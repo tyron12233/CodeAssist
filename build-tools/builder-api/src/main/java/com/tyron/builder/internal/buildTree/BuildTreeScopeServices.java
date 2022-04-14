@@ -34,7 +34,7 @@ public class BuildTreeScopeServices {
         this.modelServices = modelServices;
     }
 
-    protected void configure(ServiceRegistration registration) {
+    protected void configure(ServiceRegistration registration, List<PluginServiceRegistry> pluginServiceRegistries) {
 
         // from ExecutionServices
         registration.add(DefaultPlanExecutor.class);
@@ -50,10 +50,6 @@ public class BuildTreeScopeServices {
 //                );
 //            }
 //        });
-
-        List<PluginServiceRegistry> pluginServiceRegistries = new ArrayList<>();
-        pluginServiceRegistries.add(new CompositeBuildServices());
-
         for (PluginServiceRegistry pluginServiceRegistry : pluginServiceRegistries) {
             pluginServiceRegistry.registerBuildTreeServices(registration);
         }

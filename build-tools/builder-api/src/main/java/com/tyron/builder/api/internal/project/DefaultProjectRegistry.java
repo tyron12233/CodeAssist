@@ -64,12 +64,7 @@ public class DefaultProjectRegistry<T extends ProjectIdentifier> implements Proj
 
     @Override
     public T getProject(final File projectDir) {
-        Set<T> projects = findAll(new Predicate<T>() {
-            @Override
-            public boolean test(T element) {
-                return element.getProjectDir().equals(projectDir);
-            }
-        });
+        Set<T> projects = findAll(element -> element.getProjectDir().equals(projectDir));
         if (projects.size() > 1) {
             throw new InvalidUserDataException(String.format("Found multiple projects with project directory '%s': %s",
                     projectDir, projects));

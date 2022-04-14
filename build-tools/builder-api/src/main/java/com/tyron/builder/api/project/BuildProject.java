@@ -273,6 +273,10 @@ public interface BuildProject extends Comparable<BuildProject> {
      */
     void defaultTasks(String... defaultTasks);
 
+    default void defaultTasks(String task) {
+        defaultTasks(new String[]{task});
+    }
+
     /**
      * <p>Declares that this project has an evaluation dependency on the project with the given path.</p>
      *

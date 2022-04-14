@@ -13,6 +13,7 @@ import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Arrays;
+import java.util.Collections;
 
 /**
  * <p>Declares the configuration required to instantiate and configure the hierarchy of {@link
@@ -95,6 +96,10 @@ public interface Settings {
         include(Arrays.asList(projectPaths));
     }
 
+    default void include(String path) {
+        include(Collections.singletonList(path));
+    }
+
     /**
      * <p>Adds the given projects to the build. Each path in the supplied list is treated as the path of a project to
      * add to the build. Note that these path are not file paths, but instead specify the location of the new project in
@@ -146,6 +151,10 @@ public interface Settings {
      */
     default void includeFlat(String... projectNames) {
         includeFlat(Arrays.asList(projectNames));
+    }
+
+    default void includeFlat(String projectName) {
+        includeFlat(Collections.singletonList(projectName));
     }
 
     /**

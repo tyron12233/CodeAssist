@@ -70,6 +70,7 @@ import com.tyron.builder.internal.buildTree.BuildModelParameters;
 import com.tyron.builder.internal.cleanup.DefaultBuildOutputCleanupRegistry;
 import com.tyron.builder.internal.execution.taskgraph.TaskListenerInternal;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.common.TestUtil;
 
 import org.jetbrains.annotations.Nullable;
@@ -85,9 +86,9 @@ public class GradleScopeServices extends DefaultServiceRegistry {
     public GradleScopeServices(final ServiceRegistry parent) {
         super(parent);
         register(registration -> {
-//            for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
-//                pluginServiceRegistry.registerGradleServices(registration);
-//            }
+            for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
+                pluginServiceRegistry.registerGradleServices(registration);
+            }
             registration.add(ProjectFactory.class);
         });
     }

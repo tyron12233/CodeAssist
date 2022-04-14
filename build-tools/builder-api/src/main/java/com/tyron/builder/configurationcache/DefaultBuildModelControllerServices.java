@@ -8,9 +8,16 @@ import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.DefaultGradle;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.UncheckedException;
+import com.tyron.builder.api.internal.exceptions.Contextual;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.api.internal.project.CrossProjectModelAccess;
+import com.tyron.builder.api.internal.project.DefaultCrossProjectModelAccess;
+import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
+import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
+import com.tyron.builder.api.internal.tasks.TaskExecutionException;
 import com.tyron.builder.configuration.ProjectsPreparer;
 import com.tyron.builder.configuration.project.BuildScriptProcessor;
 import com.tyron.builder.configuration.project.ConfigureActionsProjectEvaluator;
@@ -20,18 +27,23 @@ import com.tyron.builder.execution.ExcludedTaskFilteringProjectsPreparer;
 import com.tyron.builder.initialization.SettingsPreparer;
 import com.tyron.builder.initialization.TaskExecutionPreparer;
 import com.tyron.builder.initialization.VintageBuildModelController;
+import com.tyron.builder.initialization.exception.DefaultExceptionAnalyser;
 import com.tyron.builder.initialization.exception.ExceptionAnalyser;
+import com.tyron.builder.initialization.exception.MultipleBuildFailuresExceptionAnalyser;
+import com.tyron.builder.initialization.exception.StackTraceSanitizingExceptionAnalyser;
 import com.tyron.builder.internal.build.BuildLifecycleController;
 import com.tyron.builder.internal.build.BuildLifecycleControllerFactory;
 import com.tyron.builder.internal.build.BuildModelController;
 import com.tyron.builder.internal.build.BuildModelControllerServices;
 import com.tyron.builder.internal.build.BuildState;
+import com.tyron.builder.internal.exceptions.LocationAwareException;
 import com.tyron.builder.internal.model.StateTransitionControllerFactory;
 
 import java.util.List;
 
 import javax.annotation.Nullable;
 
+@SuppressWarnings("unused")
 public class DefaultBuildModelControllerServices implements BuildModelControllerServices {
 
     @Override
@@ -41,32 +53,21 @@ public class DefaultBuildModelControllerServices implements BuildModelController
         return (registration, services) -> {
             registration.add(BuildDefinition.class, buildDefinition);
             registration.add(BuildState.class, owner);
-            registration.add(ExceptionAnalyser.class, new ExceptionAnalyser() {
-                @Override
-                public RuntimeException transform(Throwable failure) {
-                    if (failure == null) {
-                        return null;
-                    }
-
-                    if (failure instanceof RuntimeException) {
-                        return (RuntimeException) failure;
-                    }
-
-                    return UncheckedException.throwAsUncheckedException(failure);
-                }
-
-                @Nullable
-                @Override
-                public RuntimeException transform(List<Throwable> failures) {
-                    if (failures.isEmpty()) {
-                        return null;
-                    }
-                    return new MultipleBuildFailures(failures);
-                }
-            });
             registration.addProvider(new ServicesProvider(buildDefinition, parentBuild, services));
             registration.addProvider(new VintageBuildControllerProvider());
             registration.addProvider(new VintageModelProvider());
+
+            registration.addProvider(new VintageIsolatedProjectsProvider());
+
+            registration.addProvider(new Object() {
+                ExceptionAnalyser createExceptionAnalyser() {
+                    return new StackTraceSanitizingExceptionAnalyser(
+                            new MultipleBuildFailuresExceptionAnalyser(
+                                    new DefaultExceptionAnalyser()
+                            )
+                    );
+                }
+            });
         };
     }
 
@@ -124,6 +125,14 @@ public class DefaultBuildModelControllerServices implements BuildModelController
                             new BuildScriptProcessor()
                     );
             return new LifecycleProjectEvaluator(buildOperationExecutor, configure, buildCancellationToken);
+        }
+    }
+
+    private static class VintageIsolatedProjectsProvider {
+        protected CrossProjectModelAccess createCrossProjectModelAccess(
+                ProjectRegistry<ProjectInternal> registry
+        ) {
+            return new DefaultCrossProjectModelAccess(registry);
         }
     }
 }

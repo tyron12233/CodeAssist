@@ -18,6 +18,7 @@ import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.event.DefaultListenerManager;
 import com.tyron.builder.api.internal.event.ListenerManager;
+import com.tyron.builder.api.internal.file.DefaultFileOperations;
 import com.tyron.builder.api.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileException;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
@@ -30,7 +31,10 @@ import com.tyron.builder.api.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.operations.BuildOperationQueueFactory;
 import com.tyron.builder.api.internal.operations.DefaultBuildOperationQueueFactory;
+import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectFactory;
+import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.api.internal.properties.GradleProperties;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
@@ -64,6 +68,7 @@ import com.tyron.builder.execution.plan.ExecutionPlanFactory;
 import com.tyron.builder.initialization.BuildLoader;
 import com.tyron.builder.initialization.DefaultGradlePropertiesController;
 import com.tyron.builder.initialization.DefaultGradlePropertiesLoader;
+import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.initialization.DefaultProjectDescriptorRegistry;
 import com.tyron.builder.initialization.DefaultSettings;
 import com.tyron.builder.initialization.DefaultSettingsLoaderFactory;
@@ -98,6 +103,7 @@ import com.tyron.builder.internal.resource.StringTextResource;
 import com.tyron.builder.internal.resource.TextFileResourceLoader;
 import com.tyron.builder.internal.resource.TextResource;
 import com.tyron.builder.internal.resource.local.FileResourceListener;
+import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 
 import java.io.File;
@@ -227,6 +233,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             registration.add(DefaultNodeValidator.class);
             registration.add(TaskNodeFactory.class);
             registration.add(TaskNodeDependencyResolver.class);
+            registration.add(DefaultFileOperations.class);
 //            registration.add(WorkNodeDependencyResolver.class);
             registration.add(TaskDependencyResolver.class);
             registration.add(DefaultBuildWorkGraphController.class);
@@ -238,6 +245,9 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             registration.add(DefaultBuildIncluder.class);
 
             supplier.applyServicesTo(registration, this);
+            for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
+                pluginServiceRegistry.registerBuildServices(registration);
+            }
         });
     }
 
@@ -297,6 +307,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             WorkerLeaseService workerLeaseService
     ) {
         return new DefaultBuildOperationQueueFactory(workerLeaseService);
+    }
+
+    protected DefaultProjectRegistry<ProjectInternal> createProjectRegistry() {
+            return new DefaultProjectRegistry<>();
     }
 
     protected ProjectDescriptorRegistry createProjectDescriptorRegistry() {

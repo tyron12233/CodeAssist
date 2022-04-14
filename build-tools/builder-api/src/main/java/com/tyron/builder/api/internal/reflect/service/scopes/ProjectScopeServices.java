@@ -18,6 +18,8 @@ import com.tyron.builder.api.internal.file.collections.DirectoryFileTree;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 import com.tyron.builder.api.internal.file.collections.MinimalFileSet;
 import com.tyron.builder.api.internal.file.collections.MinimalFileTree;
+import com.tyron.builder.api.internal.file.temp.DefaultTemporaryFileProvider;
+import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
@@ -27,6 +29,7 @@ import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.DefaultTaskContainer;
 import com.tyron.builder.api.internal.tasks.DefaultTaskDependencyFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
+import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.model.internal.DefaultObjectFactory;
 import com.tyron.builder.api.tasks.TaskDependency;
@@ -61,6 +64,14 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
             BuildOperationExecutor buildOperationExecutor
     ) {
         return new DefaultTaskContainer(project, buildOperationExecutor);
+    }
+
+    protected TaskDependencyFactory createTaskDependencyFactory() {
+        return DefaultTaskDependencyFactory.forProject(project.getTasks());
+    }
+
+    protected TemporaryFileProvider createTemporaryFileProvider() {
+        return new DefaultTemporaryFileProvider(() -> new File(project.getBuildDir(), "tmp"));
     }
 
 }

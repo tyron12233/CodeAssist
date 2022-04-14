@@ -1,7 +1,10 @@
 package com.tyron.builder.launcher;
 
+import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.common.TestUtil;
 
 import java.io.File;
@@ -10,20 +13,26 @@ import java.util.List;
 public abstract class ProjectLaunchCase {
 
     private final StartParameterInternal startParameter = new StartParameterInternal();
-    private final ProjectLauncher launcher = new ProjectLauncher(startParameter) {
-        @Override
-        public void configure(BuildProject project) {
-            ProjectLaunchCase.this.configure(project);
-        }
-    };
+    private final ProjectLauncher launcher;
 
     public ProjectLaunchCase() {
         startParameter.setProjectDir(getRootDirectory());
         startParameter.setTaskNames(getTasks());
+
+        launcher = new ProjectLauncher(startParameter, getPluginServiceRegistries()) {
+            @Override
+            public void configure(BuildProject project) {
+                ProjectLaunchCase.this.configure(project);
+            }
+        };
     }
 
     public void execute() {
         launcher.execute();
+    }
+
+    protected List<PluginServiceRegistry> getPluginServiceRegistries() {
+        return ImmutableList.of();
     }
 
     /**
