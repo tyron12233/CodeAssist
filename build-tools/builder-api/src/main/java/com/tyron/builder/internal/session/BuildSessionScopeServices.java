@@ -14,6 +14,8 @@ import com.tyron.builder.api.internal.hash.ChecksumService;
 import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.api.internal.project.BuildOperationCrossProjectConfigurator;
+import com.tyron.builder.api.internal.project.CrossProjectConfigurator;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.scopeids.id.UserScopeId;
 import com.tyron.builder.api.internal.scopeids.id.WorkspaceScopeId;
@@ -48,6 +50,8 @@ import com.tyron.builder.launcher.exec.RunAsWorkerThreadBuildActionExecutor;
 import java.io.Closeable;
 import java.util.List;
 
+// accessed reflectively
+@SuppressWarnings("unused")
 public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServices {
     private final StartParameterInternal startParameter;
     private final BuildRequestMetaData buildRequestMetaData;
@@ -109,10 +113,10 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
     DefaultListenerManager createListenerManager(DefaultListenerManager parent) {
         return parent.createChild(Scopes.BuildSession.class);
     }
-//
-//    CrossProjectConfigurator createCrossProjectConfigurator(BuildOperationExecutor buildOperationExecutor) {
-//        return new BuildOperationCrossProjectConfigurator(buildOperationExecutor);
-//    }
+
+    CrossProjectConfigurator createCrossProjectConfigurator(BuildOperationExecutor buildOperationExecutor) {
+        return new BuildOperationCrossProjectConfigurator(buildOperationExecutor);
+    }
 
     BuildLayout createBuildLayout(BuildLayoutFactory buildLayoutFactory, StartParameter startParameter) {
         return buildLayoutFactory.getLayoutFor(new BuildLayoutConfiguration(startParameter));

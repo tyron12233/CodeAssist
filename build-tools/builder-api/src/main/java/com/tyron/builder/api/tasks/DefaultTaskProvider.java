@@ -23,6 +23,7 @@ import javax.annotation.Nullable;
 
 public class DefaultTaskProvider<T extends Task> implements TaskProvider<T>, ProviderInternal<T> {
 
+    private Action<? super T> configurationAction;
     private final Class<T> type;
     private final Object[] constructorArgs;
     private ProjectInternal project;
@@ -30,9 +31,10 @@ public class DefaultTaskProvider<T extends Task> implements TaskProvider<T>, Pro
     private T value;
     private boolean computed;
 
-    public DefaultTaskProvider(ProjectInternal project, TaskIdentity<T> taskIdentity, Class<T> type, Object[] constructorArgs) {
+    public DefaultTaskProvider(ProjectInternal project, TaskIdentity<T> taskIdentity, Action<? super T> configurationAction, Class<T> type, Object[] constructorArgs) {
         this.project = project;
         this.taskIdentity = taskIdentity;
+        this.configurationAction = configurationAction;
         this.type = type;
         this.constructorArgs = constructorArgs;
     }

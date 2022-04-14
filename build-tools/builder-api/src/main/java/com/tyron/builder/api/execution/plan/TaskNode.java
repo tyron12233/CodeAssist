@@ -154,7 +154,7 @@ public abstract class TaskNode extends Node {
     public abstract TaskInternal getTask();
 
     private void deprecateLifecycleHookReferencingNonLocalTask(String hookName, Node taskNode) {
-//        if (taskNode instanceof TaskInAnotherBuild) {
+//        if (taskNode instanceof   TaskInAnotherBuild) {
 //            DeprecationLogger.deprecateAction("Using " + hookName + " to reference tasks from another build")
 //                    .willBecomeAnErrorInGradle8()
 //                    .withUpgradeGuideSection(6, "referencing_tasks_from_included_builds")

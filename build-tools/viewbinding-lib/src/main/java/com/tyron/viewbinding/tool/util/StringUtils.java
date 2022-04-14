@@ -19,9 +19,6 @@ package com.tyron.viewbinding.tool.util;
 import com.google.common.base.StandardSystemProperty;
 import com.google.common.base.Strings;
 
-import java.util.Arrays;
-import java.util.stream.Collectors;
-
 public class StringUtils {
 
     public static final String LINE_SEPARATOR = StandardSystemProperty.LINE_SEPARATOR.value();
@@ -87,7 +84,7 @@ public class StringUtils {
         if (strings == null) {
             return null;
         }
-        return Arrays.stream(strings).collect(Collectors.joining(sep));
+        return String.join(sep, strings);
     }
 
     private StringUtils() {

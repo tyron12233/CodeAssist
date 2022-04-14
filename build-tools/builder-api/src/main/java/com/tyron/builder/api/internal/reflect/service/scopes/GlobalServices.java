@@ -7,11 +7,15 @@ import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
+import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.Factory;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.execution.steps.WorkInputListeners;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
+import com.tyron.builder.api.internal.file.DefaultFileOperations;
 import com.tyron.builder.api.internal.file.DefaultFilePropertyFactory;
 import com.tyron.builder.api.internal.file.DeleteSpec;
+import com.tyron.builder.api.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileException;
 import com.tyron.builder.api.internal.file.FileMetadata;
@@ -19,7 +23,9 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.FilePropertyFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 import com.tyron.builder.api.internal.file.impl.DefaultFileMetadata;
+import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.hash.DefaultFileHasher;
 import com.tyron.builder.api.internal.hash.FileHasher;
 import com.tyron.builder.api.internal.hash.StreamHasher;
@@ -30,7 +36,9 @@ import com.tyron.builder.api.internal.operations.BuildOperationProgressEventEmit
 import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
 import com.tyron.builder.api.internal.operations.DefaultBuildOperationListenerManager;
 import com.tyron.builder.api.internal.os.OperatingSystem;
+import com.tyron.builder.api.internal.provider.PropertyFactory;
 import com.tyron.builder.api.internal.provider.PropertyHost;
+import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.service.scopes.DefaultWorkInputListeners;
@@ -39,12 +47,16 @@ import com.tyron.builder.api.internal.snapshot.impl.DirectorySnapshotterStatisti
 import com.tyron.builder.api.internal.time.Clock;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.model.internal.DefaultObjectFactory;
+import com.tyron.builder.api.providers.ProviderFactory;
 import com.tyron.builder.api.tasks.WorkResult;
+import com.tyron.builder.api.tasks.options.Option;
 import com.tyron.builder.api.tasks.util.PatternSet;
 import com.tyron.builder.cache.StringInterner;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
+import com.tyron.builder.internal.service.DefaultServiceLocator;
 import com.tyron.builder.internal.service.scopes.DefaultGradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
+import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.service.scopes.WorkerSharedGlobalScopeServices;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
@@ -52,6 +64,7 @@ import com.tyron.builder.internal.vfs.impl.DefaultFileSystemAccess;
 import com.tyron.builder.internal.vfs.impl.DefaultSnapshotHierarchy;
 import com.tyron.builder.internal.vfs.impl.VfsRootReference;
 import com.tyron.builder.internal.watch.registry.FileWatcherRegistryFactory;
+import com.tyron.builder.internal.watch.registry.impl.WindowsFileWatcherRegistryFactory;
 import com.tyron.builder.internal.watch.vfs.BuildLifecycleAwareVirtualFileSystem;
 import com.tyron.builder.internal.watch.vfs.FileChangeListeners;
 import com.tyron.builder.internal.watch.vfs.WatchableFileSystemDetector;
@@ -76,7 +89,12 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         super();
     }
 
-    void configure(ServiceRegistration registration, List<String> emptyList) {
+    void configure(ServiceRegistration registration, List<String> somethingEmpty) {
+        final List<PluginServiceRegistry> pluginServiceFactories = new DefaultServiceLocator(getClass().getClassLoader()).getAll(PluginServiceRegistry.class);
+        for (PluginServiceRegistry pluginServiceRegistry : pluginServiceFactories) {
+            registration.add(PluginServiceRegistry.class, pluginServiceRegistry);
+            pluginServiceRegistry.registerGlobalServices(registration);
+        }
         registration.add(BuildLayoutFactory.class);
 
         registration.addProvider(new ExecutionGlobalServices());
@@ -119,118 +137,45 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return listenerManager.getBroadcaster(BuildOperationListener.class);
     }
 
+    FileOperations createFileOperations(
+            FileResolver fileResolver,
+            DirectoryFileTreeFactory directoryFileTreeFactory,
+            StreamHasher streamHasher,
+            FileHasher fileHasher,
+            FileCollectionFactory fileCollectionFactory,
+            ObjectFactory objectFactory,
+            FileSystem fileSystem,
+            Factory<PatternSet> patternSetFactory,
+            Deleter deleter,
+            DocumentationRegistry documentationRegistry,
+            ProviderFactory providerFactory
+    ) {
+        return new DefaultFileOperations(
+                fileResolver,
+//                temporaryFileProvider,
+                DirectInstantiator.INSTANCE,
+                directoryFileTreeFactory,
+                streamHasher,
+                fileHasher,
+                fileCollectionFactory,
+                objectFactory,
+                fileSystem,
+                patternSetFactory,
+                deleter,
+                documentationRegistry,
+                providerFactory
+        );
+    }
+
+    ProviderFactory createProviderFactory() {
+        return new ProviderFactory();
+    }
 
 
     FileHasher createFileHasher(
             StreamHasher streamHasher
     ) {
         return new DefaultFileHasher(streamHasher);
-    }
-
-    FileOperations createFileOperations(
-            FileResolver fileResolver
-    ) {
-        return new FileOperations() {
-            @Override
-            public File file(Object path) {
-                return fileResolver.resolve(path);
-            }
-
-            @Override
-            public File file(Object path, PathValidation validation) {
-                return fileResolver.resolve(path, validation);
-            }
-
-            @Override
-            public URI uri(Object path) {
-                return fileResolver.resolveUri(path);
-            }
-
-            @Override
-            public FileResolver getFileResolver() {
-                return fileResolver;
-            }
-
-            @Override
-            public String relativePath(Object path) {
-                return fileResolver.resolveAsRelativePath(path);
-            }
-
-            @Override
-            public ConfigurableFileCollection configurableFiles(Object... paths) {
-                return null;
-            }
-
-            @Override
-            public FileCollection immutableFiles(Object... paths) {
-                return null;
-            }
-
-            @Override
-            public ConfigurableFileTree fileTree(Object baseDir) {
-                return null;
-            }
-
-            @Override
-            public ConfigurableFileTree fileTree(Map<String, ?> args) {
-                return null;
-            }
-
-            @Override
-            public FileTree zipTree(Object zipPath) {
-                return null;
-            }
-
-            @Override
-            public FileTree tarTree(Object tarPath) {
-                return null;
-            }
-
-            @Override
-            public CopySpec copySpec() {
-                return null;
-            }
-
-            @Override
-            public WorkResult copy(Action<? super CopySpec> action) {
-                return null;
-            }
-
-            @Override
-            public WorkResult sync(Action<? super CopySpec> action) {
-                return null;
-            }
-
-            @Override
-            public File mkdir(Object path) {
-                File file = file(path);
-                if (!file.exists() && !file.mkdirs()) {
-                    throw new UncheckedIOException("Unable to create " + path);
-                }
-                return file;
-            }
-
-            @Override
-            public boolean delete(Object... paths) {
-                for (Object path : paths) {
-                    File file = file(path);
-                    if (!file.delete()) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
-            @Override
-            public WorkResult delete(Action<? super DeleteSpec> action) {
-                return null;
-            }
-
-            @Override
-            public PatternSet patternSet() {
-                return null;
-            }
-        };
     }
 
     FileChangeListeners createFileChangeListeners(ListenerManager listenerManager) {
@@ -290,7 +235,7 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
             Predicate<String> watchingFilter
     ) {
         if (operatingSystem.isWindows()) {
-
+            return Optional.of(new WindowsFileWatcherRegistryFactory(watchingFilter));
         }
         return Optional.empty();
     }
@@ -361,9 +306,10 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
 
     ObjectFactory createObjectFactory(
             FileCollectionFactory fileCollectionFactory,
-            FilePropertyFactory filePropertyFactory
+            FilePropertyFactory filePropertyFactory,
+            PropertyFactory propertyFactory
     ) {
-        return new DefaultObjectFactory(fileCollectionFactory, filePropertyFactory);
+        return new DefaultObjectFactory(fileCollectionFactory, filePropertyFactory, propertyFactory);
     }
 
     FilePropertyFactory createFilePropertyFactory(

@@ -44,7 +44,7 @@ public class DefaultExceptionAnalyser implements ExceptionCollector {
 //            }
 //        }
 
-        return new LocationAwareException(actualException, source, lineNumber);
+        return actualException;
     }
 
     private Throwable findDeepestRootException(Throwable exception) {

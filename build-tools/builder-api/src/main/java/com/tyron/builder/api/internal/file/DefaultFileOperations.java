@@ -1,148 +1,166 @@
 package com.tyron.builder.api.internal.file;
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.Map;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
-import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.Cast;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.Factory;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
-import com.tyron.builder.api.internal.file.collections.FileTreeAdapter;
 import com.tyron.builder.api.internal.file.copy.FileCopier;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.hash.FileHasher;
 import com.tyron.builder.api.internal.hash.StreamHasher;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
-import com.tyron.builder.api.internal.provider.ProviderInternal;
+import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.reflect.Instantiator;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.providers.Provider;
 import com.tyron.builder.api.providers.ProviderFactory;
-import com.tyron.builder.api.resources.ResourceHandler;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.tasks.util.PatternSet;
 import com.tyron.builder.api.util.GFileUtils;
 
+import java.io.File;
+import java.net.URI;
+import java.util.Map;
+
+import javax.inject.Inject;
+
 // Suppress warnings that could lead the code to be refactored in a configuration cache incompatible way.
-//@SuppressWarnings({"Convert2Lambda", "Anonymous2MethodRef"})
-//public class DefaultFileOperations implements FileOperations {
-//    private final FileResolver fileResolver;
+@SuppressWarnings({"Convert2Lambda", "Anonymous2MethodRef"})
+public class DefaultFileOperations implements FileOperations {
+    private final FileResolver fileResolver;
 //    private final TemporaryFileProvider temporaryFileProvider;
-//    private final Instantiator instantiator;
-//    private final Deleter deleter;
+    private final Instantiator instantiator;
+    private final Deleter deleter;
 //    private final ResourceHandler resourceHandler;
-//    private final StreamHasher streamHasher;
-//    private final FileHasher fileHasher;
-//    private final Factory<PatternSet> patternSetFactory;
-//    private final FileCopier fileCopier;
-//    private final FileSystem fileSystem;
-//    private final DirectoryFileTreeFactory directoryFileTreeFactory;
-//    private final FileCollectionFactory fileCollectionFactory;
-//    private final ProviderFactory providers;
-//
-//    public DefaultFileOperations(
-//            FileResolver fileResolver,
+    private final StreamHasher streamHasher;
+    private final FileHasher fileHasher;
+    private final Factory<PatternSet> patternSetFactory;
+    private final FileCopier fileCopier;
+    private final FileSystem fileSystem;
+    private final DirectoryFileTreeFactory directoryFileTreeFactory;
+    private final FileCollectionFactory fileCollectionFactory;
+    private final ProviderFactory providers;
+
+    @Inject
+    public DefaultFileOperations(
+            FileResolver fileResolver,
 //            TemporaryFileProvider temporaryFileProvider,
-//            Instantiator instantiator,
-//            DirectoryFileTreeFactory directoryFileTreeFactory,
-//            StreamHasher streamHasher,
-//            FileHasher fileHasher,
+            DirectoryFileTreeFactory directoryFileTreeFactory,
+            StreamHasher streamHasher,
+            FileHasher fileHasher,
 //            DefaultResourceHandler.Factory resourceHandlerFactory,
-//            FileCollectionFactory fileCollectionFactory,
-//            ObjectFactory objectFactory,
-//            FileSystem fileSystem,
-//            Factory<PatternSet> patternSetFactory,
-//            Deleter deleter,
-//            DocumentationRegistry documentationRegistry,
-//            ProviderFactory providers
-//    ) {
-//        this.fileCollectionFactory = fileCollectionFactory;
-//        this.fileResolver = fileResolver;
+            FileCollectionFactory fileCollectionFactory,
+            ObjectFactory objectFactory,
+            FileSystem fileSystem,
+            Factory<PatternSet> patternSetFactory,
+            Deleter deleter,
+            DocumentationRegistry documentationRegistry,
+            ProviderFactory providers
+    ) {
+        this(fileResolver, DirectInstantiator.INSTANCE, directoryFileTreeFactory, streamHasher, fileHasher, fileCollectionFactory, objectFactory, fileSystem, patternSetFactory, deleter, documentationRegistry, providers);
+    }
+
+    public DefaultFileOperations(
+            FileResolver fileResolver,
+//            TemporaryFileProvider temporaryFileProvider,
+            Instantiator instantiator,
+            DirectoryFileTreeFactory directoryFileTreeFactory,
+            StreamHasher streamHasher,
+            FileHasher fileHasher,
+//            DefaultResourceHandler.Factory resourceHandlerFactory,
+            FileCollectionFactory fileCollectionFactory,
+            ObjectFactory objectFactory,
+            FileSystem fileSystem,
+            Factory<PatternSet> patternSetFactory,
+            Deleter deleter,
+            DocumentationRegistry documentationRegistry,
+            ProviderFactory providers
+    ) {
+        this.fileCollectionFactory = fileCollectionFactory;
+        this.fileResolver = fileResolver;
 //        this.temporaryFileProvider = temporaryFileProvider;
-//        this.instantiator = instantiator;
-//        this.directoryFileTreeFactory = directoryFileTreeFactory;
+        this.instantiator = instantiator;
+        this.directoryFileTreeFactory = directoryFileTreeFactory;
 //        this.resourceHandler = resourceHandlerFactory.create(this);
-//        this.streamHasher = streamHasher;
-//        this.fileHasher = fileHasher;
-//        this.patternSetFactory = patternSetFactory;
-//        this.providers = providers;
-//        this.fileCopier = new FileCopier(
-//                deleter,
-//                directoryFileTreeFactory,
-//                fileCollectionFactory,
-//                fileResolver,
-//                patternSetFactory,
-//                objectFactory,
-//                fileSystem,
-//                instantiator,
-//                documentationRegistry
-//        );
-//        this.fileSystem = fileSystem;
-//        this.deleter = deleter;
-//    }
-//
-//    @Override
-//    public File file(Object path) {
-//        return fileResolver.resolve(path);
-//    }
-//
-//    @Override
-//    public File file(Object path, PathValidation validation) {
-//        return fileResolver.resolve(path, validation);
-//    }
-//
-//    @Override
-//    public URI uri(Object path) {
-//        return fileResolver.resolveUri(path);
-//    }
-//
-//    @Override
-//    public ConfigurableFileCollection configurableFiles(Object... paths) {
-//        return fileCollectionFactory.configurableFiles().from(paths);
-//    }
-//
-//    @Override
-//    public FileCollection immutableFiles(Object... paths) {
-//        return fileCollectionFactory.resolving(paths);
-//    }
-//
-//    @Override
-//    public PatternSet patternSet() {
-//        return patternSetFactory.create();
-//    }
-//
-//    @Override
-//    public ConfigurableFileTree fileTree(Object baseDir) {
-//        ConfigurableFileTree fileTree = fileCollectionFactory.fileTree();
-//        fileTree.from(baseDir);
-//        return fileTree;
-//    }
-//
-//    @Override
-//    public ConfigurableFileTree fileTree(Map<String, ?> args) {
+        this.streamHasher = streamHasher;
+        this.fileHasher = fileHasher;
+        this.patternSetFactory = patternSetFactory;
+        this.providers = providers;
+        this.fileCopier = new FileCopier(
+                deleter,
+                directoryFileTreeFactory,
+                fileCollectionFactory,
+                fileResolver,
+                patternSetFactory,
+                objectFactory,
+                fileSystem,
+                instantiator,
+                documentationRegistry
+        );
+        this.fileSystem = fileSystem;
+        this.deleter = deleter;
+    }
+
+    @Override
+    public File file(Object path) {
+        return fileResolver.resolve(path);
+    }
+
+    @Override
+    public File file(Object path, PathValidation validation) {
+        return fileResolver.resolve(path, validation);
+    }
+
+    @Override
+    public URI uri(Object path) {
+        return fileResolver.resolveUri(path);
+    }
+
+    @Override
+    public ConfigurableFileCollection configurableFiles(Object... paths) {
+        return fileCollectionFactory.configurableFiles().from(paths);
+    }
+
+    @Override
+    public FileCollection immutableFiles(Object... paths) {
+        return fileCollectionFactory.resolving(paths);
+    }
+
+    @Override
+    public PatternSet patternSet() {
+        return patternSetFactory.create();
+    }
+
+    @Override
+    public ConfigurableFileTree fileTree(Object baseDir) {
+        ConfigurableFileTree fileTree = fileCollectionFactory.fileTree();
+        fileTree.from(baseDir);
+        return fileTree;
+    }
+
+    @Override
+    public ConfigurableFileTree fileTree(Map<String, ?> args) {
 //        ConfigurableFileTree fileTree = fileCollectionFactory.fileTree();
 //        ConfigureUtil.configureByMap(args, fileTree);
 //        return fileTree;
-//    }
-//
-//    @Override
-//    public FileTreeInternal zipTree(Object zipPath) {
-//        Provider<File> fileProvider = asFileProvider(zipPath);
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public FileTreeInternal zipTree(Object zipPath) {
+        Provider<File> fileProvider = asFileProvider(zipPath);
+        throw new UnsupportedOperationException();
 //        return new FileTreeAdapter(new ZipFileTree(fileProvider, getExpandDir(), fileSystem, directoryFileTreeFactory, fileHasher), patternSetFactory);
-//    }
-//
-//    @Override
-//    public FileTreeInternal tarTree(Object tarPath) {
-//        Provider<File> fileProvider = asFileProvider(tarPath);
+    }
+
+    @Override
+    public FileTreeInternal tarTree(Object tarPath) {
+        Provider<File> fileProvider = asFileProvider(tarPath);
 //        Provider<ReadableResourceInternal> resource = providers.provider(() -> {
 //            if (tarPath instanceof ReadableResourceInternal) {
 //                return (ReadableResourceInternal) tarPath;
@@ -169,9 +187,11 @@ import com.tyron.builder.api.util.GFileUtils;
 //
 //        TarFileTree tarTree = new TarFileTree(fileProvider, resource.map(MaybeCompressedFileResource::new), getExpandDir(), fileSystem, directoryFileTreeFactory, streamHasher, fileHasher);
 //        return new FileTreeAdapter(tarTree, patternSetFactory);
-//    }
-//
-//    private Provider<File> asFileProvider(Object path) {
+        throw new UnsupportedOperationException();
+    }
+
+    private Provider<File> asFileProvider(Object path) {
+        throw new UnsupportedOperationException();
 //        if (path instanceof ReadableResource) {
 //            return providers.provider(() -> null);
 //        }
@@ -190,34 +210,34 @@ import com.tyron.builder.api.util.GFileUtils;
 //            return provider.map(transformer(this::file));
 //        }
 //        return providers.provider(() -> file(path));
-//    }
-//
+    }
+
 //    private File getExpandDir() {
 //        return temporaryFileProvider.newTemporaryFile("expandedArchives");
 //    }
-//
-//    @Override
-//    public String relativePath(Object path) {
-//        return fileResolver.resolveAsRelativePath(path);
-//    }
-//
-//    @Override
-//    public File mkdir(Object path) {
-//        File dir = fileResolver.resolve(path);
-//        if (dir.isFile()) {
-//            throw new InvalidUserDataException(String.format("Can't create directory. The path=%s points to an existing file.", path));
-//        }
-//        GFileUtils.mkdirs(dir);
-//        return dir;
-//    }
-//
-//    @Override
-//    public boolean delete(Object... paths) {
-//        return delete(deleteSpec -> deleteSpec.delete(paths).setFollowSymlinks(false)).getDidWork();
-//    }
-//
-//    @Override
-//    public WorkResult delete(Action<? super DeleteSpec> action) {
+
+    @Override
+    public String relativePath(Object path) {
+        return fileResolver.resolveAsRelativePath(path);
+    }
+
+    @Override
+    public File mkdir(Object path) {
+        File dir = fileResolver.resolve(path);
+        if (dir.isFile()) {
+            throw new InvalidUserDataException(String.format("Can't create directory. The path=%s points to an existing file.", path));
+        }
+        GFileUtils.mkdirs(dir);
+        return dir;
+    }
+
+    @Override
+    public boolean delete(Object... paths) {
+        return delete(deleteSpec -> deleteSpec.delete(paths).setFollowSymlinks(false)).getDidWork();
+    }
+
+    @Override
+    public WorkResult delete(Action<? super DeleteSpec> action) {
 //        DeleteSpecInternal deleteSpec = new DefaultDeleteSpec();
 //        action.execute(deleteSpec);
 //        FileCollectionInternal roots = fileCollectionFactory.resolving(deleteSpec.getPaths());
@@ -230,39 +250,43 @@ import com.tyron.builder.api.util.GFileUtils;
 //            }
 //        }
 //        return WorkResults.didWork(didWork);
-//    }
-//
-//    @Override
-//    public WorkResult copy(Action<? super CopySpec> action) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public WorkResult copy(Action<? super CopySpec> action) {
 //        return fileCopier.copy(action);
-//    }
-//
-//    @Override
-//    public WorkResult sync(Action<? super CopySpec> action) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public WorkResult sync(Action<? super CopySpec> action) {
 //        return fileCopier.sync(action);
-//    }
-//
-//    public CopySpec copySpec(Action<? super CopySpec> action) {
-//        CopySpec copySpec = copySpec();
-//        action.execute(copySpec);
-//        return copySpec;
-//    }
-//
-//    @Override
-//    public CopySpec copySpec() {
+        throw new UnsupportedOperationException();
+    }
+
+    public CopySpec copySpec(Action<? super CopySpec> action) {
+        CopySpec copySpec = copySpec();
+        action.execute(copySpec);
+        return copySpec;
+    }
+
+    @Override
+    public CopySpec copySpec() {
+        throw new UnsupportedOperationException();
 //        return instantiator.newInstance(DefaultCopySpec.class, fileCollectionFactory, instantiator, patternSetFactory);
-//    }
-//
-//    @Override
-//    public FileResolver getFileResolver() {
-//        return fileResolver;
-//    }
-//
+    }
+
+    @Override
+    public FileResolver getFileResolver() {
+        return fileResolver;
+    }
+
 //    @Override
 //    public ResourceHandler getResources() {
 //        return resourceHandler;
 //    }
-//
+
 //    public static DefaultFileOperations createSimple(FileResolver fileResolver, FileCollectionFactory fileTreeFactory, ServiceRegistry services) {
 //        Instantiator instantiator = services.get(Instantiator.class);
 //        ObjectFactory objectFactory = services.get(ObjectFactory.class);
@@ -299,4 +323,4 @@ import com.tyron.builder.api.util.GFileUtils;
 //                documentationRegistry,
 //                providers);
 //    }
-//}
+}

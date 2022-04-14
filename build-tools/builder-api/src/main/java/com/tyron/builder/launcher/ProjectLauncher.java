@@ -1,10 +1,7 @@
 package com.tyron.builder.launcher;
 
-import static com.tyron.builder.api.internal.Cast.uncheckedCast;
-
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.ProjectState;
-import com.tyron.builder.api.StartParameter;
 import com.tyron.builder.api.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.Factory;
 import com.tyron.builder.api.internal.StartParameterInternal;
@@ -25,8 +22,12 @@ import com.tyron.builder.initialization.DefaultBuildRequestContext;
 import com.tyron.builder.internal.buildTree.BuildActionRunner;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
+import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
+
+import java.util.Collections;
+import java.util.List;
 
 public abstract class ProjectLauncher {
 
@@ -34,8 +35,13 @@ public abstract class ProjectLauncher {
     private final ServiceRegistry globalServices;
 
     public ProjectLauncher(StartParameterInternal startParameter) {
+        this(startParameter, Collections.emptyList());
+    }
+
+    public ProjectLauncher(StartParameterInternal startParameter,
+                           List<PluginServiceRegistry> pluginServiceRegistries) {
         this.startParameter = startParameter;
-        globalServices = ProjectBuilderImpl.getGlobalServices();
+        globalServices = ProjectBuilderImpl.getGlobalServices(pluginServiceRegistries);
     }
 
     public ServiceRegistry getGlobalServices() {

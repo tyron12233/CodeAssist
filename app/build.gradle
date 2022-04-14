@@ -78,6 +78,7 @@ dependencies {
     implementation project(path: ':language-api')
 
     implementation project(path: ':build-tools:builder-api')
+    implementation project(path: ':build-tools:builder-java')
     implementation project(path: ':build-tools:build-logic')
     implementation project(path: ':build-tools:manifmerger')
     implementation project(path: ':build-tools:project')

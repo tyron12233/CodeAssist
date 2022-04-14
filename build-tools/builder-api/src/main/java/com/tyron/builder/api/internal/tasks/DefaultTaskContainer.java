@@ -82,7 +82,7 @@ public class DefaultTaskContainer implements TaskContainerInternal {
         Object constructorArgs = args.get(Task.TASK_CONSTRUCTOR_ARGS);
         if (constructorArgs instanceof List) {
             List<?> asList = (List<?>) constructorArgs;
-            return asList.toArray(new Object[asList.size()]);
+            return asList.toArray(new Object[0]);
         }
         if (constructorArgs instanceof Object[]) {
             return (Object[]) constructorArgs;
@@ -114,9 +114,7 @@ public class DefaultTaskContainer implements TaskContainerInternal {
     }
 
     private static void setIfNull(Map<String, Object> map, String key, Object defaultValue) {
-        if (map.get(key) == null) {
-            map.put(key, defaultValue);
-        }
+        map.putIfAbsent(key, defaultValue);
     }
 
     @Override
@@ -138,7 +136,7 @@ public class DefaultTaskContainer implements TaskContainerInternal {
     }
 
     @Override
-    public TaskProvider<Task> register(String name) throws InvalidUserDataException {
+    public <T extends Task> TaskProvider<T> register(String name) throws InvalidUserDataException {
         assertMutable("register(String)");
         return Cast.uncheckedCast(register(name, DefaultTask.class));
     }
@@ -162,8 +160,8 @@ public class DefaultTaskContainer implements TaskContainerInternal {
         
         TaskProvider<T> provider = buildOperationExecutor.call(new CallableBuildOperation<TaskProvider<T>>() {
             @Override
-            public TaskProvider<T> call(BuildOperationContext context) throws Exception {
-                TaskProvider<T> provider = new DefaultTaskProvider<>(project, identity, type, constructorArgs);
+            public TaskProvider<T> call(BuildOperationContext context) {
+                TaskProvider<T> provider = new DefaultTaskProvider<>(project, identity, configurationAction, type, constructorArgs);
                 addLaterInternal(provider);
                 context.setResult(REGISTER_RESULT);
                 return provider;
@@ -251,7 +249,7 @@ public class DefaultTaskContainer implements TaskContainerInternal {
 
 
 
-    @Override
+    @Override   
     public Task findByName(String name) {
 //        Task task = super.findByName(name);
 //        if (task != null) {

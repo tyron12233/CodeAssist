@@ -4,6 +4,7 @@ import static com.tyron.builder.cache.FileLockManager.LockMode.OnDemand;
 import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
 
 import com.google.common.hash.HashCode;
+import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
@@ -11,6 +12,8 @@ import com.tyron.builder.api.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
 import com.tyron.builder.api.internal.changedetection.state.DefaultResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizingFileSystemLocationSnapshotHasher;
+import com.tyron.builder.api.internal.changedetection.state.ResourceEntryFilter;
+import com.tyron.builder.api.internal.changedetection.state.ResourceFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
@@ -30,6 +33,7 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.api.internal.fingerprint.LineEndingSensitivity;
+import com.tyron.builder.api.internal.fingerprint.classpath.impl.DefaultClasspathFingerprinter;
 import com.tyron.builder.api.internal.fingerprint.classpath.impl.DefaultCompileClasspathFingerprinter;
 import com.tyron.builder.api.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.fingerprint.impl.AbsolutePathFileCollectionFingerprinter;
@@ -54,6 +58,7 @@ import com.tyron.builder.api.internal.tasks.execution.EventFiringTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.FinalizePropertiesTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter;
 import com.tyron.builder.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter;
+import com.tyron.builder.api.tasks.CompileClasspathNormalizer;
 import com.tyron.builder.api.work.AsyncWorkTracker;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.CacheRepository;
@@ -75,7 +80,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 public class ProjectExecutionServices extends DefaultServiceRegistry {
 
@@ -145,35 +152,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                     case "sha256": return sha256(src);
                     default: return sha512(src);
                 }
-            }
-        };
-    }
-
-    TemporaryFileProvider createTemporaryFileProvider() {
-        return new TemporaryFileProvider() {
-            @Override
-            public File newTemporaryFile(String... path) {
-                File tempDirectory = FileUtils.getTempDirectory();
-                return new File(tempDirectory, "test");
-            }
-
-            @Override
-            public File createTemporaryFile(String prefix,
-                                            @Nullable String suffix,
-                                            String... path) {
-                try {
-                    return File.createTempFile(prefix, suffix);
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public File createTemporaryDirectory(String prefix,
-                                                 @Nullable String suffix,
-                                                 String... path) {
-                File tempDirectory = FileUtils.getTempDirectory();
-                return new File(tempDirectory, prefix + suffix);
             }
         };
     }
@@ -296,6 +274,23 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         );
     }
 
+    FingerprinterRegistration createIgnoreDirectoryDefaultLineEndingsRelativePathInputFingerprinter(
+            FileSystemLocationSnapshotHasher hasher,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            StringInterner interner
+    ) {
+        return FingerprinterRegistration.registration(
+                DirectorySensitivity.IGNORE_DIRECTORIES,
+                LineEndingSensitivity.DEFAULT,
+                new RelativePathFileCollectionFingerprinter(
+                        interner,
+                        DirectorySensitivity.IGNORE_DIRECTORIES,
+                        fileCollectionSnapshotter,
+                        hasher
+                )
+        );
+    }
+
     FingerprinterRegistration createCompileClassPathFingerprinter(
             ResourceSnapshotterCacheService resourceSnapshotterCacheService,
             FileCollectionSnapshotter fileCollectionSnapshotter,
@@ -308,6 +303,47 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                         resourceSnapshotterCacheService,
                         fileCollectionSnapshotter,
                         interner
+                )
+        );
+    }
+
+    FingerprinterRegistration createClassPathNormalizerIgnoreDirectoriesInputFingerprinter(
+            ResourceSnapshotterCacheService resourceSnapshotterCacheService,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            StringInterner interner
+    ) {
+        return FingerprinterRegistration.registration(
+                DirectorySensitivity.IGNORE_DIRECTORIES,
+                LineEndingSensitivity.DEFAULT,
+                new DefaultClasspathFingerprinter(
+                        resourceSnapshotterCacheService,
+                        fileCollectionSnapshotter,
+                        ResourceFilter.FILTER_NOTHING,
+                        ResourceEntryFilter.FILTER_NOTHING,
+                        Collections.emptyMap(),
+                        interner,
+                        LineEndingSensitivity.DEFAULT
+                )
+        );
+    }
+
+
+    FingerprinterRegistration createClassPathNormalizerInputFingerprinter(
+            ResourceSnapshotterCacheService resourceSnapshotterCacheService,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            StringInterner interner
+    ) {
+        return FingerprinterRegistration.registration(
+                DirectorySensitivity.DEFAULT,
+                LineEndingSensitivity.DEFAULT,
+                new DefaultClasspathFingerprinter(
+                        resourceSnapshotterCacheService,
+                        fileCollectionSnapshotter,
+                        ResourceFilter.FILTER_NOTHING,
+                        ResourceEntryFilter.FILTER_NOTHING,
+                        Collections.emptyMap(),
+                        interner,
+                        LineEndingSensitivity.DEFAULT
                 )
         );
     }

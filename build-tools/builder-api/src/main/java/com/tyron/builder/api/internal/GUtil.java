@@ -109,6 +109,10 @@ public class GUtil {
         return builder.toString();
     }
 
+    public static String asPath(Iterable<?> collection) {
+        return CollectionUtils.join(File.pathSeparator, collection);
+    }
+
     public interface RunnableThrowable{
         void run() throws Exception;
     }

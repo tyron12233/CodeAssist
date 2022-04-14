@@ -10,4 +10,9 @@ public class Actions {
         //noinspection unchecked
         return (Action<T>) DO_NOTHING;
     }
+
+    public static <T> T with(T instance, Action<? super T> action) {
+        action.execute(instance);
+        return instance;
+    }
 }
