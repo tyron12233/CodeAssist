@@ -142,8 +142,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public ProjectInternal getRootProject(ProjectInternal referrer) {
-        return rootProject;
-//        return getCrossProjectModelAccess().access(referrer, rootProject);
+        return getCrossProjectModelAccess().access(referrer, rootProject);
     }
 
     @Override
@@ -220,12 +219,14 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public ProjectInternal project(String path) throws UnknownProjectException {
-        return null;
+        return project(this, path);
     }
 
     @Override
     public BuildProject project(String path, Action<? super BuildProject> configureAction) {
-        return null;
+        ProjectInternal project = project(path);
+        configureAction.execute(project);
+        return project;
     }
 
     @Override
@@ -482,7 +483,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public void setBuildDir(Object path) {
-
+        setBuildDir(file(path));
     }
 
     @Override
@@ -587,7 +588,7 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public BuildProject getProject() {
-        return null;
+        return this;
     }
 
     @Override
