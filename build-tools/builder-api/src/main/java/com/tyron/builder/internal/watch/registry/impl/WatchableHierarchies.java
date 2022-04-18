@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import com.tyron.builder.api.internal.file.FileMetadata;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.FileSystemSnapshotHierarchyVisitor;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
-import com.tyron.builder.api.internal.snapshot.SnapshotVisitResult;
+import com.tyron.builder.internal.file.FileMetadata;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.FileSystemSnapshotHierarchyVisitor;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.SnapshotVisitResult;
 import com.tyron.builder.internal.file.FileHierarchySet;
 import com.tyron.builder.internal.watch.registry.FileWatcherProbeRegistry;
 import com.tyron.builder.internal.watch.registry.WatchMode;

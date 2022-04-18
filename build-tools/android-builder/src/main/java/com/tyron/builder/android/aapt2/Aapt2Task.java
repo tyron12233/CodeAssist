@@ -1,17 +1,11 @@
 package com.tyron.builder.android.aapt2;
 
-import static com.tyron.builder.api.internal.GUtil.*;
-
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.file.RegularFileProperty;
 import com.tyron.builder.api.internal.GUtil;
-import com.tyron.builder.api.internal.file.Deleter;
 import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
-import com.tyron.builder.api.tasks.Classpath;
 import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;
 import com.tyron.builder.api.tasks.InputFile;
 import com.tyron.builder.api.tasks.InputFiles;
@@ -21,20 +15,14 @@ import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.PathSensitivity;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
 import com.tyron.builder.api.tasks.SourceTask;
-import com.tyron.builder.api.util.GFileUtils;
+import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.api.work.ChangeType;
 import com.tyron.builder.api.work.FileChange;
-import com.tyron.builder.api.work.Incremental;
 import com.tyron.builder.api.work.InputChanges;
 import com.tyron.builder.api.work.NormalizeLineEndings;
 
-import org.apache.commons.io.FileUtils;
-
 import java.io.File;
-import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 /**
  * Handles compilation and linking of android resource files incrementally.

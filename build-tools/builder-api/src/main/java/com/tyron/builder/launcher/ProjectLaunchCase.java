@@ -2,7 +2,6 @@ package com.tyron.builder.launcher;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.common.TestUtil;

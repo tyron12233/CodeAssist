@@ -1,13 +1,9 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
-import com.tyron.builder.api.internal.fingerprint.RelativePathInputNormalizer;
 import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.CacheableTask;
@@ -20,19 +16,15 @@ import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.PathSensitivity;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
 import com.tyron.builder.api.tasks.SourceTask;
-import com.tyron.builder.api.tasks.TaskAction;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.compile.AbstractCompile;
-import com.tyron.builder.api.tasks.incremental.IncrementalTaskInputs;
 import com.tyron.builder.api.work.FileChange;
-import com.tyron.builder.api.work.Incremental;
 import com.tyron.builder.api.work.InputChanges;
 import com.tyron.builder.api.work.NormalizeLineEndings;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 

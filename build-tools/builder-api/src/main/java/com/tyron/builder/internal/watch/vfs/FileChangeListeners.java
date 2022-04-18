@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.watch.vfs;
 
 import com.tyron.builder.api.internal.service.scopes.Scopes;
-import com.tyron.builder.api.internal.service.scopes.ServiceScope;
+import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.internal.watch.registry.FileWatcherRegistry;
 
 import java.nio.file.Path;

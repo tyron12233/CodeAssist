@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.reflect;
 
 import com.google.common.reflect.TypeToken;
-import com.tyron.builder.api.internal.UncheckedException;
+import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.api.internal.reflect.PropertyAccessorType;
-import com.tyron.builder.api.util.CollectionUtils;
+import com.tyron.builder.util.internal.CollectionUtils;
 
 import org.apache.commons.lang3.reflect.MethodUtils;
 

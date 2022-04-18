@@ -3,22 +3,20 @@ package com.tyron.builder.internal.watch.registry.impl;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multiset;
-import com.tyron.builder.api.internal.snapshot.DirectorySnapshot;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot.FileSystemLocationSnapshotTransformer;
-import com.tyron.builder.api.internal.snapshot.MissingFileSnapshot;
-import com.tyron.builder.api.internal.snapshot.RegularFileSnapshot;
-import com.tyron.builder.api.internal.snapshot.RootTrackingFileSystemSnapshotHierarchyVisitor;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
-import com.tyron.builder.api.internal.snapshot.SnapshotVisitResult;
+import com.tyron.builder.internal.snapshot.DirectorySnapshot;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot.FileSystemLocationSnapshotTransformer;
+import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
+import com.tyron.builder.internal.snapshot.RegularFileSnapshot;
+import com.tyron.builder.internal.snapshot.RootTrackingFileSystemSnapshotHierarchyVisitor;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.SnapshotVisitResult;
 import com.tyron.builder.internal.file.FileHierarchySet;
 import com.tyron.builder.internal.watch.WatchingNotSupportedException;
 import com.tyron.builder.internal.watch.registry.FileWatcherProbeRegistry;
-import com.tyron.builder.internal.watch.registry.FileWatcherUpdater;
 
 import net.rubygrapefruit.platform.NativeException;
 import net.rubygrapefruit.platform.file.FileWatcher;
-import net.rubygrapefruit.platform.internal.jni.LinuxFileEventFunctions;
 
 
 import org.slf4j.Logger;

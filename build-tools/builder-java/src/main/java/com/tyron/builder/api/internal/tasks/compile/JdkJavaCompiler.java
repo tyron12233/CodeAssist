@@ -1,7 +1,6 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
-import com.google.gson.internal.JavaVersion;
-import com.tyron.builder.api.internal.Factory;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.classpath.DefaultClassPath;
 import com.tyron.builder.api.internal.tasks.compile.processing.AnnotationProcessorDeclaration;
 import com.tyron.builder.api.internal.tasks.compile.reflect.GradleStandardJavaFileManager;

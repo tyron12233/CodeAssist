@@ -1,6 +1,6 @@
 package com.tyron.builder.util;
 
-import com.tyron.builder.api.internal.UncheckedException;
+import com.tyron.builder.internal.UncheckedException;
 
 import java.io.File;
 import java.util.regex.Pattern;

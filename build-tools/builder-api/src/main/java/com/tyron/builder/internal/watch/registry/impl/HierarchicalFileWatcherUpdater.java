@@ -2,15 +2,14 @@ package com.tyron.builder.internal.watch.registry.impl;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.file.FileHierarchySet;
 import com.tyron.builder.internal.watch.registry.FileWatcherProbeRegistry;
 import com.tyron.builder.internal.watch.registry.FileWatcherUpdater;
 import com.tyron.builder.internal.watch.registry.WatchMode;
 
 import net.rubygrapefruit.platform.file.FileWatcher;
-import net.rubygrapefruit.platform.internal.jni.WindowsFileEventFunctions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

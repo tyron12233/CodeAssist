@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
-import com.tyron.builder.api.internal.service.scopes.Scope;
+import com.tyron.builder.internal.service.scopes.Scope;
 import com.tyron.builder.api.internal.service.scopes.Scopes;
 
 /**

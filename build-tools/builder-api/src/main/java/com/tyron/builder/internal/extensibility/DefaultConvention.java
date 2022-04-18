@@ -3,8 +3,6 @@ package com.tyron.builder.internal.extensibility;
 import static com.tyron.builder.api.reflect.TypeOf.typeOf;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -12,7 +10,6 @@ import static java.lang.String.format;
 
 import com.google.common.collect.Maps;
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.Cast;
 import com.tyron.builder.api.internal.Describables;
 import com.tyron.builder.api.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;

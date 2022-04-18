@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.watch.registry.impl;
 
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.FileSystemNode;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.FileSystemNode;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 
 import java.util.ArrayList;
 import java.util.List;

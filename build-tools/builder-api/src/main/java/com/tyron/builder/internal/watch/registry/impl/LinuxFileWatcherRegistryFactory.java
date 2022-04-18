@@ -3,22 +3,19 @@ package com.tyron.builder.internal.watch.registry.impl;
 import static net.rubygrapefruit.platform.internal.jni.LinuxFileEventFunctions.*;
 
 import com.tyron.builder.api.internal.GUtil;
-import com.tyron.builder.api.internal.file.FileType;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.file.FileType;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.watch.registry.FileWatcherProbeRegistry;
 import com.tyron.builder.internal.watch.registry.FileWatcherUpdater;
 
 import net.rubygrapefruit.platform.NativeIntegrationUnavailableException;
-import net.rubygrapefruit.platform.file.FileEvents;
 import net.rubygrapefruit.platform.file.FileWatchEvent;
 import net.rubygrapefruit.platform.file.FileWatcher;
 import net.rubygrapefruit.platform.internal.jni.AbstractFileEventFunctions;
 import net.rubygrapefruit.platform.internal.jni.InsufficientResourcesForWatchingException;
-import net.rubygrapefruit.platform.internal.jni.LinuxFileEventFunctions;
 
 import org.apache.commons.vfs2.FileChangeEvent;
 import org.apache.commons.vfs2.FileListener;
-import org.apache.commons.vfs2.FileMonitor;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.FileSystemManager;
@@ -26,10 +23,6 @@ import org.apache.commons.vfs2.VFS;
 import org.apache.commons.vfs2.impl.DefaultFileMonitor;
 
 import java.io.File;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;

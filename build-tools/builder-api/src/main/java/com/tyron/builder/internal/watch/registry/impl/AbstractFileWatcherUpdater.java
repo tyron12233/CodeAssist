@@ -2,10 +2,10 @@ package com.tyron.builder.internal.watch.registry.impl;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.file.FileMetadata;
-import com.tyron.builder.api.internal.file.FileType;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.file.FileMetadata;
+import com.tyron.builder.internal.file.FileType;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.file.FileHierarchySet;
 import com.tyron.builder.internal.watch.registry.FileWatcherProbeRegistry;
 import com.tyron.builder.internal.watch.registry.FileWatcherUpdater;

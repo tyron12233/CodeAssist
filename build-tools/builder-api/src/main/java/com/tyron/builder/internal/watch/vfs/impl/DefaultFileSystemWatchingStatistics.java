@@ -4,8 +4,8 @@ import static com.tyron.builder.api.internal.snapshot.SnapshotVisitResult.CONTIN
 
 import com.google.common.collect.EnumMultiset;
 import com.google.common.collect.Multiset;
-import com.tyron.builder.api.internal.file.FileType;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.file.FileType;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.watch.registry.FileWatcherRegistry;
 import com.tyron.builder.internal.watch.vfs.FileSystemWatchingStatistics;
 

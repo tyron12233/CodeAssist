@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.serialize;
 
 import com.google.common.base.Objects;
-import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.serialize.AbstractSerializer;
 import com.tyron.builder.api.internal.serialize.Decoder;
 import com.tyron.builder.api.internal.serialize.DefaultSerializer;

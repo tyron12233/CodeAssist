@@ -4,7 +4,7 @@ import com.tyron.builder.api.internal.operations.BuildOperationContext;
 import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.api.internal.operations.BuildOperationRunner;
 import com.tyron.builder.api.internal.operations.CallableBuildOperation;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.internal.vfs.impl.AbstractVirtualFileSystem;
 import com.tyron.builder.internal.vfs.impl.VfsRootReference;

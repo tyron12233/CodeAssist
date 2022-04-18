@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.internal.DisplayName;
 import com.tyron.builder.api.internal.service.scopes.Scopes;
-import com.tyron.builder.api.internal.service.scopes.ServiceScope;
+import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.model.StateTransitionController;

@@ -1,0 +1,16 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation(projects.buildTools.builderApi)
+    implementation(projects.buildTools.buildCache)
+
+    implementation 'org.jetbrains:annotations:23.0.0'
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

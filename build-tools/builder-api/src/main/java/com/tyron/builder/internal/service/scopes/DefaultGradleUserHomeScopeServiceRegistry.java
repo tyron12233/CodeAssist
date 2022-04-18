@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.service.scopes;
 
-import com.tyron.builder.api.internal.concurrent.CompositeStoppable;
+import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
 import com.tyron.builder.initialization.GradleUserHomeDirProvider;

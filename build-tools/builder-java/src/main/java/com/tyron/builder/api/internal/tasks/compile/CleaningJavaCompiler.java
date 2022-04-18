@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.file.Deleter;
+import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.api.tasks.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.tasks.WorkResults;

@@ -16,7 +16,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.builder.api.execution.MultipleBuildFailures;
-import com.tyron.builder.api.internal.Factory;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.logging.events.OutputEvent;
 import com.tyron.builder.api.internal.logging.events.OutputEventListener;

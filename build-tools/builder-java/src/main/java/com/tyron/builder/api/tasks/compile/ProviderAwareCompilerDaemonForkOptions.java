@@ -6,7 +6,7 @@ import com.tyron.builder.api.internal.tasks.compile.CommandLineArgumentProvider;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.Nested;
 import com.tyron.builder.api.tasks.Optional;
-import com.tyron.builder.api.util.CollectionUtils;
+import com.tyron.builder.util.internal.CollectionUtils;
 
 import java.util.List;
 

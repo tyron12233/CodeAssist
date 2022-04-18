@@ -1,6 +1,6 @@
 package com.tyron.builder.launcher.exec;
 
-import com.tyron.builder.api.internal.UncheckedException;
+import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.api.internal.invocation.BuildAction;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
 import com.tyron.builder.internal.buildTree.BuildActionModelRequirements;

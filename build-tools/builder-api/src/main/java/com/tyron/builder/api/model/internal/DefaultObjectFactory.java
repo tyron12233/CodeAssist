@@ -7,7 +7,7 @@ import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.RegularFile;
 import com.tyron.builder.api.file.RegularFileProperty;
-import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FilePropertyFactory;

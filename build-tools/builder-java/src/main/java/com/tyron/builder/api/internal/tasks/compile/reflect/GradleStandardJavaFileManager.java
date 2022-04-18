@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile.reflect;
 
 import static com.tyron.builder.api.internal.tasks.compile.filter.AnnotationProcessorFilter.getFilteredClassLoader;
 
-import com.tyron.builder.api.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.ClassPath;
 
 import javax.tools.ForwardingJavaFileManager;
 import javax.tools.JavaFileManager;

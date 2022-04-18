@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.vfs;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.SnapshottingFilter;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.SnapshottingFilter;
 
 import java.util.Optional;
 import java.util.function.Consumer;

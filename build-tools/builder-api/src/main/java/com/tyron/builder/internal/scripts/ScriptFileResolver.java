@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.scripts;
 
-import com.tyron.builder.api.internal.service.scopes.Scope;
-import com.tyron.builder.api.internal.service.scopes.ServiceScope;
+import com.tyron.builder.internal.service.scopes.Scope;
+import com.tyron.builder.internal.service.scopes.ServiceScope;
 
 import java.io.File;
 import java.util.List;

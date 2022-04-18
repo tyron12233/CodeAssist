@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.compile.incremental.recomp;
 
 import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.internal.file.Deleter;
+import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.work.FileChange;
 

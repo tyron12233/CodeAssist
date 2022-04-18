@@ -8,7 +8,7 @@ import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
-import com.tyron.builder.api.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
@@ -19,7 +19,7 @@ import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
 import com.tyron.builder.api.project.TestBuildScopeServices;
-import com.tyron.builder.api.util.GFileUtils;
+import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.initialization.BuildRequestMetaData;
 import com.tyron.builder.initialization.DefaultBuildCancellationToken;
@@ -40,15 +40,12 @@ import com.tyron.builder.internal.composite.IncludedBuildInternal;
 import com.tyron.builder.internal.logging.services.LoggingServiceRegistry;
 import com.tyron.builder.internal.nativeintegration.services.NativeServices;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
-import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 

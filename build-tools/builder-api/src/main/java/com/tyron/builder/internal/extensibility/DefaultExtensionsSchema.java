@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.extensibility;
 
-import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.plugins.ExtensionsSchema;
 
 import java.util.Iterator;

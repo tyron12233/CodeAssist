@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.compile.javac;
 
-import com.tyron.builder.api.internal.Cast;
-import com.tyron.builder.api.internal.UncheckedException;
+import com.tyron.builder.internal.Cast;
+import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.tasks.compile.CompilationSourceDirs;
 import com.tyron.builder.api.internal.tasks.compile.IncrementalCompilationAwareJavaCompiler;

@@ -1,16 +1,16 @@
 package com.tyron.builder.internal.vfs.impl;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.tyron.builder.api.internal.file.FileType;
-import com.tyron.builder.api.internal.snapshot.CaseSensitivity;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.FileSystemNode;
-import com.tyron.builder.api.internal.snapshot.MetadataSnapshot;
-import com.tyron.builder.api.internal.snapshot.PartialDirectoryNode;
-import com.tyron.builder.api.internal.snapshot.SingletonChildMap;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
-import com.tyron.builder.api.internal.snapshot.UnknownFileSystemNode;
-import com.tyron.builder.api.internal.snapshot.VfsRelativePath;
+import com.tyron.builder.internal.file.FileType;
+import com.tyron.builder.internal.snapshot.CaseSensitivity;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.FileSystemNode;
+import com.tyron.builder.internal.snapshot.MetadataSnapshot;
+import com.tyron.builder.internal.snapshot.PartialDirectoryNode;
+import com.tyron.builder.internal.snapshot.SingletonChildMap;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.UnknownFileSystemNode;
+import com.tyron.builder.internal.snapshot.VfsRelativePath;
 
 import java.util.Optional;
 import java.util.stream.Stream;

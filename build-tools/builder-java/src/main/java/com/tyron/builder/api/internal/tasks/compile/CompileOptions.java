@@ -21,7 +21,7 @@ import com.tyron.builder.api.tasks.OutputDirectory;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.PathSensitivity;
 import com.tyron.builder.api.tasks.compile.AbstractCompile;
-import com.tyron.builder.api.util.CollectionUtils;
+import com.tyron.builder.util.internal.CollectionUtils;
 
 import org.jetbrains.annotations.Nullable;
 

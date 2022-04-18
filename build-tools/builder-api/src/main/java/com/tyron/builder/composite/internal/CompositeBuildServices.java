@@ -1,15 +1,10 @@
 package com.tyron.builder.composite.internal;
 
-import com.tyron.builder.api.artifacts.component.ComponentSelector;
 import com.tyron.builder.api.capabilities.Capability;
-import com.tyron.builder.api.internal.attributes.ImmutableAttributesFactory;
 import com.tyron.builder.api.internal.composite.CompositeBuildContext;
 import com.tyron.builder.api.internal.event.ListenerManager;
-import com.tyron.builder.api.internal.reflect.Instantiator;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
-import com.tyron.builder.api.internal.snapshot.impl.ValueSnapshotterSerializerRegistry;
-import com.tyron.builder.api.internal.typeconversion.NotationParser;
-import com.tyron.builder.api.model.ObjectFactory;
+import com.tyron.builder.internal.snapshot.impl.ValueSnapshotterSerializerRegistry;
 import com.tyron.builder.internal.build.BuildStateRegistry;
 import com.tyron.builder.internal.build.IncludedBuildFactory;
 import com.tyron.builder.internal.service.scopes.AbstractPluginServiceRegistry;

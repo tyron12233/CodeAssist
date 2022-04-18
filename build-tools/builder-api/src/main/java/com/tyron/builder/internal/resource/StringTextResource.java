@@ -3,8 +3,8 @@ package com.tyron.builder.internal.resource;
 import com.google.common.hash.HashCode;
 import com.tyron.builder.api.internal.Describables;
 import com.tyron.builder.api.internal.DisplayName;
-import com.tyron.builder.api.internal.hash.Hashes;
-import com.tyron.builder.api.internal.hash.PrimitiveHasher;
+import com.tyron.builder.internal.hash.Hashes;
+import com.tyron.builder.internal.hash.PrimitiveHasher;
 import com.tyron.builder.api.resources.ResourceException;
 
 import javax.annotation.Nullable;
