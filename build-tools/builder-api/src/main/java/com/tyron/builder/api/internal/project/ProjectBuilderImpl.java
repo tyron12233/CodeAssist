@@ -8,7 +8,7 @@ import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
-import com.tyron.builder.api.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
@@ -19,7 +19,7 @@ import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
 import com.tyron.builder.api.internal.work.WorkerLeaseService;
 import com.tyron.builder.api.project.TestBuildScopeServices;
-import com.tyron.builder.api.util.GFileUtils;
+import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.initialization.BuildRequestMetaData;
 import com.tyron.builder.initialization.DefaultBuildCancellationToken;
@@ -38,16 +38,14 @@ import com.tyron.builder.internal.buildTree.BuildTreeState;
 import com.tyron.builder.internal.buildTree.RunTasksRequirements;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;
 import com.tyron.builder.internal.logging.services.LoggingServiceRegistry;
+import com.tyron.builder.internal.nativeintegration.services.NativeServices;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
-import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.session.BuildSessionState;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -69,7 +67,7 @@ public class ProjectBuilderImpl {
         startParameter.setTaskNames(ImmutableList.of("testTask"));
         startParameter.setMaxWorkerCount(5);
 
-        final ServiceRegistry globalServices = getGlobalServices(Collections.emptyList());
+        final ServiceRegistry globalServices = getGlobalServices(startParameter);
 
         BuildRequestMetaData buildRequestMetaData = new DefaultBuildRequestMetaData(Time.currentTimeMillis());
         CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter);
@@ -121,19 +119,21 @@ public class ProjectBuilderImpl {
         return globalServices.get(GradleUserHomeScopeServiceRegistry.class);
     }
 
-    public synchronized static ServiceRegistry getGlobalServices(List<PluginServiceRegistry> pluginServiceRegistries) {
+    public synchronized static ServiceRegistry getGlobalServices(StartParameterInternal startParameterInternal) {
         if (globalServices == null) {
-            globalServices = createGlobalServices(pluginServiceRegistries);
+            globalServices = createGlobalServices(startParameterInternal);
         }
         return globalServices;
     }
 
-    public static ServiceRegistry createGlobalServices(List<PluginServiceRegistry> pluginServiceRegistries) {
+    public static ServiceRegistry createGlobalServices(StartParameterInternal startParameterInternal) {
         LoggingServiceRegistry serviceRegistry =
                 LoggingServiceRegistry.newCommandLineProcessLogging();
+        NativeServices.initializeOnWorker(startParameterInternal.getGradleUserHomeDir());
         return ServiceRegistryBuilder
                 .builder()
                 .parent(serviceRegistry)
+                .parent(NativeServices.getInstance())
                 .displayName("global services")
                 .provider(new GlobalServices())
                 .build();

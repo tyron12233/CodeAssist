@@ -1,6 +1,5 @@
 package com.tyron.builder.composite.internal;
 
-import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.artifacts.ModuleVersionIdentifier;
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
 import com.tyron.builder.api.internal.BuildDefinition;

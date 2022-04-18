@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.tasks;
 
 import com.tyron.builder.api.internal.file.FileOperations;
-import com.tyron.builder.api.internal.hash.FileHasher;
-import com.tyron.builder.api.internal.hash.StreamHasher;
+import com.tyron.builder.internal.hash.FileHasher;
+import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.tasks.compile.incremental.IncrementalCompilerFactory;

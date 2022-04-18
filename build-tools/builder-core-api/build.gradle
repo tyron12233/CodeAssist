@@ -1,0 +1,25 @@
+plugins {
+    id 'java-library'
+}
+
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    implementation (projects.common)
+    implementation(projects.buildTools.builderBaseServices)
+    implementation(projects.buildTools.builderEnterpriseOperations)
+    implementation(projects.buildTools.builderFiles)
+    implementation(projects.buildTools.builderLogging)
+    implementation(projects.buildTools.builderResources)
+
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.jetbrains:annotations:23.0.0'
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation 'org.apache.commons:commons-compress:1.20'
+    implementation 'org.apache.commons:commons-vfs2:2.9.0'
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+}

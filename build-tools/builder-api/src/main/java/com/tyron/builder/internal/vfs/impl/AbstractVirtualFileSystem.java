@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.vfs.impl;
 
 
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.MetadataSnapshot;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.MetadataSnapshot;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 
 import org.slf4j.Logger;

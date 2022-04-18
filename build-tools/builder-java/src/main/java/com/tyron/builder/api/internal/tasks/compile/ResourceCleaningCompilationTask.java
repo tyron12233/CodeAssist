@@ -1,13 +1,12 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
-import com.tyron.builder.api.internal.concurrent.CompositeStoppable;
+import com.tyron.builder.internal.concurrent.CompositeStoppable;
 
 import javax.tools.JavaCompiler;
-import javax.tools.JavaFileManager;
 
 import javax.annotation.processing.Processor;
 import javax.tools.DiagnosticListener;
-import javax.tools.JavaCompiler;
+
 import java.io.Closeable;
 import java.nio.charset.Charset;
 import java.util.Locale;

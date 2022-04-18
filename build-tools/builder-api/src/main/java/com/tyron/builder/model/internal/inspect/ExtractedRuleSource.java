@@ -1,6 +1,6 @@
 package com.tyron.builder.model.internal.inspect;
 
-import com.tyron.builder.api.internal.Factory;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.model.internal.core.MutableModelNode;
 import com.tyron.builder.model.internal.registry.ModelRegistry;
 

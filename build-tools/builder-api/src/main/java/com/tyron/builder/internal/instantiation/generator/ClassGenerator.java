@@ -3,7 +3,7 @@ package com.tyron.builder.internal.instantiation.generator;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.internal.instantiation.ClassGenerationException;
 import com.tyron.builder.api.internal.instantiation.InstanceGenerator;
-import com.tyron.builder.api.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.reflect.service.ServiceLookup;
 
 import org.jetbrains.annotations.Nullable;
 

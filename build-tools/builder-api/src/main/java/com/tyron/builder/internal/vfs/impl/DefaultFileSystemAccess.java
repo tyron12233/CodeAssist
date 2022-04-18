@@ -1,23 +1,23 @@
 package com.tyron.builder.internal.vfs.impl;
 
-import static com.tyron.builder.api.internal.file.FileMetadata.*;
+import static com.tyron.builder.internal.file.FileMetadata.*;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Interner;
 import com.google.common.hash.HashCode;
 import com.google.common.util.concurrent.Striped;
-import com.tyron.builder.api.internal.file.FileMetadata;
-import com.tyron.builder.api.internal.file.FileType;
-import com.tyron.builder.api.internal.file.Stat;
-import com.tyron.builder.api.internal.hash.FileHasher;
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.api.internal.snapshot.MissingFileSnapshot;
-import com.tyron.builder.api.internal.snapshot.RegularFileSnapshot;
-import com.tyron.builder.api.internal.snapshot.SnapshottingFilter;
-import com.tyron.builder.api.internal.snapshot.impl.DirectorySnapshotter;
-import com.tyron.builder.api.internal.snapshot.impl.DirectorySnapshotterStatistics;
-import com.tyron.builder.api.internal.snapshot.impl.FileSystemSnapshotFilter;
+import com.tyron.builder.internal.file.FileMetadata;
+import com.tyron.builder.internal.file.FileType;
+import com.tyron.builder.internal.file.Stat;
+import com.tyron.builder.internal.hash.FileHasher;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
+import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
+import com.tyron.builder.internal.snapshot.RegularFileSnapshot;
+import com.tyron.builder.internal.snapshot.SnapshottingFilter;
+import com.tyron.builder.internal.snapshot.impl.DirectorySnapshotter;
+import com.tyron.builder.internal.snapshot.impl.DirectorySnapshotterStatistics;
+import com.tyron.builder.internal.snapshot.impl.FileSystemSnapshotFilter;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 

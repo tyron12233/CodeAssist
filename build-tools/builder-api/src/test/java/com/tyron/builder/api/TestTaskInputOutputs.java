@@ -3,10 +3,6 @@ package com.tyron.builder.api;
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.project.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
-import com.tyron.builder.launcher.ProjectLaunchCase;
-import com.tyron.builder.launcher.ProjectLauncher;
-
-import org.junit.Test;
 
 import java.io.File;
 import java.util.List;

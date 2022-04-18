@@ -3,7 +3,7 @@ package com.tyron.builder.composite.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.tyron.builder.api.execution.plan.PlanExecutor;
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.concurrent.CompositeStoppable;
+import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.api.internal.concurrent.ManagedExecutor;
 import com.tyron.builder.api.internal.operations.BuildOperationContext;

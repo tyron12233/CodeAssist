@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.vfs;
 
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.MetadataSnapshot;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.MetadataSnapshot;
 
 import java.util.Optional;
 

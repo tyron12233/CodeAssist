@@ -2,12 +2,10 @@ package com.tyron.builder.internal.nativeintegration.services;
 
 import static com.tyron.builder.caching.internal.origin.OriginMetadataFactory.*;
 
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.os.OperatingSystem;
 import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.api.internal.reflect.service.ServiceCreationException;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
 import com.tyron.builder.initialization.GradleUserHomeDirProvider;
@@ -24,7 +22,6 @@ import net.rubygrapefruit.platform.file.FileSystems;
 import net.rubygrapefruit.platform.file.PosixFiles;
 import net.rubygrapefruit.platform.internal.DefaultProcessLauncher;
 import net.rubygrapefruit.platform.memory.Memory;
-import net.rubygrapefruit.platform.terminal.Terminals;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

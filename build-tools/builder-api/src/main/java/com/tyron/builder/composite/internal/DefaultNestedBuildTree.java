@@ -4,7 +4,7 @@ import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.time.Time;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.initialization.BuildRequestMetaData;

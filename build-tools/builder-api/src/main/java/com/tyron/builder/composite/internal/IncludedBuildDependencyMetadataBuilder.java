@@ -1,12 +1,9 @@
 package com.tyron.builder.composite.internal;
 
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
-import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.internal.build.CompositeBuildParticipantBuildState;
 import com.tyron.builder.internal.component.local.model.LocalComponentMetadata;
 import com.tyron.builder.internal.component.local.model.LocalConfigurationMetadata;
-
-import java.io.File;
 
 import javax.annotation.Nullable;
 

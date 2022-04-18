@@ -3,10 +3,10 @@ package com.tyron.builder.launcher;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.initialization.BuildCancellationToken;
-import com.tyron.builder.api.internal.Factory;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.UncheckedException;
-import com.tyron.builder.api.internal.classpath.ClassPath;
+import com.tyron.builder.internal.UncheckedException;
+import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.api.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.invocation.BuildAction;
 import com.tyron.builder.api.internal.project.ProjectBuilderImpl;
@@ -41,7 +41,7 @@ public abstract class ProjectLauncher {
     public ProjectLauncher(StartParameterInternal startParameter,
                            List<PluginServiceRegistry> pluginServiceRegistries) {
         this.startParameter = startParameter;
-        globalServices = ProjectBuilderImpl.getGlobalServices(pluginServiceRegistries);
+        globalServices = ProjectBuilderImpl.getGlobalServices(startParameter);
     }
 
     public ServiceRegistry getGlobalServices() {
@@ -53,7 +53,7 @@ public abstract class ProjectLauncher {
         Factory<LoggingManagerInternal> factory = globalServices.getFactory(LoggingManagerInternal.class);
         LoggingManagerInternal loggingManagerInternal = factory.create();
         assert loggingManagerInternal != null;
-        loggingManagerInternal.start().setLevelInternal(LogLevel.INFO);
+        loggingManagerInternal.start().setLevelInternal(LogLevel.DEBUG);
     }
 
     public void execute() {

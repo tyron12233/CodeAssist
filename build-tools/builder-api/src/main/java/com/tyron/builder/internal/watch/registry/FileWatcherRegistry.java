@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.watch.registry;
 
 
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.watch.WatchingNotSupportedException;
 
 import javax.annotation.CheckReturnValue;

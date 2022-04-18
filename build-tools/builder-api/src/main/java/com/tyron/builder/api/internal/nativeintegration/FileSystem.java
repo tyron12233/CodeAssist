@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.nativeintegration;
 
-import com.tyron.builder.api.internal.file.Chmod;
-import com.tyron.builder.api.internal.file.FileException;
-import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.internal.file.Chmod;
+import com.tyron.builder.internal.file.FileException;
+import com.tyron.builder.internal.file.Stat;
 
 import java.io.File;
 

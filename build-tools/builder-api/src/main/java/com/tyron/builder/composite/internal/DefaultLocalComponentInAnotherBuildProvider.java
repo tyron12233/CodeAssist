@@ -1,6 +1,5 @@
 package com.tyron.builder.composite.internal;
 
-import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.internal.artifacts.ivyservice.projectmodule.LocalComponentInAnotherBuildProvider;
 import com.tyron.builder.api.internal.project.ProjectStateUnk;
 import com.tyron.builder.internal.build.CompositeBuildParticipantBuildState;

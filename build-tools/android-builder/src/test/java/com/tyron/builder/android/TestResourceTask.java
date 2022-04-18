@@ -2,9 +2,7 @@ package com.tyron.builder.android;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.android.aapt2.Aapt2Task;
-import com.tyron.builder.android.services.AndroidGlobalServices;
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.project.BuildProject;
 
 import java.io.File;

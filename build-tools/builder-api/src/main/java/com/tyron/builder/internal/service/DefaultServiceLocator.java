@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.service;
 
-import com.tyron.builder.api.internal.Factory;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.reflect.DirectInstantiator;
 import com.tyron.builder.api.internal.reflect.service.ServiceLookupException;
 import com.tyron.builder.api.internal.reflect.service.UnknownServiceException;

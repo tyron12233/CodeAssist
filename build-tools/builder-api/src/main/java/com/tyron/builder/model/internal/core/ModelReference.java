@@ -2,7 +2,7 @@ package com.tyron.builder.model.internal.core;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.model.internal.type.ModelType;
 
 import javax.annotation.Nullable;

@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile;
 import com.google.common.base.Joiner;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.JavaVersion;
-import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.GUtil;
 
 import org.slf4j.Logger;

@@ -1,7 +1,6 @@
 package com.tyron.builder.internal.service.scopes;
 
-import com.tyron.builder.api.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.api.internal.state.ManagedFactoryRegistry;
+import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 
 public class WorkerSharedUserHomeScopeServices {
 

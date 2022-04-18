@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.nativeintegration.services;
 
-import com.tyron.builder.api.internal.file.FileException;
-import com.tyron.builder.api.internal.file.FileMetadata;
+import com.tyron.builder.internal.file.FileException;
+import com.tyron.builder.internal.file.FileMetadata;
 import com.tyron.builder.api.internal.nativeintegration.FileSystem;
 
 import java.io.File;

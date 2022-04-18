@@ -4,7 +4,7 @@ import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.reflect.DirectInstantiator;
-import com.tyron.builder.api.internal.reflect.Instantiator;
+import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.IncludedBuildFactory;

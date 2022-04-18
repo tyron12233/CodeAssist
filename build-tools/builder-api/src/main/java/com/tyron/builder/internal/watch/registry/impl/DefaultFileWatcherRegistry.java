@@ -6,8 +6,8 @@ import static com.tyron.builder.internal.watch.registry.FileWatcherRegistry.Type
 import static com.tyron.builder.internal.watch.registry.FileWatcherRegistry.Type.OVERFLOW;
 import static com.tyron.builder.internal.watch.registry.FileWatcherRegistry.Type.REMOVED;
 
-import com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.api.internal.snapshot.SnapshotHierarchy;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.watch.registry.FileWatcherRegistry;
 import com.tyron.builder.internal.watch.registry.FileWatcherUpdater;
 import com.tyron.builder.internal.watch.registry.WatchMode;
@@ -30,7 +30,6 @@ import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;

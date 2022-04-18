@@ -2,7 +2,7 @@ package com.tyron.builder.api.model.internal.type;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.reflect.TypeToken;
-import com.tyron.builder.api.internal.Cast;
+import com.tyron.builder.internal.Cast;
 
 import javax.annotation.Nullable;
 import java.lang.annotation.Annotation;

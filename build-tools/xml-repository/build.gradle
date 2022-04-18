@@ -12,6 +12,7 @@ dependencies {
     implementation project(path: ':build-tools:manifmerger')
 
     api files('libs/org.eclipse.lemminx-0.11.0-uber.jar')
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
     implementation project(path: ':build-tools:project')
 
     compileOnly project(path: ':android-stubs')

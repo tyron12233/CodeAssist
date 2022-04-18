@@ -1,6 +1,5 @@
 package com.tyron.builder.internal.service.scopes;
 
-import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.file.FileLookup;

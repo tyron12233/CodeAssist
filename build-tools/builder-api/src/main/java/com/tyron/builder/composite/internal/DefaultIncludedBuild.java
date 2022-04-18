@@ -7,7 +7,7 @@ import com.tyron.builder.api.artifacts.DependencySubstitutions;
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.reflect.Instantiator;
+import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.api.tasks.TaskReference;
 import com.tyron.builder.api.util.Path;
 import com.tyron.builder.initialization.IncludedBuildSpec;
