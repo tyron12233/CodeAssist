@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile.incremental.cache;
 import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
+import com.tyron.builder.internal.serialize.HashCodeSerializer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassAnalysis;
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassSetAnalysisData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.serialization.HierarchicalNameSerializer;

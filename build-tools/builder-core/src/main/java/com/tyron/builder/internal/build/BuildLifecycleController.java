@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.plan.Node;
+import com.tyron.builder.execution.plan.Node;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.execution.plan.BuildWorkPlan;

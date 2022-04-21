@@ -3,9 +3,23 @@ plugins {
 }
 
 dependencies {
+    api projects.buildTools.builderBuildCacheBase
+    api projects.buildTools.snapshots
+
+    implementation projects.common
+
     implementation(projects.buildTools.builderApi)
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.builderResources
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderPersistentCache
 
     implementation 'org.jetbrains:annotations:23.0.0'
+    implementation 'org.apache.commons:commons-compress:1.20'
 }
 
 java {

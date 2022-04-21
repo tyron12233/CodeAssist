@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.build;
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 
 import javax.annotation.Nullable;
 

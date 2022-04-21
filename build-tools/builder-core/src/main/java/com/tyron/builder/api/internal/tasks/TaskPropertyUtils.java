@@ -1,7 +1,8 @@
 package com.tyron.builder.api.internal.tasks;
 
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.api.tasks.TaskInputs;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
 import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
@@ -10,7 +11,7 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 public class TaskPropertyUtils {
     /**
      * Visits both properties declared via annotations on the properties of the task type as well as
-     * properties declared via the runtime API ({@link org.gradle.api.tasks.TaskInputs} etc.).
+     * properties declared via the runtime API ({@link TaskInputs} etc.).
      */
     public static void visitProperties(PropertyWalker propertyWalker, TaskInternal task, PropertyVisitor visitor) {
         visitProperties(propertyWalker, task, TypeValidationContext.NOOP, visitor);
@@ -18,8 +19,8 @@ public class TaskPropertyUtils {
 
     /**
      * Visits both properties declared via annotations on the properties of the task type as well as
-     * properties declared via the runtime API ({@link org.gradle.api.tasks.TaskInputs} etc.).
-     *
+     * properties declared via the runtime API ({@link TaskInputs} etc.).
+
      * Reports errors and warnings to the given validation context.
      */
     public static void visitProperties(PropertyWalker propertyWalker, TaskInternal task, TypeValidationContext validationContext, PropertyVisitor visitor) {

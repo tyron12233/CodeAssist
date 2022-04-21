@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.exceptions;
 
 
-import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
 
 import java.util.SortedSet;
 import java.util.TreeSet;

@@ -1,12 +1,12 @@
 package com.tyron.builder.internal.logging.services;
 
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.internal.logging.services.DefaultStyledTextOutputFactory;
-import com.tyron.builder.api.internal.logging.text.StyledTextOutputFactory;
-import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.time.Clock;
-import com.tyron.builder.api.internal.time.Time;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.services.DefaultStyledTextOutputFactory;
+import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
+import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.time.Clock;
+import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;

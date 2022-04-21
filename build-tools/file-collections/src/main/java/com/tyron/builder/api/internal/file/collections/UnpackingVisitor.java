@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.file.collections;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.file.DirectoryTree;
-import com.tyron.builder.api.internal.DeferredUtil;
+import com.tyron.builder.util.internal.DeferredUtil;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.AbstractOpaqueFileCollection;
 import com.tyron.builder.api.internal.file.CompositeFileCollection;
@@ -13,7 +13,7 @@ import com.tyron.builder.api.internal.provider.ProviderInternal;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
 import com.tyron.builder.api.providers.ProviderResolutionStrategy;
-import com.tyron.builder.api.tasks.Buildable;
+import com.tyron.builder.api.Buildable;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.util.PatternSet;
 

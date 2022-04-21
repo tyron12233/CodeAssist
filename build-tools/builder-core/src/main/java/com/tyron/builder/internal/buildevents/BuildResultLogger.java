@@ -3,13 +3,13 @@ package com.tyron.builder.internal.buildevents;
 import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.FailureHeader;
 import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.SuccessHeader;
 
-import com.tyron.builder.api.BuildListener;
-import com.tyron.builder.api.BuildResult;
-import com.tyron.builder.api.execution.WorkValidationWarningReporter;
+import com.tyron.builder.BuildListener;
+import com.tyron.builder.BuildResult;
+import com.tyron.builder.execution.WorkValidationWarningReporter;
 import com.tyron.builder.api.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.DurationFormatter;
-import com.tyron.builder.api.internal.logging.text.StyledTextOutputFactory;
-import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.internal.logging.DurationFormatter;
+import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
+import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.api.logging.LogLevel;
 
 /**

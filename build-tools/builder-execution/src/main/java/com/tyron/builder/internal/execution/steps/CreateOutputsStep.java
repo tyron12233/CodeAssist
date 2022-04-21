@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.execution.steps;
 
-import static com.tyron.builder.api.util.GFileUtils.mkdirs;
+import static com.tyron.builder.util.internal.GFileUtils.mkdirs;
 
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.tasks.properties.TreeType;
+import com.tyron.builder.internal.file.TreeType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

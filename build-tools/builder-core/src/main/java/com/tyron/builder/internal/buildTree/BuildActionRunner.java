@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.buildTree;
 
-import com.tyron.builder.api.execution.MultipleBuildFailures;
-import com.tyron.builder.api.internal.invocation.BuildAction;
+import com.tyron.builder.execution.MultipleBuildFailures;
+import com.tyron.builder.internal.invocation.BuildAction;
 
 import org.jetbrains.annotations.Nullable;
 

@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.buildTree;
 
-import com.tyron.builder.api.internal.operations.BuildOperationCategory;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.CallableBuildOperation;
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.CallableBuildOperation;
 import com.tyron.builder.internal.build.ExecutionResult;
 
 

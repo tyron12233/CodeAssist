@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.logging.source;
 
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
-import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
-import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.StandardOutputListener;
 import com.tyron.builder.internal.io.LinePerThreadBufferingOutputStream;

@@ -4,7 +4,7 @@ import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.AbstractOpaqueFileCollection;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
-import com.tyron.builder.api.tasks.Buildable;
+import com.tyron.builder.api.Buildable;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
 import java.io.File;

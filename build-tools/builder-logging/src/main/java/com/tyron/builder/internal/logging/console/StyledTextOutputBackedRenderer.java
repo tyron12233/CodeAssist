@@ -3,10 +3,10 @@ package com.tyron.builder.internal.logging.console;
 import static com.tyron.builder.internal.graph.StyledTextOutput.Style.Normal;
 
 import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.AbstractLineChoppingStyledTextOutput;
-import com.tyron.builder.api.internal.logging.events.OutputEvent;
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.internal.logging.events.RenderableOutputEvent;
+import com.tyron.builder.internal.logging.AbstractLineChoppingStyledTextOutput;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.logging.events.LogLevelChangeEvent;
 

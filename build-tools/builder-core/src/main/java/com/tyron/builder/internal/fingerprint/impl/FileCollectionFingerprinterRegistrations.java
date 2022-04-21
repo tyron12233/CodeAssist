@@ -19,9 +19,9 @@ import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizin
 import com.tyron.builder.api.internal.changedetection.state.ResourceEntryFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
-import com.tyron.builder.api.internal.execution.fingerprint.impl.FingerprinterRegistration;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.impl.FingerprinterRegistration;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;

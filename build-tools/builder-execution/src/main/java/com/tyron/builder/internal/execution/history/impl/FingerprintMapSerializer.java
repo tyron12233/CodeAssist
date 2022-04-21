@@ -8,10 +8,10 @@ import com.tyron.builder.internal.file.FileType;
 import com.tyron.builder.internal.fingerprint.FileSystemLocationFingerprint;
 import com.tyron.builder.internal.fingerprint.impl.DefaultFileSystemLocationFingerprint;
 import com.tyron.builder.internal.fingerprint.impl.IgnoredPathFileSystemLocationFingerprint;
-import com.tyron.builder.api.internal.serialize.AbstractSerializer;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
-import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
+import com.tyron.builder.internal.serialize.AbstractSerializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.HashCodeSerializer;
 
 import java.io.IOException;
 import java.util.Map;

@@ -5,12 +5,16 @@ plugins {
 description = "A set of generic services and utilities."
 
 dependencies {
-    api(projects.buildTools.builderBaseAnnotations)
-    implementation(projects.common)
-    implementation(projects.buildTools.builderHashing)
+    api projects.buildTools.builderBaseAnnotations
+    api projects.buildTools.builderHashing
+    api projects.buildTools.builderBuildOperations
+
+    implementation projects.common
+    implementation projects.buildTools.builderHashing
+    implementation projects.buildTools.builderMessaging
 
     implementation 'javax.inject:javax.inject:1'
-    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation common.slf4j
     implementation 'org.apache.commons:commons-lang3:3.12.0'
 }
 

@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.steps;
 
 
-import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.InputChangesInternal;
 
 import java.util.Optional;
 

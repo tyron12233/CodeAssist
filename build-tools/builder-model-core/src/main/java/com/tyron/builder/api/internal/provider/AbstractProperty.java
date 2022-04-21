@@ -2,10 +2,10 @@ package com.tyron.builder.api.internal.provider;
 
 import com.tyron.builder.api.Task;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.Describables;
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.Describables;
+import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
 import com.tyron.builder.internal.state.ModelObject;
 
 import org.jetbrains.annotations.NotNull;

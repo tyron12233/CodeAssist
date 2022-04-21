@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.project.taskfactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 import java.util.concurrent.atomic.AtomicLong;
 

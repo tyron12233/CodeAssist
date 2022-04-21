@@ -5,7 +5,7 @@ import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.tasks.CacheableTask;
 import com.tyron.builder.api.tasks.CompileClasspath;
 import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;
@@ -19,7 +19,7 @@ import com.tyron.builder.api.tasks.SourceTask;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.compile.AbstractCompile;
 import com.tyron.builder.api.work.FileChange;
-import com.tyron.builder.api.work.InputChanges;
+import com.tyron.builder.work.InputChanges;
 import com.tyron.builder.api.work.NormalizeLineEndings;
 
 import org.jetbrains.annotations.Nullable;

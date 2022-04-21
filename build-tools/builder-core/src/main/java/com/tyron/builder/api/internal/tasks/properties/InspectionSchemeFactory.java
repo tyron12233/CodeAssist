@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.properties;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.api.internal.instantiation.InstantiationScheme;
-import com.tyron.builder.api.internal.reflect.annotations.TypeAnnotationMetadataStore;
+import com.tyron.builder.internal.reflect.annotations.TypeAnnotationMetadataStore;
 import com.tyron.builder.api.internal.tasks.properties.annotations.NoOpPropertyAnnotationHandler;
 import com.tyron.builder.api.internal.tasks.properties.annotations.PropertyAnnotationHandler;
 import com.tyron.builder.api.internal.tasks.properties.annotations.TypeAnnotationHandler;

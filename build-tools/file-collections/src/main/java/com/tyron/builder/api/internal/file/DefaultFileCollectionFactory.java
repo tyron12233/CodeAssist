@@ -16,8 +16,8 @@ import com.tyron.builder.api.internal.file.collections.GeneratedSingletonFileTre
 import com.tyron.builder.api.internal.file.collections.MinimalFileSet;
 import com.tyron.builder.api.internal.file.collections.MinimalFileTree;
 import com.tyron.builder.api.internal.file.collections.UnpackingVisitor;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;

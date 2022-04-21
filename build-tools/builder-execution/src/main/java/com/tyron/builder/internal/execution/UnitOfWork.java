@@ -1,21 +1,21 @@
 package com.tyron.builder.internal.execution;
 
-import static com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter.*;
+import static com.tyron.builder.internal.execution.fingerprint.InputFingerprinter.*;
 
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.execution.caching.CachingDisabledReason;
-import com.tyron.builder.api.internal.execution.caching.CachingState;
-import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
-import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
-import com.tyron.builder.api.internal.execution.history.OverlappingOutputs;
-import com.tyron.builder.api.internal.execution.workspace.WorkspaceProvider;
+import com.tyron.builder.internal.execution.caching.CachingDisabledReason;
+import com.tyron.builder.internal.execution.caching.CachingState;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.OverlappingOutputs;
+import com.tyron.builder.internal.execution.workspace.WorkspaceProvider;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
-import com.tyron.builder.api.internal.tasks.properties.TreeType;
+import com.tyron.builder.internal.file.TreeType;
 
 import javax.annotation.Nullable;
 import java.io.File;

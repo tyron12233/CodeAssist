@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.provider;
 
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.DisplayName;
 
 class TypeSanitizingTransformer<T> implements Transformer<T, T> {
     private final DisplayName owner;

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.execution.history.impl;
 
-import static com.tyron.builder.api.internal.snapshot.SnapshotUtil.getRootHashes;
+import static com.tyron.builder.internal.snapshot.SnapshotUtil.getRootHashes;
 
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.internal.execution.history.OverlappingOutputDetector;

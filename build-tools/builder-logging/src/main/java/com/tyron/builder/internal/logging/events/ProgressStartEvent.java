@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.logging.events;
 
-import com.tyron.builder.api.internal.logging.events.CategorisedOutputEvent;
-import com.tyron.builder.api.internal.logging.events.LogLevelConverter;
-import com.tyron.builder.api.internal.logging.events.operations.LogEventLevel;
-import com.tyron.builder.api.internal.operations.BuildOperationCategory;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.logging.events.CategorisedOutputEvent;
+import com.tyron.builder.internal.logging.events.LogLevelConverter;
+import com.tyron.builder.internal.logging.events.operations.LogEventLevel;
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.logging.events.operations.ProgressStartBuildOperationProgressDetails;
 

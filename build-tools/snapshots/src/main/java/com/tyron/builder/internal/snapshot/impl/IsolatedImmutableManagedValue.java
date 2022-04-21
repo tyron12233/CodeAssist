@@ -2,7 +2,7 @@ package com.tyron.builder.internal.snapshot.impl;
 
 import com.google.common.hash.Hasher;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
-import com.tyron.builder.api.internal.state.Managed;
+import com.tyron.builder.internal.state.Managed;
 import com.tyron.builder.internal.state.ManagedFactory;
 import com.tyron.builder.api.internal.state.ManagedFactoryRegistry;
 

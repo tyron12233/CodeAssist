@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.console;
 
 import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
 
 import java.util.Collections;

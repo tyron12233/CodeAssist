@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 
 /**
  * Walks properties declared by the type.

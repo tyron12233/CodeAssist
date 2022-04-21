@@ -3,7 +3,7 @@ package com.tyron.builder.execution.taskpath;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.logging.Logging;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.util.NameMatcher;
 
 import org.slf4j.Logger;

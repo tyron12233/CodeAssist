@@ -9,7 +9,7 @@ import com.tyron.builder.api.internal.isolation.Isolatable;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.internal.snapshot.ValueSnapshotter;
 import com.tyron.builder.internal.snapshot.ValueSnapshottingException;
-import com.tyron.builder.api.internal.state.Managed;
+import com.tyron.builder.internal.state.Managed;
 
 import org.jetbrains.annotations.Nullable;
 

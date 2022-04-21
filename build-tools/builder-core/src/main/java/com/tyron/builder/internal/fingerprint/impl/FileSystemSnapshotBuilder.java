@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.fingerprint.impl;
 
-import static com.tyron.builder.api.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
+import static com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Interner;

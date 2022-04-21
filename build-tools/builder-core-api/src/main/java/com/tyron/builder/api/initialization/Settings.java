@@ -4,10 +4,9 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.UnknownProjectException;
-import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.providers.Provider;
-import com.tyron.builder.api.providers.ProviderFactory;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
 
 import javax.annotation.Nullable;
@@ -268,7 +267,7 @@ public interface Settings {
      *
      * @return The Gradle instance. Never returns null.
      */
-    GradleInternal getGradle();
+    Gradle getGradle();
 
     /**
      * Includes a build at the specified path to the composite build.

@@ -3,7 +3,7 @@ package com.tyron.builder.internal.cleanup;
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
+import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 
 import org.slf4j.Logger;

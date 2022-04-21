@@ -3,7 +3,7 @@ package com.tyron.builder.internal.fingerprint.classpath.impl;
 import com.tyron.builder.api.internal.changedetection.state.AbiExtractingClasspathResourceHasher;
 import com.tyron.builder.api.internal.changedetection.state.CachingResourceHasher;
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.internal.fingerprint.classpath.CompileClasspathFingerprinter;
 import com.tyron.builder.internal.fingerprint.impl.AbstractFileCollectionFingerprinter;
 import com.tyron.builder.api.tasks.CompileClasspathNormalizer;

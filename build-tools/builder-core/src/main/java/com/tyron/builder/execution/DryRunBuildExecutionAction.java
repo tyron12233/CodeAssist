@@ -1,12 +1,12 @@
 package com.tyron.builder.execution;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.BuildWorkExecutor;
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.BuildWorkExecutor;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.text.StyledTextOutputFactory;
+import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.internal.build.ExecutionResult;
 
 /**

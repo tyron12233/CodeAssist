@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.properties.annotations;
 import static com.tyron.builder.api.internal.reflect.problems.ValidationProblemId.INVALID_USE_OF_TYPE_ANNOTATION;
 import static com.tyron.builder.api.internal.reflect.validation.Severity.ERROR;
 
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 
 import java.lang.annotation.Annotation;
 import java.util.Arrays;

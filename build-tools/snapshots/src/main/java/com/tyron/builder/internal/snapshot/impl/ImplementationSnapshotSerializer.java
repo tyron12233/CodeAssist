@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.snapshot.impl;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
-import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
-import com.tyron.builder.api.internal.serialize.Serializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.HashCodeSerializer;
+import com.tyron.builder.internal.serialize.Serializer;
 
 public class ImplementationSnapshotSerializer implements Serializer<ImplementationSnapshot> {
 

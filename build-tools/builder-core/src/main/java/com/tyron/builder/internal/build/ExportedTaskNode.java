@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.api.execution.plan.Node;
+import com.tyron.builder.execution.plan.Node;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.composite.internal.IncludedBuildTaskResource;
 

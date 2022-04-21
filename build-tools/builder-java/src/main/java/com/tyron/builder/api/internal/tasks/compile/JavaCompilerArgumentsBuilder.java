@@ -4,7 +4,7 @@ import com.google.common.base.Joiner;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.JavaVersion;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.GUtil;
+import com.tyron.builder.util.GUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging.console;
 
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.PromptOutputEvent;
 
 public class UserInputConsoleRenderer extends AbstractUserInputRenderer {

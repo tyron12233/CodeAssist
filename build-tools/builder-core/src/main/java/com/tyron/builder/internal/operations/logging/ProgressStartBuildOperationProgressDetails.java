@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.operations.logging;
 
 
-import com.tyron.builder.api.internal.logging.events.operations.LogEventLevel;
+import com.tyron.builder.internal.logging.events.operations.LogEventLevel;
 
 /**
  * Build operation observer's view of {@code org.gradle.internal.logging.events.ProgressStartEvent}.

@@ -6,11 +6,11 @@ import com.google.common.hash.HashCode;
 import com.tyron.builder.api.attributes.Attribute;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.isolation.Isolatable;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
-import com.tyron.builder.api.internal.serialize.Serializer;
-import com.tyron.builder.api.internal.serialize.kryo.KryoBackedEncoder;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
+import com.tyron.builder.internal.serialize.Serializer;
+import com.tyron.builder.internal.serialize.kryo.KryoBackedEncoder;
 import com.tyron.builder.internal.snapshot.ValueSnapshottingException;
-import com.tyron.builder.api.internal.state.Managed;
+import com.tyron.builder.internal.state.Managed;
 
 import org.jetbrains.annotations.Nullable;
 

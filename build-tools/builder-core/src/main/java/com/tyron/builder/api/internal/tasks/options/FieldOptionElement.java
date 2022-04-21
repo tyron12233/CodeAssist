@@ -1,9 +1,9 @@
 package com.tyron.builder.api.internal.tasks.options;
 
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.reflect.JavaMethod;
-import com.tyron.builder.api.model.internal.type.ModelType;
-import com.tyron.builder.api.providers.Property;
+import com.tyron.builder.internal.reflect.JavaMethod;
+import com.tyron.builder.model.internal.type.ModelType;
+import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.api.tasks.options.Option;
 
 import org.apache.commons.lang3.StringUtils;

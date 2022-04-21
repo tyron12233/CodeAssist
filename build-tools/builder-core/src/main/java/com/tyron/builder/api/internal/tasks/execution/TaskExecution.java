@@ -2,11 +2,11 @@ package com.tyron.builder.api.internal.tasks.execution;
 
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
-import com.tyron.builder.api.tasks.TaskOutputsInternal;
+import com.tyron.builder.api.internal.TaskOutputsInternal;
 
 import org.jetbrains.annotations.Nullable;
 

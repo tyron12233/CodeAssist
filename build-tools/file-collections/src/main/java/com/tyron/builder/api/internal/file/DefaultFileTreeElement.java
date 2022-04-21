@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.file.RelativePath;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.file.Chmod;
 import com.tyron.builder.internal.file.Stat;
 

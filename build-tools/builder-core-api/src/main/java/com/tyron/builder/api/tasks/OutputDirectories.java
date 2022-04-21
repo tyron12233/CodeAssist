@@ -1,6 +1,6 @@
 package com.tyron.builder.api.tasks;
 
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 import java.lang.annotation.Annotation;
 

@@ -1,13 +1,12 @@
 package com.tyron.builder.api.internal.file.copy;
 
-import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.tasks.util.PatternSet;

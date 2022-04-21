@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.buildTree;
 
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 
 public interface BuildTreeModelControllerServices {
     /**

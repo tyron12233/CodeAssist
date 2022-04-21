@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.operations;
 
-import com.tyron.builder.api.internal.concurrent.ManagedExecutor;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.internal.concurrent.ManagedExecutor;
+import com.tyron.builder.internal.work.WorkerLeaseService;
 
 public class DefaultBuildOperationQueueFactory implements BuildOperationQueueFactory {
     private final WorkerLeaseService workerLeaseService;

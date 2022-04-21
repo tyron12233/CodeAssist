@@ -1,12 +1,12 @@
 package com.tyron.builder.internal.logging.services;
 
 import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.AbstractLineChoppingStyledTextOutput;
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
-import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
-import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.internal.logging.AbstractLineChoppingStyledTextOutput;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.api.logging.LogLevel;
 
 import java.util.ArrayList;

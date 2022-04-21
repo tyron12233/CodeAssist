@@ -3,10 +3,33 @@ plugins {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_7
-    targetCompatibility = JavaVersion.VERSION_1_7
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.buildCache
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderResources
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.fileWatching
+    implementation projects.buildTools.builderExecution
+    implementation projects.buildTools.builderNormalizationJava
+    implementation projects.buildTools.builderPersistentCache
+    
     implementation project(path: ':build-tools:builder-api')
+
+    implementation common.slf4j
 }

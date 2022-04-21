@@ -2,7 +2,7 @@ package com.tyron.builder.internal.logging.text;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.AbstractStyledTextOutput;
+import com.tyron.builder.internal.logging.text.AbstractStyledTextOutput;
 
 import java.util.ArrayList;
 import java.util.List;

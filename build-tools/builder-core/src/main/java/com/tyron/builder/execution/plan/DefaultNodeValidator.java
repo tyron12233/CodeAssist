@@ -4,10 +4,10 @@ package com.tyron.builder.execution.plan;
 import static com.tyron.builder.api.internal.reflect.validation.TypeValidationProblemRenderer.convertToSingleLine;
 import static com.tyron.builder.api.internal.reflect.validation.TypeValidationProblemRenderer.renderMinimalInformationAbout;
 
-import com.tyron.builder.api.internal.execution.WorkValidationContext;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationProblem;
-import com.tyron.builder.api.internal.reflect.validation.UserManualReference;
+import com.tyron.builder.internal.execution.WorkValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationProblem;
+import com.tyron.builder.internal.reflect.validation.UserManualReference;
 
 import java.util.List;
 import java.util.Optional;

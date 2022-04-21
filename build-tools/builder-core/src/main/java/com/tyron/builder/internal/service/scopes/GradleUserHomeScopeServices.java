@@ -4,12 +4,12 @@ import com.google.common.hash.HashCode;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
 import com.tyron.builder.internal.classpath.ClassPath;
-import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.internal.hash.ConfigurableClassLoaderHierarchyHasher;
+import com.tyron.builder.internal.classloader.ConfigurableClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.hash.Hashes;
-import com.tyron.builder.internal.hash.HashingClassLoaderFactory;
-import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
+import com.tyron.builder.internal.classloader.HashingClassLoaderFactory;
+import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.cache.CacheRepository;
@@ -25,8 +25,6 @@ import com.tyron.builder.cache.internal.scopes.DefaultCacheScopeMapping;
 import com.tyron.builder.cache.internal.scopes.DefaultGlobalScopedCache;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.initialization.layout.GlobalCacheDir;
-import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
-import com.tyron.builder.internal.service.scopes.WorkerSharedUserHomeScopeServices;
 import com.tyron.common.TestUtil;
 
 import org.jetbrains.annotations.Nullable;
@@ -35,7 +33,7 @@ import java.io.File;
 import java.util.Collections;
 
 public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServices {
-
+    
     private final ServiceRegistry globalServices;
 
     public GradleUserHomeScopeServices(ServiceRegistry globalServices) {

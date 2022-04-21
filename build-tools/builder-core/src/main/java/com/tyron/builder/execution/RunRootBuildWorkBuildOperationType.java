@@ -1,6 +1,6 @@
 package com.tyron.builder.execution;
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 // Used by gradle-profiler
 public interface RunRootBuildWorkBuildOperationType extends BuildOperationType<RunRootBuildWorkBuildOperationType.Details, Void> {

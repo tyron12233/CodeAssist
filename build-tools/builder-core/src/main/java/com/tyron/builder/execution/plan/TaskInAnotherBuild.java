@@ -4,9 +4,9 @@
 //import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 //import com.tyron.builder.api.internal.TaskInternal;
 //import com.tyron.builder.api.internal.project.ProjectInternal;
-//import com.tyron.builder.api.internal.resources.ResourceLock;
+//import com.tyron.builder.internal.resources.ResourceLock;
 //import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
-//import com.tyron.builder.api.util.Path;
+//import com.tyron.builder.util.Path;
 //import com.tyron.builder.composite.internal.IncludedBuildTaskResource;
 //
 //import java.util.Collections;

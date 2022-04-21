@@ -12,7 +12,7 @@ import static org.fusesource.jansi.Ansi.Color.DEFAULT;
 
 import com.google.common.collect.Lists;
 import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.Style;
+import com.tyron.builder.internal.logging.Style;
 
 import org.fusesource.jansi.Ansi;
 

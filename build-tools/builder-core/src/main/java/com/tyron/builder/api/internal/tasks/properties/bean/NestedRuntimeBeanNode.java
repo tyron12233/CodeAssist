@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.properties.bean;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;

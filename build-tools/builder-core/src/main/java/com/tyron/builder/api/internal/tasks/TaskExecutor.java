@@ -1,27 +1,26 @@
 package com.tyron.builder.api.internal.tasks;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.TaskSelectionException;
-import com.tyron.builder.api.execution.plan.DefaultExecutionPlan;
-import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
-import com.tyron.builder.api.execution.plan.TaskDependencyResolver;
-import com.tyron.builder.api.execution.plan.TaskNodeFactory;
-import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
-import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.execution.TaskSelectionException;
+import com.tyron.builder.execution.plan.DefaultExecutionPlan;
+import com.tyron.builder.execution.plan.ExecutionNodeAccessHierarchies;
+import com.tyron.builder.execution.plan.TaskDependencyResolver;
+import com.tyron.builder.execution.plan.TaskNodeFactory;
+import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
+import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.resources.ResourceLockCoordinationService;
+import com.tyron.builder.internal.work.WorkerLeaseService;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class TaskExecutor {
-
     private final ProjectInternal project;
     private final TaskNodeFactory taskNodeFactory;
     private final TaskDependencyResolver taskDependencyResolver;

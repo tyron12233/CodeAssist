@@ -5,8 +5,8 @@ import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.UserIn
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.exceptions.FailureResolutionAware;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.configuration.project.BuiltInCommand;
 import com.tyron.builder.initialization.BuildClientMetaData;

@@ -1,6 +1,6 @@
 package org.slf4j.impl;
 
-import com.tyron.builder.api.internal.time.Time;
+import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.internal.logging.slf4j.OutputEventListenerBackedLoggerContext;
 
 import org.slf4j.ILoggerFactory;

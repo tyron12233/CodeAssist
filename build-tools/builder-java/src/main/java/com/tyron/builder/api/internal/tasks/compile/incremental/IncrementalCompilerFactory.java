@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.tasks.compile.incremental;
 
 
 import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.tasks.compile.CleaningJavaCompiler;
 import com.tyron.builder.api.internal.tasks.compile.JavaCompileSpec;
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.ClassSetAnalyzer;

@@ -1,15 +1,15 @@
 package com.tyron.builder.api.internal;
 
-import com.tyron.builder.api.BuildListener;
+import com.tyron.builder.BuildListener;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.internal.build.BuildState;
-import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
+import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
+import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;
 
 import org.jetbrains.annotations.Nullable;

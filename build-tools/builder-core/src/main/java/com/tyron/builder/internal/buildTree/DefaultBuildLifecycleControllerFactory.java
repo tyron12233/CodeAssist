@@ -1,12 +1,12 @@
 package com.tyron.builder.internal.buildTree;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.StartParameter;
-import com.tyron.builder.api.execution.BuildWorkExecutor;
+import com.tyron.builder.StartParameter;
+import com.tyron.builder.execution.BuildWorkExecutor;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.event.ListenerManager;
-import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
+import com.tyron.builder.internal.event.ListenerManager;
+import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
 import com.tyron.builder.initialization.exception.ExceptionAnalyser;
 import com.tyron.builder.initialization.internal.InternalBuildFinishedListener;

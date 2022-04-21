@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 
 import java.io.File;

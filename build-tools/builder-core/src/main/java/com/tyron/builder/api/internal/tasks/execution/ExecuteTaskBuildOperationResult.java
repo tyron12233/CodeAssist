@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.tasks.execution;
 
-import com.tyron.builder.api.internal.execution.caching.CachingDisabledReason;
-import com.tyron.builder.api.internal.execution.caching.CachingDisabledReasonCategory;
-import com.tyron.builder.api.internal.execution.caching.CachingState;
+import com.tyron.builder.internal.execution.caching.CachingDisabledReason;
+import com.tyron.builder.internal.execution.caching.CachingDisabledReasonCategory;
+import com.tyron.builder.internal.execution.caching.CachingState;
 import com.tyron.builder.api.internal.tasks.TaskOutputCachingDisabledReasonCategory;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;

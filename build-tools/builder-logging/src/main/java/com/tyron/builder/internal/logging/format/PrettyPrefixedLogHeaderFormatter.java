@@ -4,7 +4,7 @@ import static com.tyron.builder.api.internal.logging.events.StyledTextOutputEven
 
 import com.google.common.collect.Lists;
 import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
 
 import java.util.List;
 

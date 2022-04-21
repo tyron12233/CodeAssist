@@ -2,8 +2,8 @@ package com.tyron.builder.internal.buildTree;
 
 import com.google.common.base.Joiner;
 import com.google.common.hash.Hasher;
-import com.tyron.builder.api.internal.Describables;
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.Describables;
+import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.api.internal.StartParameterInternal;
 
 public class RunTasksRequirements implements BuildActionModelRequirements {

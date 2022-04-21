@@ -1,7 +1,7 @@
 package com.tyron.builder.caching.internal.controller.operations;
 
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 public final class BuildCacheArchivePackBuildOperationType implements BuildOperationType<BuildCacheArchivePackBuildOperationType.Details, BuildCacheArchivePackBuildOperationType.Result> {
 

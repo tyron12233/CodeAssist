@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.resource.local;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.api.internal.resources.Resource;
+import com.tyron.builder.internal.resource.Resource;
 
 import java.io.File;
 

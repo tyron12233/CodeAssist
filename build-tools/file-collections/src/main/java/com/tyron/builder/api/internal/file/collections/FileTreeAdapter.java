@@ -6,10 +6,10 @@ import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.AbstractFileTree;
 import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
-import com.tyron.builder.api.tasks.Buildable;
+import com.tyron.builder.api.Buildable;
 import com.tyron.builder.api.tasks.util.PatternFilterable;
 import com.tyron.builder.api.tasks.util.PatternSet;
 

@@ -3,11 +3,11 @@ package com.tyron.builder.api.internal.provider;
 import com.google.common.base.Objects;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.state.ManagedFactory;
-import com.tyron.builder.api.providers.ListProperty;
-import com.tyron.builder.api.providers.MapProperty;
-import com.tyron.builder.api.providers.Property;
-import com.tyron.builder.api.providers.Provider;
-import com.tyron.builder.api.providers.SetProperty;
+import com.tyron.builder.api.provider.ListProperty;
+import com.tyron.builder.api.provider.MapProperty;
+import com.tyron.builder.api.provider.Property;
+import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.api.provider.SetProperty;
 
 import org.jetbrains.annotations.Nullable;
 

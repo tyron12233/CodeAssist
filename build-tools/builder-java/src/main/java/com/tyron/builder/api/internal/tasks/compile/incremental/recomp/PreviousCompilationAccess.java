@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.tasks.compile.incremental.recomp;
 
 
-import com.tyron.builder.api.internal.serialize.kryo.KryoBackedDecoder;
-import com.tyron.builder.api.internal.serialize.kryo.KryoBackedEncoder;
+import com.tyron.builder.internal.serialize.kryo.KryoBackedDecoder;
+import com.tyron.builder.internal.serialize.kryo.KryoBackedEncoder;
 import com.tyron.builder.cache.StringInterner;
 
 import java.io.File;

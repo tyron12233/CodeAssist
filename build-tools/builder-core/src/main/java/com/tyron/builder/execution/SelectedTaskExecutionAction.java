@@ -2,13 +2,13 @@ package com.tyron.builder.execution;
 
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.BuildWorkExecutor;
+import com.tyron.builder.execution.BuildWorkExecutor;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
+import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.internal.build.ExecutionResult;
 
 import java.util.LinkedList;

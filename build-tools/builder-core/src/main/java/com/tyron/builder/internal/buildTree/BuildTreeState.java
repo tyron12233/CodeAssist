@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.buildTree;
 
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistryBuilder;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.reflect.service.ServiceRegistryBuilder;
 
 import java.io.Closeable;
 import java.util.function.Function;

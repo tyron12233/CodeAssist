@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.model;
 
-import com.tyron.builder.api.internal.DisplayName;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.DisplayName;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.internal.work.WorkerLeaseService;
 
 @ServiceScope(Scopes.BuildSession.class)
 public class StateTransitionControllerFactory {

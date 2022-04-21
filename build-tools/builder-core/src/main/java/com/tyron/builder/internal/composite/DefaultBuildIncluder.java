@@ -3,7 +3,7 @@ package com.tyron.builder.internal.composite;
 
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.reflect.DirectInstantiator;
+import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.initialization.IncludedBuildSpec;
 import com.tyron.builder.internal.build.BuildIncluder;

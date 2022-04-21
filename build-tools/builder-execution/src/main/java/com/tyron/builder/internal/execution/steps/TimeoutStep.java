@@ -5,7 +5,7 @@ import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.timeout.Timeout;
 import com.tyron.builder.internal.execution.timeout.TimeoutHandler;
-import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
 
 import java.time.Duration;
 import java.util.Optional;

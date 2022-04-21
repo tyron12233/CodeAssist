@@ -1,18 +1,18 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.api.BuildListener;
-import com.tyron.builder.api.BuildResult;
-import com.tyron.builder.api.Gradle;
+import com.tyron.builder.BuildListener;
+import com.tyron.builder.BuildResult;
+import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UncheckedIOException;
-import com.tyron.builder.api.execution.BuildWorkExecutor;
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
-import com.tyron.builder.api.execution.plan.LocalTaskNode;
-import com.tyron.builder.api.execution.plan.Node;
-import com.tyron.builder.api.internal.Describables;
+import com.tyron.builder.execution.BuildWorkExecutor;
+import com.tyron.builder.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.LocalTaskNode;
+import com.tyron.builder.execution.plan.Node;
+import com.tyron.builder.internal.Describables;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
-import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
+import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 import com.tyron.builder.execution.plan.BuildWorkPlan;
 import com.tyron.builder.initialization.exception.ExceptionAnalyser;
 import com.tyron.builder.initialization.internal.InternalBuildFinishedListener;

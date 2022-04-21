@@ -1,6 +1,6 @@
 package com.tyron.builder.util;
 
-import com.tyron.builder.api.internal.GUtil;
+import com.tyron.builder.util.GUtil;
 
 import java.util.*;
 import java.util.regex.Matcher;

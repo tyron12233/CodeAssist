@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.file;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
 
 import java.util.Set;
 import java.util.function.Consumer;

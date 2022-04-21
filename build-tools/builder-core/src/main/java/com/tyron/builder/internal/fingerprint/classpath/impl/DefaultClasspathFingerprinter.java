@@ -4,7 +4,7 @@ import com.tyron.builder.api.internal.changedetection.state.ResourceEntryFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.changedetection.state.RuntimeClasspathResourceHasher;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.internal.fingerprint.classpath.ClasspathFingerprinter;
 import com.tyron.builder.internal.fingerprint.impl.AbstractFileCollectionFingerprinter;

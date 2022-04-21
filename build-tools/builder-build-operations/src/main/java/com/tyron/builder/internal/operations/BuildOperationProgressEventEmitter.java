@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.operations;
 
-import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.internal.time.Clock;
 
 import org.jetbrains.annotations.Nullable;
 

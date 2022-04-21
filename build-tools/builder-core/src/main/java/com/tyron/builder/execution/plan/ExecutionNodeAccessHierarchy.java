@@ -3,8 +3,8 @@ package com.tyron.builder.execution.plan;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileTreeElement;
-import com.tyron.builder.api.internal.collect.PersistentList;
-import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.internal.collect.PersistentList;
+import com.tyron.builder.internal.file.Stat;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.internal.snapshot.VfsRelativePath;
 

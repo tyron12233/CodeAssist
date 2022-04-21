@@ -5,11 +5,11 @@ import com.tyron.builder.api.internal.Actions;
 import com.tyron.builder.api.internal.DefaultMutationGuard;
 import com.tyron.builder.api.internal.MutationGuard;
 import com.tyron.builder.api.internal.WithMutationGuard;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.RunnableBuildOperation;
+import com.tyron.builder.api.BuildProject;
 
 import java.util.Collections;
 

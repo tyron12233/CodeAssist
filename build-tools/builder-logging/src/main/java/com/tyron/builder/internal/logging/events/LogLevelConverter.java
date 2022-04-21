@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.events;
 
 
-import com.tyron.builder.api.internal.logging.events.operations.LogEventLevel;
+import com.tyron.builder.internal.logging.events.operations.LogEventLevel;
 import com.tyron.builder.api.logging.LogLevel;
 
 public class LogLevelConverter {

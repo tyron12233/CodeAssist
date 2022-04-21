@@ -2,8 +2,8 @@ package com.tyron.builder.internal.execution;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.internal.exceptions.Contextual;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
+import com.tyron.builder.internal.exceptions.Contextual;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
 
 import org.jetbrains.annotations.Nullable;
 

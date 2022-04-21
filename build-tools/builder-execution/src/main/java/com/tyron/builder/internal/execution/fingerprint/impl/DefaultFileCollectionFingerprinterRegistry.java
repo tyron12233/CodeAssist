@@ -3,8 +3,8 @@ package com.tyron.builder.internal.execution.fingerprint.impl;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
 import com.tyron.builder.internal.execution.fingerprint.FileNormalizationSpec;
 
 import java.util.Collection;

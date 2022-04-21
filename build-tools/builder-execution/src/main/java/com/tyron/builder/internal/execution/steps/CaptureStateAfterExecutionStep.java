@@ -6,21 +6,21 @@ import java.time.Duration;
 import java.util.Optional;
 
 import com.google.common.collect.ImmutableSortedMap;
-import com.tyron.builder.api.internal.Try;
+import com.tyron.builder.internal.Try;
 import com.tyron.builder.internal.execution.ExecutionResult;
 import com.tyron.builder.internal.execution.OutputSnapshotter;
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.history.AfterExecutionState;
-import com.tyron.builder.api.internal.execution.history.BeforeExecutionState;
-import com.tyron.builder.api.internal.execution.history.PreviousExecutionState;
-import com.tyron.builder.api.internal.execution.history.impl.DefaultAfterExecutionState;
+import com.tyron.builder.internal.execution.history.AfterExecutionState;
+import com.tyron.builder.internal.execution.history.BeforeExecutionState;
+import com.tyron.builder.internal.execution.history.PreviousExecutionState;
+import com.tyron.builder.internal.execution.history.impl.DefaultAfterExecutionState;
 import com.tyron.builder.api.internal.id.UniqueId;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationType;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.time.Timer;
+import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.time.Timer;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 public class CaptureStateAfterExecutionStep<C extends BeforeExecutionContext> extends BuildOperationStep<C, AfterExecutionResult> {

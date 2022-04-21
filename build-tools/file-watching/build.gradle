@@ -1,0 +1,25 @@
+plugins {
+    id 'java-library'
+}
+
+description = "File system watchers for keeping the VFS up-to-date"
+
+dependencies {
+    api projects.buildTools.snapshots
+
+    implementation projects.common
+    implementation projects.buildTools.builderBaseAnnotations
+    implementation projects.buildTools.builderEnterpriseOperations
+
+    implementation common.slf4j
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+    implementation "net.rubygrapefruit:file-events:0.22-milestone-23"
+
+    // used in android
+    implementation 'org.apache.commons:commons-vfs2:2.9.0'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

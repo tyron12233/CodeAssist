@@ -5,9 +5,9 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.configuration.project.ProjectConfigureAction;
-import com.tyron.builder.api.internal.event.ListenerManager;
+import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.internal.exceptions.LocationAwareException;
 

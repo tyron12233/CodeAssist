@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.file.copy;
 
 
 import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.tasks.WorkResult;

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging.console;
 
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;

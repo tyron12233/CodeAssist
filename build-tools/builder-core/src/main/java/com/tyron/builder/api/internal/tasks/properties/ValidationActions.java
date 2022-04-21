@@ -9,10 +9,10 @@ import java.util.Locale;
 
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.internal.GeneratedSubclass;
-import com.tyron.builder.api.internal.reflect.problems.ValidationProblemId;
-import com.tyron.builder.api.internal.reflect.validation.PropertyProblemBuilder;
+import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
+import com.tyron.builder.internal.reflect.validation.PropertyProblemBuilder;
 import com.tyron.builder.internal.typeconversion.UnsupportedNotationException;
-import com.tyron.builder.api.model.internal.type.ModelType;
+import com.tyron.builder.model.internal.type.ModelType;
 
 public enum ValidationActions implements ValidationAction {
     NO_OP("file collection") {

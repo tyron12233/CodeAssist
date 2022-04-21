@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.build;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.execution.MultipleBuildFailures;
+import com.tyron.builder.execution.MultipleBuildFailures;
 import com.tyron.builder.internal.Cast;
 
 import org.jetbrains.annotations.Nullable;

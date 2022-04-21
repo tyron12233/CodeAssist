@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.console;
 
-import com.tyron.builder.api.internal.logging.events.OutputEvent;
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.PromptOutputEvent;
 import com.tyron.builder.internal.logging.events.UserInputRequestEvent;
 import com.tyron.builder.internal.logging.events.UserInputResumeEvent;

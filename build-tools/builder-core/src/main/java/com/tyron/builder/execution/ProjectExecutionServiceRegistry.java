@@ -5,8 +5,8 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.reflect.service.ServiceLookupException;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.reflect.service.ServiceLookupException;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
 
 import org.jetbrains.annotations.NotNull;

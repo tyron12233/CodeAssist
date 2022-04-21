@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
-import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
+import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
+import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.execution.plan.ExecutionPlanFactory;
 
 import java.util.function.Consumer;

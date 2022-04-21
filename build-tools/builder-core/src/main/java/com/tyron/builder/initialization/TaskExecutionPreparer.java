@@ -1,7 +1,7 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.api.execution.BuildWorkExecutor;
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.BuildWorkExecutor;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
 
 /**

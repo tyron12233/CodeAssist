@@ -1,9 +1,7 @@
 package com.tyron.builder;
 
-import com.tyron.builder.api.BuildListener;
-import com.tyron.builder.api.BuildResult;
-import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.initialization.Settings;
+import com.tyron.builder.api.invocation.Gradle;
 
 /**
  * A {@link BuildListener} adapter class for receiving build events. The methods in this class are empty. This class

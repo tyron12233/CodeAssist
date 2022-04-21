@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.provider;
 
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
-import com.tyron.builder.api.tasks.Buildable;
+import com.tyron.builder.api.Buildable;
 
 import java.util.Set;
 

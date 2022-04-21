@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal.tasks;
 
+import com.tyron.builder.api.tasks.TaskExecutionException;
 import com.tyron.builder.api.tasks.TaskState;
 
 import org.jetbrains.annotations.Nullable;

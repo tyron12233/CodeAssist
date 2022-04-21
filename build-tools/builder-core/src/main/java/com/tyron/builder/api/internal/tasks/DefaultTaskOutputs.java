@@ -17,9 +17,9 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.tasks.TaskOutputFilePropertyBuilder;
-import com.tyron.builder.api.tasks.TaskOutputsInternal;
+import com.tyron.builder.api.internal.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskPropertyUtils;
-import com.tyron.builder.api.util.Predicates;
+import com.tyron.builder.util.Predicates;
 
 import java.io.File;
 import java.util.Objects;

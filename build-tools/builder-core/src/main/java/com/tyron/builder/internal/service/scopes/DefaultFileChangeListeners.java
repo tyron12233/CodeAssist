@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.api.internal.event.AnonymousListenerBroadcast;
-import com.tyron.builder.api.internal.event.ListenerManager;
+import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.watch.registry.FileWatcherRegistry;
 import com.tyron.builder.internal.watch.vfs.FileChangeListener;
 import com.tyron.builder.internal.watch.vfs.FileChangeListeners;

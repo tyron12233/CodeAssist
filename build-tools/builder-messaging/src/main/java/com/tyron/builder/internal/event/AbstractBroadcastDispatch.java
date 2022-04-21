@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.event;
 
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.dispatch.Dispatch;
-import com.tyron.builder.api.internal.dispatch.MethodInvocation;
-import com.tyron.builder.api.internal.operations.BuildOperationInvocationException;
+import com.tyron.builder.internal.dispatch.Dispatch;
+import com.tyron.builder.internal.dispatch.MethodInvocation;
+import com.tyron.builder.internal.operations.BuildOperationInvocationException;
 
 import java.util.ArrayList;
 import java.util.Collections;

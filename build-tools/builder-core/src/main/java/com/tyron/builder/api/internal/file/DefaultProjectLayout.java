@@ -13,8 +13,8 @@ import com.tyron.builder.api.internal.provider.MappingProvider;
 import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.api.internal.provider.Providers;
 import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
-import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
 import java.io.File;

@@ -1,8 +1,8 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.api.internal.service.scopes.EventScope;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
-import com.tyron.builder.api.internal.service.scopes.StatefulListener;
+import com.tyron.builder.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.StatefulListener;
 
 /**
  * A listener that is notified when a root build is started and completed. No more than one root build may run at a given time.

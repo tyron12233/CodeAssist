@@ -4,7 +4,7 @@ import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.TaskExecuterResult;
 import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
-import com.tyron.builder.api.internal.tasks.TaskExecutionException;
+import com.tyron.builder.api.tasks.TaskExecutionException;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 
 public class CatchExceptionTaskExecuter implements TaskExecuter {

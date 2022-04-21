@@ -5,11 +5,11 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
 import com.tyron.builder.api.attributes.Attribute;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.api.internal.serialize.AbstractSerializer;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
-import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
-import com.tyron.builder.api.internal.serialize.Serializer;
+import com.tyron.builder.internal.serialize.AbstractSerializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.HashCodeSerializer;
+import com.tyron.builder.internal.serialize.Serializer;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 
 public class SnapshotSerializer extends AbstractSerializer<ValueSnapshot> {

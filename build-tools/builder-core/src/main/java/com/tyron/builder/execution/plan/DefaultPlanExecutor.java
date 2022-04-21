@@ -1,22 +1,24 @@
 package com.tyron.builder.execution.plan;
 
-import static com.tyron.builder.api.internal.resources.ResourceLockState.Disposition.FINISHED;
-import static com.tyron.builder.api.internal.resources.ResourceLockState.Disposition.RETRY;
+import static com.tyron.builder.internal.resources.ResourceLockState.Disposition.FINISHED;
+import static com.tyron.builder.internal.resources.ResourceLockState.Disposition.RETRY;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.initialization.BuildCancellationToken;
-import com.tyron.builder.api.internal.MutableReference;
+import com.tyron.builder.initialization.BuildCancellationToken;
+import com.tyron.builder.internal.MutableReference;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
-import com.tyron.builder.api.internal.concurrent.ExecutorFactory;
-import com.tyron.builder.api.internal.concurrent.ManagedExecutor;
+import com.tyron.builder.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.internal.concurrent.ManagedExecutor;
 import com.tyron.builder.internal.concurrent.Stoppable;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
-import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.time.TimeFormatting;
-import com.tyron.builder.api.internal.time.Timer;
-import com.tyron.builder.api.internal.work.WorkerLeaseRegistry.WorkerLease;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
+import com.tyron.builder.internal.resources.ResourceLockCoordinationService;
+import com.tyron.builder.internal.resources.ResourceLockState;
+import com.tyron.builder.internal.resources.ResourceLockState.Disposition;
+import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.time.TimeFormatting;
+import com.tyron.builder.internal.time.Timer;
+import com.tyron.builder.internal.work.WorkerLeaseRegistry.WorkerLease;
+import com.tyron.builder.internal.work.WorkerLeaseService;
 
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;

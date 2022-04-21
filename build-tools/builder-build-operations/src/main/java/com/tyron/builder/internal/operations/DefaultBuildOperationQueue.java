@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.operations;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.internal.work.WorkerLeaseService;
 
 import org.jetbrains.annotations.Nullable;
 

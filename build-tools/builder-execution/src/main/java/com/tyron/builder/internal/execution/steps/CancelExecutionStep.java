@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.steps;
 
 import com.tyron.builder.api.BuildCancelledException;
-import com.tyron.builder.api.initialization.BuildCancellationToken;
+import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.internal.execution.UnitOfWork;
 
 public class CancelExecutionStep<C extends Context, R extends Result> implements Step<C, R> {

@@ -1,6 +1,6 @@
 package com.tyron.builder.api.file;
 
-import com.tyron.builder.api.providers.Property;
+import com.tyron.builder.api.provider.Property;
 
 public interface ExpandDetails {
     /**

@@ -3,8 +3,8 @@ package com.tyron.builder.api.internal.provider;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.providers.Provider;
-import com.tyron.builder.api.providers.SetProperty;
+import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.api.provider.SetProperty;
 
 import java.util.Set;
 import java.util.function.Supplier;

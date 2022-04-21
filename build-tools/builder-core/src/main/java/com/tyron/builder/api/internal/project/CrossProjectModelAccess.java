@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.project;
 
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 
 import javax.annotation.Nullable;

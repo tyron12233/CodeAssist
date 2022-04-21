@@ -3,7 +3,7 @@ package com.tyron.builder.internal.build;
 import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.project.ProjectStateUnk;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 import org.jetbrains.annotations.Nullable;
 

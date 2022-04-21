@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.properties.annotations;
 import static com.tyron.builder.api.internal.tasks.properties.annotations.TypeAnnotationHandlerSupport.reportInvalidUseOfTypeAnnotation;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.tasks.CacheableTask;
 
 import java.lang.annotation.Annotation;

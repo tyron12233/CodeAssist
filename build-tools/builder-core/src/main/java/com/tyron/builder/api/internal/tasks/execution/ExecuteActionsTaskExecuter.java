@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.execution;
 
-import static com.tyron.builder.api.work.AsyncWorkTracker.ProjectLockRetention.RELEASE_AND_REACQUIRE_PROJECT_LOCKS;
-import static com.tyron.builder.api.work.AsyncWorkTracker.ProjectLockRetention.RELEASE_PROJECT_LOCKS;
+import static com.tyron.builder.internal.work.AsyncWorkTracker.ProjectLockRetention.RELEASE_AND_REACQUIRE_PROJECT_LOCKS;
+import static com.tyron.builder.internal.work.AsyncWorkTracker.ProjectLockRetention.RELEASE_PROJECT_LOCKS;
 
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
@@ -12,34 +12,34 @@ import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.GeneratedSubclasses;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.event.ListenerManager;
-import com.tyron.builder.api.internal.exceptions.DefaultMultiCauseException;
-import com.tyron.builder.api.internal.exceptions.MultiCauseException;
-import com.tyron.builder.api.internal.execution.ExecutionEngine;
-import com.tyron.builder.api.internal.execution.ExecutionOutcome;
-import com.tyron.builder.api.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.WorkValidationContext;
-import com.tyron.builder.api.internal.execution.WorkValidationException;
-import com.tyron.builder.api.internal.execution.caching.CachingState;
-import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
-import com.tyron.builder.api.internal.execution.history.ExecutionHistoryStore;
-import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
-import com.tyron.builder.api.internal.execution.workspace.WorkspaceProvider;
+import com.tyron.builder.internal.event.ListenerManager;
+import com.tyron.builder.internal.exceptions.DefaultMultiCauseException;
+import com.tyron.builder.internal.exceptions.MultiCauseException;
+import com.tyron.builder.internal.execution.ExecutionEngine;
+import com.tyron.builder.internal.execution.ExecutionOutcome;
+import com.tyron.builder.internal.execution.UnitOfWork;
+import com.tyron.builder.internal.execution.WorkValidationContext;
+import com.tyron.builder.internal.execution.WorkValidationException;
+import com.tyron.builder.internal.execution.caching.CachingState;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
+import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.workspace.WorkspaceProvider;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.collections.LazilyInitializedFileCollection;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.BuildOperationRef;
-import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationRef;
+import com.tyron.builder.internal.operations.RunnableBuildOperation;
 import com.tyron.builder.api.internal.project.taskfactory.IncrementalInputsTaskAction;
 import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
 import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskInputsTaskAction;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.snapshot.SnapshotUtil;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
@@ -47,7 +47,7 @@ import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.TaskExecuterResult;
 import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
-import com.tyron.builder.api.internal.tasks.TaskExecutionException;
+import com.tyron.builder.api.tasks.TaskExecutionException;
 import com.tyron.builder.api.internal.tasks.TaskExecutionOutcome;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.internal.tasks.properties.InputFilePropertySpec;
@@ -55,9 +55,9 @@ import com.tyron.builder.api.internal.tasks.properties.InputParameterUtils;
 import com.tyron.builder.api.internal.tasks.properties.InputPropertySpec;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertySpec;
 import com.tyron.builder.api.internal.tasks.properties.TaskProperties;
-import com.tyron.builder.api.tasks.TaskOutputsInternal;
-import com.tyron.builder.api.tasks.execution.ExecuteTaskActionBuildOperationType;
-import com.tyron.builder.api.work.AsyncWorkTracker;
+import com.tyron.builder.api.internal.TaskOutputsInternal;
+import com.tyron.builder.api.internal.tasks.execution.ExecuteTaskActionBuildOperationType;
+import com.tyron.builder.internal.work.AsyncWorkTracker;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import org.slf4j.Logger;
@@ -415,7 +415,7 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
                         }
 
                         try {
-                            asyncWorkTracker.waitForCompletion(currentOperation, hasMoreWork ? ProjectLockRetention.RELEASE_AND_REACQUIRE_PROJECT_LOCKS : ProjectLockRetention.RELEASE_PROJECT_LOCKS);
+                            asyncWorkTracker.waitForCompletion(currentOperation, hasMoreWork ? AsyncWorkTracker.ProjectLockRetention.RELEASE_AND_REACQUIRE_PROJECT_LOCKS : AsyncWorkTracker.ProjectLockRetention.RELEASE_PROJECT_LOCKS);
                         } catch (Throwable t) {
                             List<Throwable> failures = Lists.newArrayList();
 

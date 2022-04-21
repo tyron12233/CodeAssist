@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.steps;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.execution.history.changes.ExecutionStateChanges;
+import com.tyron.builder.internal.execution.history.changes.ExecutionStateChanges;
 
 import java.util.Optional;
 

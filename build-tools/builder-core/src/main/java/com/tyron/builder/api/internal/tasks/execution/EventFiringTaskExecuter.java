@@ -2,19 +2,19 @@ package com.tyron.builder.api.internal.tasks.execution;
 
 import com.tyron.builder.api.execution.TaskExecutionListener;
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.operations.BuildOperationCategory;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.BuildOperationRef;
-import com.tyron.builder.api.internal.operations.CallableBuildOperation;
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationRef;
+import com.tyron.builder.internal.operations.CallableBuildOperation;
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.TaskExecuterResult;
 import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
-import com.tyron.builder.api.internal.tasks.TaskExecutionException;
+import com.tyron.builder.api.tasks.TaskExecutionException;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.logging.Logger;
-import com.tyron.builder.internal.execution.taskgraph.TaskListenerInternal;
+import com.tyron.builder.execution.taskgraph.TaskListenerInternal;
 import com.tyron.builder.internal.logging.slf4j.ContextAwareTaskLogger;
 
 @SuppressWarnings("deprecation")

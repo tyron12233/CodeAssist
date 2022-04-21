@@ -1,8 +1,8 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.execution.BuildConfigurationActionExecuter;
 import com.tyron.builder.internal.buildTree.BuildModelParameters;
 

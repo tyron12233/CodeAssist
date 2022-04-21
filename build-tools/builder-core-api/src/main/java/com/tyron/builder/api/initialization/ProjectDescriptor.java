@@ -1,6 +1,6 @@
 package com.tyron.builder.api.initialization;
 
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 import org.jetbrains.annotations.Nullable;
 

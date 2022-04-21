@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.fingerprint.classpath;
 
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
 
 /**

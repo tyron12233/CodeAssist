@@ -4,7 +4,7 @@ import com.google.common.base.Preconditions;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.artifacts.DependencySubstitutions;
 import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
-import com.tyron.builder.api.internal.ImmutableActionSet;
+import com.tyron.builder.internal.ImmutableActionSet;
 import com.tyron.builder.api.tasks.TaskReference;
 
 import javax.annotation.Nonnull;

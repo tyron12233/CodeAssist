@@ -4,7 +4,7 @@ import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.file.RegularFileProperty;
-import com.tyron.builder.api.internal.GUtil;
+import com.tyron.builder.util.GUtil;
 import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
 import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;
 import com.tyron.builder.api.tasks.InputFile;
@@ -18,7 +18,7 @@ import com.tyron.builder.api.tasks.SourceTask;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.api.work.ChangeType;
 import com.tyron.builder.api.work.FileChange;
-import com.tyron.builder.api.work.InputChanges;
+import com.tyron.builder.work.InputChanges;
 import com.tyron.builder.api.work.NormalizeLineEndings;
 
 import java.io.File;

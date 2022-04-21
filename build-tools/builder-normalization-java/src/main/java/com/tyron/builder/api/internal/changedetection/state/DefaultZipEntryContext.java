@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.changedetection.state;
 
 import com.tyron.builder.internal.file.FilePathUtil;
-import com.tyron.builder.api.internal.file.archive.ZipEntry;
+import com.tyron.builder.internal.file.archive.ZipEntry;
 import com.tyron.builder.internal.fingerprint.hashing.ZipEntryContext;
 
 import java.util.function.Supplier;

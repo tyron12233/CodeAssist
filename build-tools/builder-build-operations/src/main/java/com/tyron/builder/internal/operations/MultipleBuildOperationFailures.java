@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.operations;
 
-import com.tyron.builder.api.internal.exceptions.DefaultMultiCauseException;
+import com.tyron.builder.internal.exceptions.DefaultMultiCauseException;
 
 import org.jetbrains.annotations.Nullable;
 

@@ -12,7 +12,7 @@ import java.util.Map;
 
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.properties.GradleProperties;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultGradlePropertiesLoader.class);

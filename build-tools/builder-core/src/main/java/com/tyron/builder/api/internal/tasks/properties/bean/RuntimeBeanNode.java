@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.tasks.properties.bean;
 
 import com.google.common.base.Equivalence;
 import com.google.common.base.Preconditions;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.properties.AbstractPropertyNode;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.TypeMetadata;

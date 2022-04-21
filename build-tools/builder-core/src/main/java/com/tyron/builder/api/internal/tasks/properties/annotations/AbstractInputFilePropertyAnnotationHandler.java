@@ -4,10 +4,10 @@ import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotation
 
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
-import com.tyron.builder.api.internal.reflect.PropertyMetadata;
-import com.tyron.builder.api.internal.reflect.problems.ValidationProblemId;
-import com.tyron.builder.api.internal.reflect.validation.Severity;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.PropertyMetadata;
+import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
+import com.tyron.builder.internal.reflect.validation.Severity;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.properties.BeanPropertyContext;
 import com.tyron.builder.api.internal.tasks.properties.FileParameterUtils;
 import com.tyron.builder.api.internal.tasks.properties.InputFilePropertyType;

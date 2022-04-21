@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.tasks.properties;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.reflect.AnnotationCategory;
+import com.tyron.builder.internal.reflect.AnnotationCategory;
 import com.tyron.builder.api.tasks.Classpath;
 import com.tyron.builder.api.tasks.CompileClasspath;
 import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;

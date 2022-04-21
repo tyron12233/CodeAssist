@@ -1,9 +1,9 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
-import com.tyron.builder.api.internal.DeferredUtil;
-import com.tyron.builder.api.internal.reflect.problems.ValidationProblemId;
-import com.tyron.builder.api.internal.reflect.validation.Severity;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.util.internal.DeferredUtil;
+import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
+import com.tyron.builder.internal.reflect.validation.Severity;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 
 public abstract class AbstractValidatingProperty implements ValidatingProperty {
     private final String propertyName;

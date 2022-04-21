@@ -2,7 +2,7 @@ package com.tyron.builder.work;
 
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileSystemLocation;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 
 /**
  * Provides access to any input files that need to be processed by an incremental work action.

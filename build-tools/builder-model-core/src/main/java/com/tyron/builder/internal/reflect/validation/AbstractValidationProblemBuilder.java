@@ -5,7 +5,7 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
-import com.tyron.builder.api.plugin.PluginId;
+import com.tyron.builder.plugin.use.PluginId;
 import com.tyron.builder.problems.Solution;
 
 import org.jetbrains.annotations.Nullable;

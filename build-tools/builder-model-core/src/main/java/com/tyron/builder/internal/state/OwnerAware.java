@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.state;
 
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.DisplayName;
 
 import org.jetbrains.annotations.Nullable;
 

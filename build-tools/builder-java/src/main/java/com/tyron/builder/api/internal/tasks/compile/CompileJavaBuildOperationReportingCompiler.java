@@ -1,10 +1,10 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.CallableBuildOperation;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.CallableBuildOperation;
 import com.tyron.builder.api.internal.tasks.compile.CompileJavaBuildOperationType.Result.AnnotationProcessorDetails;
 import com.tyron.builder.api.internal.tasks.compile.incremental.processing.AnnotationProcessingResult;
 import com.tyron.builder.api.internal.tasks.compile.incremental.processing.AnnotationProcessorResult;

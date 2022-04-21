@@ -18,6 +18,8 @@ buildscript {
 }
 
 allprojects {
+    apply from: "$rootDir/gradle/dependencies.gradle"
+
     repositories {
         google()
         maven { url 'https://jitpack.io' }

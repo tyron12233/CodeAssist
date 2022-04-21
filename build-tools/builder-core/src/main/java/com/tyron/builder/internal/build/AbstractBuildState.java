@@ -1,13 +1,13 @@
 package com.tyron.builder.internal.build;
 
 import com.tyron.builder.api.internal.BuildDefinition;
-import com.tyron.builder.api.internal.Describables;
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.Describables;
+import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.project.ProjectStateRegistry;
 import com.tyron.builder.initialization.IncludedBuildSpec;
 import com.tyron.builder.internal.buildTree.BuildTreeState;
-import com.tyron.builder.api.internal.reflect.service.scopes.BuildScopeServices;
+import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 import com.tyron.builder.internal.lazy.Lazy;
 
 import org.jetbrains.annotations.Nullable;

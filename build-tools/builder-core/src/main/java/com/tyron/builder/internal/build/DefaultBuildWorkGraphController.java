@@ -2,9 +2,9 @@ package com.tyron.builder.internal.build;
 
 import com.google.common.util.concurrent.Runnables;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.plan.LocalTaskNode;
-import com.tyron.builder.api.execution.plan.TaskNode;
-import com.tyron.builder.api.execution.plan.TaskNodeFactory;
+import com.tyron.builder.execution.plan.LocalTaskNode;
+import com.tyron.builder.execution.plan.TaskNode;
+import com.tyron.builder.execution.plan.TaskNodeFactory;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.composite.internal.IncludedBuildTaskResource;
 import com.tyron.builder.composite.internal.TaskIdentifier;

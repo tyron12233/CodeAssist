@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.typeconversion;
 
-import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
 
 /**
  * A converter from notations of type {@link N} to results of type {@link T}.
