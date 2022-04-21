@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+
+    <string name="app_name">কোডঅ্যাসিস্ট</string>
+    <string name="hello_world">ওহে বিশ্ব!</string>
+    <item name="paste" type="string">পেস্ট করুন</item>
+    <item name="copy" type="string">কপি</item>
+    <item name="selectAll" formatted="true" type="string">সব নির্বাচন করুন</item>
+    <item name="saveToProject" type="string">প্রকল্প</item>
+    <item name="cut" type="string">কাটা</item>
+    <item name="last" type="string">শেষ</item>
+    <item name="next" type="string">পরবর্তী</item>
+    <item name="replace" type="string">প্রতিস্থাপন করুন</item>
+    <item name="replaceAll" type="string">সমস্ত প্রতিস্থাপন</item>
+    <item name="replacement" type="string">প্রতিস্থাপন</item>
+    <item name="cancel" type="string">বাতিল করুন</item>
+    <item name="text_to_search" type="string">অনুসন্ধানের জন্য পাঠ্য</item>
+
+    <item name="more" type="string">আরও</item>
+
+    
+    <string name="messages_header">বার্তা</string>
+    <string name="sync_header">সুসংগত</string>
+
+    
+    <string name="signature_title">আপনার স্বাক্ষর</string>
+    <string name="reply_title">ডিফল্ট উত্তর ক্রিয়া</string>
+
+    
+    <string name="sync_title">পর্যায়ক্রমে ইমেল সিঙ্ক করুন</string>
+    <string name="attachment_title">ইনকামিং সংযুক্তি ডাউনলোড করুন</string>
+    <string name="attachment_summary_on">ইনকামিং ইমেলের জন্য স্বয়ংক্রিয়ভাবে সংযুক্তি ডাউনলোড করুন</string>
+    <string name="attachment_summary_off">ম্যানুয়ালি অনুরোধ করা হলে শুধুমাত্র সংযুক্তি ডাউনলোড করুন</string>
+
+
+    
+    <string name="wizard_next">পরবর্তী</string>
+    <string name="wizard_finish">শেষ করুন</string>
+    <string name="wizard_cancel">বাতিল করুন</string>
+    <string name="wizard_templates">টেমপ্লেট</string>
+    <string name="wizard_exit">প্রস্থান করুন</string>
+    <string name="wizard_desc">কার্যকলাপ টেমপ্লেট থেকে নির্বাচন করুন</string>
+    <string name="wizard_empty_templates">টেমপ্লেট খালি :(</string>
+    <string name="wizard_loading">টেমপ্লেট লোড হচ্ছে</string>
+    <string name="wizard_app_name">অ্যাপ্লিকেশন নাম</string>
+    <string name="wizard_package_name">com.my.myapplication</string>
+    <string name="wizard_save_location">স্থান সংরক্ষন</string>
+    <string name="wizard_language">ভাষা</string>
+    <string name="wizard_minimum_sdk">ন্যূনতম SDK</string>
+    <string name="wizard_create">সৃষ্টি</string>
+    <string name="wizard_previous">আগে</string>
+    <string name="wizard_scoped_storage_info">Android 11 স্টোরেজ সীমাবদ্ধতার কারণে, আপনি শুধুমাত্র অ্যাপের অভ্যন্তরীণ স্টোরেজে ফাইল সংরক্ষণ করতে পারবেন।</string>
+    <string name="wizard_file_not_writable">ডিরেক্টরি লেখার যোগ্য নয়, অন্য অবস্থান নির্বাচন করুন</string>
+    <string name="wizard_path_exceeds">অবস্থানের পথ ২৪০টি অক্ষরের বেশি।</string>
+    <string name="wizard_package_illegal">প্যাকেজের নামে অবৈধ অক্ষর রয়েছে।</string>
+    <string name="wizard_package_too_short">প্যাকেজের নাম খুবই ছোট।</string>
+    <string name="wizard_package_contains_spaces">প্যাকেজের নামে স্পেস থাকতে পারে না।</string>
+    <string name="wizard_error_name_empty">নাম খালি রাখা যাবে না।</string>
+    <string name="wizard_error_name_illegal">নামে অবৈধ অক্ষর থাকতে পারে না</string>
+    <string name="wizard_package_empty">প্যাকেজের নাম খালি রাখা যাবে না।</string>
+    <string name="wizard_select_min_sdk">একটি ন্যূনতম SDK সংস্করণ নির্বাচন করুন৷</string>
+    <string name="wizard_select_save_location">একটি সংরক্ষণ অবস্থান নির্বাচন করুন</string>
+
+    <string name="menu_open_project">মডিউল খুলুন</string>
+    <string name="menu_create_project">মডিউল তৈরি করুন</string>
+    <string name="menu_run">চালান</string>
+    <string name="menu_refresh">মডিউল রিফ্রেশ করুন</string>
+    <string name="menu_library_manager">লাইব্রেরি ম্যানেজার</string>
+    <string name="menu_format">বিন্যাস</string>
+    <string name="menu_settings">সেটিংস</string>
+
+    
+    <string name="settings_title_application">আবেদন</string>
+    <string name="settings_desc_application">সাধারণ আবেদন পছন্দ</string>
+    <string name="settings_title_editor">সম্পাদক</string>
+    <string name="settings_desc_editor">সম্পাদক কনফিগার করুন</string>
+    <string name="title_activity_settings">সেটিংস</string>
+
+    
+    <string name="settings_theme_title">থিম</string>
+    <string name="settings_theme_value_default">সিস্টেমের ডিফল্ট</string>
+    <string name="settings_theme_value_light">আলো</string>
+    <string name="settings_theme_value_dark">অন্ধকার</string>
+
+    <string-array name="theme_values">
+        <item>ডিফল্ট</item>
+        <item>আলো</item>
+        <item>অন্ধকার</item>
+    </string-array>
+    <string-array name="theme_entries"><item>@string/settings_theme_value_default</item>
+        <item>@string/settings_theme_value_light</item>
+        <item>@string/settings_theme_value_dark</item>
+    </string-array>
+    
+
+    
+    <string name="code_engine_title">সমাপ্তি ইঞ্জিন</string>
+    <string name="settings_code_completions">কোড সমাপ্তি সক্ষম করুন</string>
+    <string name="settings_kotlin_completions">কোটলিনের জন্য কোড সমাপ্তি সক্ষম করুন</string>
+    <string name="settings_kotlin_completions_desc">এই বৈশিষ্ট্য এখনও পরীক্ষামূলক এবং ধীর হতে পারে.
+        একটি শক্তিশালী ডিভাইস প্রয়োজন.</string>
+    <string name="settings_case_insensitive_match_title">কেস সংবেদনশীল ম্যাচ</string>
+    <string name="settings_case_insensitive_match_desc">ছোট হাতের উপসর্গ সহ শ্রেণীর নাম প্রস্তাব করুন।</string>
+    <string name="code_editor_error_highlight">ত্রুটি হাইলাইট সক্ষম করুন</string>
+
+    <string name="editor_settings_title">কোড এডিটর সেটিংস</string>
+    <string name="editor_settings_wordwrap">শব্দ মোড়ক মোড</string>
+    <string name="editor_delete_whitespaces">স্বয়ংক্রিয়ভাবে হোয়াইটস্পেস মুছে দিন</string>
+    <string name="save">সংরক্ষণ</string>
+    <string name="defaultString">ডিফল্ট</string>
+    <string name="editor_scheme_title">সম্পাদক রঙের স্কিম</string>
+    <string name="editor_scheme_desc">রঙের স্কিম পরিবর্তন করুন</string>
+    <string name="change_scheme_dialog_title">থিম ফাইলের পাথ পেস্ট করুন</string>
+    <string name="font_size_title">অক্ষরের আকার</string>
+    <string name="font_size_message">সম্পাদক ফন্ট সাইজ সেট করুন</string>
+    <string name="font_size_summary">সম্পাদকের ডিফল্ট ফন্টের আকার নির্দিষ্ট করুন</string>
+    <string name="keyboard_settings_title">কীবোর্ড</string>
+    <string name="keyboard_enable_suggestions_description">কীবোর্ড পরামর্শ সক্রিয় করুন</string>
+    <string name="settings_build_run_title">নির্মাণ এবং চালান</string>
+    <string name="settings_build_run_desc">বিল্ড এবং এক্সিকিউশন সেটিংস কনফিগার করুন</string>
+    <string name="run_title">চালান</string>
+    <string name="settings_install_apk_title">APK ইনস্টলেশন প্রম্পট</string>
+    <string name="settings_install_desc">সফল সংকলনের পরে APK ইনস্টলেশন প্রম্পট দেখান।</string>
+    <string-array name="java_versions" translatable="false"><item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string name="completion_settings_kotlin_title">কোটলিন</string>
+    <string name="completion_settings_java_title">জাভা</string>
+    <string name="completion_java_target_version_title">লক্ষ্য সংস্করণ</string>
+    <string name="completion_java_source_version_title">উৎস সংস্করণ</string>
+    <string name="editor_tabs_settings_title">এডিটর ট্যাব</string>
+    <string name="editor_tab_unique_file_name">অ-অনন্য ফাইল নামের জন্য ডিরেক্টরি দেখান</string>
+    <string name="editor_tab_unique_file_name_summary">অভিন্ন ফাইল নামের ফাইলগুলি খোলা হলে প্যারেন্ট ফোল্ডারগুলি দেখিয়ে প্রদর্শিত ফাইলের নামগুলিকে অনন্য করে তোলে৷</string>
+
+    
+    <string name="settings_about_us_title">আমাদের সম্পর্কে</string>
+    <string name="settings_about_us_desc">বিকাশকারীদের সম্পর্কে আরও তথ্য।</string>
+    <string name="app_description">আপনার পকেটের মধ্যেই অ্যান্ড্রয়েড অ্যাপ ডেভেলপমেন্টের জন্য শক্তিশালী এবং হালকা আইডিই।</string>
+    <string name="app_version">সংস্করণ</string>
+    <string name="contact_group_title">যোগাযোগ</string>
+    <string name="app_source_title">সোর্স কোড</string>
+    <string name="sketchub_team">স্কেচাব দল</string>
+    <string name="community">সম্প্রদায়</string>
+    <string name="rate_us">আমাদের ব্যাপারে আপনার মতামত দিন</string>
+
+    
+    <string name="error">ত্রুটি</string>
+    <string name="error_resource_name_restriction">সম্পদের নামগুলিতে শুধুমাত্র ছোট হাতের অক্ষর (a–z), সংখ্যা (0–9) এবং আন্ডারস্কোর থাকতে হবে।</string>
+    <string name="item_project">প্রকল্প</string>
+    <string name="dialog_create_class_title">একটি ক্লাস তৈরি করুন</string>
+    <string name="create_class_dialog_class_name">শ্রেণির নাম</string>
+    <string name="create_class_dialog_positive">সৃষ্টি</string>
+    <string name="create_class_dialog_class_type">ক্লাস টাইপ</string>
+    <string name="create_class_dialog_invalid_name">অবৈধ শ্রেণীর নাম</string>
+
+    <string name="success">সফলতা</string>
+    <string name="delete_success">সফলতা মুছুন।</string>
+    <string name="dialog_confirm_delete">আপনি কি %1$s মুছতে চান?</string>
+    <string name="dialog_delete">মুছে ফেলা</string>
+    <string name="menu_preview_layout">প্রিভিউ লেআউট</string>
+    <string name="action_menu_build_release">বিল্ড রিলিজ APK</string>
+    <string name="action_menu_build_debug">ডিবাগ APK তৈরি করুন</string>
+    <string name="action_menu_build_aab">AAB তৈরি করুন</string>
+
+    <string name="project_manager_alpha_notice_title">আলফা নোটিশ</string>
+    <string name="project_manager_alpha_notice">কোডঅ্যাসিস্ট এখনও আলফাতে আছে,
+        আপনি ক্র্যাশ, বাগ এবং অসম্পূর্ণ বৈশিষ্ট্যের সম্মুখীন হতে পারেন।\nআপনি
+        এই সমস্যাগুলি https://github.com/tyron12233/CodeAssist/issues এ রিপোর্ট করতে পারেন</string>
+    <string name="project_manager_save_location_title">সংরক্ষণ অবস্থান নির্বাচন করুন</string>
+    <string name="project_manager_permission_denied">অনুমতি অস্বীকার করা হয়েছে</string>
+    <string name="project_manager_button_request_again">আবার অনুরোধ</string>
+    <string name="project_manager_button_continue">চালিয়ে যান</string>
+    <string name="project_manager_rationale_title">স্টোরেজ অনুমতি</string>
+    <string name="project_manager_button_allow">অনুমতি দিন</string>
+    <string name="project_manager_button_use_internal">অভ্যন্তরীণ স্টোরেজ ব্যবহার করুন</string>
+    <string name="project_manager_permission_rationale">অ্যাপ্লিকেশন স্টোরেজ অনুমতি প্রয়োজন
+        মডিউল ফাইলগুলি সংরক্ষণ করার জন্য যা আপনি আনইনস্টল করার সময় মুছে ফেলা হবে না
+        অ্যাপ বিকল্পভাবে আপনি অ্যাপের অভ্যন্তরীণ সঞ্চয়স্থানে মডিউল ফাইল সংরক্ষণ করতে বেছে নিতে পারেন।</string>
+    <string name="project_manager_android11_notice">প্রকল্পগুলি অ্যাপের অভ্যন্তরীণ স্টোরেজ ডিরেক্টরিতে সংরক্ষণ করা হবে।
+        অ্যাপ আনইনস্টল করার আগে আপনার মডিউল ব্যাকআপ করুন।</string>
+    <string name="project_manager_projects">প্রকল্প</string>
+    <string name="project_manager_empty">প্রকল্পগুলো খালি</string>`
+    <string name="project_manager_create_project">মডিউল তৈরি করুন</string>
+    <string name="project_path_menu_title">প্রকল্পের পথ</string>
+    <string name="project_manager_null_projects">কোন প্রকল্প পাওয়া যায়নি</string>
+    <string name="project_manager_suggestions">পরামর্শ:\n\n - নতুন প্রকল্প তৈরি করুন\এবং - প্রকল্পের পথ পরিবর্তন করুন</string>
+    
+
+    
+    <string name="compilation_state_compiling">কম্পাইলিং</string>
+    <string name="compilation_button_install">ইনস্টল করুন</string>
+    <string name="compilation_result_success">সংকলন সাফল্য</string>
+    <string name="compilation_result_failed">সংকলন ব্যর্থ হয়েছে</string>
+
+    
+    <string name="library_manager_title">%1s লাইব্রেরি</string>
+    <string name="group_id">গ্রুপ আইডি</string>
+    <string name="artifact_id">আর্টিফ্যাক্ট আইডি</string>
+    <string name="version_name">সংস্করণের নাম</string>
+    <string name="menu_display_dependencies">নির্ভরতা তালিকা</string>
+    <string name="attributes_editor">বৈশিষ্ট্য সম্পাদক</string>
+    <string name="attribute_value">বৈশিষ্ট্য মান</string>
+    <string name="menu_add_libs_gradle">build.gradle থেকে লাইব্রেরি যোগ করুন</string>
+
+    
+    <string name="error_no_project_opened">কোনো প্রকল্প খোলা হয়নি।</string>
+    <string name="dialog_confirm_save_title">XML এ সংরক্ষণ করুন</string>
+    <string name="dialog_confirm_save_msg">আপনি লেআউট সংরক্ষণ করতে চান?</string>
+    
+    <string name="file_editor_selection_title">আপনি কোন সম্পাদক খুলতে চান?</string>
+
+    
+    <string name="menu_close_file">বন্ধ</string>
+    <string name="menu_close_others">অন্যদের বন্ধ করুন</string>
+    <string name="menu_close_all">সব বন্ধ করা</string>
+
+    
+    <string name="editor_error_file">ফাইলটি পড়ার সময় একটি ত্রুটি ঘটেছে৷ পরিবর্তন সংরক্ষণ করা হবে না.</string>
+
+    
+    <string name="tab_build_logs_title">লগ তৈরি করুন</string>
+    <string name="tab_app_logs_title">অ্যাপ লগ</string>
+    <string name="tab_ide_logs_title">IDE লগ</string>
+    <string name="tab_diagnostics_title">কারণ নির্ণয়</string>
+</resources>

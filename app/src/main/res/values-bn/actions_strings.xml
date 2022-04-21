@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  
+    <string name="text_actions">টেক্সট অ্যাকশন</string>
+    <string name="expand_selection">নির্বাচন প্রসারিত করুন</string>
+    <string name="copied_to_clipoard">পাঠ্যটি ক্লিপবোর্ডে অনুলিপি করা হয়েছে।</string>
+
+    
+    <string name="menu_action_new_java_class">জাভা ক্লাস</string>
+    <string name="menu_action_new_kotlin_class">কোটলিন ক্লাস</string>
+    <string name="menu_action_new_directory">ডিরেক্টরি</string>
+    <string name="menu_action_new_file">ফাইল</string>
+    <string name="directory_name">ডিরেক্টরির নাম</string>
+    <string name="file_name">ফাইলের নাম</string>
+    <string name="menu_new">নতুন</string>
+    <string name="menu_import">আমদানি</string>
+    <string name="menu_refactor">রিফ্যাক্টর</string>
+    <string name="menu_new_layout">নতুন লেআউট</string>
+
+    <string name="error_file_creation">ফাইল তৈরি করতে অক্ষম।</string>
+</resources>
