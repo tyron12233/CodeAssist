@@ -1,7 +1,9 @@
 package com.tyron.builder.internal.logging.sink;
 
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.*;
+
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.util.GUtil;
-import com.tyron.builder.internal.graph.StyledTextOutput.Style;
 import com.tyron.builder.internal.logging.events.OutputEvent;
 import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.RenderableOutputEvent;

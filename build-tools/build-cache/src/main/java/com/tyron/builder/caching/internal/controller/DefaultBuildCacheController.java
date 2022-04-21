@@ -17,7 +17,7 @@ import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
 import com.tyron.builder.internal.file.TreeType;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.caching.BuildCacheKey;
 import com.tyron.builder.caching.BuildCacheService;
 import com.tyron.builder.caching.internal.BuildCacheController;

@@ -8,7 +8,7 @@ import com.tyron.builder.internal.fingerprint.classpath.CompileClasspathFingerpr
 import com.tyron.builder.internal.fingerprint.impl.AbstractFileCollectionFingerprinter;
 import com.tyron.builder.api.tasks.CompileClasspathNormalizer;
 import com.tyron.builder.api.tasks.FileNormalizer;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 
 public class DefaultCompileClasspathFingerprinter extends AbstractFileCollectionFingerprinter implements CompileClasspathFingerprinter {
     public DefaultCompileClasspathFingerprinter(ResourceSnapshotterCacheService cacheService, FileCollectionSnapshotter fileCollectionSnapshotter, StringInterner stringInterner) {

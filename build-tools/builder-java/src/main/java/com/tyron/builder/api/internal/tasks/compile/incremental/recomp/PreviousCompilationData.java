@@ -7,7 +7,7 @@ import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.Comp
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassSetAnalysisData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.processing.AnnotationProcessingData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.serialization.HierarchicalNameSerializer;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 
 import java.util.function.Supplier;
 

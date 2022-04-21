@@ -15,6 +15,7 @@ dependencies {
     implementation projects.buildTools.builderModelCore
     implementation projects.buildTools.snapshots
     implementation projects.buildTools.builderApi
+    implementation projects.buildTools.builderProblems
     implementation projects.buildTools.builderPersistentCache
 
 

@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.Actions;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.api.internal.DefaultMutationGuard;
 import com.tyron.builder.api.internal.MutationGuard;
 import com.tyron.builder.api.internal.WithMutationGuard;

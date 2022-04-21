@@ -16,10 +16,10 @@ import com.tyron.builder.api.tasks.PathSensitivity;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
 import com.tyron.builder.api.tasks.SourceTask;
 import com.tyron.builder.util.internal.GFileUtils;
-import com.tyron.builder.api.work.ChangeType;
-import com.tyron.builder.api.work.FileChange;
+import com.tyron.builder.work.ChangeType;
+import com.tyron.builder.work.FileChange;
 import com.tyron.builder.work.InputChanges;
-import com.tyron.builder.api.work.NormalizeLineEndings;
+import com.tyron.builder.work.NormalizeLineEndings;
 
 import java.io.File;
 import java.util.concurrent.Callable;

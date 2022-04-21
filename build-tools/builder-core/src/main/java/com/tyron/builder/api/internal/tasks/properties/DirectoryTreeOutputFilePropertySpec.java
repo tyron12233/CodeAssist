@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
+import com.tyron.builder.internal.file.TreeType;
 import com.tyron.builder.internal.fingerprint.OutputNormalizer;
 
 import java.io.File;

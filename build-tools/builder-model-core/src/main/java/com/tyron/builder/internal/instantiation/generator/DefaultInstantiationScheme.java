@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.instantiation.generator;
 
-import com.tyron.builder.api.internal.instantiation.DeserializationInstantiator;
-import com.tyron.builder.api.internal.instantiation.InstanceFactory;
+import com.tyron.builder.internal.instantiation.DeserializationInstantiator;
+import com.tyron.builder.internal.instantiation.InstanceFactory;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
-import com.tyron.builder.api.internal.instantiation.InstantiationScheme;
-import com.tyron.builder.api.internal.instantiation.generator.ConstructorSelector;
+import com.tyron.builder.internal.instantiation.InstantiationScheme;
+import com.tyron.builder.internal.instantiation.generator.ConstructorSelector;
 import com.tyron.builder.internal.reflect.service.ServiceLookup;
 import com.tyron.builder.api.reflect.ObjectInstantiationException;
 import com.tyron.builder.cache.internal.CrossBuildInMemoryCache;

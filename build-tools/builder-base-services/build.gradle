@@ -10,12 +10,10 @@ dependencies {
     api projects.buildTools.builderBuildOperations
 
     implementation projects.common
-    implementation projects.buildTools.builderHashing
-    implementation projects.buildTools.builderMessaging
 
     implementation 'javax.inject:javax.inject:1'
     implementation common.slf4j
-    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    implementation common.commonsLang3
 }
 
 java {

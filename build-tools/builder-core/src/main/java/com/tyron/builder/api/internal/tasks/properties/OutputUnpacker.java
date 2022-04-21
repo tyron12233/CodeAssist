@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
-import com.tyron.builder.api.internal.MutableBoolean;
+import com.tyron.builder.internal.MutableBoolean;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 
 public class OutputUnpacker extends PropertyVisitor.Adapter {

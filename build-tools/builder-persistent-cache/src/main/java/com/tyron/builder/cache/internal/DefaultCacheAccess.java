@@ -7,7 +7,7 @@ import com.google.common.base.Objects;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.Factories;
+import com.tyron.builder.internal.Factories;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;

@@ -9,10 +9,10 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import static com.google.common.collect.ImmutableSet.toImmutableSet;
-import static com.tyron.builder.api.internal.execution.fingerprint.impl.FingerprinterRegistration.registration;
+import static com.tyron.builder.internal.execution.fingerprint.impl.FingerprinterRegistration.registration;
 import static java.util.Arrays.stream;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.tyron.builder.api.internal.changedetection.state.CachingFileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizingFileSystemLocationSnapshotHasher;
@@ -25,7 +25,7 @@ import com.tyron.builder.internal.execution.fingerprint.impl.FingerprinterRegist
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 
 public class FileCollectionFingerprinterRegistrations {
     private final Set<FingerprinterRegistration> registrants;
@@ -152,9 +152,9 @@ public class FileCollectionFingerprinterRegistrations {
 
     private static FileSystemLocationSnapshotHasher cacheIfNormalized(FileSystemLocationSnapshotHasher resourceHasher, LineEndingSensitivity lineEndingSensitivity, ResourceSnapshotterCacheService resourceSnapshotterCacheService) {
         switch (lineEndingSensitivity) {
-            case LineEndingSensitivity.DEFAULT:
+            case DEFAULT:
                 return resourceHasher;
-            case LineEndingSensitivity.NORMALIZE_LINE_ENDINGS:
+            case NORMALIZE_LINE_ENDINGS:
                 return new CachingFileSystemLocationSnapshotHasher(resourceHasher, resourceSnapshotterCacheService);
             default:
                 throw new IllegalArgumentException();

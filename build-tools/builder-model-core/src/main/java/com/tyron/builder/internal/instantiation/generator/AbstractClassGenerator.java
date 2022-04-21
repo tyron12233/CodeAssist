@@ -11,9 +11,9 @@
 //import com.tyron.builder.api.file.ConfigurableFileTree;
 //import com.tyron.builder.internal.Cast;
 //import com.tyron.builder.api.file.ConfigurableFileCollection;
-//import com.tyron.builder.api.internal.instantiation.InjectAnnotationHandler;
+//import com.tyron.builder.internal.instantiation.InjectAnnotationHandler;
 //import com.tyron.builder.internal.instantiation.InstanceGenerator;
-//import com.tyron.builder.api.internal.instantiation.PropertyRoleAnnotationHandler;
+//import com.tyron.builder.internal.instantiation.PropertyRoleAnnotationHandler;
 //import com.tyron.builder.internal.logging.text.TreeFormatter;
 //import com.tyron.builder.internal.service.ServiceLookup;
 //import com.tyron.builder.api.provider.HasMultipleValues;

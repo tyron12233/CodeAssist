@@ -8,7 +8,6 @@ description = """Persistent caches on disk and cross process locking.
 """
 
 dependencies {
-    implementation project(path: ':build-tools:builder-core')
     def buildTools = projects.buildTools
 
     implementation projects.common

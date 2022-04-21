@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.Transformer;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.FileCollection;

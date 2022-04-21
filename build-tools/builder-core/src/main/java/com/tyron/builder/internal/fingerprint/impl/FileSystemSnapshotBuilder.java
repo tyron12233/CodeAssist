@@ -129,7 +129,7 @@ public class FileSystemSnapshotBuilder {
         }
 
         public void accept(String directoryPath, String directoryName, DirectorySnapshotBuilder builder) {
-            builder.enterDirectory(determineAccessTypeForLocation(directoryPath), directoryPath, directoryName, EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS);
+            builder.enterDirectory(determineAccessTypeForLocation(directoryPath), directoryPath, directoryName, DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS);
             for (Map.Entry<String, DirectoryBuilder> entry : subDirs.entrySet()) {
                 String subDirName = entry.getKey();
                 String subDirPath = stringInterner.intern(directoryPath + File.separatorChar + subDirName);

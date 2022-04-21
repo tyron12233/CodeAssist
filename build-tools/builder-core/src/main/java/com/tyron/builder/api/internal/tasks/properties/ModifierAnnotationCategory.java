@@ -9,8 +9,8 @@ import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;
 import com.tyron.builder.api.tasks.Optional;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
-import com.tyron.builder.api.work.Incremental;
-import com.tyron.builder.api.work.NormalizeLineEndings;
+import com.tyron.builder.work.Incremental;
+import com.tyron.builder.work.NormalizeLineEndings;
 
 import java.lang.annotation.Annotation;
 import java.util.Collection;

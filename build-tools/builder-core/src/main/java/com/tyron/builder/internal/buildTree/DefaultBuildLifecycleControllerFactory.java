@@ -51,8 +51,8 @@ public class DefaultBuildLifecycleControllerFactory implements BuildLifecycleCon
 
         ShowStacktrace showStacktrace = startParameter.getShowStacktrace();
         switch (showStacktrace) {
-            case ShowStacktrace.ALWAYS:
-            case ShowStacktrace.ALWAYS_FULL:
+            case ALWAYS:
+            case ALWAYS_FULL:
 //                LoggingDeprecatedFeatureHandler.setTraceLoggingEnabled(true);
                 break;
             default:

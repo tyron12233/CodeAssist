@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.services;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.internal.logging.AbstractLineChoppingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.AbstractLineChoppingStyledTextOutput;
 import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
 import com.tyron.builder.internal.operations.CurrentBuildOperationRef;

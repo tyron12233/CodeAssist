@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
-import static com.tyron.builder.api.internal.reflect.AnnotationCategory.TYPE;
-import static com.tyron.builder.api.internal.reflect.validation.Severity.ERROR;
+import static com.tyron.builder.internal.reflect.AnnotationCategory.TYPE;
+import static com.tyron.builder.internal.reflect.validation.Severity.ERROR;
 import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory.NORMALIZATION;
 
 import com.google.common.collect.ImmutableMap;

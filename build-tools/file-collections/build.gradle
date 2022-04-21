@@ -11,6 +11,8 @@ dependencies {
     implementation projects.buildTools.builderModelCore
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderNative
+
+    implementation common.slf4j
 }
 
 java {

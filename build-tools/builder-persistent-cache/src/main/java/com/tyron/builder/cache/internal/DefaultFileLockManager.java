@@ -5,10 +5,11 @@ import static com.tyron.builder.internal.UncheckedException.throwAsUncheckedExce
 import com.google.common.annotations.VisibleForTesting;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.internal.Factory;
+import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.Stoppable;
-import com.tyron.builder.api.internal.id.IdGenerator;
-import com.tyron.builder.api.internal.id.RandomLongIdGenerator;
+import com.tyron.builder.internal.id.IdGenerator;
+import com.tyron.builder.internal.id.RandomLongIdGenerator;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.cache.FileIntegrityViolationException;
 import com.tyron.builder.cache.FileLock;

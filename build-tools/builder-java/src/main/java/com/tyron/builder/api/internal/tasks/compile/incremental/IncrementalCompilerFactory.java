@@ -9,7 +9,7 @@ import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.ClassS
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.CurrentCompilationAccess;
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.PreviousCompilationAccess;
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.RecompilationSpecProvider;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.language.base.internal.compile.Compiler;
 
 public class IncrementalCompilerFactory {

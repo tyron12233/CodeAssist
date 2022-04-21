@@ -5,7 +5,7 @@ import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.RunnableBuildOperation;
-import com.tyron.builder.api.internal.resources.ProjectLeaseRegistry;
+import com.tyron.builder.internal.resources.ProjectLeaseRegistry;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.BuildToolingModelController;
 

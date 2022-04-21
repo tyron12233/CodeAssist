@@ -8,6 +8,7 @@ import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.file.CompositeFileCollection;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
+import com.tyron.builder.api.tasks.TaskInputPropertyBuilder;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.api.internal.tasks.properties.FileParameterUtils;
@@ -21,7 +22,6 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.tasks.FileNormalizer;
 import com.tyron.builder.api.tasks.TaskInputs;
-import com.tyron.builder.api.tasks.TaskPropertyUtils;
 
 import org.jetbrains.annotations.Nullable;
 

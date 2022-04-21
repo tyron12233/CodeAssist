@@ -11,7 +11,7 @@ import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.StaticValue;
 import com.tyron.builder.api.tasks.TaskExecutionException;
 import com.tyron.builder.api.tasks.FileNormalizer;
-import com.tyron.builder.api.tasks.TaskPropertyUtils;
+import com.tyron.builder.api.internal.tasks.TaskPropertyUtils;
 
 import org.jetbrains.annotations.Nullable;
 

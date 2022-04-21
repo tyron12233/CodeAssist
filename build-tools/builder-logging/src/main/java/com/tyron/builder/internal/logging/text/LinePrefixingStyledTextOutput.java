@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging.text;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.internal.logging.text.AbstractLineChoppingStyledTextOutput;
 import com.tyron.builder.internal.logging.text.Style;
 

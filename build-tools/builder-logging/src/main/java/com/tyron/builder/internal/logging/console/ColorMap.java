@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.console;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.internal.logging.Style;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.Style;
 
 import org.fusesource.jansi.Ansi;
 

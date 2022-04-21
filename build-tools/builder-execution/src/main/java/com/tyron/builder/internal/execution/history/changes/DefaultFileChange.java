@@ -3,8 +3,8 @@ package com.tyron.builder.internal.execution.history.changes;
 import com.google.common.base.Objects;
 import com.tyron.builder.internal.file.FileType;
 import com.tyron.builder.api.tasks.incremental.InputFileDetails;
-import com.tyron.builder.api.work.ChangeType;
-import com.tyron.builder.api.work.FileChange;
+import com.tyron.builder.work.ChangeType;
+import com.tyron.builder.work.FileChange;
 
 import java.io.File;
 

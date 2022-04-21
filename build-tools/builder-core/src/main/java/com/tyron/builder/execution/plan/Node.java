@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.tasks.VerificationException;
 import com.tyron.builder.internal.resources.ResourceLock;
 
 import org.slf4j.Logger;

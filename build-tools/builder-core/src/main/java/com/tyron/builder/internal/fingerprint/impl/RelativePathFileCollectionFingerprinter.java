@@ -5,7 +5,7 @@ import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.RelativePathInputNormalizer;
 import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.tasks.FileNormalizer;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 
 
 public class RelativePathFileCollectionFingerprinter extends AbstractFileCollectionFingerprinter {

@@ -1,6 +1,8 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
 
+import com.tyron.builder.internal.file.TreeType;
+
 public enum OutputFilePropertyType {
     FILE(TreeType.FILE),
     DIRECTORY(TreeType.DIRECTORY),

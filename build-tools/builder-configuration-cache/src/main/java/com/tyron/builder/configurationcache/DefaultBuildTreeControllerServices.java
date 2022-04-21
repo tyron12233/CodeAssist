@@ -1,9 +1,9 @@
 package com.tyron.builder.configurationcache;
 
 import com.tyron.builder.api.BuildException;
+import com.tyron.builder.api.internal.BuildType;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
-import com.tyron.builder.internal.BuildType;
 import com.tyron.builder.internal.buildTree.BuildActionModelRequirements;
 import com.tyron.builder.internal.buildTree.BuildModelParameters;
 import com.tyron.builder.internal.buildTree.BuildTreeModelControllerServices;
@@ -21,7 +21,7 @@ public class DefaultBuildTreeControllerServices implements BuildTreeModelControl
             }
         }
 
-//        Boolean isolatedProjects = startParameter.getIsolatedProjects().get();
+        Boolean isolatedProjects = startParameter.getIsolatedProjects().get();
         return registration -> {
             registration.add(BuildType.class, BuildType.TASKS);
             BuildModelParameters buildModelParameters =

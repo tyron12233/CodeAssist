@@ -4,7 +4,7 @@ import static com.tyron.builder.cache.FileLockManager.LockMode.Exclusive;
 
 import com.google.common.util.concurrent.Runnables;
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.Actions;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.cache.CrossProcessCacheAccess;

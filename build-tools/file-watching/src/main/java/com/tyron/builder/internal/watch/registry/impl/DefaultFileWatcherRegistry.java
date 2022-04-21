@@ -6,6 +6,9 @@ import static com.tyron.builder.internal.watch.registry.FileWatcherRegistry.Type
 import static com.tyron.builder.internal.watch.registry.FileWatcherRegistry.Type.OVERFLOW;
 import static com.tyron.builder.internal.watch.registry.FileWatcherRegistry.Type.REMOVED;
 
+import static net.rubygrapefruit.platform.file.FileWatchEvent.*;
+import static net.rubygrapefruit.platform.file.FileWatchEvent.ChangeType.*;
+
 import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
 import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
 import com.tyron.builder.internal.watch.registry.FileWatcherRegistry;
@@ -69,9 +72,9 @@ public class DefaultFileWatcherRegistry implements FileWatcherRegistry {
                 while (consumeEvents) {
                     FileWatchEvent nextEvent = fileEvents.take();
                     if (!stopping) {
-                        nextEvent.handleEvent(new FileWatchEvent.Handler() {
+                        nextEvent.handleEvent(new Handler() {
                             @Override
-                            public void handleChangeEvent(FileWatchEvent.ChangeType type, String absolutePath) {
+                            public void handleChangeEvent(ChangeType type, String absolutePath) {
                                 fileWatchingStatistics.eventReceived();
                                 fileWatcherUpdater.triggerWatchProbe(absolutePath);
                                 handler.handleChange(convertType(type), Paths.get(absolutePath));
@@ -85,7 +88,7 @@ public class DefaultFileWatcherRegistry implements FileWatcherRegistry {
                             }
 
                             @Override
-                            public void handleOverflow(FileWatchEvent.OverflowType type, @Nullable String absolutePath) {
+                            public void handleOverflow(OverflowType type, @Nullable String absolutePath) {
                                 if (absolutePath == null) {
                                     LOGGER.info("Overflow detected (type: {}), invalidating all watched files", type);
                                     fileWatcherUpdater.getWatchedFiles().visitRoots(watchedRoot ->
@@ -151,15 +154,15 @@ public class DefaultFileWatcherRegistry implements FileWatcherRegistry {
         return fileWatcherUpdater.updateVfsOnBuildFinished(root, watchMode, maximumNumberOfWatchedHierarchies, unsupportedFileSystems);
     }
 
-    private static Type convertType(FileWatchEvent.ChangeType type) {
+    private static Type convertType(ChangeType type) {
         switch (type) {
-            case ChangeType.CREATED:
+            case CREATED:
                 return CREATED;
-            case ChangeType.MODIFIED:
+            case MODIFIED:
                 return MODIFIED;
-            case ChangeType.REMOVED:
+            case REMOVED:
                 return REMOVED;
-            case ChangeType.INVALIDATED:
+            case INVALIDATED:
                 return INVALIDATED;
             default:
                 throw new AssertionError();

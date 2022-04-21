@@ -8,6 +8,7 @@ import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprin
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.internal.execution.fingerprint.FileNormalizationSpec;
 import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.impl.DefaultFileNormalizationSpec;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
@@ -114,7 +115,8 @@ public class DefaultInputFingerprinter implements InputFingerprinter {
                 FileCollectionSnapshotter.Result result = snapshotter.snapshot(value.getFiles());
                 DirectorySensitivity
                         directorySensitivity = determineDirectorySensitivity(propertyName, type, value, result);
-                FileNormalizationSpec normalizationSpec = DefaultFileNormalizationSpec.from(value.getNormalizer(), directorySensitivity, value.getLineEndingNormalization());
+                FileNormalizationSpec normalizationSpec = DefaultFileNormalizationSpec
+                        .from(value.getNormalizer(), directorySensitivity, value.getLineEndingNormalization());
                 FileCollectionFingerprinter fingerprinter = fingerprinterRegistry.getFingerprinter(normalizationSpec);
                 CurrentFileCollectionFingerprint fingerprint = fingerprinter.fingerprint(result.getSnapshot(), previousFingerprint);
                 fingerprintsBuilder.put(propertyName, fingerprint);

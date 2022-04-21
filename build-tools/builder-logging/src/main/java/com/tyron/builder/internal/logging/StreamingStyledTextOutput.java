@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.internal.logging.text.AbstractStyledTextOutput;
 import com.tyron.builder.api.logging.StandardOutputListener;
 

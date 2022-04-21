@@ -7,7 +7,7 @@ import com.tyron.builder.api.file.FileSystemLocation;
 import com.tyron.builder.api.file.FileVisitDetails;
 import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.internal.Factory;
-import com.tyron.builder.api.internal.MutableBoolean;
+import com.tyron.builder.internal.MutableBoolean;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTree;
 import com.tyron.builder.api.internal.file.collections.FileBackedDirectoryFileTree;
 import com.tyron.builder.api.internal.file.collections.FileSystemMirroringFileTree;

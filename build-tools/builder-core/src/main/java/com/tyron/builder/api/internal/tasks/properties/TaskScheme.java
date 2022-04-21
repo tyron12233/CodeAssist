@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.instantiation.InstantiationScheme;
+import com.tyron.builder.internal.instantiation.InstantiationScheme;
 
 public class TaskScheme implements TypeScheme {
     private final InstantiationScheme instantiationScheme;

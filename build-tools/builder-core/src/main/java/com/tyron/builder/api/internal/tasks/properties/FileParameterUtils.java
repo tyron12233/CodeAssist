@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.file.FileSystemLocationProperty;
+import com.tyron.builder.internal.file.TreeType;
 import com.tyron.builder.util.internal.DeferredUtil;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;

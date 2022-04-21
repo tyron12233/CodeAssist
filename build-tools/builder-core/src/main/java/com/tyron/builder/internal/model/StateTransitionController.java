@@ -2,7 +2,7 @@ package com.tyron.builder.internal.model;
 
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.work.Synchronizer;
+import com.tyron.builder.internal.work.Synchronizer;
 import com.tyron.builder.internal.build.ExecutionResult;
 
 import javax.annotation.Nullable;

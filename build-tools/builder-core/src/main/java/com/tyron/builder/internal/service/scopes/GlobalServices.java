@@ -38,7 +38,7 @@ import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.internal.model.DefaultObjectFactory;
 import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.api.tasks.util.PatternSet;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.internal.build.BuildAddedListener;
 import com.tyron.builder.internal.service.DefaultServiceLocator;
@@ -299,13 +299,5 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
             PropertyFactory propertyFactory
     ) {
         return new DefaultObjectFactory(fileCollectionFactory, filePropertyFactory, propertyFactory);
-    }
-
-    FilePropertyFactory createFilePropertyFactory(
-            PropertyHost propertyHost,
-            FileResolver fileResolver,
-            FileCollectionFactory fileCollectionFactory
-    ) {
-        return new DefaultFilePropertyFactory(propertyHost, fileResolver, fileCollectionFactory);
     }
 }

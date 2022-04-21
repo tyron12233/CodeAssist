@@ -1,11 +1,12 @@
 package com.tyron.builder.internal.build;
 
-import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.UserInput;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.UserInput;
 
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.internal.exceptions.FailureResolutionAware;
+import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.configuration.project.BuiltInCommand;
@@ -76,7 +77,7 @@ public class BuildLayoutValidator {
             context.doNotSuggestResolutionsThatRequireBuildDefinition();
             context.appendResolution(output -> {
                 output.text("Run ");
-                context.getClientMetaData().describeCommand(output.withStyle(Style.UserInput), "init");
+                context.getClientMetaData().describeCommand(output.withStyle(UserInput), "init");
                 output.text(" to create a new Gradle build in this directory.");
             });
         }

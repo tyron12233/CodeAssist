@@ -228,15 +228,6 @@ public class CompilerService extends Service {
                 projectLauncher.getGlobalServices().getFactory(LoggingManagerInternal.class);
         LoggingManagerInternal loggingManager = loggingManagerInternalFactory.create();
         assert loggingManager != null;
-        OutputEventListener outputEventListener = new OutputEventListener() {
-            @Override
-            public void onOutput(OutputEvent event) {
-                if (event instanceof LogEvent) {
-                    logger.info("[" + event.getLogLevel() + "] " + ((LogEvent) event).getMessage());
-                }
-            }
-        };
-        loggingManager.addOutputEventListener(outputEventListener);
         loggingManager.start();
         try {
             projectLauncher.execute();
@@ -250,7 +241,6 @@ public class CompilerService extends Service {
             }
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
-        loggingManager.removeOutputEventListener(outputEventListener);
         loggingManager.stop();
 
         stopSelf();

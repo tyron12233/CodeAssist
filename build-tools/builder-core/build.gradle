@@ -11,7 +11,6 @@ dependencies {
     implementation projects.common
 
     implementation projects.buildTools.builderBaseServices
-    implementation projects.buildTools.buildCache
     implementation projects.buildTools.builderEnterpriseOperations
     implementation projects.buildTools.builderFunctional
     implementation projects.buildTools.builderMessaging
@@ -19,6 +18,8 @@ dependencies {
     implementation projects.buildTools.builderResources
     implementation projects.buildTools.builderNative
     implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.buildCache
     implementation projects.buildTools.builderCoreApi
     implementation projects.buildTools.builderFiles
     implementation projects.buildTools.builderFileTemp
@@ -27,9 +28,16 @@ dependencies {
     implementation projects.buildTools.fileWatching
     implementation projects.buildTools.builderExecution
     implementation projects.buildTools.builderNormalizationJava
-    implementation projects.buildTools.builderPersistentCache
-    
-    implementation project(path: ':build-tools:builder-api')
+
+
+    implementation projects.buildTools.builderApi
 
     implementation common.slf4j
+    implementation common.commonsLang3
+
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.apache-extras.beanshell:bsh:2.0b6'
+
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+    implementation("net.rubygrapefruit:file-events:0.22-milestone-23")
 }

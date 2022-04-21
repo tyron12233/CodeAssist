@@ -4,7 +4,7 @@ package com.tyron.builder.cache.internal.btree;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.io.StreamByteBuffer;
+import com.tyron.builder.internal.io.StreamByteBuffer;
 import com.tyron.builder.internal.serialize.Serializer;
 import com.tyron.builder.internal.serialize.kryo.KryoBackedDecoder;
 import com.tyron.builder.internal.serialize.kryo.KryoBackedEncoder;

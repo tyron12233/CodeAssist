@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.console;
 
 import com.google.common.collect.Lists;
-import com.tyron.builder.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
 import com.tyron.builder.internal.logging.format.TersePrettyDurationFormatter;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.execution.steps;
 
-import static com.tyron.builder.api.internal.execution.history.impl.OutputSnapshotUtil.filterOutputsAfterExecution;
+import static com.tyron.builder.internal.execution.history.impl.OutputSnapshotUtil.filterOutputsAfterExecution;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -14,7 +14,7 @@ import com.tyron.builder.internal.execution.history.AfterExecutionState;
 import com.tyron.builder.internal.execution.history.BeforeExecutionState;
 import com.tyron.builder.internal.execution.history.PreviousExecutionState;
 import com.tyron.builder.internal.execution.history.impl.DefaultAfterExecutionState;
-import com.tyron.builder.api.internal.id.UniqueId;
+import com.tyron.builder.internal.id.UniqueId;
 import com.tyron.builder.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.BuildOperationType;

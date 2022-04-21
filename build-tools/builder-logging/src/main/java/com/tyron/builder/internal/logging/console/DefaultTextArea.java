@@ -2,7 +2,7 @@ package com.tyron.builder.internal.logging.console;
 
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.internal.logging.AbstractLineChoppingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.AbstractLineChoppingStyledTextOutput;
 
 public class DefaultTextArea extends AbstractLineChoppingStyledTextOutput implements TextArea {
     private static final Action<AnsiContext> NEW_LINE_ACTION = new Action<AnsiContext>() {

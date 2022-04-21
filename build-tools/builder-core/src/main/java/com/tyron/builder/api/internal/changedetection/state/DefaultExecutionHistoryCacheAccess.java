@@ -1,5 +1,7 @@
 package com.tyron.builder.api.internal.changedetection.state;
 
+import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
+
 import com.tyron.builder.internal.execution.history.ExecutionHistoryCacheAccess;
 import com.tyron.builder.cache.FileLockManager;
 import com.tyron.builder.cache.PersistentCache;

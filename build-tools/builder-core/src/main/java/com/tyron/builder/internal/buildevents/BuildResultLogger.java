@@ -1,13 +1,14 @@
 package com.tyron.builder.internal.buildevents;
 
-import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.FailureHeader;
-import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.SuccessHeader;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.*;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.FailureHeader;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.SuccessHeader;
 
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.BuildResult;
 import com.tyron.builder.execution.WorkValidationWarningReporter;
-import com.tyron.builder.api.internal.graph.StyledTextOutput;
-import com.tyron.builder.internal.logging.DurationFormatter;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.format.DurationFormatter;
 import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.api.logging.LogLevel;
@@ -51,9 +52,9 @@ public class BuildResultLogger {
         textOutput.println();
         String action = result.getAction().toUpperCase();
         if (buildSucceeded) {
-            textOutput.withStyle(Style.SuccessHeader).text(action + " SUCCESSFUL");
+            textOutput.withStyle(StyledTextOutput.Style.SuccessHeader).text(action + " SUCCESSFUL");
         } else {
-            textOutput.withStyle(Style.FailureHeader).text(action + " FAILED");
+            textOutput.withStyle(FailureHeader).text(action + " FAILED");
         }
 
         long buildDurationMillis = clock.getCurrentTime() - buildStartedTime.getStartTime();

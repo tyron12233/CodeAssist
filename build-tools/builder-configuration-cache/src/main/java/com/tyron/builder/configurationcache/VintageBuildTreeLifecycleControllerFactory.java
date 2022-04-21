@@ -1,7 +1,7 @@
 package com.tyron.builder.configurationcache;
 
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.resources.ProjectLeaseRegistry;
+import com.tyron.builder.internal.resources.ProjectLeaseRegistry;
 import com.tyron.builder.composite.internal.BuildTreeWorkGraphController;
 import com.tyron.builder.internal.build.BuildLifecycleController;
 import com.tyron.builder.internal.buildTree.BuildModelParameters;

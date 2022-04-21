@@ -1,7 +1,5 @@
 package com.tyron.builder.configuration.project;
 
-import com.tyron.builder.api.configuration.project.ProjectConfigureAction;
-import com.tyron.builder.configuration.project.ProjectEvaluator;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.ProjectStateInternal;
 

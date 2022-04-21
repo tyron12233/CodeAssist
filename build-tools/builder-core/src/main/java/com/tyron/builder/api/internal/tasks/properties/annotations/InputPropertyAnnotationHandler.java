@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.tasks.properties.annotations;
 
-import static com.tyron.builder.api.internal.reflect.validation.Severity.ERROR;
+import static com.tyron.builder.internal.reflect.validation.Severity.ERROR;
 import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory.OPTIONAL;
 
 import com.google.common.collect.ImmutableSet;

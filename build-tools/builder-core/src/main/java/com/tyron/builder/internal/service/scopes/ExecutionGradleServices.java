@@ -65,7 +65,7 @@ import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.FileLockManager;
 import com.tyron.builder.cache.PersistentCache;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.caching.internal.BuildCacheController;

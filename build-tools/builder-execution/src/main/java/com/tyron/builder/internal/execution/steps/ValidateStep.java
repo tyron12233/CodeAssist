@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.steps;
 
-import static com.tyron.builder.api.internal.reflect.validation.TypeValidationProblemRenderer.convertToSingleLine;
-import static com.tyron.builder.api.internal.reflect.validation.TypeValidationProblemRenderer.renderMinimalInformationAbout;
+import static com.tyron.builder.internal.reflect.validation.TypeValidationProblemRenderer.convertToSingleLine;
+import static com.tyron.builder.internal.reflect.validation.TypeValidationProblemRenderer.renderMinimalInformationAbout;
 
 import java.io.File;
 import java.util.Collection;

@@ -1,12 +1,14 @@
 package com.tyron.builder.internal.logging.events.operations;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.api.logging.LogLevel;
+import com.tyron.builder.internal.operations.logging.LogEventLevel;
 
 import java.util.List;
 
 /**
- * Build operation observer's view of {@link org.gradle.internal.logging.events.StyledTextOutputEvent}.
+ * Build operation observer's view of {@link StyledTextOutputEvent}.
  *
  * See LoggingBuildOperationProgressBroadcaster.
  *

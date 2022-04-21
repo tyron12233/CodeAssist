@@ -12,7 +12,7 @@ import com.tyron.builder.internal.file.PathToFileResolver;
 import com.tyron.builder.api.internal.provider.ProviderInternal;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
-import com.tyron.builder.api.providers.ProviderResolutionStrategy;
+import com.tyron.builder.api.provider.ProviderResolutionStrategy;
 import com.tyron.builder.api.Buildable;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.util.PatternSet;

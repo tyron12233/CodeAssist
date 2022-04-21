@@ -10,7 +10,7 @@ import com.tyron.builder.api.internal.tasks.compile.JavaCompileSpec;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.deps.DependentsSet;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.deps.GeneratedResource;
 import com.tyron.builder.api.tasks.util.PatternSet;
-import com.tyron.builder.api.work.FileChange;
+import com.tyron.builder.work.FileChange;
 import com.tyron.builder.language.base.internal.tasks.StaleOutputCleaner;
 
 import java.io.File;

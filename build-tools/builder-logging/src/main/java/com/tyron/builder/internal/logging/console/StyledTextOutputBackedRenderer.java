@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.logging.console;
 
-import static com.tyron.builder.internal.graph.StyledTextOutput.Style.Normal;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Normal;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.internal.logging.AbstractLineChoppingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.AbstractLineChoppingStyledTextOutput;
 import com.tyron.builder.internal.logging.events.OutputEvent;
 import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.RenderableOutputEvent;

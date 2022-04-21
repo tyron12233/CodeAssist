@@ -18,9 +18,9 @@ import com.tyron.builder.api.tasks.SkipWhenEmpty;
 import com.tyron.builder.api.tasks.SourceTask;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.compile.AbstractCompile;
-import com.tyron.builder.api.work.FileChange;
+import com.tyron.builder.work.FileChange;
 import com.tyron.builder.work.InputChanges;
-import com.tyron.builder.api.work.NormalizeLineEndings;
+import com.tyron.builder.work.NormalizeLineEndings;
 
 import org.jetbrains.annotations.Nullable;
 

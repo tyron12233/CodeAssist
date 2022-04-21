@@ -8,26 +8,31 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.CircularDependencyException;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.graph.CachingDirectedGraphWalker;
-import com.tyron.builder.api.internal.graph.DirectedGraphRenderer;
-import com.tyron.builder.api.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.graph.CachingDirectedGraphWalker;
+import com.tyron.builder.internal.graph.DirectedGraphRenderer;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+
+
+
 import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.internal.resources.ResourceLock;
 import com.tyron.builder.internal.resources.ResourceLockCoordinationService;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.tasks.CircularDependencyException;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
 import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertyType;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
-import com.tyron.builder.api.internal.work.WorkerLeaseRegistry;
+import com.tyron.builder.internal.work.WorkerLeaseRegistry;
+
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

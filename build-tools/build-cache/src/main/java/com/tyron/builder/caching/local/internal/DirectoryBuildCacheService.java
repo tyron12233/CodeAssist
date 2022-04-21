@@ -6,7 +6,7 @@ import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.file.FileAccessTracker;
 import com.tyron.builder.internal.resource.local.LocallyAvailableResource;
-import com.tyron.builder.api.internal.resources.local.PathKeyFileStore;
+import com.tyron.builder.internal.resource.local.PathKeyFileStore;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.cache.PersistentCache;
 import com.tyron.builder.caching.BuildCacheEntryReader;

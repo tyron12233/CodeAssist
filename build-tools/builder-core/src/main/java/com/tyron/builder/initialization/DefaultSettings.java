@@ -6,7 +6,7 @@ import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
 import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.initialization.Settings;
-import com.tyron.builder.api.internal.Actions;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.file.FileResolver;

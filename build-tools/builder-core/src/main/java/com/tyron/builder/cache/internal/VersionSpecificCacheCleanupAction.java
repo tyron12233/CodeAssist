@@ -8,7 +8,7 @@ import com.google.common.collect.SortedSetMultimap;
 import com.google.common.collect.TreeMultimap;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
-import com.tyron.builder.api.internal.file.Deleter;
+import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.internal.time.Timer;
 import com.tyron.builder.util.internal.GFileUtils;

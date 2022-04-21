@@ -4,6 +4,9 @@ plugins {
 
 dependencies {
     implementation projects.common
+
+    implementation projects.buildTools.builderBaseAnnotations
+    implementation common.slf4j
 }
 
 java {

@@ -14,7 +14,7 @@ import com.tyron.builder.api.internal.tasks.compile.incremental.cache.UserHomeSc
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.CachingClassSetAnalyzer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.ClassSetAnalyzer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.DefaultClassSetAnalyzer;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.internal.service.scopes.AbstractPluginServiceRegistry;

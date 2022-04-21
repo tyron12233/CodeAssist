@@ -1,7 +1,9 @@
 package com.tyron.builder.util.internal;
 
 import com.tyron.builder.api.provider.Provider;
-import com.tyron.builder.api.providers.ProviderResolutionStrategy;
+import com.tyron.builder.api.provider.ProviderResolutionStrategy;
+import com.tyron.builder.internal.Factory;
+import com.tyron.builder.util.GUtil;
 
 import org.jetbrains.annotations.Nullable;
 

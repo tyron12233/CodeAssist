@@ -3,7 +3,7 @@ package com.tyron.builder.internal.buildevents;
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.BuildResult;
 import com.tyron.builder.api.invocation.Gradle;
-import com.tyron.builder.api.GradleEnterprisePluginManager;
+import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
 import com.tyron.builder.execution.WorkValidationWarningReporter;
