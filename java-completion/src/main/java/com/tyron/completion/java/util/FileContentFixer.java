@@ -9,6 +9,7 @@ import com.sun.tools.javac.parser.ScannerFactory;
 import com.sun.tools.javac.parser.Tokens.Token;
 import com.sun.tools.javac.parser.Tokens.TokenKind;
 import com.sun.tools.javac.util.Context;
+import com.tyron.completion.progress.ProgressManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +46,8 @@ public class FileContentFixer {
         Scanner scanner = ScannerFactory.instance(context).newScanner(content, true);
         List<Insertion> insertions = new ArrayList<>();
         for (; ; scanner.nextToken()) {
+            ProgressManager.checkCanceled();
+
             Token token = scanner.token();
             if (token.kind == TokenKind.EOF) {
                 break;

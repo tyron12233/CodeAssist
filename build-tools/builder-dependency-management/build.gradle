@@ -1,0 +1,32 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.buildCache
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderResources
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderExecution
+
+    implementation common.slf4j
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

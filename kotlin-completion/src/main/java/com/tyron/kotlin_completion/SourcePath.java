@@ -9,6 +9,8 @@ import com.tyron.kotlin_completion.util.UtilKt;
 
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.idea.KotlinLanguage;

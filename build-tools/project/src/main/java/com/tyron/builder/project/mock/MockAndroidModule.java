@@ -29,13 +29,15 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
 
     private File mAndroidResourcesDir;
 
+    private final ModuleSettings mockSettings = new MockModuleSettings();
+
     public MockAndroidModule(File rootDir, FileManager fileManager) {
         super(rootDir, fileManager);
     }
 
     @Override
     public ModuleSettings getSettings() {
-        return new MockModuleSettings();
+        return mockSettings;
     }
 
     @Override
@@ -112,7 +114,7 @@ public class MockAndroidModule extends MockJavaModule implements AndroidModule {
 
     @Override
     public Map<String, File> getResourceClasses() {
-        return null;
+        return new HashMap<>();
     }
 
     @Override

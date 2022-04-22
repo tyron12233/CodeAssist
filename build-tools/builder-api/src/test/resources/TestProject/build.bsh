@@ -1,0 +1,25 @@
+project.tasks.register("testTask", new Action() {
+    execute(task) {
+        print("Configuring task");
+
+        task.doLast(new Action() {
+            execute(task) {
+                print("Executing task");
+            }
+        });
+    }
+});
+
+class SomeExtension {
+
+    String message;
+
+    public String getMessage() {
+        return message;
+    }
+
+    public SomeExtension() {
+        message = "hello world!";
+    }
+}
+project.extensions.create("property", SomeExtension.class, new Object[0]);

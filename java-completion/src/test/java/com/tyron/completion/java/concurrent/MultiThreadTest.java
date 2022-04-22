@@ -25,10 +25,9 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
-import edu.emory.mathcs.backport.java.util.Collections;
 
 /**
  * The java language server is single threaded and requires threads that
@@ -109,6 +108,31 @@ public class MultiThreadTest {
         for (Thread reader : readers) {
             reader.join();
         }
+    }
+
+    @Test
+    public void testClosedFileChannel() {
+        File file = mModule.getJavaFile("com.tyron.test.MemberSelect");
+        assert file != null;
+
+        new Thread(() -> {
+            CompilerContainer compile = mService.compile(file.toPath());
+            compile.run(task -> {
+                w(500);
+            });
+        }).start();
+
+        new Thread(() -> {
+            CompilerContainer compile = mService.compile(file.toPath());
+            compile.run(compileTask -> {
+               w(200);
+            });
+        }).start();
+
+        CompilerContainer compile = mService.compile(file.toPath());
+        compile.run(task -> {
+           assert task.diagnostics.isEmpty() : task.diagnostics;
+        });
     }
 
     @Test

@@ -104,8 +104,8 @@ public class DeleteFileAction extends FileAction {
                     if (packageName != null) {
                         packageName += "." + file.getName()
                                 .substring(0, file.getName().lastIndexOf("."));
+                        ((JavaModule) module).removeJavaFile(packageName);
                     }
-                    ((JavaModule) module).removeJavaFile(packageName);
                 }
             }
 
