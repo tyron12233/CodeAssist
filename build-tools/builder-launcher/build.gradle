@@ -17,6 +17,9 @@ dependencies {
     implementation projects.buildTools.builderCoreApi
     implementation projects.buildTools.builderCore
     implementation projects.buildTools.fileWatching
+
+    implementation common.slf4j
+    implementation common.commonsLang3
 }
 
 java {
