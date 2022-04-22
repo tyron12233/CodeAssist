@@ -1,46 +1,33 @@
 package com.tyron.builder.internal.service.scopes;
 
-import com.tyron.builder.api.execution.BuildWorkExecutor;
-import com.tyron.builder.api.execution.ProjectConfigurer;
+import com.tyron.builder.execution.BuildWorkExecutor;
+import com.tyron.builder.execution.ProjectConfigurer;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
 import com.tyron.builder.api.execution.TaskExecutionListener;
-import com.tyron.builder.api.execution.TaskSelector;
-import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchies;
-import com.tyron.builder.api.execution.plan.LocalTaskNodeExecutor;
-import com.tyron.builder.api.execution.plan.NodeExecutor;
-import com.tyron.builder.api.execution.plan.PlanExecutor;
+import com.tyron.builder.execution.TaskSelector;
+import com.tyron.builder.execution.plan.ExecutionNodeAccessHierarchies;
+import com.tyron.builder.execution.plan.LocalTaskNodeExecutor;
+import com.tyron.builder.execution.plan.NodeExecutor;
+import com.tyron.builder.execution.plan.PlanExecutor;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
-import com.tyron.builder.api.internal.event.ListenerBroadcast;
-import com.tyron.builder.api.internal.event.ListenerManager;
-import com.tyron.builder.api.internal.execution.BuildOutputCleanupRegistry;
-import com.tyron.builder.api.internal.execution.DefaultTaskExecutionGraph;
-import com.tyron.builder.api.internal.execution.TaskExecutionGraphInternal;
+import com.tyron.builder.internal.event.ListenerBroadcast;
+import com.tyron.builder.internal.event.ListenerManager;
+import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
+import com.tyron.builder.execution.taskgraph.DefaultTaskExecutionGraph;
+import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
-import com.tyron.builder.api.internal.logging.text.StyledTextOutputFactory;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.options.OptionReader;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
-import com.tyron.builder.api.work.AsyncWorkTracker;
-import com.tyron.builder.api.work.DefaultAsyncWorkTracker;
-import com.tyron.builder.cache.CacheBuilder;
-import com.tyron.builder.cache.CacheRepository;
-import com.tyron.builder.cache.FileLockManager;
-import com.tyron.builder.cache.FileLockReleasedSignal;
-import com.tyron.builder.cache.internal.CacheFactory;
-import com.tyron.builder.cache.internal.CacheScopeMapping;
-import com.tyron.builder.cache.internal.DefaultCacheFactory;
-import com.tyron.builder.cache.internal.DefaultCacheRepository;
-import com.tyron.builder.cache.internal.DefaultFileLockManager;
-import com.tyron.builder.cache.internal.ProcessMetaDataProvider;
-import com.tyron.builder.cache.internal.locklistener.FileLockContentionHandler;
-import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
-import com.tyron.builder.cache.scopes.BuildScopedCache;
+import com.tyron.builder.internal.work.WorkerLeaseService;
+import com.tyron.builder.internal.work.AsyncWorkTracker;
+import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
 import com.tyron.builder.configuration.project.BuiltInCommand;
 import com.tyron.builder.execution.BuildConfigurationAction;
 import com.tyron.builder.execution.BuildConfigurationActionExecuter;
@@ -56,15 +43,13 @@ import com.tyron.builder.initialization.DefaultTaskExecutionPreparer;
 import com.tyron.builder.initialization.TaskExecutionPreparer;
 import com.tyron.builder.internal.buildTree.BuildModelParameters;
 import com.tyron.builder.internal.cleanup.DefaultBuildOutputCleanupRegistry;
-import com.tyron.builder.internal.execution.taskgraph.TaskListenerInternal;
+import com.tyron.builder.execution.taskgraph.TaskListenerInternal;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
-import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 
 import java.util.LinkedList;
 import java.util.List;
 
 public class GradleScopeServices extends DefaultServiceRegistry {
-
     private final CompositeStoppable registries = new CompositeStoppable();
 
     public GradleScopeServices(final ServiceRegistry parent) {

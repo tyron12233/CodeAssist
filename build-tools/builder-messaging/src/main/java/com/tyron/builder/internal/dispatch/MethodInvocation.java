@@ -1,4 +1,4 @@
-package com.tyron.builder.api.internal.dispatch;
+package com.tyron.builder.internal.dispatch;
 
 import com.tyron.builder.util.internal.CollectionUtils;
 

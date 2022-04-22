@@ -10,7 +10,7 @@ java {
 }
 
 dependencies {
-    implementation (projects.common)
+    implementation projects.common
     implementation 'javax.inject:javax.inject:1'
     implementation 'com.esotericsoftware:kryo:5.3.0'
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
@@ -24,15 +24,15 @@ dependencies {
 
     implementation 'org.apache.commons:commons-compress:1.20'
     implementation 'org.apache.commons:commons-vfs2:2.9.0'
-    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    implementation common.commonsLang3
 
 
     implementation 'org.ow2.asm:asm:9.3'
 
-
     implementation 'org.apache-extras.beanshell:bsh:2.0b6'
     api 'it.unimi.dsi:fastutil:8.5.8'
-    implementation 'org.slf4j:slf4j-api:1.7.36'
+
+    implementation common.slf4j
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.apache.commons:commons-lang3:3.12.0'

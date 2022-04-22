@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.initialization;
 
 import com.google.common.hash.HashCode;
+import com.tyron.builder.initialization.ClassLoaderScopeId;
 import com.tyron.builder.internal.classpath.ClassPath;
 
 import javax.annotation.Nullable;

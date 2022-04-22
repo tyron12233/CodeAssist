@@ -1,13 +1,14 @@
 package com.tyron.builder.api.internal;
 
-import static com.tyron.builder.api.internal.GUtil.uncheckedCall;
+import static com.tyron.builder.util.GUtil.uncheckedCall;
 
+import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.api.tasks.Internal;
-import com.tyron.builder.api.util.Predicates;
-import com.tyron.builder.api.work.DisableCachingByDefault;
+import com.tyron.builder.util.Predicates;
+import com.tyron.builder.work.DisableCachingByDefault;
 
 import java.util.concurrent.Callable;
 import java.util.function.Predicate;
@@ -27,7 +28,7 @@ public abstract class AbstractTask implements TaskInternal {
 
     }
 
-    static TaskInfo taskInfo() {
+    protected static TaskInfo taskInfo() {
         return NEXT_INSTANCE.get();
     }
 
@@ -53,9 +54,9 @@ public abstract class AbstractTask implements TaskInternal {
         setOnlyIf(onlyIfSpec);
     }
 
-    static class TaskInfo {
-        final TaskIdentity<?> identity;
-        final ProjectInternal project;
+    protected static class TaskInfo {
+        public final TaskIdentity<?> identity;
+        public final ProjectInternal project;
 
         private TaskInfo(TaskIdentity<?> identity, ProjectInternal project) {
             this.identity = identity;

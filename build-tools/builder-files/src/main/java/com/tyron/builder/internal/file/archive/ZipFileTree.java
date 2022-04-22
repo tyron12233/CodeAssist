@@ -10,8 +10,8 @@
 //import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 //import com.tyron.builder.api.internal.file.collections.MinimalFileTree;
 //import com.tyron.builder.internal.hash.FileHasher;
-//import com.tyron.builder.api.internal.nativeintegration.FileSystem;
-//import com.tyron.builder.api.providers.Provider;
+//import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
+//import com.tyron.builder.api.provider.Provider;
 //
 //import java.io.File;
 //

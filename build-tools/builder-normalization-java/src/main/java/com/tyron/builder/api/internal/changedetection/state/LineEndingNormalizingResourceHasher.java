@@ -31,9 +31,9 @@ public class LineEndingNormalizingResourceHasher implements ResourceHasher {
 
     public static ResourceHasher wrap(ResourceHasher delegate, LineEndingSensitivity lineEndingSensitivity) {
         switch (lineEndingSensitivity) {
-            case LineEndingSensitivity.DEFAULT:
+            case DEFAULT:
                 return delegate;
-            case LineEndingSensitivity.NORMALIZE_LINE_ENDINGS:
+            case NORMALIZE_LINE_ENDINGS:
                 return new LineEndingNormalizingResourceHasher(delegate);
             default:
                 throw new IllegalArgumentException();

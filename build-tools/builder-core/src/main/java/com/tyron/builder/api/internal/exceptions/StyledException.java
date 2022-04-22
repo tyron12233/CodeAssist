@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.exceptions;
 
 import com.google.common.base.Strings;
 import com.tyron.builder.api.BuildException;
-import com.tyron.builder.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
 

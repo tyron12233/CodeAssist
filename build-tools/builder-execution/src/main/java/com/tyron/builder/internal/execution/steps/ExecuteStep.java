@@ -1,21 +1,21 @@
 package com.tyron.builder.internal.execution.steps;
 
 import com.google.common.collect.ImmutableSortedMap;
-import com.tyron.builder.api.internal.Try;
+import com.tyron.builder.internal.Try;
 import com.tyron.builder.internal.execution.ExecutionOutcome;
 import com.tyron.builder.internal.execution.ExecutionResult;
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
-import com.tyron.builder.api.internal.execution.history.PreviousExecutionState;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.BuildOperationType;
-import com.tyron.builder.api.internal.operations.CallableBuildOperation;
+import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.PreviousExecutionState;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.CallableBuildOperation;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.time.Timer;
-import com.tyron.builder.api.work.InputChanges;
+import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.time.Timer;
+import com.tyron.builder.work.InputChanges;
 
 import java.io.File;
 import java.time.Duration;

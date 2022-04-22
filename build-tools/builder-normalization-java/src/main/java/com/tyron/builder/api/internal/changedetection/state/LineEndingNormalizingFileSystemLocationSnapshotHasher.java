@@ -32,9 +32,9 @@ public class LineEndingNormalizingFileSystemLocationSnapshotHasher implements Fi
 
     public static FileSystemLocationSnapshotHasher wrap(FileSystemLocationSnapshotHasher delegate, LineEndingSensitivity lineEndingSensitivity) {
         switch (lineEndingSensitivity) {
-            case LineEndingSensitivity.DEFAULT:
+            case DEFAULT:
                 return delegate;
-            case LineEndingSensitivity.NORMALIZE_LINE_ENDINGS:
+            case NORMALIZE_LINE_ENDINGS:
                 return new LineEndingNormalizingFileSystemLocationSnapshotHasher(delegate);
             default:
                 throw new IllegalArgumentException();

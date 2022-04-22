@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.fingerprint.classpath;
 
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.api.tasks.Classpath;
 

@@ -4,17 +4,17 @@ import com.google.common.base.Suppliers;
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.api.internal.provider.HasConfigurableValueInternal;
-import com.tyron.builder.api.internal.reflect.PropertyMetadata;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.PropertyMetadata;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.properties.BeanPropertyContext;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.TypeMetadata;
 import com.tyron.builder.api.internal.tasks.properties.annotations.PropertyAnnotationHandler;
-import com.tyron.builder.api.providers.HasConfigurableValue;
-import com.tyron.builder.api.providers.Provider;
-import com.tyron.builder.api.tasks.Buildable;
+import com.tyron.builder.api.provider.HasConfigurableValue;
+import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.api.Buildable;
 
 import org.jetbrains.annotations.Nullable;
 

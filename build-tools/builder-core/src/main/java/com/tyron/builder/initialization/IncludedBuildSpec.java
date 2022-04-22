@@ -3,7 +3,7 @@ package com.tyron.builder.initialization;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
 import com.tyron.builder.api.internal.BuildDefinition;
-import com.tyron.builder.api.internal.ImmutableActionSet;
+import com.tyron.builder.internal.ImmutableActionSet;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.build.PublicBuildPath;

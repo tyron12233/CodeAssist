@@ -1,9 +1,9 @@
 package com.tyron.builder.api;
 
-import com.tyron.builder.api.internal.service.scopes.EventScope;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.api.invocation.Gradle;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 /**
  * <p>An {@code ProjectEvaluationListener} is notified when a project is evaluated. You add can add an {@code

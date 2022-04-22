@@ -2,7 +2,7 @@ package com.tyron.builder.api;
 
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.LoggingManager;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;

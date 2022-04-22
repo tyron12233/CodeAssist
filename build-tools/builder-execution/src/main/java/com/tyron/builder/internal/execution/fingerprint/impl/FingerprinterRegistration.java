@@ -1,10 +1,9 @@
 package com.tyron.builder.internal.execution.fingerprint.impl;
 
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
 import com.tyron.builder.internal.execution.fingerprint.FileNormalizationSpec;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
-import com.tyron.builder.internal.fingerprint.impl.DefaultFileNormalizationSpec;
 
 import java.util.Objects;
 

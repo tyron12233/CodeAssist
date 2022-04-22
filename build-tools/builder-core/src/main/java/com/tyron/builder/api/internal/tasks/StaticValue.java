@@ -6,8 +6,8 @@ import com.tyron.builder.api.internal.provider.HasConfigurableValueInternal;
 import com.tyron.builder.api.internal.provider.PropertyInternal;
 import com.tyron.builder.internal.state.ModelObject;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
-import com.tyron.builder.api.providers.HasConfigurableValue;
-import com.tyron.builder.api.tasks.Buildable;
+import com.tyron.builder.api.provider.HasConfigurableValue;
+import com.tyron.builder.api.Buildable;
 
 import org.jetbrains.annotations.Nullable;
 

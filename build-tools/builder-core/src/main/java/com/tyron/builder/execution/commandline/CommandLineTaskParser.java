@@ -3,8 +3,8 @@ package com.tyron.builder.execution.commandline;
 import com.google.common.collect.Lists;
 import com.tyron.builder.TaskExecutionRequest;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.TaskSelection;
-import com.tyron.builder.api.execution.TaskSelector;
+import com.tyron.builder.execution.TaskSelection;
+import com.tyron.builder.execution.TaskSelector;
 
 import java.util.LinkedList;
 import java.util.List;

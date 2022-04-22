@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.file.collections;
 import com.tyron.builder.api.file.DirectoryTree;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.file.DefaultFileTreeElement;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 
 import java.io.File;
 

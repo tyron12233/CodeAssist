@@ -4,10 +4,10 @@ import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotation
 
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
-import com.tyron.builder.api.internal.reflect.PropertyMetadata;
-import com.tyron.builder.api.internal.reflect.problems.ValidationProblemId;
-import com.tyron.builder.api.internal.reflect.validation.Severity;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.PropertyMetadata;
+import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
+import com.tyron.builder.internal.reflect.validation.Severity;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.properties.BeanPropertyContext;
 import com.tyron.builder.api.internal.tasks.properties.FileParameterUtils;
 import com.tyron.builder.api.internal.tasks.properties.InputFilePropertyType;
@@ -23,8 +23,8 @@ import com.tyron.builder.api.tasks.Optional;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.PathSensitivity;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
-import com.tyron.builder.api.work.Incremental;
-import com.tyron.builder.api.work.NormalizeLineEndings;
+import com.tyron.builder.work.Incremental;
+import com.tyron.builder.work.NormalizeLineEndings;
 
 import java.lang.annotation.Annotation;
 

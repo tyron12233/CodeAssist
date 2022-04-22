@@ -1,15 +1,15 @@
 package com.tyron.builder.api.internal.tasks.compile.incremental.recomp;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.BuildOperationQueue;
-import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationQueue;
+import com.tyron.builder.internal.operations.RunnableBuildOperation;
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.ClassSetAnalyzer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassSetAnalysisData;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.time.Timer;
+import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.time.Timer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

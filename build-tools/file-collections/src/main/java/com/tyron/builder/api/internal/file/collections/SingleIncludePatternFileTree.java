@@ -8,12 +8,12 @@ import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.file.DefaultFileVisitDetails;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
-import com.tyron.builder.api.internal.file.pattern.PatternStep;
-import com.tyron.builder.api.internal.file.pattern.PatternStepFactory;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
-import com.tyron.builder.api.internal.nativeintegration.services.FileSystems;
+import com.tyron.builder.internal.file.pattern.PatternStep;
+import com.tyron.builder.internal.file.pattern.PatternStepFactory;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
+import com.tyron.builder.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.api.tasks.util.PatternSet;
-import com.tyron.builder.api.util.Predicates;
+import com.tyron.builder.util.Predicates;
 
 import java.io.File;
 

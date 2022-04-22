@@ -1,10 +1,10 @@
 package com.tyron.builder.api.internal.tasks.compile.incremental.deps;
 
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.serialize.AbstractSerializer;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.serialize.AbstractSerializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.internal.serialize.IntSetSerializer;
 import com.tyron.builder.internal.serialize.InterningStringSerializer;
 import com.tyron.builder.internal.serialize.SetSerializer;

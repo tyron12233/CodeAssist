@@ -1,11 +1,13 @@
 package com.tyron.builder.api.tasks;
 
+import com.tyron.builder.internal.HasInternalProtocol;
+
 /**
  * Describes an input property of a task that contains zero or more files.
  *
  * @since 3.0
  */
-//@HasInternalProtocol
+@HasInternalProtocol
 public interface TaskInputFilePropertyBuilder extends TaskFilePropertyBuilder {
     /**
      * {@inheritDoc}

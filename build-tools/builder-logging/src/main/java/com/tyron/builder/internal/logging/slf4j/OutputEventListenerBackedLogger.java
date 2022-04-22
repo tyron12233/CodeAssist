@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.logging.slf4j;
 
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
-import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.logging.events.LogEvent;
 

@@ -8,7 +8,7 @@ import com.tyron.builder.internal.reflect.validation.PropertyProblemBuilder;
 import com.tyron.builder.internal.reflect.validation.TypeProblemBuilder;
 import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.internal.reflect.validation.TypeValidationProblem;
-import com.tyron.builder.api.plugin.PluginId;
+import com.tyron.builder.plugin.use.PluginId;
 
 import org.jetbrains.annotations.Nullable;
 

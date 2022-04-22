@@ -1,6 +1,6 @@
-package com.tyron.builder.api.execution.taskgraph;
+package com.tyron.builder.execution.taskgraph;
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 /**
  * Execution of a build's taskgraph.whenReady hooks

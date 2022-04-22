@@ -1,12 +1,12 @@
 package com.tyron.builder.internal.execution.steps;
 
 import com.google.common.collect.ImmutableSortedMap;
-import com.tyron.builder.api.internal.Try;
+import com.tyron.builder.internal.Try;
 import com.tyron.builder.internal.execution.DeferredExecutionHandler;
 import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.UnitOfWork.Identity;
 import com.tyron.builder.internal.execution.WorkValidationContext;
-import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.cache.Cache;

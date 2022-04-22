@@ -11,6 +11,11 @@ dependencies {
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderProblems
+
+    implementation 'javax.inject:javax.inject:1'
+    implementation common.commonsLang3
 }
 
 java {

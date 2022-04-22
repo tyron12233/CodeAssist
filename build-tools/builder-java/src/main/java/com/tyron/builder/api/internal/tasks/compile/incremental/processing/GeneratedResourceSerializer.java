@@ -1,10 +1,10 @@
 package com.tyron.builder.api.internal.tasks.compile.incremental.processing;
 
-import com.tyron.builder.api.internal.serialize.AbstractSerializer;
-import com.tyron.builder.api.internal.serialize.BaseSerializerFactory;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
-import com.tyron.builder.api.internal.serialize.Serializer;
+import com.tyron.builder.internal.serialize.AbstractSerializer;
+import com.tyron.builder.internal.serialize.BaseSerializerFactory;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.Serializer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.deps.GeneratedResource;
 
 public class GeneratedResourceSerializer extends AbstractSerializer<GeneratedResource> {

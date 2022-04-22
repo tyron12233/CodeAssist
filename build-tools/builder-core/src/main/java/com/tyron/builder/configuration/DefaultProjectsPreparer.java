@@ -1,8 +1,8 @@
 package com.tyron.builder.configuration;
 
-import com.tyron.builder.api.execution.ProjectConfigurer;
+import com.tyron.builder.execution.ProjectConfigurer;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.initialization.ModelConfigurationListener;
 import com.tyron.builder.initialization.ProjectsEvaluatedNotifier;
 import com.tyron.builder.internal.build.BuildStateRegistry;

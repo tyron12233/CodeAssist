@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.artifacts.DependencySubstitutions;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.build.PublicBuildPath;
 import com.tyron.builder.plugin.management.PluginRequests;
 
@@ -105,7 +106,8 @@ public class BuildDefinition {
     }
 
     public static BuildDefinition fromStartParameter(StartParameterInternal startParameter, @Nullable File rootBuildDir, @Nullable PublicBuildPath fromBuild) {
-        return new BuildDefinition(null, rootBuildDir, startParameter, PluginRequests.EMPTY, Actions.doNothing(), fromBuild, false);
+        return new BuildDefinition(null, rootBuildDir, startParameter, PluginRequests.EMPTY, Actions
+                .doNothing(), fromBuild, false);
     }
 
     private static StartParameterInternal startParameterForIncludedBuildFrom(StartParameterInternal startParameter, File buildRootDir) {

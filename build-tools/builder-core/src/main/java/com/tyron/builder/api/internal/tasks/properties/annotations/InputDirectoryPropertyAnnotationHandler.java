@@ -4,8 +4,8 @@ import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotation
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
-import com.tyron.builder.api.internal.reflect.AnnotationCategory;
-import com.tyron.builder.api.internal.reflect.PropertyMetadata;
+import com.tyron.builder.internal.reflect.AnnotationCategory;
+import com.tyron.builder.internal.reflect.PropertyMetadata;
 import com.tyron.builder.api.internal.tasks.properties.InputFilePropertyType;
 import com.tyron.builder.api.tasks.InputDirectory;
 

@@ -1,13 +1,13 @@
 package com.tyron.builder.execution;
 
-import com.tyron.builder.api.execution.BuildWorkExecutor;
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.BuildWorkExecutor;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.operations.BuildOperationCategory;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.CallableBuildOperation;
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.CallableBuildOperation;
 import com.tyron.builder.initialization.BuildRequestMetaData;
 import com.tyron.builder.internal.build.ExecutionResult;
 

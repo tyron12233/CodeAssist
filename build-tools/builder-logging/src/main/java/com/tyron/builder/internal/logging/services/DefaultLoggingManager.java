@@ -2,7 +2,7 @@ package com.tyron.builder.internal.logging.services;
 
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.Stoppable;
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.StandardOutputListener;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;

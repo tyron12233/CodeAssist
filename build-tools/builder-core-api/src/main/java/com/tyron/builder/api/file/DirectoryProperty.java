@@ -1,7 +1,7 @@
 package com.tyron.builder.api.file;
 
-import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.provider.Provider;
 
 import org.jetbrains.annotations.Nullable;
 

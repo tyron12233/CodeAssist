@@ -2,9 +2,9 @@ package com.tyron.builder.api.internal.tasks.compile.incremental.processing;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.serialize.AbstractSerializer;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.AbstractSerializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.deps.GeneratedResource;
 import com.tyron.builder.api.internal.tasks.compile.incremental.serialization.HierarchicalNameSerializer;
 import com.tyron.builder.internal.serialize.MapSerializer;

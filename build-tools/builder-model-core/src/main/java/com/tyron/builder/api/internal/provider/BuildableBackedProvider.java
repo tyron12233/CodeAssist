@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.provider;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.internal.Factory;
-import com.tyron.builder.api.tasks.Buildable;
+import com.tyron.builder.api.Buildable;
 
 import org.jetbrains.annotations.Nullable;
 

@@ -1,17 +1,17 @@
 package com.tyron.builder.api.internal;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.logging.StandardOutputCapture;
+import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
-import com.tyron.builder.api.internal.resources.ResourceLock;
+import com.tyron.builder.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
-import com.tyron.builder.api.tasks.TaskOutputsInternal;
+import com.tyron.builder.api.internal.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 import java.util.List;
 import java.util.Optional;

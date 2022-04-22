@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.options;
 
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
 import com.tyron.builder.internal.typeconversion.NotationConverter;
 import com.tyron.builder.internal.typeconversion.NotationConverterToNotationParserAdapter;
 import com.tyron.builder.internal.typeconversion.NotationParser;

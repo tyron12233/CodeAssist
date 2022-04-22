@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.tasks.properties;
 
 import com.google.common.collect.ImmutableSortedSet;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 
 public interface TaskProperties {
     /**

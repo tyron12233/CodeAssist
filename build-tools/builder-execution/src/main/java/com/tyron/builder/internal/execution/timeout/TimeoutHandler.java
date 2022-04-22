@@ -2,7 +2,7 @@ package com.tyron.builder.internal.execution.timeout;
 
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.internal.concurrent.Stoppable;
-import com.tyron.builder.api.internal.operations.BuildOperationRef;
+import com.tyron.builder.internal.operations.BuildOperationRef;
 
 import org.jetbrains.annotations.Nullable;
 

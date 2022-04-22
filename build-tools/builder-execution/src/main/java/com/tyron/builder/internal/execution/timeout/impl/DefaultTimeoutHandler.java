@@ -2,15 +2,15 @@ package com.tyron.builder.internal.execution.timeout.impl;
 
 import com.google.common.io.CharStreams;
 import com.tyron.builder.api.Describable;
-import com.tyron.builder.api.internal.concurrent.ManagedScheduledExecutor;
+import com.tyron.builder.internal.concurrent.ManagedScheduledExecutor;
 import com.tyron.builder.internal.concurrent.Stoppable;
 import com.tyron.builder.internal.execution.timeout.Timeout;
 import com.tyron.builder.internal.execution.timeout.TimeoutHandler;
-import com.tyron.builder.api.internal.operations.BuildOperationRef;
-import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
-import com.tyron.builder.api.internal.time.CountdownTimer;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.time.TimeFormatting;
+import com.tyron.builder.internal.operations.BuildOperationRef;
+import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.internal.time.CountdownTimer;
+import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.time.TimeFormatting;
 
 import org.jetbrains.annotations.Nullable;
 

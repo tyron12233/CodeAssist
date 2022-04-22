@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.events;
 
-import com.tyron.builder.api.internal.logging.events.OutputEvent;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.api.logging.LogLevel;
 
 public class ProgressCompleteEvent extends OutputEvent {

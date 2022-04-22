@@ -9,7 +9,7 @@ import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.internal.file.PathToFileResolver;
 import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
-import com.tyron.builder.api.tasks.DefaultTaskDependency;
+import com.tyron.builder.api.internal.tasks.DefaultTaskDependency;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
 import java.io.File;

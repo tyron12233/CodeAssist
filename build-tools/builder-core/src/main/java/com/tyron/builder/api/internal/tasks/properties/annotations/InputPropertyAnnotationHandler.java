@@ -1,19 +1,19 @@
 package com.tyron.builder.api.internal.tasks.properties.annotations;
 
-import static com.tyron.builder.api.internal.reflect.validation.Severity.ERROR;
+import static com.tyron.builder.internal.reflect.validation.Severity.ERROR;
 import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory.OPTIONAL;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.reflect.AnnotationCategory;
-import com.tyron.builder.api.internal.reflect.JavaReflectionUtil;
-import com.tyron.builder.api.internal.reflect.PropertyMetadata;
-import com.tyron.builder.api.internal.reflect.problems.ValidationProblemId;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.AnnotationCategory;
+import com.tyron.builder.internal.reflect.JavaReflectionUtil;
+import com.tyron.builder.internal.reflect.PropertyMetadata;
+import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 import com.tyron.builder.api.internal.tasks.properties.BeanPropertyContext;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
-import com.tyron.builder.api.model.internal.type.ModelType;
+import com.tyron.builder.model.internal.type.ModelType;
 import com.tyron.builder.api.tasks.Input;
 import com.tyron.builder.api.tasks.Optional;
 

@@ -1,9 +1,9 @@
 package com.tyron.builder.api.internal.tasks.execution;
 
 import com.google.common.collect.ImmutableMap;
-import com.tyron.builder.api.execution.plan.LocalTaskNode;
+import com.tyron.builder.execution.plan.LocalTaskNode;
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.operations.trace.CustomOperationTraceSerialization;
+import com.tyron.builder.internal.operations.trace.CustomOperationTraceSerialization;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 
 public class ExecuteTaskBuildOperationDetails implements ExecuteTaskBuildOperationType.Details, CustomOperationTraceSerialization {

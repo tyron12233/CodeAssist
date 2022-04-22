@@ -2,7 +2,7 @@ package com.tyron.builder.api.tasks;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Named;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

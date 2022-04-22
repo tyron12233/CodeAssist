@@ -10,8 +10,8 @@ import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.PreviousC
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.PreviousCompilationData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.RecompilationSpec;
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.RecompilationSpecProvider;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.time.Timer;
+import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.time.Timer;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.tasks.WorkResults;
 import com.tyron.builder.language.base.internal.compile.Compiler;

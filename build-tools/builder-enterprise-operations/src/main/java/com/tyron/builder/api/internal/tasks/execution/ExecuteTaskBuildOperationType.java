@@ -1,9 +1,6 @@
 package com.tyron.builder.api.internal.tasks.execution;
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
-import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
-import com.tyron.builder.api.tasks.TaskState;
-import com.tyron.builder.api.work.InputChanges;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 import javax.annotation.Nullable;
 import java.util.List;

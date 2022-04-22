@@ -1,8 +1,8 @@
 package com.tyron.builder.execution.plan;
 
 
-import com.tyron.builder.api.execution.plan.LocalTaskNode;
-import com.tyron.builder.api.execution.plan.Node;
+import com.tyron.builder.execution.plan.LocalTaskNode;
+import com.tyron.builder.execution.plan.Node;
 import com.tyron.builder.internal.concurrent.Stoppable;
 
 import java.util.function.Consumer;

@@ -12,7 +12,7 @@
 //import static org.fusesource.jansi.internal.Kernel32.STD_OUTPUT_HANDLE;
 //import static org.fusesource.jansi.internal.Kernel32.SetConsoleMode;
 //
-//import com.tyron.builder.api.internal.os.OperatingSystem;
+//import com.tyron.builder.internal.os.OperatingSystem;
 //
 //import org.apache.commons.io.output.ProxyOutputStream;
 //import org.fusesource.jansi.io.AnsiOutputStream;

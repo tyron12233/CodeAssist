@@ -1,6 +1,6 @@
 package com.tyron.builder.initialization.layout;
 
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.internal.StartParameterInternal;
 
 import javax.annotation.Nullable;

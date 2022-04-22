@@ -5,11 +5,11 @@ import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.initialization.Settings;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.file.PathToFileResolver;
+import com.tyron.builder.internal.file.PathToFileResolver;
 import com.tyron.builder.api.internal.project.ProjectIdentifier;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.util.internal.GFileUtils;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 import com.tyron.builder.util.internal.NameValidator;
 
 import org.jetbrains.annotations.Nullable;

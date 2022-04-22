@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.reflect.validation;
 
 import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.plugin.PluginId;
+import com.tyron.builder.plugin.use.PluginId;
 
 public class DefaultTypeValidationProblemBuilder extends AbstractValidationProblemBuilder<TypeProblemBuilder> implements TypeProblemBuilder {
     private Class<?> type;

@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.logging.format;
 
-import static com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent.EOL;
+import static com.tyron.builder.internal.logging.events.StyledTextOutputEvent.EOL;
 
 import com.google.common.collect.Lists;
-import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 
 import java.util.List;
 

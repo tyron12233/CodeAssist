@@ -1,6 +1,6 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.internal.SettingsInternal;
 
 import java.io.File;

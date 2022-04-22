@@ -1,12 +1,11 @@
 package com.tyron.builder.api.internal.changedetection.state;
 
-import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.*;
+import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
 
-import com.tyron.builder.api.internal.execution.history.ExecutionHistoryCacheAccess;
+import com.tyron.builder.internal.execution.history.ExecutionHistoryCacheAccess;
 import com.tyron.builder.cache.FileLockManager;
 import com.tyron.builder.cache.PersistentCache;
 import com.tyron.builder.cache.internal.filelock.LockOptionsBuilder;
-import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.cache.scopes.ScopedCache;
 
 import java.io.Closeable;

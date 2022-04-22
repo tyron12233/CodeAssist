@@ -1,21 +1,17 @@
 package com.tyron.builder.execution;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.configuration.TaskNameResolver;
-import com.tyron.builder.api.execution.ProjectConfigurer;
-import com.tyron.builder.api.execution.TaskSelection;
-import com.tyron.builder.api.execution.TaskSelector;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.util.Path;
-import com.tyron.builder.api.util.Predicates;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.BuildStateRegistry;
 import com.tyron.builder.internal.build.IncludedBuildState;
+import com.tyron.builder.util.Path;
+import com.tyron.builder.util.Predicates;
 
-import javax.annotation.Nullable;
 import java.io.File;
 import java.util.function.Predicate;
+
+import javax.annotation.Nullable;
 
 public class CompositeAwareTaskSelector extends TaskSelector {
     private final GradleInternal gradle;

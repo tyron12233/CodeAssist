@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.fingerprint.impl;
 
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.FingerprintingStrategy;

@@ -1,13 +1,13 @@
 package com.tyron.builder.initialization;
 
 import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 import com.tyron.builder.configuration.project.BuiltInCommand;
 import com.tyron.builder.initialization.buildsrc.BuildSrcDetector;
 import com.tyron.builder.initialization.layout.BuildLayout;

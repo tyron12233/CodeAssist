@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.work;
 
-import com.tyron.builder.api.internal.exceptions.MultiCauseException;
-import com.tyron.builder.api.internal.operations.BuildOperationRef;
+import com.tyron.builder.internal.exceptions.MultiCauseException;
+import com.tyron.builder.internal.operations.BuildOperationRef;
 
 import java.util.List;
 

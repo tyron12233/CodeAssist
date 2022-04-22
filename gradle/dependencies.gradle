@@ -1,0 +1,6 @@
+ext {
+    common = [
+            slf4j: 'org.slf4j:slf4j-api:1.7.36',
+            commonsLang3: 'org.apache.commons:commons-lang3:3.12.0'
+    ]
+}

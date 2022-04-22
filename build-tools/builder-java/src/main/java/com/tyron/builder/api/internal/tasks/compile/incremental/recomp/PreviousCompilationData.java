@@ -1,13 +1,13 @@
 package com.tyron.builder.api.internal.tasks.compile.incremental.recomp;
 
-import com.tyron.builder.api.internal.serialize.AbstractSerializer;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.AbstractSerializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.CompilerApiData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassSetAnalysisData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.processing.AnnotationProcessingData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.serialization.HierarchicalNameSerializer;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 
 import java.util.function.Supplier;
 

@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.fingerprint.impl;
 
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
 import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.api.internal.file.FileTreeInternal;

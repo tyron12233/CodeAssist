@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.scopeids.id;
 
-import com.tyron.builder.api.internal.id.UniqueId;
+import com.tyron.builder.internal.id.UniqueId;
 
 public class ScopeId {
 

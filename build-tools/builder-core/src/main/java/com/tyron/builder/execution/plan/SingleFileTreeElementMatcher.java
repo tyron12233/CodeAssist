@@ -2,7 +2,7 @@ package com.tyron.builder.execution.plan;
 
 import com.tyron.builder.api.file.FileTreeElement;
 import com.tyron.builder.api.file.RelativePath;
-import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.internal.file.Stat;
 
 import java.io.File;
 import java.io.IOException;

@@ -2,7 +2,7 @@ package com.tyron.builder.internal.build;
 
 
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 /**
  * A reference to public path for a build, available via the service registry.

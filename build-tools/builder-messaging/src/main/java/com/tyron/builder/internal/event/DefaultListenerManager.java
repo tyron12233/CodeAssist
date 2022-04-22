@@ -1,14 +1,14 @@
 package com.tyron.builder.internal.event;
 
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.dispatch.Dispatch;
-import com.tyron.builder.api.internal.dispatch.MethodInvocation;
-import com.tyron.builder.api.internal.dispatch.ProxyDispatchAdapter;
-import com.tyron.builder.api.internal.dispatch.ReflectionDispatch;
-import com.tyron.builder.api.internal.reflect.service.AnnotatedServiceLifecycleHandler;
-import com.tyron.builder.api.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.dispatch.Dispatch;
+import com.tyron.builder.internal.dispatch.MethodInvocation;
+import com.tyron.builder.internal.dispatch.ProxyDispatchAdapter;
+import com.tyron.builder.internal.dispatch.ReflectionDispatch;
+import com.tyron.builder.internal.reflect.service.AnnotatedServiceLifecycleHandler;
+import com.tyron.builder.internal.service.scopes.EventScope;
 import com.tyron.builder.internal.service.scopes.Scope;
-import com.tyron.builder.api.internal.service.scopes.StatefulListener;
+import com.tyron.builder.internal.service.scopes.StatefulListener;
 
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;

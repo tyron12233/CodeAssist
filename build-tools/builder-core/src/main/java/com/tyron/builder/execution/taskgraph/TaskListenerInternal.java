@@ -1,8 +1,8 @@
 package com.tyron.builder.execution.taskgraph;
 
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
-import com.tyron.builder.api.internal.service.scopes.EventScope;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.api.tasks.TaskState;
 
 @EventScope(Scopes.Build.class)

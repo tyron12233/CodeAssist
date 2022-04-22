@@ -2,7 +2,7 @@ package com.tyron.builder.initialization.layout;
 
 import static com.tyron.builder.cache.internal.scopes.DefaultCacheScopeMapping.GLOBAL_CACHE_DIR_NAME;
 
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.initialization.GradleUserHomeDirProvider;
 

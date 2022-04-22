@@ -1,21 +1,22 @@
 package com.tyron.builder.api;
 
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.Gradle;
-import com.tyron.builder.api.InvalidUserDataException;
-import com.tyron.builder.api.PathValidation;
+import com.tyron.builder.api.file.Directory;
+import com.tyron.builder.api.file.DirectoryTree;
+import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.file.RegularFile;
+import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.internal.artifacts.DependencyMetaDataProvider;
-import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
-import com.tyron.builder.api.internal.file.DeleteSpec;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
+import com.tyron.builder.api.file.DeleteSpec;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.plugins.Convention;
 import com.tyron.builder.api.plugins.ExtensionAware;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.WorkResult;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -212,7 +213,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
      *
      * </ol>
      *
-     * If the property is not found, a {@link groovy.lang.MissingPropertyException} is thrown.
+     * If the property is not found, a {@link MissingPropertyException} is thrown.
      *
      * @param name The name of the property
      * @param value The value of the property
@@ -369,11 +370,11 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
      *
      * <li>A {@link java.net.URI} or {@link java.net.URL}. The URL's path is interpreted as the file path. Only {@code file:} URLs are supported.</li>
      *
-     * <li>A {@link org.gradle.api.file.Directory} or {@link org.gradle.api.file.RegularFile}.</li>
+     * <li>A {@link Directory} or {@link RegularFile}.</li>
      *
      * <li>A {@link Provider} of any supported type. The provider's value is resolved recursively.</li>
      *
-     * <li>A {@link org.gradle.api.resources.TextResource}.</li>
+     * <li>A {@link TextResource}.</li>
      *
      * <li>A Groovy {@link Closure} or Kotlin function that returns any supported type. The closure's return value is resolved recursively.</li>
      *
@@ -429,13 +430,13 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
      *
      * <li>A {@link java.net.URI} or {@link java.net.URL}. The URL's path is interpreted as a file path. Only {@code file:} URLs are supported.</li>
      *
-     * <li>A {@link org.gradle.api.file.Directory} or {@link org.gradle.api.file.RegularFile}.</li>
-     *
+     * <li>A {@link Directory} or {@link RegularFile}.</li>
+
      * <li>A {@link java.util.Collection}, {@link Iterable}, or an array that contains objects of any supported type. The elements of the collection are recursively converted to files.</li>
      *
-     * <li>A {@link org.gradle.api.file.FileCollection}. The contents of the collection are included in the returned collection.</li>
+     * <li>A {@link FileCollection}. The contents of the collection are included in the returned collection.</li>
      *
-     * <li>A {@link org.gradle.api.file.FileTree} or {@link org.gradle.api.file.DirectoryTree}. The contents of the tree are included in the returned collection.</li>
+     * <li>A {@link FileTree} or {@link DirectoryTree}. The contents of the tree are included in the returned collection.</li>
      *
      * <li>A {@link Provider} of any supported type. The provider's value is recursively converted to files. If the provider represents an output of a task, that task is executed if the file collection is used as an input to another task.
      *
@@ -445,7 +446,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
      *
      * <li>A {@link Task}. Converted to the task's output files. The task is executed if the file collection is used as an input to another task.</li>
      *
-     * <li>A {@link org.gradle.api.tasks.TaskOutputs}. Converted to the output files the related task. The task is executed if the file collection is used as an input to another task.</li>
+     * <li>A {@link TaskOutputs}. Converted to the output files the related task. The task is executed if the file collection is used as an input to another task.</li>
      *
      * <li>Anything else is treated as an error.</li>
      *
@@ -845,6 +846,4 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
     Path getProjectPath();
 
     Path getIdentityPath();
-
-    DependencyMetaDataProvider getDependencyMetaDataProvider();
 }

@@ -13,7 +13,7 @@ dependencies {
     implementation projects.buildTools.snapshots
 
     implementation 'org.ow2.asm:asm:9.3'
-    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation common.slf4j
 }
 
 java {

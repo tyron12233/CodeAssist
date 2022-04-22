@@ -13,7 +13,7 @@ import com.tyron.builder.api.file.FileVisitDetails;
 import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
-import com.tyron.builder.api.internal.MutableBoolean;
+import com.tyron.builder.internal.MutableBoolean;
 import com.tyron.builder.api.tasks.util.PatternFilterable;
 import com.tyron.builder.api.tasks.util.PatternSet;
 

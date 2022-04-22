@@ -1,22 +1,19 @@
 package com.tyron.builder.internal.buildevents;
 
-import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.Failure;
-import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.Info;
-import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.Normal;
-import static com.tyron.builder.api.internal.graph.StyledTextOutput.Style.UserInput;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.*;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.BuildResult;
-import com.tyron.builder.api.GradleEnterprisePluginManager;
-import com.tyron.builder.api.execution.MultipleBuildFailures;
-import com.tyron.builder.api.internal.GUtil;
-import com.tyron.builder.api.internal.exceptions.ExceptionContextVisitor;
+import com.tyron.builder.BuildResult;
+import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
+import com.tyron.builder.execution.MultipleBuildFailures;
+import com.tyron.builder.util.GUtil;
+import com.tyron.builder.internal.exceptions.ExceptionContextVisitor;
 import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
 import com.tyron.builder.api.internal.exceptions.StyledException;
-import com.tyron.builder.api.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.LinePrefixingStyledTextOutput;
-import com.tyron.builder.api.internal.logging.text.BufferingStyledTextOutput;
-import com.tyron.builder.api.internal.logging.text.StyledTextOutputFactory;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.LinePrefixingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.BufferingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;

@@ -1,9 +1,9 @@
 package com.tyron.builder.execution.commandline;
 
 import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.internal.exceptions.Contextual;
+import com.tyron.builder.internal.exceptions.Contextual;
 import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
-import com.tyron.builder.api.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.cli.CommandLineArgumentException;
 

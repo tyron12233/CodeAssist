@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 public interface CrossProjectConfigurator {
 

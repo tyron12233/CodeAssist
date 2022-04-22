@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.execution;
 
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationProblem;
-import com.tyron.builder.api.plugin.PluginId;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationProblem;
+import com.tyron.builder.plugin.use.PluginId;
 
 import java.util.List;
 import java.util.Optional;

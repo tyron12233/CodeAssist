@@ -6,10 +6,10 @@ import com.google.common.collect.Interner;
 import com.google.common.hash.HashCode;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.FileSystemLocationFingerprint;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
-import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
-import com.tyron.builder.api.internal.serialize.Serializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.HashCodeSerializer;
+import com.tyron.builder.internal.serialize.Serializer;
 
 import java.io.IOException;
 import java.util.Map;

@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile.incremental.cache;
 import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.api.internal.serialize.HashCodeSerializer;
+import com.tyron.builder.internal.serialize.HashCodeSerializer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassAnalysis;
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassSetAnalysisData;
 import com.tyron.builder.api.internal.tasks.compile.incremental.serialization.HierarchicalNameSerializer;
@@ -11,7 +11,7 @@ import com.tyron.builder.cache.Cache;
 import com.tyron.builder.cache.FileLockManager;
 import com.tyron.builder.cache.PersistentCache;
 import com.tyron.builder.cache.PersistentIndexedCacheParameters;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.internal.MinimalPersistentCache;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;

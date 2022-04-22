@@ -1,7 +1,7 @@
 package com.tyron.builder.execution;
 
 import com.tyron.builder.TaskExecutionRequest;
-import com.tyron.builder.api.execution.TaskSelection;
+import com.tyron.builder.execution.TaskSelection;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.execution.commandline.CommandLineTaskParser;
 

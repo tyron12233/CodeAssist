@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.steps;
 
-import static com.tyron.builder.api.internal.reflect.validation.TypeValidationProblemRenderer.convertToSingleLine;
-import static com.tyron.builder.api.internal.reflect.validation.TypeValidationProblemRenderer.renderMinimalInformationAbout;
+import static com.tyron.builder.internal.reflect.validation.TypeValidationProblemRenderer.convertToSingleLine;
+import static com.tyron.builder.internal.reflect.validation.TypeValidationProblemRenderer.renderMinimalInformationAbout;
 
 import java.io.File;
 import java.util.Collection;
@@ -19,22 +19,22 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.tyron.builder.api.internal.GeneratedSubclasses;
-import com.tyron.builder.api.internal.MutableReference;
+import com.tyron.builder.internal.MutableReference;
 import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.WorkValidationContext;
 import com.tyron.builder.internal.execution.WorkValidationException;
-import com.tyron.builder.api.internal.execution.history.BeforeExecutionState;
-import com.tyron.builder.api.internal.execution.history.ExecutionHistoryStore;
-import com.tyron.builder.api.internal.execution.history.PreviousExecutionState;
+import com.tyron.builder.internal.execution.history.BeforeExecutionState;
+import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
+import com.tyron.builder.internal.execution.history.PreviousExecutionState;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
-import com.tyron.builder.api.internal.reflect.problems.ValidationProblemId;
-import com.tyron.builder.api.internal.reflect.validation.Severity;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationProblem;
-import com.tyron.builder.api.internal.reflect.validation.ValidationProblemBuilder;
+import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
+import com.tyron.builder.internal.reflect.validation.Severity;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationProblem;
+import com.tyron.builder.internal.reflect.validation.ValidationProblemBuilder;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
-import com.tyron.builder.api.model.internal.type.ModelType;
+import com.tyron.builder.model.internal.type.ModelType;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.problems.BaseProblem;
 

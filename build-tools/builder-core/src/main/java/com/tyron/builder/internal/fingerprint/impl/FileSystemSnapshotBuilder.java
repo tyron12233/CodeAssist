@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.fingerprint.impl;
 
-import static com.tyron.builder.api.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
+import static com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Interner;
@@ -129,7 +129,7 @@ public class FileSystemSnapshotBuilder {
         }
 
         public void accept(String directoryPath, String directoryName, DirectorySnapshotBuilder builder) {
-            builder.enterDirectory(determineAccessTypeForLocation(directoryPath), directoryPath, directoryName, EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS);
+            builder.enterDirectory(determineAccessTypeForLocation(directoryPath), directoryPath, directoryName, DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS);
             for (Map.Entry<String, DirectoryBuilder> entry : subDirs.entrySet()) {
                 String subDirName = entry.getKey();
                 String subDirPath = stringInterner.intern(directoryPath + File.separatorChar + subDirName);

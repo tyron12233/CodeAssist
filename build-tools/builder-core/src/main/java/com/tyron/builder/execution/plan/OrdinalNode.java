@@ -2,7 +2,7 @@ package com.tyron.builder.execution.plan;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.internal.resources.ResourceLock;
+import com.tyron.builder.internal.resources.ResourceLock;
 import com.tyron.builder.api.internal.tasks.NodeExecutionContext;
 
 import org.jetbrains.annotations.Nullable;

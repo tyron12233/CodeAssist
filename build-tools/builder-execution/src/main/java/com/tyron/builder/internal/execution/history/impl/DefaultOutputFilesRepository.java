@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.execution.history.impl;
 
-import static com.tyron.builder.api.internal.snapshot.FileSystemLocationSnapshot.*;
+import static com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot.*;
 
 import com.tyron.builder.internal.execution.history.OutputFilesRepository;
 import com.tyron.builder.internal.snapshot.DirectorySnapshot;

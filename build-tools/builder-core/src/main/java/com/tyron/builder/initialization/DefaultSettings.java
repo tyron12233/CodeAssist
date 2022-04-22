@@ -1,20 +1,20 @@
 package com.tyron.builder.initialization;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
 import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.initialization.Settings;
-import com.tyron.builder.api.internal.Actions;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
-import com.tyron.builder.api.providers.ProviderFactory;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
+import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
 
 import java.io.File;

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging;
 
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.api.logging.LoggingOutput;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;

@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.InvalidUserDataException;
-import com.tyron.builder.api.internal.GUtil;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.GUtil;
+import com.tyron.builder.util.Path;
 
 import java.io.File;
 import java.util.HashMap;

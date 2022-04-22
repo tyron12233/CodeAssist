@@ -2,6 +2,7 @@ package com.tyron.builder.internal.execution.history.impl;
 
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Interner;
+import com.google.common.collect.Maps;
 import com.tyron.builder.internal.execution.history.AfterExecutionState;
 import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
 import com.tyron.builder.internal.execution.history.PreviousExecutionState;
@@ -14,7 +15,6 @@ import com.tyron.builder.cache.PersistentIndexedCache;
 import com.tyron.builder.cache.PersistentIndexedCacheParameters;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 
-import static com.google.common.collect.ImmutableSortedMap.copyOfSorted;
 import static com.google.common.collect.Maps.transformValues;
 
 import java.util.Optional;

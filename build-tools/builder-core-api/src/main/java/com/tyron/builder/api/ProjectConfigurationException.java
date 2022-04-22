@@ -1,6 +1,6 @@
 package com.tyron.builder.api;
 
-import com.tyron.builder.api.internal.exceptions.DefaultMultiCauseException;
+import com.tyron.builder.internal.exceptions.DefaultMultiCauseException;
 
 /**
  * Indicates a problem that occurs during project configuration.

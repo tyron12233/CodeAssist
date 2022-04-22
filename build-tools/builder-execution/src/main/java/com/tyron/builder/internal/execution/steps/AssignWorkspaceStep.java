@@ -3,7 +3,7 @@ package com.tyron.builder.internal.execution.steps;
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.WorkValidationContext;
-import com.tyron.builder.api.internal.execution.history.ExecutionHistoryStore;
+import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
 import com.tyron.builder.internal.execution.workspace.WorkspaceProvider;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;

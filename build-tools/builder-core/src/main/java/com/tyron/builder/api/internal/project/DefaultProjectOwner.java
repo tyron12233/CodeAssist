@@ -1,12 +1,12 @@
 package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
 import com.tyron.builder.api.internal.artifacts.DefaultProjectComponentIdentifier;
 import com.tyron.builder.internal.build.BuildState;
-import com.tyron.builder.api.internal.resources.ResourceLock;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.internal.resources.ResourceLock;
+import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.model.CalculatedModelValue;
 
 import org.jetbrains.annotations.Nullable;

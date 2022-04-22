@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.reflect.validation;
 
-import com.tyron.builder.api.plugin.PluginId;
+import com.tyron.builder.plugin.use.PluginId;
 
 import org.jetbrains.annotations.Nullable;
 

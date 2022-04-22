@@ -1,9 +1,9 @@
 package com.tyron.builder.initialization.exception;
 
 import com.tyron.builder.api.ProjectConfigurationException;
-import com.tyron.builder.api.internal.exceptions.Contextual;
-import com.tyron.builder.api.internal.reflect.service.ServiceCreationException;
-import com.tyron.builder.api.internal.tasks.TaskExecutionException;
+import com.tyron.builder.internal.exceptions.Contextual;
+import com.tyron.builder.internal.reflect.service.ServiceCreationException;
+import com.tyron.builder.api.tasks.TaskExecutionException;
 import com.tyron.builder.internal.exceptions.LocationAwareException;
 
 import java.util.ArrayList;

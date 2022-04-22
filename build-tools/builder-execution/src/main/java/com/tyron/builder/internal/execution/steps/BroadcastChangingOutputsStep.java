@@ -4,7 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.execution.OutputChangeListener;
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.tasks.properties.TreeType;
+import com.tyron.builder.internal.file.TreeType;
 
 import java.io.File;
 

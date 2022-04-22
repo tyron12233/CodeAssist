@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.execution.steps;
 
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
-import com.tyron.builder.api.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.service.scopes.EventScope;
 import com.tyron.builder.internal.service.scopes.Scope;
 
 import java.util.EnumSet;

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging.slf4j;
 
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.api.logging.LogLevel;
 
 class MessageRewritingBuildOperationAwareLogger extends BuildOperationAwareLogger {

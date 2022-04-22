@@ -2,11 +2,11 @@ package com.tyron.builder.api.internal.provider;
 
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.DisplayName;
-import com.tyron.builder.api.internal.logging.TreeFormatter;
-import com.tyron.builder.api.internal.state.Managed;
+import com.tyron.builder.internal.DisplayName;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
+import com.tyron.builder.internal.state.Managed;
 import com.tyron.builder.api.internal.tasks.TaskDependencyResolveContext;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 
 import org.jetbrains.annotations.Nullable;
 

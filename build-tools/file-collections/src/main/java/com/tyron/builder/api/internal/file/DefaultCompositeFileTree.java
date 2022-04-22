@@ -1,9 +1,7 @@
 package com.tyron.builder.api.internal.file;
 
-import com.google.common.collect.ImmutableList;
-import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.tasks.util.PatternSet;
-
+import com.tyron.builder.internal.Factory;
 
 import java.util.Collection;
 import java.util.List;

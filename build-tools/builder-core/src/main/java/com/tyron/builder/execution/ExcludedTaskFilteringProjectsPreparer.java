@@ -1,10 +1,10 @@
 package com.tyron.builder.execution;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.TaskSelector;
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.TaskSelector;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.util.Predicates;
+import com.tyron.builder.util.Predicates;
 import com.tyron.builder.initialization.TaskSchedulingPreparer;
 
 import java.util.HashSet;

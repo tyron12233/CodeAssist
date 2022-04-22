@@ -9,8 +9,8 @@ import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.TaskExecuterResult;
 import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
-import com.tyron.builder.api.internal.time.Time;
-import com.tyron.builder.api.internal.time.Timer;
+import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.time.Timer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

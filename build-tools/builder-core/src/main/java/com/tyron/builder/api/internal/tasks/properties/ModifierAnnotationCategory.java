@@ -2,15 +2,15 @@ package com.tyron.builder.api.internal.tasks.properties;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.reflect.AnnotationCategory;
+import com.tyron.builder.internal.reflect.AnnotationCategory;
 import com.tyron.builder.api.tasks.Classpath;
 import com.tyron.builder.api.tasks.CompileClasspath;
 import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;
 import com.tyron.builder.api.tasks.Optional;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
-import com.tyron.builder.api.work.Incremental;
-import com.tyron.builder.api.work.NormalizeLineEndings;
+import com.tyron.builder.work.Incremental;
+import com.tyron.builder.work.NormalizeLineEndings;
 
 import java.lang.annotation.Annotation;
 import java.util.Collection;

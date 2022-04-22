@@ -2,7 +2,20 @@ plugins {
     id 'java-library'
 }
 
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderNative
+
+    implementation common.slf4j
+}
+
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_7
-    targetCompatibility = JavaVersion.VERSION_1_7
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }

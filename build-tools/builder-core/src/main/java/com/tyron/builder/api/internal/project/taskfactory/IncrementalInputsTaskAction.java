@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.project.taskfactory;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.reflect.JavaMethod;
-import com.tyron.builder.api.work.InputChanges;
+import com.tyron.builder.internal.reflect.JavaMethod;
+import com.tyron.builder.work.InputChanges;
 
 import java.lang.reflect.Method;
 

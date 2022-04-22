@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.provider;
 
 import com.tyron.builder.api.Transformer;
-import com.tyron.builder.api.internal.DisplayName;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.internal.DisplayName;
+import com.tyron.builder.api.provider.Provider;
 
 import org.jetbrains.annotations.Nullable;
 

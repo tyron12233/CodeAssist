@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.changedetection.state;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
-import com.tyron.builder.api.internal.file.archive.ZipEntry;
+import com.tyron.builder.internal.file.archive.ZipEntry;
 import com.tyron.builder.internal.fingerprint.hashing.RegularFileSnapshotContext;
 import com.tyron.builder.internal.fingerprint.hashing.ResourceHasher;
 import com.tyron.builder.internal.fingerprint.hashing.ZipEntryContext;

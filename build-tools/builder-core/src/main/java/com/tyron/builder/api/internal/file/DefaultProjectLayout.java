@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.Transformer;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.FileCollection;
@@ -13,8 +14,8 @@ import com.tyron.builder.api.internal.provider.MappingProvider;
 import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.api.internal.provider.Providers;
 import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
-import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
 import java.io.File;

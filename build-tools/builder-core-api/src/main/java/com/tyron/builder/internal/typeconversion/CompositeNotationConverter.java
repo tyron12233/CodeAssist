@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.typeconversion;
 
-import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
 
 import java.util.List;
 

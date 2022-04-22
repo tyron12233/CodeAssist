@@ -5,9 +5,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.tyron.builder.api.internal.exceptions.DefaultMultiCauseException;
-import com.tyron.builder.api.internal.operations.BuildOperationRef;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
+import com.tyron.builder.internal.exceptions.DefaultMultiCauseException;
+import com.tyron.builder.internal.operations.BuildOperationRef;
+import com.tyron.builder.internal.work.WorkerLeaseService;
 
 import java.util.Collections;
 import java.util.List;

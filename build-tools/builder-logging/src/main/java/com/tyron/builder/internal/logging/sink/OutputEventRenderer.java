@@ -1,11 +1,11 @@
 package com.tyron.builder.internal.logging.sink;
 
 import com.tyron.builder.internal.Factory;
-import com.tyron.builder.api.internal.event.ListenerBroadcast;
-import com.tyron.builder.api.internal.logging.events.OutputEvent;
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.internal.logging.events.RenderableOutputEvent;
-import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.internal.event.ListenerBroadcast;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
+import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.StandardOutputListener;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;

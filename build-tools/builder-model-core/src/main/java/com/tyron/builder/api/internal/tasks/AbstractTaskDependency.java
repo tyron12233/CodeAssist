@@ -3,9 +3,7 @@ package com.tyron.builder.api.internal.tasks;
 import static com.tyron.builder.api.internal.tasks.WorkDependencyResolver.TASK_AS_TASK;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.tasks.TaskDependencyInternal;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
 

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.buildTree;
 
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 

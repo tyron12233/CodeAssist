@@ -1,7 +1,6 @@
 package com.tyron.builder.api.internal.tasks;
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
-import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 /**
  * Represents a task realization for a task whose creation was deferred.

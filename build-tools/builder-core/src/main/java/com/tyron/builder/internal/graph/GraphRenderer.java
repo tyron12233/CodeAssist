@@ -1,8 +1,7 @@
 package com.tyron.builder.internal.graph;
 
-import static com.tyron.builder.internal.graph.StyledTextOutput.Style.Info;
-
 import com.tyron.builder.api.Action;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 
 public class GraphRenderer {
     private final StyledTextOutput output;
@@ -19,7 +18,7 @@ public class GraphRenderer {
      */
     public void visit(Action<? super StyledTextOutput> node, boolean lastChild) {
         if (seenRootChildren) {
-            output.withStyle(Style.Info).text(prefix + (lastChild ? "\\--- " : "+--- "));
+            output.withStyle(StyledTextOutput.Style.Info).text(prefix + (lastChild ? "\\--- " : "+--- "));
         }
         this.lastChild = lastChild;
         node.execute(output);

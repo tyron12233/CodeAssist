@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging.services;
 
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.ProgressCompleteEvent;
 import com.tyron.builder.internal.logging.events.ProgressEvent;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;

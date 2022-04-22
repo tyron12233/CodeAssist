@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.progress;
 
 
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
 
 /**
  * Thread-safe, however the progress logger instances created are not.

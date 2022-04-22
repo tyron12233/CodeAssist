@@ -4,9 +4,9 @@ import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.initialization.DefaultProjectDescriptor;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.internal.build.BuildProjectRegistry;
 import com.tyron.builder.internal.build.BuildState;
 

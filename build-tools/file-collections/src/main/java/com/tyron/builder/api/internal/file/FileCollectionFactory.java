@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal.file;
 
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.Factory;

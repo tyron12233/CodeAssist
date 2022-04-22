@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.tasks.execution;
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 /**
  * Executing a task action.

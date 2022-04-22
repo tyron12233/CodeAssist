@@ -2,8 +2,10 @@ package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.PathValidation;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.CopySpec;
+import com.tyron.builder.api.file.DeleteSpec;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.tasks.WorkResult;

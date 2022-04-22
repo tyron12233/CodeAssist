@@ -1,7 +1,5 @@
 package com.tyron.builder.api.internal.file;
 
-import static com.tyron.builder.api.internal.SerializableLambdas.transformer;
-
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryProperty;
@@ -20,8 +18,8 @@ import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.api.internal.provider.Providers;
 import com.tyron.builder.internal.service.scopes.Scope;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.api.internal.state.Managed;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.internal.state.Managed;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.internal.file.PathToFileResolver;
 
 import org.jetbrains.annotations.Nullable;
@@ -418,7 +416,7 @@ public class DefaultFilePropertyFactory implements FilePropertyFactory, FileFact
         @Override
         public PathToFileResolver newResolver(File baseDir) {
             return new DirectoryProviderPathToFileResolver(
-                    directoryProvider.map(SerializableLambdas.transformer(dir -> dir.dir(baseDir.getPath()))),
+                    directoryProvider.map(directory -> directory.dir(baseDir.getPath())),
                     parentResolver
             );
         }

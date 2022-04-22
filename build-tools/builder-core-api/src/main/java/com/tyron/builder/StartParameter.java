@@ -425,4 +425,8 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     public List<File> getIncludedBuilds() {
         return includedBuilds;
     }
+
+    public void setContinuous(boolean b) {
+        this.continuous = b;
+    }
 }

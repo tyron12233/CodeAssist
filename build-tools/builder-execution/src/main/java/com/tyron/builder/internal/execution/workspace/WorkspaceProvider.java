@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.execution.workspace;
 
-import com.tyron.builder.api.internal.execution.history.ExecutionHistoryStore;
+import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
 
 import org.jetbrains.annotations.Nullable;
 

@@ -6,7 +6,7 @@ import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.file.AttributeBasedFileVisitDetails;
 import com.tyron.builder.api.internal.file.UnauthorizedFileVisitDetails;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 
 import org.jetbrains.annotations.Nullable;
 

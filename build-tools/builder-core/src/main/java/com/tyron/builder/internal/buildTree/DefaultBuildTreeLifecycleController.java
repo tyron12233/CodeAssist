@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.buildTree;
 
-import com.tyron.builder.api.internal.Describables;
+import com.tyron.builder.internal.Describables;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.composite.internal.BuildTreeWorkGraphController;

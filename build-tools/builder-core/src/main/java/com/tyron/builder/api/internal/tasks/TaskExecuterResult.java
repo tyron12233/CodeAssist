@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.execution.caching.CachingState;
+import com.tyron.builder.internal.execution.caching.CachingState;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import java.util.List;

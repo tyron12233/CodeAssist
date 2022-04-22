@@ -2,14 +2,14 @@ package com.tyron.builder.internal.execution.steps;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.Try;
+import com.tyron.builder.internal.Try;
 import com.tyron.builder.internal.execution.ExecutionOutcome;
 import com.tyron.builder.internal.execution.ExecutionResult;
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.history.AfterExecutionState;
-import com.tyron.builder.api.internal.execution.history.BeforeExecutionState;
-import com.tyron.builder.api.internal.execution.history.PreviousExecutionState;
-import com.tyron.builder.api.internal.execution.history.impl.DefaultAfterExecutionState;
+import com.tyron.builder.internal.execution.history.AfterExecutionState;
+import com.tyron.builder.internal.execution.history.BeforeExecutionState;
+import com.tyron.builder.internal.execution.history.PreviousExecutionState;
+import com.tyron.builder.internal.execution.history.impl.DefaultAfterExecutionState;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import org.slf4j.Logger;
