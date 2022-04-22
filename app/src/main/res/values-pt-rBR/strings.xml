@@ -140,6 +140,9 @@
     <string name="completion_settings_java_title">Java</string>
     <string name="completion_java_target_version_title">Versão de destino</string>
     <string name="completion_java_source_version_title">Versão de origem</string>
+    <string name="editor__settings_title">Abas do Editor</string>
+    <string name="editor_tab_unique_file_name">Mostrar diretório para nomes de arquivos que não são únicos</string>
+    <string name="editor_tab_unique_file_name_summary">Torne o diretório visível para nomes de arquivos idênticos que não são únicos.</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">Sobre nós</string>
