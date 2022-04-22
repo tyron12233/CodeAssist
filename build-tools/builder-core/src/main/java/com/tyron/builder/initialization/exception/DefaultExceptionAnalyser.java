@@ -1,6 +1,7 @@
 package com.tyron.builder.initialization.exception;
 
 import com.tyron.builder.api.ProjectConfigurationException;
+import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.exceptions.Contextual;
 import com.tyron.builder.internal.reflect.service.ServiceCreationException;
 import com.tyron.builder.api.tasks.TaskExecutionException;
@@ -11,6 +12,10 @@ import java.util.Collection;
 import java.util.List;
 
 public class DefaultExceptionAnalyser implements ExceptionCollector {
+
+    public DefaultExceptionAnalyser(ListenerManager listenerManager) {
+
+    }
 
     private Throwable transform(Throwable exception) {
         Throwable actualException = findDeepestRootException(exception);

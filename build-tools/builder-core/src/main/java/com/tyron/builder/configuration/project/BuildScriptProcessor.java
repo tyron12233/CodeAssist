@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 
 import bsh.EvalError;
 import bsh.Interpreter;
+import bsh.TargetError;
 
 public class BuildScriptProcessor implements ProjectConfigureAction {
     private static final Logger LOGGER = LoggerFactory.getLogger(BuildScriptProcessor.class);
@@ -65,7 +66,13 @@ public class BuildScriptProcessor implements ProjectConfigureAction {
         try {
             interpreter.eval(GFileUtils.readFileToString(buildScript));
         } catch (EvalError error) {
-            throw new LocationAwareException(error, error.getErrorSourceFile(), error.getErrorLineNumber());
+            Throwable cause;
+            if (error instanceof TargetError) {
+                cause = ((TargetError) error).getTarget();
+            } else {
+                cause = error;
+            }
+            throw new LocationAwareException(cause, buildScript.getPath(), error.getErrorLineNumber());
         }
     }
 

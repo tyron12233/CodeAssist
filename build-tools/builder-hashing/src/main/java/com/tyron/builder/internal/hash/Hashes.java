@@ -112,4 +112,9 @@ public class Hashes {
     public static HashCode hashBytes(byte[] bytes) {
         return DEFAULT.hashBytes(bytes);
     }
+
+    public static void putHash(Hasher hasher, HashCode another) {
+        hasher.putInt(another.asBytes().length);
+        hasher.putBytes(another.asBytes());
+    }
 }

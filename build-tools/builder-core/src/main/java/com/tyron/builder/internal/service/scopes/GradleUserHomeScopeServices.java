@@ -3,8 +3,19 @@ package com.tyron.builder.internal.service.scopes;
 import com.google.common.hash.HashCode;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
+import com.tyron.builder.api.internal.changedetection.state.DefaultFileAccessTimeJournal;
+import com.tyron.builder.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
+import com.tyron.builder.cache.GlobalCache;
+import com.tyron.builder.cache.GlobalCacheLocations;
+import com.tyron.builder.cache.internal.DefaultGlobalCacheLocations;
+import com.tyron.builder.cache.internal.GradleUserHomeCleanupServices;
 import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.ClasspathBuilder;
+import com.tyron.builder.internal.classpath.ClasspathWalker;
+import com.tyron.builder.internal.classpath.DefaultCachedClasspathTransformer;
+import com.tyron.builder.internal.classpath.DefaultClasspathTransformerCacheFactory;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.internal.file.FileAccessTimeJournal;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.classloader.ConfigurableClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.hash.Hashes;
@@ -31,6 +42,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.List;
 
 public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServices {
     
@@ -42,13 +54,13 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
 
     public void configure(ServiceRegistration registration) {
         registration.add(GlobalCacheDir.class);
-//        registration.addProvider(new GradleUserHomeCleanupServices());
-//        registration.add(ClasspathWalker.class);
-//        registration.add(ClasspathBuilder.class);
-//        registration.add(GradleUserHomeTemporaryFileProvider.class);
-//        registration.add(DefaultClasspathTransformerCacheFactory.class);
+        registration.addProvider(new GradleUserHomeCleanupServices());
+        registration.add(ClasspathWalker.class);
+        registration.add(ClasspathBuilder.class);
+        registration.add(GradleUserHomeTemporaryFileProvider.class);
+        registration.add(DefaultClasspathTransformerCacheFactory.class);
 //        registration.add(GradleUserHomeScopeFileTimeStampInspector.class);
-//        registration.add(DefaultCachedClasspathTransformer.class);
+        registration.add(DefaultCachedClasspathTransformer.class);
         for (PluginServiceRegistry plugin : globalServices.getAll(PluginServiceRegistry.class)) {
             plugin.registerGradleUserHomeServices(registration);
         }
@@ -128,6 +140,14 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
             CacheFactory cacheFactory
     ) {
         return new DefaultCacheRepository(scopeMapping, cacheFactory);
+    }
+
+    FileAccessTimeJournal createFileAccessTimeJournal(GlobalScopedCache cacheRepository, InMemoryCacheDecoratorFactory cacheDecoratorFactory) {
+        return new DefaultFileAccessTimeJournal(cacheRepository, cacheDecoratorFactory);
+    }
+
+    GlobalCacheLocations createGlobalCacheLocations(List<GlobalCache> globalCaches) {
+        return new DefaultGlobalCacheLocations(globalCaches);
     }
 
     private interface CacheDirectoryProvider {

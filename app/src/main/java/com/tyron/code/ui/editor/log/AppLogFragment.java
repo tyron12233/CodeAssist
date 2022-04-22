@@ -76,8 +76,7 @@ public class AppLogFragment extends Fragment
                                                                .getArguments());
                             bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
                             bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
-                            it.getFragment()
-                                    .setArguments(bundle);
+                            it.getFragment().setArguments(bundle);
                             manager.openFileEditor(it);
                         }
                     });

@@ -5,6 +5,7 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
+import com.tyron.builder.internal.hash.Hashes;
 
 import javax.annotation.Nullable;
 import java.util.Map;
@@ -57,7 +58,7 @@ public class ConfigurableClassLoaderHierarchyHasher implements ClassLoaderHierar
 //            }
             HashCode hash = classLoaderFactory.getClassLoaderClasspathHash(cl);
             if (hash != null) {
-                hasher.putBytes(hash.asBytes());
+                Hashes.putHash(hasher, hash);
                 return true;
             }
             foundUnknown = true;

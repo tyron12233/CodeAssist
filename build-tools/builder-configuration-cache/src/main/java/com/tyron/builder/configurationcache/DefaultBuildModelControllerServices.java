@@ -55,7 +55,7 @@ public class DefaultBuildModelControllerServices implements BuildModelController
                 ExceptionAnalyser createExceptionAnalyser() {
                     return new StackTraceSanitizingExceptionAnalyser(
                             new MultipleBuildFailuresExceptionAnalyser(
-                                    new DefaultExceptionAnalyser()
+                                    new DefaultExceptionAnalyser(null)
                             )
                     );
                 }

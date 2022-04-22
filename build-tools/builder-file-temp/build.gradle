@@ -8,6 +8,8 @@ dependencies {
     implementation(projects.common)
     implementation(projects.buildTools.builderBaseAnnotations)
     implementation(projects.buildTools.builderBaseServices)
+
+    implementation 'javax.inject:javax.inject:1'
 }
 
 java {

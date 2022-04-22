@@ -1,6 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.ProjectConfigurationException;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
@@ -106,6 +107,7 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
+import bsh.EvalError;
 import bsh.Interpreter;
 
 @SuppressWarnings({"unused"})
@@ -276,13 +278,17 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                         startParameter
                 );
 
-                return GUtil.uncheckedCall(() -> {
+
+
+                try {
                     Interpreter interpreter = new Interpreter();
                     interpreter.set("settings", settings);
                     String contents = GFileUtils.readFileToString(settingsLocation.getSettingsFile());
                     interpreter.eval(contents);
                     return settings;
-                });
+                } catch (EvalError evalError) {
+                    throw new ProjectConfigurationException("Failed to configure settings file", evalError);
+                }
             }
         };
     }

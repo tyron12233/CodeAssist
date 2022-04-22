@@ -1,6 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.execution.DefaultWorkValidationWarningRecorder;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.execution.steps.WorkInputListeners;
@@ -19,6 +20,7 @@ import com.tyron.builder.internal.file.impl.DefaultFileMetadata;
 import com.tyron.builder.internal.hash.DefaultFileHasher;
 import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
+import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationListener;
 import com.tyron.builder.internal.operations.BuildOperationListenerManager;
@@ -113,6 +115,9 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return new DefaultWorkInputListeners(listenerManager);
     }
 
+    LoggingManagerInternal createLoggingManager(Factory<LoggingManagerInternal> loggingManagerFactory) {
+        return loggingManagerFactory.create();
+    }
 
     BuildOperationListener createBuildOperationListener(
             ListenerManager listenerManager
@@ -299,5 +304,9 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
             PropertyFactory propertyFactory
     ) {
         return new DefaultObjectFactory(fileCollectionFactory, filePropertyFactory, propertyFactory);
+    }
+
+    DefaultWorkValidationWarningRecorder createValidationWarningReporter() {
+        return new DefaultWorkValidationWarningRecorder();
     }
 }

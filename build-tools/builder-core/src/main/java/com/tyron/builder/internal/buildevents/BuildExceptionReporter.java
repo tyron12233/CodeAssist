@@ -1,11 +1,13 @@
 package com.tyron.builder.internal.buildevents;
 
 import static com.tyron.builder.internal.logging.text.StyledTextOutput.*;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.UserInput;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.BuildResult;
 import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
 import com.tyron.builder.execution.MultipleBuildFailures;
+import com.tyron.builder.internal.exceptions.ContextAwareException;
 import com.tyron.builder.util.GUtil;
 import com.tyron.builder.internal.exceptions.ExceptionContextVisitor;
 import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
@@ -117,11 +119,11 @@ public class BuildExceptionReporter implements Action<Throwable> {
 
         fillInFailureResolution(details);
 
-//        if (failure instanceof ContextAwareException) {
-//            ((ContextAwareException) failure).accept(new ExceptionFormattingVisitor(details));
-//        } else {
+        if (failure instanceof ContextAwareException) {
+            ((ContextAwareException) failure).accept(new ExceptionFormattingVisitor(details));
+        } else {
             details.appendDetails();
-//        }
+        }
         details.renderStackTrace();
         return details;
     }
@@ -185,7 +187,7 @@ public class BuildExceptionReporter implements Action<Throwable> {
         if (details.exceptionStyle == ExceptionStyle.NONE) {
             context.appendResolution(output -> {
                 resolution.text("Run with ");
-                resolution.withStyle(Style.UserInput).format("--%s", "STACKTRACE");
+                resolution.withStyle(UserInput).format("--%s", "STACKTRACE");
                 resolution.text(" option to get the stack trace.");
             });
         }
@@ -193,10 +195,10 @@ public class BuildExceptionReporter implements Action<Throwable> {
             context.appendResolution(output -> {
                 resolution.text("Run with ");
                 if (loggingConfiguration.getLogLevel() != LogLevel.INFO) {
-                    resolution.withStyle(Style.UserInput).format("--%s", "INFO");
+                    resolution.withStyle(UserInput).format("--%s", "INFO");
                     resolution.text(" or ");
                 }
-                resolution.withStyle(Style.UserInput).format("--%s", "DEBUG");
+                resolution.withStyle(UserInput).format("--%s", "DEBUG");
                 resolution.text(" option to get more log output.");
             });
         }
@@ -212,7 +214,7 @@ public class BuildExceptionReporter implements Action<Throwable> {
         });
 //        context.appendResolution(output -> {
 //            output.text("Run with ");
-//            output.withStyle(UserInput).format("--%s", StartParameterBuildOptions.BuildScanOption.LONG_OPTION);
+////            output.withStyle(UserInput).format("--%s", StartParameterBuildOptions.BuildScanOption.LONG_OPTION);
 //            output.text(" to get full insights.");
 //        });
     }
@@ -224,7 +226,7 @@ public class BuildExceptionReporter implements Action<Throwable> {
     private void writeGeneralTips(StyledTextOutput resolution) {
         resolution.println();
         resolution.text("* Get more help at ");
-        resolution.withStyle(Style.UserInput).text("https://help.gradle.org");
+        resolution.withStyle(UserInput).text("https://help.gradle.org");
         resolution.println();
     }
 

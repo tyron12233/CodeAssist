@@ -1,55 +1,41 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.initialization.BuildCancellationToken;
-
 public class DefaultBuildRequestContext implements BuildRequestContext {
 
-    public static BuildRequestContext of(
-            BuildCancellationToken cancellationToken,
-            BuildEventConsumer eventConsumer,
-            BuildClientMetaData buildClientMetaData,
-            long startTime
-    ) {
-        return new DefaultBuildRequestContext(cancellationToken, eventConsumer, buildClientMetaData, startTime);
-    }
+    private final BuildCancellationToken token;
+    private final BuildEventConsumer buildEventConsumer;
+    private final BuildRequestMetaData metaData;
 
-    private final BuildCancellationToken cancellationToken;
-    private final BuildEventConsumer eventConsumer;
-    private final BuildClientMetaData buildClientMetaData;
-    private final long startTime;
-
-    private DefaultBuildRequestContext(BuildCancellationToken cancellationToken,
-                                       BuildEventConsumer eventConsumer,
-                                       BuildClientMetaData buildClientMetaData,
-                                       long startTime) {
-        this.cancellationToken = cancellationToken;
-        this.eventConsumer = eventConsumer;
-        this.buildClientMetaData = buildClientMetaData;
-
-        this.startTime = startTime;
-    }
-    @Override
-    public BuildCancellationToken getCancellationToken() {
-        return cancellationToken;
+    // TODO: Decide if we want to push the gate concept into TAPI or other entry points
+    // currently, a gate is only used by continuous build and can only be controlled from within the build.
+    public DefaultBuildRequestContext(BuildRequestMetaData metaData, BuildCancellationToken token, BuildEventConsumer buildEventConsumer) {
+        this.metaData = metaData;
+        this.token = token;
+        this.buildEventConsumer = buildEventConsumer;
     }
 
     @Override
     public BuildEventConsumer getEventConsumer() {
-        return eventConsumer;
+        return buildEventConsumer;
+    }
+
+    @Override
+    public BuildCancellationToken getCancellationToken() {
+        return token;
     }
 
     @Override
     public BuildClientMetaData getClient() {
-        return buildClientMetaData;
+        return metaData.getClient();
     }
 
     @Override
     public long getStartTime() {
-        return startTime;
+        return metaData.getStartTime();
     }
 
     @Override
     public boolean isInteractive() {
-        return false;
+        return metaData.isInteractive();
     }
 }

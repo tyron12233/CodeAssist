@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -31,6 +32,21 @@ public class CollectionUtils {
         List<T> copy = toMutableList(things);
         Collections.sort(copy, comparator);
         return copy;
+    }
+
+    /**
+     * Returns the single element in the collection or throws.
+     */
+    public static <T> T single(Iterable<? extends T> source) {
+        Iterator<? extends T> iterator = source.iterator();
+        if (!iterator.hasNext()) {
+            throw new NoSuchElementException("Expecting collection with single element, got none.");
+        }
+        T element = iterator.next();
+        if (iterator.hasNext()) {
+            throw new IllegalArgumentException("Expecting collection with single element, got multiple.");
+        }
+        return element;
     }
 
     /**

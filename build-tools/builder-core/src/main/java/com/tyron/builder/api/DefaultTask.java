@@ -97,7 +97,6 @@ public class DefaultTask extends AbstractTask {
 
     protected DefaultTask(TaskInfo taskInfo) {
         super(taskInfo);
-
         this.taskIdentity = taskInfo.identity;
         this.name = taskIdentity.name;
 

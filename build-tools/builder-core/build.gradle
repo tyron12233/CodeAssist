@@ -13,6 +13,7 @@ dependencies {
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderEnterpriseOperations
     implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderEnterpriseWorkers
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderResources
@@ -37,6 +38,7 @@ dependencies {
 
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.apache-extras.beanshell:bsh:2.0b6'
+    implementation 'org.ow2.asm:asm:9.3'
 
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
     implementation("net.rubygrapefruit:file-events:0.22-milestone-23")

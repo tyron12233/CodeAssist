@@ -18,6 +18,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
@@ -111,6 +112,12 @@ public class GUtil {
 
     public static String asPath(Iterable<?> collection) {
         return CollectionUtils.join(File.pathSeparator, collection);
+    }
+
+    public static void addToMap(Map<String, String> dest, Map<?, ?> src) {
+        for (Map.Entry<?, ?> entry : src.entrySet()) {
+            dest.put(entry.getKey().toString(), entry.getValue().toString());
+        }
     }
 
     public interface RunnableThrowable{
