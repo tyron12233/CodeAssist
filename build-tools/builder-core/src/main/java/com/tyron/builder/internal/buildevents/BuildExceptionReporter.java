@@ -208,10 +208,9 @@ public class BuildExceptionReporter implements Action<Throwable> {
         }
     }
 
+    // TODO: implement build scan
     private void addBuildScanMessage(ContextImpl context) {
-        context.appendResolution(output -> {
-            output.text("Build scan is not yet supported");
-        });
+        context.appendResolution(output -> output.text("Build scan is not yet supported"));
 //        context.appendResolution(output -> {
 //            output.text("Run with ");
 ////            output.withStyle(UserInput).format("--%s", StartParameterBuildOptions.BuildScanOption.LONG_OPTION);
