@@ -2,7 +2,7 @@ package com.tyron.builder.initialization;
 
 
 import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 public class DefaultProjectDescriptorRegistry extends DefaultProjectRegistry<DefaultProjectDescriptor> implements ProjectDescriptorRegistry {
 

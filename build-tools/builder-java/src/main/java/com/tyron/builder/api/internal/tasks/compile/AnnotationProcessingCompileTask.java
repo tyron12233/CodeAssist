@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.tasks.compile;
 
 import static com.tyron.builder.api.internal.tasks.compile.filter.AnnotationProcessorFilter.getFilteredClassLoader;
 
-import com.tyron.builder.api.internal.classpath.DefaultClassPath;
+import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.api.internal.tasks.compile.incremental.processing.AnnotationProcessingResult;
 import com.tyron.builder.api.internal.tasks.compile.incremental.processing.AnnotationProcessorResult;

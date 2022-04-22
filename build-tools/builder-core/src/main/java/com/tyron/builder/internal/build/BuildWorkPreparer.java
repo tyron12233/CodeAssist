@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
 
 import java.util.function.Consumer;

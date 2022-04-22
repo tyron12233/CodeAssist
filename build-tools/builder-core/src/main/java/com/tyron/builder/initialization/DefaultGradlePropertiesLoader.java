@@ -1,7 +1,6 @@
 package com.tyron.builder.initialization;
 
-import static com.tyron.builder.internal.Cast.uncheckedNonnullCast;
-import static com.tyron.builder.api.project.BuildProject.GRADLE_PROPERTIES;
+import static com.tyron.builder.api.BuildProject.GRADLE_PROPERTIES;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +11,8 @@ import java.util.Map;
 
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.properties.GradleProperties;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.internal.Cast;
 
 public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultGradlePropertiesLoader.class);

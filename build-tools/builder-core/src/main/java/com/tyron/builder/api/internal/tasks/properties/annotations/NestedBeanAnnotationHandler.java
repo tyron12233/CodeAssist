@@ -5,13 +5,13 @@ import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotation
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.reflect.AnnotationCategory;
-import com.tyron.builder.api.internal.reflect.PropertyMetadata;
+import com.tyron.builder.internal.reflect.AnnotationCategory;
+import com.tyron.builder.internal.reflect.PropertyMetadata;
 import com.tyron.builder.api.internal.tasks.TaskDependencyContainer;
 import com.tyron.builder.api.internal.tasks.properties.BeanPropertyContext;
 import com.tyron.builder.api.internal.tasks.properties.PropertyValue;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.Nested;
 import com.tyron.builder.api.tasks.Optional;
 

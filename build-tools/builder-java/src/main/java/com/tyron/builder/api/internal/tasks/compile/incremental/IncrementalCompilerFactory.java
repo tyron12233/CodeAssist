@@ -2,14 +2,14 @@ package com.tyron.builder.api.internal.tasks.compile.incremental;
 
 
 import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.tasks.compile.CleaningJavaCompiler;
 import com.tyron.builder.api.internal.tasks.compile.JavaCompileSpec;
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.ClassSetAnalyzer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.CurrentCompilationAccess;
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.PreviousCompilationAccess;
 import com.tyron.builder.api.internal.tasks.compile.incremental.recomp.RecompilationSpecProvider;
-import com.tyron.builder.cache.StringInterner;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.language.base.internal.compile.Compiler;
 
 public class IncrementalCompilerFactory {

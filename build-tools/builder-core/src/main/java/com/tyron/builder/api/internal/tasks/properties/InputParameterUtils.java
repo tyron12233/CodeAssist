@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.tasks.properties;
 
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.DeferredUtil;
+import com.tyron.builder.util.internal.DeferredUtil;
 
 import org.jetbrains.annotations.Nullable;
 

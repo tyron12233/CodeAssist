@@ -1,7 +1,7 @@
 package com.tyron.builder.api.attributes;
 
 import com.tyron.builder.api.Incubating;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.internal.HasInternalProtocol;
 
 import javax.annotation.Nullable;

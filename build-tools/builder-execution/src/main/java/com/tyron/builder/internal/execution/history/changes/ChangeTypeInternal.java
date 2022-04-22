@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.history.changes;
 
 
-import com.tyron.builder.api.work.ChangeType;
+import com.tyron.builder.work.ChangeType;
 
 public enum ChangeTypeInternal {
     ADDED("has been added", ChangeType.ADDED),

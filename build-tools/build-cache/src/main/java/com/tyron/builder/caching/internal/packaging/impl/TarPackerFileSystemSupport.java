@@ -1,6 +1,6 @@
 package com.tyron.builder.caching.internal.packaging.impl;
 
-import com.tyron.builder.api.internal.tasks.properties.TreeType;
+import com.tyron.builder.internal.file.TreeType;
 
 import java.io.File;
 import java.io.IOException;

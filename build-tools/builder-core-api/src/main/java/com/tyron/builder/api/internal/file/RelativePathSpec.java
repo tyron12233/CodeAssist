@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.file.FileTreeElement;
 import com.tyron.builder.api.file.RelativePath;
-import com.tyron.builder.api.internal.file.pattern.PatternMatcher;
+import com.tyron.builder.internal.file.pattern.PatternMatcher;
 
 import java.util.function.Predicate;
 

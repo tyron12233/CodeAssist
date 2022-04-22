@@ -1,17 +1,17 @@
 package com.tyron.builder.api.invocation;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.BuildListener;
+import com.tyron.builder.BuildListener;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
 import com.tyron.builder.api.initialization.IncludedBuild;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 import java.util.Collection;
 
-
+public interface Gradle {
     /**
      * Returns the root project of this build.
      *

@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.slf4j;
 
-import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;

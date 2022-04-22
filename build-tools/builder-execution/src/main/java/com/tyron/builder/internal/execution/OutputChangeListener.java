@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution;
 
-import com.tyron.builder.api.internal.service.scopes.EventScope;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 
 @EventScope(Scopes.Build.class)

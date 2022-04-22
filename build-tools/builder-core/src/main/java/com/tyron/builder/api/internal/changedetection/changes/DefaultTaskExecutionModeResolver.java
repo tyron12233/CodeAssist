@@ -8,7 +8,7 @@ import com.tyron.builder.api.internal.changedetection.TaskExecutionModeResolver;
 import com.tyron.builder.api.internal.project.taskfactory.AbstractIncrementalTaskAction;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.properties.TaskProperties;
-import com.tyron.builder.api.util.Predicates;
+import com.tyron.builder.util.Predicates;
 
 import java.util.function.Predicate;
 

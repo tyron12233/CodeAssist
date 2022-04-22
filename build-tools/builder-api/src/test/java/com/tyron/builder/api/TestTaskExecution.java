@@ -1,7 +1,7 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
 
 import java.util.List;

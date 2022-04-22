@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.tasks.options;
 
 import com.tyron.builder.api.Transformer;
-import com.tyron.builder.api.internal.reflect.JavaMethod;
+import com.tyron.builder.internal.reflect.JavaMethod;
 import com.tyron.builder.util.internal.CollectionUtils;
 
 import java.util.Collection;

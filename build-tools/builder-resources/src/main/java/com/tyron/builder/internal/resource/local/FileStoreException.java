@@ -2,7 +2,7 @@ package com.tyron.builder.internal.resource.local;
 
 
 import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.internal.exceptions.Contextual;
+import com.tyron.builder.internal.exceptions.Contextual;
 
 @Contextual
 public class FileStoreException extends BuildException {

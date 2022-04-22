@@ -1,8 +1,8 @@
 package com.tyron.builder.api.tasks;
 
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.providers.Provider;
-import com.tyron.builder.api.work.InputChanges;
+import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.work.InputChanges;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

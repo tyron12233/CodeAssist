@@ -1,13 +1,13 @@
 package com.tyron.builder.execution.plan;
 
 
-import com.tyron.builder.api.execution.plan.DefaultExecutionPlan;
-import com.tyron.builder.api.execution.plan.ExecutionNodeAccessHierarchy;
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
-import com.tyron.builder.api.execution.plan.TaskDependencyResolver;
-import com.tyron.builder.api.execution.plan.TaskNodeFactory;
-import com.tyron.builder.api.internal.resources.ResourceLockCoordinationService;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.execution.plan.DefaultExecutionPlan;
+import com.tyron.builder.execution.plan.ExecutionNodeAccessHierarchy;
+import com.tyron.builder.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.TaskDependencyResolver;
+import com.tyron.builder.execution.plan.TaskNodeFactory;
+import com.tyron.builder.internal.resources.ResourceLockCoordinationService;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 
 @ServiceScope(Scopes.Build.class)

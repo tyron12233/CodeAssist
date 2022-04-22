@@ -1,9 +1,9 @@
 package com.tyron.builder.execution;
 
 import com.tyron.builder.TaskExecutionRequest;
-import com.tyron.builder.api.StartParameter;
-import com.tyron.builder.api.execution.ProjectConfigurer;
-import com.tyron.builder.api.internal.GUtil;
+import com.tyron.builder.StartParameter;
+import com.tyron.builder.execution.ProjectConfigurer;
+import com.tyron.builder.util.GUtil;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.configuration.project.BuiltInCommand;
 

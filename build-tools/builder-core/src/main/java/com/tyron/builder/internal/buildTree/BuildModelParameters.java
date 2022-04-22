@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.buildTree;
 
 
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 
 @ServiceScope(Scopes.BuildTree.class)

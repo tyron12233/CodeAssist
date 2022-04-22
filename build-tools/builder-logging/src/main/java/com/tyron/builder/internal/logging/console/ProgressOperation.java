@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.console;
 
-import com.tyron.builder.api.internal.GUtil;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.util.GUtil;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 
 import java.util.HashSet;
 import java.util.Set;

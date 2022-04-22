@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging.console;
 
-import static com.tyron.builder.internal.graph.StyledTextOutput.Style.*;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -11,8 +11,8 @@ import static org.fusesource.jansi.Ansi.Attribute;
 import static org.fusesource.jansi.Ansi.Color.DEFAULT;
 
 import com.google.common.collect.Lists;
-import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.Style;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.Style;
 
 import org.fusesource.jansi.Ansi;
 

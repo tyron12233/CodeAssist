@@ -1,6 +1,7 @@
 package com.tyron.builder;
 
 
+import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.invocation.Gradle;
 
 import org.jetbrains.annotations.Nullable;

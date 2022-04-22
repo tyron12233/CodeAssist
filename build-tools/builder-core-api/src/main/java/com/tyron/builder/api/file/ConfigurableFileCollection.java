@@ -1,6 +1,6 @@
 package com.tyron.builder.api.file;
 
-import com.tyron.builder.api.providers.HasConfigurableValue;
+import com.tyron.builder.api.provider.HasConfigurableValue;
 
 import java.util.Set;
 

@@ -7,7 +7,7 @@ import com.tyron.builder.api.file.RegularFile;
 import com.tyron.builder.api.file.RegularFileProperty;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.state.ManagedFactory;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 
 import java.io.File;
 

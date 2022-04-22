@@ -2,9 +2,9 @@ package com.tyron.builder.internal.event;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.dispatch.Dispatch;
-import com.tyron.builder.api.internal.dispatch.MethodInvocation;
-import com.tyron.builder.api.internal.dispatch.ReflectionDispatch;
+import com.tyron.builder.internal.dispatch.Dispatch;
+import com.tyron.builder.internal.dispatch.MethodInvocation;
+import com.tyron.builder.internal.dispatch.ReflectionDispatch;
 import com.tyron.builder.util.internal.CollectionUtils;
 
 import java.lang.reflect.Method;

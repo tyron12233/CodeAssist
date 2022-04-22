@@ -3,8 +3,8 @@ package com.tyron.builder.api.internal.provider;
 
 import com.google.common.base.Preconditions;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.providers.Property;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Property;
+import com.tyron.builder.api.provider.Provider;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -109,12 +109,12 @@ public class DefaultProperty<T> extends AbstractProperty<T, ProviderInternal<? e
     }
 
     @Override
-    protected Value<? extends T> calculateValueFrom(ProviderInternal<? extends T> value, org.graalvm.compiler.lir.ValueConsumer consumer) {
+    protected Value<? extends T> calculateValueFrom(ProviderInternal<? extends T> value, ValueConsumer consumer) {
         return value.calculateValue(consumer);
     }
 
     @Override
-    protected ProviderInternal<? extends T> finalValue(ProviderInternal<? extends T> value, org.graalvm.compiler.lir.ValueConsumer consumer) {
+    protected ProviderInternal<? extends T> finalValue(ProviderInternal<? extends T> value, ValueConsumer consumer) {
         return value.withFinalValue(consumer);
     }
 

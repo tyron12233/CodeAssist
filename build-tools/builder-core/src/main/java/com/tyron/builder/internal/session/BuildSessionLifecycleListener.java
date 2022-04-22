@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.session;
 
-import com.tyron.builder.api.internal.service.scopes.EventScope;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.service.scopes.Scopes;
 
 /**
  * A listener that is notified when a session is started and completed. No more than one session may be active at any time.

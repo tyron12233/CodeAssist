@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.tasks.properties.annotations;
 
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
 
 import java.lang.annotation.Annotation;
 

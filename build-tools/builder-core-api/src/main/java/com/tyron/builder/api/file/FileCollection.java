@@ -1,6 +1,6 @@
 package com.tyron.builder.api.file;
 
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.Buildable;
 
 import java.io.File;

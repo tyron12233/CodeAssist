@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
+import com.tyron.builder.api.tasks.TaskOutputs;
 
 import java.io.File;
 import java.util.Set;

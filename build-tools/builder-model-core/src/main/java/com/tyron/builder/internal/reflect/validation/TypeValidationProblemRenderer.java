@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.reflect.validation;
 
-import com.tyron.builder.api.internal.logging.TreeFormatter;
-import com.tyron.builder.api.model.internal.type.ModelType;
-import com.tyron.builder.api.plugin.PluginId;
+import com.tyron.builder.internal.logging.text.TreeFormatter;
+import com.tyron.builder.model.internal.type.ModelType;
+import com.tyron.builder.plugin.use.PluginId;
 import com.tyron.builder.problems.Solution;
 
 import java.util.List;

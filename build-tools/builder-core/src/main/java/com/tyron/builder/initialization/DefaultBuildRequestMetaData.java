@@ -1,7 +1,7 @@
 package com.tyron.builder.initialization;
 
 
-import com.tyron.builder.api.internal.time.Time;
+import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.configuration.GradleLauncherMetaData;
 
 public class DefaultBuildRequestMetaData implements BuildRequestMetaData {

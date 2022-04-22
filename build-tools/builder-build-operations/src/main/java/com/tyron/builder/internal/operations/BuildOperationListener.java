@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.operations;
 
-import com.tyron.builder.api.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.service.scopes.EventScope;
 import com.tyron.builder.internal.service.scopes.Scope;
 
 /**

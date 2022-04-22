@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.typeconversion;
 
 
-import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
 
 public class NotationConverterToNotationParserAdapter<N, T> implements NotationParser<N, T> {
     private final NotationConverter<? super N, ? extends T> converter;

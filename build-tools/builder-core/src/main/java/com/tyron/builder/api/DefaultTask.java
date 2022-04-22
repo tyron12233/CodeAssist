@@ -3,16 +3,17 @@ package com.tyron.builder.api;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.RelativePath;
+import com.tyron.builder.api.internal.AbstractTask;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.api.internal.logging.StandardOutputCapture;
+import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.resources.ResourceLock;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.resources.ResourceLock;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.api.internal.tasks.DefaultTaskInputs;
 import com.tyron.builder.api.internal.tasks.DefaultTaskOutputs;
@@ -28,15 +29,15 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
 import com.tyron.builder.api.logging.LoggingManager;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.internal.tasks.DefaultTaskDependency;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskLocalState;
-import com.tyron.builder.api.tasks.TaskOutputsInternal;
+import com.tyron.builder.api.internal.TaskOutputsInternal;
 import com.tyron.builder.util.internal.GFileUtils;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.slf4j.ContextAwareTaskLogger;
 import com.tyron.builder.internal.logging.slf4j.DefaultContextAwareTaskLogger;
@@ -48,7 +49,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class  extends AbstractTask {
+public class DefaultTask extends AbstractTask {
 
     private static final Logger BUILD_LOGGER = Logging.getLogger(Task.class);
 

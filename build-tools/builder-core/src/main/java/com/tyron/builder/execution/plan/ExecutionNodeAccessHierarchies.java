@@ -1,6 +1,7 @@
 package com.tyron.builder.execution.plan;
 
-import com.tyron.builder.api.internal.file.Stat;
+import com.tyron.builder.execution.ProjectExecutionServices;
+import com.tyron.builder.internal.file.Stat;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
 
 public class ExecutionNodeAccessHierarchies {
@@ -20,7 +21,7 @@ public class ExecutionNodeAccessHierarchies {
      * Create the input node access hierarchy.
      *
      * For performance reasons, we keep one input node access hierarchy per project,
-     * so we only have a factory method here and this is used to create the hierarchy in {@link org.gradle.execution.ProjectExecutionServices}.
+     * so we only have a factory method here and this is used to create the hierarchy in {@link ProjectExecutionServices}.
      */
     public InputNodeAccessHierarchy createInputHierarchy() {
         return new InputNodeAccessHierarchy(caseSensitivity, stat);

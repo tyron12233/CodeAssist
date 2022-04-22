@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.tasks;
 
-import com.tyron.builder.api.internal.execution.ExecutionOutcome;
+import com.tyron.builder.internal.execution.ExecutionOutcome;
 
 import org.jetbrains.annotations.Nullable;
 

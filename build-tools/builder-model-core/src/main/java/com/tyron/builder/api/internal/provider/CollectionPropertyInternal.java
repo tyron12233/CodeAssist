@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.provider;
 
-import com.tyron.builder.api.providers.HasMultipleValues;
+import com.tyron.builder.api.provider.HasMultipleValues;
 
 import java.util.Collection;
 

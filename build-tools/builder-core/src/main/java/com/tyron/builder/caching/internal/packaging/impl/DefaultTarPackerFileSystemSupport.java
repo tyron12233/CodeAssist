@@ -1,7 +1,7 @@
 package com.tyron.builder.caching.internal.packaging.impl;
 
-import com.tyron.builder.api.internal.file.Deleter;
-import com.tyron.builder.api.internal.tasks.properties.TreeType;
+import com.tyron.builder.internal.file.Deleter;
+import com.tyron.builder.internal.file.TreeType;
 
 import org.apache.commons.io.FileUtils;
 
@@ -26,10 +26,10 @@ public class DefaultTarPackerFileSystemSupport implements TarPackerFileSystemSup
     @Override
     public void ensureDirectoryForTree(TreeType type, File root) throws IOException {
         switch (type) {
-            case TreeType.DIRECTORY:
+            case DIRECTORY:
                 deleter.ensureEmptyDirectory(root);
                 break;
-            case TreeType.FILE:
+            case FILE:
                 if (!makeDirectory(root.getParentFile())) {
                     if (root.exists()) {
                         deleter.deleteRecursively(root);

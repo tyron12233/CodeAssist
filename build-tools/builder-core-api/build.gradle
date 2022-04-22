@@ -9,17 +9,18 @@ java {
 }
 
 dependencies {
-    implementation (projects.common)
-    implementation(projects.buildTools.builderBaseServices)
-    implementation(projects.buildTools.builderEnterpriseOperations)
-    implementation(projects.buildTools.builderFiles)
-    implementation(projects.buildTools.builderLogging)
-    implementation(projects.buildTools.builderResources)
+    implementation projects.common
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderResources
+    implementation projects.buildTools.builderPersistentCache
 
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.jetbrains:annotations:23.0.0'
-    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation common.slf4j
     implementation 'org.apache.commons:commons-compress:1.20'
     implementation 'org.apache.commons:commons-vfs2:2.9.0'
-    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    implementation common.commonsLang3
 }

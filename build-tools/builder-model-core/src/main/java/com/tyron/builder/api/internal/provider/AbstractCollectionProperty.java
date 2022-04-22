@@ -5,8 +5,8 @@ import com.google.common.collect.ImmutableCollection;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.provider.Collectors.*;
-import com.tyron.builder.api.providers.HasMultipleValues;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.HasMultipleValues;
+import com.tyron.builder.api.provider.Provider;
 
 import org.jetbrains.annotations.Nullable;
 

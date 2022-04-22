@@ -1,10 +1,10 @@
 package com.tyron.builder.execution;
 
 import com.tyron.builder.api.BuildCancelledException;
-import com.tyron.builder.api.execution.ProjectConfigurer;
-import com.tyron.builder.api.initialization.BuildCancellationToken;
+import com.tyron.builder.execution.ProjectConfigurer;
+import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 public class TaskPathProjectEvaluator implements ProjectConfigurer {
     private final BuildCancellationToken cancellationToken;

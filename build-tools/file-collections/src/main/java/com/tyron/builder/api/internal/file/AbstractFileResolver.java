@@ -2,8 +2,8 @@ package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
-import com.tyron.builder.api.internal.DeferredUtil;
-import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.util.internal.DeferredUtil;
+import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
 import com.tyron.builder.internal.typeconversion.NotationParser;
 import com.tyron.builder.internal.typeconversion.UnsupportedNotationException;
 
@@ -116,14 +116,14 @@ public abstract class AbstractFileResolver implements FileResolver {
 
     protected void validate(File file, PathValidation validation) {
         switch (validation) {
-            case PathValidation.NONE:
+            case NONE:
                 break;
-            case PathValidation.EXISTS:
+            case EXISTS:
                 if (!file.exists()) {
                     throw new InvalidUserDataException(String.format("File '%s' does not exist.", file));
                 }
                 break;
-            case PathValidation.FILE:
+            case FILE:
                 if (!file.exists()) {
                     throw new InvalidUserDataException(String.format("File '%s' does not exist.", file));
                 }
@@ -131,7 +131,7 @@ public abstract class AbstractFileResolver implements FileResolver {
                     throw new InvalidUserDataException(String.format("File '%s' is not a file.", file));
                 }
                 break;
-            case PathValidation.DIRECTORY:
+            case DIRECTORY:
                 if (!file.exists()) {
                     throw new InvalidUserDataException(String.format("Directory '%s' does not exist.", file));
                 }

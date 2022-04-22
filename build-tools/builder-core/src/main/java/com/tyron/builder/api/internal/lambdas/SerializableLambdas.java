@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal.lambdas;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Transformer;
+import com.tyron.builder.internal.Factory;
 
 import java.io.Serializable;
 import java.util.function.Predicate;

@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.steps;
 
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.history.OutputFilesRepository;
+import com.tyron.builder.internal.execution.history.OutputFilesRepository;
 
 public class RecordOutputsStep<C extends Context, R extends AfterExecutionResult> implements Step<C, R> {
     private final OutputFilesRepository outputFilesRepository;

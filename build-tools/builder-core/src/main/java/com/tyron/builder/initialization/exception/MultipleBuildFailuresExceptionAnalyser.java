@@ -1,6 +1,6 @@
 package com.tyron.builder.initialization.exception;
 
-import com.tyron.builder.api.execution.MultipleBuildFailures;
+import com.tyron.builder.execution.MultipleBuildFailures;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;

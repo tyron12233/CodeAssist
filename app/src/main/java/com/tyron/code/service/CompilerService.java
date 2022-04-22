@@ -15,12 +15,12 @@ import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
-import com.tyron.builder.api.execution.MultipleBuildFailures;
+import com.tyron.builder.execution.MultipleBuildFailures;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.logging.events.OutputEvent;
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.compiler.AndroidAppBuilder;
 import com.tyron.builder.compiler.AndroidAppBundleBuilder;
 import com.tyron.builder.compiler.ApkBuilder;
@@ -228,15 +228,6 @@ public class CompilerService extends Service {
                 projectLauncher.getGlobalServices().getFactory(LoggingManagerInternal.class);
         LoggingManagerInternal loggingManager = loggingManagerInternalFactory.create();
         assert loggingManager != null;
-        OutputEventListener outputEventListener = new OutputEventListener() {
-            @Override
-            public void onOutput(OutputEvent event) {
-                if (event instanceof LogEvent) {
-                    logger.info("[" + event.getLogLevel() + "] " + ((LogEvent) event).getMessage());
-                }
-            }
-        };
-        loggingManager.addOutputEventListener(outputEventListener);
         loggingManager.start();
         try {
             projectLauncher.execute();
@@ -250,7 +241,6 @@ public class CompilerService extends Service {
             }
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
-        loggingManager.removeOutputEventListener(outputEventListener);
         loggingManager.stop();
 
         stopSelf();

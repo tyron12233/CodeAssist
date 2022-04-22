@@ -1,6 +1,6 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 /**
  * An operation to run the projectsEvaluated lifecycle hook.

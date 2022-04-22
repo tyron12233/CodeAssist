@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.logging;
 
-import com.tyron.builder.api.internal.logging.StandardOutputCapture;
+import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.logging.LoggingOutput;

@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.tasks.properties.annotations;
 import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory.*;
 
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.reflect.AnnotationCategory;
+import com.tyron.builder.internal.reflect.AnnotationCategory;
 import com.tyron.builder.api.internal.tasks.properties.InputFilePropertyType;
 import com.tyron.builder.api.tasks.InputFile;
 

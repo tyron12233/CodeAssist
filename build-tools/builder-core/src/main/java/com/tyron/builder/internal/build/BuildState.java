@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.build;
 
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 import com.tyron.builder.initialization.IncludedBuildSpec;
 
 import java.io.File;

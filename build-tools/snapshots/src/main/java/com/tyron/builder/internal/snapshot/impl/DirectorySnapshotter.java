@@ -11,7 +11,7 @@ import com.google.common.hash.HashCode;
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.tyron.builder.internal.file.FileMetadata;
 import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.api.internal.file.impl.DefaultFileMetadata;
+import com.tyron.builder.internal.file.impl.DefaultFileMetadata;
 import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.snapshot.DirectorySnapshot;
 import com.tyron.builder.internal.snapshot.FileSystemLeafSnapshot;

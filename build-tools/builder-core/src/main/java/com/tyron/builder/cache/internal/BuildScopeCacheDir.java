@@ -1,6 +1,6 @@
 package com.tyron.builder.cache.internal;
 
-import com.tyron.builder.api.StartParameter;
+import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.initialization.GradleUserHomeDirProvider;

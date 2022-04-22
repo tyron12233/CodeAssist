@@ -1,30 +1,18 @@
 package com.tyron.builder.internal.session;
 
 import com.tyron.builder.StartParameter;
-import com.tyron.builder.api.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
-import com.tyron.builder.internal.classpath.ClassPath;
-import com.tyron.builder.api.internal.event.DefaultListenerManager;
-import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileResolver;
-import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.BuildOperationCrossProjectConfigurator;
 import com.tyron.builder.api.internal.project.CrossProjectConfigurator;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistration;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
-import com.tyron.builder.api.internal.time.Clock;
-import com.tyron.builder.api.internal.work.WorkerLeaseService;
-import com.tyron.builder.api.work.DefaultAsyncWorkTracker;
 import com.tyron.builder.cache.CacheRepository;
-import com.tyron.builder.cache.StringInterner;
 import com.tyron.builder.cache.internal.BuildScopeCacheDir;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildTreeScopedCache;
 import com.tyron.builder.cache.scopes.BuildTreeScopedCache;
-import com.tyron.builder.configurationcache.DefaultBuildTreeControllerServices;
+import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.initialization.BuildClientMetaData;
 import com.tyron.builder.initialization.BuildEventConsumer;
 import com.tyron.builder.initialization.BuildRequestMetaData;
@@ -34,13 +22,19 @@ import com.tyron.builder.initialization.layout.BuildLayoutConfiguration;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.initialization.layout.ProjectCacheDir;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
-import com.tyron.builder.internal.buildTree.BuildTreeModelControllerServices;
 import com.tyron.builder.internal.buildevents.BuildStartedTime;
+import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.event.DefaultListenerManager;
+import com.tyron.builder.internal.file.Deleter;
+import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.internal.model.StateTransitionControllerFactory;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.WorkerSharedBuildSessionScopeServices;
-import com.tyron.builder.launcher.exec.BuildTreeLifecycleBuildActionExecutor;
-import com.tyron.builder.launcher.exec.RunAsWorkerThreadBuildActionExecutor;
+import com.tyron.builder.internal.time.Clock;
+import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
 
 import java.io.Closeable;
 import java.util.List;
@@ -78,23 +72,10 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
         registration.add(StateTransitionControllerFactory.class);
         registration.add(BuildLayoutValidator.class);
         registration.add(DefaultAsyncWorkTracker.class);
-        registration.add(DefaultBuildTreeControllerServices.class);
         // Must be no higher than this scope as needs cache repository services.
 //        registration.addProvider(new ScopeIdsServices());
 
         // from ToolingBuildScopeServices
-        registration.addProvider(new Object() {
-            BuildSessionActionExecutor createActionExecutor(
-                    BuildTreeModelControllerServices buildModelServices,
-                    BuildLayoutValidator buildLayoutValidator,
-                    WorkerLeaseService workerLeaseService
-            ) {
-                return new RunAsWorkerThreadBuildActionExecutor(
-                        workerLeaseService,
-                        new BuildTreeLifecycleBuildActionExecutor(buildModelServices, buildLayoutValidator)
-                );
-            }
-        });
     }
 
 //    PendingChangesManager createPendingChangesManager(ListenerManager listenerManager) {

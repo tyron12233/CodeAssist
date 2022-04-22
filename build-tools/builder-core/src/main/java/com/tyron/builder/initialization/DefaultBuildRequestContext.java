@@ -1,6 +1,6 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.api.initialization.BuildCancellationToken;
+import com.tyron.builder.initialization.BuildCancellationToken;
 
 public class DefaultBuildRequestContext implements BuildRequestContext {
 

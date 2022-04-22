@@ -4,10 +4,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.ProjectConfigurationException;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.execution.TaskSelectionResult;
+import com.tyron.builder.execution.TaskSelectionResult;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.tasks.TaskContainer;
 
 import javax.annotation.Nullable;

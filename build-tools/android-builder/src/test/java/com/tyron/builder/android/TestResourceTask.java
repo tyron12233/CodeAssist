@@ -3,7 +3,7 @@ package com.tyron.builder.android;
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.android.aapt2.Aapt2Task;
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 import java.io.File;
 import java.util.List;

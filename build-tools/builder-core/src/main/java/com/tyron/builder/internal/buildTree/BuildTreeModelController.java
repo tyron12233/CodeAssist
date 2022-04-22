@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.buildTree;
 
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
+import com.tyron.builder.internal.operations.RunnableBuildOperation;
 
 import java.util.Collection;
 

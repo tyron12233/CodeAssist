@@ -1,7 +1,7 @@
 package com.tyron.builder.caching.internal.packaging.impl;
 
 import static com.tyron.builder.internal.file.FileMetadata.AccessType.DIRECT;
-import static com.tyron.builder.api.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
+import static com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -10,7 +10,7 @@ import com.google.common.hash.HashCode;
 import com.google.common.io.CountingOutputStream;
 import com.tyron.builder.internal.RelativePathSupplier;
 import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.api.internal.file.impl.DefaultFileMetadata;
+import com.tyron.builder.internal.file.impl.DefaultFileMetadata;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.snapshot.DirectorySnapshot;
 import com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder;
@@ -22,7 +22,7 @@ import com.tyron.builder.internal.snapshot.RegularFileSnapshot;
 import com.tyron.builder.internal.snapshot.RelativePathTracker;
 import com.tyron.builder.internal.snapshot.RelativePathTrackingFileSystemSnapshotHierarchyVisitor;
 import com.tyron.builder.internal.snapshot.SnapshotVisitResult;
-import com.tyron.builder.api.internal.tasks.properties.TreeType;
+import com.tyron.builder.internal.file.TreeType;
 import com.tyron.builder.caching.internal.CacheableEntity;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 import com.tyron.builder.caching.internal.origin.OriginReader;

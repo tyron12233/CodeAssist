@@ -8,11 +8,26 @@ java {
 }
 
 dependencies {
-    implementation project(path: ':common')
-    implementation project(path: ':build-tools:builder-api')
+    implementation projects.common
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderWorkers
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderExecution
+    implementation projects.buildTools.builderDependencyManagement
 
     implementation 'org.ow2.asm:asm:9.3'
-    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation common.slf4j
+    implementation project(path: ':build-tools:builder-language-jvm')
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.apache.commons:commons-lang3:3.12.0'

@@ -1,8 +1,8 @@
 package com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi;
 
-import com.tyron.builder.api.internal.serialize.AbstractSerializer;
-import com.tyron.builder.api.internal.serialize.Decoder;
-import com.tyron.builder.api.internal.serialize.Encoder;
+import com.tyron.builder.internal.serialize.AbstractSerializer;
+import com.tyron.builder.internal.serialize.Decoder;
+import com.tyron.builder.internal.serialize.Encoder;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.constants.ConstantToDependentsMapping;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.deps.DependentSetSerializer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.compilerapi.deps.DependentsSet;

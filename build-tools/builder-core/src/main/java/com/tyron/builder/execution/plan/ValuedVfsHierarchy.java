@@ -1,7 +1,7 @@
 package com.tyron.builder.execution.plan;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.collect.PersistentList;
+import com.tyron.builder.internal.collect.PersistentList;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.internal.snapshot.ChildMap;
 import com.tyron.builder.internal.snapshot.ChildMapFactory;

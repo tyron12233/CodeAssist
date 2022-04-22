@@ -1,6 +1,6 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.api.internal.operations.BuildOperationType;
+import com.tyron.builder.internal.operations.BuildOperationType;
 
 public final class RunNestedBuildBuildOperationType implements BuildOperationType<RunNestedBuildBuildOperationType.Details, RunNestedBuildBuildOperationType.Result> {
 

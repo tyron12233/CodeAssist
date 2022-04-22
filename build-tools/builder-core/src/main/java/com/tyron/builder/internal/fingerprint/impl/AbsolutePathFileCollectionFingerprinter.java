@@ -1,10 +1,10 @@
 package com.tyron.builder.internal.fingerprint.impl;
 
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.internal.fingerprint.AbsolutePathInputNormalizer;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.api.tasks.FileNormalizer;
 

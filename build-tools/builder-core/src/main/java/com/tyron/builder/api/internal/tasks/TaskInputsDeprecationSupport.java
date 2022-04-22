@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal.tasks;
 
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.tasks.TaskInputFilePropertyBuilder;
+import com.tyron.builder.api.tasks.TaskInputPropertyBuilder;
 import com.tyron.builder.api.tasks.TaskInputs;
 
 import org.jetbrains.annotations.Nullable;

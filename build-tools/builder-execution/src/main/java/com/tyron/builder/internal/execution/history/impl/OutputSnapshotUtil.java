@@ -7,9 +7,9 @@ import java.util.function.BiPredicate;
 
 import static com.google.common.collect.ImmutableSortedMap.copyOfSorted;
 import static com.google.common.collect.Maps.transformEntries;
-import static com.tyron.builder.api.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.EXCLUDE_EMPTY_DIRS;
-import static com.tyron.builder.api.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
-import static com.tyron.builder.api.internal.snapshot.SnapshotUtil.index;
+import static com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.EXCLUDE_EMPTY_DIRS;
+import static com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder.EmptyDirectoryHandlingStrategy.INCLUDE_EMPTY_DIRS;
+import static com.tyron.builder.internal.snapshot.SnapshotUtil.index;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;

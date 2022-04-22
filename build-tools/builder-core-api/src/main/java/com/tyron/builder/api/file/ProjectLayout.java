@@ -1,9 +1,9 @@
 package com.tyron.builder.api.file;
 
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.provider.Provider;
 
 import java.io.File;
 

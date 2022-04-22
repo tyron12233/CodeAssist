@@ -14,7 +14,7 @@ import static java.util.Arrays.asList;
 import com.google.common.base.Function;
 import com.tyron.builder.api.Incubating;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.api.model.internal.type.ModelType;
+import com.tyron.builder.model.internal.type.ModelType;
 
 /**
  * Provides a way to preserve high-fidelity {@link Type} information on generic types.

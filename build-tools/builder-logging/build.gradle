@@ -3,12 +3,16 @@ plugins {
 }
 
 dependencies {
-    implementation(projects.common)
-    implementation(projects.buildTools.builderBaseServices)
-    implementation(projects.buildTools.builderMessaging)
-    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation projects.common
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderEnterpriseWorkers
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderApi
+    
+    implementation common.slf4j
     implementation 'org.fusesource.jansi:jansi:2.4.0'
-    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    implementation common.commonsLang3
 }
 
 java {

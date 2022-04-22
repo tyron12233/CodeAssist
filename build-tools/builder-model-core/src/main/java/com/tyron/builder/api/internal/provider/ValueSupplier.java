@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.provider;
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.DisplayName;
+import com.tyron.builder.internal.DisplayName;
 
 import org.jetbrains.annotations.Nullable;
 

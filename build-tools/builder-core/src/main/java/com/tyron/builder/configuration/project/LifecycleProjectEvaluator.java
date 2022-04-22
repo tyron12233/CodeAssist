@@ -4,16 +4,16 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildCancelledException;
 import com.tyron.builder.api.ProjectConfigurationException;
 import com.tyron.builder.api.ProjectEvaluationListener;
-import com.tyron.builder.api.configuration.project.ProjectEvaluator;
-import com.tyron.builder.api.initialization.BuildCancellationToken;
-import com.tyron.builder.api.internal.operations.BuildOperationCategory;
-import com.tyron.builder.api.internal.operations.BuildOperationContext;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.operations.RunnableBuildOperation;
+import com.tyron.builder.configuration.project.ProjectEvaluator;
+import com.tyron.builder.initialization.BuildCancellationToken;
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.RunnableBuildOperation;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.ProjectStateInternal;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 import java.io.File;
 

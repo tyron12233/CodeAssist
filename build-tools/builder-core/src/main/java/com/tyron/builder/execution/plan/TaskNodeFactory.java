@@ -5,10 +5,10 @@ import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.api.internal.execution.WorkValidationContext;
-import com.tyron.builder.api.internal.execution.impl.DefaultWorkValidationContext;
-import com.tyron.builder.api.plugin.PluginId;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.internal.execution.WorkValidationContext;
+import com.tyron.builder.internal.execution.impl.DefaultWorkValidationContext;
+import com.tyron.builder.plugin.use.PluginId;
+import com.tyron.builder.api.BuildProject;
 
 import org.jetbrains.annotations.Nullable;
 

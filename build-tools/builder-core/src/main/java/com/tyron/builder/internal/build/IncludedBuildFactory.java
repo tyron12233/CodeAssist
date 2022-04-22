@@ -3,9 +3,9 @@ package com.tyron.builder.internal.build;
 
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.internal.BuildDefinition;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 @ServiceScope(Scopes.BuildTree.class)
 public interface IncludedBuildFactory {

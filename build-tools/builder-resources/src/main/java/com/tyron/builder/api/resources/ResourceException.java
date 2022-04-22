@@ -1,7 +1,7 @@
 package com.tyron.builder.api.resources;
 
 import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.internal.exceptions.Contextual;
+import com.tyron.builder.internal.exceptions.Contextual;
 
 import javax.annotation.Nullable;
 import java.net.URI;

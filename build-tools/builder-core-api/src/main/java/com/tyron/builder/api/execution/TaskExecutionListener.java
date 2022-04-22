@@ -1,8 +1,8 @@
 package com.tyron.builder.api.execution;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.service.scopes.EventScope;
-import com.tyron.builder.api.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.scopes.EventScope;
+import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.api.tasks.TaskState;
 
 /**

@@ -5,6 +5,7 @@ import com.tyron.builder.api.file.FileVisitDetails;
 import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.internal.file.FileMetadata;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
+import com.tyron.builder.internal.file.impl.DefaultFileMetadata;
 import com.tyron.builder.internal.fingerprint.GenericFileTreeSnapshotter;
 import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;

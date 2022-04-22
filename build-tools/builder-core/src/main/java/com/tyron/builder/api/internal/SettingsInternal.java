@@ -18,6 +18,9 @@ public interface SettingsInternal extends Settings {
 
 //    ScriptSource getSettingsScript();
 
+    @Override
+    GradleInternal getGradle();
+
     ProjectRegistry<DefaultProjectDescriptor> getProjectRegistry();
 
     void setDefaultProject(DefaultProjectDescriptor defaultProjectDescriptor);

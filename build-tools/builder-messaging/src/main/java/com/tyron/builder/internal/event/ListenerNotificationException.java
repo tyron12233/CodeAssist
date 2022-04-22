@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.event;
 
-import com.tyron.builder.api.internal.dispatch.MethodInvocation;
-import com.tyron.builder.api.internal.exceptions.Contextual;
-import com.tyron.builder.api.internal.exceptions.DefaultMultiCauseException;
+import com.tyron.builder.internal.dispatch.MethodInvocation;
+import com.tyron.builder.internal.exceptions.Contextual;
+import com.tyron.builder.internal.exceptions.DefaultMultiCauseException;
 
 import org.jetbrains.annotations.Nullable;
 

@@ -1,0 +1,17 @@
+plugins {
+    id 'java-library'
+}
+
+description = "Common shared build cache classes"
+
+dependencies {
+    implementation projects.buildTools.builderBaseAnnotations
+    implementation projects.buildTools.builderFiles
+
+    implementation common.slf4j
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

@@ -1,6 +1,6 @@
 package com.tyron.builder.execution;
 
-import com.tyron.builder.api.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.initialization.TaskSchedulingPreparer;
 

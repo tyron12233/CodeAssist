@@ -1,0 +1,22 @@
+plugins {
+    id 'java-library'
+}
+
+description = "This project contains various native operating system integration utilities"
+
+dependencies {
+    api projects.buildTools.builderFiles
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderFileTemp
+
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+    implementation "net.rubygrapefruit:file-events:0.22-milestone-23"
+    implementation 'org.fusesource.jansi:jansi:2.4.0'
+    implementation common.slf4j
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

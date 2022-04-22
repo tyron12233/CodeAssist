@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.file.collections.MinimalFileSet;
 

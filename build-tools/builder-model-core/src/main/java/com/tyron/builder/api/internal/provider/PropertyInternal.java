@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.provider;
 
 import com.tyron.builder.internal.state.ModelObject;
-import com.tyron.builder.api.internal.state.OwnerAware;
+import com.tyron.builder.internal.state.OwnerAware;
 
 public interface PropertyInternal<T> extends ProviderInternal<T>, HasConfigurableValueInternal, OwnerAware {
     /**

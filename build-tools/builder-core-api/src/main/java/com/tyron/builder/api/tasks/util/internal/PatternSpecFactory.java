@@ -2,10 +2,10 @@ package com.tyron.builder.api.tasks.util.internal;
 
 import com.tyron.builder.api.file.FileTreeElement;
 import com.tyron.builder.api.internal.file.RelativePathSpec;
-import com.tyron.builder.api.internal.file.pattern.PatternMatcher;
-import com.tyron.builder.api.internal.file.pattern.PatternMatcherFactory;
+import com.tyron.builder.internal.file.pattern.PatternMatcher;
+import com.tyron.builder.internal.file.pattern.PatternMatcherFactory;
 import com.tyron.builder.api.tasks.util.PatternSet;
-import com.tyron.builder.api.util.Predicates;
+import com.tyron.builder.util.Predicates;
 
 import java.util.ArrayList;
 import java.util.Arrays;

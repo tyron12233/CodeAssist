@@ -1,6 +1,7 @@
 package com.tyron.builder.internal.graph;
 
-import com.tyron.builder.api.internal.logging.AbstractStyledTextOutput;
+import com.tyron.builder.internal.logging.text.AbstractStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

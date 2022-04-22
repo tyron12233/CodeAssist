@@ -2,8 +2,8 @@ package com.tyron.builder.internal.execution.steps;
 
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.history.OutputFileChanges;
-import com.tyron.builder.api.internal.execution.history.changes.ChangeDetectorVisitor;
+import com.tyron.builder.internal.execution.history.OutputFileChanges;
+import com.tyron.builder.internal.execution.history.changes.ChangeDetectorVisitor;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 
 public class StoreExecutionStateStep<C extends PreviousExecutionContext, R extends AfterExecutionResult> implements Step<C, R> {

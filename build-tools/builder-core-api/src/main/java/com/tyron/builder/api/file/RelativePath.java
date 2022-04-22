@@ -1,6 +1,6 @@
 package com.tyron.builder.api.file;
 
-import com.tyron.builder.api.internal.file.FilePathUtil;
+import com.tyron.builder.internal.file.FilePathUtil;
 
 import org.jetbrains.annotations.Nullable;
 

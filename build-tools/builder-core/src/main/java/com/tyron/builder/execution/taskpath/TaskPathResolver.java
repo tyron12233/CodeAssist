@@ -1,7 +1,7 @@
 package com.tyron.builder.execution.taskpath;
 
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 public class TaskPathResolver {
 

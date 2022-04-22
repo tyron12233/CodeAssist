@@ -1,5 +1,7 @@
 package com.tyron.builder.api.internal.tasks;
 
+import com.tyron.builder.api.tasks.TaskInputPropertyBuilder;
+
 public class DefaultTaskInputPropertyRegistration implements TaskInputPropertyRegistration {
 
     private final String propertyName;

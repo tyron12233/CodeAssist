@@ -2,8 +2,8 @@ package com.tyron.builder.api.tasks.util;
 
 import com.google.common.collect.Sets;
 import com.tyron.builder.api.file.FileTreeElement;
-import com.tyron.builder.api.internal.typeconversion.NotationParser;
-import com.tyron.builder.api.internal.typeconversion.NotationParserBuilder;
+import com.tyron.builder.internal.typeconversion.NotationParser;
+import com.tyron.builder.internal.typeconversion.NotationParserBuilder;
 import com.tyron.builder.api.tasks.util.internal.PatternSpecFactory;
 
 import org.jetbrains.annotations.Nullable;

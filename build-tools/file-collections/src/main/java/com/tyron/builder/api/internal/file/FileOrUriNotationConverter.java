@@ -2,8 +2,8 @@ package com.tyron.builder.api.internal.file;
 
 import com.tyron.builder.api.file.FileSystemLocation;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.api.internal.exceptions.DiagnosticsVisitor;
-import com.tyron.builder.api.internal.os.OperatingSystem;
+import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.internal.os.OperatingSystem;
 import com.tyron.builder.internal.typeconversion.NotationConvertResult;
 import com.tyron.builder.internal.typeconversion.NotationConverter;
 import com.tyron.builder.internal.typeconversion.NotationParser;

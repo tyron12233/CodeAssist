@@ -1,6 +1,6 @@
 package com.tyron.builder.api.internal.exceptions;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.initialization.BuildClientMetaData;
 
 import java.util.function.Consumer;

@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 public class DefaultPublicBuildPath implements PublicBuildPath {
 

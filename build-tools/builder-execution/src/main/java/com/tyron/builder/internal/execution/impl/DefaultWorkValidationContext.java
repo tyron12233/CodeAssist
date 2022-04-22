@@ -4,10 +4,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.internal.execution.WorkValidationContext;
-import com.tyron.builder.api.internal.reflect.ProblemRecordingTypeValidationContext;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationContext;
-import com.tyron.builder.api.internal.reflect.validation.TypeValidationProblem;
-import com.tyron.builder.api.plugin.PluginId;
+import com.tyron.builder.internal.reflect.ProblemRecordingTypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationContext;
+import com.tyron.builder.internal.reflect.validation.TypeValidationProblem;
+import com.tyron.builder.plugin.use.PluginId;
 
 import java.util.Comparator;
 import java.util.HashSet;

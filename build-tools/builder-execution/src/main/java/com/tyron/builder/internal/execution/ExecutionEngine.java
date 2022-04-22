@@ -2,9 +2,9 @@ package com.tyron.builder.internal.execution;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.Try;
-import com.tyron.builder.api.internal.execution.caching.CachingState;
-import com.tyron.builder.api.internal.execution.history.AfterExecutionState;
+import com.tyron.builder.internal.Try;
+import com.tyron.builder.internal.execution.caching.CachingState;
+import com.tyron.builder.internal.execution.history.AfterExecutionState;
 import com.tyron.builder.cache.Cache;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 

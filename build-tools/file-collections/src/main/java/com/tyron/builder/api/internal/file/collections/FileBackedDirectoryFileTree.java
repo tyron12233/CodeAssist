@@ -1,5 +1,5 @@
 package com.tyron.builder.api.internal.file.collections;
-import com.tyron.builder.api.internal.nativeintegration.services.FileSystems;
+import com.tyron.builder.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
 import java.io.File;

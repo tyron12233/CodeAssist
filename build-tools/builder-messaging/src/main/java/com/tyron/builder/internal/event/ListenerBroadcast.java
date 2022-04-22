@@ -1,9 +1,9 @@
 package com.tyron.builder.internal.event;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.dispatch.Dispatch;
-import com.tyron.builder.api.internal.dispatch.MethodInvocation;
-import com.tyron.builder.api.internal.dispatch.ProxyDispatchAdapter;
+import com.tyron.builder.internal.dispatch.Dispatch;
+import com.tyron.builder.internal.dispatch.MethodInvocation;
+import com.tyron.builder.internal.dispatch.ProxyDispatchAdapter;
 
 import java.util.Collection;
 

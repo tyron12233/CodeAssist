@@ -3,7 +3,7 @@ package com.tyron.builder.internal.service.scopes;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.internal.file.temp.DefaultTemporaryFileProvider;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
-import com.tyron.builder.api.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;

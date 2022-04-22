@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.logging.console;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.logging.Style;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.Style;
 
 public interface AnsiContext {
     /**

@@ -3,12 +3,12 @@ package com.tyron.builder.internal.execution.steps;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.execution.OutputChangeListener;
 import com.tyron.builder.internal.execution.UnitOfWork;
-import com.tyron.builder.api.internal.execution.history.BeforeExecutionState;
-import com.tyron.builder.api.internal.execution.history.OutputsCleaner;
+import com.tyron.builder.internal.execution.history.BeforeExecutionState;
+import com.tyron.builder.internal.execution.history.OutputsCleaner;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.snapshot.SnapshotUtil;
-import com.tyron.builder.api.internal.tasks.properties.TreeType;
+import com.tyron.builder.internal.file.TreeType;
 
 import java.io.File;
 import java.io.IOException;

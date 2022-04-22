@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution.caching;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.Either;
+import com.tyron.builder.internal.Either;
 import com.tyron.builder.internal.execution.history.BeforeExecutionState;
 import com.tyron.builder.caching.BuildCacheKey;
 

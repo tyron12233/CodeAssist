@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.sink;
 
-import com.tyron.builder.api.internal.logging.events.OutputEvent;
-import com.tyron.builder.api.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 
 /**
  * Manages dispatch of output events to the renderer and at most one other arbitrary listener.

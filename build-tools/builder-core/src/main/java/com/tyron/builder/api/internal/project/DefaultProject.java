@@ -1,7 +1,5 @@
 package com.tyron.builder.api.internal.project;
 
-import static com.tyron.builder.api.internal.Cast.uncheckedCast;
-
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
@@ -12,31 +10,33 @@ import com.tyron.builder.api.PathValidation;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UnknownProjectException;
-import com.tyron.builder.api.configuration.project.ProjectEvaluator;
+import com.tyron.builder.api.internal.artifacts.Module;
+import com.tyron.builder.configuration.project.ProjectEvaluator;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.artifacts.DependencyMetaDataProvider;
-import com.tyron.builder.api.internal.event.ListenerBroadcast;
-import com.tyron.builder.api.internal.file.ConfigurableFileCollection;
-import com.tyron.builder.api.internal.file.DeleteSpec;
+import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
+import com.tyron.builder.internal.Cast;
+import com.tyron.builder.internal.event.ListenerBroadcast;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
+import com.tyron.builder.api.file.DeleteSpec;
 import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.FileResolver;
-import com.tyron.builder.api.internal.instantiation.InstanceGenerator;
+import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
-import com.tyron.builder.api.internal.reflect.DirectInstantiator;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.internal.reflect.service.scopes.ServiceRegistryFactory;
+import com.tyron.builder.internal.reflect.DirectInstantiator;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.plugins.Convention;
-import com.tyron.builder.api.project.BuildProject;
-import com.tyron.builder.api.providers.Property;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.provider.Property;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.reflect.ObjectInstantiationException;
 import com.tyron.builder.api.tasks.WorkResult;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.extensibility.DefaultConvention;
 
 import org.jetbrains.annotations.NotNull;
@@ -693,11 +693,8 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public DependencyMetaDataProvider getDependencyMetaDataProvider() {
-        return new DependencyMetaDataProvider() {
-            @Override
-            public Module getModule() {
-                throw new UnsupportedOperationException();
-            }
+        return () -> {
+            throw new UnsupportedOperationException();
         };
     }
 

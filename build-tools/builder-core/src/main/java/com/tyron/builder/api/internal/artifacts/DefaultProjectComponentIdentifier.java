@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.artifacts;
 
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
-import com.tyron.builder.api.util.Path;
+import com.tyron.builder.util.Path;
 
 public class DefaultProjectComponentIdentifier implements ProjectComponentIdentifier {
     private final BuildIdentifier buildIdentifier;

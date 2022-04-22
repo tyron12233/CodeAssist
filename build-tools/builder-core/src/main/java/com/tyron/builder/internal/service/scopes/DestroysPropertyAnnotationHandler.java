@@ -3,6 +3,7 @@ package com.tyron.builder.internal.service.scopes;
 import static com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory.OPTIONAL;
 
 import com.google.common.collect.ImmutableSet;
+import com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory;
 import com.tyron.builder.internal.reflect.AnnotationCategory;
 import com.tyron.builder.internal.reflect.PropertyMetadata;
 import com.tyron.builder.api.internal.tasks.properties.BeanPropertyContext;

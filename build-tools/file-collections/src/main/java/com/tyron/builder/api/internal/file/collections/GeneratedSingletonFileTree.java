@@ -9,8 +9,8 @@ import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.AbstractFileTreeElement;
 import com.tyron.builder.internal.file.Chmod;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
-import com.tyron.builder.api.internal.io.StreamByteBuffer;
-import com.tyron.builder.api.internal.nativeintegration.FileSystem;
+import com.tyron.builder.internal.io.StreamByteBuffer;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
 import java.io.File;

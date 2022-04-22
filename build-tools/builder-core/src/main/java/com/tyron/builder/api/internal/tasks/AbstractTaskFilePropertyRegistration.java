@@ -1,7 +1,5 @@
 package com.tyron.builder.api.internal.tasks;
 
-import com.tyron.builder.api.tasks.TaskPropertyUtils;
-
 public abstract class AbstractTaskFilePropertyRegistration implements TaskPropertyRegistration {
     private String propertyName;
     private boolean optional;

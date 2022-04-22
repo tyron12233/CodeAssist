@@ -3,11 +3,12 @@ package com.tyron.builder.internal.fingerprint.impl;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinter;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
-import com.tyron.builder.api.internal.execution.fingerprint.FileCollectionSnapshotter;
-import com.tyron.builder.api.internal.execution.fingerprint.FileNormalizationSpec;
-import com.tyron.builder.api.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.FileNormalizationSpec;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.impl.DefaultFileNormalizationSpec;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
@@ -114,7 +115,8 @@ public class DefaultInputFingerprinter implements InputFingerprinter {
                 FileCollectionSnapshotter.Result result = snapshotter.snapshot(value.getFiles());
                 DirectorySensitivity
                         directorySensitivity = determineDirectorySensitivity(propertyName, type, value, result);
-                FileNormalizationSpec normalizationSpec = DefaultFileNormalizationSpec.from(value.getNormalizer(), directorySensitivity, value.getLineEndingNormalization());
+                FileNormalizationSpec normalizationSpec = DefaultFileNormalizationSpec
+                        .from(value.getNormalizer(), directorySensitivity, value.getLineEndingNormalization());
                 FileCollectionFingerprinter fingerprinter = fingerprinterRegistry.getFingerprinter(normalizationSpec);
                 CurrentFileCollectionFingerprint fingerprint = fingerprinter.fingerprint(result.getSnapshot(), previousFingerprint);
                 fingerprintsBuilder.put(propertyName, fingerprint);

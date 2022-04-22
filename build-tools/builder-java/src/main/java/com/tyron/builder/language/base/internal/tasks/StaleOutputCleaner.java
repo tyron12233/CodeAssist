@@ -2,7 +2,7 @@ package com.tyron.builder.language.base.internal.tasks;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.UncheckedIOException;
-import com.tyron.builder.api.internal.execution.history.OutputsCleaner;
+import com.tyron.builder.internal.execution.history.OutputsCleaner;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.file.FileType;
 

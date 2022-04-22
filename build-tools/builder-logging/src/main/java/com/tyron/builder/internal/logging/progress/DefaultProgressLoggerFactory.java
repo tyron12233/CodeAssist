@@ -1,16 +1,16 @@
 package com.tyron.builder.internal.logging.progress;
 
-import com.tyron.builder.api.internal.GUtil;
-import com.tyron.builder.api.internal.logging.progress.ProgressLogger;
-import com.tyron.builder.api.internal.logging.progress.ProgressLoggerFactory;
-import com.tyron.builder.api.internal.operations.BuildOperationCategory;
-import com.tyron.builder.api.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.api.internal.operations.BuildOperationIdFactory;
-import com.tyron.builder.api.internal.operations.BuildOperationMetadata;
-import com.tyron.builder.api.internal.operations.BuildOperationRef;
-import com.tyron.builder.api.internal.operations.CurrentBuildOperationRef;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
-import com.tyron.builder.api.internal.time.Clock;
+import com.tyron.builder.util.GUtil;
+import com.tyron.builder.internal.logging.progress.ProgressLogger;
+import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationIdFactory;
+import com.tyron.builder.internal.operations.BuildOperationMetadata;
+import com.tyron.builder.internal.operations.BuildOperationRef;
+import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
+import com.tyron.builder.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.internal.logging.events.ProgressCompleteEvent;
 import com.tyron.builder.internal.logging.events.ProgressEvent;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;

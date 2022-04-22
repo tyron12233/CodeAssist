@@ -7,10 +7,10 @@ import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.internal.file.FileType;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
-import com.tyron.builder.api.providers.Provider;
+import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.incremental.InputFileDetails;
-import com.tyron.builder.api.work.ChangeType;
-import com.tyron.builder.api.work.FileChange;
+import com.tyron.builder.work.ChangeType;
+import com.tyron.builder.work.FileChange;
 
 import java.io.File;
 import java.util.Objects;

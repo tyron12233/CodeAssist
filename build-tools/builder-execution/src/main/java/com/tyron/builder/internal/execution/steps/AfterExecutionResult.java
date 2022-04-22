@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.execution.steps;
 
-import com.tyron.builder.api.internal.execution.history.AfterExecutionState;
+import com.tyron.builder.internal.execution.history.AfterExecutionState;
 
 import java.util.Optional;
 

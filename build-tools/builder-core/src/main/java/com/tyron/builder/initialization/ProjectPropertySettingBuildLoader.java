@@ -1,26 +1,27 @@
 package com.tyron.builder.initialization;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
-import java.io.File;
-import java.util.Map;
-import java.util.Properties;
-
-import static com.google.common.collect.Maps.newHashMap;
-import static com.tyron.builder.api.internal.Cast.uncheckedCast;
 import static java.util.Collections.emptyMap;
 
-import com.tyron.builder.api.internal.GUtil;
+import com.google.common.collect.Maps;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.properties.GradleProperties;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Pair;
 import com.tyron.builder.internal.reflect.JavaPropertyReflectionUtil;
 import com.tyron.builder.internal.reflect.PropertyMutator;
 import com.tyron.builder.internal.resource.local.FileResourceListener;
+import com.tyron.builder.util.GUtil;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.util.Map;
+import java.util.Properties;
+
+import javax.annotation.Nullable;
 
 public class ProjectPropertySettingBuildLoader implements BuildLoader {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProjectPropertySettingBuildLoader.class);

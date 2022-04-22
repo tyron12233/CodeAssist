@@ -2,7 +2,7 @@ package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.common.TestUtil;
 

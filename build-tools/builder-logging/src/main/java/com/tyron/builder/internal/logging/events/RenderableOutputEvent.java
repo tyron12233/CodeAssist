@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.events;
 
-import com.tyron.builder.internal.graph.StyledTextOutput;
-import com.tyron.builder.api.internal.operations.OperationIdentifier;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.api.logging.LogLevel;
 
 import org.jetbrains.annotations.Nullable;

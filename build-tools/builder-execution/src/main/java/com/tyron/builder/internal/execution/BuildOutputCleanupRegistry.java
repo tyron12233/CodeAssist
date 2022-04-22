@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.execution;
 
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 import java.io.File;
 import java.util.Set;

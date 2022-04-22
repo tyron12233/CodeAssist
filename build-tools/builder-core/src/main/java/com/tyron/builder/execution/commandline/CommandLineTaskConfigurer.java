@@ -3,7 +3,7 @@ package com.tyron.builder.execution.commandline;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.tasks.options.OptionDescriptor;
 import com.tyron.builder.api.internal.tasks.options.OptionReader;
-import com.tyron.builder.api.internal.typeconversion.TypeConversionException;
+import com.tyron.builder.internal.typeconversion.TypeConversionException;
 import com.tyron.builder.cli.CommandLineArgumentException;
 import com.tyron.builder.cli.CommandLineOption;
 import com.tyron.builder.cli.CommandLineParser;

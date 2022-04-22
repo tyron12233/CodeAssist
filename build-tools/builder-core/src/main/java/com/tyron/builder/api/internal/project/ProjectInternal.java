@@ -5,10 +5,11 @@ import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
-import com.tyron.builder.api.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
-import com.tyron.builder.api.project.BuildProject;
+import com.tyron.builder.api.BuildProject;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -86,4 +87,6 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
 
     @Override
     ExtensionContainerInternal getExtensions();
+
+    DependencyMetaDataProvider getDependencyMetaDataProvider();
 }
