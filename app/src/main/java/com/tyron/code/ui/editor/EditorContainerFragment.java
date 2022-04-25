@@ -352,7 +352,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     @Nullable
     @Override
     public Context getContext() {
-        Context originalContext = getContext();
+        Context originalContext = super.getContext();
         if (originalContext != null && !(originalContext instanceof DataContext)) {
             return new DataContext(originalContext);
         }
