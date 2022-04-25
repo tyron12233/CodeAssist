@@ -113,7 +113,7 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
             return;
         }
         Content text = mEditor.getText();
-        if (text.getCursor().isSelected() || checkNoCompletion()) {
+        if (text.getCursor().isSelected()) {
             hide();
             return;
         }
