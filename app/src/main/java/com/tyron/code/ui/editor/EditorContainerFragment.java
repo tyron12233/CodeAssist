@@ -88,6 +88,8 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         }
     };
 
+    private DataContext mDataContext;
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -345,7 +347,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     @Override
     public void onDestroy() {
         super.onDestroy();
-
+        mDataContext = null;
         ApplicationLoader.getDefaultPreferences().unregisterOnSharedPreferenceChangeListener(this);
     }
 
@@ -353,9 +355,13 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     @Override
     public Context getContext() {
         Context originalContext = super.getContext();
-        if (originalContext != null && !(originalContext instanceof DataContext)) {
-            return new DataContext(originalContext);
+        if (originalContext == null) {
+            return null;
         }
-        return originalContext;
+
+        if (mDataContext == null) {
+            mDataContext = new DataContext(originalContext);
+        }
+        return mDataContext;
     }
 }
