@@ -224,38 +224,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
             List<FileEditor> oldList = new ArrayList<>(mEditors);
             mEditors.clear();
             mEditors.addAll(files);
-            PageAdapter.getDiff(oldList, files, new ListUpdateCallback() {
-                @Override
-                public void onInserted(int position, int count) {
-                    FileEditor editor = files.get(position);
-                    TabLayout.Tab tab = getTabLayout(editor);
-                    mTabLayout.addTab(tab, position, false);
-                    mTabLayout.selectTab(tab, true);
-                }
-
-                @Override
-                public void onRemoved(int position, int count) {
-                    for (int i = 0; i < count; i++) {
-                        mTabLayout.removeTabAt(position);
-                    }
-                }
-
-                @Override
-                public void onMoved(int fromPosition, int toPosition) {
-
-                }
-
-                @Override
-                public void onChanged(int position, int count, @Nullable Object payload) {
-
-                }
-
-                private TabLayout.Tab getTabLayout(FileEditor editor) {
-                    TabLayout.Tab tab = mTabLayout.newTab();
-                    tab.setText(editor.getFile().getName());
-                    return tab;
-                }
-            });
+            EditorTabUtil.updateTabLayout(mTabLayout, oldList, files);
         });
 
         mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), position -> {
@@ -289,8 +258,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         int behaviorState = state.getInt("bottom_sheet_state", BottomSheetBehavior.STATE_COLLAPSED);
         mMainViewModel.setBottomSheetState(behaviorState);
         Bundle floatOffset = new Bundle();
-        floatOffset
-                .putFloat("offset", behaviorState == BottomSheetBehavior.STATE_EXPANDED ? 1 : 0f);
+        floatOffset.putFloat("offset", behaviorState == BottomSheetBehavior.STATE_EXPANDED ? 1 : 0f);
         getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, floatOffset);
     }
 
