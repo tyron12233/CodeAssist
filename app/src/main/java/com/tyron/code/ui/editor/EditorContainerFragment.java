@@ -120,8 +120,10 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY,
                 mMainViewModel.getCurrentFileEditor());
 
-        CoordinatorLayout root = (CoordinatorLayout) inflater
-                .inflate(R.layout.editor_container_fragment, container, false);
+        CoordinatorLayout root = (CoordinatorLayout) inflater.inflate(R.layout.editor_container_fragment,
+                container,
+                false
+        );
         mContainer = root.findViewById(R.id.viewpager);
         ((FileEditorManagerImpl) FileEditorManagerImpl.getInstance())
                 .attach(mMainViewModel, getChildFragmentManager());
@@ -218,13 +220,17 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         ApplicationLoader.getDefaultPreferences().registerOnSharedPreferenceChangeListener(this);
 
         mMainViewModel.getFiles().observe(getViewLifecycleOwner(), files -> {
-            if (files.isEmpty()) {
-                mContainer.removeAllViews();
-            }
             List<FileEditor> oldList = new ArrayList<>(mEditors);
             mEditors.clear();
             mEditors.addAll(files);
-            EditorTabUtil.updateTabLayout(mTabLayout, oldList, files);
+
+            if (files.isEmpty()) {
+                mContainer.removeAllViews();
+                mTabLayout.removeAllTabs();
+                mMainViewModel.setCurrentPosition(-1);
+            } else {
+                EditorTabUtil.updateTabLayout(mTabLayout, oldList, files);
+            }
         });
 
         mMainViewModel.getCurrentPosition().observe(getViewLifecycleOwner(), position -> {
