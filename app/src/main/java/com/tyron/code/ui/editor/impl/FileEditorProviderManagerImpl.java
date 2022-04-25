@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 
 import com.tyron.code.ui.editor.impl.image.ImageEditorProvider;
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorProvider;
+import com.tyron.code.ui.editor.impl.text.squircle.SquircleEditorProvider;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorProvider;
 import com.tyron.fileeditor.api.FileEditorProvider;
 import com.tyron.fileeditor.api.FileEditorProviderManager;
@@ -36,6 +37,7 @@ public class FileEditorProviderManagerImpl implements FileEditorProviderManager 
         registerProvider(new RosemoeEditorProvider());
         registerProvider(new LayoutTextEditorProvider());
         registerProvider(new ImageEditorProvider());
+        registerProvider(new SquircleEditorProvider());
     }
 
     @Override

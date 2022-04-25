@@ -4,26 +4,16 @@ import android.content.Context;
 import android.view.View;
 
 import androidx.annotation.NonNull;
-import androidx.fragment.app.Fragment;
 
-import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.Module;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.editor.Content;
 import com.tyron.fileeditor.api.FileDocumentManager;
-import com.tyron.fileeditor.api.FileEditorManager;
 import com.tyron.fileeditor.api.TextEditor;
 
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
-import org.apache.commons.vfs2.FileSystemManager;
 import org.apache.commons.vfs2.VFS;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.Objects;
 
 public class RosemoeCodeEditor implements TextEditor {
@@ -69,18 +59,8 @@ public class RosemoeCodeEditor implements TextEditor {
 
     @Override
     public boolean isModified() {
-        Project project = ProjectManager.getInstance().getCurrentProject();
-        if (project != null) {
-            Module module = project.getModule(mFile);
-            if (module != null) {
-                Instant diskModified = Instant.ofEpochMilli(mFile.lastModified());
-                Instant lastModified = module.getFileManager().getLastModified(mFile);
-                if (lastModified != null) {
-                    return lastModified.isAfter(diskModified);
-                }
-            }
-        }
-        return false;
+        FileDocumentManager instance = FileDocumentManager.getInstance();
+        return instance.isContentUnsaved(getContent());
     }
 
     @Override
