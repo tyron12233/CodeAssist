@@ -140,6 +140,13 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+
+        hideEditorWindows();
+    }
+
+    @Override
     public void setColorScheme(@NonNull EditorColorScheme colors) {
         super.setColorScheme(colors);
     }

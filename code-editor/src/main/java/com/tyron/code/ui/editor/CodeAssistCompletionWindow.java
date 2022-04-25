@@ -105,6 +105,8 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
             ProgressManager.getInstance().cancelThread(mThread);
         }
         super.cancelCompletion();
+
+        getPopup().dismiss();
     }
 
     @Override
