@@ -47,6 +47,7 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.UniqueNameBuilder;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.editor.util.EditorUtil;
 import com.tyron.fileeditor.api.FileDocumentManager;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.fileeditor.api.FileEditorManager;
@@ -56,8 +57,10 @@ import org.apache.commons.vfs2.FileObject;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class EditorContainerFragment extends Fragment implements FileListener,
         ProjectManager.OnProjectOpenListener, SharedPreferences.OnSharedPreferenceChangeListener {
@@ -183,39 +186,23 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     }
 
     private void updateTab(TabLayout.Tab tab, int pos) {
+        List<FileEditor> fileEditors = mMainViewModel.getFiles().getValue();
+        if (fileEditors == null) {
+            fileEditors = Collections.emptyList();
+        }
+        List<File> files = fileEditors.stream().map(FileEditor::getFile).collect(Collectors.toList());
         FileEditor currentEditor =
-                Objects.requireNonNull(mMainViewModel.getFiles().getValue()).get(pos);
+                Objects.requireNonNull(fileEditors).get(pos);
         File current = currentEditor.getFile();
 
-        String text = current != null ? getUniqueTabTitle(current) : "Unknown";
+        String text = current != null ?
+                EditorUtil.getUniqueTabTitle(current, files)
+                : "Unknown";
         if (currentEditor.isModified()) {
             text = "*" + text;
         }
 
         tab.setText(text);
-    }
-
-    private String getUniqueTabTitle(@NonNull File currentFile) {
-        if (!pref.getBoolean(SharedPreferenceKeys.EDITOR_TAB_UNIQUE_FILE_NAME, true)) {
-            return currentFile.getName();
-        }
-
-        int sameFileNameCount = 0;
-        UniqueNameBuilder<File> builder = new UniqueNameBuilder<>("", "/");
-
-        for (FileEditor fileEditor : Objects.requireNonNull(mMainViewModel.getFiles().getValue())) {
-            File openFile = fileEditor.getFile();
-            if (openFile.getName().equals(currentFile.getName())) {
-                sameFileNameCount++;
-            }
-            builder.addPath(openFile, openFile.getPath());
-        }
-
-        if (sameFileNameCount > 1) {
-            return builder.getShortPath(currentFile);
-        } else {
-            return currentFile.getName();
-        }
     }
 
     @Override
