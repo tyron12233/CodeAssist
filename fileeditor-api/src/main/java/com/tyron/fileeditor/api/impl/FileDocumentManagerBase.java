@@ -21,7 +21,7 @@ public abstract class FileDocumentManagerBase extends FileDocumentManager {
 
     private static final String FILE_OBJECT_KEY = "fileObject";
 
-    private static final Object lock = new Object();
+    private final Object lock = new Object();
 
     public FileDocumentManagerBase() {
 
@@ -70,7 +70,7 @@ public abstract class FileDocumentManagerBase extends FileDocumentManager {
     @Nullable
     @Override
     public Content getCachedDocument(@NotNull FileObject file) {
-        return null;
+        return documentCache.getIfPresent(file);
     }
 
     @Nullable
