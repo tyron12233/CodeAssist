@@ -122,4 +122,9 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
     public void saveContent(@NotNull Content content) {
         saveDocument(content, true);
     }
+
+    @Override
+    public boolean isContentUnsaved(@NotNull Content content) {
+        return unsavedContents.contains(content);
+    }
 }

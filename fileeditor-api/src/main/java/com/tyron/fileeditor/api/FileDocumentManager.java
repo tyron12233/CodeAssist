@@ -52,4 +52,6 @@ public abstract class FileDocumentManager {
      * @param content the document to save.
      */
     public abstract void saveContent(@NotNull Content content);
+
+    public abstract boolean isContentUnsaved(@NotNull Content content);
 }
