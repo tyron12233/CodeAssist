@@ -1,6 +1,7 @@
 package com.tyron.code.ui.editor;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -29,6 +30,7 @@ import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
+import com.tyron.actions.menu.ActionPopupMenu;
 import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.FileManager;
@@ -107,6 +109,15 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     public View onCreateView(@NonNull LayoutInflater inflater,
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
+        // safe cast, getContext() ensures it returns a DataContext
+        DataContext dataContext = (DataContext) requireContext();
+        dataContext.putData(CommonDataKeys.PROJECT,
+                ProjectManager.getInstance().getCurrentProject());
+        dataContext.putData(CommonDataKeys.FRAGMENT, EditorContainerFragment.this);
+        dataContext.putData(MainFragment.MAIN_VIEW_MODEL_KEY, mMainViewModel);
+        dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY,
+                mMainViewModel.getCurrentFileEditor());
+
         CoordinatorLayout root = (CoordinatorLayout) inflater
                 .inflate(R.layout.editor_container_fragment, container, false);
         mContainer = root.findViewById(R.id.viewpager);
@@ -125,24 +136,11 @@ public class EditorContainerFragment extends Fragment implements FileListener,
 
             @Override
             public void onTabReselected(TabLayout.Tab p1) {
-                PopupMenu popup = new PopupMenu(requireActivity(), p1.view);
-
-                DataContext dataContext = DataContextUtils.getDataContext(mTabLayout);
-                dataContext.putData(CommonDataKeys.PROJECT,
-                        ProjectManager.getInstance().getCurrentProject());
-                dataContext.putData(CommonDataKeys.FRAGMENT, EditorContainerFragment.this);
-                dataContext.putData(MainFragment.MAIN_VIEW_MODEL_KEY, mMainViewModel);
-                dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY,
-                        mMainViewModel.getCurrentFileEditor());
-
-                ActionManager.getInstance().fillMenu(
-                        dataContext,
-                        popup.getMenu(),
-                        ActionPlaces.EDITOR_TAB,
-                        true,
-                        false
+                ActionPopupMenu.createAndShow(
+                        p1.view,
+                        (DataContext) requireContext(),
+                        ActionPlaces.EDITOR_TAB
                 );
-                popup.show();
             }
 
             @Override
@@ -332,14 +330,14 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         updateTab(tab, found);
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
         switch (key) {
             case SharedPreferenceKeys.EDITOR_TAB_UNIQUE_FILE_NAME:
-//                if (mAdapter != null) {
-//                    mAdapter.notifyDataSetChanged();
-//                }
+                for (int i = 0; i < mTabLayout.getTabCount(); i++) {
+                    TabLayout.Tab tab = mTabLayout.getTabAt(i);
+                    updateTab(tab, i);
+                }
                 break;
         }
     }
@@ -349,5 +347,15 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         super.onDestroy();
 
         ApplicationLoader.getDefaultPreferences().unregisterOnSharedPreferenceChangeListener(this);
+    }
+
+    @Nullable
+    @Override
+    public Context getContext() {
+        Context originalContext = getContext();
+        if (originalContext != null && !(originalContext instanceof DataContext)) {
+            return new DataContext(originalContext);
+        }
+        return originalContext;
     }
 }
