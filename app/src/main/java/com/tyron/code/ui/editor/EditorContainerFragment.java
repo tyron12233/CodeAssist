@@ -46,9 +46,13 @@ import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.code.util.Listeners;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.UniqueNameBuilder;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.editor.Content;
+import com.tyron.editor.event.ContentEvent;
+import com.tyron.editor.event.ContentListener;
 import com.tyron.editor.util.EditorUtil;
 import com.tyron.fileeditor.api.FileDocumentManager;
 import com.tyron.fileeditor.api.FileEditor;
@@ -56,6 +60,8 @@ import com.tyron.fileeditor.api.FileEditorManager;
 import com.tyron.fileeditor.api.TextEditor;
 
 import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
+import org.apache.commons.vfs2.VFS;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -148,7 +154,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
 
             @Override
             public void onTabSelected(TabLayout.Tab p1) {
-                updateTab(p1, p1.getPosition());
+                updateTab(p1.getPosition());
                 mMainViewModel.setCurrentPosition(p1.getPosition(), true);
 
                 ProgressManager.getInstance().runLater(() -> getParentFragmentManager()
@@ -185,7 +191,12 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         return root;
     }
 
-    private void updateTab(TabLayout.Tab tab, int pos) {
+    private void updateTab(int pos) {
+        TabLayout.Tab tab = mTabLayout.getTabAt(pos);
+        if (tab == null) {
+            return;
+        }
+
         List<FileEditor> fileEditors = mMainViewModel.getFiles().getValue();
         if (fileEditors == null) {
             fileEditors = Collections.emptyList();
@@ -249,6 +260,29 @@ public class EditorContainerFragment extends Fragment implements FileListener,
             transition.setDuration(150L);
             TransitionManager.beginDelayedTransition(mContainer, transition);
             mContainer.addView(currentFileEditor.getView());
+
+            try {
+                File file = currentFileEditor.getFile();
+                FileObject fileObject = VFS.getManager().toFileObject(file);
+                Content content = FileDocumentManager.getInstance().getContent(fileObject);
+
+                if (content != null) {
+                    Listeners.registerListener(new ContentListener() {
+                        @Override
+                        public void contentChanged(@NonNull ContentEvent event) {
+                            FileEditor fileEditor = mMainViewModel.getCurrentFileEditor();
+                            int index = mEditors.indexOf(fileEditor);
+                            if (index != -1) {
+                                updateTab(index);
+                            }
+                        }
+                    }, getViewLifecycleOwner(), content::addContentListener, content::removeContentListener);
+                }
+            } catch (FileSystemException e) {
+                e.printStackTrace();
+
+                // safe to ignore here, just don't register the listener then
+            }
         });
 
         mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), state -> {
@@ -342,7 +376,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         if (tab == null) {
             return;
         }
-        updateTab(tab, found);
+        updateTab(found);
     }
 
     @Override
@@ -350,8 +384,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         switch (key) {
             case SharedPreferenceKeys.EDITOR_TAB_UNIQUE_FILE_NAME:
                 for (int i = 0; i < mTabLayout.getTabCount(); i++) {
-                    TabLayout.Tab tab = mTabLayout.getTabAt(i);
-                    updateTab(tab, i);
+                    updateTab(i);
                 }
                 break;
         }
