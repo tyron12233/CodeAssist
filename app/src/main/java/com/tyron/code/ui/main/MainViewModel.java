@@ -115,10 +115,6 @@ public class MainViewModel extends ViewModel {
     }
 
     public void setCurrentPosition(int pos, boolean update) {
-        Integer value = currentPosition.getValue();
-        if (value != null && value.equals(pos)) {
-            return;
-        }
         currentPosition.setValue(pos, update);
     }
 

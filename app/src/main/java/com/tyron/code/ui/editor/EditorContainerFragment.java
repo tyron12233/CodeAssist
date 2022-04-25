@@ -170,8 +170,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
                 if (isAdded()) {
                     Bundle bundle = new Bundle();
                     bundle.putFloat("offset", slideOffset);
-                    getChildFragmentManager()
-                            .setFragmentResult(BottomEditorFragment.OFFSET_KEY, bundle);
+                    getChildFragmentManager().setFragmentResult(BottomEditorFragment.OFFSET_KEY, bundle);
                 }
             }
         });
@@ -242,7 +241,13 @@ public class EditorContainerFragment extends Fragment implements FileListener,
             if (position == -1 || currentFileEditor == null) {
                 return;
             }
-            TransitionManager.beginDelayedTransition(mContainer, new MaterialFadeThrough());
+
+            if (mTabLayout.getSelectedTabPosition() != position) {
+                mTabLayout.selectTab(mTabLayout.getTabAt(position), true);
+            }
+            MaterialFadeThrough transition = new MaterialFadeThrough();
+            transition.setDuration(150L);
+            TransitionManager.beginDelayedTransition(mContainer, transition);
             mContainer.addView(currentFileEditor.getView());
         });
 
