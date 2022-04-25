@@ -14,6 +14,7 @@ import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 import com.tyron.kotlin_completion.CompletionEngine;
 
@@ -61,7 +62,7 @@ public class KotlinAnalyzer extends DiagnosticTextmateAnalyzer {
     }
 
     @Override
-    public void analyzeInBackground(CharSequence content) {
+    public void analyzeInBackground(Content content) {
 
         // remove this when kotlin analysis is stable
         if (true) {

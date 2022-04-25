@@ -9,6 +9,7 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.language.DiagnosticSpanMapUpdater;
 import com.tyron.code.language.HighlightUtil;
+import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
 import java.io.InputStream;
@@ -22,7 +23,6 @@ import io.github.rosemoe.sora.lang.analysis.StyleReceiver;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.CharPosition;
-import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.textmate.core.grammar.StackElement;
 import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
@@ -76,7 +76,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
             if (!mShouldAnalyzeInBg) {
                 mShouldAnalyzeInBg = true;
             } else {
-                analyzeInBackground(ref.getReference());
+                analyzeInBackground((Content) ref.getReference());
             }
         }
 
@@ -97,7 +97,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
             if (!mShouldAnalyzeInBg) {
                 mShouldAnalyzeInBg = true;
             } else {
-                analyzeInBackground(ref.getReference());
+                analyzeInBackground((Content) ref.getReference());
             }
         }
 
@@ -136,7 +136,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         super.destroy();
     }
 
-    public abstract void analyzeInBackground(CharSequence contents);
+    public abstract void analyzeInBackground(Content contents);
 
     public void rerunWithoutBg() {
         mShouldAnalyzeInBg = false;
@@ -146,7 +146,7 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
     public void rerunWithBg() {
         super.rerun();
 
-        analyzeInBackground(ref.getReference());
+        analyzeInBackground((Content) ref.getReference());
     }
 
     public static class StyleReceiverInterceptor implements StyleReceiver {
