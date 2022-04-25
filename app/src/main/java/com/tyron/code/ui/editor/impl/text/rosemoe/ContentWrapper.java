@@ -3,119 +3,149 @@ package com.tyron.code.ui.editor.impl.text.rosemoe;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.editor.Content;
+import com.google.common.collect.Maps;
+import com.tyron.editor.AbstractContent;
+import com.tyron.editor.event.ContentEvent;
+import com.tyron.editor.event.ContentListener;
+import com.tyron.editor.event.impl.ContentEventImpl;
 
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.Content;
 
-public class ContentWrapper implements Content {
+public class ContentWrapper extends Content implements com.tyron.editor.Content {
 
-    private final io.github.rosemoe.sora.text.Content mContent;
+    private AtomicInteger sequence;
 
-    public ContentWrapper(io.github.rosemoe.sora.text.Content content) {
-        mContent = content;
+    public ContentWrapper() {
+
     }
 
-    @Override
-    public int length() {
-        return mContent.length();
+    public ContentWrapper(CharSequence text) {
+        super(text, true);
     }
 
-    @Override
-    public char charAt(int index) {
-        return mContent.charAt(index);
-    }
-
-    @NonNull
-    @Override
-    public CharSequence subSequence(int start, int end) {
-        return mContent.subSequence(start, end);
-    }
-
-    @NonNull
-    @Override
-    public IntStream chars() {
-        return mContent.chars();
-    }
-
-    @NonNull
-    @Override
-    public IntStream codePoints() {
-        return mContent.codePoints();
-    }
+    private long modificationStamp = 0;
+    private final Map<String, Object> dataMap = Maps.newConcurrentMap();
+    private final List<ContentListener> contentListeners = new CopyOnWriteArrayList<>();
 
     @Override
-    public int hashCode() {
-        return mContent.hashCode();
-    }
-
-    @SuppressWarnings("EqualsWhichDoesntCheckParameterClass")
-    @Override
-    public boolean equals(@Nullable Object obj) {
-        return mContent.equals(obj);
-    }
-
-    @NonNull
-    @Override
-    public String toString() {
-        return mContent.toString();
-    }
-
-    @Override
-    public boolean canRedo() {
-        return mContent.canRedo();
-    }
-
-    @Override
-    public void redo() {
-        mContent.redo();
-    }
-
-    @Override
-    public boolean canUndo() {
-        return mContent.canUndo();
-    }
-
-    @Override
-    public void undo() {
-        mContent.undo();
-    }
-
-    @Override
-    public int getLineCount() {
-        return mContent.getLineCount();
-    }
-
-    @Override
-    public String getLineString(int line) {
-        return mContent.getLineString(line);
+    public void insert(int index, CharSequence text) {
+        CharPosition pos = getIndexer().getCharPosition(index);
+        insert(pos.line, pos.column, text);
     }
 
     @Override
     public void insert(int line, int column, CharSequence text) {
-        mContent.insert(line, column, text);
-    }
+        super.insert(line, column, text);
 
-    @Override
-    public void insert(int index, CharSequence string) {
-        CharPosition startPos = mContent.getIndexer()
-                .getCharPosition(index);
-        insert(startPos.getLine(), startPos.getColumn(), string);
-    }
-
-    @Override
-    public void delete(int start, int end) {
-        mContent.delete(start, end);
+        int offset = getCharIndex(line, column);
+        Content newText = this;
+        CharSequence newString = newText.subSequence(offset, offset + text.length());
+        updateText(newText, offset, "", newString, false, System.currentTimeMillis(), offset, 0,
+                offset);
     }
 
     @Override
     public void replace(int start, int end, CharSequence text) {
-        CharPosition startPos = mContent.getIndexer()
-                .getCharPosition(start);
-        CharPosition endPos = mContent.getIndexer()
-                .getCharPosition(end);
-        mContent.replace(startPos.getLine(), startPos.getColumn(),
-                         endPos.getLine(), endPos.getColumn(), text);
+        CharPosition startPos = getIndexer().getCharPosition(start);
+        CharPosition endPos = getIndexer().getCharPosition(end);
+        replace(startPos.line, startPos.column, endPos.line, endPos.column, text);
+    }
+
+    @Override
+    public void delete(int start, int end) {
+        CharPosition startPos = getIndexer().getCharPosition(start);
+        CharPosition endPos = getIndexer().getCharPosition(end);
+        delete(startPos.line, startPos.column, endPos.line, endPos.column);
+    }
+
+    @Override
+    public void delete(int startLine, int columnOnStartLine, int endLine, int columnOnEndLine) {
+        // need to get the offset before deleting since the end offset will be invalid
+        // if it has been deleted before
+        int startOffset = getCharIndex(startLine, columnOnStartLine);
+        int endOffset = getCharIndex(endLine, columnOnEndLine);
+        CharSequence oldString = subSequence(startOffset, endOffset);
+
+        super.delete(startLine, columnOnStartLine, endLine, columnOnEndLine);
+
+        Content newText = this;
+        updateText(newText, startOffset, oldString, "", false, System.currentTimeMillis(),
+                startOffset, endOffset - startOffset, startOffset);
+    }
+
+    private AtomicInteger getSequence() {
+        if (sequence == null) {
+            sequence = new AtomicInteger(0);
+        }
+        return sequence;
+    }
+
+    protected void updateText(@NonNull CharSequence text,
+                              int offset,
+                              @NonNull CharSequence oldString,
+                              @NonNull CharSequence newString,
+                              boolean wholeTextReplaced,
+                              long newModificationStamp,
+                              int initialStartOffset,
+                              int initialOldLength,
+                              int moveOffset) {
+        assert moveOffset >= 0 && moveOffset <= length() : "Invalid moveOffset: " + moveOffset;
+        ContentEvent event =
+                new ContentEventImpl(this, offset, oldString, newString, modificationStamp,
+                        wholeTextReplaced, initialStartOffset, initialOldLength, moveOffset);
+        getSequence().incrementAndGet();
+
+        CharSequence prevText = this;
+        changedUpdate(event, newModificationStamp, prevText);
+    }
+
+    protected void changedUpdate(@NonNull ContentEvent event,
+                                 long newModificationStamp,
+                                 @NonNull CharSequence prevText) {
+//        assert event.getOldFragment().length() == event.getOldLength();
+//        assert event.getNewFragment().length() == event.getNewLength();
+        if (contentListeners == null) {
+            return;
+        }
+        for (ContentListener contentListener : contentListeners) {
+            contentListener.contentChanged(event);
+        }
+    }
+
+    @Override
+    public void setData(String key, Object object) {
+        dataMap.put(key, object);
+    }
+
+    @Override
+    public Object getData(String key) {
+        return dataMap.get(key);
+    }
+
+    @Override
+    public void addContentListener(ContentListener listener) {
+        contentListeners.add(listener);
+    }
+
+    @Override
+    public void removeContentListener(ContentListener listener) {
+        contentListeners.remove(listener);
+    }
+
+    @Override
+    public void setModificationStamp(long stamp) {
+        modificationStamp = stamp;
+    }
+
+    @Override
+    public long getModificationStamp() {
+        return modificationStamp;
     }
 }

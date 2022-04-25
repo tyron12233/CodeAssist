@@ -14,8 +14,8 @@ public abstract class FileEditorManager {
      * @param state the saved state of the editor
      * @return the editor
      */
-    public FileEditor openFile(FileEditorSavedState state) {
-        FileEditor[] fileEditors = getFileEditors(state.getFile());
+    public FileEditor openFile(Context context, FileEditorSavedState state) {
+        FileEditor[] fileEditors = getFileEditors(context, state.getFile());
         for (FileEditor fileEditor : fileEditors) {
             if (state.getName().equals(fileEditor.getName())) {
                 return fileEditor;
@@ -45,7 +45,7 @@ public abstract class FileEditorManager {
     @NonNull
     public abstract FileEditor[] openFile(@NonNull Context context, @NonNull File file, boolean focus);
 
-    public abstract FileEditor[] getFileEditors(@NonNull File file);
+    public abstract FileEditor[] getFileEditors(Context context, @NonNull File file);
 
     public abstract void openFileEditor(@NonNull FileEditor fileEditor);
 

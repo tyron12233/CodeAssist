@@ -71,14 +71,14 @@ public class AppLogFragment extends Fragment
                 if (getContext() != null) {
                     FileEditorManager manager = FileEditorManagerImpl.getInstance();
                     manager.openFile(requireContext(), diagnostic.getSource(), it -> {
-                        if (diagnostic.getLineNumber() > 0 && diagnostic.getColumnNumber() > 0) {
-                            Bundle bundle = new Bundle(it.getFragment()
-                                                               .getArguments());
-                            bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
-                            bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
-                            it.getFragment().setArguments(bundle);
-                            manager.openFileEditor(it);
-                        }
+//                        if (diagnostic.getLineNumber() > 0 && diagnostic.getColumnNumber() > 0) {
+//                            Bundle bundle = new Bundle(it.getFragment()
+//                                                               .getArguments());
+//                            bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
+//                            bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
+//                            it.getFragment().setArguments(bundle);
+//                            manager.openFileEditor(it);
+//                        }
                     });
                 }
             }

@@ -28,7 +28,7 @@
             app:tabGravity="start"
             app:tabTextAppearance="@style/TabLayoutText" />
 
-        <androidx.viewpager2.widget.ViewPager2
+        <FrameLayout
             android:id="@+id/viewpager"
             android:layout_width="match_parent"
             android:layout_height="0dp"

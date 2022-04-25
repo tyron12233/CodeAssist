@@ -41,20 +41,20 @@ public class PreviewLayoutAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        FileEditor fileEditor = e.getRequiredData(CommonDataKeys.FILE_EDITOR_KEY);
-        Fragment fragment = fileEditor.getFragment();
-        if (fragment == null || fragment.isDetached() || fragment.getActivity() == null) {
-            return;
-        }
-        FragmentActivity activity = fragment.requireActivity();
-        View currentFocus = activity.getCurrentFocus();
-        if (currentFocus == null) {
-            currentFocus = new View(activity);
-        }
-        AndroidUtilities.hideKeyboard(currentFocus);
-
-        if (fragment instanceof LayoutTextEditorFragment) {
-            ((LayoutTextEditorFragment) fragment).preview();
-        }
+//        FileEditor fileEditor = e.getRequiredData(CommonDataKeys.FILE_EDITOR_KEY);
+//        Fragment fragment = fileEditor.getFragment();
+//        if (fragment == null || fragment.isDetached() || fragment.getActivity() == null) {
+//            return;
+//        }
+//        FragmentActivity activity = fragment.requireActivity();
+//        View currentFocus = activity.getCurrentFocus();
+//        if (currentFocus == null) {
+//            currentFocus = new View(activity);
+//        }
+//        AndroidUtilities.hideKeyboard(currentFocus);
+//
+//        if (fragment instanceof LayoutTextEditorFragment) {
+//            ((LayoutTextEditorFragment) fragment).preview();
+//        }
     }
 }

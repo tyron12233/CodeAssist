@@ -64,27 +64,27 @@ public class SaveAction extends AnAction {
         if (editors == null) {
             return;
         }
+//
+//        Stream<FileEditor> validEditors = editors.stream()
+//                        .filter(it -> it.getFragment() instanceof Savable)
+//                        .filter(it -> ((Savable) it.getFragment()).canSave());
+//        List<File> filesToSave = validEditors
+//                .map(FileEditor::getFile)
+//                .collect(Collectors.toList());
 
-        Stream<FileEditor> validEditors = editors.stream()
-                        .filter(it -> it.getFragment() instanceof Savable)
-                        .filter(it -> ((Savable) it.getFragment()).canSave());
-        List<File> filesToSave = validEditors
-                .map(FileEditor::getFile)
-                .collect(Collectors.toList());
-
-        Project project = e.getRequiredData(CommonDataKeys.PROJECT);
-        ProgressManager.getInstance()
-                .runNonCancelableAsync(() -> {
-                    List<IOException> exceptions = saveFiles(project, filesToSave);
-                    if (!exceptions.isEmpty()) {
-                        new MaterialAlertDialogBuilder(e.getDataContext()).setTitle(R.string.error)
-                                .setPositiveButton(android.R.string.ok, null)
-                                .setMessage(exceptions.stream()
-                                        .map(IOException::getMessage)
-                                        .collect(Collectors.joining("\n\n")))
-                                .show();
-                    }
-                });
+//        Project project = e.getRequiredData(CommonDataKeys.PROJECT);
+//        ProgressManager.getInstance()
+//                .runNonCancelableAsync(() -> {
+//                    List<IOException> exceptions = saveFiles(project, filesToSave);
+//                    if (!exceptions.isEmpty()) {
+//                        new MaterialAlertDialogBuilder(e.getDataContext()).setTitle(R.string.error)
+//                                .setPositiveButton(android.R.string.ok, null)
+//                                .setMessage(exceptions.stream()
+//                                        .map(IOException::getMessage)
+//                                        .collect(Collectors.joining("\n\n")))
+//                                .show();
+//                    }
+//                });
     }
 
     @WorkerThread

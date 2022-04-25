@@ -20,6 +20,7 @@ import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.language.EditorFormatter;
 import com.tyron.code.analyzer.DiagnosticTextmateAnalyzer;
 import com.tyron.code.language.xml.LanguageXML;
+import com.tyron.code.ui.editor.impl.text.rosemoe.window.ActionsWindow;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.model.XmlCompletionType;
@@ -130,10 +131,12 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     private void init() {
+        setColorScheme(EditorUtil.getDefaultColorScheme(getContext()));
+
         mCompletionWindow = new CodeAssistCompletionWindow(this);
         mCompletionWindow.setAdapter(new CodeAssistCompletionAdapter());
         replaceComponent(EditorAutoCompletion.class, mCompletionWindow);
-        replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
+        replaceComponent(EditorTextActionWindow.class, new ActionsWindow(this));
     }
 
     @Override
@@ -401,7 +404,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public Content getContent() {
-        return new ContentWrapper(CodeEditorView.this.getText());
+        return (Content) getText();
     }
 
     /**
