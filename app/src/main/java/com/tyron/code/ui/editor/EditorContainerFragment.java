@@ -117,10 +117,9 @@ public class EditorContainerFragment extends Fragment implements FileListener,
                 ProjectManager.getInstance().getCurrentProject());
         dataContext.putData(CommonDataKeys.FRAGMENT, EditorContainerFragment.this);
         dataContext.putData(MainFragment.MAIN_VIEW_MODEL_KEY, mMainViewModel);
-        dataContext.putData(CommonDataKeys.FILE_EDITOR_KEY,
-                mMainViewModel.getCurrentFileEditor());
 
-        CoordinatorLayout root = (CoordinatorLayout) inflater.inflate(R.layout.editor_container_fragment,
+        CoordinatorLayout root = (CoordinatorLayout) inflater.inflate(
+                R.layout.editor_container_fragment,
                 container,
                 false
         );
@@ -224,11 +223,14 @@ public class EditorContainerFragment extends Fragment implements FileListener,
             mEditors.clear();
             mEditors.addAll(files);
 
+            TransitionManager.beginDelayedTransition(mContainer, new MaterialFadeThrough());
             if (files.isEmpty()) {
                 mContainer.removeAllViews();
                 mTabLayout.removeAllTabs();
+                mTabLayout.setVisibility(View.GONE);
                 mMainViewModel.setCurrentPosition(-1);
             } else {
+                mTabLayout.setVisibility(View.VISIBLE);
                 EditorTabUtil.updateTabLayout(mTabLayout, oldList, files);
             }
         });

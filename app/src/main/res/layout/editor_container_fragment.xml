@@ -26,6 +26,7 @@
             app:tabInlineLabel="true"
             app:tabMode="scrollable"
             app:tabGravity="start"
+            android:visibility="gone"
             app:tabTextAppearance="@style/TabLayoutText" />
 
         <FrameLayout
