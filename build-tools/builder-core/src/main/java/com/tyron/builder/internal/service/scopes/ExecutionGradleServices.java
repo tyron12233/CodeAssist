@@ -138,7 +138,7 @@ public class ExecutionGradleServices {
                 buildOperationExecutor,
                 temporaryFileProvider,
                 true,
-                true,
+                false,
                 true,
                 fileSystemAccess,
                 buildCacheEntryPacker,

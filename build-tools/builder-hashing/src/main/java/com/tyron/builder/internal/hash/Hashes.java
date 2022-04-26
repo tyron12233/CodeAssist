@@ -88,7 +88,7 @@ public class Hashes {
 
             @Override
             public void putHash(HashCode hashCode) {
-                hasher.putBytes(hashCode.asBytes());
+                Hashes.putHash(hasher, hashCode);
             }
 
             @Override

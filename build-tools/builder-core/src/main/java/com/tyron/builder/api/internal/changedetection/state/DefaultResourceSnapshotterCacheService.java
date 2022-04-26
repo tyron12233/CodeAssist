@@ -57,8 +57,8 @@ public class DefaultResourceSnapshotterCacheService implements ResourceSnapshott
 
     private static HashCode resourceHashCacheKey(HashCode contentHash, HashCode configurationHash) {
         Hasher hasher = Hashes.newHasher();
-        hasher.putBytes(configurationHash.asBytes());
-        hasher.putBytes(contentHash.asBytes());
+        Hashes.putHash(hasher, configurationHash);
+        Hashes.putHash(hasher, contentHash);
         return hasher.hash();
     }
 }

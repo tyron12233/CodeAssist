@@ -1,6 +1,7 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.hash.HashCode;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.AbstractTask;
@@ -9,6 +10,8 @@ import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
+import com.tyron.builder.internal.hash.Hashes;
+import com.tyron.builder.internal.hash.PrimitiveHasher;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
@@ -45,6 +48,7 @@ import com.tyron.builder.internal.logging.slf4j.DefaultContextAwareTaskLogger;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -529,6 +533,18 @@ public class DefaultTask extends AbstractTask {
 //        } else {
 //
 //        }
+
+        if (action instanceof Proxy) {
+            Proxy proxy = ((Proxy) action);
+            int hash = 21;
+            for (Class<?> anInterface : proxy.getClass().getInterfaces()) {
+                hash *= anInterface.hashCode() + 3;
+            }
+            PrimitiveHasher primitiveHasher = Hashes.newPrimitiveHasher();
+            primitiveHasher.putInt(hash);
+            HashCode hashCode = primitiveHasher.hash();
+            return proxy.getClass().getName() + "_" + hashCode.toString();
+        }
 
         return action.getClass().getName();
     }
