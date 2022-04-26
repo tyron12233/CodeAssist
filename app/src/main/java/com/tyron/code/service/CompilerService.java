@@ -15,6 +15,7 @@ import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.execution.MultipleBuildFailures;
 import com.tyron.builder.initialization.ReportedException;
@@ -242,6 +243,7 @@ public class CompilerService extends Service {
     private void compileNew(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setProjectDir(project.getRootFile());
+        startParameter.setLogLevel(LogLevel.LIFECYCLE);
         startParameter.setGradleUserHomeDir(new File(project.getRootFile(), ".gradle"));
 
         ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
@@ -257,6 +259,7 @@ public class CompilerService extends Service {
         LoggingManagerInternal loggingManagerInternal =
                 projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
         loggingManagerInternal.attachConsole(standardOutputStream, errorOutputStream, ConsoleOutput.Plain);
+
         try {
             projectLauncher.execute();
             mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));

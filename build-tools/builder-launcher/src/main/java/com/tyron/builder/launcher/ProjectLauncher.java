@@ -15,6 +15,7 @@ import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
+import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.launcher.bootstrap.ExecutionListener;
 import com.tyron.builder.launcher.cli.ExceptionReportingAction;
 import com.tyron.builder.launcher.cli.RunBuildAction;
@@ -46,7 +47,8 @@ public abstract class ProjectLauncher {
     }
 
     private void prepare() {
-
+        VirtualFileSystem virtualFileSystem = getGlobalServices().get(VirtualFileSystem.class);
+        virtualFileSystem.invalidateAll();
     }
 
     public void execute() {
@@ -61,18 +63,10 @@ public abstract class ProjectLauncher {
         Action<Throwable> reporter = throwable -> {
 
         };
-        Action<ExecutionListener> executionListenerAction = executionListener -> {
-
-        };
         LoggingManagerInternal loggingManagerInternal =
                 globalServices.get(LoggingManagerInternal.class);
         ExceptionReportingAction action = new ExceptionReportingAction(reporter,
-                loggingManagerInternal, new Action<ExecutionListener>() {
-            @Override
-            public void execute(ExecutionListener executionListener) {
-                runnable.run();
-            }
-        });
+                loggingManagerInternal, executionListener -> runnable.run());
         action.execute(failure -> {
             throw new ReportedException();
         });
