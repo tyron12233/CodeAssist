@@ -1,0 +1,23 @@
+plugins {
+    id 'java-library'
+}
+
+apply plugin: 'kotlin'
+
+dependencies {
+    testImplementation 'junit:junit:4.+'
+
+    implementation 'androidx.annotation:annotation:1.3.0'
+
+    api 'com.google.guava:guava:30.1.1-jre'
+    api 'com.google.code.gson:gson:2.8.8'
+    api 'commons-io:commons-io:2.11.0'
+    api 'net.lingala.zip4j:zip4j:2.9.1'
+
+    compileOnly project(path: ':android-stubs')
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

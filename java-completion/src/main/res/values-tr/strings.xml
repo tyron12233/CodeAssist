@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="menu_diagnostic_info_title">Teşhis bilgisi</string>
+    <string name="menu_close">Kapat</string>
+    <string name="menu_quickfix_surround_try_catch_title">Try-catch ile sar</string>
+    <string name="menu_quickfix_add_catch_clause_title">Catch cümlesi ekle</string>
+    <string name="menu_quickfix_add_throws_title">\'throws\' ekle</string>
+    <string name="menu_quickfix_implement_abstract_methods_title">Abstract metodları uygula</string>
+    <string name="menu_quickfix_override_inherited_methods_title">Inherited metodları Override et</string>
+    <string name="menu_quickfix_introduce_local_variable_title">Yerel değişkeni tanımla</string>
+    <string name="import_class_name">%1s\'i içe aktar</string>
+    <string name="import_class_title">Sınıfı içe aktar</string>
+    <string name="menu_action_view_javadoc_title">Javadoc\'u göster</string>
+    <string name="menu_action_no_javadoc_message">Javadoc bulunamadı</string>
+</resources>

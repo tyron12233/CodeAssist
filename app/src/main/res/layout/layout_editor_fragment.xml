@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:weightSum="100"
+    android:background="?attr/colorSurface">
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/palette_container"
+        android:name="com.tyron.code.ui.layoutEditor.ViewPaletteFragment"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:layout_weight="35"
+        tools:layout="@layout/view_palette_fragment">
+
+    </androidx.fragment.app.FragmentContainerView>
+
+    <FrameLayout
+        android:id="@+id/editor_layout"
+        android:layout_width="0dp"
+        android:layout_weight="65"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.tyron.layoutpreview.BoundaryDrawingFrameLayout
+            android:id="@+id/editor_root"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:id="@+id/loading_root"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"/>
+
+            <TextView
+                android:id="@+id/loading_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                tools:text="arsing"/>
+        </LinearLayout>
+    </FrameLayout>
+
+</LinearLayout>

@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Hello world!</string>
+    <item name="paste" type="string">Вставить</item>
+    <item name="copy" type="string">Скопировать</item>
+    <item name="selectAll" formatted="true" type="string">Выбрать все</item>
+    <item name="saveToProject" translatable="false" type="string">Проект</item>
+    <item name="cut" type="string">Вырезать</item>
+    <item name="last" type="string">Последнее</item>
+    <item name="next" type="string">Далее</item>
+    <item name="replace" type="string">Заменить</item>
+    <item name="replaceAll" type="string">Заменить все</item>
+    <item name="replacement" type="string">Замена</item>
+    <item name="cancel" type="string">Отмена</item>
+    <item name="text_to_search" type="string">Текст для поиска</item>
+
+    <item name="more" translatable="false" type="string">Больше</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Сообщения</string>
+    <string name="sync_header">Синхронизация</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Своя подпись</string>
+    <string name="reply_title">Действие ответа по умолчанию</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Периодически синхронизировать Email</string>
+    <string name="attachment_title">Скачать входящие вложения</string>
+    <string name="attachment_summary_on">Автоматически загружать вложения для входящих писем
+    </string>
+    <string name="attachment_summary_off">Загружать вложения только по запросу вручную</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">Далее</string>
+    <string name="wizard_finish">Завершить</string>
+    <string name="wizard_cancel">Отмена</string>
+    <string name="wizard_templates">Шаблоны</string>
+    <string name="wizard_exit">Выход</string>
+    <string name="wizard_desc">Выберите из шаблонов активностей</string>
+    <string name="wizard_empty_templates">Шаблонов нет :(</string>
+    <string name="wizard_loading">Загрузка шаблонов</string>
+    <string name="wizard_app_name">Название приложения</string>
+    <string name="wizard_package_name">com.my.myapplication</string>
+    <string name="wizard_save_location">Путь для проекта</string>
+    <string name="wizard_language">Язык программирования</string>
+    <string name="wizard_minimum_sdk">Минимальное SDK</string>
+    <string name="wizard_create">Создать</string>
+    <string name="wizard_previous">Назад</string>
+    <string name="wizard_scoped_storage_info">Из-за ограничений хранилища Android 11 вы можете сохранять файлы только во внутреннем хранилище приложения.</string>
+    <string name="wizard_file_not_writable">Директория недоступна для записи, выберите другой путь</string>
+    <string name="wizard_path_exceeds">Путь к проекту превышает 240 символов.</string>
+    <string name="wizard_package_illegal">Имя пакета содержит недопустимые символы.</string>
+    <string name="wizard_package_too_short">Имя пакета слишком короткое.</string>
+    <string name="wizard_package_contains_spaces">Имя пакета не может содержать пробелы.</string>
+    <string name="wizard_error_name_empty">Название не может быть пустым.</string>
+    <string name="wizard_error_name_illegal">Название содержит недопустимые символы.</string>
+    <string name="wizard_package_empty">Имя пакета не может быть пустым.</string>
+    <string name="wizard_select_min_sdk">Выберите минимальную версию SDK.</string>
+    <string name="wizard_select_save_location">Выберите путь для проекта.</string>
+
+    <string name="menu_open_project">Открыть проект</string>
+    <string name="menu_create_project">Создать проект</string>
+    <string name="menu_run">Запустить</string>
+    <string name="menu_refresh">Обновить проект</string>
+    <string name="menu_library_manager">Библиотеки проекта</string>
+    <string name="menu_format">Форматировать код</string>
+    <string name="menu_settings">Настройки</string>
+
+<!-- Application settings -->
+    <string name="settings_theme_title">Тема приложения</string>
+    <string name="settings_theme_value_default">Системная тема (по умолчанию)</string>
+    <string name="settings_theme_value_light">Светлая тема</string>
+    <string name="settings_theme_value_dark">Темная тема</string>
+
+
+    <!-- preferences -->
+    <string name="settings_title_editor">Редактор кода</string>
+    <string name="title_activity_settings">Настройки</string>
+        <string name="settings_title_application">Приложение</string>
+    <string name="settings_desc_application">Общие настройки приложения</string>
+       <string name="settings_desc_editor">Настройки редактора кода</string>
+    
+
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">Движок автозавершения</string>
+    <string name="settings_code_completions">Автозавершение кода</string>
+    <string name="settings_kotlin_completions">Автозавершение кода для Kotlin</string>
+    <string name="settings_kotlin_completions_desc">Эта функция экспериментальная и может работать медленно.
+        Требуется мощное устройство.
+    </string>
+    <string name="code_editor_error_highlight">Включить выделение ошибок</string>
+    <string name="editor_scheme_title">Цветовая схема редактора</string>
+    <string name="editor_scheme_desc">Нажмите, чтобы изменить цветовую схему редактора</string>
+    <string name="editor_delete_whitespaces">Автоматическое удаление пробелов</string>
+   <string name="settings_case_insensitive_match_title">Не учитывать регистр</string>
+    <string name="settings_case_insensitive_match_desc">Подсказывать имена классов с префиксом в нижнем регистре</string>
+ <string name="save">Сохранить</string>
+    <string name="editor_settings_title">Настройки редактора кода</string>
+    <string name="editor_settings_wordwrap">Перенос по словам</string>
+    <string name="font_size_title">Размер шрифта</string>
+    <string name="font_size_message">Установите размер шрифта редактора</string>
+    <string name="font_size_summary">Укажите размер шрифта редактора по умолчанию</string>
+    <string name="keyboard_settings_title">Клавиатура</string>
+    <string name="keyboard_enable_suggestions_description">Включить подсказки клавиатуры</string>
+    <string name="settings_build_run_title">Сборка и запуск</string>
+    <string name="settings_build_run_desc">Настройки сборки и запуска</string>
+    <string name="run_title">Запуск приложения</string>
+    <string name="settings_install_apk_title">Запрос на установку APK</string>
+    <string name="settings_install_desc">Показ диалога об установке APK после успешной компиляции.</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">Обратная связь</string>
+    <string name="settings_about_us_desc">Информация о разработчиках приложения</string>
+    <string name="app_description">Мощная и легкая IDE для разработки приложений Android прямо у вас в кармане.</string>
+    <string name="app_version">Версия %1$s</string>
+    <string name="contact_group_title">Связь</string>
+    <string name="app_source_title">Исходный код</string>
+    <string name="sketchub_team">Команда Sketchub</string>
+    <string name="community">Сообщество</string>
+    <string name="rate_us">Оценить нас</string>
+
+
+    <!-- file manager menu -->
+    <string name="error">Error</string>
+    <string name="error_resource_name_restriction">Имена ресурсов должны содержать только строчные буквы a–z, 0–9 и знаки подчеркивания.</string>
+    <string name="menu_action_new_java_class">Java-класс</string>
+    <string name="menu_action_new_kotlin_class">Kotlin-класс</string>
+    <string name="menu_action_new_directory">Новая папка</string>
+    <string name="menu_action_new_file">Новый файл</string>
+    <string name="directory_name">Имя папки</string>
+    <string name="file_name">Имя файла</string>
+    <string name="menu_new">Создать</string>
+    <string name="menu_refactor">Рефакторинг</string>
+    <string name="item_project">Ваш проект</string>
+    <string name="dialog_create_class_title">Создать класс</string>
+    <string name="create_class_dialog_class_name">Название класса</string>
+    <string name="create_class_dialog_positive">Создать</string>
+    <string name="create_class_dialog_class_type">Тип класса</string>
+    <string name="create_class_dialog_invalid_name">Недействительное название класса</string>
+
+    <string name="success">Успешно</string>
+    <string name="delete_success">Успешно удалено.</string>
+    <string name="dialog_confirm_delete">Вы уверены, что хотите удалить %1$s?</string>
+    <string name="dialog_delete">Удалить</string>
+    <string name="menu_preview_layout">Предпросмотр макета</string>
+    <string name="action_menu_build_release">Собрать APK-release</string>
+    <string name="action_menu_build_debug">Собрать APK-debug</string>
+    <string name="action_menu_build_aab">Собрать AAB</string>
+    
+    <string name="project_manager_alpha_notice_title">Уведомление об альфа-версии</string>
+    <string name="project_manager_alpha_notice">CodeAssist все еще находится в альфа-версии,
+        вы можете столкнуться со сбоями, ошибками и ограниченным функционалом.\nВы
+        можете сообщить об этих проблемах на https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_save_location_title">Выбрать место сохранения</string>
+    <string name="project_manager_permission_denied">Доступ запрещен</string>
+    <string name="project_manager_button_request_again">Запросить еще раз</string>
+    <string name="project_manager_button_continue">Продолжить</string>
+    <string name="project_manager_rationale_title">Разрешение на хранилище</string>
+    <string name="project_manager_button_allow">Разрешить</string>
+    <string name="project_manager_button_use_internal">Использовать внутреннее хранилище</string>
+    <string name="project_manager_permission_rationale">Приложению требуется разрешение на хранилище
+        чтобы сохранить файлы модулей, которые не будут удалены при удалении
+        приложения. В качестве альтернативы вы можете сохранить файлы модуля во внутреннем хранилище приложения.</string>
+    <string name="project_manager_android11_notice">Проекты будут сохранены во внутреннем хранилище приложения.
+        Сделайте копию ваших модулей перед удалением приложения.</string>
+    <string name="project_manager_projects">Проекты</string>
+    <string name="project_manager_empty">Отсутствуют проекты</string>`
+    <string name="project_manager_create_project">Создать модуль</string>
+    <string name="project_path_menu_title">Путь к проектам</string>
+    <string name="project_manager_null_projects">Проекты не найдены</string>
+    <string name="project_manager_suggestions">Советы:\n\n  - Создайте новый проект\n  - Измените путь к текущему проекту</string>
+    
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Идет компиляция</string>
+    <string name="compilation_button_install">Установить</string>
+    <string name="compilation_result_success">Успешная компиляция</string>
+    <string name="compilation_result_failed">Сбой компиляции</string>
+
+<!-- File Editor Manager -->
+    <string name="file_editor_selection_title">Выберите редактор кода, через который хотите открыть файл</string>
+
+<!-- Editor tabs -->
+    <string name="menu_close_file">Закрыть</string>
+    <string name="menu_close_others">Закрыть другое</string>
+    <string name="menu_close_all">Закрыть всё</string>
+
+
+    <!-- Library manager -->
+    <string name="library_manager_title">Библиотек: %1s</string>
+    <string name="group_id">Group ID</string>
+    <string name="artifact_id">Artifact ID</string>
+    <string name="version_name">Имя версии</string>
+    <string name="menu_display_dependencies">Список зависимостей</string>
+    <string name="attributes_editor">Редактор атрибутов</string>
+    <string name="attribute_value">Значение атрибута</string>
+<string name="menu_add_libs_gradle">Добавить из файла build.gradle</string>
+
+</resources>

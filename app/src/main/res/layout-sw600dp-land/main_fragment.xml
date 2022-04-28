@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="true"
+    android:fitsSystemWindows="true"
+    android:orientation="horizontal"
+    android:weightSum="100">
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/fragment_first_pane"
+        android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="25" />
+
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        tools:background="?attr/dividerColor" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="75"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/app_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:elevation="0dp">
+
+            <com.tyron.actions.impl.ActionToolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progressbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_second_pane"
+            android:name="com.tyron.code.ui.editor.EditorContainerFragment"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            tools:layout="@layout/editor_container_fragment" />
+    </LinearLayout>
+</LinearLayout>

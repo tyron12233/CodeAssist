@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="menu_diagnostic_info_title">Informasi diagnostik</string>
+    <string name="menu_close">Tutup</string>
+    <string name="menu_quickfix_surround_try_catch_title">Kelilingi dengan try-catch</string>
+    <string name="menu_quickfix_add_catch_clause_title">Tambahkan klausa catch</string>
+    <string name="menu_quickfix_add_throws_title">Tambahkan \'throws\'</string>
+
+    <string name="menu_quickfix_implement_abstract_methods_title">Implemen metode-metode abstrak</string>
+    <string name="menu_quickfix_override_inherited_methods_title">Override metode-metode yang diwariskan</string>
+    <string name="menu_quickfix_introduce_local_variable_title">Buat variabel lokal</string>
+
+    <string name="import_class_name">Impor %1s</string>
+    <string name="import_class_title">Impor kelas</string>
+    <string name="menu_action_view_javadoc_title">Lihat javadoc</string>
+    <string name="menu_action_no_javadoc_message">Javadoc tidak ditemukan.</string>
+</resources>

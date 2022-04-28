@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Merhaba Dünya!</string>
+    <item name="paste" type="string">Yapıştır</item>
+    <item name="copy" type="string">Kopyala</item>
+    <item name="selectAll" formatted="true" type="string">Tümünü Seç</item>
+    <item name="saveToProject" translatable="false" type="string">Proje</item>
+    <item name="cut" type="string" translatable="false">Kes</item>
+    <item name="last" type="string">Son</item>
+    <item name="next" type="string">Sonraki</item>
+    <item name="replace" type="string">Yerine Koy</item>
+    <item name="replaceAll" type="string">Tamamının Yerine Koy</item>
+    <item name="replacement" type="string">Yerine Koyma</item>
+    <item name="cancel" type="string">İptal</item>
+    <item name="text_to_search" type="string">Aramak İçin Yazın</item>
+
+    <item name="more" translatable="false" type="string">Daha Fazla</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Mesajlar</string>
+    <string name="sync_header">Senkronize Et</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Sizin İmzanız</string>
+    <string name="reply_title">Varsayılan Cevap Aksiyonu</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Epostayı Periyodik Olarak Senkronize Et</string>
+    <string name="attachment_title">Gelen Ekleri İndir</string>
+    <string name="attachment_summary_on">Gelen Epostalar İçin Ekleri Otomatik İndir
+    </string>
+    <string name="attachment_summary_off">Ekleri Yalnızca Manuel Olarak İstendiğinde İndir</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">Sonraki</string>
+    <string name="wizard_finish">Bitir</string>
+    <string name="wizard_cancel">İptal</string>
+    <string name="wizard_templates">Şablonlar</string>
+    <string name="wizard_exit">Çıkış</string>
+    <string name="wizard_desc">Aktivite Şablonlarından Seç</string>
+    <string name="wizard_empty_templates">Şablonlar Boş :(</string>
+    <string name="wizard_loading">Şablonlar Yükleniyor</string>
+    <string name="wizard_app_name">Uygulama Adı</string>
+    <string name="wizard_package_name">com.benim.uygulamam</string>
+    <string name="wizard_save_location">Konuma Kaydet</string>
+    <string name="wizard_language">Dil</string>
+    <string name="wizard_minimum_sdk">Minimum SDK</string>
+    <string name="wizard_create">Oluştur</string>
+    <string name="wizard_previous">Önceki</string>
+    <string name="wizard_scoped_storage_info">Android 11 Depolama Kısıtlamaları Nedeniyle, Dosyaları Yalnızca Uygulamanın Dahili Deposuna Kaydedebilirsiniz.</string>
+    <string name="wizard_file_not_writable">Dizin Yazılabilir Değil, Başka Bir Konum Seçin</string>
+    <string name="wizard_path_exceeds">Konum Yolu 240 Karakteri Aşıyor.</string>
+    <string name="wizard_package_illegal">Paket Adı İllegal Karakter İçeriyor.</string>
+    <string name="wizard_package_too_short">Paket Adı Çok Kısa.</string>
+    <string name="wizard_package_contains_spaces">Paket Adı Boşluk İçeremez.</string>
+    <string name="wizard_error_name_empty">İsim Boş Olamaz.</string>
+    <string name="wizard_error_name_illegal">İsim İllegal Karakter İçeremez</string>
+    <string name="wizard_package_empty">Paket Adı Boş Olamaz.</string>
+    <string name="wizard_select_min_sdk">Minimum SDK Versiyonu Seçin.</string>
+    <string name="wizard_select_save_location">Kaydetme Konumu Seçin</string>
+
+    <string name="menu_open_project">Modülü Aç</string>
+    <string name="menu_create_project">Modül Oluştur</string>
+    <string name="menu_run">Çalıştır</string>
+    <string name="menu_refresh">Modülü Yenile</string>
+    <string name="menu_library_manager">Kütüphane Yöneticisi</string>
+    <string name="menu_format">Formatla</string>
+    <string name="menu_settings">Ayarlar</string>
+
+    <!-- preferences -->
+    <string name="settings_title_editor">Editör</string>
+    <string name="title_activity_settings">Ayarlar</string>
+
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">Tamamlama Motoru</string>
+    <string name="settings_code_completions">Kod tamamlamalarını aktif et</string>
+    <string name="settings_kotlin_completions">Kotlin İçin Kod Tamamlamalarını Aktif Et</string>
+    <string name="settings_kotlin_completions_desc">Bu özellik hala deneysel ve yavaş olabilir.
+        Güçlü cihaz gerektirir.
+    </string>
+    <string name="code_editor_error_highlight">Hata vurgulamalarını aktif et</string>
+
+    <string name="editor_settings_title">Kod Editörü ayarları</string>
+    <string name="editor_settings_wordwrap">Kelime sarma modu</string>
+    <string name="font_size_title">Font boyutu</string>
+    <string name="font_size_message">Editör font boyutunu ayarla</string>
+    <string name="font_size_summary">Editörün varsayılan yazı tipi boyutunu belirt</string>
+    <string name="keyboard_settings_title">Klavye</string>
+    <string name="keyboard_enable_suggestions_description">Klavye önerilerini aktif et</string>
+    <string name="settings_build_run_title">Derleme &amp; Çalıştırma</string>
+    <string name="settings_build_run_desc">Derleme ve çalıştırma ayarlarını düzenle</string>
+    <string name="run_title">Çalıştırma</string>
+    <string name="settings_install_apk_title">APK Yükleme Ekranı</string>
+    <string name="settings_install_desc">Başarılı derlemeden sonra APK yükleme ekranını göster.</string>
+    <string-array name="java_versions" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string name="completion_settings_kotlin_title">Kotlin</string>
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">Hedef Versiyon</string>
+    <string name="completion_java_source_version_title">Kaynak Versiyonu</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">Hakkında</string>
+    <string name="settings_about_us_desc">Geliştiriciler hakkında daha fazla bilgi</string>
+    <string name="app_description">Android uygulama geliştirme için cebinizde güçlü ve hafif bir IDE.</string>
+    <string name="app_version">Versiyon</string>
+    <string name="contact_group_title">İletişim</string>
+    <string name="app_source_title">Kaynak kodu</string>
+    <string name="sketchub_team">Sketchub Takımı</string>
+    <string name="community">Topluluk</string>
+    <!-- file manager menu -->
+    <string name="error">Hata</string>
+    <string name="error_resource_name_restriction">Kaynak adları yalnızca küçük harf a–z, 0–9 veya alt çizgi içermelidir.</string>
+    <string name="menu_action_new_java_class">Java sınıfı </string>
+    <string name="menu_action_new_kotlin_class">Kotlin sınıfı</string>
+    <string name="menu_action_new_directory">Dizin</string>
+    <string name="menu_action_new_file">Dosya</string>
+    <string name="directory_name">Dizin Adı</string>
+    <string name="file_name">Dosya Adı</string>
+    <string name="menu_new">Yeni</string>
+    <string name="menu_refactor">Yeniden Düzenle</string>
+    <string name="item_project">Proje</string>
+    <string name="dialog_create_class_title">Bir sınıf oluştur</string>
+    <string name="create_class_dialog_class_name">Sınıf adı</string>
+    <string name="create_class_dialog_positive">Oluştur</string>
+    <string name="create_class_dialog_class_type">Sınıf türü</string>
+    <string name="create_class_dialog_invalid_name">Geçersiz sınıf adı</string>
+
+    <string name="success">Başarılı</string>
+    <string name="delete_success">Silme Başarılı</string>
+    <string name="dialog_confirm_delete">%1$s\'ı Silmek İstediğinize Emin Misiniz?</string>
+    <string name="dialog_delete">Sil</string>
+    <string name="menu_preview_layout">Tasarımı Ön İzle</string>
+    <string name="action_menu_build_release">Yayın APK\'sı Derle</string>
+    <string name="action_menu_build_debug">Debug APK\'sı Derle</string>
+    <string name="action_menu_build_aab">AAB Derle</string>
+
+    <string name="project_manager_alpha_notice_title">Alpha Notu</string>
+    <string name="project_manager_alpha_notice">CodeAssit hala Alpha sürümde,
+        hatalarla, bozulmalarla ve tamamlanmayan özelliklerle karşılaşabilirsiniz.\nBu
+        hataları https://github.com/tyron12233/CodeAssist/issues adresinden raporlayabilirsiniz.</string>
+    <string name="project_manager_save_location_title">Kaydetme konumu seç</string>
+    <string name="project_manager_permission_denied">İzin reddedildi</string>
+    <string name="project_manager_button_request_again">Tekrar İste</string>
+    <string name="project_manager_button_continue">Devam Et</string>
+    <string name="project_manager_rationale_title">Depolama İzinleri</string>
+    <string name="project_manager_button_allow">İzin Ver</string>
+    <string name="project_manager_button_use_internal">Dahili depolamayı kullan</string>
+    <string name="project_manager_permission_rationale">Uygulamayı kaldırdığınızda silinmeyecek modül dosyalarını kaydetmek için uygulamanın depolama izinlerine ihtiyacı var.
+        Alternatif olarak, modül dosyalarını uygulamanın dahili depolamasına kaydetmeyi seçebilirsiniz.</string>
+    <string name="project_manager_android11_notice">Projeler, uygulamanın dahili depolama dizinine kaydedilecek.
+        Uygulamayı kaldırmadan önce modüllerinizi yedekleyin.</string>
+    <string name="project_manager_projects">Projeler</string>
+    <string name="project_manager_empty">Projeler boş</string>`
+    <string name="project_manager_create_project">Modül oluştur</string>
+    <string name="project_path_menu_title">Proje yolu</string>
+    <string name="project_manager_null_projects">Proje Bulunamadı</string>
+    <string name="project_manager_suggestions">Öneriler:\n\n  - Yeni Proje Oluştur\n  - Proje Yolunu Değiştir</string>
+
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Derleniyor</string>
+    <string name="compilation_button_install">YÜKLE</string>
+    <string name="compilation_result_success">Derleme başarılı</string>
+    <string name="compilation_result_failed">Derleme başarısız oldu</string>
+
+    <!-- Library manager -->
+    <string name="library_manager_title">%1s Kütüphaneleri</string>
+    <string name="group_id">Grup Id</string>
+    <string name="artifact_id">Yapaylık Id</string>
+    <string name="version_name">Versiyon Adı</string>
+    <string name="menu_display_dependencies">Gereklilikleri listele</string>
+    <string name="attributes_editor">Özellikler Editörü</string>
+    <string name="attribute_value">Özellikler değeri</string>
+    <string name="rate_us">Bizi değerlendirin</string>
+    <string name="change_scheme_dialog_title">Tema dosyasının yolunu yapıştırın</string>
+    <string name="editor_scheme_desc">Renk şemasını değiştirin</string>
+    <string name="editor_scheme_title">Editör renk şeması</string>
+    <string name="defaultString">Varsayılan</string>
+    <string name="save">Kaydet</string>
+    <string name="settings_case_insensitive_match_title">Harf duyarsız eşleşme</string>
+    <string name="settings_case_insensitive_match_desc">Küçük harf önek ile sınıf isimleri öner</string>
+    <string name="settings_theme_value_dark">Koyu</string>
+    <string name="settings_theme_value_light">Açık</string>
+    <string name="settings_theme_value_default">Sistem varsayılanı</string>
+    <string name="settings_theme_title">Tema</string>
+    <string name="settings_desc_editor">Editörü yapılandır</string>
+    <string name="settings_desc_application">Genel uygulama tercihleri</string>
+    <string name="settings_title_application">Uygulama</string>
+    <string name="error_file_creation">Yeni dosya oluşturulamıyor.</string>
+    <string name="menu_new_layout">Yeni layout</string>
+    <string name="copied_to_clipoard">Yazı clipboard\'a kopyalandı</string>
+    <string name="expand_selection">Seçeneği Genişlet</string>
+    <string name="text_actions">Yazı Aksiyonları</string>
+    <string name="menu_add_libs_gradle">build.gradle\'dan kütüphane ekle</string>
+    <string name="file_editor_selection_title">Hangi editörü açmak istersiniz?</string>
+    <string name="menu_close_file">Kapat</string>
+    <string name="menu_close_others">Diğerlerini kapat</string>
+    <string name="menu_close_all">Tümünü kapat</string>
+    <string name="editor_error_file">Dosyayı okurken bir hata oluştu. Değişiklikler kaydedilmeyecek.</string>
+    <string name="tab_build_logs_title">Build Kayıtları</string>
+    <string name="tab_app_logs_title">Uygulama Kayıtları</string>
+    <string name="tab_ide_logs_title">IDE Kayıtları</string>
+    <string name="tab_diagnostics_title">Hata Teşhisleri</string>
+    <string name="editor_delete_whitespaces">Whitespace\'i otomatik sil</string>
+</resources>

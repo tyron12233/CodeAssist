@@ -1,0 +1,26 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:fragment="com.tyron.code.ui.settings.ApplicationSettingsFragment"
+        app:iconSpaceReserved="false"
+        app:summary="@string/settings_desc_application"
+        app:title="@string/settings_title_application" />
+
+    <Preference
+        app:fragment="com.tyron.code.ui.settings.EditorSettingsFragment"
+        app:iconSpaceReserved="false"
+        app:summary="@string/settings_desc_editor"
+        app:title="@string/settings_title_editor" />
+
+    <Preference
+        app:fragment="com.tyron.code.ui.settings.BuildSettingsFragment"
+        app:iconSpaceReserved="false"
+        app:summary="@string/settings_build_run_desc"
+        app:title="@string/settings_build_run_title" />
+
+    <Preference
+        app:fragment="com.tyron.code.ui.settings.AboutUsFragment"
+        app:iconSpaceReserved="false"
+        app:title="@string/settings_about_us_title"
+        app:summary="@string/settings_about_us_desc"/>
+</PreferenceScreen>

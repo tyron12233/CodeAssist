@@ -1,0 +1,20 @@
+plugins {
+    id 'java-library'
+}
+
+description = "A set of general-purpose resource abstractions"
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

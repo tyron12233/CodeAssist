@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="CodeEditorActionBar" parent="AppTheme">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="android:colorBackground">@color/colorBackground</item>
+        <item name="android:textColorPrimary">#FFFEFEFE</item>
+        <item name="android:textColorSecondary">#FFEAEAEA</item>
+        <item name="actionMenuTextColor">#fffefefe</item>
+    </style>
+
+
+	<style name="CodeEditorThemeOverlay" parent ="ThemeOverlay.MaterialComponents.Toolbar.Primary">
+		<item name="colorSurface">@color/colorSurface</item>
+        <item name="colorControlNormal">@color/colorControlNormal</item>
+	</style>
+
+    <style name="CodeEditorFloatingOverlay" parent="ThemeOverlay.MaterialComponents.ActionBar">
+        <item name="android:background">@android:color/transparent</item>
+    </style>
+</resources>

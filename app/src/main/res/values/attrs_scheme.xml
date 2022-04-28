@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <attr name="editorColorScheme" format="reference"/>
+
+    <declare-styleable name="EditorColorScheme">
+
+        <!-- Lexer Colors -->
+        <attr name="keyword" format="color"/>
+
+        <attr name="operator" format="color"/>
+
+        <attr name="xmlAttributeName" format="color" />
+
+        <attr name="xmlAttributeValue" format="color" />
+
+        <attr name="htmlTag" format="color" />
+
+        <attr name="annotation" format="color" />
+
+        <attr name="functionName" format="color" />
+
+        <attr name="identifierName" format="color" />
+
+        <attr name="identifierVar" format="color" />
+
+        <attr name="literal" format="color" />
+
+        <attr name="comment" format="color" />
+
+        <attr name="textNormal" format="color" />
+        <!-- Underline span colors -->
+
+        <attr name="problemTypo" format="color"/>
+        <attr name="problemWarning" format="color"/>
+        <attr name="problemError" format="color"/>
+
+        <attr name="selectedTextBackground" format="color" />
+        <attr name="blockLineColor" format="color"/>
+
+        <!-- Editor view colors -->
+
+        <attr name="lineNumberDividerColor" format="color"/>
+
+        <attr name="wholeBackground" format="color"/>
+        <attr name="completionPanelBackground" format="color" />
+        <attr name="completionPanelStrokeColor" format="color" />
+
+        <attr name="lineNumberBackground" format="color" />
+        <attr name="lineNumberTextColor" format="color" />
+
+    </declare-styleable>
+</resources>

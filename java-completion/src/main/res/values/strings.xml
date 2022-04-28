@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="menu_diagnostic_info_title">Diagnostic information</string>
+    <string name="menu_close">Close</string>
+    <string name="menu_quickfix_surround_try_catch_title">Surround with try-catch</string>
+    <string name="menu_quickfix_add_catch_clause_title">Add catch clause</string>
+    <string name="menu_quickfix_add_throws_title">Add \'throws\'</string>
+
+    <string name="menu_quickfix_implement_abstract_methods_title">Implement abstract methods</string>
+    <string name="menu_quickfix_override_inherited_methods_title">Override inherited methods</string>
+    <string name="menu_quickfix_introduce_local_variable_title">Introduce local variable</string>
+
+    <string name="import_class_name">Import %1s</string>
+    <string name="import_class_title">Import class</string>
+    <string name="menu_action_view_javadoc_title">View javadoc</string>
+    <string name="menu_action_no_javadoc_message">No javadoc found.</string>
+</resources>

@@ -1,0 +1,36 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/content"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+   <com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView
+       android:id="@+id/code_editor"
+       android:layout_width="match_parent"
+       android:layout_height="match_parent"/>
+
+   <FrameLayout
+       android:id="@+id/top_view"
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content">
+
+      <com.google.android.material.progressindicator.CircularProgressIndicator
+          android:id="@+id/progressbar"
+          android:layout_marginEnd="8dp"
+          android:layout_marginStart="8dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginBottom="4dp"
+          app:trackThickness="2.5dp"
+          app:minHideDelay="@integer/material_motion_duration_long_2"
+          android:layout_gravity="end"
+          android:indeterminate="true"
+          android:layout_width="20dp"
+          android:layout_height="20dp"
+          app:indicatorSize="14dp"/>
+   </FrameLayout>
+
+   <FrameLayout
+       android:id="@+id/layout_editor_container"
+       android:layout_width="match_parent"
+       android:layout_height="match_parent"/>
+</FrameLayout>

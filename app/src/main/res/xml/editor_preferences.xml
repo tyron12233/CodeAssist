@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+<!--    <PreferenceCategory-->
+<!--        app:iconSpaceReserved="false"-->
+<!--        android:title="@string/code_engine_title">-->
+
+<!--        <SwitchPreference-->
+<!--            android:defaultValue="false"-->
+<!--            android:iconSpaceReserved="false"-->
+<!--            android:key="experimental_kotlin_completions"-->
+<!--            app:iconSpaceReserved="false"-->
+<!--            android:title="@string/settings_kotlin_completions"-->
+<!--            android:summary="@string/settings_kotlin_completions_desc"/>-->
+<!--    </PreferenceCategory>-->
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        app:title="@string/completion_settings_java_title">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            app:iconSpaceReserved="false"
+            android:key="code_editor_error_highlight"
+            android:title="@string/code_editor_error_highlight"/>
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="code_editor_completion"
+            app:iconSpaceReserved="false"
+            android:title="@string/settings_code_completions" />
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="java_case_insensitive_match"
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:summary="@string/settings_case_insensitive_match_desc"
+            app:title="@string/settings_case_insensitive_match_title" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        app:title="@string/completion_settings_kotlin_title">
+
+        <SwitchPreference
+            android:defaultValue="true"
+            app:iconSpaceReserved="false"
+            android:key="kotlin_error_highlight"
+            android:title="@string/code_editor_error_highlight"/>
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:iconSpaceReserved="false"
+            android:key="kotlin_completion"
+            app:iconSpaceReserved="false"
+            android:title="@string/settings_code_completions" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        android:title="@string/editor_settings_title">
+
+        <EditTextPreference
+            app:iconSpaceReserved="false"
+            android:dialogTitle="@string/font_size_title"
+            android:defaultValue="14"
+            android:inputType="numberDecimal"
+            android:digits="0123456789"
+            android:title="@string/font_size_title"
+            android:summary="@string/font_size_summary"
+            android:key="font_size"
+            android:dialogMessage="@string/font_size_message"
+            android:negativeButtonText="@android:string/cancel"
+            android:positiveButtonText="@android:string/ok"/>
+
+        <SwitchPreference
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:title="@string/editor_settings_wordwrap"
+            app:key="editor_wordwrap" />
+
+        <SwitchPreference
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:title="@string/editor_delete_whitespaces"
+            app:key="editor_delete_whitespaces"/>
+
+        <Preference
+            app:key="scheme"
+            app:iconSpaceReserved="false"
+            app:title="@string/editor_scheme_title"
+            app:summary="@string/editor_scheme_desc"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        android:title="@string/editor_tabs_settings_title">
+
+        <SwitchPreference
+            app:iconSpaceReserved="false"
+            app:defaultValue="true"
+            app:title="@string/editor_tab_unique_file_name"
+            app:summary="@string/editor_tab_unique_file_name_summary"
+            app:key="editor_tab_unique_file_name" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

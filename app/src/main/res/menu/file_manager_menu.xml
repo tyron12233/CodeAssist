@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:checkable="false"
+        android:title="@string/menu_new"
+        android:visible="true"
+        app:showAsAction="never">
+
+        <menu>
+            <item
+                android:id="@+id/action_new_class"
+                android:title="@string/menu_action_new_java_class" />
+        </menu>
+    </item>
+    <item android:title="@string/menu_refactor" />
+</menu>

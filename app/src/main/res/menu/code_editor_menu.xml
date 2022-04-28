@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_run"
+        android:icon="@drawable/round_play_arrow_24"
+        android:title="@string/menu_run"
+        app:showAsAction="always">
+
+        <menu>
+            <item
+                android:id="@+id/action_build_release"
+                android:title="@string/action_menu_build_release" />
+
+            <item
+                android:id="@+id/action_build_debug"
+                android:title="@string/action_menu_build_debug" />
+
+            <item
+                android:id="@+id/action_build_aab"
+                android:title="@string/action_menu_build_aab" />
+        </menu>
+    </item>
+
+    <item
+        android:id="@+id/item_project"
+        android:icon="@drawable/round_folder_24"
+        android:title="@string/item_project"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/debug_refresh"
+                android:title="@string/menu_refresh" />
+            <item
+                android:id="@+id/library_manager"
+                android:title="@string/menu_library_manager"/>
+        </menu>
+    </item>
+
+    <item
+        android:id="@+id/action_format"
+        android:title="@string/menu_format" />
+
+    <item
+        android:id="@+id/menu_settings"
+        android:title="@string/menu_settings" />
+
+    <item
+        android:id="@+id/menu_preview_layout"
+        android:title="@string/menu_preview_layout" />
+</menu>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="EditorColorSchemeNight" parent="DefaultEditorColorScheme">
+        <item name="annotation">#BBB529</item>
+        <item name="keyword">#CC7832</item>
+        <item name="literal">#629755</item>
+        <item name="comment">#808080</item>
+        <item name="operator">#FAFAFA</item>
+        <item name="functionName">#FFC66D</item>
+        <item name="xmlAttributeName">#ff9876AA</item>
+        <item name="xmlAttributeValue">#629755</item>
+        <item name="htmlTag">#E8BF6A</item>
+        <item name="identifierName">#FAFAFA</item>
+        <item name="blockLineColor">?attr/dividerColor</item>
+        <item name="textNormal">@color/white</item>
+
+        <item name="wholeBackground">?android:attr/colorBackground</item>
+        <item name="completionPanelBackground">?attr/colorSurface</item>
+        <item name="completionPanelStrokeColor">?attr/dividerColor</item>
+
+        <item name="lineNumberBackground">?attr/colorSurface</item>
+        <item name="lineNumberTextColor">?attr/dividerColor</item>
+        <item name="lineNumberDividerColor">?attr/dividerColor</item>
+    </style>
+</resources>

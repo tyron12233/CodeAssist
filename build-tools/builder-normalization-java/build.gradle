@@ -1,0 +1,22 @@
+plugins {
+    id 'java-library'
+}
+
+description = "API extraction for Java"
+
+dependencies {
+    implementation projects.common
+    implementation projects.buildTools.builderBaseAnnotations
+    implementation projects.buildTools.builderHashing
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.snapshots
+
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation common.slf4j
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

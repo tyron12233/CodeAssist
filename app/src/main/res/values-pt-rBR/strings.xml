@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Olá, mundo!</string>
+    <item name="paste" type="string">Colar</item>
+    <item name="copy" type="string">Copiar</item>
+    <item name="selectAll" formatted="true" type="string">Selecionar tudo</item>
+    <item name="saveToProject" type="string">Projeto</item>
+    <item name="cut" type="string">Cortar</item>
+    <item name="last" type="string">Último</item>
+    <item name="next" type="string">Próximo</item>
+    <item name="replace" type="string">Substituir</item>
+    <item name="replaceAll" type="string">Substituir tudo</item>
+    <item name="replacement" type="string">Substituição</item>
+    <item name="cancel" type="string">Cancelar</item>
+    <item name="text_to_search" type="string">Texto para procurar</item>
+
+    <item name="more" type="string">Mais</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Mensagens</string>
+    <string name="sync_header">Sincronizar</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Sua assinatura</string>
+    <string name="reply_title">Ação de resposta padrão</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Sincronizar e-mail periodicamente</string>
+    <string name="attachment_title">Baixar os anexos recebidos</string>
+    <string name="attachment_summary_on">Baixar automaticamente anexos para e-mails recebidos</string>
+    <string name="attachment_summary_off">Baixar anexos apenas quando requisitado manualmente</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">Próximo</string>
+    <string name="wizard_finish">Concluir</string>
+    <string name="wizard_cancel">Cancelar</string>
+    <string name="wizard_templates">Exemplos de modelo</string>
+    <string name="wizard_exit">Sair</string>
+    <string name="wizard_desc">Selecione um modelo de exemplo</string>
+    <string name="wizard_empty_templates">Os modelos de exemplo estão vazios :(</string>
+    <string name="wizard_loading">Carregando modelo</string>
+    <string name="wizard_app_name">Nome do aplicativo</string>
+    <string name="wizard_package_name">com.desenvolvedor.nomedoaplicativo</string>
+    <string name="wizard_save_location">Salvar a localização</string>
+    <string name="wizard_language">Linguagem padrão</string>
+    <string name="wizard_minimum_sdk">SDK mínimo requerido</string>
+    <string name="wizard_create">Criar</string>
+    <string name="wizard_previous">Anterior</string>
+    <string name="wizard_scoped_storage_info">Devido às restrições de armazenamento do Android 11, só é possível criar e salvar no armazenamento interno do aplicativo.</string>
+    <string name="wizard_file_not_writable">Este diretório não pode ser escrito, escolha outro caminho</string>
+    <string name="wizard_path_exceeds">Este caminho excede o limite de 240 caractetes.</string>
+    <string name="wizard_package_illegal">O nome do pacote contém caracteres incorretos.</string>
+    <string name="wizard_package_too_short">O nome do pacote é muito curto.</string>
+    <string name="wizard_package_contains_spaces">O nome do pacote não pode conter espaços.</string>
+    <string name="wizard_error_name_empty">O nome não pode estar vazio.</string>
+    <string name="wizard_error_name_illegal">O nome não pode conter caracteres incorretos.</string>
+    <string name="wizard_package_empty">O nome do pacote não pode estar vazio.</string>
+    <string name="wizard_select_min_sdk">Selecione o SDK mínimo requerido.</string>
+    <string name="wizard_select_save_location">Selecione um caminho para salvar</string>
+
+    <string name="menu_open_project">Abrir o módulo</string>
+    <string name="menu_create_project">Criar um módulo</string>
+    <string name="menu_run">Compilar</string>
+    <string name="menu_refresh">Atualizar as dependências</string>
+    <string name="menu_library_manager">Gerenciar as dependências</string>
+    <string name="menu_format">Formatar</string>
+    <string name="menu_settings">Configurações</string>
+
+    <!-- preferences -->
+    <string name="settings_title_application">Aplicativo</string>
+    <string name="settings_desc_application">Configurações gerais do aplicativo</string>
+    <string name="settings_title_editor">Editor</string>
+    <string name="settings_desc_editor">Escolha ao seu gosto e necessidade às suas preferências</string>
+    <string name="title_activity_settings">Configurações</string>
+
+    <!-- Application settings -->
+    <string name="settings_theme_title">Tema</string>
+    <string name="settings_theme_value_default">Padrão do sistema</string>
+    <string name="settings_theme_value_light">Branco</string>
+    <string name="settings_theme_value_dark">Preto</string>
+
+    <string-array name="theme_values">
+        <item>default</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+    <string-array name="theme_entries">
+        <item>@string/settings_theme_value_default</item>
+        <item>@string/settings_theme_value_light</item>
+        <item>@string/settings_theme_value_dark</item>
+    </string-array>
+    
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">Motor de Autocompletar</string>
+    <string name="settings_code_completions">Ativar o autocompletador de código</string>
+    <string name="settings_kotlin_completions">Ativar o autocompletador de código</string>
+    <string name="settings_kotlin_completions_desc">O autocompletador é instável e pode causar travamentos se ativado.
+        Requer um dispositivo bom.
+    </string>
+    <string name="settings_case_insensitive_match_title">Sem distinção entre letras maiúsculas e minúsculas</string>
+    <string name="settings_case_insensitive_match_desc">Sugerir nomes de classe com prefixo minúsculo.</string>
+    <string name="code_editor_error_highlight">Ativar o destaque de erros</string>
+
+    <string name="editor_settings_title">Configurações do editor de código</string>
+    <string name="editor_settings_wordwrap">Modo de quebra de linha</string>
+    <string name="editor_delete_whitespaces">Remoção automática de espaços em branco</string>
+    <string name="save">Salvar</string>
+    <string name="defaultString">Padrão</string>
+    <string name="editor_scheme_title">Esquema de cores do editor</string>
+    <string name="editor_scheme_desc">Alterar o esquema de cor</string>
+    <string name="change_scheme_dialog_title">Digite o caminho do arquivo do tema</string>
+    <string name="font_size_title">Tamanho da fonte</string>
+    <string name="font_size_message">Defina o tamanho da fonte do editor</string>
+    <string name="font_size_summary">Especifique o tamanho padrão da fonte do editor</string>
+    <string name="keyboard_settings_title">Teclado</string>
+    <string name="keyboard_enable_suggestions_description">Ativar sugestões do teclado</string>
+    <string name="settings_build_run_title">Compilar &amp; Instalar</string>
+    <string name="settings_build_run_desc">Definir configurações de compilação e execução</string>
+    <string name="run_title">Run</string>
+    <string name="settings_install_apk_title">Diálogo de instalação do APK</string>
+    <string name="settings_install_desc">Mostrar um diálogo de instalação do APK após a compilação bem-sucedida.</string>
+    <string-array name="java_versions" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string name="completion_settings_kotlin_title">Kotlin</string>
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">Versão de destino</string>
+    <string name="completion_java_source_version_title">Versão de origem</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">Sobre nós</string>
+    <string name="settings_about_us_desc">Mais informações sobre os desenvolvedores.</string>
+    <string name="app_description">IDE poderoso e leve para desenvolvimento de aplicativos Android dentro do seu bolso.</string>
+    <string name="app_version">Versão</string>
+    <string name="contact_group_title">Contatar</string>
+    <string name="app_source_title">Código-fonte</string>
+    <string name="sketchub_team">Time do Sketchub</string>
+    <string name="community">Comunidade</string>
+    <string name="rate_us">Nos avalie</string>
+
+    <!-- file manager menu -->
+    <string name="error">Erro</string>
+    <string name="error_resource_name_restriction">Os nomes de recursos devem conter apenas a–z minúsculo, 0–9 ou sublinhado.</string>
+    <string name="item_project">Projeto</string>
+    <string name="dialog_create_class_title">Criar a classe</string>
+    <string name="create_class_dialog_class_name">Nome de class</string>
+    <string name="create_class_dialog_positive">Criar</string>
+    <string name="create_class_dialog_class_type">Tipo de classe</string>
+    <string name="create_class_dialog_invalid_name">Nome de classe inválida</string>
+
+    <string name="success">Sucesso</string>
+    <string name="delete_success">Deletado com sucesso.</string>
+    <string name="dialog_confirm_delete">Você tem certeza que quer deletar %1$s?</string>
+    <string name="dialog_delete">Deletar</string>
+    <string name="menu_preview_layout">Prévia do layout</string>
+    <string name="action_menu_build_release">Compilar para APK (Final)</string>
+    <string name="action_menu_build_debug">Compilar para APK (Depuração)</string>
+    <string name="action_menu_build_aab">Compilar para AAB (Bundle)</string>
+
+    <string name="project_manager_alpha_notice_title">Aviso do desenvolvimento Alpha</string>
+    <string name="project_manager_alpha_notice">CodeAssist ainda está em alpha,
+        você pode se deparar com travamentos, bugs e funções incompletas.\nVocê
+        pode reportar esses problemas em https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_save_location_title">Salvar o caminho de saída</string>
+    <string name="project_manager_permission_denied">Permissão negada</string>
+    <string name="project_manager_button_request_again">Requesitar novamente</string>
+    <string name="project_manager_button_continue">Continuar</string>
+    <string name="project_manager_rationale_title">Permissões do armazenamento</string>
+    <string name="project_manager_button_allow">Permitir</string>
+    <string name="project_manager_button_use_internal">Usar o armazenamento internk</string>
+    <string name="project_manager_permission_rationale">O aplicativo precisa da permissão do armazenamento
+        para poder salvar os arquivos dos módulos para não serem deletados após você desinstalar
+        o CodeAssist. Alternativamente você pode escolher salvar os arquivos do módulo no armazenamento interno do aplicativo.</string>
+    <string name="project_manager_android11_notice">Os projetos serão salvos no armazenamento interno do aplicativo.
+        Faça backup dos seus módulos antes de desinstalar o CodeAssist.</string>
+    <string name="project_manager_projects">Projetos</string>
+    <string name="project_manager_empty">Projetos estão vazios</string>
+    <string name="project_manager_create_project">Criar um novo módulo</string>
+    <string name="project_path_menu_title">Caminho dos projetos</string>
+    <string name="project_manager_null_projects">Ops! Você não tem nenhum projeto existente</string>
+    <string name="project_manager_suggestions">Sugestões:\n\n  - Criar um novo projeto\n  - Mudar o caminho dos projetos</string>
+    
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Compilando</string>
+    <string name="compilation_button_install">INSTALAR</string>
+    <string name="compilation_result_success">Compilação foi concluída com sucesso</string>
+    <string name="compilation_result_failed">Compilação falhou</string>
+
+    <!-- Library manager -->
+    <string name="library_manager_title">%1s Dependências</string>
+    <string name="group_id">Identificação do grupo</string>
+    <string name="artifact_id">Identificação do artefato</string>
+    <string name="version_name">Nome da versão</string>
+    <string name="menu_display_dependencies">Listar as dependências usadas</string>
+    <string name="attributes_editor">Editor de Atributos</string>
+    <string name="attribute_value">Valor do atributo</string>
+    <string name="menu_add_libs_gradle">Adicionar as bibilotecas do build.gradle</string>
+
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">Nenhum projeto está aberto.</string>
+    <string name="dialog_confirm_save_title">Salvar como XML</string>
+    <string name="dialog_confirm_save_msg">Você deseja salvar o layout?</string>
+
+    <!-- File Editor Manager -->
+    <string name="file_editor_selection_title">Qual editor você gostaria de abrir?</string>
+
+    <!-- Editor tabs -->
+    <string name="menu_close_file">Fechar</string>
+    <string name="menu_close_others">Fechar os outros</string>
+    <string name="menu_close_all">Fechar tudo</string>
+
+    <!-- Editor -->
+    <string name="editor_error_file">Ocorreu um erro ao ler o arquivo. As alterações não serão salvas.</string>
+
+    <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">Logs da compilação</string>
+    <string name="tab_app_logs_title">Logs do aplicativo</string>
+    <string name="tab_ide_logs_title">Logs da IDE</string>
+    <string name="tab_diagnostics_title">Diagnósticos</string>
+</resources>

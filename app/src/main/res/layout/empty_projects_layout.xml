@@ -1,0 +1,31 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="8dp" >
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:focusable="false"
+        android:padding="8dp"
+        android:gravity="center"
+        android:text="@string/project_manager_null_projects"
+        tools:text="No Projects found"
+        android:textAppearance="@style/TextAppearance.Material3.BodyLarge"/>
+
+    <TextView
+        android:visibility="gone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:alpha="0.7"
+        android:focusable="false"
+        android:padding="8dp"
+        android:text="@string/project_manager_suggestions"
+        android:textColor="?attr/colorOnSurface"
+        android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+
+</LinearLayout>

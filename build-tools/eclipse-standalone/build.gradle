@@ -1,0 +1,22 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+
+    api files('libs/org.eclipse.jdt.core-3.28.0.jar')
+    api 'org.eclipse.platform:org.eclipse.core.resources:3.16.100'
+    api 'org.eclipse.platform:org.eclipse.core.runtime:3.24.100'
+    api 'org.eclipse.platform:org.eclipse.core.filesystem:1.9.300'
+    api 'org.eclipse.platform:org.eclipse.text:3.12.0'
+
+
+
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

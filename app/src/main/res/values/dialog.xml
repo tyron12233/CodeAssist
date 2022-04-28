@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<style name="CodeEditorDialog" parent="@style/ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+		<item name="colorOnSurface">#FFFEFEFE</item>
+		<item name="buttonBarPositiveButtonStyle">@style/PositiveButtonStyle</item>
+		<item name="buttonBarNegativeButtonStyle">@style/PositiveButtonStyle</item>
+		<item name="android:windowBackground">@color/colorSurface</item>
+	</style>
+
+	
+	<style name="PositiveButtonStyle" parent="@style/Widget.MaterialComponents.Button">
+		<item name="android:textColor">@color/colorPrimary</item>
+		<item name="android:background">@android:color/transparent</item>
+	</style>
+
+	<style name="PreviewDialog" parent="Theme.MaterialComponents.Dialog">
+		<item name="windowMinWidthMajor">70%</item>
+		<item name="windowMinWidthMinor">70%</item>
+		<item name="android:layout_width">match_parent</item>
+		<item name="android:layout_height">match_parent</item>
+		<item name="android:windowNoTitle">true</item>
+		<item name="android:windowIsFloating">true</item>
+	</style>
+</resources>

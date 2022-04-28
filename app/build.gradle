@@ -1,0 +1,156 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+
+android {
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+
+    defaultConfig {
+        applicationId rootProject.ext.applicationId
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode rootProject.ext.versionCode
+        versionName rootProject.ext.versionName
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+    compileOptions {
+        coreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+
+        unitTests.all {
+            systemProperty 'robolectric.enabledSdks', '26'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    packagingOptions {
+        resources.excludes += "license/*"
+
+        exclude "plugin.properties"
+        exclude "plugin.xml"
+        exclude "about.html"
+        exclude ".api_description"
+        exclude "about_files/*"
+        exclude "META-INF/eclipse.inf"
+        exclude "META-INF/INDEX.LIST"
+    }
+}
+
+configurations.implementation {
+    exclude group: "org.jetbrains", module: "annotations"
+}
+
+dependencies {
+    // TODO: Removed these modules, the features that are using these modules
+    // should be moved into its own module.
+
+    // TODO: language processing should be on its own module
+    implementation 'org.antlr:antlr4-runtime:4.9.2'
+    implementation files (
+            'libs/language-base-0.5.0.jar',
+            'libs/language-java-0.5.0.jar'
+    )
+
+    // TODO: completion providers should not be included on the main module
+    implementation project(path: ':code-editor')
+    implementation project(path: ':xml-completion')
+    implementation project(path: ':build-tools:viewbinding-inject')
+    implementation project(path: ':build-tools:xml-repository')
+    implementation project(path: ':java-completion')
+    // not used for compilation, but for analysis
+    implementation project(path: ':build-tools:javac')
+
+    implementation project(path: ':language-api')
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderLauncher
+    implementation projects.buildTools.builderConfigurationCache
+    implementation project(path: ':build-tools:builder-api')
+    implementation project(path: ':build-tools:builder-java')
+    implementation project(path: ':build-tools:build-logic')
+    implementation project(path: ':build-tools:manifmerger')
+    implementation project(path: ':build-tools:project')
+    implementation project(path: ':build-tools:logging')
+    implementation project(path: ':build-tools:jaxp:jaxp-internal')
+    implementation project(path: ':build-tools:jaxp:xml')
+    implementation project(path: ':common')
+    implementation project(path: ':build-tools:lint')
+    implementation project(path: ':layout-preview')
+    implementation project(path: ':kotlin-completion')
+    
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation project(path: ':dependency-resolver')
+
+    implementation project(path: ':treeview')
+
+    // apis
+    implementation project(path: ':completion-api')
+    implementation project(path: ':actions-api')
+    implementation project(path: ':editor-api')
+    implementation project(path: ':fileeditor-api')
+
+    // formatters
+    implementation project(path: ':google-java-format')
+
+    // about
+    implementation 'com.github.daniel-stoneuk:material-about-library:3.1.2'
+
+    implementation 'androidx.appcompat:appcompat:1.4.1'
+    implementation 'androidx.core:core:1.7.0'
+    implementation 'com.google.android.material:material:1.5.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    implementation 'androidx.viewpager:viewpager:1.0.0'
+    implementation 'androidx.recyclerview:recyclerview:1.2.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata-core:2.4.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.4.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.4.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata:2.4.1'
+    implementation 'androidx.fragment:fragment:1.4.1'
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
+    implementation 'androidx.activity:activity:1.4.0'
+    implementation 'androidx.drawerlayout:drawerlayout:1.1.1'
+    implementation 'com.github.angads25:filepicker:1.1.1'
+
+    // image loading
+    implementation 'com.github.bumptech.glide:glide:4.12.0'
+
+    implementation 'androidx.preference:preference:1.2.0'
+    implementation 'com.github.TutorialsAndroid:crashx:v6.0.19'
+    implementation project(path: ':eclipse-formatter')
+    implementation project(path: ':build-tools:builder-core')
+
+    //debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.7'
+
+    // testing
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation "com.google.truth:truth:1.1.3"
+    testImplementation 'org.mockito:mockito-core:1.10.19'
+    testImplementation "org.robolectric:robolectric:4.7.3"
+    debugImplementation 'androidx.test:core:1.4.0'
+    debugImplementation 'androidx.fragment:fragment-testing:1.4.1'
+
+    androidTestImplementation 'com.google.truth:truth:1.1.3'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.3'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
+}

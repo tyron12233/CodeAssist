@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    implementation 'androidx.annotation:annotation:1.3.0'
+    implementation project(path: ':common')
+    // for manifest  parsing
+    implementation project(path: ':build-tools:manifmerger')
+
+    // user data holder
+    implementation project(path: ':build-tools:kotlinc')
+    compileOnly project(path: ':android-stubs')
+
+    testImplementation 'junit:junit:4.13.2'
+}
