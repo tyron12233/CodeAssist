@@ -97,7 +97,6 @@ public class IconManagerActivity extends AppCompatActivity {
 		//toolbar.setTitleTextColor(Color.BLACK);
 		fab.setImageResource(R.drawable.outline_add_24);
 		getIconList(desPath, recyclerview1);
-		//statusBarIconIsBlack(true);
 		makeSomeCheckup();
 
 		fab.setOnClickListener(new View.OnClickListener() {
@@ -321,14 +320,6 @@ public class IconManagerActivity extends AppCompatActivity {
 		dialog1.show();
 	}
 
-	private void statusBarIconIsBlack(boolean s) {
-		View decorView = getWindow().getDecorView();
-		if (s) {
-			decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-		} else {
-			decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-		}
-	}
 
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
