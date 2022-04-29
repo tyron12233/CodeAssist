@@ -21,13 +21,13 @@ import java.util.HashMap;
 
 public class IconAdapter extends RecyclerView.Adapter<IconAdapter.ViewHolder> {
 
-    ArrayList<HashMap<String, Object>> data;
+    ArrayList<String> data;
     Context c;
     LinearLayout base;
     ImageView icon;
     TextView name;
 
-    public IconAdapter(ArrayList<HashMap<String, Object>> arr, Context context) {
+    public IconAdapter(ArrayList<String> arr, Context context) {
         data = arr;
         c = context;
     }
@@ -50,23 +50,23 @@ public class IconAdapter extends RecyclerView.Adapter<IconAdapter.ViewHolder> {
         icon = view.findViewById(R.id.imageview1);
         name = view.findViewById(R.id.textview1);
 
-        if (data.get(position).containsKey("path")) {
-            if (Uri.parse(Uri.parse(data.get(position).get("path").toString()).getLastPathSegment())
+        if (!data.get(position).isEmpty()) {
+            if (Uri.parse(Uri.parse(data.get(position)).getLastPathSegment())
                     .getLastPathSegment()
                     .startsWith("outline_")) {
                 name.setText(
                         Uri.parse(
-                                        Uri.parse(data.get(position).get("path").toString())
+                                        Uri.parse(data.get(position))
                                                 .getLastPathSegment())
                                 .getLastPathSegment()
                                 .replace(".png", ""));
             }
         }
-        if (isFile(data.get(position).get("path").toString())) {
-            if (data.get(position).get("path").toString().contains(".png")) {
+        if (isFile(data.get(position))) {
+            if (data.get(position).contains(".png")) {
                 icon.setImageBitmap(
                         decodeSampleBitmapFromPath(
-                                data.get(position).get("path").toString(), 1024, 1024));
+                                data.get(position), 1024, 1024));
             }
         }
         icon.setColorFilter(0xFF000000, PorterDuff.Mode.MULTIPLY);
@@ -74,8 +74,8 @@ public class IconAdapter extends RecyclerView.Adapter<IconAdapter.ViewHolder> {
 	    base.setOnClickListener(
                 new View.OnClickListener() {
                     @Override
-                    public void onClick(View _view) {
-						MainActivity.editVectorDialog(c,data.get(position).get("path").toString());
+                    public void onClick(View view) {
+						MainActivity.editVectorDialog(c,data.get(position));
 					}
                 });
     }
