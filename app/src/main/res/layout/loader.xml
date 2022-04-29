@@ -1,0 +1,32 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical" >
+
+    <LinearLayout
+        android:id="@+id/l1"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_horizontal|center_vertical"
+        android:orientation="vertical" >
+
+        <LinearLayout
+            android:id="@+id/l2"
+            android:layout_width="90dp"
+            android:layout_height="90dp"
+            android:background="#EEEEEE"
+            android:gravity="center_horizontal|center_vertical"
+            android:orientation="horizontal"
+            android:padding="5dp" >
+
+            <LinearLayout
+                android:id="@+id/l3"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:orientation="horizontal" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>
