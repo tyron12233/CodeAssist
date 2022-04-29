@@ -66,7 +66,6 @@ public class IconManagerActivity extends AppCompatActivity {
 	RecyclerView recyclerview1;
 	public static String desPath, resPath, name, icon, vector, unziped_vector, f, project_path;
 	int n = 0;
-	ArrayList<HashMap<String, Object>> listmap = new ArrayList<>();
 	ArrayList<String> list = new ArrayList<>();
 	ArrayList<String> scanner1 = new ArrayList<>();
 	ArrayList<String> scanner2 = new ArrayList<>();
@@ -136,23 +135,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	private void getIconList(String path, RecyclerView recyclerView) {
 		makeSomeCheckup();
 		list.clear();
-		listmap.clear();
 		FileUtil.listDir(path, list);
-
-		try {
-
-			for (int repeat = 0; repeat < list.size(); repeat++) {
-				{
-					HashMap<String, Object> item = new HashMap<>();
-					item.put("path", list.get(repeat));
-					listmap.add(item);
-				}
-
-				n++;
-			}
-		} catch (IndexOutOfBoundsException e) {
-			Utils.toast(this, e.toString());
-		}
 		recyclerView.setAdapter(new IconAdapter(listmap, this));
 		recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
 		recyclerView.setNestedScrollingEnabled(false);
