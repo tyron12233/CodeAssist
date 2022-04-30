@@ -141,6 +141,9 @@
     <string name="completion_settings_java_title">Java</string>
     <string name="completion_java_target_version_title">目標版本</string>
     <string name="completion_java_source_version_title">源碼版本</string>
+    <string name="editor_tabs_settings_title">編輯器標簽</string>
+    <string name="editor_tab_unique_file_name">顯示非唯一文件名的目錄</string>
+    <string name="editor_tab_unique_file_name_summary">如果打開具有相同文件名的文件，則通過顯示父文件夾使顯示的文件名唯一</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">關於我們</string>
