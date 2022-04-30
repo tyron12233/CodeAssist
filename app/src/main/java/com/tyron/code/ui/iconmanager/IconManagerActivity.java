@@ -227,7 +227,7 @@ public class IconManagerActivity extends AppCompatActivity {
 
 		}
 
-		Utils.toast(this, new File(icon).getAbsolutePath());
+		Utils.toast(this, "Extracted successfully");
 		FileUtil.deleteFile(resPath);
 
 	}
@@ -245,7 +245,7 @@ public class IconManagerActivity extends AppCompatActivity {
 		} else {
 			FileUtil.writeFile(to.concat(name.trim().concat(".xml")), vector);
 
-		}
+		}                
 
 	}
 
@@ -321,6 +321,7 @@ public class IconManagerActivity extends AppCompatActivity {
 								editVectorFileProcess(name.getText().toString().trim(),
 										height.getText().toString().trim(), width.getText().toString().trim(),
 										color.getText().toString().trim(), from, path.getText().toString());
+                                                                Utils.toast(c,"Icon has been added to your project");
 								dialog1.dismiss();
 							}
 						}
