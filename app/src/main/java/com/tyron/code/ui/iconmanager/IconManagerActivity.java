@@ -92,9 +92,7 @@ public class IconManagerActivity extends AppCompatActivity {
 		setSupportActionBar(toolbar);
 		getSupportActionBar().setDisplayHomeAsUpEnabled(false);
 		getSupportActionBar().setHomeButtonEnabled(false);
-		//getSupportActionBar().setBackgroundDrawable(new ColorDrawable(Color.parseColor("#ffffff")));
 		getSupportActionBar().setTitle("Icon Manager");
-		//toolbar.setTitleTextColor(Color.BLACK);
 		fab.setImageResource(R.drawable.outline_add_24);
 		getIconList(desPath, recyclerview1);
 		makeSomeCheckup();
@@ -283,6 +281,20 @@ public class IconManagerActivity extends AppCompatActivity {
 		final String finalIconName = iconName.replace(".png", "");
 		name.setText(finalIconName);
 		path.setText(project_path);
+                textinput4.setEndIconOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View view) {
+				if (!color.getText().toString().startsWith("#")) {
+					Utils.toast(c, "Invalid color code");
+				} else {
+					try {
+						icon.setColorFilter(Color.parseColor(color.getText().toString()), PorterDuff.Mode.MULTIPLY);
+					} catch (Exception e) {
+						Utils.toast(c, "Invaild color code");
+					}
+				}
+			}
+		});               
 		container.setBackground(new GradientDrawable() {
 			public GradientDrawable getIns(int a, int b) {
 				this.setCornerRadius(a);
