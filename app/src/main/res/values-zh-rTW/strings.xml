@@ -208,6 +208,11 @@
     <string name="attributes_editor">屬性編輯器</string>
     <string name="attribute_value">屬性值</string>
     <string name="menu_add_libs_gradle">從 build.gradle 新增庫</string>
+    
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">沒有打開項目</string>
+    <string name="dialog_confirm_save_title">保存為XML</string>
+    <string name="dialog_confirm_save_msg">是否要保存布局？</string>
 
     <!-- File Editor Manager -->
     <string name="file_editor_selection_title">您想用哪個編輯器開啟?</string>
