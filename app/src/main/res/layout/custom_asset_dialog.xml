@@ -105,6 +105,8 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/textinputlayout4"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                app:endIconMode="custom"
+                app:endIconDrawable="@drawable/outline_sync_24"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
