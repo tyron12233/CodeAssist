@@ -141,6 +141,9 @@
     <string name="completion_settings_java_title">Java</string>
     <string name="completion_java_target_version_title">目标版本</string>
     <string name="completion_java_source_version_title">源码版本</string>
+    <string name="editor_tabs_settings_title">编辑器标签</string>
+    <string name="editor_tab_unique_file_name">显示非唯一文件名的目录</string>
+    <string name="editor_tab_unique_file_name_summary">如果打开具有相同文件名的文件，则通过显示父文件夹使显示的文件名唯一</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">关于我们</string>
@@ -208,6 +211,11 @@
     <string name="attributes_editor">属性编辑器</string>
     <string name="attribute_value">属性值</string>
     <string name="menu_add_libs_gradle">从 build.gradle 添加库</string>
+
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">没有打开项目</string>
+    <string name="dialog_confirm_save_title">保存为XML</string>
+    <string name="dialog_confirm_save_msg">是否要保存布局？</string>
 
     <!-- File Editor Manager -->
     <string name="file_editor_selection_title">您想用哪个编辑器打开?</string>
