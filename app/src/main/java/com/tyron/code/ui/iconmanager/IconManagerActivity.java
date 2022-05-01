@@ -107,10 +107,10 @@ public class IconManagerActivity extends AppCompatActivity {
 		fab.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View view) {
-				Intent chooseFile = new Intent(Intent.ACTION_GET_CONTENT);
-				chooseFile.setType("*/*");
-				chooseFile = Intent.createChooser(chooseFile, "Choose a file");
-				startActivityForResult(chooseFile, 2000);
+				Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                                intent.setType("application/zip");
+				startActivityForResult(intent, 2000);
 
 			}
 		});
