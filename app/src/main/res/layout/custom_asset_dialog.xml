@@ -33,7 +33,7 @@
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/textinputlayout1"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
@@ -58,7 +58,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/textinputlayout2"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginRight="4dp"
@@ -74,7 +74,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/textinputlayout3"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="4dp"
@@ -104,7 +104,7 @@
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/textinputlayout4"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
                 app:endIconMode="custom"
                 app:endIconDrawable="@drawable/outline_sync_24"
                 android:layout_width="match_parent"
@@ -124,7 +124,7 @@
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/textinputlayout5"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
