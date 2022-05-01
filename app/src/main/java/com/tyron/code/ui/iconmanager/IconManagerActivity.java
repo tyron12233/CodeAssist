@@ -56,6 +56,7 @@ import java.util.zip.ZipInputStream;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.project.ProjectManager;
+import org.apache.commons.io.FileUtils;
 
 public class IconManagerActivity extends AppCompatActivity {
 	
@@ -89,7 +90,7 @@ public class IconManagerActivity extends AppCompatActivity {
 		String mPath = FileUtil.getPackageDir(this).concat("/material-icons-pack/");
 		resPath = mPath.concat("res");
                 String v1 = ProjectManager.getInstance().getCurrentProject().getRootFile().getAbsolutePath();
-                String v2 = "app/src/main/res/drawable/";
+                String v2 = "/app/src/main/res/drawable/";
 		project_path = v1 + v2;
 		//
                 //testing if getting project path
@@ -106,6 +107,7 @@ public class IconManagerActivity extends AppCompatActivity {
 		fab.setImageResource(R.drawable.outline_add_24);
 		getIconList(desPath, recyclerview1);
 		makeSomeCheckup();
+                makeSomeFileCheckUp();
 
 		fab.setOnClickListener(new View.OnClickListener() {
 			@Override
@@ -137,6 +139,13 @@ public class IconManagerActivity extends AppCompatActivity {
 
 	private void makeSomeFileCheckUp() {
 		//todo: find duplicate files
+        if(FileUtil.exists(resPath)) {
+        try {
+	FileUtils.forceDelete(new File(resPath));
+	} catch (Exception e) {
+	Utils.toast(this,e.toString());
+	}
+        }
 	}
 
 	private void getIconList(String path, RecyclerView recyclerView) {
@@ -238,7 +247,11 @@ public class IconManagerActivity extends AppCompatActivity {
 		}
 
 		Utils.toast(this, "Extracted successfully");
-		FileUtil.deleteFile(resPath);
+		try {
+			FileUtils.forceDelete(new File(resPath));
+		} catch (Exception e) {
+			Utils.toast(this, e.toString());
+		}
 
 	}
 
