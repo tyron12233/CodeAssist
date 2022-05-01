@@ -11,7 +11,7 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import com.tyron.code.ui.IconManagerActivity;
+import com.tyron.code.ui.iconmanager.IconManagerActivity;
 import com.tyron.code.R;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -75,7 +75,7 @@ public class IconAdapter extends RecyclerView.Adapter<IconAdapter.ViewHolder> {
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-						MainActivity.editVectorDialog(c,data.get(position));
+						IconManagerActivity.editVectorDialog(c,data.get(position));
 					}
                 });
     }
