@@ -72,7 +72,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	ArrayList<String> list = new ArrayList<>();
 	ArrayList<String> scanner1 = new ArrayList<>();
 	ArrayList<String> scanner2 = new ArrayList<>();
-        ArrayList<String> scanner3 = new ArrayList<>();
+        public static ArrayList<String> scanner3 = new ArrayList<>();
 	SwipeRefreshLayout swipeRefreshLayout;
 	Project mProject;
 
@@ -343,7 +343,7 @@ public class IconManagerActivity extends AppCompatActivity {
 							if (color.getText().toString().trim().equals("")) {
 
 							} else {
-								editVectorFileProcess(name.getText().toString().trim(),
+								editVectorFileProcess(c, name.getText().toString().trim(),
 										height.getText().toString().trim(), width.getText().toString().trim(),
 										color.getText().toString().trim(), position, path.getText().toString());
                                                                 Utils.toast(c,"Icon has been added to your project");
