@@ -67,7 +67,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	FloatingActionButton fab;
 	Toolbar toolbar;
 	RecyclerView recyclerview1;
-	public static String desPath, resPath, name, icon, vector, unziped_vector, f, project_path;
+	public static String desPath, resPath, name, icon, vector, unziped_vector, f, project_path, from;
 	int n = 0;
 	ArrayList<String> list = new ArrayList<>();
 	ArrayList<String> scanner1 = new ArrayList<>();
@@ -92,6 +92,7 @@ public class IconManagerActivity extends AppCompatActivity {
                 String v1 = ProjectManager.getInstance().getCurrentProject().getRootFile().getAbsolutePath();
                 String v2 = "/app/src/main/res/drawable/";
 		project_path = v1 + v2;
+                from = FileUtil.getPackageDir(this).concat("/material-icons-pack/materialiconsoutlined/vector-packs/");
 		//
                 //testing if getting project path
                 try{
@@ -209,13 +210,20 @@ public class IconManagerActivity extends AppCompatActivity {
 
 		performUnzipTask(from, to);
 		FileUtil.listDir(resPath.concat("/drawable/"), scanner1);
-		int m = 0;
+
 		for (int repeat = 0; repeat < scanner1.size(); repeat++) {
-			if (scanner1.get(m).contains("_24")) {
-				name = scanner1.get(m);
-			}
-			m++;
+			if (scanner1.get(repeat).contains("_24")) {
+				name = scanner1.get(repeat);
+			}		
 		}
+                
+                FileUtil.listDir(resPath.concat("/drawable-xxhdpi/"), scanner2);
+
+			for (int repeat = 0; repeat < scanner2.size(); repeat++) {
+				if (scanner2.get(repeat).contains("_white_48")) {
+					icon = scanner2.get(repeat);
+				}
+			}
 
 		if (FileUtil.exists(name) || FileUtil.exists(icon)) {
 
@@ -230,16 +238,6 @@ public class IconManagerActivity extends AppCompatActivity {
 					"android:tint=\"$tint\"");
 			FileUtil.writeFile(to.concat("materialiconsoutlined/vector-packs/"
 					.concat(Uri.parse(name).getLastPathSegment().replace("_24", ""))), unziped_vector);
-
-			FileUtil.listDir(resPath.concat("/drawable-xxhdpi/"), scanner2);
-
-			int a = 0;
-			for (int repeat = 0; repeat < scanner2.size(); repeat++) {
-				if (scanner2.get(a).contains("_white_48")) {
-					icon = scanner2.get(a);
-				}
-				a++;
-			}
 
 			Bitmap bm = BitmapFactory.decodeFile(new File(icon).getAbsolutePath());
 			FileUtil.bitmapToFile(IconManagerActivity.this, bm, Uri.parse(icon).getLastPathSegment().replace("_white_48", ""));
