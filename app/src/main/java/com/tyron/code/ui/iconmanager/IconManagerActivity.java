@@ -67,7 +67,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	FloatingActionButton fab;
 	Toolbar toolbar;
 	RecyclerView recyclerview1;
-	public static String desPath, resPath, name, icon, vector, unziped_vector, f, project_path, from;
+	public static String desPath, resPath, name, icon, vector, unziped_vector, f, project_path, from, from2;
 	int n = 0;
 	ArrayList<String> list = new ArrayList<>();
 	ArrayList<String> scanner1 = new ArrayList<>();
@@ -275,6 +275,10 @@ public class IconManagerActivity extends AppCompatActivity {
 	}
 
 	public static void editVectorDialog(final Context c, int position) {
+                scanner3.clear();
+                String d = FileUtil.getPackageDir(c) + "/material-icons-pack/materialiconsoutlined/preview-packs/";
+                FileUtil.listDir(d,scanner3);
+                from2 = scanner3.get(position);
 		final AlertDialog dialog1 = new AlertDialog.Builder(c).create();
 		View inflate = LayoutInflater.from(c).inflate(R.layout.custom_asset_dialog, null);
 		dialog1.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
@@ -302,7 +306,7 @@ public class IconManagerActivity extends AppCompatActivity {
 		textinput5.setHint("Path");
 		path.setEnabled(false);
 		icon.setColorFilter(0xFF000000, PorterDuff.Mode.MULTIPLY);
-		final String iconName = Uri.parse(from).getLastPathSegment();
+		final String iconName = Uri.parse(from2).getLastPathSegment();
 		final String finalIconName = iconName.replace(".png", "");
 		name.setText(finalIconName);
 		path.setText(project_path);
@@ -327,10 +331,10 @@ public class IconManagerActivity extends AppCompatActivity {
 				return this;
 			}
 		}.getIns(15, 0xFFFFFFFF));
-		icon.setImageBitmap(FileUtil.decodeSampleBitmapFromPath(from, 1024, 1024));
+		icon.setImageBitmap(FileUtil.decodeSampleBitmapFromPath(from2, 1024, 1024));
 		b1.setOnClickListener(new View.OnClickListener() {
 			@Override
-			public void onClick(View _view) {
+			public void onClick(View view) {
 				if (name.getText().toString().trim().equals("")) {
 
 				} else {
