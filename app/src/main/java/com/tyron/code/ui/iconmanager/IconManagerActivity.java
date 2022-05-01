@@ -141,7 +141,7 @@ public class IconManagerActivity extends AppCompatActivity {
 		makeSomeCheckup();
 		list.clear();
 		FileUtil.listDir(path, list);
-		recyclerView.setAdapter(new IconAdapter(listmap, this));
+		recyclerView.setAdapter(new IconAdapter(list, this));
 		recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
 		recyclerView.setNestedScrollingEnabled(false);
 
