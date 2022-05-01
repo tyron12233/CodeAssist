@@ -75,8 +75,8 @@ public class IconAdapter extends RecyclerView.Adapter<IconAdapter.ViewHolder> {
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-						IconManagerActivity.editVectorDialog(c,data.get(position));
-					}
+		    IconManagerActivity.editVectorDialog(c, position);
+		   }
                 });
     }
 
