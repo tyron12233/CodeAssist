@@ -31,7 +31,6 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.tyron.code.ui.iconmanager.loader.LoaderDialog;
 import com.tyron.code.ui.iconmanager.util.FileUtil;
-import com.tyron.code.ui.iconmanager.util.Utils;
 import com.google.android.material.button.MaterialButton;
 import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.iconmanager.adapter.IconAdapter;
@@ -57,6 +56,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.project.ProjectManager;
 import org.apache.commons.io.FileUtils;
+import com.tyron.common.util.AndroidUtilities;
 
 public class IconManagerActivity extends AppCompatActivity {
 	
@@ -93,13 +93,7 @@ public class IconManagerActivity extends AppCompatActivity {
                 String v1 = ProjectManager.getInstance().getCurrentProject().getRootFile().getAbsolutePath();
                 String v2 = "/app/src/main/res/drawable/";
 		project_path = v1 + v2;
-                //
-                //testing if getting project path
-                try{
-                Utils.toast(this,project_path);
-                }catch(Exception e){
-                Utils.toast(this,e.toString());
-                }
+                //     
 
 		setSupportActionBar(toolbar);
 		getSupportActionBar().setDisplayHomeAsUpEnabled(false);
@@ -244,11 +238,11 @@ public class IconManagerActivity extends AppCompatActivity {
 
 		}
 
-		Utils.toast(this, "Extracted successfully");
+		AndroidUtilities.showToast("Extracted successfully");
 		try {
 			FileUtils.forceDelete(new File(resPath));
 		} catch (Exception e) {
-			Utils.toast(this, e.toString());
+			AndroidUtilities.showToast(e.toString());
 		}
 
 	}
@@ -314,12 +308,12 @@ public class IconManagerActivity extends AppCompatActivity {
 			@Override
 			public void onClick(View view) {
 				if (!color.getText().toString().startsWith("#")) {
-					Utils.toast(c, "Invalid color code");
+					AndroidUtilities.showToast("Invalid color code");
 				} else {
 					try {
 						icon.setColorFilter(Color.parseColor(color.getText().toString()), PorterDuff.Mode.MULTIPLY);
 					} catch (Exception e) {
-						Utils.toast(c, "Invaild color code");
+						AndroidUtilities.showToast("Invalid color code");
 					}
 				}
 			}
@@ -350,7 +344,7 @@ public class IconManagerActivity extends AppCompatActivity {
 								editVectorFileProcess(c, name.getText().toString().trim(),
 										height.getText().toString().trim(), width.getText().toString().trim(),
 										color.getText().toString().trim(), position, path.getText().toString());
-                                                                Utils.toast(c,"Icon has been added to your project");
+                                                                AndroidUtilities.showToast("Icon has been added to your project");
 								dialog1.dismiss();
 							}
 						}
