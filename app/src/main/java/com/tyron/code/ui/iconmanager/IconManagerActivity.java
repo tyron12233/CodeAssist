@@ -253,11 +253,11 @@ public class IconManagerActivity extends AppCompatActivity {
 
 	}
 
-	public static void editVectorFileProcess(String name, String height, String width, String color, int position,
+	public static void editVectorFileProcess(Context c, String name, String height, String width, String color, int position,
 			String to) {
 
                 scanner3.clear();
-                String ab = FileUtil.getPackageDir(this) + "/material-icons-pack/materialiconsoutlined/vector-packs/";
+                String ab = FileUtil.getPackageDir(c) + "/material-icons-pack/materialiconsoutlined/vector-packs/";
                 FileUtil.listDir(ab, scanner3);
                 from = scanner3.get(position);
 		vector = FileUtil.readFile(from);
