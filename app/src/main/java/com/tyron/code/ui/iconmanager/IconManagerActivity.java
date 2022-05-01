@@ -138,7 +138,7 @@ public class IconManagerActivity extends AppCompatActivity {
         try {
 	FileUtils.forceDelete(new File(resPath));
 	} catch (Exception e) {
-	Utils.toast(this,e.toString());
+	AndroidUtilities.showToast(e.toString());
 	}
         }
 	}
