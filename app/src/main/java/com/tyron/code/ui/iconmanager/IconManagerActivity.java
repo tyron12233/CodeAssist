@@ -72,6 +72,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	ArrayList<String> list = new ArrayList<>();
 	ArrayList<String> scanner1 = new ArrayList<>();
 	ArrayList<String> scanner2 = new ArrayList<>();
+        ArrayList<String> scanner3 = new ArrayList<>();
 	SwipeRefreshLayout swipeRefreshLayout;
 	Project mProject;
 
@@ -92,8 +93,7 @@ public class IconManagerActivity extends AppCompatActivity {
                 String v1 = ProjectManager.getInstance().getCurrentProject().getRootFile().getAbsolutePath();
                 String v2 = "/app/src/main/res/drawable/";
 		project_path = v1 + v2;
-                from = FileUtil.getPackageDir(this).concat("/material-icons-pack/materialiconsoutlined/vector-packs/");
-		//
+                //
                 //testing if getting project path
                 try{
                 Utils.toast(this,project_path);
@@ -253,9 +253,13 @@ public class IconManagerActivity extends AppCompatActivity {
 
 	}
 
-	public static void editVectorFileProcess(String name, String height, String width, String color, String from,
+	public static void editVectorFileProcess(String name, String height, String width, String color, int position,
 			String to) {
 
+                scanner3.clear();
+                String ab = FileUtil.getPackageDir(this) + "/material-icons-pack/materialiconsoutlined/vector-packs/";
+                FileUtil.listDir(ab, scanner3);
+                from = scanner3.get(position);
 		vector = FileUtil.readFile(from);
 		vector = vector.replace("$height_", height.trim());
 		vector = vector.replace("$width_", width.trim());
@@ -270,7 +274,7 @@ public class IconManagerActivity extends AppCompatActivity {
 
 	}
 
-	public static void editVectorDialog(final Context c, String from) {
+	public static void editVectorDialog(final Context c, int position) {
 		final AlertDialog dialog1 = new AlertDialog.Builder(c).create();
 		View inflate = LayoutInflater.from(c).inflate(R.layout.custom_asset_dialog, null);
 		dialog1.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
@@ -341,7 +345,7 @@ public class IconManagerActivity extends AppCompatActivity {
 							} else {
 								editVectorFileProcess(name.getText().toString().trim(),
 										height.getText().toString().trim(), width.getText().toString().trim(),
-										color.getText().toString().trim(), from, path.getText().toString());
+										color.getText().toString().trim(), position, path.getText().toString());
                                                                 Utils.toast(c,"Icon has been added to your project");
 								dialog1.dismiss();
 							}
