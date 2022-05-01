@@ -54,6 +54,8 @@ import java.util.TimerTask;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import com.tyron.builder.project.Project;
+import com.tyron.code.R;
+import com.tyron.code.ui.project.ProjectManager;
 
 public class IconManagerActivity extends AppCompatActivity {
 	
@@ -82,12 +84,18 @@ public class IconManagerActivity extends AppCompatActivity {
 		swipeRefreshLayout = findViewById(R.id.s1);
 
 		//Strings
-		desPath = FileUtil.getPackageDir(IconManagerActivity.this)
+		desPath = FileUtil.getPackageDir(this)
 				.concat("/material-icons-pack/materialiconsoutlined/preview-packs/");
 		String mPath = FileUtil.getPackageDir(this).concat("/material-icons-pack/");
 		resPath = mPath.concat("res");
-		project_path = mProject.getRootFile().concat("app/src/main/res/drawable/");
+		project_path = ProjectManager.getInstance().getCurrentProject().concat("app/src/main/res/drawable/");
 		//
+                //testing if getting project path
+                try{
+                Utils.toast(this,project_path);
+                }catch(Exception e){
+                Utils.toast(this,e.toString());
+                }
 
 		setSupportActionBar(toolbar);
 		getSupportActionBar().setDisplayHomeAsUpEnabled(false);
