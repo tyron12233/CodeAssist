@@ -88,7 +88,9 @@ public class IconManagerActivity extends AppCompatActivity {
 				.concat("/material-icons-pack/materialiconsoutlined/preview-packs/");
 		String mPath = FileUtil.getPackageDir(this).concat("/material-icons-pack/");
 		resPath = mPath.concat("res");
-		project_path = ProjectManager.getInstance().getCurrentProject().concat("app/src/main/res/drawable/");
+                String v1 = ProjectManager.getInstance().getCurrentProject().getRootFile().getAbsolutePath();
+                String v2 = "app/src/main/res/drawable/";
+		project_path = v1 + v2;
 		//
                 //testing if getting project path
                 try{
