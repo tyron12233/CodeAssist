@@ -297,7 +297,7 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
 
         @Override
         public void createMutableModel(ClassLoaderScope selfClassLoaderScope, ClassLoaderScope baseClassLoaderScope) {
-            controller.createMutableModel(descriptor, owner, this, null, null, projectFactory);
+            controller.createMutableModel(descriptor, owner, this, selfClassLoaderScope, baseClassLoaderScope, projectFactory);
         }
 
         @Override

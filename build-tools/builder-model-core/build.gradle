@@ -17,6 +17,7 @@ dependencies {
 
     implementation 'javax.inject:javax.inject:1'
     implementation common.commonsLang3
+    implementation 'org.ow2.asm:asm:9.3'
     implementation 'org.codehaus.groovy:groovy:3.0.7:grooid'
 }
 

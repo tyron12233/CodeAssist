@@ -26,6 +26,7 @@ import com.tyron.builder.api.resources.ResourceHandler;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.internal.Actions;
+import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.util.ConfigureUtil;
@@ -57,7 +58,7 @@ public abstract class DefaultScript extends BasicScript {
             fileOperations = scriptServices.getFileOperations();
             processOperations = scriptServices.getProcessOperations();
         } else {
-            Instantiator instantiator = services.get(Instantiator.class);
+            Instantiator instantiator = DirectInstantiator.INSTANCE;
             FileLookup fileLookup = services.get(FileLookup.class);
             FileCollectionFactory fileCollectionFactory = services.get(FileCollectionFactory.class);
             File sourceFile = getScriptSource().getResource().getLocation().getFile();

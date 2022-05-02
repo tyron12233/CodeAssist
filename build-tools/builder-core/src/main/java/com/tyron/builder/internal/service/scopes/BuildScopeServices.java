@@ -25,6 +25,7 @@ import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.properties.GradleProperties;
 import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.caching.internal.BuildCacheConfigurationInternal;
 import com.tyron.builder.caching.internal.BuildCacheController;
 import com.tyron.builder.caching.internal.controller.RootBuildCacheControllerRef;
@@ -70,7 +71,9 @@ import com.tyron.builder.groovy.scripts.internal.CompileOperation;
 import com.tyron.builder.groovy.scripts.internal.CompiledScript;
 import com.tyron.builder.groovy.scripts.internal.DefaultScriptCompilationHandler;
 import com.tyron.builder.groovy.scripts.internal.DefaultScriptRunnerFactory;
+import com.tyron.builder.groovy.scripts.internal.FileCacheBackedScriptClassCompiler;
 import com.tyron.builder.groovy.scripts.internal.ScriptClassCompiler;
+import com.tyron.builder.groovy.scripts.internal.ScriptCompilationHandler;
 import com.tyron.builder.groovy.scripts.internal.ScriptRunnerFactory;
 import com.tyron.builder.initialization.BuildLoader;
 import com.tyron.builder.initialization.DefaultGradlePropertiesController;
@@ -108,6 +111,7 @@ import com.tyron.builder.internal.build.PublicBuildPath;
 import com.tyron.builder.internal.buildTree.BuildInclusionCoordinator;
 import com.tyron.builder.internal.buildTree.BuildModelParameters;
 import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.internal.classpath.CachedClasspathTransformer;
 import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.composite.DefaultBuildIncluder;
@@ -115,12 +119,14 @@ import com.tyron.builder.internal.event.DefaultListenerManager;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.file.FileException;
+import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.hash.Hashes;
 import com.tyron.builder.internal.hash.PrimitiveHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.id.UniqueId;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -435,43 +441,25 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         );
     }
 
-    protected ScriptClassCompiler createScriptClassCompiler() {
-        return new ScriptClassCompiler() {
-            @Override
-            public <T extends Script, M> CompiledScript<T, M> compile(ScriptSource source,
-                                                                      ClassLoaderScope targetScope,
-                                                                      CompileOperation<M> transformer,
-                                                                      Class<T> scriptBaseClass,
-                                                                      Action<? super ClassNode> verifier) {
-                PrimitiveHasher hasher = Hashes.newPrimitiveHasher();
-                hasher.putString(transformer.getId());
-                hasher.putHash(source.getResource().getContentHash());
-                String key = Hashes.toCompactString(hasher.hash());
+    protected DefaultScriptCompilationHandler createScriptCompilationHandler(Deleter deleter, ImportsReader importsReader) {
+        return new DefaultScriptCompilationHandler(deleter, importsReader);
+    }
 
-                if (TestUtil.isWindows()) {
-                    DefaultScriptCompilationHandler handler = new DefaultScriptCompilationHandler(get(Deleter.class),
-                                    new ImportsReader() {
-                                        @Override
-                                        public String[] getImportPackages() {
-                                            return new String[0];
-                                        }
 
-                                        @Override
-                                        public Map<String, List<String>> getSimpleNameToFullClassNamesMapping() {
-                                            return null;
-                                        }
-                                    });
-                    TemporaryFileProvider temporaryFileProvider = get(TemporaryFileProvider.class);
-                    File scripts = new File(TestUtil.getResourcesDirectory(), "scripts");
-                    File metadata = new File(TestUtil.getResourcesDirectory(), "metadata");
-                    handler.compileToDir(source, targetScope.getLocalClassLoader(), scripts, metadata, transformer, scriptBaseClass, verifier);
-                    return handler.loadFromDir(source, source.getResource().getContentHash(),
-                            targetScope, DefaultClassPath.of(scripts.listFiles()) , metadata, transformer,
-                            scriptBaseClass);
-                }
-                return null;
-            }
-        };
+    protected ScriptClassCompiler createScriptClassCompiler(
+            GlobalScopedCache cache,
+            ScriptCompilationHandler handler,
+            ProgressLoggerFactory progressLoggerFactory,
+            ClassLoaderHierarchyHasher hasher,
+            CachedClasspathTransformer transformer
+    ) {
+        return new FileCacheBackedScriptClassCompiler(
+                cache,
+                handler,
+                progressLoggerFactory,
+                hasher,
+                transformer
+        );
     }
 
     protected ScriptCompilerFactory createScriptCompileFactory(

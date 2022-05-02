@@ -62,6 +62,9 @@ public class DefaultDeleter implements Deleter {
 
     @Override
     public boolean ensureEmptyDirectory(File target, boolean followSymlinks) throws IOException {
+        if (!target.exists()) {
+            return false;
+        }
         FileUtils.cleanDirectory(target);
         return true;
     }

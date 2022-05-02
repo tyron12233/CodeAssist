@@ -28,6 +28,8 @@ import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.tasks.util.PatternSet;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.resource.TextUriResourceLoader;
+import com.tyron.builder.internal.verifier.HttpRedirectVerifier;
 import com.tyron.builder.util.ConfigureUtil;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.internal.file.Deleter;
@@ -296,13 +298,19 @@ public class DefaultFileOperations implements FileOperations {
     }
 
     public static DefaultFileOperations createSimple(FileResolver fileResolver, FileCollectionFactory fileTreeFactory, ServiceRegistry services) {
-        Instantiator instantiator = services.get(Instantiator.class);
+        Instantiator instantiator = DirectInstantiator.INSTANCE;
         ObjectFactory objectFactory = services.get(ObjectFactory.class);
         FileSystem fileSystem = services.get(FileSystem.class);
         DirectoryFileTreeFactory directoryFileTreeFactory = services.get(DirectoryFileTreeFactory.class);
         StreamHasher streamHasher = services.get(StreamHasher.class);
         FileHasher fileHasher = services.get(FileHasher.class);
-        ApiTextResourceAdapter.Factory textResourceAdapterFactory = services.get(ApiTextResourceAdapter.Factory.class);
+        ApiTextResourceAdapter.Factory textResourceAdapterFactory = new ApiTextResourceAdapter.Factory(
+                new TextUriResourceLoader.Factory() {
+                    @Override
+                    public TextUriResourceLoader create(HttpRedirectVerifier redirectVerifier) {
+                        throw new UnsupportedOperationException("Not yet supported!");
+                    }
+                }, services.get(TemporaryFileProvider.class));// services.get(ApiTextResourceAdapter.Factory.class);
         Factory<PatternSet> patternSetFactory = services.getFactory(PatternSet.class);
         Deleter deleter = services.get(Deleter.class);
         DocumentationRegistry documentationRegistry = services.get(DocumentationRegistry.class);

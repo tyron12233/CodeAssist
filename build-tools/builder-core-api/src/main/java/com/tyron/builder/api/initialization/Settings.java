@@ -57,7 +57,7 @@ public interface Settings {
     /**
      * <p>The default name for the settings file.</p>
      */
-    String DEFAULT_SETTINGS_FILE = "settings.bhs";
+    String DEFAULT_SETTINGS_FILE = "settings.gradle";
 
     /**
      * <p>Adds the given projects to the build. Each path in the supplied list is treated as the path of a project to

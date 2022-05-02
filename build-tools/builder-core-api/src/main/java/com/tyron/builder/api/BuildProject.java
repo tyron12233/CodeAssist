@@ -39,7 +39,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
     /**
      * The default project build file name.
      */
-    String DEFAULT_BUILD_FILE = "build.bsh";
+    String DEFAULT_BUILD_FILE = "build.gradle";
 
     /**
      * The hierarchy separator for project and task path names.
@@ -288,10 +288,6 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @param defaultTasks The default task names.
      */
     void defaultTasks(String... defaultTasks);
-
-    default void defaultTasks(String task) {
-        defaultTasks(new String[]{task});
-    }
 
     /**
      * <p>Declares that this project has an evaluation dependency on the project with the given path.</p>

@@ -17,7 +17,7 @@ public class ConfigurableClassLoaderHierarchyHasher implements ClassLoaderHierar
 
     public ConfigurableClassLoaderHierarchyHasher(Map<ClassLoader, String> knownClassLoaders, HashingClassLoaderFactory classLoaderFactory) {
         this.classLoaderFactory = classLoaderFactory;
-        Map<ClassLoader, byte[]> hashes = new WeakHashMap<ClassLoader, byte[]>();
+        Map<ClassLoader, byte[]> hashes = new WeakHashMap<>();
         for (Map.Entry<ClassLoader, String> entry : knownClassLoaders.entrySet()) {
             hashes.put(entry.getKey(), entry.getValue().getBytes(Charsets.UTF_8));
         }
@@ -53,9 +53,9 @@ public class ConfigurableClassLoaderHierarchyHasher implements ClassLoaderHierar
                 hasher.putBytes(knownId);
                 return false;
             }
-//            if (cl instanceof CachingClassLoader || cl instanceof MultiParentClassLoader) {
-//                return true;
-//            }
+            if (cl instanceof CachingClassLoader || cl instanceof MultiParentClassLoader) {
+                return true;
+            }
             HashCode hash = classLoaderFactory.getClassLoaderClasspathHash(cl);
             if (hash != null) {
                 Hashes.putHash(hasher, hash);

@@ -1,0 +1,7 @@
+defaultTasks("test")
+
+tasks.register("test") {
+    doLast {
+        println("Executing!")
+    }
+}

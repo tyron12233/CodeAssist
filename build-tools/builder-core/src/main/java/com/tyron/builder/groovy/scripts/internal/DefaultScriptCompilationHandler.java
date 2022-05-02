@@ -98,7 +98,9 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
 
         final EmptyScriptDetector emptyScriptDetector = new EmptyScriptDetector();
         final PackageStatementDetector packageDetector = new PackageStatementDetector();
-        GroovyClassLoader groovyClassLoader = new GroovyClassLoader(classLoader, configuration, false) {
+        // TODO: Filter class loader to allow only API classes
+        GroovyClassLoader groovyClassLoader = new GroovyClassLoader(
+                ClassLoader.getSystemClassLoader(), configuration, false) {
             @Override
             protected CompilationUnit createCompilationUnit(CompilerConfiguration compilerConfiguration,
                                                             CodeSource codeSource) {

@@ -11,6 +11,8 @@ import com.tyron.builder.api.internal.classpath.ModuleRegistry;
 import com.tyron.builder.api.internal.classpath.PluginModuleRegistry;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
+import com.tyron.builder.configuration.DefaultImportsReader;
+import com.tyron.builder.configuration.ImportsReader;
 import com.tyron.builder.execution.DefaultWorkValidationWarningRecorder;
 import com.tyron.builder.initialization.ClassLoaderRegistry;
 import com.tyron.builder.initialization.DefaultClassLoaderRegistry;
@@ -212,6 +214,10 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
                 return DefaultFileMetadata.file(f.lastModified(), f.length(), FileMetadata.AccessType.DIRECT);
             }
         };
+    }
+
+    protected ImportsReader createImportsReader() {
+        return new DefaultImportsReader();
     }
 
     StringInterner createStringInterner() {

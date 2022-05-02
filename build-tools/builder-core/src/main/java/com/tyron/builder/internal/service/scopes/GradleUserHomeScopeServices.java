@@ -5,6 +5,7 @@ import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
 import com.tyron.builder.api.internal.changedetection.state.DefaultFileAccessTimeJournal;
 import com.tyron.builder.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.loadercache.ClassLoaderCache;
 import com.tyron.builder.api.internal.initialization.loadercache.DefaultClassLoaderCache;
 import com.tyron.builder.cache.GlobalCache;
@@ -54,6 +55,8 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServices {
     
@@ -79,9 +82,13 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
     }
 
     ClassLoaderHierarchyHasher createClassLoaderHierarchyHasher(
-            HashingClassLoaderFactory hashingClassLoaderFactory
+            HashingClassLoaderFactory hashingClassLoaderFactory,
+            ClassLoaderScopeRegistry classLoaderScopeRegistry
     ) {
-        return new ConfigurableClassLoaderHierarchyHasher(Collections.emptyMap(), hashingClassLoaderFactory);
+        Map<ClassLoader, String> classLoaderStringMap = new WeakHashMap<>();
+        classLoaderStringMap.put(ClassLoader.getSystemClassLoader(), "system");
+        classLoaderStringMap.put(classLoaderScopeRegistry.getCoreAndPluginsScope().getExportClassLoader(), "plugins");
+        return new ConfigurableClassLoaderHierarchyHasher(classLoaderStringMap, hashingClassLoaderFactory);
     }
 
     HashingClassLoaderFactory createClassLoaderFactory(ClasspathHasher classpathHasher) {

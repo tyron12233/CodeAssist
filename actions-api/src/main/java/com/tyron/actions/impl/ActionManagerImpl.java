@@ -54,8 +54,7 @@ public class ActionManagerImpl extends ActionManager {
 
             value.update(event);
 
-            if (event.getPresentation()
-                    .isVisible()) {
+            if (event.getPresentation().isVisible()) {
                 fillMenu(menu, value, event);
             }
         }
@@ -114,14 +113,10 @@ public class ActionManagerImpl extends ActionManager {
         for (AnAction child : children) {
             event.setPresentation(child.getTemplatePresentation());
             child.update(event);
-            if (event.getPresentation()
-                    .isVisible()) {
-                MenuItem add = menu.add(id, Menu.NONE, Menu.NONE, event.getPresentation()
-                        .getText());
-                add.setEnabled(event.getPresentation()
-                                       .isEnabled());
-                add.setIcon(event.getPresentation()
-                                    .getIcon());
+            if (event.getPresentation().isVisible()) {
+                MenuItem add = menu.add(id, Menu.NONE, Menu.NONE, event.getPresentation().getText());
+                add.setEnabled(event.getPresentation().isEnabled());
+                add.setIcon(event.getPresentation().getIcon());
                 add.setOnMenuItemClickListener(item -> performAction(child, event));
             }
         }
