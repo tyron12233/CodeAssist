@@ -1,7 +1,6 @@
 package com.tyron.code.ui.iconmanager;
 
 import android.app.Activity;
-import android.app.ProgressDialog;
 import android.content.ClipData;
 import android.content.ContentUris;
 import android.content.ContentResolver;
@@ -17,7 +16,6 @@ import android.graphics.PorterDuff;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.provider.DocumentsContract;
-import android.os.Environment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -31,7 +29,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.tyron.code.ui.iconmanager.loader.LoaderDialog;
 import com.tyron.code.ui.iconmanager.util.FileUtil;
-import com.google.android.material.button.MaterialButton;
+import android.widget.Button;
 import androidx.recyclerview.widget.RecyclerView;
 import com.tyron.code.ui.iconmanager.adapter.IconAdapter;
 import com.google.android.material.textfield.TextInputEditText;
@@ -58,12 +56,12 @@ import com.tyron.code.R;
 import com.tyron.code.ui.project.ProjectManager;
 import org.apache.commons.io.FileUtils;
 import com.tyron.common.util.AndroidUtilities;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class IconManagerActivity extends AppCompatActivity {
 	
 	
 	//mainTask: codeCleanUp :)
-	//resFolderDelete doesnt works till now
 
 	FloatingActionButton fab;
 	Toolbar toolbar;
@@ -132,16 +130,16 @@ public class IconManagerActivity extends AppCompatActivity {
 	private void makeSomeCheckup() {
 		String checkupFather = FileUtil.getPackageDir(this) + "/material-icons-pack/materialiconsoutlined/";
 		FileUtil.makeDir(checkupFather);
+                FileUtil.makeDir(samplePath + "/")
 		FileUtil.makeDir(checkupFather + "preview-packs/");
 		FileUtil.makeDir(checkupFather + "vector-packs/");
 	}
         //checks if res folder and sample folder
 	private void makeSomeFileCheckUp() {
 		
-        if(FileUtil.exists(resPath) || FileUtil.exists(samplePath)) {
+        if(FileUtil.exists(resPath)) {
         try {
-	FileUtils.forceDelete(new File(resPath));
-        FileUtils.forceDelete(new File(samplePath));
+	FileUtils.forceDelete(new File(resPath));       
 	} catch (Exception e) {
 	AndroidUtilities.showToast(e.toString());
 	}
@@ -277,9 +275,8 @@ public class IconManagerActivity extends AppCompatActivity {
                 String d = FileUtil.getPackageDir(c) + "/material-icons-pack/materialiconsoutlined/preview-packs/";
                 FileUtil.listDir(d,scanner3);
                 from2 = scanner3.get(position);
-		final AlertDialog dialog1 = new AlertDialog.Builder(c).create();
+		final AlertDialog dialog1 = new MaterialAlertDialogBuilder(c).create();
 		View inflate = LayoutInflater.from(c).inflate(R.layout.custom_asset_dialog, null);
-		dialog1.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 		dialog1.setView(inflate);
 		TextInputLayout textinput1 = (TextInputLayout) inflate.findViewById(R.id.textinputlayout1);
 		TextInputLayout textinput2 = (TextInputLayout) inflate.findViewById(R.id.textinputlayout2);
@@ -294,7 +291,7 @@ public class IconManagerActivity extends AppCompatActivity {
 
 		ImageView icon = (ImageView) inflate.findViewById(R.id.icon);
 
-		MaterialButton b1 = (MaterialButton) inflate.findViewById(R.id.b1);
+		Button b1 = (Button) inflate.findViewById(R.id.b1);
 
 		LinearLayout container = (LinearLayout) inflate.findViewById(R.id.container);
 		textinput1.setHint("Name");
@@ -356,7 +353,6 @@ public class IconManagerActivity extends AppCompatActivity {
 				}
 			}
 		});
-		dialog1.setCancelable(true);
 		dialog1.show();
 	}
 
