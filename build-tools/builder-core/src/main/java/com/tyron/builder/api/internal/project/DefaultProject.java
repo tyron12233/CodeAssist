@@ -15,6 +15,7 @@ import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.logging.Logging;
 import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.plugins.ObjectConfigurationAction;
 import com.tyron.builder.api.plugins.PluginContainer;
@@ -34,6 +35,7 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
+import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
@@ -69,6 +71,8 @@ import groovy.lang.Closure;
 import groovy.lang.Script;
 
 public class DefaultProject implements ProjectInternal {
+
+    private static final Logger BUILD_LOGGER = Logging.getLogger(BuildProject.class);
 
     private final ProjectStateUnk owner;
     private final ProjectInternal rootProject;
@@ -229,17 +233,17 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public Logger getLogger() {
-        return null;
+        return BUILD_LOGGER;
     }
 
     @Override
-    public LoggingManager getLogging() {
-        return null;
+    public LoggingManagerInternal getLogging() {
+        return services.get(LoggingManagerInternal.class);
     }
 
     @Override
     public StandardOutputCapture getStandardOutputCapture() {
-        return null;
+        return getLogging();
     }
 
     @Override
