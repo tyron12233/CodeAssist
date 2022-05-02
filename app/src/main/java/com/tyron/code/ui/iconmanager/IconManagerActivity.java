@@ -46,6 +46,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.FileOutputStream;
 import java.net.URLDecoder;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Timer;
@@ -67,12 +68,15 @@ public class IconManagerActivity extends AppCompatActivity {
 	FloatingActionButton fab;
 	Toolbar toolbar;
 	RecyclerView recyclerview1;
-	public static String desPath, resPath, name, icon, vector, unziped_vector, f, project_path, from, from2;
+	public static String desPath, resPath, name, icon, vector, unziped_vector, f, project_path, from, from2, samplePath;
 	int n = 0;
+        //ArrayList
 	ArrayList<String> list = new ArrayList<>();
 	ArrayList<String> scanner1 = new ArrayList<>();
 	ArrayList<String> scanner2 = new ArrayList<>();
         public static ArrayList<String> scanner3 = new ArrayList<>();
+        public static ArrayList<String> scanner4 = new ArrayList<>();
+        //
 	SwipeRefreshLayout swipeRefreshLayout;
 	Project mProject;
 
@@ -86,13 +90,13 @@ public class IconManagerActivity extends AppCompatActivity {
 		swipeRefreshLayout = findViewById(R.id.s1);
 
 		//Strings
-		desPath = FileUtil.getPackageDir(this)
-				.concat("/material-icons-pack/materialiconsoutlined/preview-packs/");
-		String mPath = FileUtil.getPackageDir(this).concat("/material-icons-pack/");
-		resPath = mPath.concat("res");
+		desPath = FileUtil.getPackageDir(this) + "/material-icons-pack/materialiconsoutlined/preview-packs/";
+		String mPath = FileUtil.getPackageDir(this) + "/material-icons-pack/";
+		resPath = mPath + "res";
                 String v1 = ProjectManager.getInstance().getCurrentProject().getRootFile().getAbsolutePath();
                 String v2 = "/app/src/main/res/drawable/";
 		project_path = v1 + v2;
+                samplePath = mPath + "sample";
                 //     
 
 		setSupportActionBar(toolbar);
@@ -124,19 +128,20 @@ public class IconManagerActivity extends AppCompatActivity {
 		});
 
 	}
-
+        //makes some important checkups
 	private void makeSomeCheckup() {
-		String checkupFather = FileUtil.getPackageDir(this).concat("/material-icons-pack/materialiconsoutlined/");
+		String checkupFather = FileUtil.getPackageDir(this) + "/material-icons-pack/materialiconsoutlined/";
 		FileUtil.makeDir(checkupFather);
-		FileUtil.makeDir(checkupFather.concat("preview-packs/"));
-		FileUtil.makeDir(checkupFather.concat("vector-packs/"));
+		FileUtil.makeDir(checkupFather + "preview-packs/");
+		FileUtil.makeDir(checkupFather + "vector-packs/");
 	}
-
+        //checks if res folder and sample folder
 	private void makeSomeFileCheckUp() {
-		//todo: find duplicate files
-        if(FileUtil.exists(resPath)) {
+		
+        if(FileUtil.exists(resPath) || FileUtil.exists(samplePath)) {
         try {
 	FileUtils.forceDelete(new File(resPath));
+        FileUtils.forceDelete(new File(samePath));
 	} catch (Exception e) {
 	AndroidUtilities.showToast(e.toString());
 	}
@@ -203,7 +208,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	private void startFullProcess(String from, String to) {
 
 		performUnzipTask(from, to);
-		FileUtil.listDir(resPath.concat("/drawable/"), scanner1);
+		FileUtil.listDir(resPath + "/drawable/"), scanner1);
 
 		for (int repeat = 0; repeat < scanner1.size(); repeat++) {
 			if (scanner1.get(repeat).contains("_24")) {
@@ -211,7 +216,7 @@ public class IconManagerActivity extends AppCompatActivity {
 			}		
 		}
                 
-                FileUtil.listDir(resPath.concat("/drawable-xxhdpi/"), scanner2);
+                FileUtil.listDir(resPath + "/drawable-xxhdpi/"), scanner2);
 
 			for (int repeat = 0; repeat < scanner2.size(); repeat++) {
 				if (scanner2.get(repeat).contains("_white_48")) {
@@ -230,8 +235,7 @@ public class IconManagerActivity extends AppCompatActivity {
 					"android:viewportWidth=\"$width_\"");
 			unziped_vector = unziped_vector.replace("android:tint=\"?attr/colorControlNormal\"",
 					"android:tint=\"$tint\"");
-			FileUtil.writeFile(to.concat("materialiconsoutlined/vector-packs/"
-					.concat(Uri.parse(name).getLastPathSegment().replace("_24", ""))), unziped_vector);
+			FileUtil.writeFile(to + "materialiconsoutlined/vector-packs/" + Uri.parse(name).getLastPathSegment().replace("_24", ""), unziped_vector);
 
 			Bitmap bm = BitmapFactory.decodeFile(new File(icon).getAbsolutePath());
 			FileUtil.bitmapToFile(IconManagerActivity.this, bm, Uri.parse(icon).getLastPathSegment().replace("_white_48", ""));
@@ -370,12 +374,39 @@ public class IconManagerActivity extends AppCompatActivity {
 
 					Uri uri = data.getData();
 					if (uri != null) {
-						f = FileUtil.convertUriToFilePath(IconManagerActivity.this, uri);
+                                                BufferedReader reader = null; 
+                                                InputStream in = null;
+                                                OutputStream out = null;
+                                                String path = FileUtil.convertUriToFilePath(this,uri);
+						f = Uri.parse(path).getLastPathSegment();
+                                                try {
+	                                          try {
+		
+		                                   in = getContentResolver().openInputStream(uri);
+		                                   out = new FileOutputStream(new File(samePath+"/"+f));
+		                                   byte[] buffer = new byte[1024];
+		                                   int len;
+		                                   while ((len = in.read(buffer)) != -1) {
+			                           out.write(buffer, 0, len);
+		                                   }
+	                                           } finally {
+		                                   if (in != null) {
+			                           in.close();
+		                                   }
+		                                   if (out != null){
+			                           out.close();
+		                                   }
+	                                           }
+                                                   }catch(Exception e) {
+	                                           AndroidUtilities.showToast(e.toString());
+                                                }
+
 
 						final LoaderDialog loaderDialog = new LoaderDialog(this).show();
-
-						startFullProcess(f, FileUtil.getPackageDir(IconManagerActivity.this).concat("/material-icons-pack/"));
-
+                                                String processPath = samplePath + "/" +f;
+                                                if(FileUtil.exists(processPath)){
+						startFullProcess(processPath, FileUtil.getPackageDir(IconManagerActivity.this).concat("/material-icons-pack/"));
+                                                }
 						TimerTask task;
 						Timer timer = new Timer();
 						task = new TimerTask() {
