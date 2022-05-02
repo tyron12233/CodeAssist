@@ -56,7 +56,6 @@ public abstract class ProjectLauncher {
                 .getServicesFor(startParameter.getGradleUserHomeDir());
         VirtualFileSystem virtualFileSystem =
                 gradleUserHomeScopeServices.get(VirtualFileSystem.class);
-
         FileSystemAccess fileSystemAccess = gradleUserHomeScopeServices.get(FileSystemAccess.class);
     }
 
@@ -77,9 +76,10 @@ public abstract class ProjectLauncher {
                 loggingManagerInternal, executionListener -> runnable.run());
 
         prepare();
-
         action.execute(failure -> {
-            throw UncheckedException.throwAsUncheckedException(failure);
+            if (!(failure instanceof ReportedException)) {
+                throw UncheckedException.throwAsUncheckedException(failure);
+            }
         });
 
 
