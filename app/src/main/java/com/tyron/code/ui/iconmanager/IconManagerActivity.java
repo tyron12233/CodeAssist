@@ -130,7 +130,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	private void makeSomeCheckup() {
 		String checkupFather = FileUtil.getPackageDir(this) + "/material-icons-pack/materialiconsoutlined/";
 		FileUtil.makeDir(checkupFather);
-                FileUtil.makeDir(samplePath + "/")
+                FileUtil.makeDir(samplePath + "/");
 		FileUtil.makeDir(checkupFather + "preview-packs/");
 		FileUtil.makeDir(checkupFather + "vector-packs/");
 	}
