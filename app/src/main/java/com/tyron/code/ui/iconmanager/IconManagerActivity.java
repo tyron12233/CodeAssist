@@ -208,7 +208,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	private void startFullProcess(String from, String to) {
 
 		performUnzipTask(from, to);
-		FileUtil.listDir(resPath + "/drawable/"), scanner1);
+		FileUtil.listDir(resPath + "/drawable/", scanner1);
 
 		for (int repeat = 0; repeat < scanner1.size(); repeat++) {
 			if (scanner1.get(repeat).contains("_24")) {
@@ -216,7 +216,7 @@ public class IconManagerActivity extends AppCompatActivity {
 			}		
 		}
                 
-                FileUtil.listDir(resPath + "/drawable-xxhdpi/"), scanner2);
+                FileUtil.listDir(resPath + "/drawable-xxhdpi/", scanner2);
 
 			for (int repeat = 0; repeat < scanner2.size(); repeat++) {
 				if (scanner2.get(repeat).contains("_white_48")) {
@@ -399,12 +399,12 @@ public class IconManagerActivity extends AppCompatActivity {
 	                                           }
                                                    }catch(Exception e) {
 	                                           AndroidUtilities.showToast(e.toString());
-                                                }
+                                                }                                                
 
 
 						final LoaderDialog loaderDialog = new LoaderDialog(this).show();
                                                 String processPath = samplePath + "/" +f;
-                                                if(FileUtil.exists(processPath)){
+                                                if(FileUtil.exists(processPath)){                                           
 						startFullProcess(processPath, FileUtil.getPackageDir(IconManagerActivity.this).concat("/material-icons-pack/"));
                                                 }
 						TimerTask task;
