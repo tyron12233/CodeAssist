@@ -1,5 +1,6 @@
 package com.tyron.builder.internal.service.scopes;
 
+import com.google.common.collect.Sets;
 import com.tyron.builder.api.internal.ClassPathRegistry;
 import com.tyron.builder.api.internal.DefaultClassPathProvider;
 import com.tyron.builder.api.internal.DefaultClassPathRegistry;
@@ -10,6 +11,7 @@ import com.tyron.builder.api.internal.classpath.DefaultPluginModuleRegistry;
 import com.tyron.builder.api.internal.classpath.ModuleRegistry;
 import com.tyron.builder.api.internal.classpath.PluginModuleRegistry;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
+import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
 import com.tyron.builder.configuration.DefaultImportsReader;
 import com.tyron.builder.configuration.ImportsReader;
@@ -51,6 +53,7 @@ import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.internal.snapshot.impl.DirectorySnapshotterStatistics;
 import com.tyron.builder.internal.time.Clock;
@@ -62,6 +65,7 @@ import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.internal.build.BuildAddedListener;
 import com.tyron.builder.internal.service.DefaultServiceLocator;
+import com.tyron.builder.internal.verifier.HttpRedirectVerifier;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.internal.vfs.impl.DefaultFileSystemAccess;
@@ -82,6 +86,7 @@ import net.rubygrapefruit.platform.file.FileSystems;
 import net.rubygrapefruit.platform.internal.PosixFileSystems;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -110,6 +115,18 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         registration.add(BuildLayoutFactory.class);
 
         registration.addProvider(new ExecutionGlobalServices());
+    }
+
+
+    // TODO: move this to DependencyManagementServices
+
+    TextUriResourceLoader.Factory createTextUrlResourceLoaderFactory() {
+       return new TextUriResourceLoader.Factory() {
+           @Override
+           public TextUriResourceLoader create(HttpRedirectVerifier redirectVerifier) {
+               throw new UnsupportedOperationException("");
+           }
+       };
     }
 
     BuildOperationProgressEventEmitter createBuildOperationProgressEventEmitter(

@@ -3,6 +3,7 @@ package com.tyron.builder.internal.service.scopes;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.file.DefaultFileOperations;
 import com.tyron.builder.api.internal.file.FileLookup;
+import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.model.DefaultObjectFactory;
@@ -10,6 +11,7 @@ import com.tyron.builder.api.internal.provider.PropertyFactory;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.provider.ProviderFactory;
+import com.tyron.builder.api.resources.ResourceHandler;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.DefaultFileCollectionFactory;
 import com.tyron.builder.api.internal.file.DefaultFilePropertyFactory;
@@ -24,6 +26,7 @@ import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
+import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
@@ -60,24 +63,42 @@ public class WorkerSharedProjectScopeServices {
                 fileFactory);
     }
 
-    protected DefaultFileOperations createFileOperations(FileResolver fileResolver,
-                                                         TemporaryFileProvider temporaryFileProvider,
-                                                         Instantiator instantiator,
-                                                         DirectoryFileTreeFactory directoryFileTreeFactory,
-                                                         StreamHasher streamHasher,
-                                                         FileHasher fileHasher,
-                                                         DefaultResourceHandler.Factory resourceHandlerFactory,
-                                                         FileCollectionFactory fileCollectionFactory,
-                                                         ObjectFactory objectFactory,
-                                                         FileSystem fileSystem,
-                                                         Factory<PatternSet> patternSetFactory,
-                                                         Deleter deleter,
-                                                         DocumentationRegistry documentationRegistry,
-                                                         ProviderFactory providers) {
-        return new DefaultFileOperations(fileResolver, temporaryFileProvider, instantiator,
-                directoryFileTreeFactory, streamHasher, fileHasher, resourceHandlerFactory,
-                fileCollectionFactory, objectFactory, fileSystem, patternSetFactory, deleter,
-                documentationRegistry, providers);
+
+    protected Instantiator createInstantatior() {
+        return DirectInstantiator.INSTANCE;
+    }
+
+    protected DefaultFileOperations createFileOperations(
+            FileResolver fileResolver,
+            TemporaryFileProvider temporaryFileProvider,
+            Instantiator instantiator,
+            DirectoryFileTreeFactory directoryFileTreeFactory,
+            StreamHasher streamHasher,
+            FileHasher fileHasher,
+            DefaultResourceHandler.Factory resourceHandlerFactory,
+            FileCollectionFactory fileCollectionFactory,
+            ObjectFactory objectFactory,
+            FileSystem fileSystem,
+            Factory<PatternSet> patternSetFactory,
+            Deleter deleter,
+            DocumentationRegistry documentationRegistry,
+            ProviderFactory providers
+    ) {
+        return new DefaultFileOperations(
+                fileResolver,
+                temporaryFileProvider,
+                instantiator,
+                directoryFileTreeFactory,
+                streamHasher,
+                fileHasher,
+                resourceHandlerFactory,
+                fileCollectionFactory,
+                objectFactory,
+                fileSystem,
+                patternSetFactory,
+                deleter,
+                documentationRegistry,
+                providers);
     }
 
 //    ObjectFactory createObjectFactory(InstantiatorFactory instantiatorFactory, ServiceRegistry

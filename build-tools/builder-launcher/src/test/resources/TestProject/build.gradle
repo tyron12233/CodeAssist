@@ -1,7 +1,7 @@
 defaultTasks("test")
 
 tasks.register("test") {
-    doLast {
+    it.doLast {
         println("Executing!")
     }
 }

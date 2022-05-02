@@ -24,6 +24,8 @@ import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.properties.GradleProperties;
+import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
+import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.caching.internal.BuildCacheConfigurationInternal;
@@ -316,6 +318,15 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 return new StringTextResource(description, GFileUtils.readFileToString(sourceFile));
             }
         };
+    }
+
+    protected DefaultResourceHandler.Factory createResourceHandlerFactory(FileResolver fileResolver, FileSystem fileSystem, TemporaryFileProvider temporaryFileProvider, ApiTextResourceAdapter.Factory textResourceAdapterFactory) {
+        return DefaultResourceHandler.Factory.from(
+                fileResolver,
+                fileSystem,
+                temporaryFileProvider,
+                textResourceAdapterFactory
+        );
     }
 
     InitScriptHandler createInitScriptHandler(BuildOperationExecutor buildOperationExecutor, TextFileResourceLoader resourceLoader) {

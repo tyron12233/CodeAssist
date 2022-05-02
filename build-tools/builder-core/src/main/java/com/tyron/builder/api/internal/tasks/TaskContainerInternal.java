@@ -21,13 +21,4 @@ public interface TaskContainerInternal extends TaskContainer, TaskResolver {
      * Ensures that all configuration has been applied to the given task, and the task is ready to be added to the task graph.
      */
     void prepareForExecution(Task task);
-
-
-    default <T extends Task> TaskProvider<T> register(
-            String name,
-            Class<T> type,
-            Proxy action) {
-        System.out.println(name);
-        return null;
-    }
 }
