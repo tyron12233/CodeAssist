@@ -305,6 +305,7 @@ public class IconManagerActivity extends AppCompatActivity {
 		final String finalIconName = iconName.replace(".png", "");
 		name.setText(finalIconName);
 		path.setText(project_path);
+                color.setText("#000000");
                 textinput4.setEndIconOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View view) {
