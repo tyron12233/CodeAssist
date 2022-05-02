@@ -1,18 +1,30 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.Action;
+import com.tyron.builder.api.GradleScriptException;
 import com.tyron.builder.api.ProjectConfigurationException;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.artifacts.Module;
+import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.file.DefaultFileOperations;
+import com.tyron.builder.api.internal.file.FileCollectionFactory;
+import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.initialization.DefaultScriptHandlerFactory;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerInternal;
+import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.properties.GradleProperties;
+import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.caching.internal.BuildCacheConfigurationInternal;
 import com.tyron.builder.caching.internal.BuildCacheController;
 import com.tyron.builder.caching.internal.controller.RootBuildCacheControllerRef;
@@ -26,9 +38,17 @@ import com.tyron.builder.caching.internal.packaging.impl.TarBuildCacheEntryPacke
 import com.tyron.builder.caching.internal.packaging.impl.TarPackerFileSystemSupport;
 import com.tyron.builder.configuration.BuildOperationFiringProjectsPreparer;
 import com.tyron.builder.configuration.BuildTreePreparingProjectsPreparer;
+import com.tyron.builder.configuration.CompileOperationFactory;
 import com.tyron.builder.configuration.DefaultProjectsPreparer;
+import com.tyron.builder.configuration.DefaultScriptPluginFactory;
+import com.tyron.builder.configuration.ImportsReader;
 import com.tyron.builder.configuration.InitScriptProcessor;
 import com.tyron.builder.configuration.ProjectsPreparer;
+import com.tyron.builder.configuration.ScriptPluginFactory;
+import com.tyron.builder.configuration.ScriptPluginFactorySelector;
+import com.tyron.builder.configuration.ScriptTarget;
+import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
+import com.tyron.builder.configuration.project.DefaultCompileOperationFactory;
 import com.tyron.builder.execution.CompositeAwareTaskSelector;
 import com.tyron.builder.execution.ProjectConfigurer;
 import com.tyron.builder.execution.TaskNameResolver;
@@ -40,6 +60,18 @@ import com.tyron.builder.execution.plan.ExecutionPlanFactory;
 import com.tyron.builder.execution.plan.TaskDependencyResolver;
 import com.tyron.builder.execution.plan.TaskNodeDependencyResolver;
 import com.tyron.builder.execution.plan.TaskNodeFactory;
+import com.tyron.builder.groovy.scripts.DefaultScriptCompilerFactory;
+import com.tyron.builder.groovy.scripts.ScriptCompiler;
+import com.tyron.builder.groovy.scripts.ScriptCompilerFactory;
+import com.tyron.builder.groovy.scripts.ScriptRunner;
+import com.tyron.builder.groovy.scripts.ScriptSource;
+import com.tyron.builder.groovy.scripts.internal.BuildScriptData;
+import com.tyron.builder.groovy.scripts.internal.CompileOperation;
+import com.tyron.builder.groovy.scripts.internal.CompiledScript;
+import com.tyron.builder.groovy.scripts.internal.DefaultScriptCompilationHandler;
+import com.tyron.builder.groovy.scripts.internal.DefaultScriptRunnerFactory;
+import com.tyron.builder.groovy.scripts.internal.ScriptClassCompiler;
+import com.tyron.builder.groovy.scripts.internal.ScriptRunnerFactory;
 import com.tyron.builder.initialization.BuildLoader;
 import com.tyron.builder.initialization.DefaultGradlePropertiesController;
 import com.tyron.builder.initialization.DefaultGradlePropertiesLoader;
@@ -56,6 +88,8 @@ import com.tyron.builder.initialization.ModelConfigurationListener;
 import com.tyron.builder.initialization.NotifyingBuildLoader;
 import com.tyron.builder.initialization.ProjectDescriptorRegistry;
 import com.tyron.builder.initialization.ProjectPropertySettingBuildLoader;
+import com.tyron.builder.initialization.ScriptEvaluatingSettingsProcessor;
+import com.tyron.builder.initialization.SettingsFactory;
 import com.tyron.builder.initialization.SettingsLoaderFactory;
 import com.tyron.builder.initialization.SettingsLocation;
 import com.tyron.builder.initialization.SettingsPreparer;
@@ -74,19 +108,26 @@ import com.tyron.builder.internal.build.PublicBuildPath;
 import com.tyron.builder.internal.buildTree.BuildInclusionCoordinator;
 import com.tyron.builder.internal.buildTree.BuildModelParameters;
 import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.composite.DefaultBuildIncluder;
 import com.tyron.builder.internal.event.DefaultListenerManager;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.file.FileException;
+import com.tyron.builder.internal.hash.Hashes;
+import com.tyron.builder.internal.hash.PrimitiveHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.id.UniqueId;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
+import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.BuildOperationQueueFactory;
 import com.tyron.builder.internal.operations.DefaultBuildOperationQueueFactory;
+import com.tyron.builder.internal.reflect.DirectInstantiator;
+import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.StringTextResource;
@@ -95,13 +136,24 @@ import com.tyron.builder.internal.resource.TextResource;
 import com.tyron.builder.internal.resource.local.FileResourceListener;
 import com.tyron.builder.internal.resources.ResourceLockCoordinationService;
 import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
+import com.tyron.builder.internal.scripts.ScriptExecutionListener;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.work.WorkerLeaseService;
+import com.tyron.builder.plugin.management.internal.PluginRequests;
+import com.tyron.builder.plugin.management.internal.autoapply.AutoAppliedPluginHandler;
+import com.tyron.builder.plugin.use.internal.PluginRequestApplicator;
 import com.tyron.builder.util.GUtil;
 import com.tyron.builder.util.internal.GFileUtils;
+import com.tyron.common.TestUtil;
+import com.tyron.groovy.ScriptFactory;
+
+import org.codehaus.groovy.ast.ClassNode;
+import org.codehaus.groovy.classgen.Verifier;
+import org.codehaus.groovy.control.CompilerConfiguration;
 
 import java.io.File;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -109,6 +161,11 @@ import javax.annotation.Nullable;
 
 import bsh.EvalError;
 import bsh.Interpreter;
+import groovy.lang.GrooidClassLoader;
+import groovy.lang.GroovyClassLoader;
+import groovy.lang.GroovyShell;
+import groovy.lang.Script;
+import groovy.transform.Field;
 
 @SuppressWarnings({"unused"})
 public class BuildScopeServices extends DefaultServiceRegistry {
@@ -264,33 +321,24 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         }, buildOperationExecutor, resourceLoader);
     }
 
-    SettingsProcessor createSettingsProcessor() {
-        return new SettingsProcessor() {
-            @Override
-            public SettingsInternal process(GradleInternal gradle,
-                                            SettingsLocation settingsLocation,
-                                            ClassLoaderScope buildRootClassLoaderScope,
-                                            StartParameter startParameter) {
-                SettingsInternal settings = new DefaultSettings(
-                        get(ServiceRegistryFactory.class),
-                        gradle,
-                        settingsLocation.getSettingsDir(),
-                        startParameter
-                );
-
-
-
-                try {
-                    Interpreter interpreter = new Interpreter();
-                    interpreter.set("settings", settings);
-                    String contents = GFileUtils.readFileToString(settingsLocation.getSettingsFile());
-                    interpreter.eval(contents);
-                    return settings;
-                } catch (EvalError evalError) {
-                    throw new ProjectConfigurationException("Failed to configure settings file", evalError);
-                }
-            }
-        };
+    SettingsProcessor createSettingsProcessor(
+            ScriptPluginFactory scriptPluginFactory,
+            ScriptHandlerFactory scriptHandlerFactory,
+            ServiceRegistryFactory serviceRegistryFactory,
+            GradleProperties gradleProperties,
+            BuildOperationExecutor buildOperationExecutor,
+            TextFileResourceLoader textFileResourceLoader
+    ) {
+        return new ScriptEvaluatingSettingsProcessor(
+                scriptPluginFactory,
+                new SettingsFactory(
+                        DirectInstantiator.INSTANCE,
+                        serviceRegistryFactory,
+                        scriptHandlerFactory
+                ),
+                gradleProperties,
+                textFileResourceLoader
+        );
     }
 
     SettingsPreparer createSettingsPreparer(SettingsLoaderFactory factory) {
@@ -325,6 +373,26 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected TaskSelector createTaskSelector(GradleInternal gradle, BuildStateRegistry buildStateRegistry, ProjectConfigurer projectConfigurer) {
         return new CompositeAwareTaskSelector(gradle, buildStateRegistry, projectConfigurer, new TaskNameResolver());
+    }
+
+    protected ScriptHandlerFactory createScriptHandlerFactory(
+            FileResolver fileResolver,
+            FileCollectionFactory fileCollectionFactory,
+            DependencyMetaDataProvider dependencyMetaDataProvider
+//            ScriptClassPathResolver classPathResolver,
+//            NamedObjectInstantiator instantiator
+    ) {
+        return new DefaultScriptHandlerFactory(fileResolver, fileCollectionFactory, dependencyMetaDataProvider);
+    }
+
+    protected DependencyMetaDataProvider createDependencyMetaDataProvider() {
+        System.out.println("Warning: Stub implementation in createDependencyMetaDataProvider");
+        return new DependencyMetaDataProvider() {
+            @Override
+            public Module getModule() {
+                return null;
+            }
+        };
     }
 
     protected ProjectsPreparer createBuildConfigurer(
@@ -365,6 +433,95 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 ),
                 buildOperationExecutor
         );
+    }
+
+    protected ScriptClassCompiler createScriptClassCompiler() {
+        return new ScriptClassCompiler() {
+            @Override
+            public <T extends Script, M> CompiledScript<T, M> compile(ScriptSource source,
+                                                                      ClassLoaderScope targetScope,
+                                                                      CompileOperation<M> transformer,
+                                                                      Class<T> scriptBaseClass,
+                                                                      Action<? super ClassNode> verifier) {
+                PrimitiveHasher hasher = Hashes.newPrimitiveHasher();
+                hasher.putString(transformer.getId());
+                hasher.putHash(source.getResource().getContentHash());
+                String key = Hashes.toCompactString(hasher.hash());
+
+                if (TestUtil.isWindows()) {
+                    DefaultScriptCompilationHandler handler = new DefaultScriptCompilationHandler(get(Deleter.class),
+                                    new ImportsReader() {
+                                        @Override
+                                        public String[] getImportPackages() {
+                                            return new String[0];
+                                        }
+
+                                        @Override
+                                        public Map<String, List<String>> getSimpleNameToFullClassNamesMapping() {
+                                            return null;
+                                        }
+                                    });
+                    TemporaryFileProvider temporaryFileProvider = get(TemporaryFileProvider.class);
+                    File scripts = new File(TestUtil.getResourcesDirectory(), "scripts");
+                    File metadata = new File(TestUtil.getResourcesDirectory(), "metadata");
+                    handler.compileToDir(source, targetScope.getLocalClassLoader(), scripts, metadata, transformer, scriptBaseClass, verifier);
+                    return handler.loadFromDir(source, source.getResource().getContentHash(),
+                            targetScope, DefaultClassPath.of(scripts.listFiles()) , metadata, transformer,
+                            scriptBaseClass);
+                }
+                return null;
+            }
+        };
+    }
+
+    protected ScriptCompilerFactory createScriptCompileFactory(
+            ScriptClassCompiler scriptClassCompiler,
+            ScriptRunnerFactory scriptRunnerFactory
+    ) {
+        return new DefaultScriptCompilerFactory(scriptClassCompiler, scriptRunnerFactory);
+    }
+    protected ScriptPluginFactory createScriptPluginFactory(
+            InstantiatorFactory instantiatorFactory,
+            BuildOperationExecutor buildOperationExecutor,
+            UserCodeApplicationContext userCodeApplicationContext
+    ) {
+        DefaultScriptPluginFactory defaultScriptPluginFactory = defaultScriptPluginFactory();
+        ScriptPluginFactorySelector.ProviderInstantiator instantiator = ScriptPluginFactorySelector.defaultProviderInstantiatorFor(instantiatorFactory.inject(this));
+        ScriptPluginFactorySelector scriptPluginFactorySelector = new ScriptPluginFactorySelector(defaultScriptPluginFactory, instantiator, buildOperationExecutor, userCodeApplicationContext);
+        defaultScriptPluginFactory.setScriptPluginFactory(scriptPluginFactorySelector);
+        return scriptPluginFactorySelector;
+    }
+
+    protected ScriptRunnerFactory createScriptRunnerFactory(ListenerManager listenerManager) {
+        ScriptExecutionListener scriptExecutionListener = listenerManager.getBroadcaster(ScriptExecutionListener.class);
+        return new DefaultScriptRunnerFactory(
+                scriptExecutionListener,
+                DirectInstantiator.INSTANCE
+        );
+    }
+
+    private DefaultScriptPluginFactory defaultScriptPluginFactory() {
+        return new DefaultScriptPluginFactory(
+                this,
+                get(ScriptCompilerFactory.class),
+                getFactory(LoggingManagerInternal.class),
+                get(AutoAppliedPluginHandler.class),
+                get(PluginRequestApplicator.class),
+                get(CompileOperationFactory.class));
+    }
+
+    public AutoAppliedPluginHandler createAutoAppliedPluginHandler() {
+        return (initialRequests, pluginTarget) -> initialRequests;
+    }
+
+    public PluginRequestApplicator createPluginRequestsApplicator() {
+        return (requests, scriptHandler, target, classLoaderScope) -> {
+
+        };
+    }
+
+    public CompileOperationFactory createCompileOperationFactory(DocumentationRegistry documentationRegistry) {
+        return new DefaultCompileOperationFactory(documentationRegistry);
     }
 
     Environment createEnvironment() {

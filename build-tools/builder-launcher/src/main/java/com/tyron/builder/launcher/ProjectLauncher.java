@@ -8,6 +8,7 @@ import com.tyron.builder.configuration.GradleLauncherMetaData;
 import com.tyron.builder.initialization.BuildRequestContext;
 import com.tyron.builder.initialization.ReportedException;
 import com.tyron.builder.internal.SystemProperties;
+import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.Stoppable;
@@ -15,6 +16,8 @@ import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
+import com.tyron.builder.internal.service.scopes.VirtualFileSystemServices;
+import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.launcher.bootstrap.ExecutionListener;
 import com.tyron.builder.launcher.cli.ExceptionReportingAction;
@@ -47,12 +50,17 @@ public abstract class ProjectLauncher {
     }
 
     private void prepare() {
-        VirtualFileSystem virtualFileSystem = getGlobalServices().get(VirtualFileSystem.class);
-        virtualFileSystem.invalidateAll();
+        GradleUserHomeScopeServiceRegistry gradleUserHomeScopeServiceRegistry =
+                globalServices.get(GradleUserHomeScopeServiceRegistry.class);
+        ServiceRegistry gradleUserHomeScopeServices = gradleUserHomeScopeServiceRegistry
+                .getServicesFor(startParameter.getGradleUserHomeDir());
+        VirtualFileSystem virtualFileSystem =
+                gradleUserHomeScopeServices.get(VirtualFileSystem.class);
+
+        FileSystemAccess fileSystemAccess = gradleUserHomeScopeServices.get(FileSystemAccess.class);
     }
 
     public void execute() {
-        prepare();
 
         Runnable runnable = runBuildAndCloseServices(
                 startParameter,
@@ -67,8 +75,11 @@ public abstract class ProjectLauncher {
                 globalServices.get(LoggingManagerInternal.class);
         ExceptionReportingAction action = new ExceptionReportingAction(reporter,
                 loggingManagerInternal, executionListener -> runnable.run());
+
+        prepare();
+
         action.execute(failure -> {
-            throw new ReportedException();
+            throw UncheckedException.throwAsUncheckedException(failure);
         });
 
 

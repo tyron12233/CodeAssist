@@ -2,6 +2,7 @@ package com.tyron.builder.util.internal;
 
 import static com.tyron.builder.internal.Cast.uncheckedNonnullCast;
 
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.Lists;
 import com.tyron.builder.api.Transformer;
 
@@ -24,6 +25,11 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class CollectionUtils {
+
+    public static List<String> toStringList(Iterable<?> iterable) {
+        return collect(iterable, new LinkedList<>(),
+                (Transformer<String, Object>) Object::toString);
+    }
 
     /**
      * Returns a sorted copy of the provided collection of things. Uses the provided comparator to sort.
@@ -258,5 +264,16 @@ public class CollectionUtils {
 
     public static Iterable<String> stringize(Collection<?> compilerArgs) {
         return compilerArgs.stream().map(Objects::toString).collect(Collectors.toList());
+    }
+
+    public static <K, V> Map<K, Collection<V>> groupBy(Iterable<? extends V> iterable, Transformer<? extends K, V> grouper) {
+        ImmutableListMultimap.Builder<K, V> builder = ImmutableListMultimap.builder();
+
+        for (V element : iterable) {
+            K key = grouper.transform(element);
+            builder.put(key, element);
+        }
+
+        return builder.build().asMap();
     }
 }

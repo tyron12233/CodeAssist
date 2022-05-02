@@ -7,6 +7,7 @@ dependencies {
     implementation projects.common
 
     implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
     implementation projects.buildTools.builderFunctional
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderMessaging
@@ -16,6 +17,7 @@ dependencies {
 
     implementation 'javax.inject:javax.inject:1'
     implementation common.commonsLang3
+    implementation 'org.codehaus.groovy:groovy:3.0.7:grooid'
 }
 
 java {

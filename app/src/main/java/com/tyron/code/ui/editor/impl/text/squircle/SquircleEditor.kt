@@ -20,8 +20,10 @@ class SquircleEditor(
     init {
         val fileObject = VFS.getManager().toFileObject(ioFile)
         val content = FileDocumentManager.getInstance().getContent(fileObject)
+        val contentPlugin = ContentImpl(content!!)
 
-        editorView.setText(content)
+        editorView.text = contentPlugin
+        editorView.installPlugin(contentPlugin)
     }
 
     override fun getView() = editorView

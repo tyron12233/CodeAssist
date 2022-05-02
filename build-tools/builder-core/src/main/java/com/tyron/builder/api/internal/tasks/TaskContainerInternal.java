@@ -1,8 +1,12 @@
 package com.tyron.builder.api.internal.tasks;
 
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.api.tasks.TaskProvider;
 import com.tyron.builder.api.tasks.TaskResolver;
+
+import java.lang.reflect.Proxy;
 
 public interface TaskContainerInternal extends TaskContainer, TaskResolver {
 
@@ -18,4 +22,12 @@ public interface TaskContainerInternal extends TaskContainer, TaskResolver {
      */
     void prepareForExecution(Task task);
 
+
+    default <T extends Task> TaskProvider<T> register(
+            String name,
+            Class<T> type,
+            Proxy action) {
+        System.out.println(name);
+        return null;
+    }
 }

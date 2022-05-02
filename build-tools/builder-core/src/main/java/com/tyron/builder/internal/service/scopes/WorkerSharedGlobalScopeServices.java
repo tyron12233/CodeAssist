@@ -19,6 +19,8 @@ import com.tyron.builder.api.tasks.util.internal.PatternSets;
 import com.tyron.builder.api.tasks.util.internal.PatternSpecFactory;
 import com.tyron.builder.cache.internal.CrossBuildInMemoryCacheFactory;
 import com.tyron.builder.cache.internal.DefaultCrossBuildInMemoryCacheFactory;
+import com.tyron.builder.initialization.DefaultLegacyTypesSupport;
+import com.tyron.builder.initialization.LegacyTypesSupport;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.file.impl.DefaultDeleter;
@@ -41,6 +43,10 @@ import com.tyron.builder.internal.time.Time;
 
 @SuppressWarnings({"unused"})
 public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
+
+    LegacyTypesSupport createLegacyTypesSupport() {
+        return new DefaultLegacyTypesSupport();
+    }
 
     BuildOperationIdFactory createBuildOperationIdProvider() {
         return new DefaultBuildOperationIdFactory();

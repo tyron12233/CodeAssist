@@ -9,6 +9,11 @@ import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.file.DeleteSpec;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.file.collections.FileTreeAdapter;
+import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
+import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
+import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
+import com.tyron.builder.api.resources.ResourceHandler;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 import com.tyron.builder.api.internal.file.copy.FileCopier;
@@ -22,6 +27,8 @@ import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.tasks.util.PatternSet;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.util.ConfigureUtil;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.internal.file.Deleter;
 
@@ -35,10 +42,10 @@ import javax.inject.Inject;
 @SuppressWarnings({"Convert2Lambda", "Anonymous2MethodRef"})
 public class DefaultFileOperations implements FileOperations {
     private final FileResolver fileResolver;
-//    private final TemporaryFileProvider temporaryFileProvider;
+    private final TemporaryFileProvider temporaryFileProvider;
     private final Instantiator instantiator;
     private final Deleter deleter;
-//    private final ResourceHandler resourceHandler;
+    private final ResourceHandler resourceHandler;
     private final StreamHasher streamHasher;
     private final FileHasher fileHasher;
     private final Factory<PatternSet> patternSetFactory;
@@ -51,11 +58,11 @@ public class DefaultFileOperations implements FileOperations {
     @Inject
     public DefaultFileOperations(
             FileResolver fileResolver,
-//            TemporaryFileProvider temporaryFileProvider,
+            TemporaryFileProvider temporaryFileProvider,
             DirectoryFileTreeFactory directoryFileTreeFactory,
             StreamHasher streamHasher,
             FileHasher fileHasher,
-//            DefaultResourceHandler.Factory resourceHandlerFactory,
+            DefaultResourceHandler.Factory resourceHandlerFactory,
             FileCollectionFactory fileCollectionFactory,
             ObjectFactory objectFactory,
             FileSystem fileSystem,
@@ -64,17 +71,17 @@ public class DefaultFileOperations implements FileOperations {
             DocumentationRegistry documentationRegistry,
             ProviderFactory providers
     ) {
-        this(fileResolver, DirectInstantiator.INSTANCE, directoryFileTreeFactory, streamHasher, fileHasher, fileCollectionFactory, objectFactory, fileSystem, patternSetFactory, deleter, documentationRegistry, providers);
+        this(fileResolver, temporaryFileProvider, DirectInstantiator.INSTANCE, directoryFileTreeFactory, streamHasher, fileHasher, resourceHandlerFactory, fileCollectionFactory, objectFactory, fileSystem, patternSetFactory, deleter, documentationRegistry, providers);
     }
 
     public DefaultFileOperations(
             FileResolver fileResolver,
-//            TemporaryFileProvider temporaryFileProvider,
+            TemporaryFileProvider temporaryFileProvider,
             Instantiator instantiator,
             DirectoryFileTreeFactory directoryFileTreeFactory,
             StreamHasher streamHasher,
             FileHasher fileHasher,
-//            DefaultResourceHandler.Factory resourceHandlerFactory,
+            DefaultResourceHandler.Factory resourceHandlerFactory,
             FileCollectionFactory fileCollectionFactory,
             ObjectFactory objectFactory,
             FileSystem fileSystem,
@@ -85,10 +92,10 @@ public class DefaultFileOperations implements FileOperations {
     ) {
         this.fileCollectionFactory = fileCollectionFactory;
         this.fileResolver = fileResolver;
-//        this.temporaryFileProvider = temporaryFileProvider;
+        this.temporaryFileProvider = temporaryFileProvider;
         this.instantiator = instantiator;
         this.directoryFileTreeFactory = directoryFileTreeFactory;
-//        this.resourceHandler = resourceHandlerFactory.create(this);
+        this.resourceHandler = resourceHandlerFactory.create(this);
         this.streamHasher = streamHasher;
         this.fileHasher = fileHasher;
         this.patternSetFactory = patternSetFactory;
@@ -147,10 +154,9 @@ public class DefaultFileOperations implements FileOperations {
 
     @Override
     public ConfigurableFileTree fileTree(Map<String, ?> args) {
-//        ConfigurableFileTree fileTree = fileCollectionFactory.fileTree();
-//        ConfigureUtil.configureByMap(args, fileTree);
-//        return fileTree;
-        throw new UnsupportedOperationException();
+        ConfigurableFileTree fileTree = fileCollectionFactory.fileTree();
+        ConfigureUtil.configureByMap(args, fileTree);
+        return fileTree;
     }
 
     @Override
@@ -284,45 +290,45 @@ public class DefaultFileOperations implements FileOperations {
         return fileResolver;
     }
 
-//    @Override
-//    public ResourceHandler getResources() {
-//        return resourceHandler;
-//    }
+    @Override
+    public ResourceHandler getResources() {
+        return resourceHandler;
+    }
 
-//    public static DefaultFileOperations createSimple(FileResolver fileResolver, FileCollectionFactory fileTreeFactory, ServiceRegistry services) {
-//        Instantiator instantiator = services.get(Instantiator.class);
-//        ObjectFactory objectFactory = services.get(ObjectFactory.class);
-//        FileSystem fileSystem = services.get(FileSystem.class);
-//        DirectoryFileTreeFactory directoryFileTreeFactory = services.get(DirectoryFileTreeFactory.class);
-//        StreamHasher streamHasher = services.get(StreamHasher.class);
-//        FileHasher fileHasher = services.get(FileHasher.class);
-//        ApiTextResourceAdapter.Factory textResourceAdapterFactory = services.get(ApiTextResourceAdapter.Factory.class);
-//        Factory<PatternSet> patternSetFactory = services.getFactory(PatternSet.class);
-//        Deleter deleter = services.get(Deleter.class);
-//        DocumentationRegistry documentationRegistry = services.get(DocumentationRegistry.class);
-//        ProviderFactory providers = services.get(ProviderFactory.class);
-//
-//        DefaultResourceHandler.Factory resourceHandlerFactory = DefaultResourceHandler.Factory.from(
-//                fileResolver,
-//                fileSystem,
-//                null,
-//                textResourceAdapterFactory
-//        );
-//
-//        return new DefaultFileOperations(
-//                fileResolver,
-//                null,
-//                instantiator,
-//                directoryFileTreeFactory,
-//                streamHasher,
-//                fileHasher,
-//                resourceHandlerFactory,
-//                fileTreeFactory,
-//                objectFactory,
-//                fileSystem,
-//                patternSetFactory,
-//                deleter,
-//                documentationRegistry,
-//                providers);
-//    }
+    public static DefaultFileOperations createSimple(FileResolver fileResolver, FileCollectionFactory fileTreeFactory, ServiceRegistry services) {
+        Instantiator instantiator = services.get(Instantiator.class);
+        ObjectFactory objectFactory = services.get(ObjectFactory.class);
+        FileSystem fileSystem = services.get(FileSystem.class);
+        DirectoryFileTreeFactory directoryFileTreeFactory = services.get(DirectoryFileTreeFactory.class);
+        StreamHasher streamHasher = services.get(StreamHasher.class);
+        FileHasher fileHasher = services.get(FileHasher.class);
+        ApiTextResourceAdapter.Factory textResourceAdapterFactory = services.get(ApiTextResourceAdapter.Factory.class);
+        Factory<PatternSet> patternSetFactory = services.getFactory(PatternSet.class);
+        Deleter deleter = services.get(Deleter.class);
+        DocumentationRegistry documentationRegistry = services.get(DocumentationRegistry.class);
+        ProviderFactory providers = services.get(ProviderFactory.class);
+
+        DefaultResourceHandler.Factory resourceHandlerFactory = DefaultResourceHandler.Factory.from(
+                fileResolver,
+                fileSystem,
+                null,
+                textResourceAdapterFactory
+        );
+
+        return new DefaultFileOperations(
+                fileResolver,
+                null,
+                instantiator,
+                directoryFileTreeFactory,
+                streamHasher,
+                fileHasher,
+                resourceHandlerFactory,
+                fileTreeFactory,
+                objectFactory,
+                fileSystem,
+                patternSetFactory,
+                deleter,
+                documentationRegistry,
+                providers);
+    }
 }

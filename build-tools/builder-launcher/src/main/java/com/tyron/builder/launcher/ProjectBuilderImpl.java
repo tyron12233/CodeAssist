@@ -59,64 +59,64 @@ public class ProjectBuilderImpl {
 
     private static ServiceRegistry globalServices;
 
-    public ProjectInternal createProject(String name, File inputProjectDir, File gradleUserHomeDir) {
-        System.setProperty("user.dir", inputProjectDir.getAbsolutePath());
-
-        final File projectDir = prepareProjectDir(inputProjectDir);
-        File userHomeDir = gradleUserHomeDir == null ? new File(projectDir, "userHome") : GFileUtils.canonicalize(gradleUserHomeDir);
-        StartParameterInternal startParameter = new StartParameterInternal();
-        startParameter.setGradleUserHomeDir(userHomeDir);
-        startParameter.setProjectDir(inputProjectDir);
-        startParameter.setTaskNames(ImmutableList.of("testTask"));
-        startParameter.setMaxWorkerCount(5);
-
-        final ServiceRegistry globalServices = getGlobalServices(startParameter);
-
-        BuildRequestMetaData buildRequestMetaData = new DefaultBuildRequestMetaData(Time.currentTimeMillis());
-        CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter);
-        GradleUserHomeScopeServiceRegistry userHomeServices = userHomeServicesOf(globalServices);
-        BuildSessionState buildSessionState = new BuildSessionState(userHomeServices, crossBuildSessionState, startParameter, buildRequestMetaData, ClassPath.EMPTY, new DefaultBuildCancellationToken(), buildRequestMetaData.getClient(), new NoOpBuildEventConsumer());
-        BuildTreeModelControllerServices.Supplier modelServices = buildSessionState.getServices().get(BuildTreeModelControllerServices.class).servicesForBuildTree(new RunTasksRequirements(startParameter));
-        BuildTreeState buildTreeState = new BuildTreeState(buildSessionState.getServices(), modelServices);
-        TestRootBuild build = new TestRootBuild(projectDir, startParameter, buildTreeState);
-
-        BuildScopeServices buildServices = build.getBuildServices();
-        buildServices.get(BuildStateRegistry.class).attachRootBuild(build);
-
-//        // Take a root worker lease; this won't ever be released as ProjectBuilder has no lifecycle
-        ResourceLockCoordinationService coordinationService = buildServices.get(ResourceLockCoordinationService.class);
-        WorkerLeaseService workerLeaseService = buildServices.get(WorkerLeaseService.class);
-//        WorkerLeaseRegistry.WorkerLeaseCompletion workerLease = workerLeaseService.maybeStartWorker();
-
-        GradleInternal gradle = build.getMutableModel();
-//        gradle.setIncludedBuilds(Collections.emptyList());
-
-        WorkerLeaseRegistry.WorkerLeaseCompletion lease =
-                workerLeaseService.startWorker();
-
-        try {
-
-            ProjectDescriptorRegistry projectDescriptorRegistry = buildServices.get(ProjectDescriptorRegistry.class);
-            DefaultProjectDescriptor projectDescriptor =
-                    new DefaultProjectDescriptor(null, name, projectDir, projectDescriptorRegistry,
-                            buildServices.get(FileResolver.class));
-            projectDescriptorRegistry.addProject(projectDescriptor);
-
-            ProjectStateRegistry projectStateRegistry = buildServices.get(ProjectStateRegistry.class);
-            ProjectStateUnk projectState = projectStateRegistry.registerProject(build,
-                    projectDescriptor);
-            projectState.createMutableModel();
-            ProjectInternal project = projectState.getMutableModel();
-
-            gradle.setRootProject(project);
-            gradle.setDefaultProject(project);
-            return project;
-        } finally {
-            lease.leaseFinish();
-        }
-        // Lock root project; this won't ever be released as ProjectBuilder has no lifecycle
-//        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(project.getOwner().getAccessLock()));
-    }
+//    public ProjectInternal createProject(String name, File inputProjectDir, File gradleUserHomeDir) {
+//        System.setProperty("user.dir", inputProjectDir.getAbsolutePath());
+//
+//        final File projectDir = prepareProjectDir(inputProjectDir);
+//        File userHomeDir = gradleUserHomeDir == null ? new File(projectDir, "userHome") : GFileUtils.canonicalize(gradleUserHomeDir);
+//        StartParameterInternal startParameter = new StartParameterInternal();
+//        startParameter.setGradleUserHomeDir(userHomeDir);
+//        startParameter.setProjectDir(inputProjectDir);
+//        startParameter.setTaskNames(ImmutableList.of("testTask"));
+//        startParameter.setMaxWorkerCount(5);
+//
+//        final ServiceRegistry globalServices = getGlobalServices(startParameter);
+//
+//        BuildRequestMetaData buildRequestMetaData = new DefaultBuildRequestMetaData(Time.currentTimeMillis());
+//        CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter);
+//        GradleUserHomeScopeServiceRegistry userHomeServices = userHomeServicesOf(globalServices);
+//        BuildSessionState buildSessionState = new BuildSessionState(userHomeServices, crossBuildSessionState, startParameter, buildRequestMetaData, ClassPath.EMPTY, new DefaultBuildCancellationToken(), buildRequestMetaData.getClient(), new NoOpBuildEventConsumer());
+//        BuildTreeModelControllerServices.Supplier modelServices = buildSessionState.getServices().get(BuildTreeModelControllerServices.class).servicesForBuildTree(new RunTasksRequirements(startParameter));
+//        BuildTreeState buildTreeState = new BuildTreeState(buildSessionState.getServices(), modelServices);
+//        TestRootBuild build = new TestRootBuild(projectDir, startParameter, buildTreeState);
+//
+//        BuildScopeServices buildServices = build.getBuildServices();
+//        buildServices.get(BuildStateRegistry.class).attachRootBuild(build);
+//
+////        // Take a root worker lease; this won't ever be released as ProjectBuilder has no lifecycle
+//        ResourceLockCoordinationService coordinationService = buildServices.get(ResourceLockCoordinationService.class);
+//        WorkerLeaseService workerLeaseService = buildServices.get(WorkerLeaseService.class);
+////        WorkerLeaseRegistry.WorkerLeaseCompletion workerLease = workerLeaseService.maybeStartWorker();
+//
+//        GradleInternal gradle = build.getMutableModel();
+////        gradle.setIncludedBuilds(Collections.emptyList());
+//
+//        WorkerLeaseRegistry.WorkerLeaseCompletion lease =
+//                workerLeaseService.startWorker();
+//
+//        try {
+//
+//            ProjectDescriptorRegistry projectDescriptorRegistry = buildServices.get(ProjectDescriptorRegistry.class);
+//            DefaultProjectDescriptor projectDescriptor =
+//                    new DefaultProjectDescriptor(null, name, projectDir, projectDescriptorRegistry,
+//                            buildServices.get(FileResolver.class));
+//            projectDescriptorRegistry.addProject(projectDescriptor);
+//
+//            ProjectStateRegistry projectStateRegistry = buildServices.get(ProjectStateRegistry.class);
+//            ProjectStateUnk projectState = projectStateRegistry.registerProject(build,
+//                    projectDescriptor);
+//            projectState.createMutableModel();
+//            ProjectInternal project = projectState.getMutableModel();
+//
+//            gradle.setRootProject(project);
+//            gradle.setDefaultProject(project);
+//            return project;
+//        } finally {
+//            lease.leaseFinish();
+//        }
+//        // Lock root project; this won't ever be released as ProjectBuilder has no lifecycle
+////        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(project.getOwner().getAccessLock()));
+//    }
 
     private GradleUserHomeScopeServiceRegistry userHomeServicesOf(ServiceRegistry globalServices) {
         return globalServices.get(GradleUserHomeScopeServiceRegistry.class);
@@ -138,7 +138,7 @@ public class ProjectBuilderImpl {
                 .parent(serviceRegistry)
                 .parent(NativeServices.getInstance())
                 .displayName("global services")
-                .provider(new GlobalServices())
+                .provider(new GlobalServices(true, ClassPath.EMPTY))
                 .build();
     }
 

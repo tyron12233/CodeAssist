@@ -48,10 +48,16 @@ import com.tyron.builder.internal.logging.slf4j.DefaultContextAwareTaskLogger;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import bsh.NameSpace;
+import bsh.This;
+import bsh.XThis;
 
 public class DefaultTask extends AbstractTask {
 
@@ -495,6 +501,7 @@ public class DefaultTask extends AbstractTask {
                 Thread.currentThread().setContextClassLoader(original);
             }
         }
+
         public ImplementationSnapshot getActionImplementation(ClassLoaderHierarchyHasher hasher) {
             return ImplementationSnapshot.of(getActionClassName(action), hasher.getClassLoaderHash(action.getClass().getClassLoader()));
         }
@@ -534,19 +541,45 @@ public class DefaultTask extends AbstractTask {
 //
 //        }
 
-        if (action instanceof Proxy) {
-            Proxy proxy = ((Proxy) action);
-            int hash = 21;
-            for (Class<?> anInterface : proxy.getClass().getInterfaces()) {
-                hash *= anInterface.hashCode() + 3;
+        if (Proxy.isProxyClass(action.getClass())) {
+            InvocationHandler invocationHandler = Proxy.getInvocationHandler(action);
+            if (invocationHandler.getClass().getName().equals("bsh.XThis$Handler")) {
+                return BeanShellUtils.getAnonymousName(invocationHandler);
             }
-            PrimitiveHasher primitiveHasher = Hashes.newPrimitiveHasher();
-            primitiveHasher.putInt(hash);
-            HashCode hashCode = primitiveHasher.hash();
-            return proxy.getClass().getName() + "_" + hashCode.toString();
         }
 
         return action.getClass().getName();
+    }
+
+    private static class BeanShellUtils {
+
+        private static String getAnonymousName(InvocationHandler handler) {
+            NameSpace namespace = getNamespace(handler);
+            NameSpace root = getRootNamespace(namespace);
+            return "";
+        }
+
+        private static NameSpace getRootNamespace(NameSpace nameSpace) {
+            NameSpace current = nameSpace;
+            while (current.getParent() != null) {
+                current = current.getParent();
+            }
+            return current;
+        }
+
+        private static NameSpace getNamespace(InvocationHandler handler) {
+            try {
+                Field this$0 = handler.getClass().getDeclaredField("this$0");
+                this$0.setAccessible(true);
+                Object o = this$0.get(handler);
+
+                Field namespace = This.class.getDeclaredField("namespace");
+                namespace.setAccessible(true);
+                return (NameSpace) namespace.get(o);
+            } catch (ReflectiveOperationException e) {
+                throw new Error(e);
+            }
+        }
     }
 
     @Override

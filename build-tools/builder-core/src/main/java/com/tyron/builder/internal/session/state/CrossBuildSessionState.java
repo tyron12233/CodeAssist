@@ -2,6 +2,8 @@ package com.tyron.builder.internal.session.state;
 
 
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.configuration.internal.DefaultUserCodeApplicationContext;
+import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.internal.event.ListenerManager;
@@ -89,6 +91,9 @@ public class CrossBuildSessionState implements Closeable {
             return new LoggingBuildOperationProgressBroadcaster(outputEventListenerManager, buildOperationProgressEventEmitter);
         }
 
+        UserCodeApplicationContext createUserCodeApplicationContext() {
+            return new DefaultUserCodeApplicationContext();
+        }
 
 //        BuildOperationTrace createBuildOperationTrace(BuildOperationListenerManager buildOperationListenerManager) {
 //            return new BuildOperationTrace(startParameter, buildOperationListenerManager);

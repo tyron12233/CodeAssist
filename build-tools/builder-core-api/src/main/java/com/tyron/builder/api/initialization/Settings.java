@@ -1,6 +1,7 @@
 package com.tyron.builder.api.initialization;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.UnknownProjectException;
@@ -187,7 +188,7 @@ public interface Settings {
      *
      * @since 4.4
      */
-//    ScriptHandler getBuildscript();
+    ScriptHandler getBuildscript();
 
     /**
      * <p>Returns the settings directory of the build. The settings directory is the directory containing the settings

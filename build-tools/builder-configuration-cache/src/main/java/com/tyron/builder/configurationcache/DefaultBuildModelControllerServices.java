@@ -1,5 +1,6 @@
 package com.tyron.builder.configurationcache;
 
+import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.project.ProjectEvaluator;
 import com.tyron.builder.execution.TaskSelector;
 import com.tyron.builder.initialization.BuildCancellationToken;
@@ -110,11 +111,12 @@ public class DefaultBuildModelControllerServices implements BuildModelController
     private static class VintageModelProvider {
         public ProjectEvaluator createProjectEvaluator(
                 BuildOperationExecutor buildOperationExecutor,
+                ScriptPluginFactory configurerFactory,
                 BuildCancellationToken buildCancellationToken
         ) {
             ConfigureActionsProjectEvaluator configure =
                     new ConfigureActionsProjectEvaluator(
-                            new BuildScriptProcessor()
+                            new BuildScriptProcessor(configurerFactory)
                     );
             return new LifecycleProjectEvaluator(buildOperationExecutor, configure, buildCancellationToken);
         }

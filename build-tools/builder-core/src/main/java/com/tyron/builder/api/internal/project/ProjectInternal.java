@@ -6,7 +6,11 @@ import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
+import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
+import com.tyron.builder.api.plugins.PluginManager;
+import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.BuildProject;
@@ -44,7 +48,7 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
     @Override
     TaskContainerInternal getTasks();
 
-//    ScriptSource getBuildScriptSource();
+    ScriptSource getBuildScriptSource();
 
     ProjectEvaluationListener getProjectEvaluationBroadcaster();
 
@@ -84,6 +88,17 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
     ProjectStateInternal getState();
 
     GradleInternal getGradle();
+
+    ClassLoaderScope getClassLoaderScope();
+
+    ClassLoaderScope getBaseClassLoaderScope();
+
+    void setScript(groovy.lang.Script script);
+
+    @Override
+    PluginManagerInternal getPluginManager();
+
+    void addDeferredConfiguration(Runnable configuration);
 
     @Override
     ExtensionContainerInternal getExtensions();

@@ -40,7 +40,11 @@ import com.tyron.code.util.ApkInstaller;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.util.function.Consumer;
@@ -242,9 +246,10 @@ public class CompilerService extends Service {
 
     private void compileNew(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
-        startParameter.setProjectDir(project.getRootFile());
-        startParameter.setLogLevel(LogLevel.LIFECYCLE);
-        startParameter.setGradleUserHomeDir(new File(project.getRootFile(), ".gradle"));
+        File rootFile = project.getRootFile();
+        startParameter.setProjectDir(rootFile);
+        startParameter.setLogLevel(LogLevel.DEBUG);
+        startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
 
         ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
             @Override
@@ -253,14 +258,36 @@ public class CompilerService extends Service {
             }
         };
 
+
+
         standardOutputStream.setLineConsumer(logger::info);
         errorOutputStream.setLineConsumer(logger::error);
 
-        LoggingManagerInternal loggingManagerInternal =
-                projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
-        loggingManagerInternal.attachConsole(standardOutputStream, errorOutputStream, ConsoleOutput.Plain);
-
         try {
+            File outputFile = new File(rootFile, "output.txt");
+            if (outputFile.exists()) {
+                FileUtils.forceDelete(outputFile);
+            }
+            if (!outputFile.createNewFile()) {
+                throw new IOException();
+            }
+
+            File errorFile = new File(rootFile, "error.txt");
+            if (errorFile.exists()) {
+                FileUtils.forceDelete(errorFile);
+            }
+            if (!errorFile.createNewFile()) {
+                throw new IOException();
+            }
+
+            FileOutputStream fileOutputStream = FileUtils.openOutputStream(outputFile);
+            FileOutputStream errorOutputStream = FileUtils.openOutputStream(errorFile);
+
+            LoggingManagerInternal loggingManagerInternal =
+                    projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
+            loggingManagerInternal.attachConsole(fileOutputStream,
+                    errorOutputStream, ConsoleOutput.Auto);
+
             projectLauncher.execute();
             mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
         } catch (Throwable t) {

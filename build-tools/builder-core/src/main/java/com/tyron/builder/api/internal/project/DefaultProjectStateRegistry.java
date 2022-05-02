@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal.project;
 import com.google.common.collect.Maps;
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.internal.Describables;
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.internal.Factories;
@@ -295,7 +296,7 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         }
 
         @Override
-        public void createMutableModel() {//ClassLoaderScope selfClassLoaderScope, ClassLoaderScope baseClassLoaderScope) {
+        public void createMutableModel(ClassLoaderScope selfClassLoaderScope, ClassLoaderScope baseClassLoaderScope) {
             controller.createMutableModel(descriptor, owner, this, null, null, projectFactory);
         }
 

@@ -1,8 +1,22 @@
 package com.tyron.builder.internal.service.scopes;
 
+import com.tyron.builder.api.internal.ClassPathRegistry;
+import com.tyron.builder.api.internal.DefaultClassPathProvider;
+import com.tyron.builder.api.internal.DefaultClassPathRegistry;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.DynamicModulesClassPathProvider;
+import com.tyron.builder.api.internal.classpath.DefaultModuleRegistry;
+import com.tyron.builder.api.internal.classpath.DefaultPluginModuleRegistry;
+import com.tyron.builder.api.internal.classpath.ModuleRegistry;
+import com.tyron.builder.api.internal.classpath.PluginModuleRegistry;
+import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
+import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
 import com.tyron.builder.execution.DefaultWorkValidationWarningRecorder;
+import com.tyron.builder.initialization.ClassLoaderRegistry;
+import com.tyron.builder.initialization.DefaultClassLoaderRegistry;
+import com.tyron.builder.initialization.LegacyTypesSupport;
 import com.tyron.builder.internal.Factory;
+import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.execution.steps.WorkInputListeners;
 import com.tyron.builder.api.internal.file.DefaultFileOperations;
@@ -20,6 +34,7 @@ import com.tyron.builder.internal.file.impl.DefaultFileMetadata;
 import com.tyron.builder.internal.hash.DefaultFileHasher;
 import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
+import com.tyron.builder.internal.installation.CurrentGradleInstallation;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationListener;
@@ -31,6 +46,7 @@ import com.tyron.builder.internal.os.OperatingSystem;
 import com.tyron.builder.api.internal.provider.PropertyFactory;
 import com.tyron.builder.api.internal.provider.PropertyHost;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
+import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
@@ -70,9 +86,18 @@ import java.util.function.Predicate;
 
 public class GlobalServices extends WorkerSharedGlobalScopeServices {
 
-    public GlobalServices() {
-        super();
+    protected final ClassPath additionalModuleClassPath;
+
+    public GlobalServices(final boolean longLiving) {
+        this(longLiving, ClassPath.EMPTY);
     }
+
+    public GlobalServices(final boolean longLiving, ClassPath additionalModuleClassPath) {
+        super();
+        this.additionalModuleClassPath = additionalModuleClassPath;
+//        this.environment = () -> longLiving;
+    }
+
 
     void configure(ServiceRegistration registration, List<String> somethingEmpty) {
         final List<PluginServiceRegistry> pluginServiceFactories = new DefaultServiceLocator(getClass().getClassLoader()).getAll(PluginServiceRegistry.class);
@@ -125,36 +150,6 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return listenerManager.getBroadcaster(BuildOperationListener.class);
     }
 
-    FileOperations createFileOperations(
-            FileResolver fileResolver,
-            DirectoryFileTreeFactory directoryFileTreeFactory,
-            StreamHasher streamHasher,
-            FileHasher fileHasher,
-            FileCollectionFactory fileCollectionFactory,
-            ObjectFactory objectFactory,
-            FileSystem fileSystem,
-            Factory<PatternSet> patternSetFactory,
-            Deleter deleter,
-            DocumentationRegistry documentationRegistry,
-            ProviderFactory providerFactory
-    ) {
-        return new DefaultFileOperations(
-                fileResolver,
-//                temporaryFileProvider,
-                DirectInstantiator.INSTANCE,
-                directoryFileTreeFactory,
-                streamHasher,
-                fileHasher,
-                fileCollectionFactory,
-                objectFactory,
-                fileSystem,
-                patternSetFactory,
-                deleter,
-                documentationRegistry,
-                providerFactory
-        );
-    }
-
     ProviderFactory createProviderFactory() {
         return new ProviderFactory();
     }
@@ -170,68 +165,8 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return new DefaultFileChangeListeners(listenerManager);
     }
 
-    LocationsWrittenByCurrentBuild createLocationsUpdatedByCurrentBuild(ListenerManager listenerManager) {
-        LocationsWrittenByCurrentBuild locationsWrittenByCurrentBuild = new LocationsWrittenByCurrentBuild();
-//        listenerManager.addListener(new RootBuildLifecycleListener() {
-//            @Override
-//            public void afterStart() {
-//                locationsWrittenByCurrentBuild.buildStarted();
-//            }
-//
-//            @Override
-//            public void beforeComplete() {
-//                locationsWrittenByCurrentBuild.buildFinished();
-//            }
-//        });
-        return locationsWrittenByCurrentBuild;
-    }
-
     FileSystems createFileSystems() {
         return new PosixFileSystems();
-    }
-
-    WatchableFileSystemDetector createWatchableFileSystemDetector(FileSystems fileSystems) {
-        return new DefaultWatchableFileSystemDetector(fileSystems);
-    }
-
-    VirtualFileSystem createVirtualFileSystem(
-            LocationsWrittenByCurrentBuild locationsWrittenByCurrentBuild,
-            ListenerManager listenerManager,
-            FileChangeListeners fileChangeListeners,
-            FileSystem fileSystem,
-            WatchableFileSystemDetector watchableFileSystemDetector
-    ) {
-        VfsRootReference reference = new VfsRootReference(DefaultSnapshotHierarchy.empty(CaseSensitivity.CASE_SENSITIVE));
-        BuildLifecycleAwareVirtualFileSystem virtualFileSystem = determineWatcherRegistryFactory(
-                OperatingSystem.current(),
-                path -> true)
-                .<BuildLifecycleAwareVirtualFileSystem>map(watcherRegistryFactory -> new WatchingVirtualFileSystem(
-                        watcherRegistryFactory,
-                        reference,
-                        sectionId -> null,
-                        locationsWrittenByCurrentBuild,
-                        watchableFileSystemDetector,
-                        fileChangeListeners
-                ))
-                .orElse(new WatchingNotSupportedVirtualFileSystem(reference));
-        listenerManager.addListener((BuildAddedListener) buildState -> {
-            File buildRootDir = buildState.getBuildRootDir();
-            virtualFileSystem.registerWatchableHierarchy(buildRootDir);
-        });
-        
-        return virtualFileSystem;
-    }
-
-    private Optional<FileWatcherRegistryFactory> determineWatcherRegistryFactory(
-            OperatingSystem operatingSystem,
-            Predicate<String> watchingFilter
-    ) {
-        if (operatingSystem.isWindows()) {
-            return Optional.of(new WindowsFileWatcherRegistryFactory(watchingFilter));
-        } else {
-            // TODO: MacOS?
-            return Optional.of(new LinuxFileWatcherRegistryFactory(watchingFilter));
-        }
     }
 
     FileSystem createFileSystem() {
@@ -283,27 +218,40 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return new StringInterner();
     }
 
-    FileSystemAccess createFileSystemAccess(
-            FileHasher fileHasher,
-            StringInterner interner,
-            Stat stat,
-            VirtualFileSystem virtualFileSystem
-    ) {
-        return new DefaultFileSystemAccess(fileHasher, interner, stat, virtualFileSystem,
-                new FileSystemAccess.WriteListener() {
-                    @Override
-                    public void locationsWritten(Iterable<String> locations) {
-
-                    }
-                }, new DirectorySnapshotterStatistics.Collector());
-    }
-
     ObjectFactory createObjectFactory(
             FileCollectionFactory fileCollectionFactory,
             FilePropertyFactory filePropertyFactory,
             PropertyFactory propertyFactory
     ) {
         return new DefaultObjectFactory(fileCollectionFactory, filePropertyFactory, propertyFactory);
+    }
+
+    ClassPathRegistry createClassPathRegistry(ModuleRegistry moduleRegistry, PluginModuleRegistry pluginModuleRegistry) {
+        return new DefaultClassPathRegistry(
+                new DefaultClassPathProvider(moduleRegistry),
+                new DynamicModulesClassPathProvider(moduleRegistry,
+                        pluginModuleRegistry));
+    }
+
+    DefaultModuleRegistry createModuleRegistry(CurrentGradleInstallation currentGradleInstallation) {
+        return new DefaultModuleRegistry(additionalModuleClassPath, currentGradleInstallation.getInstallation());
+    }
+
+    CurrentGradleInstallation createCurrentGradleInstallation() {
+        return CurrentGradleInstallation.locate();
+    }
+
+    PluginModuleRegistry createPluginModuleRegistry(ModuleRegistry moduleRegistry) {
+        return new DefaultPluginModuleRegistry(moduleRegistry);
+    }
+
+    ClassLoaderRegistry createClassLoaderRegistry(ClassPathRegistry classPathRegistry, LegacyTypesSupport legacyTypesSupport) {
+//        if (GradleRuntimeShadedJarDetector.isLoadedFrom(getClass())) {
+//            return new FlatClassLoaderRegistry(getClass().getClassLoader());
+//        }
+
+        // Use DirectInstantiator here to avoid setting up the instantiation infrastructure early
+        return new DefaultClassLoaderRegistry(classPathRegistry, legacyTypesSupport, DirectInstantiator.INSTANCE);
     }
 
     DefaultWorkValidationWarningRecorder createValidationWarningReporter() {

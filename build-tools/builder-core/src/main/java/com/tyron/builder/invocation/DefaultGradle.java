@@ -1,13 +1,29 @@
 package com.tyron.builder.invocation;
 
+import com.google.common.hash.HashCode;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.BuildListener;
+import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.file.FileCollectionFactory;
+import com.tyron.builder.api.internal.initialization.ClassLoaderIds;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScopeIdentifier;
+import com.tyron.builder.api.internal.initialization.DefaultClassLoaderScope;
+import com.tyron.builder.api.internal.initialization.loadercache.ClassLoaderCache;
+import com.tyron.builder.api.internal.initialization.loadercache.ClassLoaderId;
+import com.tyron.builder.api.internal.initialization.loadercache.DefaultClassLoaderCache;
+import com.tyron.builder.api.internal.initialization.loadercache.DefaultClasspathHasher;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.initialization.IncludedBuild;
+import com.tyron.builder.api.tasks.ClasspathNormalizer;
+import com.tyron.builder.initialization.ClassLoaderScopeId;
+import com.tyron.builder.initialization.ClassLoaderScopeRegistry;
+import com.tyron.builder.initialization.ClassLoaderScopeRegistryListener;
+import com.tyron.builder.internal.classloader.HashingClassLoaderFactory;
+import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.event.ListenerBroadcast;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
@@ -17,6 +33,11 @@ import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
+import com.tyron.builder.internal.execution.fingerprint.FileNormalizationSpec;
+import com.tyron.builder.internal.execution.fingerprint.impl.DefaultFileNormalizationSpec;
+import com.tyron.builder.internal.fingerprint.classpath.impl.DefaultClasspathFingerprinter;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.BuildProject;
@@ -29,6 +50,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Supplier;
 
 public class DefaultGradle implements GradleInternal {
 
@@ -42,7 +64,9 @@ public class DefaultGradle implements GradleInternal {
     private Path identityPath;
     private boolean projectsLoaded;
     private ArrayList<IncludedBuild> includedBuilds;
-    private ListenerBroadcast<BuildListener> buildListenerBroadcast;
+    private final ListenerBroadcast<BuildListener> buildListenerBroadcast;
+    private Supplier<? extends ClassLoaderScope> classLoaderScope;
+    private ClassLoaderScope baseProjectClassLoaderScope;
 
     public DefaultGradle(@Nullable BuildState parent, StartParameter startParameter, ServiceRegistryFactory parentRegistry) {
         this.parent = parent;
@@ -111,7 +135,14 @@ public class DefaultGradle implements GradleInternal {
 
     @Override
     public ClassLoaderScope getClassLoaderScope() {
-        return null;
+        if (classLoaderScope == null) {
+            classLoaderScope = () -> getClassLoaderScopeRegistry().getCoreAndPluginsScope();
+        }
+        return classLoaderScope.get();
+    }
+
+    protected ClassLoaderScopeRegistry getClassLoaderScopeRegistry() {
+        return services.get(ClassLoaderScopeRegistry.class);
     }
 
     @Override
@@ -166,6 +197,26 @@ public class DefaultGradle implements GradleInternal {
     @Override
     public void setRootProject(ProjectInternal rootProject) {
         this.rootProject = rootProject;
+    }
+
+    @Override
+    public ClassLoaderScope baseProjectClassLoaderScope() {
+        if (baseProjectClassLoaderScope == null) {
+            throw new IllegalStateException("baseProjectClassLoaderScope not yet set");
+        }
+        return baseProjectClassLoaderScope;
+    }
+
+    @Override
+    public void setBaseProjectClassLoaderScope(ClassLoaderScope classLoaderScope) {
+        if (classLoaderScope == null) {
+            throw new IllegalArgumentException("classLoaderScope must not be null");
+        }
+        if (baseProjectClassLoaderScope != null) {
+            throw new IllegalStateException("baseProjectClassLoaderScope is already set");
+        }
+
+        this.baseProjectClassLoaderScope = classLoaderScope;
     }
 
     @Override

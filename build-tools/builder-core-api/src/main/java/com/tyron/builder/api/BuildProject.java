@@ -4,18 +4,23 @@ import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryTree;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.RegularFile;
+import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.DeleteSpec;
+import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.plugins.Convention;
 import com.tyron.builder.api.plugins.ExtensionAware;
+import com.tyron.builder.api.plugins.PluginAware;
 import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.WorkResult;
+import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.util.Path;
 
 import org.jetbrains.annotations.Nullable;
@@ -26,9 +31,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.logging.Logger;
 
-public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
+import groovy.lang.Closure;
+
+public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, PluginAware {
 
     /**
      * The default project build file name.
@@ -94,6 +100,14 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
      * @param path The build directory. This is evaluated as per {@link #file(Object)}
      */
     void setBuildDir(Object path);
+
+    /**
+     * Returns the build script handler for this project. You can use this handler to query details about the build
+     * script for this project, and manage the classpath used to compile and execute the project's build script.
+     *
+     * @return the classpath handler. Never returns null.
+     */
+    ScriptHandler getBuildscript();
 
     /**
      * The build script for this project.
@@ -638,6 +652,18 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
 //     */
     ObjectFactory getObjects();
 
+
+    /**
+     * <p>Configures the build script classpath for this project.
+     *
+     * <p>The given closure is executed against this project's {@link ScriptHandler}. The {@link ScriptHandler} is
+     * passed to the closure as the closure's delegate.
+     *
+     * @param configureClosure the closure to use to configure the build script classpath.
+     */
+    void buildscript(Closure configureClosure);
+
+
     /**
      * Creates a directory and returns a file pointing to it.
      *
@@ -833,6 +859,17 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware {
      * @return The logger. Never returns null.
      */
     Logger getLogger();
+
+    /**
+     * Returns the {@link LoggingManager} which can be used to receive logging and to control the
+     * standard output/error capture for this project's build script. By default, System.out is redirected to the Gradle
+     * logging system at the QUIET log level, and System.err is redirected at the ERROR log level.
+     *
+     * @return the LoggingManager. Never returns null.
+     */
+    LoggingManager getLogging();
+
+    StandardOutputCapture getStandardOutputCapture();
 
     /**
      * Configures a collection of objects via an action.
