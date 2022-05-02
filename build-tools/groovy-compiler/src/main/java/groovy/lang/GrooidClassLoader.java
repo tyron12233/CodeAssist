@@ -16,11 +16,21 @@ public class GrooidClassLoader extends GroovyClassLoader {
         super(loader, config);
     }
 
+    public GrooidClassLoader(ClassLoader parent, CompilerConfiguration configuration, boolean b) {
+        super(parent, configuration, b);
+    }
+
     @Override
     protected ClassCollector createCollector(CompilationUnit unit, SourceUnit su) {
         InnerLoader loader = AccessController.doPrivileged((PrivilegedAction<InnerLoader>) () -> new InnerLoader(GrooidClassLoader.this));
         //noinspection rawtypes
         return new ClassCollector(loader, unit, su) {
+
+            @Override
+            protected Class createClass(byte[] code, ClassNode classNode) {
+                return super.createClass(code, classNode);
+            }
+
             @Override
             protected Class onClassNode(ClassWriter classWriter, ClassNode classNode) {
                 try {

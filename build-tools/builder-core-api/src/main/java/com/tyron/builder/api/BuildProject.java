@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 
 import groovy.lang.Closure;
+import groovy.lang.MissingPropertyException;
 
 public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, PluginAware {
 

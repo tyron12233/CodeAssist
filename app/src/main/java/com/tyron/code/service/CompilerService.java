@@ -16,7 +16,10 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.builder.api.logging.LogLevel;
+import com.tyron.builder.api.logging.StandardOutputListener;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
+import com.tyron.builder.api.logging.configuration.ShowStacktrace;
+import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.execution.MultipleBuildFailures;
 import com.tyron.builder.initialization.ReportedException;
 import com.tyron.builder.api.internal.StartParameterInternal;
@@ -28,6 +31,11 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.compiler.ProjectBuilder;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
+import com.tyron.builder.internal.logging.services.TextStreamOutputEventListener;
+import com.tyron.builder.internal.logging.text.BufferingStyledTextOutput;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -217,38 +225,13 @@ public class CompilerService extends Service {
         }, indicator);
     }
 
-    private static class LineReportingOutputSteam extends OutputStream {
-
-        private Consumer<String> lineConsumer;
-
-        private StringBuffer buffer = new StringBuffer();
-
-        public void setLineConsumer(Consumer<String> lineConsumer) {
-            this.lineConsumer = lineConsumer;
-        }
-
-        @Override
-        public void write(int i) {
-            if (i == '\n') {
-                if (lineConsumer != null) {
-                    lineConsumer.accept(buffer.toString());
-                }
-                buffer = new StringBuffer();
-            } else {
-                buffer.append((char) i);
-            }
-        }
-    }
-
-    static LineReportingOutputSteam standardOutputStream = new LineReportingOutputSteam();
-    static LineReportingOutputSteam errorOutputStream = new LineReportingOutputSteam();
-
-
     private void compileNew(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
+        startParameter.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
+        startParameter.setWarningMode(WarningMode.All);
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
-        startParameter.setLogLevel(LogLevel.DEBUG);
+        startParameter.setLogLevel(LogLevel.INFO);
         startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
 
         ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
@@ -258,36 +241,12 @@ public class CompilerService extends Service {
             }
         };
 
+        LoggingManagerInternal loggingManagerInternal =
+                projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
 
-
-        standardOutputStream.setLineConsumer(logger::info);
-        errorOutputStream.setLineConsumer(logger::error);
+        loggingManagerInternal.start();
 
         try {
-            File outputFile = new File(rootFile, "output.txt");
-            if (outputFile.exists()) {
-                FileUtils.forceDelete(outputFile);
-            }
-            if (!outputFile.createNewFile()) {
-                throw new IOException();
-            }
-
-            File errorFile = new File(rootFile, "error.txt");
-            if (errorFile.exists()) {
-                FileUtils.forceDelete(errorFile);
-            }
-            if (!errorFile.createNewFile()) {
-                throw new IOException();
-            }
-
-            FileOutputStream fileOutputStream = FileUtils.openOutputStream(outputFile);
-            FileOutputStream errorOutputStream = FileUtils.openOutputStream(errorFile);
-
-            LoggingManagerInternal loggingManagerInternal =
-                    projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
-            loggingManagerInternal.attachConsole(fileOutputStream,
-                    errorOutputStream, ConsoleOutput.Auto);
-
             projectLauncher.execute();
             mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
         } catch (Throwable t) {
@@ -301,9 +260,7 @@ public class CompilerService extends Service {
             }
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
-
-        standardOutputStream.setLineConsumer(null);
-        errorOutputStream.setLineConsumer(null);
+        loggingManagerInternal.stop();
 
         stopSelf();
         stopForeground(true);

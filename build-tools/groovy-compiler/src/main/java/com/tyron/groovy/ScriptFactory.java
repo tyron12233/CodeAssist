@@ -1,5 +1,7 @@
 package com.tyron.groovy;
 
+import static java.util.stream.Collectors.joining;
+
 import android.util.Log;
 
 import com.android.tools.r8.ByteDataView;
@@ -8,18 +10,23 @@ import com.android.tools.r8.D8;
 import com.android.tools.r8.D8Command;
 import com.android.tools.r8.DexIndexedConsumer;
 import com.android.tools.r8.DiagnosticsHandler;
+import com.android.tools.r8.OutputMode;
 import com.android.tools.r8.origin.Origin;
+import com.google.common.base.Joiner;
 
 import org.codehaus.groovy.control.CompilerConfiguration;
 
+import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import dalvik.system.InMemoryDexClassLoader;
+import dalvik.system.PathClassLoader;
 import groovy.lang.GrooidClassLoader;
 import groovy.lang.Script;
 
@@ -100,5 +107,25 @@ public class ScriptFactory {
             Log.e("DynamicLoading", "Unable to load class", e);
         }
         return result;
+    }
+
+    public static File dexJar(File inputJar, File outputDir) {
+        D8Command.Builder builder = D8Command.builder();
+        builder.setMinApiLevel(26);
+        builder.setDisableDesugaring(true);
+        builder.addProgramFiles(inputJar.toPath());
+        builder.setOutput(outputDir.toPath(), OutputMode.DexIndexed);
+        try {
+            D8.run(builder.build());
+        } catch (CompilationFailedException e) {
+            throw new ScriptCompilationException(e);
+        }
+        return new File(outputDir, "classes.dex");
+    }
+
+    public static Class<?> loadClass(List<File> classPath, ClassLoader parent, String name) throws ClassNotFoundException {
+        String join = Joiner.on(File.pathSeparator).join(classPath);
+        PathClassLoader classLoader = new PathClassLoader(join, parent);
+        return classLoader.loadClass(name);
     }
 }

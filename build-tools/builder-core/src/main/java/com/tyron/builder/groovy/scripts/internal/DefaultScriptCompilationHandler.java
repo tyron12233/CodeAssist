@@ -4,6 +4,8 @@ import com.google.common.hash.HashCode;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScopeIdentifier;
+import com.tyron.builder.api.internal.initialization.ImmutableClassLoaderScope;
 import com.tyron.builder.configuration.ImportsReader;
 import com.tyron.builder.groovy.scripts.ScriptCompilationException;
 import com.tyron.builder.groovy.scripts.ScriptSource;
@@ -13,18 +15,26 @@ import com.tyron.builder.internal.classloader.ClassLoaderUtils;
 import com.tyron.builder.internal.classloader.ImplementationHashAware;
 import com.tyron.builder.internal.classloader.VisitableURLClassLoader;
 import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.serialize.Serializer;
 import com.tyron.builder.internal.serialize.kryo.KryoBackedDecoder;
 import com.tyron.builder.internal.serialize.kryo.KryoBackedEncoder;
 import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.internal.time.Timer;
+import com.tyron.builder.util.GUtil;
 import com.tyron.builder.util.internal.GFileUtils;
+import com.tyron.common.TestUtil;
+import com.tyron.groovy.ScriptFactory;
 
+import groovy.lang.GrooidClassLoader;
 import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyCodeSource;
 import groovy.lang.GroovyResourceLoader;
 import groovy.lang.Script;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.ast.stmt.Statement;
 import org.codehaus.groovy.control.CompilationFailedException;
@@ -46,6 +56,7 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.net.URL;
 import java.security.CodeSource;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -99,8 +110,15 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
         final EmptyScriptDetector emptyScriptDetector = new EmptyScriptDetector();
         final PackageStatementDetector packageDetector = new PackageStatementDetector();
         // TODO: Filter class loader to allow only API classes
-        GroovyClassLoader groovyClassLoader = new GroovyClassLoader(
-                ClassLoader.getSystemClassLoader(), configuration, false) {
+        ClassLoader parent;
+        if (TestUtil.isDalvik()) {
+            parent = getClass().getClassLoader();
+        } else {
+            // on tests, the system class loader contains all the classes
+            parent = ClassLoader.getSystemClassLoader();
+        }
+        GroovyClassLoader groovyClassLoader = new GrooidClassLoader(
+                parent, configuration, false) {
             @Override
             protected CompilationUnit createCompilationUnit(CompilerConfiguration compilerConfiguration,
                                                             CodeSource codeSource) {
@@ -325,6 +343,25 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
 
         private ClassLoaderScope prepareClassLoaderScope() {
             String scopeName = "groovy-dsl:" + source.getFileName() + ":" + scriptBaseClass.getSimpleName();
+            if (TestUtil.isDalvik()) {
+                List<File> asFiles = scriptClassPath.getAsFiles();
+                List<File> dexFiles = new ArrayList<>();
+                return GUtil.uncheckedCall(() -> {
+                    for (File file : asFiles) {
+                        File compiledDex = ScriptFactory.dexJar(file, file.getParentFile());
+
+                        File renamed = new File(file.getParent() + "/" + FilenameUtils.getBaseName(file.getName()) + ".dex");
+                        GFileUtils.deleteIfExists(renamed);
+                        boolean b = compiledDex.renameTo(renamed);
+                        if (b) {
+                            dexFiles.add(renamed);
+                        }
+                    }
+
+                    ClassPath dexClassPath = DefaultClassPath.of(dexFiles);
+                    return targetScope.createLockedChild(scopeName, dexClassPath, sourceHashCode, parent -> new ScriptClassLoader(source, parent, dexClassPath, sourceHashCode));
+                });
+            }
             return targetScope.createLockedChild(scopeName, scriptClassPath, sourceHashCode, parent -> new ScriptClassLoader(source, parent, scriptClassPath, sourceHashCode));
         }
     }
@@ -335,9 +372,11 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
     private static class ScriptClassLoader extends VisitableURLClassLoader implements ImplementationHashAware {
         private final ScriptSource scriptSource;
         private final HashCode implementationHash;
+        private final ClassPath classPath;
 
         ScriptClassLoader(ScriptSource scriptSource, ClassLoader parent, ClassPath classPath, HashCode implementationHash) {
             super("groovy-script-" + scriptSource.getFileName() + "-loader", parent, classPath);
+            this.classPath = classPath;
             this.scriptSource = scriptSource;
             this.implementationHash = implementationHash;
         }
@@ -353,6 +392,9 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
             if (name.startsWith(scriptSource.getClassName())) {
                 // Synchronized to avoid multiple threads attempting to define the same class on a lookup miss
                 synchronized (this) {
+                    if (TestUtil.isDalvik()) {
+                        return ScriptFactory.loadClass(classPath.getAsFiles(), getParent(), name);
+                    }
                     Class<?> cl = findLoadedClass(name);
                     if (cl == null) {
                         cl = findClass(name);

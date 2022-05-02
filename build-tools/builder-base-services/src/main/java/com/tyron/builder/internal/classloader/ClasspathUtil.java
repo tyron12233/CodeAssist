@@ -5,6 +5,7 @@ import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.reflect.JavaMethod;
+import com.tyron.common.TestUtil;
 
 import java.io.File;
 import java.net.MalformedURLException;
@@ -13,6 +14,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.security.CodeSource;
+import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -77,11 +79,14 @@ public class ClasspathUtil {
     public static File getClasspathForClass(Class<?> targetClass) {
         URI location;
         try {
-            CodeSource codeSource = targetClass.getProtectionDomain().getCodeSource();
-            if (codeSource != null && codeSource.getLocation() != null) {
-                location = toURI(codeSource.getLocation());
-                if (location.getScheme().equals("file")) {
-                    return new File(location);
+            ProtectionDomain protectionDomain = targetClass.getProtectionDomain();
+            if (protectionDomain != null) {
+                CodeSource codeSource = protectionDomain.getCodeSource();
+                if (codeSource != null && codeSource.getLocation() != null) {
+                    location = toURI(codeSource.getLocation());
+                    if (location.getScheme().equals("file")) {
+                        return new File(location);
+                    }
                 }
             }
             if (targetClass.getClassLoader() != null) {
@@ -90,6 +95,10 @@ public class ClasspathUtil {
                 if (resource != null) {
                     return getClasspathForResource(resource, resourceName);
                 }
+            }
+
+            if (TestUtil.isDalvik()) {
+                return new File(System.getProperty("java.class.path"));
             }
             throw new BuildException(String.format("Cannot determine classpath for class %s.", targetClass.getName()));
         } catch (URISyntaxException e) {
