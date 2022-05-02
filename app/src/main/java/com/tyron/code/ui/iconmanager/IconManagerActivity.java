@@ -141,7 +141,7 @@ public class IconManagerActivity extends AppCompatActivity {
         if(FileUtil.exists(resPath) || FileUtil.exists(samplePath)) {
         try {
 	FileUtils.forceDelete(new File(resPath));
-        FileUtils.forceDelete(new File(samePath));
+        FileUtils.forceDelete(new File(samplePath));
 	} catch (Exception e) {
 	AndroidUtilities.showToast(e.toString());
 	}
@@ -383,7 +383,7 @@ public class IconManagerActivity extends AppCompatActivity {
 	                                          try {
 		
 		                                   in = getContentResolver().openInputStream(uri);
-		                                   out = new FileOutputStream(new File(samePath+"/"+f));
+		                                   out = new FileOutputStream(new File(samplePath+"/"+f));
 		                                   byte[] buffer = new byte[1024];
 		                                   int len;
 		                                   while ((len = in.read(buffer)) != -1) {
@@ -405,7 +405,7 @@ public class IconManagerActivity extends AppCompatActivity {
 						final LoaderDialog loaderDialog = new LoaderDialog(this).show();
                                                 String processPath = samplePath + "/" +f;
                                                 if(FileUtil.exists(processPath)){                                           
-						startFullProcess(processPath, FileUtil.getPackageDir(IconManagerActivity.this).concat("/material-icons-pack/"));
+						startFullProcess(processPath, FileUtil.getPackageDir(IconManagerActivity.this) + "/material-icons-pack/");
                                                 }
 						TimerTask task;
 						Timer timer = new Timer();
