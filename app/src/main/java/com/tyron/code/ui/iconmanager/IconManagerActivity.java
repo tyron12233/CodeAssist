@@ -320,13 +320,7 @@ public class IconManagerActivity extends AppCompatActivity {
 				}
 			}
 		});               
-		container.setBackground(new GradientDrawable() {
-			public GradientDrawable getIns(int a, int b) {
-				this.setCornerRadius(a);
-				this.setColor(b);
-				return this;
-			}
-		}.getIns(15, 0xFFFFFFFF));
+		
 		icon.setImageBitmap(FileUtil.decodeSampleBitmapFromPath(from2, 1024, 1024));
 		b1.setOnClickListener(new View.OnClickListener() {
 			@Override
@@ -414,7 +408,11 @@ public class IconManagerActivity extends AppCompatActivity {
 									public void run() {
 										loaderDialog.dismiss();
 										getIconList(desPath, recyclerview1);
-
+                                                                                try {
+                                                                                FileUtils.forceDelete(new File(samplePath));
+                                                                                } catch(Exception e) {
+                                                                                AndroidUtilities.showToast(e.toString());
+                                                                                }
 									}
 								});
 							}
