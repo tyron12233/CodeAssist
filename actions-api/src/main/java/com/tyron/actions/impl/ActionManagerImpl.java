@@ -215,6 +215,19 @@ public class ActionManagerImpl extends ActionManager {
         return isGroup(mIdToAction.get(actionId));
     }
 
+    @Override
+    public void performAction(String id, AnActionEvent event) {
+        AnAction anAction = mIdToAction.get(id);
+        if (anAction != null) {
+            anAction.update(event);
+            if (anAction.getTemplatePresentation().isVisible()) {
+                anAction.actionPerformed(event);
+            }
+        } else {
+            // TODO: throw exception
+        }
+    }
+
     private boolean isGroup(AnAction action) {
         return action instanceof ActionGroup;
     }
