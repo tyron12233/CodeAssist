@@ -4,4 +4,8 @@ public class GradleEnterprisePluginManager {
     public boolean isPresent() {
         return false;
     }
+
+    public void buildFinished(Throwable buildFailure) {
+
+    }
 }

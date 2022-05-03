@@ -77,7 +77,7 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
     /**
      * When file system watching is enabled, this system property can be used to invalidate the entire VFS.
      *
-     * @see org.gradle.initialization.StartParameterBuildOptions.WatchFileSystemOption
+     * @see com.tyron.builder.initialization.StartParameterBuildOptions.WatchFileSystemOption
      */
     public static final String VFS_DROP_PROPERTY = "org.gradle.vfs.drop";
 
@@ -166,7 +166,7 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
             return new DefaultWatchableFileSystemDetector(fileSystems);
         }
 
-        VirtualFileSystem createVirtualFileSystem(
+        BuildLifecycleAwareVirtualFileSystem createVirtualFileSystem(
                 LocationsWrittenByCurrentBuild locationsWrittenByCurrentBuild,
                 ListenerManager listenerManager,
                 FileChangeListeners fileChangeListeners,

@@ -6,6 +6,7 @@ import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyLockingHandler;
 import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
 import com.tyron.builder.api.attributes.AttributeContainer;
+import com.tyron.builder.api.attributes.Category;
 import com.tyron.builder.api.attributes.LibraryElements;
 import com.tyron.builder.api.attributes.Usage;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
@@ -61,12 +62,12 @@ public class DefaultScriptHandler implements ScriptHandler, ScriptHandlerInterna
 
     @Override
     public void dependencies(Closure configureClosure) {
-//        ConfigureUtil.configure(configureClosure, getDependencies());
+        ConfigureUtil.configure(configureClosure, getDependencies());
     }
 
     @Override
     public void addScriptClassPathDependency(Object notation) {
-//        getDependencies().add(ScriptHandler.CLASSPATH_CONFIGURATION, notation);
+        getDependencies().add(ScriptHandler.CLASSPATH_CONFIGURATION, notation);
     }
 
     @Override
@@ -118,7 +119,7 @@ public class DefaultScriptHandler implements ScriptHandler, ScriptHandlerInterna
             // and this service is therefore not available!
             AttributeContainer attributes = classpathConfiguration.getAttributes();
             attributes.attribute(Usage.USAGE_ATTRIBUTE, instantiator.named(Usage.class, Usage.JAVA_RUNTIME));
-//            attributes.attribute(Category.CATEGORY_ATTRIBUTE, instantiator.named(Category.class, Category.LIBRARY));
+            attributes.attribute(Category.CATEGORY_ATTRIBUTE, instantiator.named(Category.class, Category.LIBRARY));
             attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, instantiator.named(LibraryElements.class, LibraryElements.JAR));
 //            attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, instantiator.named(Bundling.class, Bundling.EXTERNAL));
 //            attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, Integer.parseInt(JavaVersion.current().getMajorVersion()));

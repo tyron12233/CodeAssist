@@ -8,6 +8,7 @@ import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileFactory;
 import com.tyron.builder.api.internal.file.FilePropertyFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.api.internal.model.NamedObjectInstantiator;
 import com.tyron.builder.api.internal.provider.DefaultPropertyFactory;
 import com.tyron.builder.api.internal.provider.ManagedFactories;
 import com.tyron.builder.api.internal.provider.PropertyFactory;
@@ -64,6 +65,9 @@ public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
         return new DefaultCrossBuildInMemoryCacheFactory(listenerManager);
     }
 
+    NamedObjectInstantiator createNamedObjectInstantiator(CrossBuildInMemoryCacheFactory cacheFactory) {
+        return new NamedObjectInstantiator(cacheFactory);
+    }
 
     TaskDependencyFactory createTaskDependencyFactory() {
         return DefaultTaskDependencyFactory.withNoAssociatedProject();

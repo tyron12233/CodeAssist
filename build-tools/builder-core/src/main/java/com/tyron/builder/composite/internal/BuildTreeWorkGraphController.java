@@ -2,7 +2,7 @@ package com.tyron.builder.composite.internal;
 
 import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.internal.buildTree.BuildTreeWorkGraph;
+import com.tyron.builder.internal.buildtree.BuildTreeWorkGraph;
 
 import java.util.function.Function;
 

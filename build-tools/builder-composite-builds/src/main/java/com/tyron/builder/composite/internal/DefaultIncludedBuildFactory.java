@@ -9,7 +9,7 @@ import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.IncludedBuildFactory;
 import com.tyron.builder.internal.build.IncludedBuildState;
-import com.tyron.builder.internal.buildTree.BuildTreeState;
+import com.tyron.builder.internal.buildtree.BuildTreeState;
 
 import java.io.File;
 

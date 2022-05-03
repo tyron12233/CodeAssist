@@ -1,32 +1,33 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.StartParameter;
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.GradleScriptException;
-import com.tyron.builder.api.ProjectConfigurationException;
+import com.tyron.builder.api.artifacts.ConfigurationContainer;
+import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
+import com.tyron.builder.api.artifacts.dsl.DependencyLockingHandler;
+import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
+import com.tyron.builder.api.attributes.AttributesSchema;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.artifacts.DependencyManagementServices;
+import com.tyron.builder.api.internal.artifacts.DependencyResolutionServices;
 import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
+import com.tyron.builder.api.internal.artifacts.dsl.dependencies.ProjectFinder;
+import com.tyron.builder.api.internal.attributes.ImmutableAttributesFactory;
 import com.tyron.builder.api.internal.file.DefaultFileOperations;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
-import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.DefaultScriptClassPathResolver;
 import com.tyron.builder.api.internal.initialization.DefaultScriptHandlerFactory;
 import com.tyron.builder.api.internal.initialization.ScriptClassPathInitializer;
 import com.tyron.builder.api.internal.initialization.ScriptClassPathResolver;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
-import com.tyron.builder.api.internal.initialization.ScriptHandlerInternal;
 import com.tyron.builder.api.internal.model.NamedObjectInstantiator;
 import com.tyron.builder.api.internal.plugins.DefaultPluginRegistry;
 import com.tyron.builder.api.internal.plugins.PluginInspector;
-import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
 import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectFactory;
@@ -34,7 +35,7 @@ import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.properties.GradleProperties;
 import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
-import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.caching.internal.BuildCacheConfigurationInternal;
 import com.tyron.builder.caching.internal.BuildCacheController;
@@ -57,7 +58,6 @@ import com.tyron.builder.configuration.InitScriptProcessor;
 import com.tyron.builder.configuration.ProjectsPreparer;
 import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.ScriptPluginFactorySelector;
-import com.tyron.builder.configuration.ScriptTarget;
 import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.configuration.project.DefaultCompileOperationFactory;
 import com.tyron.builder.execution.CompositeAwareTaskSelector;
@@ -72,13 +72,7 @@ import com.tyron.builder.execution.plan.TaskDependencyResolver;
 import com.tyron.builder.execution.plan.TaskNodeDependencyResolver;
 import com.tyron.builder.execution.plan.TaskNodeFactory;
 import com.tyron.builder.groovy.scripts.DefaultScriptCompilerFactory;
-import com.tyron.builder.groovy.scripts.ScriptCompiler;
 import com.tyron.builder.groovy.scripts.ScriptCompilerFactory;
-import com.tyron.builder.groovy.scripts.ScriptRunner;
-import com.tyron.builder.groovy.scripts.ScriptSource;
-import com.tyron.builder.groovy.scripts.internal.BuildScriptData;
-import com.tyron.builder.groovy.scripts.internal.CompileOperation;
-import com.tyron.builder.groovy.scripts.internal.CompiledScript;
 import com.tyron.builder.groovy.scripts.internal.DefaultScriptCompilationHandler;
 import com.tyron.builder.groovy.scripts.internal.DefaultScriptRunnerFactory;
 import com.tyron.builder.groovy.scripts.internal.FileCacheBackedScriptClassCompiler;
@@ -90,7 +84,6 @@ import com.tyron.builder.initialization.ClassLoaderScopeRegistry;
 import com.tyron.builder.initialization.DefaultGradlePropertiesController;
 import com.tyron.builder.initialization.DefaultGradlePropertiesLoader;
 import com.tyron.builder.initialization.DefaultProjectDescriptorRegistry;
-import com.tyron.builder.initialization.DefaultSettings;
 import com.tyron.builder.initialization.DefaultSettingsLoaderFactory;
 import com.tyron.builder.initialization.DefaultSettingsPreparer;
 import com.tyron.builder.initialization.Environment;
@@ -105,7 +98,6 @@ import com.tyron.builder.initialization.ProjectPropertySettingBuildLoader;
 import com.tyron.builder.initialization.ScriptEvaluatingSettingsProcessor;
 import com.tyron.builder.initialization.SettingsFactory;
 import com.tyron.builder.initialization.SettingsLoaderFactory;
-import com.tyron.builder.initialization.SettingsLocation;
 import com.tyron.builder.initialization.SettingsPreparer;
 import com.tyron.builder.initialization.SettingsProcessor;
 import com.tyron.builder.initialization.layout.ResolvedBuildLayout;
@@ -119,20 +111,16 @@ import com.tyron.builder.internal.build.DefaultBuildWorkGraphController;
 import com.tyron.builder.internal.build.DefaultBuildWorkPreparer;
 import com.tyron.builder.internal.build.DefaultPublicBuildPath;
 import com.tyron.builder.internal.build.PublicBuildPath;
-import com.tyron.builder.internal.buildTree.BuildInclusionCoordinator;
-import com.tyron.builder.internal.buildTree.BuildModelParameters;
+import com.tyron.builder.internal.buildtree.BuildInclusionCoordinator;
+import com.tyron.builder.internal.buildtree.BuildModelParameters;
 import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.internal.classpath.CachedClasspathTransformer;
-import com.tyron.builder.internal.classpath.ClassPath;
-import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.composite.DefaultBuildIncluder;
 import com.tyron.builder.internal.event.DefaultListenerManager;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.file.FileException;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.internal.hash.Hashes;
-import com.tyron.builder.internal.hash.PrimitiveHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.id.UniqueId;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
@@ -144,8 +132,8 @@ import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.BuildOperationQueueFactory;
 import com.tyron.builder.internal.operations.DefaultBuildOperationQueueFactory;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
-import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.StringTextResource;
 import com.tyron.builder.internal.resource.TextFileResourceLoader;
@@ -158,17 +146,10 @@ import com.tyron.builder.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.work.WorkerLeaseService;
 import com.tyron.builder.model.internal.inspect.ModelRuleSourceDetector;
-import com.tyron.builder.plugin.management.internal.PluginRequests;
 import com.tyron.builder.plugin.management.internal.autoapply.AutoAppliedPluginHandler;
 import com.tyron.builder.plugin.use.internal.PluginRequestApplicator;
 import com.tyron.builder.util.GUtil;
 import com.tyron.builder.util.internal.GFileUtils;
-import com.tyron.common.TestUtil;
-import com.tyron.groovy.ScriptFactory;
-
-import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.classgen.Verifier;
-import org.codehaus.groovy.control.CompilerConfiguration;
 
 import java.io.File;
 import java.util.List;
@@ -176,14 +157,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
-
-import bsh.EvalError;
-import bsh.Interpreter;
-import groovy.lang.GrooidClassLoader;
-import groovy.lang.GroovyClassLoader;
-import groovy.lang.GroovyShell;
-import groovy.lang.Script;
-import groovy.transform.Field;
 
 @SuppressWarnings({"unused"})
 public class BuildScopeServices extends DefaultServiceRegistry {
@@ -408,6 +381,61 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected ScriptClassPathResolver createScriptClassPathResolver(List<ScriptClassPathInitializer> initializers) {
         return new DefaultScriptClassPathResolver(initializers);
+    }
+
+    protected DependencyManagementServices createDependencyManagementServices() {
+        System.out.println("Warning: Stub implementation craeteDependencyManagementServices()");
+        return new DependencyManagementServices() {
+            @Override
+            public void addDslServices(ServiceRegistration registration,
+                                       DomainObjectContext domainObjectContext) {
+
+            }
+
+            @Override
+            public DependencyResolutionServices create(FileResolver resolver,
+                                                       FileCollectionFactory fileCollectionFactory,
+                                                       DependencyMetaDataProvider dependencyMetaDataProvider,
+                                                       ProjectFinder projectFinder,
+                                                       DomainObjectContext domainObjectContext) {
+                return new DependencyResolutionServices() {
+                    @Override
+                    public RepositoryHandler getResolveRepositoryHandler() {
+                        return null;
+                    }
+
+                    @Override
+                    public ConfigurationContainer getConfigurationContainer() {
+                        return null;
+                    }
+
+                    @Override
+                    public DependencyHandler getDependencyHandler() {
+                        return null;
+                    }
+
+                    @Override
+                    public DependencyLockingHandler getDependencyLockingHandler() {
+                        return null;
+                    }
+
+                    @Override
+                    public ImmutableAttributesFactory getAttributesFactory() {
+                        return null;
+                    }
+
+                    @Override
+                    public AttributesSchema getAttributesSchema() {
+                        return null;
+                    }
+
+                    @Override
+                    public ObjectFactory getObjectFactory() {
+                        return null;
+                    }
+                };
+            }
+        };
     }
 
     protected ScriptHandlerFactory createScriptHandlerFactory(DependencyManagementServices dependencyManagementServices, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, DependencyMetaDataProvider dependencyMetaDataProvider, ScriptClassPathResolver classPathResolver, NamedObjectInstantiator instantiator) {
