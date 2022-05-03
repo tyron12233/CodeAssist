@@ -60,7 +60,6 @@ public class GradleScopeServices extends DefaultServiceRegistry {
             for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
                 pluginServiceRegistry.registerGradleServices(registration);
             }
-            registration.add(ProjectFactory.class);
         });
     }
 

@@ -43,6 +43,7 @@ import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.installation.CurrentGradleInstallation;
 import com.tyron.builder.internal.instantiation.InjectAnnotationHandler;
+import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.instantiation.generator.DefaultInstantiatorFactory;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
@@ -180,6 +181,9 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return new ProviderFactory();
     }
 
+    InstanceGenerator createInstantiator(InstantiatorFactory instantiatorFactory) {
+        return instantiatorFactory.decorateLenient();
+    }
 
     FileHasher createFileHasher(
             StreamHasher streamHasher
