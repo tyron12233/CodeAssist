@@ -6,6 +6,7 @@ import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyLockingHandler;
 import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
 import com.tyron.builder.api.attributes.AttributesSchema;
+import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
@@ -36,6 +37,10 @@ import com.tyron.builder.api.internal.properties.GradleProperties;
 import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
 import com.tyron.builder.api.model.ObjectFactory;
+import com.tyron.builder.cache.CacheRepository;
+import com.tyron.builder.cache.internal.BuildScopeCacheDir;
+import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
+import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.caching.internal.BuildCacheConfigurationInternal;
 import com.tyron.builder.caching.internal.controller.BuildCacheController;
@@ -88,6 +93,7 @@ import com.tyron.builder.initialization.DefaultSettingsLoaderFactory;
 import com.tyron.builder.initialization.DefaultSettingsPreparer;
 import com.tyron.builder.initialization.Environment;
 import com.tyron.builder.initialization.GradlePropertiesController;
+import com.tyron.builder.initialization.GradleUserHomeDirProvider;
 import com.tyron.builder.initialization.IGradlePropertiesLoader;
 import com.tyron.builder.initialization.InitScriptHandler;
 import com.tyron.builder.initialization.InstantiatingBuildLoader;
@@ -100,6 +106,9 @@ import com.tyron.builder.initialization.SettingsFactory;
 import com.tyron.builder.initialization.SettingsLoaderFactory;
 import com.tyron.builder.initialization.SettingsPreparer;
 import com.tyron.builder.initialization.SettingsProcessor;
+import com.tyron.builder.initialization.layout.BuildLayout;
+import com.tyron.builder.initialization.layout.BuildLayoutConfiguration;
+import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.initialization.layout.ResolvedBuildLayout;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.build.BuildModelControllerServices;
@@ -576,6 +585,21 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     ExecutionNodeAccessHierarchies createExecutionNodeAccessHierarchies() {
         return new ExecutionNodeAccessHierarchies(CaseSensitivity.CASE_INSENSITIVE, FileSystems.getDefault());
+    }
+
+    protected BuildScopedCache createBuildScopedCache(
+            GradleUserHomeDirProvider userHomeDirProvider,
+            BuildLayout buildLayout,
+            StartParameter startParameter,
+            CacheRepository cacheRepository
+    ) {
+        BuildScopeCacheDir cacheDir = new BuildScopeCacheDir(userHomeDirProvider, buildLayout, startParameter);
+        return new DefaultBuildScopedCache(cacheDir.getDir(), cacheRepository);
+    }
+
+
+    protected BuildLayout createBuildLayout(BuildLayoutFactory buildLayoutFactory, BuildDefinition buildDefinition) {
+        return buildLayoutFactory.getLayoutFor(new BuildLayoutConfiguration(buildDefinition.getStartParameter()));
     }
 
     protected PublicBuildPath createPublicBuildPath(BuildState buildState) {

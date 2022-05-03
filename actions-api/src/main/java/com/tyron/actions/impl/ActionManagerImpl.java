@@ -81,8 +81,7 @@ public class ActionManagerImpl extends ActionManager {
 
                     child.update(event);
 
-                    if (event.getPresentation()
-                            .isVisible()) {
+                    if (event.getPresentation().isVisible()) {
                         if (actionGroup.isPopup()) {
                             fillSubMenu(subMenu, child, event);
                         }
@@ -143,8 +142,7 @@ public class ActionManagerImpl extends ActionManager {
 
                     child.update(event);
 
-                    if (event.getPresentation()
-                            .isVisible()) {
+                    if (event.getPresentation().isVisible()) {
                         fillSubMenu(subSubMenu, child, event);
                     }
                 }

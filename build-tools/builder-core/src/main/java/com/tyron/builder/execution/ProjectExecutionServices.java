@@ -97,13 +97,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         addProvider(new ExecutionGradleServices());
     }
 
-    protected BuildScopedCache createBuildScopedCache(
-            CacheRepository cacheRepository
-    ) {
-        File gradle = new File(projectInternal.getBuildDir(), ".gradle");
-        return new DefaultBuildScopedCache(gradle, cacheRepository);
-    }
-
     ChecksumService createChecksumService() {
         return new ChecksumService() {
             @Override
@@ -164,31 +157,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
             ChecksumService checksumService
     ) {
         return new DefaultPathKeyFileStore(checksumService, projectInternal.getBuildDir());
-    }
-
-    LocalBuildCacheService createLocalBuildCacheService(
-        CacheRepository cacheRepository,
-        ChecksumService checksumService,
-        TemporaryFileProvider temporaryFileProvider,
-        FileAccessTracker fileAccessTracker
-    ) {
-        File buildDir = projectInternal.getBuildDir();
-
-        PathKeyFileStore pathKeyFileStore = new DefaultPathKeyFileStore(checksumService, new File(buildDir, ".gradle"));
-        PersistentCache cache = cacheRepository.cache(buildDir)
-                .withDisplayName("Build cache")
-                .withLockOptions(mode(OnDemand))
-                .withCrossVersionCache(CacheBuilder.LockTarget.DefaultTarget)
-                .open();
-        BuildCacheTempFileStore tempFileStore = new DefaultBuildCacheTempFileStore(temporaryFileProvider);
-
-        return new DirectoryBuildCacheService(
-                pathKeyFileStore,
-                cache,
-                tempFileStore,
-                fileAccessTracker,
-                ".failed"
-        );
     }
 
     FileSystemLocationSnapshotHasher createFileSystemLocationSnapshotHasher() {
