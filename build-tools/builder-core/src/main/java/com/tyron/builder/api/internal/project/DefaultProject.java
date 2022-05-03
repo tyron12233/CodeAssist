@@ -10,12 +10,43 @@ import com.tyron.builder.api.PathValidation;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UnknownProjectException;
+import com.tyron.builder.api.artifacts.Dependency;
+import com.tyron.builder.api.artifacts.ExternalModuleDependency;
+import com.tyron.builder.api.artifacts.MinimalExternalModuleDependency;
+import com.tyron.builder.api.artifacts.dsl.ComponentMetadataHandler;
+import com.tyron.builder.api.artifacts.dsl.ComponentModuleMetadataHandler;
+import com.tyron.builder.api.artifacts.dsl.DependencyConstraintHandler;
+import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
+import com.tyron.builder.api.artifacts.dsl.ExternalModuleDependencyVariantSpec;
+import com.tyron.builder.api.artifacts.query.ArtifactResolutionQuery;
+import com.tyron.builder.api.artifacts.transform.TransformAction;
+import com.tyron.builder.api.artifacts.transform.TransformParameters;
+import com.tyron.builder.api.artifacts.transform.TransformSpec;
+import com.tyron.builder.api.artifacts.transform.VariantTransform;
+import com.tyron.builder.api.artifacts.type.ArtifactTypeContainer;
+import com.tyron.builder.api.attributes.AttributesSchema;
+import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.internal.artifacts.Module;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
+import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
+import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.logging.Logging;
+import com.tyron.builder.api.logging.LoggingManager;
+import com.tyron.builder.api.plugins.ExtensionContainer;
+import com.tyron.builder.api.plugins.ObjectConfigurationAction;
+import com.tyron.builder.api.plugins.PluginContainer;
+import com.tyron.builder.api.plugins.PluginManager;
+import com.tyron.builder.api.provider.ProviderConvertible;
+import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
+import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.project.ProjectEvaluator;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
+import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.event.ListenerBroadcast;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
@@ -25,8 +56,11 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
+import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.model.ObjectFactory;
@@ -36,6 +70,7 @@ import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.reflect.ObjectInstantiationException;
 import com.tyron.builder.api.tasks.WorkResult;
+import com.tyron.builder.util.ConfigureUtil;
 import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.extensibility.DefaultConvention;
 
@@ -53,9 +88,13 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
-import java.util.logging.Logger;
 
-public class DefaultProject implements ProjectInternal {
+import groovy.lang.Closure;
+import groovy.lang.Script;
+
+public class DefaultProject extends AbstractPluginAware implements ProjectInternal {
+
+    private static final Logger BUILD_LOGGER = Logging.getLogger(BuildProject.class);
 
     private final ProjectStateUnk owner;
     private final ProjectInternal rootProject;
@@ -68,6 +107,9 @@ public class DefaultProject implements ProjectInternal {
     private final ServiceRegistry services;
     private final TaskContainerInternal taskContainer;
     private final GradleInternal gradle;
+    private final ScriptSource buildScriptSource;
+    private final ClassLoaderScope classLoaderScope;
+    private final ClassLoaderScope baseClassLoaderScope;
     private String description;
     private Object group;
     private Object version;
@@ -81,21 +123,24 @@ public class DefaultProject implements ProjectInternal {
                           @Nullable ProjectInternal parent,
                           File projectDir,
                           File buildFile,
+                          ScriptSource buildScriptSource,
                           GradleInternal gradle,
                           ProjectStateUnk owner,
-                          ServiceRegistryFactory serviceRegistryFactory) {
+                          ServiceRegistryFactory serviceRegistryFactory,
+                          ClassLoaderScope selfClassLoaderScope,
+                          ClassLoaderScope baseClassLoaderScope
+    ) {
         this.owner = owner;
-        this.gradle = gradle;
-//        this.classLoaderScope = selfClassLoaderScope;
-//        this.baseClassLoaderScope = baseClassLoaderScope;
+        this.classLoaderScope = selfClassLoaderScope;
+        this.baseClassLoaderScope = baseClassLoaderScope;
         this.rootProject = parent != null ? parent.getRootProject() : this;
         this.projectDir = projectDir;
         this.buildFile = buildFile;
         this.parent = parent;
         this.name = name;
         this.state = new ProjectStateInternal();
-//        this.buildScriptSource = buildScriptSource;
-//        this.gradle = gradle;
+        this.buildScriptSource = buildScriptSource;
+        this.gradle = gradle;
 
         if (parent == null) {
             depth = 0;
@@ -167,6 +212,11 @@ public class DefaultProject implements ProjectInternal {
     }
 
     @Override
+    public ScriptSource getBuildScriptSource() {
+        return buildScriptSource;
+    }
+
+    @Override
     public ProjectEvaluationListener getProjectEvaluationBroadcaster() {
         return evaluationListener.getSource();
     }
@@ -205,7 +255,17 @@ public class DefaultProject implements ProjectInternal {
 
     @Override
     public Logger getLogger() {
-        return null;
+        return BUILD_LOGGER;
+    }
+
+    @Override
+    public LoggingManagerInternal getLogging() {
+        return services.get(LoggingManagerInternal.class);
+    }
+
+    @Override
+    public StandardOutputCapture getStandardOutputCapture() {
+        return getLogging();
     }
 
     @Override
@@ -367,6 +427,11 @@ public class DefaultProject implements ProjectInternal {
     }
 
     @Override
+    public void buildscript(Closure configureClosure) {
+        ConfigureUtil.configure(configureClosure, getBuildscript());
+    }
+
+    @Override
     public File mkdir(Object path) {
         return getFileOperations().mkdir(path);
     }
@@ -483,6 +548,21 @@ public class DefaultProject implements ProjectInternal {
     }
 
     @Override
+    public DependencyHandler getDependencies() {
+        return null;
+    }
+
+    @Override
+    public void dependencies(Closure configureClosure) {
+        BUILD_LOGGER.warn("Dependencies block is not yet supported.");
+    }
+
+    @Override
+    public ScriptHandler getBuildscript() {
+        return null;
+    }
+
+    @Override
     public ProjectInternal getParent() {
         return getParent(this);
     }
@@ -592,14 +672,6 @@ public class DefaultProject implements ProjectInternal {
         return Cast.uncheckedCast(getAllprojects(this));
     }
 
-    protected CrossProjectModelAccess getCrossProjectModelAccess() {
-        return services.get(CrossProjectModelAccess.class);
-    }
-
-    protected CrossProjectConfigurator getProjectConfigurator() {
-        return services.get(CrossProjectConfigurator.class);
-    }
-
     @Override
     public List<String> getDefaultTasks() {
         return defaultTasks;
@@ -704,7 +776,66 @@ public class DefaultProject implements ProjectInternal {
     }
 
     @Override
+    public ClassLoaderScope getClassLoaderScope() {
+        return classLoaderScope;
+    }
+
+    @Override
+    public ClassLoaderScope getBaseClassLoaderScope() {
+        return baseClassLoaderScope;
+    }
+
+    @Override
+    public void setScript(Script script) {
+
+    }
+
+    @Override
     public ExtensionContainerInternal getExtensions() {
         return ((ExtensionContainerInternal) getConvention());
+    }
+
+
+    @Override
+    public void addDeferredConfiguration(Runnable configuration) {
+
+    }
+
+    @Override
+    public PluginManagerInternal getPluginManager() {
+        return services.get(PluginManagerInternal.class);
+    }
+
+    @Override
+    protected DefaultObjectConfigurationAction createObjectConfigurationAction() {
+        TextUriResourceLoader.Factory textUriResourceLoaderFactory = services.get(TextUriResourceLoader.Factory.class);
+        return new DefaultObjectConfigurationAction(getFileResolver(), getScriptPluginFactory(), getScriptHandlerFactory(), getBaseClassLoaderScope(), textUriResourceLoaderFactory, this);
+    }
+
+    // getter from services
+
+    @Override
+    public ConfigurationTargetIdentifier getConfigurationTargetIdentifier() {
+        return services.get(ConfigurationTargetIdentifier.class);
+    }
+
+    protected FileResolver getFileResolver() {
+        return services.get(FileResolver.class);
+    }
+
+    protected ScriptPluginFactory getScriptPluginFactory() {
+        return services.get(ScriptPluginFactory.class);
+    }
+
+    protected ScriptHandlerFactory getScriptHandlerFactory() {
+        return services.get(ScriptHandlerFactory.class);
+    }
+
+    protected CrossProjectModelAccess getCrossProjectModelAccess() {
+        return services.get(CrossProjectModelAccess.class);
+    }
+
+    protected CrossProjectConfigurator getProjectConfigurator() {
+        return services.get(CrossProjectConfigurator.class);
     }
 }

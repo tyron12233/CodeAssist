@@ -2,6 +2,7 @@ package com.tyron.builder.internal.snpashot.impl;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
+import com.tyron.builder.internal.hash.Hashes;
 
 public class HashCodeSnapshot extends AbstractIsolatableScalarValue<HashCode> {
     public HashCodeSnapshot(HashCode value) {
@@ -10,6 +11,6 @@ public class HashCodeSnapshot extends AbstractIsolatableScalarValue<HashCode> {
 
     @Override
     public void appendToHasher(Hasher hasher) {
-        hasher.putBytes(getValue().asBytes());
+        Hashes.putHash(hasher, getValue());
     }
 }

@@ -203,18 +203,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         return new DefaultFileCollectionFingerprinterRegistry(registrations);
     }
 
-
-
-    ResourceSnapshotterCacheService createResourceSnapshotterCacheService(
-            CrossBuildFileHashCache store
-    ) {
-        PersistentIndexedCache<HashCode, HashCode> resourceHashesCache = store.createCache(
-                PersistentIndexedCacheParameters.of("resourceHashesCache", HashCode.class, new HashCodeSerializer()),
-                400000,
-                true);
-        return new DefaultResourceSnapshotterCacheService(resourceHashesCache);
-    }
-
     FingerprinterRegistration createAbsolutePathDefaultFingerprinter(
             FileCollectionSnapshotter fileCollectionSnapshotter,
             FileSystemLocationSnapshotHasher fileSystemLocationSnapshotHasher

@@ -1,5 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
+import com.tyron.builder.api.internal.plugins.PluginRegistry;
+import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
 import com.tyron.builder.execution.BuildWorkExecutor;
 import com.tyron.builder.execution.ProjectConfigurer;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
@@ -58,7 +60,6 @@ public class GradleScopeServices extends DefaultServiceRegistry {
             for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
                 pluginServiceRegistry.registerGradleServices(registration);
             }
-            registration.add(ProjectFactory.class);
         });
     }
 
@@ -116,6 +117,15 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         );
     }
 
+    PluginRegistry createPluginRegistry(PluginRegistry parentRegistry) {
+        return parentRegistry.createChild(get(GradleInternal.class).getClassLoaderScope());
+    }
+
+//    PluginManagerInternal createPluginManager(Instantiator instantiator, GradleInternal gradleInternal, PluginRegistry pluginRegistry, InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator decorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
+//        PluginTarget target = new ImperativeOnlyPluginTarget<>(gradleInternal);
+//        return instantiator.newInstance(DefaultPluginManager.class, pluginRegistry, instantiatorFactory.inject(this), target, buildOperationExecutor, userCodeApplicationContext, decorator, domainObjectCollectionFactory);
+//    }
+
     ServiceRegistryFactory createServiceRegistryFactory(final ServiceRegistry services) {
         final Factory<LoggingManagerInternal> loggingManagerInternalFactory = getFactory(LoggingManagerInternal.class);
         return new ServiceRegistryFactory() {
@@ -165,6 +175,9 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         return listenerManager.getBroadcaster(TaskListenerInternal.class);
     }
 
+    protected ConfigurationTargetIdentifier createConfigurationTargetIdentifier(GradleInternal gradle) {
+        return ConfigurationTargetIdentifier.of(gradle);
+    }
 
     @Override
     public void close() {

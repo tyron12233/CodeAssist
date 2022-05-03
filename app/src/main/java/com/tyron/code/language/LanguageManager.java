@@ -7,6 +7,8 @@ import com.tyron.code.language.kotlin.Kotlin;
 import com.tyron.code.language.xml.Xml;
 import com.tyron.editor.Editor;
 
+import org.apache.commons.vfs2.FileObject;
+
 import java.io.File;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -46,6 +48,15 @@ public class LanguageManager {
             }
         }
         return false;
+    }
+
+    public io.github.rosemoe.sora.lang.Language get(Editor editor, FileObject file) {
+        for (Language lang : mLanguages) {
+            if (lang.isApplicable(file)) {
+                return lang.get(editor);
+            }
+        }
+        return null;
     }
 
     public io.github.rosemoe.sora.lang.Language get(Editor editor, File file) {

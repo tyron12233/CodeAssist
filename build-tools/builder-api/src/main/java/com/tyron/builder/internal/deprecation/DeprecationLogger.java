@@ -1,5 +1,7 @@
 package com.tyron.builder.internal.deprecation;
 
+import org.graalvm.compiler.debug.DebugContext;
+
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -29,6 +31,14 @@ public class DeprecationLogger {
             return true;
         }
     };
+
+//    /**
+//     * Output: ${behaviour}.
+//     */
+//    @CheckReturnValue
+//    public static DeprecationMessageBuilder.DeprecateBehaviour deprecateBehaviour(String behaviour) {
+//        return new DeprecationMessageBuilder.DeprecateBehaviour(behaviour);
+//    }
 
 //    private static final LoggingDeprecatedFeatureHandler DEPRECATED_FEATURE_HANDLER = new LoggingDeprecatedFeatureHandler();
 }

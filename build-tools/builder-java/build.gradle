@@ -10,6 +10,7 @@ java {
 dependencies {
     implementation projects.common
     implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
     implementation projects.buildTools.builderEnterpriseOperations
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.builderLogging

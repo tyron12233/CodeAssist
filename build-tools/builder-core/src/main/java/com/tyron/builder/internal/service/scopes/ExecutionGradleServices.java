@@ -138,7 +138,7 @@ public class ExecutionGradleServices {
                 buildOperationExecutor,
                 temporaryFileProvider,
                 true,
-                true,
+                false,
                 true,
                 fileSystemAccess,
                 buildCacheEntryPacker,
@@ -151,26 +151,6 @@ public class ExecutionGradleServices {
         return new DefaultExecutionStateChangeDetector();
     }
 
-    GenericFileTreeSnapshotter createGenericFileTreeSnapshotter(
-            FileHasher fileHasher,
-            StringInterner stringInterner
-    ) {
-        return new DefaultGenericFileTreeSnapshotter(fileHasher, stringInterner);
-    }
-
-    FileCollectionSnapshotter createFileCollectionSnapshotter(
-            FileSystemAccess fileSystemAccess,
-            GenericFileTreeSnapshotter genericFileTreeSnapshotter,
-            Stat stat
-    ) {
-        return new DefaultFileCollectionSnapshotter(fileSystemAccess, genericFileTreeSnapshotter, stat);
-    }
-
-    OutputSnapshotter createOutputSnapshotter(
-            FileCollectionSnapshotter fileCollectionSnapshotter
-    ) {
-        return new DefaultOutputSnapshotter(fileCollectionSnapshotter);
-    }
 
     OverlappingOutputDetector createOverlappingOutputDetector() {
         return new DefaultOverlappingOutputDetector();

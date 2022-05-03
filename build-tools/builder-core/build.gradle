@@ -7,17 +7,24 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
+repositories {
+    maven { url 'https://jitpack.io' }
+}
+
 dependencies {
     implementation projects.common
 
     implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
     implementation projects.buildTools.builderEnterpriseOperations
     implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderEnterpriseWorkers
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderResources
     implementation projects.buildTools.builderNative
     implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderModelGroovy
     implementation projects.buildTools.builderPersistentCache
     implementation projects.buildTools.buildCache
     implementation projects.buildTools.builderCoreApi
@@ -28,6 +35,7 @@ dependencies {
     implementation projects.buildTools.fileWatching
     implementation projects.buildTools.builderExecution
     implementation projects.buildTools.builderNormalizationJava
+    implementation projects.buildTools.groovyCompiler
 
 
     implementation projects.buildTools.builderApi
@@ -37,6 +45,7 @@ dependencies {
 
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.apache-extras.beanshell:bsh:2.0b6'
+    implementation 'org.ow2.asm:asm:9.3'
 
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
     implementation("net.rubygrapefruit:file-events:0.22-milestone-23")

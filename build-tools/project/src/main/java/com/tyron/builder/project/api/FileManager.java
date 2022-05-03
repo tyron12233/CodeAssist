@@ -9,6 +9,7 @@ import java.io.File;
 import java.time.Instant;
 import java.util.Optional;
 
+@Deprecated
 public interface FileManager {
 
     /**

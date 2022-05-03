@@ -375,7 +375,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             project.getSettings().refresh();
         }
 
-        IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
+//        IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
         mIndexServiceConnection.setProject(project);

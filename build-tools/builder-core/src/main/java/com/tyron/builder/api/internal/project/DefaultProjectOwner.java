@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
 import com.tyron.builder.api.internal.artifacts.DefaultProjectComponentIdentifier;
@@ -117,7 +118,8 @@ public class DefaultProjectOwner implements ProjectStateUnk {
     }
 
     @Override
-    public void createMutableModel() {
+    public void createMutableModel(ClassLoaderScope selfClassLoaderScope,
+                                   ClassLoaderScope baseClassLoaderScope) {
 
     }
 

@@ -9,7 +9,7 @@ import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.build.PublicBuildPath;
 import com.tyron.builder.internal.composite.DefaultConfigurableIncludedBuild;
 import com.tyron.builder.internal.composite.DefaultConfigurableIncludedPluginBuild;
-import com.tyron.builder.plugin.management.PluginRequests;
+import com.tyron.builder.plugin.management.internal.PluginRequests;
 
 import java.io.File;
 

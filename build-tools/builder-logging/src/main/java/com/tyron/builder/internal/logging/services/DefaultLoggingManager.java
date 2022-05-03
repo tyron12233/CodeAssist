@@ -245,7 +245,8 @@ public class DefaultLoggingManager implements LoggingManagerInternal, Closeable 
                 return;
             }
             if (this.consoleAttachment != null) {
-                throw new UnsupportedOperationException("Not implemented yet.");
+                consoleAttachment = null;
+//                throw new UnsupportedOperationException("Not implemented yet.");
             }
 
             if (originalState != null) {
