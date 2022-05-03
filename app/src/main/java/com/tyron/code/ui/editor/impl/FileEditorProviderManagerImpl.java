@@ -37,7 +37,6 @@ public class FileEditorProviderManagerImpl implements FileEditorProviderManager 
         registerProvider(new RosemoeEditorProvider());
         registerProvider(new LayoutTextEditorProvider());
         registerProvider(new ImageEditorProvider());
-        registerProvider(new SquircleEditorProvider());
     }
 
     @Override
