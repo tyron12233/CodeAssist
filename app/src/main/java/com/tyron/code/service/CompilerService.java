@@ -31,6 +31,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.compiler.ProjectBuilder;
 import com.tyron.builder.internal.MutableBoolean;
+import com.tyron.builder.internal.buildoption.BuildOption;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
@@ -223,6 +224,8 @@ public class CompilerService extends Service {
     private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
+        startParameter.setConfigurationCache(BuildOption.Value.value(true));
+        startParameter.setConfigurationCacheDebug(true);
         startParameter.setWarningMode(WarningMode.All);
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
