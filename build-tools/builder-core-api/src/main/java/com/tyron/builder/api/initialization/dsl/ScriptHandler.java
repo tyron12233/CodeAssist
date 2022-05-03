@@ -2,6 +2,10 @@ package com.tyron.builder.api.initialization.dsl;
 
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.Script;
+import com.tyron.builder.api.artifacts.ConfigurationContainer;
+import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
+import com.tyron.builder.api.artifacts.dsl.DependencyLockingHandler;
+import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -17,12 +21,12 @@ import groovy.lang.Closure;
  * <p>You can obtain a {@code ScriptHandler} instance using {@link BuildProject#getBuildscript()} or {@link
  * Script#getBuildscript()}.</p>
  *
- * <p>To declare the script classpath, you use the {@link org.gradle.api.artifacts.dsl.DependencyHandler} provided by
+ * <p>To declare the script classpath, you use the {@link com.tyron.builder.api.artifacts.dsl.DependencyHandler} provided by
  * {@link #getDependencies()} to attach dependencies to the {@value #CLASSPATH_CONFIGURATION} configuration. These
  * dependencies are resolved just prior to script compilation, and assembled into the classpath for the script.</p>
  *
  * <p>For most external dependencies you will also need to declare one or more repositories where the dependencies can
- * be found, using the {@link org.gradle.api.artifacts.dsl.RepositoryHandler} provided by {@link
+ * be found, using the {@link com.tyron.builder.api.artifacts.dsl.RepositoryHandler} provided by {@link
  * #getRepositories()}.</p>
  */
 public interface ScriptHandler {
@@ -52,7 +56,7 @@ public interface ScriptHandler {
      *
      * @return the repository handler. Never returns null.
      */
-//    RepositoryHandler getRepositories();
+    RepositoryHandler getRepositories();
 
     /**
      * Configures the repositories for the script dependencies. Executes the given closure against the {@link
@@ -70,7 +74,7 @@ public interface ScriptHandler {
      * @return the dependency handler. Never returns null.
      * @see #getConfigurations()
      */
-//    DependencyHandler getDependencies();
+    DependencyHandler getDependencies();
 
     /**
      * Configures the dependencies for the script. Executes the given closure against the {@link DependencyHandler} for
@@ -86,7 +90,7 @@ public interface ScriptHandler {
      *
      * @return The configuration of this handler.
      */
-//    ConfigurationContainer getConfigurations();
+    ConfigurationContainer getConfigurations();
 
     /**
      * Configures dependency locking
@@ -103,7 +107,7 @@ public interface ScriptHandler {
      *
      * @since 6.1
      */
-//    DependencyLockingHandler getDependencyLocking();
+    DependencyLockingHandler getDependencyLocking();
 
     /**
      * Returns the {@code ClassLoader} which contains the classpath for this script.

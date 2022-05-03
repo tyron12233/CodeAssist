@@ -9,6 +9,7 @@ import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.artifacts.DependencyManagementServices;
 import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.file.DefaultFileOperations;
@@ -16,9 +17,13 @@ import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.initialization.DefaultScriptClassPathResolver;
 import com.tyron.builder.api.internal.initialization.DefaultScriptHandlerFactory;
+import com.tyron.builder.api.internal.initialization.ScriptClassPathInitializer;
+import com.tyron.builder.api.internal.initialization.ScriptClassPathResolver;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerInternal;
+import com.tyron.builder.api.internal.model.NamedObjectInstantiator;
 import com.tyron.builder.api.internal.plugins.DefaultPluginRegistry;
 import com.tyron.builder.api.internal.plugins.PluginInspector;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
@@ -401,14 +406,18 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new CompositeAwareTaskSelector(gradle, buildStateRegistry, projectConfigurer, new TaskNameResolver());
     }
 
-    protected ScriptHandlerFactory createScriptHandlerFactory(
-            FileResolver fileResolver,
-            FileCollectionFactory fileCollectionFactory,
-            DependencyMetaDataProvider dependencyMetaDataProvider
-//            ScriptClassPathResolver classPathResolver,
-//            NamedObjectInstantiator instantiator
-    ) {
-        return new DefaultScriptHandlerFactory(fileResolver, fileCollectionFactory, dependencyMetaDataProvider);
+    protected ScriptClassPathResolver createScriptClassPathResolver(List<ScriptClassPathInitializer> initializers) {
+        return new DefaultScriptClassPathResolver(initializers);
+    }
+
+    protected ScriptHandlerFactory createScriptHandlerFactory(DependencyManagementServices dependencyManagementServices, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, DependencyMetaDataProvider dependencyMetaDataProvider, ScriptClassPathResolver classPathResolver, NamedObjectInstantiator instantiator) {
+        return new DefaultScriptHandlerFactory(
+                dependencyManagementServices,
+                fileResolver,
+                fileCollectionFactory,
+                dependencyMetaDataProvider,
+                classPathResolver,
+                instantiator);
     }
 
     protected DependencyMetaDataProvider createDependencyMetaDataProvider() {
