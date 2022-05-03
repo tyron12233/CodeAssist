@@ -13,6 +13,8 @@ import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
@@ -20,6 +22,8 @@ import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.plugins.ObjectConfigurationAction;
 import com.tyron.builder.api.plugins.PluginContainer;
 import com.tyron.builder.api.plugins.PluginManager;
+import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
+import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.project.ProjectEvaluator;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.FileTree;
@@ -39,6 +43,7 @@ import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.model.ObjectFactory;
@@ -70,7 +75,7 @@ import java.util.concurrent.Callable;
 import groovy.lang.Closure;
 import groovy.lang.Script;
 
-public class DefaultProject implements ProjectInternal {
+public class DefaultProject extends AbstractPluginAware implements ProjectInternal {
 
     private static final Logger BUILD_LOGGER = Logging.getLogger(BuildProject.class);
 
@@ -640,14 +645,6 @@ public class DefaultProject implements ProjectInternal {
         return Cast.uncheckedCast(getAllprojects(this));
     }
 
-    protected CrossProjectModelAccess getCrossProjectModelAccess() {
-        return services.get(CrossProjectModelAccess.class);
-    }
-
-    protected CrossProjectConfigurator getProjectConfigurator() {
-        return services.get(CrossProjectConfigurator.class);
-    }
-
     @Override
     public List<String> getDefaultTasks() {
         return defaultTasks;
@@ -771,33 +768,47 @@ public class DefaultProject implements ProjectInternal {
         return ((ExtensionContainerInternal) getConvention());
     }
 
-    @Override
-    public PluginContainer getPlugins() {
-        return null;
-    }
 
     @Override
-    public void apply(Closure closure) {
-
-    }
-
-    @Override
-    public void apply(Action<? super ObjectConfigurationAction> action) {
-
-    }
-
-    @Override
-    public void apply(Map<String, ?> options) {
+    public void addDeferredConfiguration(Runnable configuration) {
 
     }
 
     @Override
     public PluginManagerInternal getPluginManager() {
-        return null;
+        return services.get(PluginManagerInternal.class);
     }
 
     @Override
-    public void addDeferredConfiguration(Runnable configuration) {
+    protected DefaultObjectConfigurationAction createObjectConfigurationAction() {
+        TextUriResourceLoader.Factory textUriResourceLoaderFactory = services.get(TextUriResourceLoader.Factory.class);
+        return new DefaultObjectConfigurationAction(getFileResolver(), getScriptPluginFactory(), getScriptHandlerFactory(), getBaseClassLoaderScope(), textUriResourceLoaderFactory, this);
+    }
 
+    // getter from services
+
+    @Override
+    public ConfigurationTargetIdentifier getConfigurationTargetIdentifier() {
+        return services.get(ConfigurationTargetIdentifier.class);
+    }
+
+    protected FileResolver getFileResolver() {
+        return services.get(FileResolver.class);
+    }
+
+    protected ScriptPluginFactory getScriptPluginFactory() {
+        return services.get(ScriptPluginFactory.class);
+    }
+
+    protected ScriptHandlerFactory getScriptHandlerFactory() {
+        return services.get(ScriptHandlerFactory.class);
+    }
+
+    protected CrossProjectModelAccess getCrossProjectModelAccess() {
+        return services.get(CrossProjectModelAccess.class);
+    }
+
+    protected CrossProjectConfigurator getProjectConfigurator() {
+        return services.get(CrossProjectConfigurator.class);
     }
 }
