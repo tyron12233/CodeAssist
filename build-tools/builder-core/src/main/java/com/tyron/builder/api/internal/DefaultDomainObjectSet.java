@@ -7,7 +7,6 @@ import com.tyron.builder.api.internal.collections.CollectionFilter;
 import com.tyron.builder.api.internal.collections.ElementSource;
 import com.tyron.builder.api.internal.collections.IterationOrderRetainingSetElementSource;
 import com.tyron.builder.internal.ImmutableActionSet;
-import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import com.tyron.builder.util.Predicates;
 
 import java.util.LinkedHashSet;

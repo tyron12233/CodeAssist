@@ -1,7 +1,7 @@
 package com.tyron.builder.tooling.internal.provider;
 
-import com.tyron.builder.internal.buildTree.BuildActionRunner;
-import com.tyron.builder.internal.buildTree.BuildTreeLifecycleController;
+import com.tyron.builder.internal.buildtree.BuildActionRunner;
+import com.tyron.builder.internal.buildtree.BuildTreeLifecycleController;
 import com.tyron.builder.internal.invocation.BuildAction;
 import com.tyron.builder.tooling.internal.provider.action.ExecuteBuildAction;
 

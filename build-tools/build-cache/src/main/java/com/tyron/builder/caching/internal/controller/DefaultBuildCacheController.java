@@ -1,69 +1,52 @@
 package com.tyron.builder.caching.internal.controller;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.io.Closer;
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildException;
-import com.tyron.builder.internal.file.FileMetadata;
-import com.tyron.builder.internal.file.FileType;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
-import com.tyron.builder.internal.operations.BuildOperationContext;
-import com.tyron.builder.internal.operations.BuildOperationDescriptor;
-import com.tyron.builder.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.internal.operations.CallableBuildOperation;
-import com.tyron.builder.internal.operations.RunnableBuildOperation;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
-import com.tyron.builder.internal.file.TreeType;
-import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.caching.BuildCacheKey;
 import com.tyron.builder.caching.BuildCacheService;
-import com.tyron.builder.caching.internal.BuildCacheController;
-import com.tyron.builder.caching.internal.CacheableEntity;
 import com.tyron.builder.caching.internal.controller.operations.PackOperationDetails;
 import com.tyron.builder.caching.internal.controller.operations.PackOperationResult;
 import com.tyron.builder.caching.internal.controller.operations.UnpackOperationDetails;
 import com.tyron.builder.caching.internal.controller.operations.UnpackOperationResult;
-import com.tyron.builder.caching.internal.controller.service.BuildCacheLoadResult;
+import com.tyron.builder.caching.internal.controller.service.BuildCacheServiceHandle;
 import com.tyron.builder.caching.internal.controller.service.DefaultLocalBuildCacheServiceHandle;
+import com.tyron.builder.caching.internal.controller.service.LoadTarget;
 import com.tyron.builder.caching.internal.controller.service.LocalBuildCacheServiceHandle;
+import com.tyron.builder.caching.internal.controller.service.NullBuildCacheServiceHandle;
 import com.tyron.builder.caching.internal.controller.service.NullLocalBuildCacheServiceHandle;
-import com.tyron.builder.caching.internal.controller.service.NullRemoteBuildCacheServiceHandle;
-import com.tyron.builder.caching.internal.controller.service.RemoteBuildCacheServiceHandle;
-import com.tyron.builder.caching.internal.origin.OriginMetadata;
-import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
-import com.tyron.builder.caching.internal.packaging.BuildCacheEntryPacker;
+import com.tyron.builder.caching.internal.controller.service.StoreTarget;
 import com.tyron.builder.caching.internal.service.BuildCacheServicesConfiguration;
 import com.tyron.builder.caching.local.internal.BuildCacheTempFileStore;
 import com.tyron.builder.caching.local.internal.DefaultBuildCacheTempFileStore;
 import com.tyron.builder.caching.local.internal.LocalBuildCacheService;
-import com.tyron.builder.internal.vfs.FileSystemAccess;
-
-import org.jetbrains.annotations.Nullable;
+import com.tyron.builder.internal.operations.BuildOperationContext;
+import com.tyron.builder.internal.operations.BuildOperationDescriptor;
+import com.tyron.builder.internal.operations.BuildOperationExecutor;
+import com.tyron.builder.internal.operations.RunnableBuildOperation;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
+
+import javax.annotation.Nullable;
 
 public class DefaultBuildCacheController implements BuildCacheController {
 
     @VisibleForTesting
-    final RemoteBuildCacheServiceHandle remote;
+    final BuildCacheServiceHandle remote;
 
     @VisibleForTesting
     final LocalBuildCacheServiceHandle local;
 
     private final BuildCacheTempFileStore tmp;
+    private final BuildOperationExecutor buildOperationExecutor;
     private final boolean emitDebugLogging;
-    private final PackOperationExecutor packExecutor;
 
     private boolean closed;
 
@@ -73,23 +56,13 @@ public class DefaultBuildCacheController implements BuildCacheController {
             TemporaryFileProvider temporaryFileProvider,
             boolean logStackTraces,
             boolean emitDebugLogging,
-            boolean disableRemoteOnError,
-            FileSystemAccess fileSystemAccess,
-            BuildCacheEntryPacker packer,
-            OriginMetadataFactory originMetadataFactory,
-            StringInterner stringInterner
+            boolean disableRemoteOnError
     ) {
+        this.buildOperationExecutor = buildOperationExecutor;
         this.emitDebugLogging = emitDebugLogging;
         this.local = toLocalHandle(config.getLocal(), config.isLocalPush());
         this.remote = toRemoteHandle(config.getRemote(), config.isRemotePush(), buildOperationExecutor, logStackTraces, disableRemoteOnError);
         this.tmp = toTempFileStore(config.getLocal(), temporaryFileProvider);
-        this.packExecutor = new PackOperationExecutor(
-                buildOperationExecutor,
-                fileSystemAccess,
-                packer,
-                originMetadataFactory,
-                stringInterner
-        );
     }
 
     @Override
@@ -103,52 +76,129 @@ public class DefaultBuildCacheController implements BuildCacheController {
     }
 
     @Override
-    public Optional<BuildCacheLoadResult> load(BuildCacheKey key, CacheableEntity entity) {
-        Optional<BuildCacheLoadResult> result = loadLocal(key, entity);
-        if (result.isPresent()) {
-            return result;
-        }
-        return loadRemoteAndStoreResultLocally(key, entity);
-    }
+    public <T> Optional<T> load(BuildCacheLoadCommand<T> command) {
+        final Unpack<T> unpack = new Unpack<>(command);
 
-    private Optional<BuildCacheLoadResult> loadLocal(BuildCacheKey key, CacheableEntity entity) {
-        try {
-            return local.maybeLoad(key, file -> packExecutor.unpack(key, entity, file));
-        } catch (Exception e) {
-            throw new BuildException("Could not load from local cache: " + e.getMessage(), e);
-        }
-    }
-
-    private Optional<BuildCacheLoadResult> loadRemoteAndStoreResultLocally(BuildCacheKey key, CacheableEntity entity) {
-        if (!remote.canLoad()) {
-            return Optional.empty();
-        }
-        AtomicReference<Optional<BuildCacheLoadResult>> result = new AtomicReference<>(Optional.empty());
-        tmp.withTempFile(key, file -> {
-            Optional<BuildCacheLoadResult> remoteResult;
+        if (local.canLoad()) {
             try {
-                remoteResult = remote.maybeLoad(key, file, f -> packExecutor.unpack(key, entity, f));
+                local.load(command.getKey(), unpack);
             } catch (Exception e) {
-                throw new BuildException("Could not load from remote cache: " + e.getMessage(), e);
+                throw new BuildException("Build cache entry " + command.getKey().getHashCode() + " from local build cache is invalid", e);
             }
-            if (remoteResult.isPresent()) {
-                local.maybeStore(key, file);
-                result.set(remoteResult);
+
+            if (unpack.result != null) {
+                return Optional.of(unpack.result.getMetadata());
             }
-        });
-        return result.get();
+        }
+
+        if (remote.canLoad()) {
+            tmp.withTempFile(command.getKey(), file -> {
+                LoadTarget loadTarget = new LoadTarget(file);
+                remote.load(command.getKey(), loadTarget);
+
+                if (loadTarget.isLoaded()) {
+                    try {
+                        unpack.execute(file);
+                    } catch (Exception e) {
+                        throw new BuildException("Build cache entry " + command.getKey().getHashCode() + " from remote build cache is invalid", e);
+                    }
+                    if (local.canStore()) {
+                        local.store(command.getKey(), file);
+                    }
+                }
+            });
+        }
+
+        BuildCacheLoadCommand.Result<T> result = unpack.result;
+        return result == null
+                ? Optional.empty()
+                : Optional.of(result.getMetadata());
+    }
+
+    private class Unpack<T> implements Action<File> {
+        private final BuildCacheLoadCommand<T> command;
+
+        private BuildCacheLoadCommand.Result<T> result;
+
+        private Unpack(BuildCacheLoadCommand<T> command) {
+            this.command = command;
+        }
+
+        @Override
+        public void execute(File file) {
+            buildOperationExecutor.run(new RunnableBuildOperation() {
+                @Override
+                public void run(BuildOperationContext context) throws IOException {
+                    try (InputStream input = new FileInputStream(file)) {
+                        result = command.load(input);
+                        context.setResult(new UnpackOperationResult(
+                                result.getArtifactEntryCount()
+                        ));
+                    }
+                }
+
+                @Override
+                public BuildOperationDescriptor.Builder description() {
+                    return BuildOperationDescriptor.displayName("Unpack build cache entry " + command.getKey().getHashCode())
+                            .details(new UnpackOperationDetails(command.getKey(), file.length()))
+                            .progressDisplayName("Unpacking build cache entry");
+                }
+            });
+        }
     }
 
     @Override
-    public void store(BuildCacheKey key, CacheableEntity entity, Map<String, FileSystemSnapshot> snapshots, Duration executionTime) {
+    public void store(BuildCacheStoreCommand command) {
         if (!local.canStore() && !remote.canStore()) {
             return;
         }
-        tmp.withTempFile(key, file -> {
-            packExecutor.pack(file, key, entity, snapshots, executionTime);
-            remote.maybeStore(key, file);
-            local.maybeStore(key, file);
+
+        BuildCacheKey key = command.getKey();
+        Pack pack = new Pack(command);
+
+        tmp.withTempFile(command.getKey(), file -> {
+            pack.execute(file);
+
+            if (remote.canStore()) {
+                remote.store(key, new StoreTarget(file));
+            }
+
+            if (local.canStore()) {
+                local.store(key, file);
+            }
         });
+    }
+
+    private class Pack implements Action<File> {
+
+        private final BuildCacheStoreCommand command;
+
+        private Pack(BuildCacheStoreCommand command) {
+            this.command = command;
+        }
+
+        @Override
+        public void execute(final File file) {
+            buildOperationExecutor.run(new RunnableBuildOperation() {
+                @Override
+                public void run(BuildOperationContext context) throws IOException {
+                    try (FileOutputStream fileOutputStream = new FileOutputStream(file)) {
+                        BuildCacheStoreCommand.Result result = command.store(fileOutputStream);
+                        context.setResult(new PackOperationResult(
+                                result.getArtifactEntryCount(),
+                                file.length()
+                        ));
+                    }
+                }
+
+                @Override
+                public BuildOperationDescriptor.Builder description() {
+                    return BuildOperationDescriptor.displayName("Pack build cache entry " + command.getKey())
+                            .details(new PackOperationDetails(command.getKey()))
+                            .progressDisplayName("Packing build cache entry");
+                }
+            });
+        }
     }
 
     @Override
@@ -162,115 +212,11 @@ public class DefaultBuildCacheController implements BuildCacheController {
         }
     }
 
-    @VisibleForTesting
-    static class PackOperationExecutor {
-        private final BuildOperationExecutor buildOperationExecutor;
-        private final FileSystemAccess fileSystemAccess;
-        private final BuildCacheEntryPacker packer;
-        private final OriginMetadataFactory originMetadataFactory;
-        private final StringInterner stringInterner;
-
-        PackOperationExecutor(BuildOperationExecutor buildOperationExecutor, FileSystemAccess fileSystemAccess, BuildCacheEntryPacker packer, OriginMetadataFactory originMetadataFactory, StringInterner stringInterner) {
-            this.buildOperationExecutor = buildOperationExecutor;
-            this.fileSystemAccess = fileSystemAccess;
-            this.packer = packer;
-            this.originMetadataFactory = originMetadataFactory;
-            this.stringInterner = stringInterner;
-        }
-
-        @VisibleForTesting
-        BuildCacheLoadResult unpack(BuildCacheKey key, CacheableEntity entity, File file) {
-            return buildOperationExecutor.call(new CallableBuildOperation<BuildCacheLoadResult>() {
-                @Override
-                public BuildCacheLoadResult call(BuildOperationContext context) throws IOException {
-                    try (InputStream input = new FileInputStream(file)) {
-                        BuildCacheLoadResult metadata = doUnpack(entity, input);
-                        context.setResult(new UnpackOperationResult(metadata.getArtifactEntryCount()));
-                        return metadata;
-                    }
-                }
-
-                @Override
-                public BuildOperationDescriptor.Builder description() {
-                    return BuildOperationDescriptor.displayName("Unpack build cache entry " + key.getHashCode())
-                            .details(new UnpackOperationDetails(key, file.length()))
-                            .progressDisplayName("Unpacking build cache entry");
-                }
-            });
-        }
-
-        private BuildCacheLoadResult doUnpack(CacheableEntity entity, InputStream input) throws IOException {
-            ImmutableList.Builder<String> roots = ImmutableList.builder();
-            entity.visitOutputTrees((name, type, root) -> roots.add(root.getAbsolutePath()));
-            // TODO: Actually unpack the roots inside of the action
-            fileSystemAccess.write(roots.build(), () -> {});
-            BuildCacheEntryPacker.UnpackResult unpackResult = packer.unpack(entity, input, originMetadataFactory.createReader(entity));
-            // TODO: Update the snapshots from the action
-            ImmutableSortedMap<String, FileSystemSnapshot>
-                    resultingSnapshots = snapshotUnpackedData(entity, unpackResult.getSnapshots());
-            return new BuildCacheLoadResult() {
-                @Override
-                public long getArtifactEntryCount() {
-                    return unpackResult.getEntries();
-                }
-                @Override
-                public OriginMetadata getOriginMetadata() {
-                    return unpackResult.getOriginMetadata();
-                }
-                @Override
-                public ImmutableSortedMap<String, FileSystemSnapshot> getResultingSnapshots() {
-                    return resultingSnapshots;
-                }
-            };
-        }
-
-        private ImmutableSortedMap<String, FileSystemSnapshot> snapshotUnpackedData(CacheableEntity entity, Map<String, ? extends FileSystemLocationSnapshot> treeSnapshots) {
-            ImmutableSortedMap.Builder<String, FileSystemSnapshot> builder = ImmutableSortedMap.naturalOrder();
-            entity.visitOutputTrees((treeName, type, root) -> {
-                FileSystemLocationSnapshot treeSnapshot = treeSnapshots.get(treeName);
-                FileSystemLocationSnapshot resultingSnapshot;
-                if (treeSnapshot == null) {
-                    String internedAbsolutePath = stringInterner.intern(root.getAbsolutePath());
-                    resultingSnapshot = new MissingFileSnapshot(internedAbsolutePath, FileMetadata.AccessType.DIRECT);
-                } else {
-                    if (type == TreeType.FILE && treeSnapshot.getType() != FileType.RegularFile) {
-                        throw new IllegalStateException(String.format("Only a regular file should be produced by unpacking tree '%s', but saw a %s", treeName, treeSnapshot.getType()));
-                    }
-                    resultingSnapshot = treeSnapshot;
-                }
-                fileSystemAccess.record(resultingSnapshot);
-                builder.put(treeName, resultingSnapshot);
-            });
-            return builder.build();
-        }
-
-        @VisibleForTesting
-        void pack(File file, BuildCacheKey key, CacheableEntity entity, Map<String, FileSystemSnapshot> snapshots, Duration executionTime) {
-            buildOperationExecutor.run(new RunnableBuildOperation() {
-                @Override
-                public void run(BuildOperationContext context) throws IOException {
-                    try (FileOutputStream fileOutputStream = new FileOutputStream(file)) {
-                        BuildCacheEntryPacker.PackResult packResult = packer.pack(entity, snapshots, fileOutputStream, originMetadataFactory.createWriter(entity, executionTime));
-                        long entryCount = packResult.getEntries();
-                        context.setResult(new PackOperationResult(entryCount, file.length()));
-                    }
-                }
-
-                @Override
-                public BuildOperationDescriptor.Builder description() {
-                    return BuildOperationDescriptor.displayName("Pack build cache entry " + key)
-                            .details(new PackOperationDetails(key))
-                            .progressDisplayName("Packing build cache entry");
-                }
-            });
-        }
-    }
-
-    private static RemoteBuildCacheServiceHandle toRemoteHandle(@Nullable BuildCacheService service, boolean push, BuildOperationExecutor buildOperationExecutor, boolean logStackTraces, boolean disableOnError) {
-        return NullRemoteBuildCacheServiceHandle.INSTANCE;
+    private static BuildCacheServiceHandle toRemoteHandle(@Nullable BuildCacheService service, boolean push, BuildOperationExecutor buildOperationExecutor, boolean logStackTraces, boolean disableOnError) {
+        return NullBuildCacheServiceHandle.INSTANCE;
 //        return service == null
-//                ?
-//                : new OpFiringRemoteBuildCacheServiceHandle(service, push, BuildCacheServiceRole.REMOTE, buildOperationExecutor, logStackTraces, disableOnError);
+//                ? NullBuildCacheServiceHandle.INSTANCE
+//                : new OpFiringBuildCacheServiceHandle(service, push, BuildCacheServiceRole.REMOTE, buildOperationExecutor, logStackTraces, disableOnError);
     }
 
     private static LocalBuildCacheServiceHandle toLocalHandle(@Nullable LocalBuildCacheService local, boolean localPush) {

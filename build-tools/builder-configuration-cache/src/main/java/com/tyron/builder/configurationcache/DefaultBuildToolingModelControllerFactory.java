@@ -5,7 +5,7 @@ import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.BuildToolingModelController;
 import com.tyron.builder.internal.build.BuildToolingModelControllerFactory;
 import com.tyron.builder.internal.build.DefaultBuildToolingModelController;
-import com.tyron.builder.internal.buildTree.BuildModelParameters;
+import com.tyron.builder.internal.buildtree.BuildModelParameters;
 
 public class DefaultBuildToolingModelControllerFactory implements BuildToolingModelControllerFactory {
 

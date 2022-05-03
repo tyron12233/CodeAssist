@@ -1,6 +1,5 @@
 package com.tyron.code.ui.editor;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -8,8 +7,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.PopupMenu;
-import android.widget.ViewSwitcher;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
@@ -17,41 +14,25 @@ import androidx.annotation.Nullable;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.ListUpdateCallback;
 import androidx.transition.TransitionManager;
-import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
-import com.google.android.material.transition.MaterialFade;
 import com.google.android.material.transition.MaterialFadeThrough;
-import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.menu.ActionPopupMenu;
-import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.FileManager;
-import com.tyron.builder.project.api.Module;
-import com.tyron.builder.project.listener.FileListener;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.event.EventReceiver;
-import com.tyron.code.event.Unsubscribe;
-import com.tyron.code.ui.editor.adapter.PageAdapter;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
-import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
-import com.tyron.code.ui.editor.impl.text.rosemoe.ContentWrapper;
-import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.main.action.project.SaveEvent;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.Listeners;
 import com.tyron.common.SharedPreferenceKeys;
-import com.tyron.common.util.UniqueNameBuilder;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Content;
 import com.tyron.editor.event.ContentEvent;
@@ -283,8 +264,6 @@ public class EditorContainerFragment extends Fragment implements
                     }, getViewLifecycleOwner(), content::addContentListener, content::removeContentListener);
                 }
             } catch (FileSystemException e) {
-                e.printStackTrace();
-
                 // safe to ignore here, just don't register the listener then
             }
         });

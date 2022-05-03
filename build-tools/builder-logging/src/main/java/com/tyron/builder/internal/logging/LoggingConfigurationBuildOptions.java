@@ -1,26 +1,26 @@
-package com.tyron.builder.internal.logging;
-
-import com.sun.tools.javac.util.StringUtils;
-import com.tyron.builder.api.logging.LogLevel;
-import com.tyron.builder.api.logging.configuration.ConsoleOutput;
-import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
-import com.tyron.builder.api.logging.configuration.ShowStacktrace;
-import com.tyron.builder.api.logging.configuration.WarningMode;
-import com.tyron.builder.cli.CommandLineParser;
-import com.tyron.builder.cli.ParsedCommandLine;
-import com.tyron.builder.internal.buildoption.AbstractBuildOption;
-import com.tyron.builder.internal.buildoption.BuildOption;
-import com.tyron.builder.internal.buildoption.BuildOptionSet;
-import com.tyron.builder.internal.buildoption.CommandLineOptionConfiguration;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
+//package com.tyron.builder.internal.logging;
+//
+//import com.sun.tools.javac.util.StringUtils;
+//import com.tyron.builder.api.logging.LogLevel;
+//import com.tyron.builder.api.logging.configuration.ConsoleOutput;
+//import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
+//import com.tyron.builder.api.logging.configuration.ShowStacktrace;
+//import com.tyron.builder.api.logging.configuration.WarningMode;
+//import com.tyron.builder.cli.CommandLineParser;
+//import com.tyron.builder.cli.ParsedCommandLine;
+//import com.tyron.builder.internal.buildoption.AbstractBuildOption;
+//import com.tyron.builder.internal.buildoption.BuildOption;
+//import com.tyron.builder.internal.buildoption.BuildOptionSet;
+//import com.tyron.builder.internal.buildoption.CommandLineOptionConfiguration;
+//
+//import java.util.ArrayList;
+//import java.util.Arrays;
+//import java.util.Collection;
+//import java.util.Collections;
+//import java.util.List;
+//import java.util.Locale;
+//import java.util.Map;
+//
 //public class LoggingConfigurationBuildOptions extends BuildOptionSet<LoggingConfiguration> {
 //
 //    private static List<BuildOption<LoggingConfiguration>> options;

@@ -13,7 +13,7 @@ import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.NestedBuildTree;
 import com.tyron.builder.internal.build.RootBuildState;
 import com.tyron.builder.internal.build.StandAloneNestedBuild;
-import com.tyron.builder.internal.buildTree.BuildTreeState;
+import com.tyron.builder.internal.buildtree.BuildTreeState;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.session.state.CrossBuildSessionState;
 

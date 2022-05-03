@@ -2,6 +2,7 @@ package com.tyron.builder.internal.service.scopes;
 
 import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
 
+import com.tyron.builder.caching.internal.controller.BuildCacheCommandFactory;
 import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.changedetection.state.DefaultExecutionHistoryCacheAccess;
@@ -11,7 +12,6 @@ import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.internal.execution.ExecutionEngine;
 import com.tyron.builder.internal.execution.OutputChangeListener;
 import com.tyron.builder.internal.execution.OutputSnapshotter;
-import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.internal.execution.history.ExecutionHistoryCacheAccess;
 import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
 import com.tyron.builder.internal.execution.history.OutputFilesRepository;
@@ -23,7 +23,6 @@ import com.tyron.builder.internal.execution.history.impl.DefaultExecutionHistory
 import com.tyron.builder.internal.execution.history.impl.DefaultOutputFilesRepository;
 import com.tyron.builder.internal.execution.history.impl.DefaultOverlappingOutputDetector;
 import com.tyron.builder.internal.execution.impl.DefaultExecutionEngine;
-import com.tyron.builder.internal.execution.impl.DefaultOutputSnapshotter;
 import com.tyron.builder.internal.execution.steps.AssignWorkspaceStep;
 import com.tyron.builder.internal.execution.steps.BroadcastChangingOutputsStep;
 import com.tyron.builder.internal.execution.steps.BuildCacheStep;
@@ -52,13 +51,8 @@ import com.tyron.builder.internal.execution.steps.legacy.MarkSnapshottingInputsF
 import com.tyron.builder.internal.execution.timeout.TimeoutHandler;
 import com.tyron.builder.internal.execution.timeout.impl.DefaultTimeoutHandler;
 import com.tyron.builder.internal.file.Deleter;
-import com.tyron.builder.internal.file.Stat;
-import com.tyron.builder.internal.fingerprint.impl.DefaultGenericFileTreeSnapshotter;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
-import com.tyron.builder.internal.fingerprint.GenericFileTreeSnapshotter;
-import com.tyron.builder.internal.fingerprint.impl.DefaultFileCollectionSnapshotter;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
 import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
@@ -68,7 +62,7 @@ import com.tyron.builder.cache.PersistentCache;
 import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
-import com.tyron.builder.caching.internal.BuildCacheController;
+import com.tyron.builder.caching.internal.controller.BuildCacheController;
 import com.tyron.builder.caching.internal.controller.DefaultBuildCacheController;
 import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
 import com.tyron.builder.caching.internal.packaging.BuildCacheEntryPacker;
@@ -118,35 +112,6 @@ public class ExecutionGradleServices {
         return listenerManager.getBroadcaster(OutputChangeListener.class);
     }
 
-    BuildCacheServicesConfiguration createBuildCacheServicesConfiguration(
-            LocalBuildCacheService localBuildCacheService
-    ) {
-        return new BuildCacheServicesConfiguration(localBuildCacheService, true, null, false);
-    }
-
-    BuildCacheController createBuildCacheController(
-            BuildCacheServicesConfiguration configuration,
-            BuildOperationExecutor buildOperationExecutor,
-            TemporaryFileProvider temporaryFileProvider,
-            FileSystemAccess fileSystemAccess,
-            BuildCacheEntryPacker buildCacheEntryPacker,
-            OriginMetadataFactory originMetadataFactory,
-            StringInterner stringInterner
-    ) {
-        return new DefaultBuildCacheController(
-                configuration,
-                buildOperationExecutor,
-                temporaryFileProvider,
-                true,
-                false,
-                true,
-                fileSystemAccess,
-                buildCacheEntryPacker,
-                originMetadataFactory,
-                stringInterner
-        );
-    }
-
     ExecutionStateChangeDetector createExecutionStateChangeDetector() {
         return new DefaultExecutionStateChangeDetector();
     }
@@ -171,6 +136,7 @@ public class ExecutionGradleServices {
 
     ExecutionEngine createExecutionEngine(
             BuildCacheController buildCacheController,
+            BuildCacheCommandFactory buildCacheCommandFactory,
             BuildCancellationToken cancellationToken,
             BuildInvocationScopeId buildInvocationScopeId,
             BuildOperationExecutor buildOperationExecutor,
@@ -207,7 +173,7 @@ public class ExecutionGradleServices {
                 new SkipUpToDateStep<>(
                 new RecordOutputsStep<>(outputFilesRepository,
                 new StoreExecutionStateStep<>(
-                new BuildCacheStep(buildCacheController, deleter, outputChangeListener,
+                new BuildCacheStep(buildCacheController, buildCacheCommandFactory, deleter, outputChangeListener,
                 new BroadcastChangingOutputsStep<>(outputChangeListener,
                 new CaptureStateAfterExecutionStep<>(buildOperationExecutor, buildInvocationScopeId.getId(), outputSnapshotter,
                 new CreateOutputsStep<>(

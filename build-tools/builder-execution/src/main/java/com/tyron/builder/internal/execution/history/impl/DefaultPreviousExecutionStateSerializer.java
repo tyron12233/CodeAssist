@@ -13,8 +13,8 @@ import com.tyron.builder.internal.serialize.Serializer;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
-import com.tyron.builder.internal.snpashot.impl.ImplementationSnapshotSerializer;
-import com.tyron.builder.internal.snpashot.impl.SnapshotSerializer;
+import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshotSerializer;
+import com.tyron.builder.internal.snapshot.impl.SnapshotSerializer;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import java.time.Duration;

@@ -1,5 +1,6 @@
 package com.tyron.builder.caching.internal.controller.service;
 
+import com.tyron.builder.api.Action;
 import com.tyron.builder.caching.BuildCacheKey;
 import com.tyron.builder.caching.local.internal.LocalBuildCacheService;
 
@@ -23,8 +24,13 @@ public class NullLocalBuildCacheServiceHandle implements LocalBuildCacheServiceH
     }
 
     @Override
-    public Optional<BuildCacheLoadResult> maybeLoad(BuildCacheKey key, Function<File, BuildCacheLoadResult> unpackFunction) {
-        return Optional.empty();
+    public boolean canLoad() {
+        return false;
+    }
+
+    @Override
+    public void load(BuildCacheKey key, Action<? super File> reader) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -33,8 +39,8 @@ public class NullLocalBuildCacheServiceHandle implements LocalBuildCacheServiceH
     }
 
     @Override
-    public boolean maybeStore(BuildCacheKey key, File file) {
-        return false;
+    public void store(BuildCacheKey key, File file) {
+        throw new UnsupportedOperationException();
     }
 
     @Override

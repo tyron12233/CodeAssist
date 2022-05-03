@@ -4,10 +4,7 @@ import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.initialization.BuildLoader;
-import com.tyron.builder.internal.buildTree.BuildInclusionCoordinator;
-
-
-import java.io.File;
+import com.tyron.builder.internal.buildtree.BuildInclusionCoordinator;
 
 public class BuildTreePreparingProjectsPreparer implements ProjectsPreparer {
     private final ProjectsPreparer delegate;

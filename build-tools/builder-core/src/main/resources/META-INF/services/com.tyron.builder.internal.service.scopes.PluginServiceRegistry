@@ -1,1 +1,2 @@
 com.tyron.builder.internal.service.scopes.VirtualFileSystemServices
+com.tyron.builder.caching.internal.BuildCacheServices

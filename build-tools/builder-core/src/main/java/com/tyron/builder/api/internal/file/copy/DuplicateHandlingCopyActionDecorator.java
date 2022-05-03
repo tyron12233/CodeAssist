@@ -5,7 +5,6 @@ import com.tyron.builder.api.InvalidUserCodeException;
 import com.tyron.builder.api.file.DuplicatesStrategy;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.tasks.Copy;
 import com.tyron.builder.api.tasks.WorkResult;
 
 import org.slf4j.Logger;
@@ -53,8 +52,8 @@ public class DuplicateHandlingCopyActionDecorator implements CopyAction {
 
     private void failWithIncorrectDuplicatesStrategySetup(RelativePath relativePath) {
         throw new InvalidUserCodeException(
-                "Entry " + relativePath.getPathString() + " is a duplicate but no duplicate handling strategy has been set. " +
-                "Please refer to " + documentationRegistry.getDslRefForProperty(Copy.class, "duplicatesStrategy") + " for details."
+                "Entry " + relativePath.getPathString() + " is a duplicate but no duplicate handling strategy has been set. "
+//                "Please refer to " + documentationRegistry.getDslRefForProperty(Copy.class, "duplicatesStrategy") + " for details."
         );
     }
 }
