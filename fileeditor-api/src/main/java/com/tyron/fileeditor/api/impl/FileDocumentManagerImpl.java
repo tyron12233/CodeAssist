@@ -14,6 +14,7 @@ import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.provider.DefaultFileContent;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,9 +24,13 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.function.Predicate;
 
 public class FileDocumentManagerImpl extends FileDocumentManagerBase {
 
@@ -87,7 +92,7 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
             }
         }
         LOGGER.trace(" done");
-
+        
         unsavedContents.remove(content);
     }
 
@@ -115,8 +120,52 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
 
     @Override
     public void saveAllContents() {
+        saveAllContents(true);
+    }
+
+    /**
+     * @param isExplicit caused by user directly (Save action) or indirectly (e.g. Compile)
+     */
+    public void saveAllContents(boolean isExplicit) {
+        saveDocuments(null, isExplicit);
+    }
+
+    private void saveDocuments(@Nullable Predicate<? super Content> filter, boolean isExplicit) {
+        Map<Content, IOException> failedToSave = new HashMap<>();
+        Set<Content> vetoed = new HashSet<>();
+        while (true) {
+            int count = 0;
+
+            for (Content document : unsavedContents) {
+                if (filter != null && !filter.test(document)) continue;
+                if (failedToSave.containsKey(document)) continue;
+                if (vetoed.contains(document)) continue;
+                try {
+                    doSaveContent(document, isExplicit);
+                }
+                catch (IOException e) {
+                    failedToSave.put(document, e);
+                }
+//                catch (SaveVetoException e) {
+//                    vetoed.add(document);
+//                }
+                count++;
+            }
+
+            if (count == 0) break;
+        }
+
+        if (!failedToSave.isEmpty()) {
+            handleErrorsOnSave(failedToSave);
+        }
+    }
+
+    private static class SaveVetoException extends Exception {}
+
+    private void handleErrorsOnSave(@NotNull Map<Content, IOException> failures) {
 
     }
+
 
     @Override
     public void saveContent(@NotNull Content content) {

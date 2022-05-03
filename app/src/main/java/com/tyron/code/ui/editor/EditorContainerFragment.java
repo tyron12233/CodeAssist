@@ -38,6 +38,8 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.listener.FileListener;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.event.EventReceiver;
+import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.ui.editor.adapter.PageAdapter;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
@@ -45,6 +47,7 @@ import com.tyron.code.ui.editor.impl.text.rosemoe.ContentWrapper;
 import com.tyron.code.ui.editor.impl.xml.LayoutTextEditorFragment;
 import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
+import com.tyron.code.ui.main.action.project.SaveEvent;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.Listeners;
 import com.tyron.common.SharedPreferenceKeys;
@@ -70,7 +73,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class EditorContainerFragment extends Fragment implements FileListener,
+public class EditorContainerFragment extends Fragment implements
         ProjectManager.OnProjectOpenListener, SharedPreferences.OnSharedPreferenceChangeListener {
 
     public static final String SAVE_ALL_KEY = "saveAllEditors";
@@ -191,6 +194,14 @@ public class EditorContainerFragment extends Fragment implements FileListener,
         return root;
     }
 
+    private void updateTabs() {
+        FileEditor fileEditor = mMainViewModel.getCurrentFileEditor();
+        int index = mEditors.indexOf(fileEditor);
+        if (index != -1) {
+            updateTab(index);
+        }
+    }
+
     private void updateTab(int pos) {
         TabLayout.Tab tab = mTabLayout.getTabAt(pos);
         if (tab == null) {
@@ -218,10 +229,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
 
     @Override
     public void onProjectOpen(Project project) {
-        for (Module module : project.getModules()) {
-            FileManager fileManager = module.getFileManager();
-            fileManager.addSnapshotListener(this);
-        }
+
     }
 
     @Override
@@ -270,11 +278,7 @@ public class EditorContainerFragment extends Fragment implements FileListener,
                     Listeners.registerListener(new ContentListener() {
                         @Override
                         public void contentChanged(@NonNull ContentEvent event) {
-                            FileEditor fileEditor = mMainViewModel.getCurrentFileEditor();
-                            int index = mEditors.indexOf(fileEditor);
-                            if (index != -1) {
-                                updateTab(index);
-                            }
+                           updateTabs();
                         }
                     }, getViewLifecycleOwner(), content::addContentListener, content::removeContentListener);
                 }
@@ -285,20 +289,16 @@ public class EditorContainerFragment extends Fragment implements FileListener,
             }
         });
 
+        ApplicationLoader.getInstance().getEventManager().subscribeEvent(
+                getViewLifecycleOwner(),
+                SaveEvent.class,
+                (event, unsubscribe) -> updateTabs()
+        );
+
         mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), state -> {
             mBehavior.setState(state);
             mOnBackPressedCallback.setEnabled(state == BottomSheetBehavior.STATE_EXPANDED);
         });
-
-//        getParentFragmentManager().setFragmentResultListener(SAVE_ALL_KEY,
-//        getViewLifecycleOwner(),
-//                                                             (requestKey, result) -> saveAll());
-//        getParentFragmentManager().setFragmentResultListener(PREVIEW_KEY, getViewLifecycleOwner(),
-//                                                             ((requestKey, result) ->
-//                                                             previewCurrent()));
-//        getParentFragmentManager().setFragmentResultListener(FORMAT_KEY, getViewLifecycleOwner(),
-//                                                             (((requestKey, result) ->
-//                                                             formatCurrent())));
     }
 
     private void restoreViewState(@NonNull Bundle state) {
@@ -312,71 +312,6 @@ public class EditorContainerFragment extends Fragment implements FileListener,
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-
-        ProjectManager projectManager = ProjectManager.getInstance();
-        Project currentProject = projectManager.getCurrentProject();
-        if (currentProject != null) {
-            for (Module module : currentProject.getModules()) {
-                FileManager fileManager = module.getFileManager();
-                fileManager.removeSnapshotListener(this);
-            }
-        }
-    }
-
-//    private void formatCurrent() {
-//        String tag = "f" + mAdapter.getItemId(mPager.getCurrentItem());
-//        Fragment fragment = getChildFragmentManager().findFragmentByTag(tag);
-//        if (fragment instanceof CodeEditorFragment) {
-//            ((CodeEditorFragment) fragment).format();
-//        }
-//    }
-//
-//    private void previewCurrent() {
-//        String tag = "f" + mAdapter.getItemId(mPager.getCurrentItem());
-//        Fragment fragment = getChildFragmentManager().findFragmentByTag(tag);
-//        if (fragment instanceof LayoutTextEditorFragment) {
-//            ((LayoutTextEditorFragment) fragment).preview();
-//        }
-//    }
-//
-//    private void saveAll() {
-//        for (int i = 0; i < mAdapter.getItemCount(); i++) {
-//            String tag = "f" + mAdapter.getItemId(i);
-//            Fragment fragment = getChildFragmentManager().findFragmentByTag(tag);
-//            if (fragment instanceof Savable) {
-//                ((Savable) fragment).save(true);
-//            }
-//        }
-//    }
-
-    @Override
-    public void onSnapshotChanged(File file, CharSequence contents) {
-        if (mTabLayout == null) {
-            return;
-        }
-        List<FileEditor> editors = mMainViewModel.getFiles().getValue();
-        if (editors == null) {
-            return;
-        }
-
-        int found = -1;
-        for (int i = 0; i < editors.size(); i++) {
-            FileEditor editor = editors.get(i);
-            if (file.equals(editor.getFile())) {
-                found = i;
-                break;
-            }
-        }
-
-        if (found == -1) {
-            return;
-        }
-
-        TabLayout.Tab tab = mTabLayout.getTabAt(found);
-        if (tab == null) {
-            return;
-        }
-        updateTab(found);
     }
 
     @Override
