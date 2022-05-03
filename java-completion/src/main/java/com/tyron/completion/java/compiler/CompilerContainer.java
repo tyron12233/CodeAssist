@@ -6,6 +6,7 @@ import androidx.annotation.GuardedBy;
 
 import com.tyron.completion.java.BuildConfig;
 import com.tyron.completion.progress.ProcessCanceledException;
+import com.tyron.completion.progress.ProgressManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,7 +58,11 @@ public class CompilerContainer {
     }
 
     public <T> T get(Function1<CompileTask, T> fun) {
-        semaphore.acquireUninterruptibly();
+        try {
+            semaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new ProcessCanceledException();
+        }
         try {
             return fun.invoke(mCompileTask);
         } finally {
@@ -66,7 +71,11 @@ public class CompilerContainer {
     }
 
     public <T> T getWithLock(Function1<CompileTask, T> fun) {
-        semaphore.acquireUninterruptibly();
+        try {
+            semaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new ProcessCanceledException();
+        }
         try {
             return fun.invoke(mCompileTask);
         } finally {
@@ -80,7 +89,11 @@ public class CompilerContainer {
     }
 
     void initialize(Runnable runnable) {
-        semaphore.acquireUninterruptibly();
+        try {
+            semaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new ProcessCanceledException();
+        }
         mIsWriting = true;
         try {
             // ensure that compile task is closed
