@@ -23,6 +23,7 @@ import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
 import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
 import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -109,7 +110,8 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
 
             @Override
             public void applyImperative(@Nullable String pluginId, Plugin<?> plugin) {
-
+                Plugin<ProjectInternal> internalPlugin = Cast.uncheckedCast(plugin);
+                internalPlugin.apply(project);
             }
 
             @Override
