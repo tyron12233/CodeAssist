@@ -6,6 +6,10 @@ import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.Lists;
 import com.tyron.builder.api.Transformer;
 
+import org.jetbrains.annotations.Nullable;
+import org.objectweb.asm.Type;
+
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -25,6 +29,29 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class CollectionUtils {
+
+
+    @Nullable
+    public static <T> T findFirst(Iterable<? extends T> source, Predicate<? super T> filter) {
+        for (T item : source) {
+            if (filter.test(item)) {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    @Nullable
+    public static <T> T findFirst(T[] source, Predicate<? super T> filter) {
+        for (T thing : source) {
+            if (filter.test(thing)) {
+                return thing;
+            }
+        }
+
+        return null;
+    }
 
     public static List<String> toStringList(Iterable<?> iterable) {
         return collect(iterable, new LinkedList<>(),
@@ -275,5 +302,18 @@ public class CollectionUtils {
         }
 
         return builder.build().asMap();
+    }
+
+    public static <R, I> R[] collectArray(I[] list, Class<R> newType, Transformer<? extends R, ? super I> transformer) {
+        @SuppressWarnings("unchecked") R[] destination = (R[]) Array.newInstance(newType, list.length);
+        return collectArray(list, destination, transformer);
+    }
+
+    public static <R, I> R[] collectArray(I[] list, R[] destination, Transformer<? extends R, ? super I> transformer) {
+        assert list.length <= destination.length;
+        for (int i = 0; i < list.length; ++i) {
+            destination[i] = transformer.transform(list[i]);
+        }
+        return destination;
     }
 }

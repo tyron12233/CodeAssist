@@ -1,7 +1,10 @@
 package com.tyron.builder.util;
 
+import static java.util.Arrays.asList;
+
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.util.internal.CollectionUtils;
@@ -19,8 +22,11 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -52,7 +58,8 @@ public class GUtil {
 
             throw new IllegalArgumentException(
                     String.format("Cannot convert string value '%s' to an enum value of type '%s' (valid case insensitive values: %s)",
-                            literal, enumType.getName(), CollectionUtils.join(", ", CollectionUtils.collect(Arrays.asList(enumType.getEnumConstants()), new Transformer<String, T>() {
+                            literal, enumType.getName(), CollectionUtils.join(", ", CollectionUtils.collect(
+                                    asList(enumType.getEnumConstants()), new Transformer<String, T>() {
                                 @Override
                                 public String transform(T t) {
                                     return t.name();
@@ -147,6 +154,43 @@ public class GUtil {
 
         final String scheme = url.getScheme();
         return !"http".equalsIgnoreCase(scheme);
+    }
+
+    public static <T extends Collection<?>> T flatten(Object[] elements, T addTo, boolean flattenMaps) {
+        return flatten(asList(elements), addTo, flattenMaps);
+    }
+
+    public static <T extends Collection<?>> T flatten(Object[] elements, T addTo) {
+        return flatten(asList(elements), addTo);
+    }
+
+    public static <T extends Collection<?>> T flatten(Collection<?> elements, T addTo) {
+        return flatten(elements, addTo, true);
+    }
+
+    public static <T extends Collection<?>> T flattenElements(Object... elements) {
+        Collection<T> out = new LinkedList<T>();
+        flatten(elements, out, true);
+        return Cast.uncheckedNonnullCast(out);
+    }
+
+    public static <T extends Collection<?>> T flatten(Collection<?> elements, T addTo, boolean flattenMapsAndArrays) {
+        return flatten(elements, addTo, flattenMapsAndArrays, flattenMapsAndArrays);
+    }
+
+    public static <T extends Collection<?>> T flatten(Collection<?> elements, T addTo, boolean flattenMaps, boolean flattenArrays) {
+        for (Object element : elements) {
+            if (element instanceof Collection) {
+                flatten((Collection<?>) element, addTo, flattenMaps, flattenArrays);
+            } else if ((element instanceof Map) && flattenMaps) {
+                flatten(((Map<?, ?>) element).values(), addTo, flattenMaps, flattenArrays);
+            } else if ((element.getClass().isArray()) && flattenArrays) {
+                flatten(asList((Object[]) element), addTo, flattenMaps, flattenArrays);
+            } else {
+                (Cast.<Collection<Object>>uncheckedNonnullCast(addTo)).add(element);
+            }
+        }
+        return addTo;
     }
 
     public interface RunnableThrowable{

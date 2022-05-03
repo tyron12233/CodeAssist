@@ -1,6 +1,7 @@
 package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.DomainObjectSet;
 import com.tyron.builder.api.Plugin;
 
 import java.util.Collection;
@@ -14,23 +15,23 @@ import groovy.lang.Closure;
  *
  * @param <T> The type of plugins which this collection contains.
  */
-public interface PluginCollection<T extends Plugin> extends Set<T> {
+public interface PluginCollection<T extends Plugin> extends DomainObjectSet<T> {
     /**
      * {@inheritDoc}
      */
-//    @Override
+    @Override
     PluginCollection<T> matching(Predicate<? super T> spec);
 
     /**
      * {@inheritDoc}
      */
-//    @Override
+    @Override
     PluginCollection<T> matching(Closure closure);
 
     /**
      * {@inheritDoc}
      */
-//    @Override
+    @Override
     <S extends T> PluginCollection<S> withType(Class<S> type);
 
     /**

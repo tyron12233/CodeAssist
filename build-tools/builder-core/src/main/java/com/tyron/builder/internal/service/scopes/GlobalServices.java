@@ -13,6 +13,9 @@ import com.tyron.builder.api.internal.classpath.PluginModuleRegistry;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.AbstractOutputPropertyAnnotationHandler;
+import com.tyron.builder.api.internal.tasks.properties.annotations.OutputPropertyRoleAnnotationHandler;
+import com.tyron.builder.cache.internal.CrossBuildInMemoryCacheFactory;
 import com.tyron.builder.configuration.DefaultImportsReader;
 import com.tyron.builder.configuration.ImportsReader;
 import com.tyron.builder.execution.DefaultWorkValidationWarningRecorder;
@@ -39,6 +42,9 @@ import com.tyron.builder.internal.hash.DefaultFileHasher;
 import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.installation.CurrentGradleInstallation;
+import com.tyron.builder.internal.instantiation.InjectAnnotationHandler;
+import com.tyron.builder.internal.instantiation.InstantiatorFactory;
+import com.tyron.builder.internal.instantiation.generator.DefaultInstantiatorFactory;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationListener;
@@ -81,6 +87,7 @@ import com.tyron.builder.internal.watch.vfs.impl.DefaultWatchableFileSystemDetec
 import com.tyron.builder.internal.watch.vfs.impl.LocationsWrittenByCurrentBuild;
 import com.tyron.builder.internal.watch.vfs.impl.WatchingNotSupportedVirtualFileSystem;
 import com.tyron.builder.internal.watch.vfs.impl.WatchingVirtualFileSystem;
+import com.tyron.builder.model.internal.inspect.ModelRuleSourceDetector;
 
 import net.rubygrapefruit.platform.file.FileSystems;
 import net.rubygrapefruit.platform.internal.PosixFileSystems;
@@ -188,6 +195,10 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return new PosixFileSystems();
     }
 
+    protected ModelRuleSourceDetector createModelRuleSourceDetector() {
+        return new ModelRuleSourceDetector();
+    }
+
     FileSystem createFileSystem() {
         return new FileSystem() {
             @Override
@@ -239,6 +250,10 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
 
     StringInterner createStringInterner() {
         return new StringInterner();
+    }
+
+    InstantiatorFactory createInstantiatorFactory(CrossBuildInMemoryCacheFactory cacheFactory, List<InjectAnnotationHandler> injectHandlers, List<AbstractOutputPropertyAnnotationHandler> outputHandlers) {
+        return new DefaultInstantiatorFactory(cacheFactory, injectHandlers, new OutputPropertyRoleAnnotationHandler(outputHandlers));
     }
 
     ObjectFactory createObjectFactory(

@@ -1,10 +1,14 @@
 package com.tyron.builder.util;
 
+import com.tyron.builder.api.specs.internal.ClosurePredicate;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Predicate;
+
+import groovy.lang.Closure;
 
 public class Predicates {
     public static final Predicate<Object> SATISFIES_ALL = element -> true;
@@ -107,5 +111,9 @@ public class Predicates {
             first = first.or(predicate);
         }
         return first;
+    }
+
+    public static <T> Predicate<T> convertClosureToSpec(final Closure<?> closure) {
+        return new ClosurePredicate<>(closure);
     }
 }

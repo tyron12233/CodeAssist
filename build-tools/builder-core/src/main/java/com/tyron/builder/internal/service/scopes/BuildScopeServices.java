@@ -19,7 +19,10 @@ import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.DefaultScriptHandlerFactory;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerInternal;
+import com.tyron.builder.api.internal.plugins.DefaultPluginRegistry;
+import com.tyron.builder.api.internal.plugins.PluginInspector;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
+import com.tyron.builder.api.internal.plugins.PluginRegistry;
 import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
@@ -78,6 +81,7 @@ import com.tyron.builder.groovy.scripts.internal.ScriptClassCompiler;
 import com.tyron.builder.groovy.scripts.internal.ScriptCompilationHandler;
 import com.tyron.builder.groovy.scripts.internal.ScriptRunnerFactory;
 import com.tyron.builder.initialization.BuildLoader;
+import com.tyron.builder.initialization.ClassLoaderScopeRegistry;
 import com.tyron.builder.initialization.DefaultGradlePropertiesController;
 import com.tyron.builder.initialization.DefaultGradlePropertiesLoader;
 import com.tyron.builder.initialization.DefaultProjectDescriptorRegistry;
@@ -148,6 +152,7 @@ import com.tyron.builder.internal.scripts.ScriptExecutionListener;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.work.WorkerLeaseService;
+import com.tyron.builder.model.internal.inspect.ModelRuleSourceDetector;
 import com.tyron.builder.plugin.management.internal.PluginRequests;
 import com.tyron.builder.plugin.management.internal.autoapply.AutoAppliedPluginHandler;
 import com.tyron.builder.plugin.use.internal.PluginRequestApplicator;
@@ -388,6 +393,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 ));
     }
 
+    protected PluginRegistry createPluginRegistry(ClassLoaderScopeRegistry scopeRegistry, PluginInspector pluginInspector) {
+        return new DefaultPluginRegistry(pluginInspector, scopeRegistry.getCoreAndPluginsScope());
+    }
+
     protected TaskSelector createTaskSelector(GradleInternal gradle, BuildStateRegistry buildStateRegistry, ProjectConfigurer projectConfigurer) {
         return new CompositeAwareTaskSelector(gradle, buildStateRegistry, projectConfigurer, new TaskNameResolver());
     }
@@ -410,6 +419,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 return null;
             }
         };
+    }
+
+    protected PluginInspector createPluginInspector(ModelRuleSourceDetector modelRuleSourceDetector) {
+        return new PluginInspector(modelRuleSourceDetector);
     }
 
     protected ProjectsPreparer createBuildConfigurer(

@@ -10,6 +10,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
@@ -44,16 +45,20 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ApkInstaller;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.lang.ref.WeakReference;
 import java.util.function.Consumer;
 
@@ -241,11 +246,6 @@ public class CompilerService extends Service {
             }
         };
 
-        LoggingManagerInternal loggingManagerInternal =
-                projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
-
-        loggingManagerInternal.start();
-
         try {
             projectLauncher.execute();
             mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
@@ -260,7 +260,6 @@ public class CompilerService extends Service {
             }
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
-        loggingManagerInternal.stop();
 
         stopSelf();
         stopForeground(true);
