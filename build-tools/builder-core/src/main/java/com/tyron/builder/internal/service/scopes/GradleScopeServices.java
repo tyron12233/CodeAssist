@@ -20,12 +20,14 @@ import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.execution.taskgraph.DefaultTaskExecutionGraph;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
+import com.tyron.builder.internal.id.UniqueId;
 import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.options.OptionReader;
+import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.internal.work.WorkerLeaseService;
 import com.tyron.builder.internal.work.AsyncWorkTracker;
 import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
@@ -176,6 +178,18 @@ public class GradleScopeServices extends DefaultServiceRegistry {
 
     protected ConfigurationTargetIdentifier createConfigurationTargetIdentifier(GradleInternal gradle) {
         return ConfigurationTargetIdentifier.of(gradle);
+    }
+
+    // This needs to go here instead of being “build tree” scoped due to the GradleBuild task.
+    // Builds launched by that task are part of the same build tree, but should have their own invocation ID.
+    // Such builds also have their own root Gradle object.
+    protected BuildInvocationScopeId createBuildInvocationScopeId(GradleInternal gradle) {
+        GradleInternal rootGradle = gradle.getRoot();
+        if (gradle == rootGradle) {
+            return new BuildInvocationScopeId(UniqueId.generate());
+        } else {
+            return rootGradle.getServices().get(BuildInvocationScopeId.class);
+        }
     }
 
     @Override

@@ -2,12 +2,13 @@ package com.tyron.builder.caching.internal.controller;
 
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.caching.BuildCacheKey;
-import com.tyron.builder.caching.internal.BuildCacheController;
 import com.tyron.builder.caching.internal.CacheableEntity;
 import com.tyron.builder.caching.internal.controller.service.BuildCacheLoadResult;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
+
 import java.util.Optional;
 
 public class RootBuildCacheControllerRef {
@@ -51,13 +52,13 @@ public class RootBuildCacheControllerRef {
         }
 
         @Override
-        public Optional<BuildCacheLoadResult> load(BuildCacheKey cacheKey, CacheableEntity cacheableEntity) {
-            return delegate.load(cacheKey, cacheableEntity);
+        public <T> Optional<T> load(BuildCacheLoadCommand<T> command) {
+            return delegate.load(command);
         }
 
         @Override
-        public void store(BuildCacheKey cacheKey, CacheableEntity entity, Map<String, FileSystemSnapshot> snapshots, Duration executionTime) {
-            delegate.store(cacheKey, entity, snapshots, executionTime);
+        public void store(BuildCacheStoreCommand command) {
+            delegate.store(command);
         }
 
         @Override

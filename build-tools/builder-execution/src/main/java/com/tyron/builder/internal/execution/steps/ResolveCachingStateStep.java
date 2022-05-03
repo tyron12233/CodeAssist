@@ -19,7 +19,7 @@ import com.tyron.builder.internal.execution.history.PreviousExecutionState;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.caching.BuildCacheKey;
-import com.tyron.builder.caching.internal.BuildCacheController;
+import com.tyron.builder.caching.internal.controller.BuildCacheController;
 import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import org.slf4j.Logger;

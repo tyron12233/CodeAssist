@@ -38,7 +38,7 @@ import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.caching.internal.BuildCacheConfigurationInternal;
-import com.tyron.builder.caching.internal.BuildCacheController;
+import com.tyron.builder.caching.internal.controller.BuildCacheController;
 import com.tyron.builder.caching.internal.controller.RootBuildCacheControllerRef;
 import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
 import com.tyron.builder.caching.internal.origin.OriginMetadataFactory.HostnameLookup;
@@ -164,111 +164,6 @@ public class BuildScopeServices extends DefaultServiceRegistry {
     public BuildScopeServices(ServiceRegistry parent, BuildModelControllerServices.Supplier supplier) {
         super(parent);
 
-
-        addProvider(new Object() {
-
-            private static final String GRADLE_VERSION_KEY = "gradleVersion";
-
-            // This needs to go here instead of being “build tree” scoped due to the GradleBuild task.
-            // Builds launched by that task are part of the same build tree, but should have their own invocation ID.
-            // Such builds also have their own root Gradle object.
-            BuildInvocationScopeId createBuildInvocationScopeId(GradleInternal gradle) {
-                GradleInternal rootGradle = gradle.getRoot();
-                if (gradle == rootGradle) {
-                    return new BuildInvocationScopeId(UniqueId.generate());
-                } else {
-                    return rootGradle.getServices().get(BuildInvocationScopeId.class);
-                }
-            }
-
-            OriginMetadataFactory.HostnameLookup createHostNameLookup() {
-                return new OriginMetadataFactory.HostnameLookup() {
-                    @Override
-                    public String getHostname() {
-                        return "TEST";
-                    }
-                };
-            }
-
-            TarPackerFileSystemSupport createPackerFileSystemSupport(Deleter deleter) {
-                return new DefaultTarPackerFileSystemSupport(deleter);
-            }
-
-            BuildCacheEntryPacker createResultPacker(
-                    TarPackerFileSystemSupport fileSystemSupport,
-                    FileSystem fileSystem,
-                    StreamHasher fileHasher,
-                    StringInterner stringInterner
-            ) {
-                return new GZipBuildCacheEntryPacker(
-                        new TarBuildCacheEntryPacker(fileSystemSupport, new FilePermissionsAccessAdapter(fileSystem), fileHasher, stringInterner));
-            }
-
-            OriginMetadataFactory createOriginMetadataFactory(
-                    BuildInvocationScopeId buildInvocationScopeId,
-                    GradleInternal gradleInternal,
-                    HostnameLookup hostnameLookup
-            ) {
-                return new OriginMetadataFactory(
-                        "Test",
-                        "ANDROID",
-                        buildInvocationScopeId.getId().asString(),
-                        properties -> properties.setProperty(GRADLE_VERSION_KEY, DocumentationRegistry.GradleVersion
-                                .current().getVersion()),
-                        hostnameLookup::getHostname
-                );
-            }
-
-            BuildCacheController createBuildCacheController(
-                    ServiceRegistry serviceRegistry,
-                    BuildCacheConfigurationInternal buildCacheConfiguration,
-                    BuildOperationExecutor buildOperationExecutor,
-                    InstantiatorFactory instantiatorFactory,
-                    GradleInternal gradle,
-                    RootBuildCacheControllerRef rootControllerRef,
-                    TemporaryFileProvider temporaryFileProvider,
-                    FileSystemAccess fileSystemAccess,
-                    BuildCacheEntryPacker packer,
-                    OriginMetadataFactory originMetadataFactory,
-                    StringInterner stringInterner
-            ) {
-                if (isRoot(gradle) || isGradleBuildTaskRoot(rootControllerRef)) {
-                    return doCreateBuildCacheController(serviceRegistry, buildCacheConfiguration, buildOperationExecutor, instantiatorFactory, gradle, temporaryFileProvider, fileSystemAccess, packer, originMetadataFactory, stringInterner);
-                } else {
-                    // must be an included build or buildSrc
-                    throw new UnsupportedOperationException("Not yet implemented!");
-//                    return rootControllerRef.getForNonRootBuild()
-                }
-            }
-
-            private boolean isGradleBuildTaskRoot(RootBuildCacheControllerRef rootControllerRef) {
-                // GradleBuild tasks operate with their own build session and tree scope.
-                // Therefore, they have their own RootBuildCacheControllerRef.
-                // This prevents them from reusing the build cache configuration defined by the root.
-                // There is no way to detect that a Gradle instance represents a GradleBuild invocation.
-                // If there were, that would be a better heuristic than this.
-                return !rootControllerRef.isSet();
-            }
-
-            private boolean isRoot(GradleInternal gradle) {
-                return gradle.isRootBuild();
-            }
-
-            private BuildCacheController doCreateBuildCacheController(
-                    ServiceRegistry serviceRegistry,
-                    BuildCacheConfigurationInternal buildCacheConfiguration,
-                    BuildOperationExecutor buildOperationExecutor,
-                    InstantiatorFactory instantiatorFactory,
-                    GradleInternal gradle,
-                    TemporaryFileProvider temporaryFileProvider,
-                    FileSystemAccess fileSystemAccess,
-                    BuildCacheEntryPacker packer,
-                    OriginMetadataFactory originMetadataFactory,
-                    StringInterner stringInterner
-            ) {
-                throw new UnsupportedOperationException("Not yet implemented");
-            }
-        });
 
         register(registration -> {
             registration.add(ProjectFactory.class);
