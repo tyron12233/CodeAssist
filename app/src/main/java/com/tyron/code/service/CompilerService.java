@@ -10,7 +10,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
@@ -31,12 +30,8 @@ import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.compiler.ProjectBuilder;
+import com.tyron.builder.internal.MutableBoolean;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
-import com.tyron.builder.internal.logging.events.OutputEvent;
-import com.tyron.builder.internal.logging.events.OutputEventListener;
-import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
-import com.tyron.builder.internal.logging.services.TextStreamOutputEventListener;
-import com.tyron.builder.internal.logging.text.BufferingStyledTextOutput;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -45,22 +40,17 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ApkInstaller;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedReader;
+import java.io.Console;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.lang.ref.WeakReference;
-import java.util.function.Consumer;
 
 public class CompilerService extends Service {
 
@@ -193,7 +183,7 @@ public class CompilerService extends Service {
     public void compile(Project project, BuildType type) {
 
         if (true) {
-            ProgressManager.getInstance().runNonCancelableAsync(() -> compileNew(project, type));
+            ProgressManager.getInstance().runNonCancelableAsync(() -> compileWithBuilderApi(project, type));
             return;
         }
 
@@ -230,7 +220,7 @@ public class CompilerService extends Service {
         }, indicator);
     }
 
-    private void compileNew(Project project, BuildType type) {
+    private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
         startParameter.setWarningMode(WarningMode.All);
@@ -246,6 +236,16 @@ public class CompilerService extends Service {
             }
         };
 
+        StandardOutputListener standardOutputListener = output -> logger.info(output.toString());
+        StandardOutputListener standardErrorListener = output -> logger.error(output.toString());
+
+        LoggingManagerInternal loggingManagerInternal =
+                projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
+        loggingManagerInternal.enableUserStandardOutputListeners();
+
+        loggingManagerInternal.addStandardOutputListener(standardOutputListener);
+        loggingManagerInternal.addStandardErrorListener(standardErrorListener);
+
         try {
             projectLauncher.execute();
             mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
@@ -260,6 +260,9 @@ public class CompilerService extends Service {
             }
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
+
+        loggingManagerInternal.removeStandardOutputListener(standardOutputListener);
+        loggingManagerInternal.removeStandardErrorListener(standardErrorListener);
 
         stopSelf();
         stopForeground(true);
