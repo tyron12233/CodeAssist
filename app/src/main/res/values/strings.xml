@@ -69,6 +69,7 @@
     <string name="menu_library_manager">Library manager</string>
     <string name="menu_format">Format</string>
     <string name="menu_settings">Settings</string>
+    <string name="menu_iconmanager">Icon Manager</string>
 
     <!-- preferences -->
     <string name="settings_title_application">Application</string>
@@ -229,6 +230,9 @@
 
     <!-- Editor -->
     <string name="editor_error_file">An error has occurred while reading the file. Changes will not be saved.</string>
+
+    <!-- Icon Manager -->
+    <string name="title_activity_iconmanager">Icon Manager</string>
 
     <!-- Bottom Editor Fragment -->
     <string name="tab_build_logs_title">Build Logs</string>

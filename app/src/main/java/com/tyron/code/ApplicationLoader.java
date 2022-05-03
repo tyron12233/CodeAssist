@@ -27,6 +27,7 @@ import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.debug.DebugActionGroup;
 import com.tyron.code.ui.main.action.other.FormatAction;
 import com.tyron.code.ui.main.action.other.OpenSettingsAction;
+import com.tyron.code.ui.main.action.other.OpenIconManagerAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.settings.ApplicationSettingsFragment;
 import com.tyron.common.ApplicationProvider;
@@ -146,6 +147,7 @@ public class ApplicationLoader extends Application {
             manager.registerAction(ProjectActionGroup.ID, new ProjectActionGroup());
             manager.registerAction(PreviewLayoutAction.ID, new PreviewLayoutAction());
             manager.registerAction(OpenSettingsAction.ID, new OpenSettingsAction());
+            manager.registerAction(OpenIconManagerAction.ID, new OpenIconManagerAction());
             manager.registerAction(FormatAction.ID, new FormatAction());
             manager.registerAction(DebugActionGroup.ID, new DebugActionGroup());
 

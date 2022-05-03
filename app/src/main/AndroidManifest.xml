@@ -19,7 +19,7 @@
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true"
         android:resizeableActivity="true"
-android:supportsRtl="true"
+        android:supportsRtl="true"
         tools:targetApi="q">
         <service
             android:name=".service.IndexService"
@@ -31,6 +31,13 @@ android:supportsRtl="true"
             android:exported="false"
             android:label="@string/title_activity_settings"
             android:theme="@style/AppThemeNew"/>
+        
+        <activity
+            android:name=".ui.iconmanager.IconManagerActivity"
+            android:exported="false"
+            android:label="@string/title_activity_iconmanager"
+            android:theme="@style/AppThemeNew"/>
+      
         <activity
             android:name=".MainActivity"
             android:exported="true"
