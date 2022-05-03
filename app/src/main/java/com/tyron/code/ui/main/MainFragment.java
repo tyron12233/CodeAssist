@@ -298,13 +298,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         super.onDestroy();
 
         ProjectManager manager = ProjectManager.getInstance();
-        Project project = manager.getCurrentProject();
-        if (project != null) {
-            for (Module module : project.getModules()) {
-                module.getFileManager()
-                        .shutdown();
-            }
-        }
         manager.removeOnProjectOpenListener(this);
 
         if (mLogReceiver != null) {
@@ -325,7 +318,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     public void onPause() {
         super.onPause();
 
-        saveAll();
         mServiceConnection.setShouldShowNotification(true);
     }
 
@@ -338,10 +330,9 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
-        saveAll();
         if (mRoot instanceof DrawerLayout) {
             outState.putBoolean("start_drawer_state",
-                                ((DrawerLayout) mRoot).isDrawerOpen(GravityCompat.START));
+                    ((DrawerLayout) mRoot).isDrawerOpen(GravityCompat.START));
         }
         super.onSaveInstanceState(outState);
     }
@@ -371,7 +362,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         }
 
         if (project.equals(ProjectManager.getInstance().getCurrentProject())) {
-            saveAll(false);
             project.getSettings().refresh();
         }
 
@@ -393,52 +383,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         requireActivity().bindService(intent, mIndexServiceConnection, Context.BIND_IMPORTANT);
     }
 
-    private void saveAll() {
-        saveAll(true);
-    }
-
-    private void saveAll(boolean async) {
-        if (mProject == null) {
-            return;
-        }
-
-        if (CompletionEngine.isIndexing()) {
-            return;
-        }
-
-        Collection<Module> modules = mProject.getModules();
-        modules.forEach(it -> it.getFileManager().saveContents());
-
-        getChildFragmentManager().setFragmentResult(EditorContainerFragment.SAVE_ALL_KEY,
-                                                    Bundle.EMPTY);
-
-        ProjectSettings settings = mProject.getSettings();
-        if (settings == null) {
-            return;
-        }
-
-        List<FileEditor> items = mMainViewModel.getFiles()
-                .getValue();
-        if (items != null) {
-            String itemString = new Gson().toJson(items.stream()
-                                                          .map(FileEditorSavedState::new)
-                                                          .collect(Collectors.toList()));
-            SharedPreferences.Editor editor = settings.edit()
-                    .putString(ProjectSettings.SAVED_EDITOR_FILES, itemString);
-            if (async) {
-                editor.apply();
-            } else {
-                editor.commit();
-            }
-        }
-    }
-
     private void compile(BuildType type) {
         if (mServiceConnection.isCompiling() || CompletionEngine.isIndexing()) {
             return;
         }
-
-        saveAll();
         mServiceConnection.setBuildType(type);
 
         mMainViewModel.setCurrentState(getString(R.string.compilation_state_compiling));
