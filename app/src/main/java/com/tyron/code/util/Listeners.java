@@ -24,7 +24,7 @@ public class Listeners {
         registerAction.accept(listener);
         lifecycleOwner.getLifecycle().addObserver(new DefaultLifecycleObserver() {
             @Override
-            public void onStop(@NonNull LifecycleOwner owner) {
+            public void onDestroy(@NonNull LifecycleOwner owner) {
                 unregisterAction.accept(listener);
             }
         });
