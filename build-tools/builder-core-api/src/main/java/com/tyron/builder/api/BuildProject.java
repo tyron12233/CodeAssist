@@ -1,5 +1,6 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryTree;
 import com.tyron.builder.api.file.FileCollection;
@@ -101,6 +102,32 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @param path The build directory. This is evaluated as per {@link #file(Object)}
      */
     void setBuildDir(Object path);
+
+    /**
+     * Returns the dependency handler of this project. The returned dependency handler instance can be used for adding
+     * new dependencies. For accessing already declared dependencies, the configurations can be used.
+     *
+     * <h3>Examples:</h3>
+     * See docs for {@link DependencyHandler}
+     *
+     * @return the dependency handler. Never returns null.
+     * @see #getConfigurations()
+     */
+    DependencyHandler getDependencies();
+
+    /**
+     * <p>Configures the dependencies for this project.
+     *
+     * <p>This method executes the given closure against the {@link DependencyHandler} for this project. The {@link
+     * DependencyHandler} is passed to the closure as the closure's delegate.
+     *
+     * <h3>Examples:</h3>
+     * See docs for {@link DependencyHandler}
+     *
+     * @param configureClosure the closure to use to configure the dependencies.
+     */
+    void dependencies(Closure configureClosure);
+
 
     /**
      * Returns the build script handler for this project. You can use this handler to query details about the build

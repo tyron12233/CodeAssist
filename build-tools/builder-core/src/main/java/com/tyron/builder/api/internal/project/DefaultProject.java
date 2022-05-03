@@ -10,6 +10,21 @@ import com.tyron.builder.api.PathValidation;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UnknownProjectException;
+import com.tyron.builder.api.artifacts.Dependency;
+import com.tyron.builder.api.artifacts.ExternalModuleDependency;
+import com.tyron.builder.api.artifacts.MinimalExternalModuleDependency;
+import com.tyron.builder.api.artifacts.dsl.ComponentMetadataHandler;
+import com.tyron.builder.api.artifacts.dsl.ComponentModuleMetadataHandler;
+import com.tyron.builder.api.artifacts.dsl.DependencyConstraintHandler;
+import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
+import com.tyron.builder.api.artifacts.dsl.ExternalModuleDependencyVariantSpec;
+import com.tyron.builder.api.artifacts.query.ArtifactResolutionQuery;
+import com.tyron.builder.api.artifacts.transform.TransformAction;
+import com.tyron.builder.api.artifacts.transform.TransformParameters;
+import com.tyron.builder.api.artifacts.transform.TransformSpec;
+import com.tyron.builder.api.artifacts.transform.VariantTransform;
+import com.tyron.builder.api.artifacts.type.ArtifactTypeContainer;
+import com.tyron.builder.api.attributes.AttributesSchema;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
@@ -19,9 +34,11 @@ import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
 import com.tyron.builder.api.logging.LoggingManager;
+import com.tyron.builder.api.plugins.ExtensionContainer;
 import com.tyron.builder.api.plugins.ObjectConfigurationAction;
 import com.tyron.builder.api.plugins.PluginContainer;
 import com.tyron.builder.api.plugins.PluginManager;
+import com.tyron.builder.api.provider.ProviderConvertible;
 import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
 import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.project.ProjectEvaluator;
@@ -528,6 +545,16 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
     @Override
     public void setBuildDir(Object path) {
         setBuildDir(file(path));
+    }
+
+    @Override
+    public DependencyHandler getDependencies() {
+        return null;
+    }
+
+    @Override
+    public void dependencies(Closure configureClosure) {
+        BUILD_LOGGER.warn("Dependencies block is not yet supported.");
     }
 
     @Override

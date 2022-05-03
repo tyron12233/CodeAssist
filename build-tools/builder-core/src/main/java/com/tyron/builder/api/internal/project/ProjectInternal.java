@@ -4,12 +4,15 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
+import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
+import com.tyron.builder.api.attributes.Attribute;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.plugins.PluginManager;
+import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
@@ -27,7 +30,7 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
     String TASKS_TASK = "tasks";
     String PROJECTS_TASK = "projects";
 
-//    Attribute<String> STATUS_ATTRIBUTE = Attribute.of("org.gradle.status", String.class);
+    Attribute<String> STATUS_ATTRIBUTE = Attribute.of("org.gradle.status", String.class);
 
     @Nullable
     @Override
@@ -103,5 +106,22 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
     @Override
     ExtensionContainerInternal getExtensions();
 
+    /**
+     * Returns the property that stored {@link BuildProject#getStatus()}.
+     * <p>
+     * By exposing this property, the {@code base} plugin can override the default value without overriding the build configuration.
+     * <p>
+     * See: https://github.com/gradle/gradle/issues/16946
+     */
+    Property<Object> getInternalStatus();
+
     DependencyMetaDataProvider getDependencyMetaDataProvider();
+
+    interface DetachedResolver {
+//        RepositoryHandler getRepositories();
+
+        DependencyHandler getDependencies();
+
+//        ConfigurationContainer getConfigurations();
+    }
 }
