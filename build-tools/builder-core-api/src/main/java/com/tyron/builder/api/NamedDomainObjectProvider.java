@@ -1,6 +1,7 @@
-package com.tyron.builder.api.provider;
+package com.tyron.builder.api;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.provider.Provider;
 
 /**
  * Provides a domain object of the given type.
