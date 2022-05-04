@@ -1,9 +1,11 @@
 package com.tyron.builder.configurationcache;
 
+import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.project.ProjectEvaluator;
 import com.tyron.builder.execution.TaskSelector;
 import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.BuildDefinition;
+import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.invocation.DefaultGradle;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -52,10 +54,10 @@ public class DefaultBuildModelControllerServices implements BuildModelController
             registration.addProvider(new VintageIsolatedProjectsProvider());
 
             registration.addProvider(new Object() {
-                ExceptionAnalyser createExceptionAnalyser() {
+                ExceptionAnalyser createExceptionAnalyser(ListenerManager listenerManager) {
                     return new StackTraceSanitizingExceptionAnalyser(
                             new MultipleBuildFailuresExceptionAnalyser(
-                                    new DefaultExceptionAnalyser()
+                                    new DefaultExceptionAnalyser(listenerManager)
                             )
                     );
                 }
@@ -110,11 +112,12 @@ public class DefaultBuildModelControllerServices implements BuildModelController
     private static class VintageModelProvider {
         public ProjectEvaluator createProjectEvaluator(
                 BuildOperationExecutor buildOperationExecutor,
+                ScriptPluginFactory configurerFactory,
                 BuildCancellationToken buildCancellationToken
         ) {
             ConfigureActionsProjectEvaluator configure =
                     new ConfigureActionsProjectEvaluator(
-                            new BuildScriptProcessor()
+                            new BuildScriptProcessor(configurerFactory)
                     );
             return new LifecycleProjectEvaluator(buildOperationExecutor, configure, buildCancellationToken);
         }

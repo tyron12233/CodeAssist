@@ -70,12 +70,18 @@ import com.tyron.editor.CharPosition;
 import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.vfs2.FileContent;
+import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemManager;
+import org.apache.commons.vfs2.VFS;
 import org.jetbrains.kotlin.backend.common.psi.PsiSourceManager;
 import org.jetbrains.kotlin.com.intellij.openapi.components.ServiceManager;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentEvent;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.event.DocumentEventImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.LoadTextUtil;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalVirtualFile;
 import org.jetbrains.kotlin.com.intellij.psi.AbstractFileViewProvider;
 import org.jetbrains.kotlin.com.intellij.psi.FileViewProvider;
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
@@ -576,8 +582,10 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     private ListenableFuture<String> readFile() {
         return Futures.submitAsync(() -> {
-            String contents = FileUtils.readFileToString(mCurrentFile, StandardCharsets.UTF_8);
-            return Futures.immediateFuture(contents);
+            FileSystemManager manager = VFS.getManager();
+            FileObject fileObject = manager.resolveFile(mCurrentFile.toURI());
+            FileContent content = fileObject.getContent();
+            return Futures.immediateFuture(content.getString(StandardCharsets.UTF_8));
         }, Executors.newSingleThreadExecutor());
     }
 
@@ -586,6 +594,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
         Module module = currentProject.getModule(mCurrentFile);
         FileManager fileManager = module.getFileManager();
         fileManager.addSnapshotListener(this);
+
+
 
         // the file is already opened, so no need to load it.
         if (fileManager.isOpened(mCurrentFile)) {

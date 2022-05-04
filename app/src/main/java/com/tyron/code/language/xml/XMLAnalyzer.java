@@ -23,6 +23,7 @@ import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.task.InjectResourcesTask;
+import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 import com.tyron.viewbinding.task.InjectViewBindingTask;
 
@@ -71,7 +72,7 @@ public class XMLAnalyzer extends DiagnosticTextmateAnalyzer {
     }
 
     @Override
-    public void analyzeInBackground(CharSequence contents) {
+    public void analyzeInBackground(Content contents) {
         Editor editor = mEditorReference.get();
         if (editor == null) {
             return;

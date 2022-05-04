@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal.project;
 
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.internal.build.BuildState;
@@ -85,7 +86,7 @@ public interface ProjectStateUnk extends ModelContainer<ProjectInternal> {
     /**
      * Creates the mutable model for this project.
      */
-    void createMutableModel();
+    void createMutableModel(ClassLoaderScope selfClassLoaderScope, ClassLoaderScope baseClassLoaderScope);
 
     /**
      * Returns the lock that will be acquired when accessing the mutable state of this project via {@link #applyToMutableState(Consumer)} and {@link #fromMutableState(Function)}.

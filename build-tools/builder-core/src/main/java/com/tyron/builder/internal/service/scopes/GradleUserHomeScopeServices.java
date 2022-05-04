@@ -3,8 +3,31 @@ package com.tyron.builder.internal.service.scopes;
 import com.google.common.hash.HashCode;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
+import com.tyron.builder.api.internal.changedetection.state.DefaultFileAccessTimeJournal;
+import com.tyron.builder.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.api.internal.initialization.loadercache.ClassLoaderCache;
+import com.tyron.builder.api.internal.initialization.loadercache.DefaultClassLoaderCache;
+import com.tyron.builder.cache.GlobalCache;
+import com.tyron.builder.cache.GlobalCacheLocations;
+import com.tyron.builder.cache.internal.DefaultGlobalCacheLocations;
+import com.tyron.builder.cache.internal.GradleUserHomeCleanupServices;
+import com.tyron.builder.initialization.ClassLoaderRegistry;
+import com.tyron.builder.initialization.ClassLoaderScopeRegistry;
+import com.tyron.builder.initialization.ClassLoaderScopeRegistryListenerManager;
+import com.tyron.builder.initialization.DefaultClassLoaderScopeRegistry;
+import com.tyron.builder.internal.classloader.ClasspathHasher;
+import com.tyron.builder.internal.classloader.DefaultHashingClassLoaderFactory;
+import com.tyron.builder.internal.classloader.FilteringClassLoader;
 import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.ClasspathBuilder;
+import com.tyron.builder.internal.classpath.ClasspathWalker;
+import com.tyron.builder.internal.classpath.DefaultCachedClasspathTransformer;
+import com.tyron.builder.internal.classpath.DefaultClasspathTransformerCacheFactory;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.internal.event.DefaultListenerManager;
+import com.tyron.builder.internal.event.ListenerManager;
+import com.tyron.builder.internal.file.FileAccessTimeJournal;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.classloader.ConfigurableClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.hash.Hashes;
@@ -31,6 +54,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServices {
     
@@ -42,50 +68,53 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
 
     public void configure(ServiceRegistration registration) {
         registration.add(GlobalCacheDir.class);
-//        registration.addProvider(new GradleUserHomeCleanupServices());
-//        registration.add(ClasspathWalker.class);
-//        registration.add(ClasspathBuilder.class);
-//        registration.add(GradleUserHomeTemporaryFileProvider.class);
-//        registration.add(DefaultClasspathTransformerCacheFactory.class);
+        registration.addProvider(new GradleUserHomeCleanupServices());
+        registration.add(ClasspathWalker.class);
+        registration.add(ClasspathBuilder.class);
+        registration.add(GradleUserHomeTemporaryFileProvider.class);
+        registration.add(DefaultClasspathTransformerCacheFactory.class);
 //        registration.add(GradleUserHomeScopeFileTimeStampInspector.class);
-//        registration.add(DefaultCachedClasspathTransformer.class);
+        registration.add(DefaultCachedClasspathTransformer.class);
+
         for (PluginServiceRegistry plugin : globalServices.getAll(PluginServiceRegistry.class)) {
             plugin.registerGradleUserHomeServices(registration);
         }
     }
 
-    HashingClassLoaderFactory createHashingClassLoaderFactory() {
-        return new HashingClassLoaderFactory() {
-            @Override
-            public ClassLoader createChildClassLoader(String name,
-                                                      ClassLoader parent,
-                                                      ClassPath classPath,
-                                                      @Nullable HashCode implementationHash) {
-                return parent;
-            }
-
-            @Nullable
-            @Override
-            public HashCode getClassLoaderClasspathHash(ClassLoader classLoader) {
-                return Hashes.signature(classLoader.getClass().getName());
-            }
-
-            @Override
-            public ClassLoader getIsolatedSystemClassLoader() {
-                return null;
-            }
-
-            @Override
-            public ClassLoader createIsolatedClassLoader(String name, ClassPath classPath) {
-                return null;
-            }
-        };
+    ClassLoaderHierarchyHasher createClassLoaderHierarchyHasher(
+            HashingClassLoaderFactory hashingClassLoaderFactory,
+            ClassLoaderScopeRegistry classLoaderScopeRegistry
+    ) {
+        Map<ClassLoader, String> classLoaderStringMap = new WeakHashMap<>();
+        classLoaderStringMap.put(ClassLoader.getSystemClassLoader(), "system");
+        classLoaderStringMap.put(classLoaderScopeRegistry.getCoreAndPluginsScope().getExportClassLoader(), "plugins");
+        return new ConfigurableClassLoaderHierarchyHasher(classLoaderStringMap, hashingClassLoaderFactory);
     }
 
-    ClassLoaderHierarchyHasher createClassLoaderHierarchyHasher(
-            HashingClassLoaderFactory hashingClassLoaderFactory
+    HashingClassLoaderFactory createClassLoaderFactory(ClasspathHasher classpathHasher) {
+        return new DefaultHashingClassLoaderFactory(classpathHasher);
+    }
+
+    DefaultListenerManager createListenerManager(DefaultListenerManager parent) {
+        return parent.createChild(Scopes.UserHome.class);
+    }
+
+    ClassLoaderCache createClassLoaderCache(HashingClassLoaderFactory classLoaderFactory, ClasspathHasher classpathHasher, ListenerManager listenerManager) {
+        DefaultClassLoaderCache cache = new DefaultClassLoaderCache(classLoaderFactory, classpathHasher);
+        listenerManager.addListener(cache);
+        return cache;
+    }
+
+    protected ClassLoaderScopeRegistryListenerManager createClassLoaderScopeRegistryListenerManager(ListenerManager listenerManager) {
+        return new ClassLoaderScopeRegistryListenerManager(listenerManager);
+    }
+
+    protected ClassLoaderScopeRegistry createClassLoaderScopeRegistry(
+            ClassLoaderRegistry classLoaderRegistry,
+            ClassLoaderCache classLoaderCache,
+            ClassLoaderScopeRegistryListenerManager listenerManager
     ) {
-        return new ConfigurableClassLoaderHierarchyHasher(Collections.emptyMap(), hashingClassLoaderFactory);
+        return new DefaultClassLoaderScopeRegistry(classLoaderRegistry, classLoaderCache, listenerManager.getBroadcaster());
     }
 
     GlobalScopedCache createGlobalScopedCache(
@@ -100,14 +129,6 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
     ) {
         return new DefaultInMemoryCacheDecoratorFactory(true, crossBuildInMemoryCacheFactory);
     }
-
-    CrossBuildFileHashCache createCrossBuildFileHashCache(
-            GlobalScopedCache scopedCache,
-            InMemoryCacheDecoratorFactory factory
-    ) {
-        return new CrossBuildFileHashCache(scopedCache, factory, CrossBuildFileHashCache.Kind.FILE_HASHES);
-    }
-
 
     CacheFactory createCacheFactory(
             FileLockManager fileLockManager,
@@ -128,6 +149,14 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
             CacheFactory cacheFactory
     ) {
         return new DefaultCacheRepository(scopeMapping, cacheFactory);
+    }
+
+    FileAccessTimeJournal createFileAccessTimeJournal(GlobalScopedCache cacheRepository, InMemoryCacheDecoratorFactory cacheDecoratorFactory) {
+        return new DefaultFileAccessTimeJournal(cacheRepository, cacheDecoratorFactory);
+    }
+
+    GlobalCacheLocations createGlobalCacheLocations(List<GlobalCache> globalCaches) {
+        return new DefaultGlobalCacheLocations(globalCaches);
     }
 
     private interface CacheDirectoryProvider {

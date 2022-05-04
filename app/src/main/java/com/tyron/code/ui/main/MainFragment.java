@@ -414,8 +414,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             saveAll(false);
             project.getSettings().refresh();
         }
-        
-        IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
+
+//        IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
 		mGitViewModel.setPostCheckout( () -> {

@@ -1,29 +1,31 @@
 package com.tyron.builder.launcher;
 
-import com.tyron.builder.api.ProjectEvaluationListener;
-import com.tyron.builder.api.ProjectState;
-import com.tyron.builder.initialization.BuildCancellationToken;
-import com.tyron.builder.internal.Factory;
+import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.Action;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.configuration.GradleLauncherMetaData;
+import com.tyron.builder.initialization.BuildRequestContext;
+import com.tyron.builder.initialization.ReportedException;
+import com.tyron.builder.internal.SystemProperties;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.classpath.ClassPath;
-import com.tyron.builder.internal.event.ListenerManager;
-import com.tyron.builder.internal.invocation.BuildAction;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.api.logging.LogLevel;
-import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.configuration.GradleLauncherMetaData;
-import com.tyron.builder.initialization.BuildClientMetaData;
-import com.tyron.builder.initialization.BuildEventConsumer;
-import com.tyron.builder.initialization.BuildRequestContext;
-import com.tyron.builder.initialization.DefaultBuildCancellationToken;
-import com.tyron.builder.initialization.DefaultBuildRequestContext;
-import com.tyron.builder.internal.buildTree.BuildActionRunner;
+import com.tyron.builder.internal.concurrent.CompositeStoppable;
+import com.tyron.builder.internal.concurrent.Stoppable;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
-import com.tyron.builder.internal.session.BuildSessionState;
-import com.tyron.builder.internal.session.state.CrossBuildSessionState;
+import com.tyron.builder.internal.service.scopes.VirtualFileSystemServices;
+import com.tyron.builder.internal.vfs.FileSystemAccess;
+import com.tyron.builder.internal.vfs.VirtualFileSystem;
+import com.tyron.builder.launcher.bootstrap.ExecutionListener;
+import com.tyron.builder.launcher.cli.ExceptionReportingAction;
+import com.tyron.builder.launcher.cli.RunBuildAction;
+import com.tyron.builder.launcher.exec.BuildActionExecuter;
+import com.tyron.builder.launcher.exec.BuildActionParameters;
+import com.tyron.builder.launcher.exec.BuildExecuter;
+import com.tyron.builder.launcher.exec.DefaultBuildActionParameters;
 
 import java.util.Collections;
 import java.util.List;
@@ -48,76 +50,67 @@ public abstract class ProjectLauncher {
     }
 
     private void prepare() {
-        // enable info logging
-        Factory<LoggingManagerInternal> factory = globalServices.getFactory(LoggingManagerInternal.class);
-        LoggingManagerInternal loggingManagerInternal = factory.create();
-        assert loggingManagerInternal != null;
-        loggingManagerInternal.start().setLevelInternal(LogLevel.DEBUG);
+        GradleUserHomeScopeServiceRegistry gradleUserHomeScopeServiceRegistry =
+                globalServices.get(GradleUserHomeScopeServiceRegistry.class);
+        ServiceRegistry gradleUserHomeScopeServices = gradleUserHomeScopeServiceRegistry
+                .getServicesFor(startParameter.getGradleUserHomeDir());
+        VirtualFileSystem virtualFileSystem =
+                gradleUserHomeScopeServices.get(VirtualFileSystem.class);
+        FileSystemAccess fileSystemAccess = gradleUserHomeScopeServices.get(FileSystemAccess.class);
     }
 
     public void execute() {
-        prepare();
 
-        BuildAction buildAction = new BuildAction() {
-            @Override
-            public StartParameterInternal getStartParameter() {
-                return startParameter;
-            }
-
-            @Override
-            public boolean isRunTasks() {
-                return true;
-            }
-
-            @Override
-            public boolean isCreateModel() {
-                return false;
-            }
-        };
-
-        BuildCancellationToken cancellationToken = new DefaultBuildCancellationToken();
-        BuildEventConsumer consumer = System.out::println;
-        BuildClientMetaData clientMetaData = new GradleLauncherMetaData();
-        BuildRequestContext requestContext = DefaultBuildRequestContext.of(
-                cancellationToken,
-                consumer,
-                clientMetaData,
-                System.currentTimeMillis()
+        Runnable runnable = runBuildAndCloseServices(
+                startParameter,
+                globalServices.get(BuildExecuter.class),
+                globalServices,
+                globalServices.get(GradleUserHomeScopeServiceRegistry.class)
         );
-        runBuildAction(buildAction, requestContext);
+        Action<Throwable> reporter = throwable -> {
+
+        };
+        LoggingManagerInternal loggingManagerInternal =
+                globalServices.get(LoggingManagerInternal.class);
+        ExceptionReportingAction action = new ExceptionReportingAction(reporter,
+                loggingManagerInternal, executionListener -> runnable.run());
+
+        prepare();
+        action.execute(failure -> {
+            if (!(failure instanceof ReportedException)) {
+                throw UncheckedException.throwAsUncheckedException(failure);
+            }
+        });
+
+
     }
 
-    private void runBuildAction(BuildAction buildAction, BuildRequestContext requestContext) {
-        try (CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(
-                globalServices, startParameter)) {
-            try (BuildSessionState buildSessionState = new BuildSessionState(globalServices.get(
-                    GradleUserHomeScopeServiceRegistry.class), crossBuildSessionState, startParameter, requestContext, ClassPath.EMPTY, requestContext.getCancellationToken(), requestContext.getClient(), requestContext.getEventConsumer())) {
+    private Runnable runBuildAndCloseServices(StartParameterInternal startParameter, BuildActionExecuter<BuildActionParameters, BuildRequestContext> executer, ServiceRegistry sharedServices, Object... stopBeforeSharedServices) {
+        BuildActionParameters
+                parameters = createBuildActionParameters(startParameter);
+        Stoppable stoppable = new CompositeStoppable(); //.add(stopBeforeSharedServices).add(sharedServices);
+        return new RunBuildAction(executer, startParameter, clientMetaData(), getBuildStartTime(), parameters, sharedServices, stoppable);
+    }
 
-                // register listeners
-                ListenerManager listenerManager = globalServices.get(ListenerManager.class);
-                listenerManager.addListener(new ProjectEvaluationListener() {
-                    @Override
-                    public void beforeEvaluate(BuildProject project) {
-                        configure(project);
-                    }
+    private BuildActionParameters createBuildActionParameters(StartParameter startParameter) {
+        return new DefaultBuildActionParameters(
+//                daemonParameters.getEffectiveSystemProperties(),
+                Collections.emptyMap(),
+//                daemonParameters.getEnvironmentVariables(),
+                Collections.emptyMap(),
+                SystemProperties.getInstance().getCurrentDir(),
+                startParameter.getLogLevel(),
+//                daemonParameters.isEnabled(),
+                false,
+                ClassPath.EMPTY);
+    }
 
-                    @Override
-                    public void afterEvaluate(BuildProject project, ProjectState state) {
+    private long getBuildStartTime() {
+        return System.currentTimeMillis();
+    }
 
-                    }
-                });
-
-                BuildActionRunner.Result result = buildSessionState.run(context -> context.execute(buildAction));
-
-                if (result.getClientFailure() != null) {
-                    throw UncheckedException.throwAsUncheckedException(result.getClientFailure());
-                }
-
-                if (result.getBuildFailure() != null) {
-                    throw UncheckedException.throwAsUncheckedException(result.getBuildFailure());
-                 }
-            }
-        }
+    private GradleLauncherMetaData clientMetaData() {
+        return new GradleLauncherMetaData();
     }
 
     /**

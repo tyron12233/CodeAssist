@@ -5,7 +5,7 @@ import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.artifacts.DependencySubstitutions;
 import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.build.PublicBuildPath;
-import com.tyron.builder.plugin.management.PluginRequests;
+import com.tyron.builder.plugin.management.internal.PluginRequests;
 
 import javax.annotation.Nullable;
 import java.io.File;

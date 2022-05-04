@@ -16,7 +16,7 @@ import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.BuildStateRegistry;
 import com.tyron.builder.internal.build.ExecutionResult;
 import com.tyron.builder.internal.build.ExportedTaskNode;
-import com.tyron.builder.internal.buildTree.BuildTreeWorkGraph;
+import com.tyron.builder.internal.buildtree.BuildTreeWorkGraph;
 import com.tyron.builder.internal.taskgraph.CalculateTreeTaskGraphBuildOperationType;
 
 import java.io.Closeable;

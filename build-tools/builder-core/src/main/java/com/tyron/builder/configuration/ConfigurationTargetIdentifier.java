@@ -2,6 +2,7 @@ package com.tyron.builder.configuration;
 
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
+import com.tyron.builder.api.internal.plugins.PluginAwareInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 
 import javax.annotation.Nullable;
@@ -43,12 +44,11 @@ public abstract class ConfigurationTargetIdentifier {
      */
     @Nullable
     public static ConfigurationTargetIdentifier of(Object any) {
-//        if (any instanceof PluginAwareInternal) {
-//            return ((PluginAwareInternal) any).getConfigurationTargetIdentifier();
-//        } else {
-//            return null;
-//        }
-        throw new UnsupportedOperationException("Not yet implemente");
+        if (any instanceof PluginAwareInternal) {
+            return ((PluginAwareInternal) any).getConfigurationTargetIdentifier();
+        } else {
+            return null;
+        }
     }
 
     public static ConfigurationTargetIdentifier of(final ProjectInternal project) {

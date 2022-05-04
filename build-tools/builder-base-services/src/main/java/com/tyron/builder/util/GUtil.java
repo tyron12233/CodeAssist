@@ -1,7 +1,10 @@
 package com.tyron.builder.util;
 
+import static java.util.Arrays.asList;
+
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.util.internal.CollectionUtils;
@@ -14,11 +17,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -50,7 +58,8 @@ public class GUtil {
 
             throw new IllegalArgumentException(
                     String.format("Cannot convert string value '%s' to an enum value of type '%s' (valid case insensitive values: %s)",
-                            literal, enumType.getName(), CollectionUtils.join(", ", CollectionUtils.collect(Arrays.asList(enumType.getEnumConstants()), new Transformer<String, T>() {
+                            literal, enumType.getName(), CollectionUtils.join(", ", CollectionUtils.collect(
+                                    asList(enumType.getEnumConstants()), new Transformer<String, T>() {
                                 @Override
                                 public String transform(T t) {
                                     return t.name();
@@ -111,6 +120,77 @@ public class GUtil {
 
     public static String asPath(Iterable<?> collection) {
         return CollectionUtils.join(File.pathSeparator, collection);
+    }
+
+    public static void addToMap(Map<String, String> dest, Map<?, ?> src) {
+        for (Map.Entry<?, ?> entry : src.entrySet()) {
+            dest.put(entry.getKey().toString(), entry.getValue().toString());
+        }
+    }
+
+    public static boolean isSecureUrl(URI url) {
+        /*
+         * TL;DR: http://127.0.0.1 will bypass this validation, http://localhost will fail this validation.
+         *
+         * Hundreds of Gradle's integration tests use a local web-server to test logic that relies upon
+         * this behavior.
+         *
+         * Changing all of those tests so that they use a KeyStore would have been impractical.
+         * Instead, the test fixture was updated to use 127.0.0.1 when making HTTP requests.
+         *
+         * This allows tests that still want to exercise the deprecation logic to use http://localhost
+         * which will bypass this check and trigger the validation.
+         *
+         * It's important to note that the only way to create a certificate for an IP address is to bind
+         * the IP address as a 'Subject Alternative Name' which was deemed far too complicated for our test
+         * use case.
+         *
+         * Additionally, in the rare case that a user or a plugin author truly needs to test with a localhost
+         * server, they can use http://127.0.0.1
+         */
+        if ("127.0.0.1".equals(url.getHost())) {
+            return true;
+        }
+
+        final String scheme = url.getScheme();
+        return !"http".equalsIgnoreCase(scheme);
+    }
+
+    public static <T extends Collection<?>> T flatten(Object[] elements, T addTo, boolean flattenMaps) {
+        return flatten(asList(elements), addTo, flattenMaps);
+    }
+
+    public static <T extends Collection<?>> T flatten(Object[] elements, T addTo) {
+        return flatten(asList(elements), addTo);
+    }
+
+    public static <T extends Collection<?>> T flatten(Collection<?> elements, T addTo) {
+        return flatten(elements, addTo, true);
+    }
+
+    public static <T extends Collection<?>> T flattenElements(Object... elements) {
+        Collection<T> out = new LinkedList<T>();
+        flatten(elements, out, true);
+        return Cast.uncheckedNonnullCast(out);
+    }
+
+    public static <T extends Collection<?>> T flatten(Collection<?> elements, T addTo, boolean flattenMapsAndArrays) {
+        return flatten(elements, addTo, flattenMapsAndArrays, flattenMapsAndArrays);
+    }
+
+    public static <T extends Collection<?>> T flatten(Collection<?> elements, T addTo, boolean flattenMaps, boolean flattenArrays) {
+        for (Object element : elements) {
+            if (element instanceof Collection) {
+                flatten((Collection<?>) element, addTo, flattenMaps, flattenArrays);
+            } else if ((element instanceof Map) && flattenMaps) {
+                flatten(((Map<?, ?>) element).values(), addTo, flattenMaps, flattenArrays);
+            } else if ((element.getClass().isArray()) && flattenArrays) {
+                flatten(asList((Object[]) element), addTo, flattenMaps, flattenArrays);
+            } else {
+                (Cast.<Collection<Object>>uncheckedNonnullCast(addTo)).add(element);
+            }
+        }
+        return addTo;
     }
 
     public interface RunnableThrowable{

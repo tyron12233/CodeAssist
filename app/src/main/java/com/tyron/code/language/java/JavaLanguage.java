@@ -12,12 +12,13 @@ import com.google.googlejavaformat.java.JavaFormatterOptions;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.EditorFormatter;
 import com.tyron.code.analyzer.BaseTextmateAnalyzer;
-import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.editor.langs.java.Tokens;
@@ -25,6 +26,7 @@ import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
+import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
@@ -105,10 +107,11 @@ public class JavaLanguage implements Language, EditorFormatter {
         if (list == null) {
             return;
         }
-        for (CompletionItem item : list.getItems()) {
-            CompletionItemWrapper wrapper = new CompletionItemWrapper(item);
-            publisher.addItem(wrapper);
-        }
+
+        List<CompletionItem> items =
+                list.getItems().stream().map(CompletionItemWrapper::new)
+                        .collect(Collectors.toList());
+        publisher.addItems(items);
     }
 
     @Override

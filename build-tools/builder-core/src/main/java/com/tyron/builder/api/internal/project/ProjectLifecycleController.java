@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal.project;
 
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
@@ -26,14 +27,14 @@ public class ProjectLifecycleController {
             DefaultProjectDescriptor descriptor,
             BuildState build,
             ProjectStateUnk owner,
-            Object selfClassLoaderScope,
-            Object baseClassLoaderScope,
+            ClassLoaderScope selfClassLoaderScope,
+            ClassLoaderScope baseClassLoaderScope,
             IProjectFactory projectFactory
     ) {
         controller.transition(State.NotCreated, State.Created, () -> {
             ProjectStateUnk parent = owner.getBuildParent();
             ProjectInternal parentModel = parent == null ? null : parent.getMutableModel();
-            project = projectFactory.createProject(build.getMutableModel(), descriptor, owner, parentModel);
+            project = projectFactory.createProject(build.getMutableModel(), descriptor, owner, parentModel, selfClassLoaderScope, baseClassLoaderScope);
         });
     }
 

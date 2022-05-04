@@ -4,10 +4,10 @@ import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.internal.BuildType;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
-import com.tyron.builder.internal.buildTree.BuildActionModelRequirements;
-import com.tyron.builder.internal.buildTree.BuildModelParameters;
-import com.tyron.builder.internal.buildTree.BuildTreeModelControllerServices;
-import com.tyron.builder.internal.buildTree.RunTasksRequirements;
+import com.tyron.builder.internal.buildtree.BuildActionModelRequirements;
+import com.tyron.builder.internal.buildtree.BuildModelParameters;
+import com.tyron.builder.internal.buildtree.BuildTreeModelControllerServices;
+import com.tyron.builder.internal.buildtree.RunTasksRequirements;
 
 public class DefaultBuildTreeControllerServices implements BuildTreeModelControllerServices {
     @Override

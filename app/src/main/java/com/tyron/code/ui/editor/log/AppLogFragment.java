@@ -16,7 +16,6 @@ import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
-import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
@@ -24,9 +23,6 @@ import com.tyron.fileeditor.api.FileEditorManager;
 
 import java.util.List;
 import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 public class AppLogFragment extends Fragment
         implements ProjectManager.OnProjectOpenListener {
@@ -71,15 +67,14 @@ public class AppLogFragment extends Fragment
                 if (getContext() != null) {
                     FileEditorManager manager = FileEditorManagerImpl.getInstance();
                     manager.openFile(requireContext(), diagnostic.getSource(), it -> {
-                        if (diagnostic.getLineNumber() > 0 && diagnostic.getColumnNumber() > 0) {
-                            Bundle bundle = new Bundle(it.getFragment()
-                                                               .getArguments());
-                            bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
-                            bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
-                            it.getFragment()
-                                    .setArguments(bundle);
-                            manager.openFileEditor(it);
-                        }
+//                        if (diagnostic.getLineNumber() > 0 && diagnostic.getColumnNumber() > 0) {
+//                            Bundle bundle = new Bundle(it.getFragment()
+//                                                               .getArguments());
+//                            bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
+//                            bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
+//                            it.getFragment().setArguments(bundle);
+//                            manager.openFileEditor(it);
+//                        }
                     });
                 }
             }
@@ -89,6 +84,7 @@ public class AppLogFragment extends Fragment
         mRecyclerView.setAdapter(mAdapter);
         mRoot.addView(mRecyclerView,
                 new FrameLayout.LayoutParams(-1, -1));
+
         return mRoot;
     }
 

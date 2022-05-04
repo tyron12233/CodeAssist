@@ -61,7 +61,7 @@ import javax.tools.ToolProvider;
  * </pre>
  */
 @CacheableTask
-public class JavaCompile extends AbstractCompile {
+public class  JavaCompile extends AbstractCompile {
 
     private final CompileOptions compileOptions;
     private final FileCollection stableSources = getProject().files((Callable<FileTree>) this::getSource);

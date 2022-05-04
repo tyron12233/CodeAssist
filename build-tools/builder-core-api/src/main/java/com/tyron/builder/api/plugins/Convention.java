@@ -2,6 +2,7 @@ package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.internal.metaobject.DynamicObject;
 
 import javax.annotation.Nullable;
 import java.util.Map;
@@ -41,12 +42,12 @@ public interface Convention extends ExtensionContainer {
     @Nullable
     <T> T findPlugin(Class<T> type) throws IllegalStateException;
 
-//    /**
-//     * Returns a dynamic object which represents the properties and methods contributed by the extensions and convention objects contained in this
-//     * convention.
-//     *
-//     * @return The dynamic object
-//     */
-//    DynamicObject getExtensionsAsDynamicObject();
+    /**
+     * Returns a dynamic object which represents the properties and methods contributed by the extensions and convention objects contained in this
+     * convention.
+     *
+     * @return The dynamic object
+     */
+    DynamicObject getExtensionsAsDynamicObject();
 }
 

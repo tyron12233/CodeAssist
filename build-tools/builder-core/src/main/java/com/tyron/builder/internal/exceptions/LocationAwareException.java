@@ -2,6 +2,7 @@ package com.tyron.builder.internal.exceptions;
 
 
 import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
+import com.tyron.builder.groovy.scripts.ScriptSource;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -13,9 +14,9 @@ public class LocationAwareException extends ContextAwareException implements Fai
     private final String sourceDisplayName;
     private final Integer lineNumber;
 
-//    public LocationAwareException(Throwable cause, ScriptSource source, Integer lineNumber) {
-//        this(cause, source != null ? source.getDisplayName() : null, lineNumber);
-//    }
+    public LocationAwareException(Throwable cause, ScriptSource source, Integer lineNumber) {
+        this(cause, source != null ? source.getDisplayName() : null, lineNumber);
+    }
 
     public LocationAwareException(Throwable cause, String sourceDisplayName, Integer lineNumber) {
         super(cause);

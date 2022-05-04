@@ -2,9 +2,14 @@ package com.tyron.builder.util.internal;
 
 import static com.tyron.builder.internal.Cast.uncheckedNonnullCast;
 
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.Lists;
 import com.tyron.builder.api.Transformer;
 
+import org.jetbrains.annotations.Nullable;
+import org.objectweb.asm.Type;
+
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -17,12 +22,41 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class CollectionUtils {
+
+
+    @Nullable
+    public static <T> T findFirst(Iterable<? extends T> source, Predicate<? super T> filter) {
+        for (T item : source) {
+            if (filter.test(item)) {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    @Nullable
+    public static <T> T findFirst(T[] source, Predicate<? super T> filter) {
+        for (T thing : source) {
+            if (filter.test(thing)) {
+                return thing;
+            }
+        }
+
+        return null;
+    }
+
+    public static List<String> toStringList(Iterable<?> iterable) {
+        return collect(iterable, new LinkedList<>(),
+                (Transformer<String, Object>) Object::toString);
+    }
 
     /**
      * Returns a sorted copy of the provided collection of things. Uses the provided comparator to sort.
@@ -31,6 +65,21 @@ public class CollectionUtils {
         List<T> copy = toMutableList(things);
         Collections.sort(copy, comparator);
         return copy;
+    }
+
+    /**
+     * Returns the single element in the collection or throws.
+     */
+    public static <T> T single(Iterable<? extends T> source) {
+        Iterator<? extends T> iterator = source.iterator();
+        if (!iterator.hasNext()) {
+            throw new NoSuchElementException("Expecting collection with single element, got none.");
+        }
+        T element = iterator.next();
+        if (iterator.hasNext()) {
+            throw new IllegalArgumentException("Expecting collection with single element, got multiple.");
+        }
+        return element;
     }
 
     /**
@@ -242,5 +291,29 @@ public class CollectionUtils {
 
     public static Iterable<String> stringize(Collection<?> compilerArgs) {
         return compilerArgs.stream().map(Objects::toString).collect(Collectors.toList());
+    }
+
+    public static <K, V> Map<K, Collection<V>> groupBy(Iterable<? extends V> iterable, Transformer<? extends K, V> grouper) {
+        ImmutableListMultimap.Builder<K, V> builder = ImmutableListMultimap.builder();
+
+        for (V element : iterable) {
+            K key = grouper.transform(element);
+            builder.put(key, element);
+        }
+
+        return builder.build().asMap();
+    }
+
+    public static <R, I> R[] collectArray(I[] list, Class<R> newType, Transformer<? extends R, ? super I> transformer) {
+        @SuppressWarnings("unchecked") R[] destination = (R[]) Array.newInstance(newType, list.length);
+        return collectArray(list, destination, transformer);
+    }
+
+    public static <R, I> R[] collectArray(I[] list, R[] destination, Transformer<? extends R, ? super I> transformer) {
+        assert list.length <= destination.length;
+        for (int i = 0; i < list.length; ++i) {
+            destination[i] = transformer.transform(list[i]);
+        }
+        return destination;
     }
 }

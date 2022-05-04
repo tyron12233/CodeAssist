@@ -1,5 +1,6 @@
 package com.tyron.builder.caching.internal.controller.service;
 
+import com.tyron.builder.api.Action;
 import com.tyron.builder.caching.BuildCacheKey;
 import com.tyron.builder.caching.local.internal.LocalBuildCacheService;
 
@@ -27,10 +28,13 @@ public class DefaultLocalBuildCacheServiceHandle implements LocalBuildCacheServi
     }
 
     @Override
-    public Optional<BuildCacheLoadResult> maybeLoad(BuildCacheKey key, Function<File, BuildCacheLoadResult> unpackFunction) {
-        AtomicReference<Optional<BuildCacheLoadResult>> result = new AtomicReference<>(Optional.empty());
-        service.loadLocally(key, file -> result.set(Optional.ofNullable(unpackFunction.apply(file))));
-        return result.get();
+    public boolean canLoad() {
+        return true;
+    }
+
+    @Override
+    public void load(BuildCacheKey key, Action<? super File> reader) {
+        service.loadLocally(key, reader);
     }
 
     @Override
@@ -39,12 +43,8 @@ public class DefaultLocalBuildCacheServiceHandle implements LocalBuildCacheServi
     }
 
     @Override
-    public boolean maybeStore(BuildCacheKey key, File file) {
-        if (canStore()) {
-            service.storeLocally(key, file);
-            return true;
-        }
-        return false;
+    public void store(BuildCacheKey key, File file) {
+        service.storeLocally(key, file);
     }
 
     @Override

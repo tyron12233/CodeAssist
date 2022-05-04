@@ -21,13 +21,13 @@ public interface ResourceHandler {
      */
     ReadableResource bzip2(Object path);
 
-//    /**
-//     * Returns a factory for creating {@code TextResource}s from various sources such as
-//     * strings, files, and archive entries.
-//     *
-//     * @since 2.2
-//     *
-//     * @return a factory for creating {@code TextResource}s
-//     */
-//    TextResourceFactory getText();
+    /**
+     * Returns a factory for creating {@code TextResource}s from various sources such as
+     * strings, files, and archive entries.
+     *
+     * @since 2.2
+     *
+     * @return a factory for creating {@code TextResource}s
+     */
+    TextResourceFactory getText();
 }

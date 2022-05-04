@@ -9,6 +9,7 @@ import com.tyron.builder.internal.execution.caching.CachingState;
 import com.tyron.builder.internal.execution.caching.CachingStateFactory;
 import com.tyron.builder.internal.execution.history.BeforeExecutionState;
 import com.tyron.builder.caching.BuildCacheKey;
+import com.tyron.builder.internal.hash.Hashes;
 
 import org.slf4j.Logger;
 
@@ -36,18 +37,21 @@ public class DefaultCachingStateFactory implements CachingStateFactory {
         });
 
         beforeExecutionState.getInputProperties().forEach((propertyName, valueSnapshot) -> {
-            Hasher valueHasher = Hashing.md5().newHasher();
-            valueSnapshot.appendToHasher(valueHasher);
-            logger.warn("Appending input value fingerprint for '" +  propertyName +
-                           "' to build cache key: " + valueHasher.hash());
+            if (logger.isWarnEnabled()) {
+                Hasher valueHasher = Hashes.newHasher();
+                valueSnapshot.appendToHasher(valueHasher);
+                logger.warn("Appending input value fingerprint for '{}' to build cache key: {}",
+                        propertyName, valueHasher.hash());
+            }
             cacheKeyHasher.putString(propertyName, StandardCharsets.UTF_8);
             valueSnapshot.appendToHasher(cacheKeyHasher);
         });
 
         beforeExecutionState.getInputFileProperties().forEach((propertyName, fingerprint) -> {
-            logger.warn("Appending input file fingerprints for '{}' to build cache key: " + propertyName + " - " + fingerprint.getHash() + "" + fingerprint);
+            logger.warn("Appending input file fingerprints for '{}' to build cache key: {} - {}",
+                    propertyName, fingerprint.getHash(), fingerprint);
             cacheKeyHasher.putString(propertyName, StandardCharsets.UTF_8);
-            cacheKeyHasher.putBytes(fingerprint.getHash().asBytes());
+            Hashes.putHash(cacheKeyHasher, fingerprint.getHash());
         });
 
         beforeExecutionState.getOutputFileLocationSnapshots().keySet().forEach(propertyName -> {
