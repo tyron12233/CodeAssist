@@ -60,7 +60,8 @@ public class ModuleSettings implements SharedPreferences {
                 }.getType());
 
         } catch (IOException  | JsonSyntaxException e) {
-            Log.e("ModuleSettings", "Failed to parse module settings", e);
+//            Log.e("ModuleSettings", "Failed to parse module settings", e);
+            // TODO: USE SLF4j
         }
         return config == null ? getDefaults() : config;
     }
