@@ -69,6 +69,7 @@ dependencies {
     // TODO: completion providers should not be included on the main module
     // alternate editor impl
     implementation 'com.blacksquircle.ui:editorkit:2.1.2'
+    implementation 'com.caverock:androidsvg-aar:1.4'
 
     implementation project(path: ':code-editor')
     implementation project(path: ':xml-completion')
