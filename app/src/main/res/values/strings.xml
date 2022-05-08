@@ -69,6 +69,7 @@
     <string name="menu_library_manager">Library manager</string>
     <string name="menu_format">Format</string>
     <string name="menu_settings">Settings</string>
+    <string name="menu_icon_manager">Icon Manager</string>
 
     <!-- preferences -->
     <string name="settings_title_application">Application</string>
