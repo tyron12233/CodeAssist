@@ -24,6 +24,8 @@ import androidx.recyclerview.widget.GridLayoutManager;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
 import com.google.android.material.transition.MaterialSharedAxis;
 
 import com.tyron.code.R;
@@ -98,7 +100,7 @@ public class IconManagerFragment extends Fragment {
 		RecyclerView recyclerView = view.findViewById(R.id.recyclerview);
 
 		if (!new File(getPackageDirectory() + "/Icons/").exists()) {
-			showConfirmationDialog();
+			showConfirmationDialog(recyclerView);
 		} else {
 
 		ProgressManager.getInstance()
@@ -117,18 +119,18 @@ public class IconManagerFragment extends Fragment {
 	}
 
 	
-	private void showConfirmationDialog() {
+	private void showConfirmationDialog(RecyclerView recyclerView) {
 		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireContext());
 		builder.setTitle("Warning!");
 		builder.setMessage("Do you want to extract all icons from CodeAssist?");
 		builder.setPositiveButton("EXTRACT", (d, w) -> {
-			startExtractingIcons(progressDialog);
+			startExtractingIcons(progressDialog, recyclerView);
 		});
 		builder.setNegativeButton("CANCEL", null);
 		builder.create().show();
 	}
 
-	private void startExtractingIcons(ProgressDialog progressDialog) {
+	private void startExtractingIcons(ProgressDialog progressDialog, RecyclerView recyclerView) {
 		Decompress.unzipFromAssets(requireContext(), "Icons.zip", getPackageDirectory());
 		ProgressManager.getInstance().runLater(() -> {
 			progressDialog = new ProgressDialog(requireContext());
