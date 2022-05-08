@@ -1,5 +1,7 @@
 package com.tyron.code.ui.iconmanager;
 
+import android.app.ProgressDialog;
+
 import android.os.Bundle;
 
 import android.view.ViewGroup;
@@ -30,6 +32,8 @@ import com.tyron.code.ui.project.ProjectManager;
 
 import com.tyron.completion.progress.ProgressManager;
 
+import com.tyron.common.util.Decompress;
+
 import com.tyron.code.ui.iconmanager.adapter.IconAdapter;
 
 import java.io.File;
@@ -58,9 +62,13 @@ import org.w3c.dom.Element;
 
 public class IconManagerFragment extends Fragment {
 
-	public static String TAG = IconManagerFragment.class.getSimpleName();	private String iconFolderDirectory, projectResourceDirectory;
+	public static String TAG = IconManagerFragment.class.getSimpleName();
+
+        private String iconFolderDirectory, projectResourceDirectory;
 
 	private ArrayList<String> iconList = new ArrayList<>();
+
+	private ProgressDialog progressDialog;
 
 	@Override
 
@@ -74,7 +82,6 @@ public class IconManagerFragment extends Fragment {
 
 		iconFolderDirectory = getPackageDirectory() + "/Icons/";
 
-		checkDirs();
 
 	}
 
@@ -90,11 +97,14 @@ public class IconManagerFragment extends Fragment {
 
 		RecyclerView recyclerView = view.findViewById(R.id.recyclerview);
 
+		if (!new File(getPackageDirectory() + "/Icons/").exists()) {
+			showConfirmationDialog();
+		} else {
+
 		ProgressManager.getInstance()
 
 				.runNonCancelableAsync(() -> loadIcons(iconFolderDirectory, iconList, recyclerView));
-
-		loadIcons(iconFolderDirectory, iconList, recyclerView);
+		}
 
 		return view;
 
@@ -107,11 +117,34 @@ public class IconManagerFragment extends Fragment {
 	}
 
 	
+	private void showConfirmationDialog() {
+		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(MainActivity.this);
+		builder.setTitle("Warning!");
+		builder.setMessage("Do you want to extract all icons from CodeAssist?");
+		builder.setPositiveButton("EXTRACT", (d, w) -> {
+			startExtractingIcons(progressDialog);
+		});
+		builder.setNegativeButton("CANCEL", null);
+		builder.create().show();
+	}
 
-	private void checkDirs() {
-
-		makeDirs(iconFolderDirectory);
-
+	private void startExtractingIcons(ProgressDialog progressDialog) {
+		Decompress.unzipFromAssets(requireContext(), "Icons.zip", getPackageDirectory());
+		ProgressManager.getInstance().runLater(() -> {
+			progressDialog = new ProgressDialog(requireContext());
+			progressDialog.setMessage("Extracting icons");
+			progressDialog.setCancelable(false);
+			progressDialog.show();
+		});
+		ProgressManager.getInstance().runLater(() -> {
+			if (progressDialog.isShowing()) {
+				loadIcons(iconFolderDirectory, iconList, recyclerView);
+				progressDialog.dismiss();
+				if (iconList.size() == 0) {
+					Toast.makeText(requireContext(), "Unable to find icons", 3000).show();
+				}
+			}
+		});
 	}
 
 	private void loadIcons(String path, ArrayList<String> list, RecyclerView recyclerView) {
