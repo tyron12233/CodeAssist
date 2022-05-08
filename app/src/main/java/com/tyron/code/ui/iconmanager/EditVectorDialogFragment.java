@@ -44,6 +44,10 @@ import com.google.android.material.textfield.TextInputLayout;
 
 import com.tyron.code.R;
 
+import com.tyron.code.ui.project.ProjectManager;
+
+import com.tyron.common.util.SingleTextWatcher;
+
 import java.io.File;
 
 import java.io.FileInputStream;
@@ -85,7 +89,7 @@ public class EditVectorDialogFragment extends DialogFragment {
 		if (bundle != null) {
 
 			iconPath = bundle.getString("iconPath");
-
+			projectResourceDirectory = ProjectManager.getInstance().getCurrentProject().getRootFile().getAbsolutePath() + "/app/src/main/res/drawable/";
 		}
 
 		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireContext());
@@ -186,7 +190,7 @@ public class EditVectorDialogFragment extends DialogFragment {
 
 			final Button positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
 
-			/*	SingleTextWatcher textWatcher = new SingleTextWatcher() {
+			SingleTextWatcher textWatcher = new SingleTextWatcher() {
 
 					@Override
 
@@ -210,8 +214,6 @@ public class EditVectorDialogFragment extends DialogFragment {
 
 				path.addTextChangedListener(textWatcher);
 
-				*/
-
 		});
 
 		return dialog;
@@ -221,8 +223,6 @@ public class EditVectorDialogFragment extends DialogFragment {
 	private void generateSvg2Vector(String width, String height, String color, String source, String destination) {
 
 		File svgPath = new File(source);
-
-		//File vectorPath = new File(destination);
 
 		DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
 
