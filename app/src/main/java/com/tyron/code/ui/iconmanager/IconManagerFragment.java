@@ -118,7 +118,7 @@ public class IconManagerFragment extends Fragment {
 
 	
 	private void showConfirmationDialog() {
-		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(MainActivity.this);
+		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireContext());
 		builder.setTitle("Warning!");
 		builder.setMessage("Do you want to extract all icons from CodeAssist?");
 		builder.setPositiveButton("EXTRACT", (d, w) -> {
