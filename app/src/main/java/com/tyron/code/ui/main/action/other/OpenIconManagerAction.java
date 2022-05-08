@@ -62,7 +62,7 @@ public class OpenIconManagerAction extends AnAction {
 
         }
 
-        presentation.setText(context.getString(R.string.menu_iconmanager));
+        presentation.setText(context.getString(R.string.menu_icon_manager));
 
         presentation.setVisible(true);
 
