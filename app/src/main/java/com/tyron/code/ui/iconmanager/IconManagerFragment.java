@@ -70,7 +70,7 @@ public class IconManagerFragment extends Fragment {
 
 	private ArrayList<String> iconList = new ArrayList<>();
 
-	private ProgressDialog pDialog;
+	private ProgressDialog pDialog = new ProgressDialog(requireContext());
 
 	@Override
 
@@ -100,7 +100,7 @@ public class IconManagerFragment extends Fragment {
 		RecyclerView recyclerView = view.findViewById(R.id.recyclerview);
 
 		if (!new File(getPackageDirectory() + "/Icons/").exists()) {
-			showConfirmationDialog(recyclerView);
+			showConfirmationDialog(recyclerView, pDialog);
 		} else {
 
 		ProgressManager.getInstance()
@@ -119,12 +119,12 @@ public class IconManagerFragment extends Fragment {
 	}
 
 	
-	private void showConfirmationDialog(RecyclerView recyclerView) {
+	private void showConfirmationDialog(RecyclerView recyclerView, ProgressDialog progressDialog) {
 		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireContext());
 		builder.setTitle("Warning!");
 		builder.setMessage("Do you want to extract all icons from CodeAssist?");
 		builder.setPositiveButton("EXTRACT", (d, w) -> {
-			startExtractingIcons(pDialog, recyclerView);
+			startExtractingIcons(progressDialog, recyclerView);
 		});
 		builder.setNegativeButton("CANCEL", null);
 		builder.create().show();
@@ -132,7 +132,6 @@ public class IconManagerFragment extends Fragment {
 
 	private void startExtractingIcons(final ProgressDialog progressDialog, RecyclerView recyclerView) {
 		Decompress.unzipFromAssets(requireContext(), "Icons.zip", getPackageDirectory());
-		progressDialog = new ProgressDialog(requireContext());
 		ProgressManager.getInstance().runLater(() -> {
 			progressDialog.setMessage("Extracting icons");
 			progressDialog.setCancelable(false);
