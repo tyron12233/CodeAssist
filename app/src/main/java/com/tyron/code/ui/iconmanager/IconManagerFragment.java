@@ -30,6 +30,8 @@ import com.google.android.material.transition.MaterialSharedAxis;
 
 import com.tyron.code.R;
 
+import com.tyron.code.util.UiUtilsKt;
+
 import com.tyron.code.ui.project.ProjectManager;
 
 import com.tyron.completion.progress.ProgressManager;
@@ -104,10 +106,7 @@ public class IconManagerFragment extends Fragment {
 		if (!new File(getPackageDirectory() + "/Icons/").exists()) {
 			showConfirmationDialog(recyclerView, pDialog);
 		} else {
-
-		ProgressManager.getInstance()
-
-				.runNonCancelableAsync(() -> loadIcons(iconFolderDirectory, iconList, recyclerView));
+                loadIcons(iconFolderDirectory, iconList, recyclerView);
 		}
 
 		return view;
@@ -126,7 +125,7 @@ public class IconManagerFragment extends Fragment {
 		builder.setTitle("Warning!");
 		builder.setMessage("Do you want to extract all icons from CodeAssist?");
 		builder.setPositiveButton("EXTRACT", (d, w) -> {
-			startExtractingIcons(progressDialog, recyclerView);
+		ProgressManager.getInstance().runNonCancelableAsync(() ->startExtractingIcons(progressDialog, recyclerView));
 		});
 		builder.setNegativeButton("CANCEL", null);
 		builder.create().show();
