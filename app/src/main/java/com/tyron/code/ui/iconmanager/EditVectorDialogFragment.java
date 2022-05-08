@@ -47,7 +47,8 @@ import javax.xml.parsers.DocumentBuilderFactory;
 
 public class EditVectorDialogFragment extends DialogFragment {
 
-	public static final String TAG = EditVectorDialogFragment.class.getSimpleName();	public static final String ADD_KEY = "addVector";
+	public static final String TAG = EditVectorDialogFragment.class.getSimpleName();	
+	public static final String ADD_KEY = "addVector";
 	private String iconPath, projectResourceDirectory;
 
 	@SuppressWarnings("ConstantConditions")
@@ -108,7 +109,7 @@ public class EditVectorDialogFragment extends DialogFragment {
 		icon.setImageDrawable(loadSvg(iconPath));
 		
 		builder.setPositiveButton("Create", (d, w) -> {
-			generateSvg2Vector(width.getText().toString(), height.getText().toString(), color.getText().toString(), iconPath, projectResourceDirectory);
+			generateSvg2Vector(name.getText().toString().trim(), width.getText().toString().trim(), height.getText().toString().trim(), color.getText().toString().trim(), iconPath, projectResourceDirectory);
 		});
 
 		builder.setNegativeButton("Cancel", null);
@@ -134,7 +135,7 @@ public class EditVectorDialogFragment extends DialogFragment {
 		return dialog;
 	}
 
-	private void generateSvg2Vector(String width, String height, String color, String source, String destination) {
+	private void generateSvg2Vector(String name, String width, String height, String color, String source, String destination) {
 
 		File svgPath = new File(source);
 		DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
@@ -159,7 +160,7 @@ public class EditVectorDialogFragment extends DialogFragment {
 
 				byte[] vectorText = a.getBytes(StandardCharsets.UTF_8);
 
-				Files.write(Paths.get(new File(projectResourceDirectory).replace(".svg", ".xml").toURI()), vectorText, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+				Files.write(Paths.get(new File(projectResourceDirectory + name + ".xml").toURI()), vectorText, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
 			}
 		} catch (Exception e) {
