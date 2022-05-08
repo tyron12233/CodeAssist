@@ -68,7 +68,8 @@ public class IconManagerFragment extends Fragment {
 
 		pDialog = new ProgressDialog(requireContext());
 		RecyclerView recyclerView = view.findViewById(R.id.recyclerview);
-
+		Toolbar toolbar = view.findViewById(R.id.toolbar);
+		UiUtilsKt.addSystemWindowInsetToPadding(toolbar, false, true, false, false);
 		if (!new File(getPackageDirectory() + "/Icons/").exists()) {
 			showConfirmationDialog(recyclerView, pDialog);
 		} else {
