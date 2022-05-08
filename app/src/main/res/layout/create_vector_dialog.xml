@@ -1,104 +1,164 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-
     xmlns:app="http://schemas.android.com/apk/res-auto"
-
     xmlns:tools="http://schemas.android.com/tools"
-
     android:layout_width="match_parent"
-
     android:layout_height="match_parent"
-
     android:orientation="vertical" >
 
-    <androidx.cardview.widget.CardView
-
-        android:id="@+id/cardview1"
-
+    <ScrollView
         android:layout_width="match_parent"
-
-        android:layout_height="100dp"
-
-        android:layout_margin="8dp"
-
-        app:cardCornerRadius="8dp"
-
-        app:cardElevation="3dp" >
+        android:layout_height="match_parent"
+        android:scrollbars="none" >
 
         <LinearLayout
-
-            android:id="@+id/linear1"
-
+            android:id="@+id/container"
             android:layout_width="match_parent"
-
-            android:layout_height="match_parent"
-
-            android:background="?attr/selectableItemBackground"
-
-            android:clickable="true"
-
-            android:focusable="true"
-
-            android:gravity="center_horizontal|center_vertical"
-
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
             android:orientation="vertical"
-
             android:padding="8dp" >
 
             <ImageView
-
-                android:id="@+id/imageview1"
-
-                android:layout_width="45dp"
-
-                android:layout_height="45dp"
-
+                android:id="@+id/icon"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
+                android:layout_marginBottom="8dp"
+                android:layout_marginLeft="8dp"
                 android:focusable="false"
-
                 android:padding="8dp"
-
                 android:scaleType="fitCenter" />
 
-            <TextView
-
-                android:id="@+id/textview1"
-
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/textinputlayout1"
+                style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
                 android:layout_width="match_parent"
-
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
+                android:hint="Name" >
 
-                android:layout_marginTop="8dp"
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-                android:ellipsize="marquee"
+            <LinearLayout
+                android:id="@+id/linear3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
+                android:orientation="horizontal"
+                android:padding="4dp" >
 
-                android:fadingEdge="horizontal"
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/textinputlayout2"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginRight="4dp"
+                    android:layout_weight="1"
+                    android:hint="Height" >
 
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/height"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLength="3"
+                        android:singleLine="true"
+                        android:text="24dp" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/textinputlayout3"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="4dp"
+                    android:layout_weight="1"
+                    android:hint="Width" >
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/width"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLength="3"
+                        android:singleLine="true"
+                        android:text="24dp" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/textview2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
                 android:focusable="false"
-
-                android:gravity="center_horizontal|center_vertical"
-
-                android:marqueeRepeatLimit="marquee_forever"
-
-                android:paddingBottom="4dp"
-
-                android:paddingLeft="8dp"
-
                 android:paddingRight="8dp"
-
-                android:paddingTop="4dp"
-
-                android:scrollHorizontally="true"
-
                 android:singleLine="true"
-
-                android:text="TextView"
-
-                android:textColor="#000000"
-
+                android:text="*Preview icon&apos;s size won&apos;t increase"
+                android:textColor="#ff757575"
                 android:textSize="12sp" />
 
-        </LinearLayout>
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/textinputlayout4"
+                style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
+                android:layout_marginTop="8dp"
+                android:hint="Color"
+                app:endIconDrawable="@drawable/outline_sync_24"
+                app:endIconMode="custom" >
 
-    </androidx.cardview.widget.CardView>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/color"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLength="7"
+                    android:singleLine="true"
+                    android:text="#000000" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
+                app:cardCornerRadius="10dp" >
+
+                <LinearLayout
+                    android:id="@+id/round"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp" />
+            </androidx.cardview.widget.CardView>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/textinputlayout5"
+                style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
+                android:hint="Path"
+                app:endIconContentDescription="Path"
+                app:endIconDrawable="@drawable/ic_baseline_folder_open_24"
+                app:endIconMode="custom" >
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/path"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+    </ScrollView>
 
 </LinearLayout>
-
