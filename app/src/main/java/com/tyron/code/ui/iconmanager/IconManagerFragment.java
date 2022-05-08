@@ -86,11 +86,14 @@ public class IconManagerFragment extends Fragment {
 
 	}
 
-	private void showConfirmationDialog(RecyclerView recyclerView, ProgressDialog progressDialog) {
+	private void showConfirmationDialog(RecyclerView recyclerView, final ProgressDialog progressDialog) {
 		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireContext());
 		builder.setTitle("Warning!");
 		builder.setMessage("Do you want to extract all icons from CodeAssist?");
 		builder.setPositiveButton("EXTRACT", (d, w) -> {
+        progressDialog.setMessage("Extracting icons");
+		progressDialog.setCancelable(false);
+		progressDialog.show();
 		ProgressManager.getInstance().runNonCancelableAsync(() ->startExtractingIcons(progressDialog, recyclerView));
 		});
 		builder.setNegativeButton("CANCEL", null);
@@ -98,9 +101,6 @@ public class IconManagerFragment extends Fragment {
 	}
 
 	private void startExtractingIcons(final ProgressDialog progressDialog, RecyclerView recyclerView) {
-        progressDialog.setMessage("Extracting icons");
-		progressDialog.setCancelable(false);
-		progressDialog.show();
 		Decompress.unzipFromAssets(requireContext(), "Icons.zip", getPackageDirectory());
 		
 		ProgressManager.getInstance().runLater(() -> {
