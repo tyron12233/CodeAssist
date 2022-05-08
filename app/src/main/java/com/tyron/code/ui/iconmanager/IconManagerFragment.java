@@ -70,7 +70,7 @@ public class IconManagerFragment extends Fragment {
 
 	private ArrayList<String> iconList = new ArrayList<>();
 
-	private ProgressDialog pDialog = new ProgressDialog(requireContext());
+	private ProgressDialog pDialog;
 
 	@Override
 
@@ -96,6 +96,8 @@ public class IconManagerFragment extends Fragment {
 			@Nullable Bundle savedInstanceState) {
 
 		View view = inflater.inflate(R.layout.icon_manager_fragment, container, false);
+
+		pDialog = new ProgressDialog(requireContext());
 
 		RecyclerView recyclerView = view.findViewById(R.id.recyclerview);
 
