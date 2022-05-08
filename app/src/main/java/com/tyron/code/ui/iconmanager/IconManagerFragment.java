@@ -70,7 +70,7 @@ public class IconManagerFragment extends Fragment {
 
 	private ArrayList<String> iconList = new ArrayList<>();
 
-	private ProgressDialog progressDialog;
+	private ProgressDialog pDialog;
 
 	@Override
 
@@ -124,7 +124,7 @@ public class IconManagerFragment extends Fragment {
 		builder.setTitle("Warning!");
 		builder.setMessage("Do you want to extract all icons from CodeAssist?");
 		builder.setPositiveButton("EXTRACT", (d, w) -> {
-			startExtractingIcons(progressDialog, recyclerView);
+			startExtractingIcons(pDialog, recyclerView);
 		});
 		builder.setNegativeButton("CANCEL", null);
 		builder.create().show();
@@ -140,7 +140,7 @@ public class IconManagerFragment extends Fragment {
 		});
 		ProgressManager.getInstance().runLater(() -> {
 			if (progressDialog.isShowing()) {
-				loadIcons(iconFolderDirectory, iconList, recyclerView);
+				ProgressManager.getInstance().runNonCancelableAsync(() -> loadIcons(iconFolderDirectory, iconList, recyclerView));
 				progressDialog.dismiss();
 				if (iconList.size() == 0) {
 					Toast.makeText(requireContext(), "Unable to find icons", 3000).show();
