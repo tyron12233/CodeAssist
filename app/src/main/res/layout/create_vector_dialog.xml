@@ -69,7 +69,7 @@
                         android:layout_height="wrap_content"
                         android:maxLength="3"
                         android:singleLine="true"
-                        android:text="24dp" />
+                        android:text="24" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
@@ -87,7 +87,7 @@
                         android:layout_height="wrap_content"
                         android:maxLength="3"
                         android:singleLine="true"
-                        android:text="24dp" />
+                        android:text="24" />
                 </com.google.android.material.textfield.TextInputLayout>
             </LinearLayout>
 
