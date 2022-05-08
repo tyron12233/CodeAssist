@@ -132,8 +132,8 @@ public class IconManagerFragment extends Fragment {
 
 	private void startExtractingIcons(final ProgressDialog progressDialog, RecyclerView recyclerView) {
 		Decompress.unzipFromAssets(requireContext(), "Icons.zip", getPackageDirectory());
+		progressDialog = new ProgressDialog(requireContext());
 		ProgressManager.getInstance().runLater(() -> {
-			progressDialog = new ProgressDialog(requireContext());
 			progressDialog.setMessage("Extracting icons");
 			progressDialog.setCancelable(false);
 			progressDialog.show();
