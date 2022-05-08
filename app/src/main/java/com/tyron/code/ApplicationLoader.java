@@ -27,7 +27,7 @@ import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.debug.DebugActionGroup;
 import com.tyron.code.ui.main.action.other.FormatAction;
 import com.tyron.code.ui.main.action.other.OpenSettingsAction;
-30import com.tyron.code.ui.main.action.other.OpenIconManagerAction;
+import com.tyron.code.ui.main.action.other.OpenIconManagerAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.settings.ApplicationSettingsFragment;
 import com.tyron.common.ApplicationProvider;
