@@ -2,6 +2,7 @@ package com.tyron.builder.internal.snapshot.impl;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
+import com.tyron.builder.internal.hash.Hashes;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -20,7 +21,7 @@ public class KnownImplementationSnapshot extends ImplementationSnapshot {
     public void appendToHasher(Hasher hasher) {
         hasher.putString(ImplementationSnapshot.class.getName(), StandardCharsets.UTF_8);
         hasher.putString(getTypeName(), StandardCharsets.UTF_8);
-        hasher.putBytes(classLoaderHash.asBytes());
+        Hashes.putHash(hasher, classLoaderHash);
     }
 
     @Override

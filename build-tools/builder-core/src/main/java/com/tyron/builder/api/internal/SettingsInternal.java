@@ -28,6 +28,8 @@ public interface SettingsInternal extends Settings {
     DefaultProjectDescriptor getDefaultProject();
 
 
+    ClassLoaderScope getBaseClassLoaderScope();
+
     ClassLoaderScope getClassLoaderScope();
 
     List<IncludedBuildSpec> getIncludedBuilds();

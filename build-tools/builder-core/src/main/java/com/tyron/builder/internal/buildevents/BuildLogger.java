@@ -65,7 +65,7 @@ public class BuildLogger implements InternalBuildListener, TaskExecutionGraphLis
 
     @Override
     public void buildFinished(BuildResult result) {
-
+        this.action = result.getAction();
     }
 
     @Override
@@ -74,5 +74,15 @@ public class BuildLogger implements InternalBuildListener, TaskExecutionGraphLis
             logger.info("Tasks to be executed: {}", graph.getAllTasks());
             logger.info("Tasks that were excluded: {}", ((TaskExecutionGraphInternal)graph).getFilteredTasks());
         }
+    }
+
+    public void logResult(Throwable buildFailure) {
+        if (action == null) {
+            // This logger has been replaced (for example using `Gradle.useLogger()`), so don't log anything
+            return;
+        }
+        BuildResult buildResult = new BuildResult(action, null, buildFailure);
+        exceptionReporter.buildFinished(buildResult);
+        resultLogger.buildFinished(buildResult);
     }
 }

@@ -6,7 +6,7 @@ import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.initialization.ModelConfigurationListener;
 import com.tyron.builder.initialization.ProjectsEvaluatedNotifier;
 import com.tyron.builder.internal.build.BuildStateRegistry;
-import com.tyron.builder.internal.buildTree.BuildModelParameters;
+import com.tyron.builder.internal.buildtree.BuildModelParameters;
 
 public class DefaultProjectsPreparer implements ProjectsPreparer {
     private final BuildOperationExecutor buildOperationExecutor;

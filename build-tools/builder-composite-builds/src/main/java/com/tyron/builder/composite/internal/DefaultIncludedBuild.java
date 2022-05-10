@@ -14,7 +14,7 @@ import com.tyron.builder.initialization.IncludedBuildSpec;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.ExecutionResult;
 import com.tyron.builder.internal.build.IncludedBuildState;
-import com.tyron.builder.internal.buildTree.BuildTreeState;
+import com.tyron.builder.internal.buildtree.BuildTreeState;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;
 
 import java.io.File;

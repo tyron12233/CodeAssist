@@ -2,6 +2,7 @@ package com.tyron.builder.internal.watch.vfs.impl;
 
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.internal.watch.vfs.WatchableFileSystemDetector;
+import com.tyron.common.TestUtil;
 
 import net.rubygrapefruit.platform.file.FileSystemInfo;
 import net.rubygrapefruit.platform.file.FileSystems;
@@ -10,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.stream.Stream;
 
 public class DefaultWatchableFileSystemDetector implements WatchableFileSystemDetector {
@@ -45,6 +48,9 @@ public class DefaultWatchableFileSystemDetector implements WatchableFileSystemDe
 
     @Override
     public Stream<File> detectUnsupportedFileSystems() {
+        if (TestUtil.isDalvik()) {
+            return Stream.empty();
+        }
         return fileSystems.getFileSystems().stream()
                 .filter(fileSystem -> {
                     LOGGER.debug("Detected {}: {} from {} (remote: {})",

@@ -1,0 +1,20 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.fileCollections
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

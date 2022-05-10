@@ -2,7 +2,7 @@ package com.tyron.builder.composite.internal;
 
 import com.tyron.builder.execution.plan.Node;
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.internal.buildTree.BuildTreeWorkGraph;
+import com.tyron.builder.internal.buildtree.BuildTreeWorkGraph;
 
 import java.util.function.Consumer;
 

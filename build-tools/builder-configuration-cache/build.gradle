@@ -10,6 +10,7 @@ dependencies {
     implementation projects.buildTools.builderApi
 
     implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
     implementation projects.buildTools.builderCompositeBuilds
     implementation projects.buildTools.builderCore
     implementation projects.buildTools.builderCoreApi

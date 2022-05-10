@@ -3,6 +3,12 @@ package com.tyron.builder.internal.execution.steps;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.caching.BuildCacheKey;
+import com.tyron.builder.caching.internal.CacheableEntity;
+import com.tyron.builder.caching.internal.controller.BuildCacheCommandFactory;
+import com.tyron.builder.caching.internal.controller.BuildCacheCommandFactory.LoadMetadata;
+import com.tyron.builder.caching.internal.controller.BuildCacheController;
+import com.tyron.builder.caching.internal.origin.OriginMetadata;
 import com.tyron.builder.internal.Try;
 import com.tyron.builder.internal.execution.ExecutionOutcome;
 import com.tyron.builder.internal.execution.ExecutionResult;
@@ -12,14 +18,8 @@ import com.tyron.builder.internal.execution.history.AfterExecutionState;
 import com.tyron.builder.internal.execution.history.BeforeExecutionState;
 import com.tyron.builder.internal.execution.history.impl.DefaultAfterExecutionState;
 import com.tyron.builder.internal.file.Deleter;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.file.TreeType;
-import com.tyron.builder.caching.BuildCacheKey;
-import com.tyron.builder.caching.internal.BuildCacheController;
-import com.tyron.builder.caching.internal.CacheableEntity;
-import com.tyron.builder.caching.internal.controller.service.BuildCacheLoadResult;
-import com.tyron.builder.caching.internal.origin.OriginMetadata;
-
+import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,21 +30,23 @@ import java.time.Duration;
 import java.util.Optional;
 
 public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExecutionResult> {
-
     private static final Logger LOGGER = LoggerFactory.getLogger(BuildCacheStep.class);
 
     private final BuildCacheController buildCache;
+    private final BuildCacheCommandFactory commandFactory;
     private final Deleter deleter;
     private final OutputChangeListener outputChangeListener;
     private final Step<? super IncrementalChangesContext, ? extends AfterExecutionResult> delegate;
 
     public BuildCacheStep(
             BuildCacheController buildCache,
+            BuildCacheCommandFactory commandFactory,
             Deleter deleter,
             OutputChangeListener outputChangeListener,
             Step<? super IncrementalChangesContext, ? extends AfterExecutionResult> delegate
     ) {
         this.buildCache = buildCache;
+        this.commandFactory = commandFactory;
         this.deleter = deleter;
         this.outputChangeListener = outputChangeListener;
         this.delegate = delegate;
@@ -61,13 +63,14 @@ public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExec
     private AfterExecutionResult executeWithCache(UnitOfWork work, IncrementalChangesContext context, BuildCacheKey cacheKey, BeforeExecutionState beforeExecutionState) {
         CacheableWork cacheableWork = new CacheableWork(context.getIdentity().getUniqueId(), context.getWorkspace(), work);
         return Try.ofFailable(() -> work.isAllowedToLoadFromCache()
-                ? buildCache.load(cacheKey, cacheableWork)
-                : Optional.<BuildCacheLoadResult>empty()
+                ? buildCache.load(commandFactory.createLoad(cacheKey, cacheableWork))
+                : Optional.<LoadMetadata>empty()
         )
                 .map(successfulLoad -> successfulLoad
                         .map(cacheHit -> {
                             if (LOGGER.isInfoEnabled()) {
-                                LOGGER.info("Loaded cache entry for " +  work.getDisplayName() + " with cache key " + cacheKey.getHashCode());
+                                LOGGER.info("Loaded cache entry for {} with cache key {}",
+                                        work.getDisplayName(), cacheKey.getHashCode());
                             }
                             cleanLocalState(context.getWorkspace(), work);
                             OriginMetadata originMetadata = cacheHit.getOriginMetadata();
@@ -107,11 +110,8 @@ public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExec
                 )
                 .getOrMapFailure(loadFailure -> {
                     throw new RuntimeException(
-                            String.format("Failed to load cache entry %s for %s: %s",
-                                    cacheKey.getHashCode(),
-                                    work.getDisplayName(),
-                                    loadFailure.getMessage()
-                            ),
+                            String.format("Failed to load cache entry for %s",
+                                    work.getDisplayName()),
                             loadFailure
                     );
                 });
@@ -133,29 +133,29 @@ public class BuildCacheStep implements Step<IncrementalChangesContext, AfterExec
 
     private AfterExecutionResult executeAndStoreInCache(CacheableWork cacheableWork, BuildCacheKey cacheKey, IncrementalChangesContext context) {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Did not find cache entry for " + cacheableWork.getDisplayName() + " with cache key " + cacheKey.getHashCode() + ", executing instead");
+            LOGGER.debug("Did not find cache entry for {} with cache key {}, executing instead",
+                    cacheableWork.getDisplayName(), cacheKey.getHashCode());
         }
         AfterExecutionResult result = executeWithoutCache(cacheableWork.work, context);
         result.getExecutionResult().ifSuccessfulOrElse(
                 executionResult -> result.getAfterExecutionState()
                         .ifPresent(afterExecutionState -> store(cacheableWork, cacheKey, afterExecutionState.getOutputFilesProducedByWork(), afterExecutionState.getOriginMetadata().getExecutionTime())),
-                failure -> LOGGER.debug("Not storing result of " + cacheableWork.getDisplayName() + " in cache because the execution failed")
+                failure -> LOGGER.debug("Not storing result of {} in cache because the execution failed", cacheableWork.getDisplayName())
         );
         return result;
     }
 
     private void store(CacheableWork work, BuildCacheKey cacheKey, ImmutableSortedMap<String, FileSystemSnapshot> outputFilesProducedByWork, Duration executionTime) {
         try {
-            buildCache.store(cacheKey, work, outputFilesProducedByWork, executionTime);
+            buildCache.store(commandFactory.createStore(cacheKey, work, outputFilesProducedByWork, executionTime));
             if (LOGGER.isInfoEnabled()) {
-                LOGGER.info("Stored cache entry for " + work.getDisplayName() + " with cache key " + cacheKey.getHashCode());
+                LOGGER.info("Stored cache entry for {} with cache key {}",
+                        work.getDisplayName(), cacheKey.getHashCode());
             }
         } catch (Exception e) {
             throw new RuntimeException(
-                    String.format("Failed to store cache entry %s for %s: %s",
-                            cacheKey.getHashCode(),
-                            work.getDisplayName(),
-                            e.getMessage()),
+                    String.format("Failed to store cache entry for %s",
+                            work.getDisplayName()),
                     e);
         }
     }

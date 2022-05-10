@@ -5,7 +5,6 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.language.textmate.BaseIncrementalAnalyzeManager;
 import com.tyron.code.language.textmate.CodeBlockUtils;
 import com.tyron.editor.Editor;
 
@@ -13,14 +12,10 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.util.List;
 
-import io.github.rosemoe.sora.lang.analysis.IncrementalAnalyzeManager;
-import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
+import io.github.rosemoe.sora.lang.analysis.AsyncIncrementalAnalyzeManager;
 import io.github.rosemoe.sora.lang.styling.CodeBlock;
-import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Span;
-import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
-import io.github.rosemoe.sora.langs.textmate.analyzer.TextMateAnalyzer;
 import io.github.rosemoe.sora.langs.textmate.folding.FoldingRegions;
 import io.github.rosemoe.sora.langs.textmate.folding.IndentRange;
 import io.github.rosemoe.sora.text.Content;
@@ -42,7 +37,7 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 /**
  * A text mate analyzer which does not use a TextMateLanguage
  */
-public class BaseTextmateAnalyzer extends BaseIncrementalAnalyzeManager<StackElement, Span> {
+public class BaseTextmateAnalyzer extends AsyncIncrementalAnalyzeManager<StackElement, Span> {
 
     /**
      * Maximum for code block count
@@ -85,7 +80,7 @@ public class BaseTextmateAnalyzer extends BaseIncrementalAnalyzeManager<StackEle
         }
         try {
             FoldingRegions foldingRegions =
-                    CodeBlockUtils.computeRanges(model, editor.getTabCount(), folding.getOffSide(),
+                    IndentRange.computeRanges(model, editor.getTabCount(), folding.getOffSide(),
                                                  folding, MAX_FOLDING_REGIONS_FOR_INDENT_LIMIT,
                                                  delegate);
             for (int i = 0; i < foldingRegions.length() && !delegate.isCancelled(); i++) {
@@ -132,7 +127,7 @@ public class BaseTextmateAnalyzer extends BaseIncrementalAnalyzeManager<StackEle
     }
 
     @Override
-    public Result<StackElement, Span> tokenizeLine(CharSequence lineC, StackElement state) {
+    public synchronized LineTokenizeResult<StackElement, Span> tokenizeLine(CharSequence lineC, StackElement state) {
         String line = lineC.toString();
         ArrayList<Span> tokens = new ArrayList<>();
         ITokenizeLineResult2 lineTokens = grammar.tokenizeLine2(line, state);
@@ -158,7 +153,7 @@ public class BaseTextmateAnalyzer extends BaseIncrementalAnalyzeManager<StackEle
 
             tokens.add(span);
         }
-        return new Result<>(lineTokens.getRuleStack(), null, tokens);
+        return new LineTokenizeResult<>(lineTokens.getRuleStack(), null, tokens);
     }
 
     @Override

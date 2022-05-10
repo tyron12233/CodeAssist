@@ -2,14 +2,24 @@ package com.tyron.builder.internal.session.state;
 
 
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.internal.CollectionCallbackActionDecorator;
+import com.tyron.builder.api.internal.DefaultCollectionCallbackActionDecorator;
+import com.tyron.builder.configuration.internal.DefaultUserCodeApplicationContext;
+import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;
+import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
+import com.tyron.builder.internal.logging.sink.OutputEventListenerManager;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.BuildOperationIdFactory;
 import com.tyron.builder.internal.operations.BuildOperationListenerManager;
+import com.tyron.builder.internal.operations.BuildOperationProgressEventEmitter;
 import com.tyron.builder.internal.operations.DefaultBuildOperationExecutor;
 import com.tyron.builder.internal.operations.DefaultBuildOperationQueueFactory;
+import com.tyron.builder.internal.operations.logging.LoggingBuildOperationProgressBroadcaster;
+import com.tyron.builder.internal.operations.notify.BuildOperationNotificationBridge;
+import com.tyron.builder.internal.operations.notify.BuildOperationNotificationValve;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.reflect.service.ServiceRegistryBuilder;
@@ -76,6 +86,33 @@ public class CrossBuildSessionState implements Closeable {
 
         ParallelismConfiguration createParallelismConfiguration() {
             return new DefaultParallelismConfiguration(startParameter.isParallelProjectExecutionEnabled(), startParameter.getMaxWorkerCount());
+        }
+
+        LoggingBuildOperationProgressBroadcaster createLoggingBuildOperationProgressBroadcaster(
+                OutputEventListenerManager outputEventListenerManager, BuildOperationProgressEventEmitter buildOperationProgressEventEmitter) {
+            return new LoggingBuildOperationProgressBroadcaster(outputEventListenerManager, buildOperationProgressEventEmitter);
+        }
+
+        UserCodeApplicationContext createUserCodeApplicationContext() {
+            return new DefaultUserCodeApplicationContext();
+        }
+
+        CollectionCallbackActionDecorator createDomainObjectCollectioncallbackActionDecorator(BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext) {
+            return new DefaultCollectionCallbackActionDecorator(buildOperationExecutor, userCodeApplicationContext);
+        }
+
+//        BuildOperationTrace createBuildOperationTrace(BuildOperationListenerManager buildOperationListenerManager) {
+//            return new BuildOperationTrace(startParameter, buildOperationListenerManager);
+//        }
+
+        BuildOperationNotificationBridge createBuildOperationNotificationBridge(BuildOperationListenerManager buildOperationListenerManager, ListenerManager generalListenerManager) {
+            return new BuildOperationNotificationBridge(buildOperationListenerManager, generalListenerManager);
+        }
+
+
+        BuildOperationNotificationValve createBuildOperationNotificationValve(
+                BuildOperationNotificationBridge buildOperationNotificationBridge) {
+            return buildOperationNotificationBridge.getValve();
         }
 
         BuildOperationExecutor createBuildOperationExecutor(

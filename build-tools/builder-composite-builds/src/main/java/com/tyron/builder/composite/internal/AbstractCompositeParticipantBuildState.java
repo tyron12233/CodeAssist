@@ -12,7 +12,7 @@ import com.tyron.builder.internal.Pair;
 import com.tyron.builder.internal.build.AbstractBuildState;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.CompositeBuildParticipantBuildState;
-import com.tyron.builder.internal.buildTree.BuildTreeState;
+import com.tyron.builder.internal.buildtree.BuildTreeState;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

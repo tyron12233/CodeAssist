@@ -1,6 +1,7 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.hash.HashCode;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.AbstractTask;
@@ -9,6 +10,8 @@ import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
+import com.tyron.builder.internal.hash.Hashes;
+import com.tyron.builder.internal.hash.PrimitiveHasher;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
@@ -45,9 +48,16 @@ import com.tyron.builder.internal.logging.slf4j.DefaultContextAwareTaskLogger;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import bsh.NameSpace;
+import bsh.This;
+import bsh.XThis;
 
 public class DefaultTask extends AbstractTask {
 
@@ -97,7 +107,6 @@ public class DefaultTask extends AbstractTask {
 
     protected DefaultTask(TaskInfo taskInfo) {
         super(taskInfo);
-
         this.taskIdentity = taskInfo.identity;
         this.name = taskIdentity.name;
 
@@ -492,6 +501,7 @@ public class DefaultTask extends AbstractTask {
                 Thread.currentThread().setContextClassLoader(original);
             }
         }
+
         public ImplementationSnapshot getActionImplementation(ClassLoaderHierarchyHasher hasher) {
             return ImplementationSnapshot.of(getActionClassName(action), hasher.getClassLoaderHash(action.getClass().getClassLoader()));
         }
@@ -531,7 +541,45 @@ public class DefaultTask extends AbstractTask {
 //
 //        }
 
+        if (Proxy.isProxyClass(action.getClass())) {
+            InvocationHandler invocationHandler = Proxy.getInvocationHandler(action);
+            if (invocationHandler.getClass().getName().equals("bsh.XThis$Handler")) {
+                return BeanShellUtils.getAnonymousName(invocationHandler);
+            }
+        }
+
         return action.getClass().getName();
+    }
+
+    private static class BeanShellUtils {
+
+        private static String getAnonymousName(InvocationHandler handler) {
+            NameSpace namespace = getNamespace(handler);
+            NameSpace root = getRootNamespace(namespace);
+            return "";
+        }
+
+        private static NameSpace getRootNamespace(NameSpace nameSpace) {
+            NameSpace current = nameSpace;
+            while (current.getParent() != null) {
+                current = current.getParent();
+            }
+            return current;
+        }
+
+        private static NameSpace getNamespace(InvocationHandler handler) {
+            try {
+                Field this$0 = handler.getClass().getDeclaredField("this$0");
+                this$0.setAccessible(true);
+                Object o = this$0.get(handler);
+
+                Field namespace = This.class.getDeclaredField("namespace");
+                namespace.setAccessible(true);
+                return (NameSpace) namespace.get(o);
+            } catch (ReflectiveOperationException e) {
+                throw new Error(e);
+            }
+        }
     }
 
     @Override

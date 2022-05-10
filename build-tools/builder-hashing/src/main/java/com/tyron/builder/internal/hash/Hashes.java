@@ -7,6 +7,7 @@ import com.google.common.hash.Hashing;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 
 public class Hashes {
@@ -88,7 +89,7 @@ public class Hashes {
 
             @Override
             public void putHash(HashCode hashCode) {
-                hasher.putBytes(hashCode.asBytes());
+                Hashes.putHash(hasher, hashCode);
             }
 
             @Override
@@ -111,5 +112,18 @@ public class Hashes {
 
     public static HashCode hashBytes(byte[] bytes) {
         return DEFAULT.hashBytes(bytes);
+    }
+
+    public static void putHash(Hasher hasher, HashCode another) {
+        hasher.putInt(another.asBytes().length);
+        hasher.putBytes(another.asBytes());
+    }
+
+    public static HashCode hashString(String text) {
+        return newHasher().putString(text, StandardCharsets.UTF_8).hash();
+    }
+
+    public static String toCompactString(HashCode hashCode) {
+        return new BigInteger(1, hashCode.asBytes()).toString(36);
     }
 }

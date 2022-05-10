@@ -3,12 +3,14 @@ plugins {
 }
 
 dependencies {
-    implementation 'org.jetbrains:annotations:23.0.0'
 
+    implementation projects.common
+    implementation projects.languageApi
     implementation project(path: ':build-tools:logging')
     implementation project(path: ':build-tools:project')
-    implementation project(path: ':language-api')
-    implementation project(path: ':common')
+
+    implementation 'it.unimi.dsi:fastutil:8.5.8'
+    implementation 'org.jetbrains:annotations:23.0.0'
 
     testImplementation 'junit:junit:4.+'
 }

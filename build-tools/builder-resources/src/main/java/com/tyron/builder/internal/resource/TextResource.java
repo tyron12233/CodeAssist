@@ -1,6 +1,7 @@
 package com.tyron.builder.internal.resource;
 
 import com.google.common.hash.HashCode;
+import com.tyron.builder.api.resources.MissingResourceException;
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.internal.resource.Resource;
 import com.tyron.builder.api.resources.ResourceException;
@@ -69,7 +70,7 @@ public interface TextResource extends Resource {
      *
      * <p>Note that this method may be expensive when {@link #isContentCached()} returns false, depending on the implementation.
      *
-     * @throws org.gradle.api.resources.MissingResourceException When this resource does not exist.
+     * @throws MissingResourceException When this resource does not exist.
      * @throws ResourceException On failure to read content.
      */
     boolean getHasEmptyContent() throws ResourceException;
@@ -79,7 +80,7 @@ public interface TextResource extends Resource {
      *
      * <p>Note that this method, or reading from the provided reader, may be expensive when {@link #isContentCached()} returns false, depending on the implementation.
      *
-     * @throws org.gradle.api.resources.MissingResourceException When this resource does not exist.
+     * @throws MissingResourceException When this resource does not exist.
      * @throws ResourceException On failure to read content.
      */
     Reader getAsReader() throws ResourceException;
@@ -90,7 +91,7 @@ public interface TextResource extends Resource {
      * <p>Note that this method may be expensive when {@link #isContentCached()} returns false, depending on the implementation.
      *
      * @return the content. Never returns null.
-     * @throws org.gradle.api.resources.MissingResourceException When this resource does not exist.
+     * @throws MissingResourceException When this resource does not exist.
      * @throws ResourceException On failure to read content.
      */
     String getText() throws ResourceException;

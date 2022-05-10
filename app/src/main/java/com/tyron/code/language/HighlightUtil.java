@@ -216,7 +216,13 @@ public class HighlightUtil {
         Spans spans = styles.getSpans();
         Spans.Reader read = spans.read();
         for (int i = 0; i < spans.getLineCount(); i++) {
-            List<Span> spansOnLine = new ArrayList<>(read.getSpansOnLine(i));
+            List<Span> original;
+            try {
+                original  = read.getSpansOnLine(i);
+            } catch (NullPointerException e) {
+                continue;
+            }
+            List<Span> spansOnLine = new ArrayList<>(original);
             for (Span span : spansOnLine) {
                 span.problemFlags = 0;
             }

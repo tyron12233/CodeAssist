@@ -429,4 +429,16 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     public void setContinuous(boolean b) {
         this.continuous = b;
     }
+
+    public boolean isBuildCacheEnabled() {
+        return buildCacheEnabled;
+    }
+
+    public boolean isOffline() {
+        return offline;
+    }
+
+    public boolean isBuildCacheDebugLogging() {
+        return buildCacheDebugLogging;
+    }
 }

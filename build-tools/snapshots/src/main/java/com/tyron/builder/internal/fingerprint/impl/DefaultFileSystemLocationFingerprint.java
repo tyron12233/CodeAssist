@@ -4,6 +4,8 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.tyron.builder.internal.fingerprint.FileSystemLocationFingerprint;
 import com.tyron.builder.internal.file.FileType;
+import com.tyron.builder.internal.hash.Hashes;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 
@@ -32,7 +34,7 @@ public class DefaultFileSystemLocationFingerprint implements FileSystemLocationF
     @Override
     public final void appendToHasher(Hasher hasher) {
         hasher.putString(getNormalizedPath(), StandardCharsets.UTF_8);
-        hasher.putBytes(getNormalizedContentHash().asBytes());
+        Hashes.putHash(hasher, getNormalizedContentHash());
     }
 
     @Override

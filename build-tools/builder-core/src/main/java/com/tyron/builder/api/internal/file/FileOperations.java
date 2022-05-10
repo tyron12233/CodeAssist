@@ -8,6 +8,7 @@ import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.file.DeleteSpec;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileTree;
+import com.tyron.builder.api.resources.ResourceHandler;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.tasks.util.PatternSet;
 
@@ -62,4 +63,6 @@ public interface FileOperations {
 //    ResourceHandler getResources();
 
     PatternSet patternSet();
+
+    ResourceHandler getResources();
 }

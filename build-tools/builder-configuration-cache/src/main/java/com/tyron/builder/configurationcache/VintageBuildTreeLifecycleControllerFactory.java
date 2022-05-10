@@ -4,14 +4,14 @@ import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.resources.ProjectLeaseRegistry;
 import com.tyron.builder.composite.internal.BuildTreeWorkGraphController;
 import com.tyron.builder.internal.build.BuildLifecycleController;
-import com.tyron.builder.internal.buildTree.BuildModelParameters;
-import com.tyron.builder.internal.buildTree.BuildTreeFinishExecutor;
-import com.tyron.builder.internal.buildTree.BuildTreeLifecycleController;
-import com.tyron.builder.internal.buildTree.BuildTreeLifecycleControllerFactory;
-import com.tyron.builder.internal.buildTree.BuildTreeWorkExecutor;
-import com.tyron.builder.internal.buildTree.DefaultBuildTreeLifecycleController;
-import com.tyron.builder.internal.buildTree.DefaultBuildTreeModelCreator;
-import com.tyron.builder.internal.buildTree.DefaultBuildTreeWorkPreparer;
+import com.tyron.builder.internal.buildtree.BuildModelParameters;
+import com.tyron.builder.internal.buildtree.BuildTreeFinishExecutor;
+import com.tyron.builder.internal.buildtree.BuildTreeLifecycleController;
+import com.tyron.builder.internal.buildtree.BuildTreeLifecycleControllerFactory;
+import com.tyron.builder.internal.buildtree.BuildTreeWorkExecutor;
+import com.tyron.builder.internal.buildtree.DefaultBuildTreeLifecycleController;
+import com.tyron.builder.internal.buildtree.DefaultBuildTreeModelCreator;
+import com.tyron.builder.internal.buildtree.DefaultBuildTreeWorkPreparer;
 import com.tyron.builder.internal.model.StateTransitionControllerFactory;
 
 public class VintageBuildTreeLifecycleControllerFactory implements BuildTreeLifecycleControllerFactory {

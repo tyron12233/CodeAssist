@@ -3,7 +3,7 @@ package com.tyron.builder.internal.build;
 import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
-import com.tyron.builder.internal.buildTree.BuildTreeLifecycleController;
+import com.tyron.builder.internal.buildtree.BuildTreeLifecycleController;
 
 /**
  * Transitions the model of an individual build in the build tree through its lifecycle.

@@ -4,9 +4,9 @@ import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.internal.invocation.BuildAction;
 import com.tyron.builder.internal.build.BuildStateRegistry;
 import com.tyron.builder.internal.build.RootBuildState;
-import com.tyron.builder.internal.buildTree.BuildActionRunner;
-import com.tyron.builder.internal.buildTree.BuildTreeActionExecutor;
-import com.tyron.builder.internal.buildTree.BuildTreeContext;
+import com.tyron.builder.internal.buildtree.BuildActionRunner;
+import com.tyron.builder.internal.buildtree.BuildTreeActionExecutor;
+import com.tyron.builder.internal.buildtree.BuildTreeContext;
 
 public class RootBuildLifecycleBuildActionExecutor implements BuildTreeActionExecutor {
     private final BuildActionRunner buildActionRunner;

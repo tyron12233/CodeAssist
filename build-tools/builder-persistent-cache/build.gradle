@@ -20,6 +20,7 @@ dependencies {
     implementation buildTools.builderLogging
 
     implementation common.slf4j
+    implementation common.commonsLang3
 }
 
 java {
