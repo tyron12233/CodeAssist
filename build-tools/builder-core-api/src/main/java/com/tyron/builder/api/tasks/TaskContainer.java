@@ -1,9 +1,14 @@
 package com.tyron.builder.api.tasks;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.Task;
 
 import java.util.Collection;
+import java.util.Map;
+
+import groovy.lang.Closure;
 
 public interface TaskContainer extends Collection<Task> {
 

@@ -5,6 +5,7 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
+import com.tyron.builder.internal.hash.Hashes;
 
 import javax.annotation.Nullable;
 import java.util.Map;
@@ -16,7 +17,7 @@ public class ConfigurableClassLoaderHierarchyHasher implements ClassLoaderHierar
 
     public ConfigurableClassLoaderHierarchyHasher(Map<ClassLoader, String> knownClassLoaders, HashingClassLoaderFactory classLoaderFactory) {
         this.classLoaderFactory = classLoaderFactory;
-        Map<ClassLoader, byte[]> hashes = new WeakHashMap<ClassLoader, byte[]>();
+        Map<ClassLoader, byte[]> hashes = new WeakHashMap<>();
         for (Map.Entry<ClassLoader, String> entry : knownClassLoaders.entrySet()) {
             hashes.put(entry.getKey(), entry.getValue().getBytes(Charsets.UTF_8));
         }
@@ -52,12 +53,12 @@ public class ConfigurableClassLoaderHierarchyHasher implements ClassLoaderHierar
                 hasher.putBytes(knownId);
                 return false;
             }
-//            if (cl instanceof CachingClassLoader || cl instanceof MultiParentClassLoader) {
-//                return true;
-//            }
+            if (cl instanceof CachingClassLoader || cl instanceof MultiParentClassLoader) {
+                return true;
+            }
             HashCode hash = classLoaderFactory.getClassLoaderClasspathHash(cl);
             if (hash != null) {
-                hasher.putBytes(hash.asBytes());
+                Hashes.putHash(hasher, hash);
                 return true;
             }
             foundUnknown = true;

@@ -4,7 +4,7 @@ import com.google.common.base.Function;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.initialization.BuildRequestContext;
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.internal.buildTree.BuildActionRunner;
+import com.tyron.builder.internal.buildtree.BuildActionRunner;
 import com.tyron.builder.internal.invocation.BuildAction;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
@@ -14,6 +14,7 @@ import com.tyron.builder.internal.session.state.CrossBuildSessionState;
 import com.tyron.builder.launcher.exec.BuildActionExecuter;
 import com.tyron.builder.launcher.exec.BuildActionParameters;
 import com.tyron.builder.launcher.exec.BuildActionResult;
+import com.tyron.builder.launcher.exec.BuildExecuter;
 import com.tyron.builder.tooling.internal.provider.serialization.PayloadSerializer;
 import com.tyron.builder.tooling.internal.provider.serialization.SerializedPayload;
 
@@ -36,12 +37,12 @@ public class BuildSessionLifecycleBuildActionExecuter implements BuildActionExec
             // When creating a model, do not use continuous mode
             startParameter.setContinuous(false);
         }
-
+        BuildActionResult run;
         ActionImpl actionWrapper = new ActionImpl(action, requestContext);
         try {
             try (CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter)) {
                 try (BuildSessionState buildSessionState = new BuildSessionState(userHomeServiceRegistry, crossBuildSessionState, startParameter, requestContext, actionParameters.getInjectedPluginClasspath(), requestContext.getCancellationToken(), requestContext.getClient(), requestContext.getEventConsumer())) {
-                    return buildSessionState.run(actionWrapper);
+                    run = buildSessionState.run(actionWrapper);
                 }
             }
         } catch (Throwable t) {
@@ -58,9 +59,14 @@ public class BuildSessionLifecycleBuildActionExecuter implements BuildActionExec
                         .throwAsUncheckedException(actionWrapper.result.addFailure(t).getBuildFailure());
             }
         }
+
+        if (run.hasFailure()) {
+            run.rethrow();
+        }
+        return run;
     }
 
-    private RuntimeException wrap(Throwable failure) {
+    private static RuntimeException wrap(Throwable failure) {
         if (failure instanceof RuntimeException) {
             return (RuntimeException) failure;
         } else {
@@ -93,7 +99,8 @@ public class BuildSessionLifecycleBuildActionExecuter implements BuildActionExec
             if (requestContext.getCancellationToken().isCancellationRequested()) {
                 return BuildActionResult.cancelled(payloadSerializer.serialize(result.getBuildFailure()));
             }
-            return BuildActionResult.failed(payloadSerializer.serialize(result.getClientFailure()));
+//            return BuildActionResult.failed(payloadSerializer.serialize(result.getClientFailure()));
+            return BuildActionResult.failed(wrap(result.getClientFailure()));
         }
     }
 }

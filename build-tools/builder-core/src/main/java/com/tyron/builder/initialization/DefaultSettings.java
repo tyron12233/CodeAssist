@@ -6,6 +6,8 @@ import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
 import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.initialization.Settings;
+import com.tyron.builder.api.initialization.dsl.ScriptHandler;
+import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.Actions;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
@@ -24,7 +26,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 public class DefaultSettings implements SettingsInternal {
-//    private ScriptSource settingsScript;
+    private ScriptSource settingsScript;
 
     private StartParameter startParameter;
 
@@ -36,9 +38,9 @@ public class DefaultSettings implements SettingsInternal {
 
     private final GradleInternal gradle;
 
-//    private final ClassLoaderScope classLoaderScope;
-//    private final ClassLoaderScope baseClassLoaderScope;
-//    private final ScriptHandler scriptHandler;
+    private final ClassLoaderScope classLoaderScope;
+    private final ClassLoaderScope baseClassLoaderScope;
+    private final ScriptHandler scriptHandler;
     private final ServiceRegistry services;
 
     private final List<IncludedBuildSpec> includedBuildSpecs = new ArrayList<>();
@@ -48,19 +50,19 @@ public class DefaultSettings implements SettingsInternal {
     public DefaultSettings(
             ServiceRegistryFactory serviceRegistryFactory,
             GradleInternal gradle,
-//            ClassLoaderScope classLoaderScope,
-//            ClassLoaderScope baseClassLoaderScope,
-//            ScriptHandler settingsScriptHandler,
+            ClassLoaderScope classLoaderScope,
+            ClassLoaderScope baseClassLoaderScope,
+            ScriptHandler settingsScriptHandler,
             File settingsDir,
-//            ScriptSource settingsScript,
+            ScriptSource settingsScript,
             StartParameter startParameter
     ) {
         this.gradle = gradle;
-//        this.classLoaderScope = classLoaderScope;
-//        this.baseClassLoaderScope = baseClassLoaderScope;
-//        this.scriptHandler = settingsScriptHandler;
+        this.classLoaderScope = classLoaderScope;
+        this.baseClassLoaderScope = baseClassLoaderScope;
+        this.scriptHandler = settingsScriptHandler;
         this.settingsDir = settingsDir;
-//        this.settingsScript = settingsScript;
+        this.settingsScript = settingsScript;
         this.startParameter = startParameter;
         this.services = serviceRegistryFactory.createFor(this);
         this.rootProjectDescriptor = createProjectDescriptor(null, settingsDir.getName(), settingsDir);
@@ -115,6 +117,11 @@ public class DefaultSettings implements SettingsInternal {
     @Override
     public Settings getSettings() {
         return this;
+    }
+
+    @Override
+    public ScriptHandler getBuildscript() {
+        return scriptHandler;
     }
 
     @Override
@@ -218,9 +225,15 @@ public class DefaultSettings implements SettingsInternal {
         return defaultProjectDescriptor;
     }
 
+
+    @Override
+    public ClassLoaderScope getBaseClassLoaderScope() {
+        return baseClassLoaderScope;
+    }
+
     @Override
     public ClassLoaderScope getClassLoaderScope() {
-        return null;
+        return classLoaderScope;
     }
 
     @Override

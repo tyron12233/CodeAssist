@@ -111,9 +111,9 @@ public class BottomEditorFragment extends Fragment {
         adapter.setOnShortcutSelectedListener((item, pos) -> {
             FileEditor currentFile = mFilesViewModel.getCurrentFileEditor();
             if (currentFile != null) {
-                if (currentFile.getFragment() instanceof CodeEditorFragment) {
-                    ((CodeEditorFragment) currentFile.getFragment()).performShortcut(item);
-                }
+//                if (currentFile.getFragment() instanceof CodeEditorFragment) {
+//                    ((CodeEditorFragment) currentFile.getFragment()).performShortcut(item);
+//                }
             }
         });
 

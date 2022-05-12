@@ -2,7 +2,7 @@ package com.tyron.builder.api.tasks;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.provider.NamedDomainObjectProvider;
+import com.tyron.builder.api.NamedDomainObjectProvider;
 
 /**
  * Providers a task of the given type.

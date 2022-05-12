@@ -109,11 +109,11 @@ public class MerkleDirectorySnapshotBuilder implements DirectorySnapshotBuilder 
             if (sortingRequired) {
                 children.sort(FileSystemLocationSnapshot.BY_NAME);
             }
-            Hasher hasher = Hashing.md5().newHasher();
-            hasher.putBytes(DIR_SIGNATURE.asBytes());
+            Hasher hasher = Hashes.newHasher();
+            Hashes.putHash(hasher, DIR_SIGNATURE);
             for (FileSystemLocationSnapshot child : children) {
                 hasher.putString(child.getName(), StandardCharsets.UTF_8);
-                hasher.putBytes(child.getHash().asBytes());
+                Hashes.putHash(hasher, child.getHash());
             }
             return new DirectorySnapshot(absolutePath, name, accessType, hasher.hash(), children);
         }

@@ -1,8 +1,12 @@
 package com.tyron.builder.api.internal.tasks;
 
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.tasks.TaskContainer;
+import com.tyron.builder.api.tasks.TaskProvider;
 import com.tyron.builder.api.tasks.TaskResolver;
+
+import java.lang.reflect.Proxy;
 
 public interface TaskContainerInternal extends TaskContainer, TaskResolver {
 
@@ -17,5 +21,4 @@ public interface TaskContainerInternal extends TaskContainer, TaskResolver {
      * Ensures that all configuration has been applied to the given task, and the task is ready to be added to the task graph.
      */
     void prepareForExecution(Task task);
-
 }

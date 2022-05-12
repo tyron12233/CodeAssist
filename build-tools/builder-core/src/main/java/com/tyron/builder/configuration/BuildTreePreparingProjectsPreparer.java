@@ -2,11 +2,9 @@ package com.tyron.builder.configuration;
 
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
+import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.initialization.BuildLoader;
-import com.tyron.builder.internal.buildTree.BuildInclusionCoordinator;
-
-
-import java.io.File;
+import com.tyron.builder.internal.buildtree.BuildInclusionCoordinator;
 
 public class BuildTreePreparingProjectsPreparer implements ProjectsPreparer {
     private final ProjectsPreparer delegate;
@@ -30,9 +28,9 @@ public class BuildTreePreparingProjectsPreparer implements ProjectsPreparer {
     public void prepareProjects(GradleInternal gradle) {
         // Setup classloader for root project, all other projects will be derived from this.
         SettingsInternal settings = gradle.getSettings();
-//        ClassLoaderScope settingsClassLoaderScope = settings.getClassLoaderScope();
-//        ClassLoaderScope buildSrcClassLoaderScope = settingsClassLoaderScope.createChild("buildSrc[" + gradle.getIdentityPath() + "]");
-//        gradle.setBaseProjectClassLoaderScope(buildSrcClassLoaderScope);
+        ClassLoaderScope settingsClassLoaderScope = settings.getClassLoaderScope();
+        ClassLoaderScope buildSrcClassLoaderScope = settingsClassLoaderScope.createChild("buildSrc[" + gradle.getIdentityPath() + "]");
+        gradle.setBaseProjectClassLoaderScope(buildSrcClassLoaderScope);
 //        generateDependenciesAccessorsAndAssignPluginVersions(gradle.getServices(), settings, buildSrcClassLoaderScope);
         // attaches root project
         buildLoader.load(gradle.getSettings(), gradle);

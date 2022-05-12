@@ -20,5 +20,5 @@ public interface ClassLoaderFactory {
      * @param spec the filtering spec for the classloader
      * @return The ClassLoader
      */
-//    ClassLoader createFilteringClassLoader(ClassLoader parent, FilteringClassLoader.Spec spec);
+    ClassLoader createFilteringClassLoader(ClassLoader parent, FilteringClassLoader.Spec spec);
 }

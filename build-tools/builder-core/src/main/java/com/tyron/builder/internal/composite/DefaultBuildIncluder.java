@@ -10,7 +10,7 @@ import com.tyron.builder.internal.build.BuildIncluder;
 import com.tyron.builder.internal.build.BuildStateRegistry;
 import com.tyron.builder.internal.build.IncludedBuildState;
 import com.tyron.builder.internal.build.PublicBuildPath;
-import com.tyron.builder.internal.buildTree.BuildInclusionCoordinator;
+import com.tyron.builder.internal.buildtree.BuildInclusionCoordinator;
 
 import java.util.ArrayList;
 import java.util.Collection;

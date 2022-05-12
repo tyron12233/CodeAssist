@@ -67,6 +67,9 @@ dependencies {
     )
 
     // TODO: completion providers should not be included on the main module
+    // alternate editor impl
+    implementation 'com.blacksquircle.ui:editorkit:2.1.2'
+
     implementation project(path: ':code-editor')
     implementation project(path: ':xml-completion')
     implementation project(path: ':build-tools:viewbinding-inject')
@@ -95,7 +98,10 @@ dependencies {
     implementation project(path: ':build-tools:lint')
     implementation project(path: ':layout-preview')
     implementation project(path: ':kotlin-completion')
-    
+
+    // Virtual File System
+    implementation 'org.apache.commons:commons-vfs2:2.9.0'
+
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation project(path: ':dependency-resolver')
 

@@ -29,6 +29,7 @@ import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.CharPosition;
+import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
 import javax.tools.Diagnostic;
@@ -137,7 +138,7 @@ public class JavaAnalyzer extends SemanticAnalyzeManager {
     }
 
     @Override
-    public void analyzeInBackground(CharSequence contents) {
+    public void analyzeInBackground(Content contents) {
         sDebouncer.cancel();
         sDebouncer.schedule(cancel -> {
             doAnalyzeInBackground(cancel, contents);
@@ -164,7 +165,7 @@ public class JavaAnalyzer extends SemanticAnalyzeManager {
         return null;
     }
 
-    private void doAnalyzeInBackground(Function0<Boolean> cancel, CharSequence contents) {
+    private void doAnalyzeInBackground(Function0<Boolean> cancel, Content contents) {
         Log.d(TAG, "doAnalyzeInBackground: called");
         Editor editor = mEditorReference.get();
         if (editor == null) {
@@ -181,11 +182,6 @@ public class JavaAnalyzer extends SemanticAnalyzeManager {
             if (service != null) {
                 File currentFile = editor.getCurrentFile();
                 if (currentFile == null) {
-                    return;
-                }
-                Module module =
-                        ProjectManager.getInstance().getCurrentProject().getModule(currentFile);
-                if (!module.getFileManager().isOpened(currentFile)) {
                     return;
                 }
                 try {

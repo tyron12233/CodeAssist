@@ -15,11 +15,14 @@ import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.tyron.builder.api.logging.LogLevel;
+import com.tyron.builder.api.logging.StandardOutputListener;
+import com.tyron.builder.api.logging.configuration.ConsoleOutput;
+import com.tyron.builder.api.logging.configuration.ShowStacktrace;
+import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.execution.MultipleBuildFailures;
-import com.tyron.builder.internal.Factory;
+import com.tyron.builder.initialization.ReportedException;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.internal.logging.events.OutputEvent;
-import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.compiler.AndroidAppBuilder;
 import com.tyron.builder.compiler.AndroidAppBundleBuilder;
@@ -27,8 +30,8 @@ import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.compiler.ProjectBuilder;
+import com.tyron.builder.internal.MutableBoolean;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
-import com.tyron.builder.internal.logging.events.LogEvent;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -41,7 +44,12 @@ import com.tyron.code.util.ApkInstaller;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
+import org.apache.commons.lang3.StringUtils;
+
+import java.io.BufferedReader;
+import java.io.Console;
 import java.io.File;
+import java.io.IOException;
 import java.lang.ref.WeakReference;
 
 public class CompilerService extends Service {
@@ -175,7 +183,7 @@ public class CompilerService extends Service {
     public void compile(Project project, BuildType type) {
 
         if (true) {
-            ProgressManager.getInstance().runNonCancelableAsync(() -> compileNew(project, type));
+            ProgressManager.getInstance().runNonCancelableAsync(() -> compileWithBuilderApi(project, type));
             return;
         }
 
@@ -212,10 +220,14 @@ public class CompilerService extends Service {
         }, indicator);
     }
 
-    private void compileNew(Project project, BuildType type) {
+    private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
-        startParameter.setProjectDir(project.getRootFile());
-        startParameter.setGradleUserHomeDir(new File(project.getRootFile(), ".gradle"));
+        startParameter.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
+        startParameter.setWarningMode(WarningMode.All);
+        File rootFile = project.getRootFile();
+        startParameter.setProjectDir(rootFile);
+        startParameter.setLogLevel(LogLevel.INFO);
+        startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
 
         ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
             @Override
@@ -224,11 +236,16 @@ public class CompilerService extends Service {
             }
         };
 
-        Factory<LoggingManagerInternal> loggingManagerInternalFactory =
-                projectLauncher.getGlobalServices().getFactory(LoggingManagerInternal.class);
-        LoggingManagerInternal loggingManager = loggingManagerInternalFactory.create();
-        assert loggingManager != null;
-        loggingManager.start();
+        StandardOutputListener standardOutputListener = output -> logger.info(output.toString());
+        StandardOutputListener standardErrorListener = output -> logger.error(output.toString());
+
+        LoggingManagerInternal loggingManagerInternal =
+                projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
+        loggingManagerInternal.enableUserStandardOutputListeners();
+
+        loggingManagerInternal.addStandardOutputListener(standardOutputListener);
+        loggingManagerInternal.addStandardErrorListener(standardErrorListener);
+
         try {
             projectLauncher.execute();
             mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
@@ -236,12 +253,16 @@ public class CompilerService extends Service {
             String message;
             if (t instanceof MultipleBuildFailures) {
                 message = Log.getStackTraceString(t.getCause());
+            } else if (t instanceof ReportedException) {
+                message = "";
             } else {
                 message = t.getMessage();
             }
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
-        loggingManager.stop();
+
+        loggingManagerInternal.removeStandardOutputListener(standardOutputListener);
+        loggingManagerInternal.removeStandardErrorListener(standardErrorListener);
 
         stopSelf();
         stopForeground(true);

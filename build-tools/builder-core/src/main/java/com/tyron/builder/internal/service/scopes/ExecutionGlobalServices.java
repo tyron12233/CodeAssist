@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.Generated;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
+import com.tyron.builder.api.tasks.CacheableTask;
 import com.tyron.builder.internal.instantiation.DeserializationInstantiator;
 import com.tyron.builder.internal.instantiation.InstanceFactory;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
@@ -13,6 +14,7 @@ import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.reflect.annotations.TypeAnnotationMetadataStore;
 import com.tyron.builder.internal.reflect.annotations.impl.DefaultTypeAnnotationMetadataStore;
 import com.tyron.builder.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.scripts.ScriptOrigin;
 import com.tyron.builder.internal.state.ManagedFactory;
 import com.tyron.builder.api.internal.tasks.properties.InspectionScheme;
 import com.tyron.builder.api.internal.tasks.properties.InspectionSchemeFactory;
@@ -55,6 +57,7 @@ import com.tyron.builder.api.tasks.OutputFiles;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
 import com.tyron.builder.api.tasks.options.OptionValues;
+import com.tyron.builder.work.DisableCachingByDefault;
 import com.tyron.builder.work.Incremental;
 import com.tyron.builder.work.NormalizeLineEndings;
 import com.tyron.builder.cache.internal.CrossBuildInMemoryCacheFactory;
@@ -64,6 +67,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+
+import groovy.lang.GroovyObject;
 
 public class ExecutionGlobalServices {
 
@@ -102,9 +107,9 @@ public class ExecutionGlobalServices {
         annotationRegistry.registerPropertyTypeAnnotations(builder);
         return new DefaultTypeAnnotationMetadataStore(
                 ImmutableSet.of(
-//                        CacheableTask.class,
+                        CacheableTask.class,
 //                        CacheableTransform.class,
-//                        DisableCachingByDefault.class,
+                        DisableCachingByDefault.class
 //                        UntrackedTask.class
                 ),
                 ModifierAnnotationCategory.asMap(builder.build()),
@@ -123,9 +128,9 @@ public class ExecutionGlobalServices {
                         Describable.class
                 ),
                 ImmutableSet.of(
-//                        GroovyObject.class,
-                        Object.class
-//                        ScriptOrigin.class
+                        GroovyObject.class,
+                        Object.class,
+                        ScriptOrigin.class
                 ),
                 ImmutableSet.of(
                         ConfigurableFileCollection.class,
@@ -143,70 +148,6 @@ public class ExecutionGlobalServices {
             CrossBuildInMemoryCacheFactory cacheFactory
     ) {
         return new InspectionSchemeFactory(typeHandlers, propertyHandlers, typeAnnotationMetadataStore, cacheFactory);
-    }
-
-    InstantiatorFactory createInstantiatorFactory() {
-        return new InstantiatorFactory() {
-            @Override
-            public InstanceGenerator inject(ServiceLookup services) {
-                return null;
-            }
-
-            @Override
-            public InstanceGenerator inject() {
-                return null;
-            }
-
-            @Override
-            public InstantiationScheme injectScheme() {
-                return null;
-            }
-
-            @Override
-            public InstantiationScheme injectScheme(Collection<Class<? extends Annotation>> injectAnnotations) {
-                return null;
-            }
-
-            @Override
-            public InstanceGenerator injectLenient(ServiceLookup services) {
-                return null;
-            }
-
-            @Override
-            public InstanceGenerator injectLenient() {
-                return null;
-            }
-
-            @Override
-            public InstanceGenerator decorate(ServiceLookup services) {
-                return null;
-            }
-
-            @Override
-            public InstantiationScheme decorateScheme() {
-                return null;
-            }
-
-            @Override
-            public InstanceGenerator decorateLenient() {
-                return null;
-            }
-
-            @Override
-            public InstanceGenerator decorateLenient(ServiceLookup services) {
-                return null;
-            }
-
-            @Override
-            public InstantiationScheme decorateLenientScheme() {
-                return null;
-            }
-
-            @Override
-            public ManagedFactory getManagedFactory() {
-                return null;
-            }
-        };
     }
 
     TaskScheme createTaskScheme(InspectionSchemeFactory inspectionSchemeFactory, InstantiatorFactory instantiatorFactory, AnnotationHandlerRegistar annotationRegistry) {

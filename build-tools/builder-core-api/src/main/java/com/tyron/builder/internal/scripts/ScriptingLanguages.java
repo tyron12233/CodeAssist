@@ -16,7 +16,6 @@ public final class ScriptingLanguages {
     private static final List<ScriptingLanguage> ALL =
             Collections.unmodifiableList(
                     Arrays.asList(
-                            scriptingLanguage(".bsh", null),
                             scriptingLanguage(".gradle", null),
                             scriptingLanguage(".gradle.kts", "org.gradle.kotlin.dsl.provider.KotlinScriptPluginFactory")));
 

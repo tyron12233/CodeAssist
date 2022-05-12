@@ -109,6 +109,7 @@
         <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/text_compose_panel.xml" value="0.25" />
         <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/view_palette_fragment.xml" value="0.25" />
         <entry key="..\:/Users/pavnv/Desktop/Android_Projects/CodeAssist/app/src/main/res/layout/wizard_details.xml" value="0.25" />
+        <entry key="..\:/Users/tyron scott/StudioProjects/CodeAssist/app/src/main/res/layout/editor_container_fragment.xml" value="0.16394927536231885" />
         <entry key="app/src/main/res/drawable/ic_baseline_add_24.xml" value="0.15" />
         <entry key="app/src/main/res/drawable/ic_baseline_code_24.xml" value="0.16197916666666667" />
         <entry key="app/src/main/res/drawable/ic_java_class_24.xml" value="0.15185185185185185" />
@@ -197,7 +198,7 @@
       </value>
     </option>
   </component>
-  <component name="ProjectRootManager" version="2" languageLevel="JDK_1_8" project-jdk-name="11" project-jdk-type="JavaSDK">
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_1_7" project-jdk-name="11" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/build-logic/classes" />
   </component>
   <component name="ProjectType">

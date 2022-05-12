@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.internal.buildTree.BuildTreeLifecycleController;
+import com.tyron.builder.internal.buildtree.BuildTreeLifecycleController;
 
 import java.util.function.Function;
 

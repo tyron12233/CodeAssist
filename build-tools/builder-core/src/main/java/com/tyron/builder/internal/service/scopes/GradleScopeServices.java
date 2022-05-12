@@ -1,5 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
+import com.tyron.builder.api.internal.plugins.PluginRegistry;
+import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
 import com.tyron.builder.execution.BuildWorkExecutor;
 import com.tyron.builder.execution.ProjectConfigurer;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
@@ -18,13 +20,14 @@ import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.execution.taskgraph.DefaultTaskExecutionGraph;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
+import com.tyron.builder.internal.id.UniqueId;
 import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.options.OptionReader;
+import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.internal.work.WorkerLeaseService;
 import com.tyron.builder.internal.work.AsyncWorkTracker;
 import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
@@ -41,7 +44,7 @@ import com.tyron.builder.execution.commandline.CommandLineTaskConfigurer;
 import com.tyron.builder.execution.commandline.CommandLineTaskParser;
 import com.tyron.builder.initialization.DefaultTaskExecutionPreparer;
 import com.tyron.builder.initialization.TaskExecutionPreparer;
-import com.tyron.builder.internal.buildTree.BuildModelParameters;
+import com.tyron.builder.internal.buildtree.BuildModelParameters;
 import com.tyron.builder.internal.cleanup.DefaultBuildOutputCleanupRegistry;
 import com.tyron.builder.execution.taskgraph.TaskListenerInternal;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
@@ -58,7 +61,6 @@ public class GradleScopeServices extends DefaultServiceRegistry {
             for (PluginServiceRegistry pluginServiceRegistry : parent.getAll(PluginServiceRegistry.class)) {
                 pluginServiceRegistry.registerGradleServices(registration);
             }
-            registration.add(ProjectFactory.class);
         });
     }
 
@@ -116,6 +118,15 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         );
     }
 
+    PluginRegistry createPluginRegistry(PluginRegistry parentRegistry) {
+        return parentRegistry.createChild(get(GradleInternal.class).getClassLoaderScope());
+    }
+
+//    PluginManagerInternal createPluginManager(Instantiator instantiator, GradleInternal gradleInternal, PluginRegistry pluginRegistry, InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator decorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
+//        PluginTarget target = new ImperativeOnlyPluginTarget<>(gradleInternal);
+//        return instantiator.newInstance(DefaultPluginManager.class, pluginRegistry, instantiatorFactory.inject(this), target, buildOperationExecutor, userCodeApplicationContext, decorator, domainObjectCollectionFactory);
+//    }
+
     ServiceRegistryFactory createServiceRegistryFactory(final ServiceRegistry services) {
         final Factory<LoggingManagerInternal> loggingManagerInternalFactory = getFactory(LoggingManagerInternal.class);
         return new ServiceRegistryFactory() {
@@ -165,6 +176,21 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         return listenerManager.getBroadcaster(TaskListenerInternal.class);
     }
 
+    protected ConfigurationTargetIdentifier createConfigurationTargetIdentifier(GradleInternal gradle) {
+        return ConfigurationTargetIdentifier.of(gradle);
+    }
+
+    // This needs to go here instead of being “build tree” scoped due to the GradleBuild task.
+    // Builds launched by that task are part of the same build tree, but should have their own invocation ID.
+    // Such builds also have their own root Gradle object.
+    protected BuildInvocationScopeId createBuildInvocationScopeId(GradleInternal gradle) {
+        GradleInternal rootGradle = gradle.getRoot();
+        if (gradle == rootGradle) {
+            return new BuildInvocationScopeId(UniqueId.generate());
+        } else {
+            return rootGradle.getServices().get(BuildInvocationScopeId.class);
+        }
+    }
 
     @Override
     public void close() {

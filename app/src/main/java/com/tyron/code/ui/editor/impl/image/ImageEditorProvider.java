@@ -1,5 +1,7 @@
 package com.tyron.code.ui.editor.impl.image;
 
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 
 import com.tyron.fileeditor.api.FileEditor;
@@ -32,7 +34,7 @@ public class ImageEditorProvider implements FileEditorProvider {
 
     @NonNull
     @Override
-    public FileEditor createEditor(@NonNull File file) {
+    public FileEditor createEditor(@NonNull Context context, @NonNull File file) {
         return new ImageEditor(file, this);
     }
 

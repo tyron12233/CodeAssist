@@ -4,7 +4,7 @@ import com.tyron.builder.execution.plan.ExecutionPlan;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.execution.BuildConfigurationActionExecuter;
-import com.tyron.builder.internal.buildTree.BuildModelParameters;
+import com.tyron.builder.internal.buildtree.BuildModelParameters;
 
 public class DefaultTaskExecutionPreparer implements TaskExecutionPreparer {
     private final BuildOperationExecutor buildOperationExecutor;
