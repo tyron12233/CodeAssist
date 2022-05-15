@@ -26,6 +26,7 @@ import com.tyron.builder.api.artifacts.transform.VariantTransform;
 import com.tyron.builder.api.artifacts.type.ArtifactTypeContainer;
 import com.tyron.builder.api.attributes.AttributesSchema;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
+import com.tyron.builder.api.internal.DynamicObjectAware;
 import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
@@ -48,16 +49,21 @@ import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.Cast;
+import com.tyron.builder.internal.Factory;
+import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import com.tyron.builder.internal.event.ListenerBroadcast;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.DeleteSpec;
 import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.internal.extensibility.ExtensibleDynamicObject;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
+import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
+import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.TextUriResourceLoader;
@@ -92,7 +98,7 @@ import java.util.concurrent.Callable;
 import groovy.lang.Closure;
 import groovy.lang.Script;
 
-public class DefaultProject extends AbstractPluginAware implements ProjectInternal {
+public class DefaultProject extends AbstractPluginAware implements ProjectInternal, DynamicObjectAware {
 
     private static final Logger BUILD_LOGGER = Logging.getLogger(BuildProject.class);
 
@@ -110,12 +116,12 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
     private final ScriptSource buildScriptSource;
     private final ClassLoaderScope classLoaderScope;
     private final ClassLoaderScope baseClassLoaderScope;
+    private final ExtensibleDynamicObject extensibleDynamicObject;
     private String description;
     private Object group;
     private Object version;
     private List<String> defaultTasks = new ArrayList<>();
     private Property<Object> status;
-    private final Convention convention;
     private File buildDir;
     private ListenerBroadcast<ProjectEvaluationListener> evaluationListener = newProjectEvaluationListenerBroadcast();
 
@@ -142,28 +148,21 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
         this.buildScriptSource = buildScriptSource;
         this.gradle = gradle;
 
+        services = serviceRegistryFactory.createFor(this);
+        taskContainer = services.get(TaskContainerInternal.class);
+
+        extensibleDynamicObject = new ExtensibleDynamicObject(this, BuildProject.class, services.get(
+                InstantiatorFactory.class).decorateLenient(services));
+        if (parent != null) {
+            extensibleDynamicObject.setParent(parent.getInheritedScope());
+        }
+        extensibleDynamicObject.addObject(taskContainer.getTasksAsDynamicObject(), ExtensibleDynamicObject.Location.AfterConvention);
+
         if (parent == null) {
             depth = 0;
         } else {
             depth = parent.getDepth() + 1;
         }
-
-        services = serviceRegistryFactory.createFor(this);
-        this.convention = new DefaultConvention(new InstanceGenerator() {
-            @Override
-            public <T> T newInstanceWithDisplayName(Class<? extends T> type,
-                                                    Describable displayName,
-                                                    Object... parameters) throws ObjectInstantiationException {
-                return newInstance(type, parameters);
-            }
-
-            @Override
-            public <T> T newInstance(Class<? extends T> type,
-                                     Object... parameters) throws ObjectInstantiationException {
-                return DirectInstantiator.instantiate(type, parameters);
-            }
-        });
-        taskContainer = services.get(TaskContainerInternal.class);
 
         setBuildDir(new File(projectDir, "build"));
     }
@@ -188,7 +187,7 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
 
     @Override
     public Convention getConvention() {
-        return convention;
+        return extensibleDynamicObject.getConvention();
     }
 
     @Override
@@ -238,7 +237,13 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
 
     @Override
     public Map<String, ?> getProperties() {
-        return null;
+        return DeprecationLogger.whileDisabled(new Factory<Map<String, ?>>() {
+            @Nullable
+            @Override
+            public Map<String, ?> create() {
+                return extensibleDynamicObject.getProperties();
+            }
+        });
     }
 
     @Nullable
@@ -258,9 +263,14 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
         return BUILD_LOGGER;
     }
 
+    private LoggingManagerInternal loggingManagerInternal;
+
     @Override
     public LoggingManagerInternal getLogging() {
-        return services.get(LoggingManagerInternal.class);
+        if (loggingManagerInternal == null) {
+            loggingManagerInternal = services.get(LoggingManagerInternal.class);
+        }
+        return loggingManagerInternal;
     }
 
     @Override
@@ -598,6 +608,16 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
     }
 
     @Override
+    public DynamicObject getAsDynamicObject() {
+        return extensibleDynamicObject;
+    }
+
+    @Override
+    public DynamicObject getInheritedScope() {
+        return extensibleDynamicObject.getInheritable();
+    }
+
+    @Override
     public String getDescription() {
         return description;
     }
@@ -645,7 +665,10 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
     }
 
     public Property<Object> getInternalStatus() {
-        return null;
+        if (status == null) {
+            status = getObjects().property(Object.class).convention(DEFAULT_STATUS);
+        }
+        return status;
     }
 
     @Override
