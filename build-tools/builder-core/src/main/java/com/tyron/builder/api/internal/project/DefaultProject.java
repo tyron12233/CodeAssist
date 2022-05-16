@@ -27,9 +27,11 @@ import com.tyron.builder.api.artifacts.type.ArtifactTypeContainer;
 import com.tyron.builder.api.attributes.AttributesSchema;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.internal.DynamicObjectAware;
+import com.tyron.builder.api.internal.ProcessOperations;
 import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerInternal;
 import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.logging.Logger;
@@ -64,6 +66,7 @@ import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.internal.metaobject.DynamicObject;
+import com.tyron.builder.internal.model.ModelContainer;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.TextUriResourceLoader;
@@ -95,10 +98,12 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
 
+import javax.inject.Inject;
+
 import groovy.lang.Closure;
 import groovy.lang.Script;
 
-public class DefaultProject extends AbstractPluginAware implements ProjectInternal, DynamicObjectAware {
+public abstract class DefaultProject extends AbstractPluginAware implements ProjectInternal, DynamicObjectAware {
 
     private static final Logger BUILD_LOGGER = Logging.getLogger(BuildProject.class);
 
@@ -196,9 +201,8 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
         return this;
     }
 
-    public ProjectEvaluator getProjectEvaluator() {
-        return getServices().get(ProjectEvaluator.class);
-    }
+    @Inject
+    protected abstract ProjectEvaluator getProjectEvaluator();
 
     @Override
     public ProjectInternal bindAllModelRules() {
@@ -355,9 +359,9 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
         return owner.getProjectDir();
     }
 
-    private FileOperations getFileOperations() {
-        return getServices().get(FileOperations.class);
-    }
+    @Override
+    @Inject
+    public abstract FileOperations getFileOperations();
 
     private FileResolver getProjectFileResolver() {
         FileLookup fileLookup = getServices().get(FileLookup.class);
@@ -533,6 +537,11 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
     }
 
     @Override
+    public ProcessOperations getProcessOperations() {
+        return null;
+    }
+
+    @Override
     public File getBuildFile() {
         return buildFile;
     }
@@ -567,10 +576,9 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
         BUILD_LOGGER.warn("Dependencies block is not yet supported.");
     }
 
+    @Inject
     @Override
-    public ScriptHandler getBuildscript() {
-        return null;
-    }
+    public abstract ScriptHandlerInternal getBuildscript();
 
     @Override
     public ProjectInternal getParent() {
@@ -686,7 +694,7 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
     }
 
     @Override
-    public BuildProject getProject() {
+    public ProjectInternal getProject() {
         return this;
     }
 
@@ -782,8 +790,48 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
     }
 
     @Override
+    public ModelContainer<?> getModel() {
+        return owner;
+    }
+
+    @Override
+    public Path getBuildPath() {
+        return gradle.getIdentityPath();
+    }
+
+    @Override
+    public Path projectPath(String name) {
+        return getProjectPath().child(name);
+    }
+
+    @Override
+    public boolean isScript() {
+        return false;
+    }
+
+    @Override
+    public boolean isRootScript() {
+        return false;
+    }
+
+    @Override
+    public boolean isPluginContext() {
+        return false;
+    }
+
+    @Override
+    public boolean isDetachedState() {
+        return ProjectInternal.super.isDetachedState();
+    }
+
+    @Override
     public Path getIdentityPath() {
         return owner.getIdentityPath();
+    }
+
+    @Override
+    public Path identityPath(String name) {
+        return getIdentityPath().child(name);
     }
 
     @Override
@@ -854,9 +902,8 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
         return services.get(ScriptHandlerFactory.class);
     }
 
-    protected CrossProjectModelAccess getCrossProjectModelAccess() {
-        return services.get(CrossProjectModelAccess.class);
-    }
+    @Inject
+    protected abstract CrossProjectModelAccess getCrossProjectModelAccess();
 
     protected CrossProjectConfigurator getProjectConfigurator() {
         return services.get(CrossProjectConfigurator.class);

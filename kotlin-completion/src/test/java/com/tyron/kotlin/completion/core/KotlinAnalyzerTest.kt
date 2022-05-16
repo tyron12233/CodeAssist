@@ -55,5 +55,5 @@ class KotlinAnalyzerTest {
 //        val physicalPsiFile = psiManager.findFile(CoreLocalFileSystem().findFileByIoFile(File(TestUtil.getResourcesDirectory(), "Test.java"))!!)
 //        val document = documentManager.getDocument(physicalPsiFile!!)
 //        println()
-    }
+//    }
 }

@@ -112,7 +112,7 @@ public class ProjectBuilderImpl {
     public static ServiceRegistry createGlobalServices(StartParameterInternal startParameterInternal) {
         LoggingServiceRegistry serviceRegistry =
                 LoggingServiceRegistry.newCommandLineProcessLogging();
-        NativeServices.initializeOnWorker(startParameterInternal.getGradleUserHomeDir());
+        NativeServices.initializeOnDaemon(startParameterInternal.getGradleUserHomeDir());
         return ServiceRegistryBuilder
                 .builder()
                 .parent(serviceRegistry)

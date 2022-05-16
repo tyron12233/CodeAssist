@@ -6,14 +6,18 @@ import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.attributes.Attribute;
+import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
+import com.tyron.builder.api.internal.file.HasScriptServices;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
+import com.tyron.builder.api.internal.plugins.PluginAwareInternal;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.plugins.PluginManager;
 import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.groovy.scripts.ScriptSource;
+import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.BuildProject;
@@ -22,7 +26,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
 
-public interface ProjectInternal extends BuildProject, ProjectIdentifier {
+public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScriptServices, DomainObjectContext, PluginAwareInternal {
 
     // These constants are defined here and not with the rest of their kind in HelpTasksPlugin because they are referenced
     // in the ‘core’ modules, which don't depend on ‘plugins’ where HelpTasksPlugin is defined.
@@ -105,6 +109,8 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
 
     @Override
     ExtensionContainerInternal getExtensions();
+
+    DynamicObject getInheritedScope();
 
     /**
      * Returns the property that stored {@link BuildProject#getStatus()}.
