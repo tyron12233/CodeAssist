@@ -36,6 +36,8 @@ import java.util.stream.Stream;
 
 public class SaveAction extends AnAction {
 
+    public static final String ID = "saveAction";
+
     @Override
     public void update(@NonNull AnActionEvent event) {
         Presentation presentation = event.getPresentation();
@@ -61,8 +63,11 @@ public class SaveAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        FileDocumentManager.getInstance().saveAllContents();
+        doSave();
+    }
 
+    public static void doSave() {
+        FileDocumentManager.getInstance().saveAllContents();
         EventManager eventManager = ApplicationLoader.getInstance().getEventManager();
         eventManager.dispatchEvent(new SaveEvent());
     }

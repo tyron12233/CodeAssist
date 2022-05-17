@@ -3,14 +3,16 @@ package com.tyron.builder.api.tasks;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.InvalidUserDataException;
+import com.tyron.builder.api.PolymorphicDomainObjectContainer;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.internal.metaobject.DynamicObject;
 
 import java.util.Collection;
 import java.util.Map;
 
 import groovy.lang.Closure;
 
-public interface TaskContainer extends Collection<Task> {
+public interface TaskContainer extends Collection<Task>, PolymorphicDomainObjectContainer<Task> {
 
     TaskProvider<Task> register(String name, Action<? super Task> configurationAction);
 
@@ -20,9 +22,11 @@ public interface TaskContainer extends Collection<Task> {
 
     <T extends Task> TaskProvider<T> register(String name, Class<T> type);
 
-    <T extends Task> TaskProvider<T> register(String name);
+    TaskProvider<Task> register(String name);
 
     Task findByName(String name);
 
     Task getByPath(String path);
+
+    DynamicObject getTasksAsDynamicObject();
 }

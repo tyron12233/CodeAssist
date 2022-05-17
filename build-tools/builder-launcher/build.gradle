@@ -5,6 +5,8 @@ plugins {
 dependencies {
     implementation projects.common
 
+    implementation projects.buildTools.codeassistBuilderPlugin
+
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderEnterpriseOperations
     implementation projects.buildTools.builderMessaging
@@ -21,7 +23,11 @@ dependencies {
     implementation common.slf4j
     implementation common.commonsLang3
 
+    testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-23'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'net.rubygrapefruit:native-platform:0.22-milestone-23'
+    testImplementation projects.buildTools.builderApi
+    testImplementation projects.buildTools.builderCoreApi
     testImplementation projects.buildTools.builderCore
     testImplementation projects.buildTools.builderConfigurationCache
     testImplementation projects.buildTools.builderBaseServicesGroovy

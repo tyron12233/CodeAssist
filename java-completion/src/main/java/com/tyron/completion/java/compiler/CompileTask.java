@@ -70,5 +70,9 @@ public class CompileTask implements AutoCloseable {
     @Override
     public void close() {
         mCompileBatch.close();
+        ReusableCompiler.Borrow borrow = mCompileBatch.borrow;
+        if (borrow != null && !borrow.closed) {
+            borrow.close();
+        }
     }
 }

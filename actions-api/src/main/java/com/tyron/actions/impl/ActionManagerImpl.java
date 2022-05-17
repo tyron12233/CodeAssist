@@ -81,8 +81,7 @@ public class ActionManagerImpl extends ActionManager {
 
                     child.update(event);
 
-                    if (event.getPresentation()
-                            .isVisible()) {
+                    if (event.getPresentation().isVisible()) {
                         if (actionGroup.isPopup()) {
                             fillSubMenu(subMenu, child, event);
                         }
@@ -143,8 +142,7 @@ public class ActionManagerImpl extends ActionManager {
 
                     child.update(event);
 
-                    if (event.getPresentation()
-                            .isVisible()) {
+                    if (event.getPresentation().isVisible()) {
                         fillSubMenu(subSubMenu, child, event);
                     }
                 }
@@ -213,6 +211,19 @@ public class ActionManagerImpl extends ActionManager {
     @Override
     public boolean isGroup(@NonNull String actionId) {
         return isGroup(mIdToAction.get(actionId));
+    }
+
+    @Override
+    public void performAction(String id, AnActionEvent event) {
+        AnAction anAction = mIdToAction.get(id);
+        if (anAction != null) {
+            anAction.update(event);
+            if (anAction.getTemplatePresentation().isVisible()) {
+                anAction.actionPerformed(event);
+            }
+        } else {
+            // TODO: throw exception
+        }
     }
 
     private boolean isGroup(AnAction action) {

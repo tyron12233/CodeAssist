@@ -24,6 +24,7 @@ import com.tyron.kotlin.completion.core.model.KotlinEnvironment;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
+import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.DocumentEx;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
@@ -130,39 +131,24 @@ public class JavaCompletionProvider extends CompletionProvider {
         }
         KotlinModule kotlinModule = ((KotlinModule) module);
         KotlinCoreEnvironment environment = KotlinEnvironment.getEnvironment(kotlinModule);
-        org.jetbrains.kotlin.com.intellij.openapi.project.Project jetProject =
-                environment.getProject();
+        org.jetbrains.kotlin.com.intellij.openapi.project.Project jetProject = environment.getProject();
 
         setCurrentIndicator();
 
-        VirtualFile virtualFile =
-                environment.getProjectEnvironment().getEnvironment().getLocalFileSystem()
+        VirtualFile virtualFile = environment.getProjectEnvironment().getEnvironment().getLocalFileSystem()
                         .findFileByIoFile(file);
         assert virtualFile != null && virtualFile.isValid();
 
         PsiFile storedPsi = PsiManager.getInstance(jetProject).findFile(virtualFile);
         assert storedPsi != null && storedPsi.isValid();
 
-        String oldText = storedPsi.getText();
-
-        PsiDocumentManager documentManager = PsiDocumentManager.getInstance(jetProject);
-        Document document = documentManager.getDocument(storedPsi);
+        Document document = PsiDocumentManager.getInstance(jetProject).getDocument(storedPsi);
         assert document != null;
+        WriteCommandAction.runWriteCommandAction(jetProject, () -> {
+            document.setText(contents);
+        });
 
-        document.setText(contents);
-
-        DocumentEventImpl event = new DocumentEventImpl(document, 0, oldText, contents, storedPsi.getModificationStamp(), true);
-        ((PsiDocumentManagerBase) documentManager).documentChanged(event);
-
-        PsiFileFactory factory = PsiFileFactory.getInstance(jetProject);
-        PsiFile parsed =
-                factory.createFileFromText(contents, storedPsi);
-        assert parsed != null;
-
-        storedPsi.getViewProvider().rootChanged(parsed);
-
-        PsiElement elementAt = parsed.findElementAt((int) (cursor - 1));
-        assert elementAt != null;
+        PsiElement elementAt = storedPsi.findElementAt((int) cursor);
 
         CompletionList.Builder builder = new CompletionList.Builder(elementAt.getText());
         JavaKotlincCompletionProvider provider =
@@ -216,6 +202,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             return new Completions(service).complete(file, contents, cursor);
         } catch (Throwable e) {
             if (e instanceof ProcessCanceledException) {
+                service.invalidate(file.toPath());
                 throw e;
             }
             if (BuildConfig.DEBUG) {

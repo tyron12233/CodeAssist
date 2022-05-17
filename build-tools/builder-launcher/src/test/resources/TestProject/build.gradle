@@ -1,7 +1,19 @@
-defaultTasks("test")
+import com.tyron.builder.plugin.CodeAssistPlugin
+
+apply plugin: CodeAssistPlugin
+
+defaultTasks("codeAssistAssembleTask")
 
 tasks.register("test") {
     it.doLast {
         println("Executing!")
     }
+}
+
+codeAssist {
+
+}
+
+codeAssistRepositories {
+    maven()
 }

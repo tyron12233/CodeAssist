@@ -4,6 +4,7 @@ import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.configuration.GradleLauncherMetaData;
 import com.tyron.builder.initialization.BuildRequestContext;
 import com.tyron.builder.initialization.ReportedException;

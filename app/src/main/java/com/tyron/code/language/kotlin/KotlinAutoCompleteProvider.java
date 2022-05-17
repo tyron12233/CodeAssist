@@ -73,22 +73,23 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
             environment = KotlinEnvironment.getEnvironment((KotlinModule) currentModule);
         }
 
-        if (mEditor.getCurrentFile() == null) {
-            return null;
-        }
-
-        CompletionEngine engine = CompletionEngine.getInstance((AndroidModule) currentModule);
-
-        if (engine.isIndexing()) {
-            return null;
-        }
-
-        // waiting for code editor to support async code completions
-        return engine.complete(mEditor.getCurrentFile(),
-                String.valueOf(mEditor.getContent()),
-                prefix,
-                line,
-                column,
-                mEditor.getCaret().getStart());
+//        if (mEditor.getCurrentFile() == null) {
+//            return null;
+//        }
+//
+//        CompletionEngine engine = CompletionEngine.getInstance((AndroidModule) currentModule);
+//
+//        if (engine.isIndexing()) {
+//            return null;
+//        }
+//
+//        // waiting for code editor to support async code completions
+//        return engine.complete(mEditor.getCurrentFile(),
+//                String.valueOf(mEditor.getContent()),
+//                prefix,
+//                line,
+//                column,
+//                mEditor.getCaret().getStart());
+        return null;
     }
 }
