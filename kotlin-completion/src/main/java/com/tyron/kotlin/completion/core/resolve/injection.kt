@@ -6,6 +6,10 @@ import com.tyron.kotlin.completion.core.resolve.lang.java.resolver.CodeAssistTra
 import org.jetbrains.kotlin.builtins.jvm.JvmBuiltIns
 import org.jetbrains.kotlin.builtins.jvm.JvmBuiltInsPackageFragmentProvider
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project
+import org.jetbrains.kotlin.com.intellij.psi.PsiClass
+import org.jetbrains.kotlin.com.intellij.psi.PsiJavaModule
+import org.jetbrains.kotlin.com.intellij.psi.PsiPackage
+import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.config.JvmAnalysisFlags
 import org.jetbrains.kotlin.config.JvmTarget
@@ -50,7 +54,31 @@ fun StorageComponentContainer.configureJavaTopDownAnalysis(
     useImpl<LazyTopDownAnalyzer>()
     useImpl<JavaDescriptorResolver>()
     useImpl<DeserializationComponentsForJava>()
+    useInstance(object: JavaFileManager {
+        override fun findPackage(p0: String): PsiPackage? {
+            TODO("Not yet implemented")
+        }
 
+        override fun findClass(p0: String, p1: GlobalSearchScope): PsiClass? {
+            TODO("Not yet implemented")
+        }
+
+        override fun findClasses(p0: String, p1: GlobalSearchScope): Array<PsiClass> {
+            TODO("Not yet implemented")
+        }
+
+        override fun getNonTrivialPackagePrefixes(): MutableCollection<String> {
+            TODO("Not yet implemented")
+        }
+
+        override fun findModules(
+            p0: String,
+            p1: GlobalSearchScope
+        ): MutableCollection<PsiJavaModule> {
+            TODO("Not yet implemented")
+        }
+
+    })
     useInstance(VirtualFileFinderFactory.SERVICE.getInstance(project).create(moduleContentScope))
 
 //    useImpl<EclipseJavaPropertyInitializerEvaluator>()

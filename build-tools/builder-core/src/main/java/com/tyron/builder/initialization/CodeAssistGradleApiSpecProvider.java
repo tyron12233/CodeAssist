@@ -25,6 +25,7 @@ public class CodeAssistGradleApiSpecProvider implements GradleApiSpecProvider {
         return new GradleApiSpecAggregator.DefaultSpec(
                 merge(getScriptExportedClasses(), getGroovyExportedClasses()),
                 ImmutableSet.of(
+                        "com.tyron.builder.plugin",
                         "com.tyron.builder.api",
                         "groovy.lang",
                         "org.codehaus.groovy.reflection",

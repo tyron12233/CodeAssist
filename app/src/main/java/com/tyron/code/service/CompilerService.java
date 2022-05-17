@@ -30,8 +30,16 @@ import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.compiler.ProjectBuilder;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.MutableBoolean;
+import com.tyron.builder.internal.buildoption.BuildOption;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
+import com.tyron.builder.internal.logging.events.ProgressStartEvent;
+import com.tyron.builder.internal.logging.services.DefaultLoggingManagerFactory;
+import com.tyron.builder.internal.logging.sink.OutputEventRenderer;
+import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -51,6 +59,7 @@ import java.io.Console;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.util.Collections;
 
 public class CompilerService extends Service {
 
@@ -223,7 +232,10 @@ public class CompilerService extends Service {
     private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
+        startParameter.setConfigurationCache(BuildOption.Value.value(true));
+        startParameter.setConfigurationCacheDebug(true);
         startParameter.setWarningMode(WarningMode.All);
+        startParameter.setTaskNames(Collections.singletonList("codeAssistAssembleTask"));
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
         startParameter.setLogLevel(LogLevel.INFO);
@@ -238,13 +250,16 @@ public class CompilerService extends Service {
 
         StandardOutputListener standardOutputListener = output -> logger.info(output.toString());
         StandardOutputListener standardErrorListener = output -> logger.error(output.toString());
-
+        DefaultLoggingManagerFactory factory =
+                (DefaultLoggingManagerFactory) projectLauncher.getGlobalServices().getFactory(LoggingManagerInternal.class);
+        factory.getRoot();
         LoggingManagerInternal loggingManagerInternal =
                 projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
-        loggingManagerInternal.enableUserStandardOutputListeners();
-
-        loggingManagerInternal.addStandardOutputListener(standardOutputListener);
-        loggingManagerInternal.addStandardErrorListener(standardErrorListener);
+        loggingManagerInternal.start();
+//        loggingManagerInternal.enableUserStandardOutputListeners();
+//
+//        loggingManagerInternal.addStandardOutputListener(standardOutputListener);
+//        loggingManagerInternal.addStandardErrorListener(standardErrorListener);
 
         try {
             projectLauncher.execute();
@@ -261,8 +276,9 @@ public class CompilerService extends Service {
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
 
-        loggingManagerInternal.removeStandardOutputListener(standardOutputListener);
-        loggingManagerInternal.removeStandardErrorListener(standardErrorListener);
+        loggingManagerInternal.stop();
+//        loggingManagerInternal.removeStandardOutputListener(standardOutputListener);
+//        loggingManagerInternal.removeStandardErrorListener(standardErrorListener);
 
         stopSelf();
         stopForeground(true);

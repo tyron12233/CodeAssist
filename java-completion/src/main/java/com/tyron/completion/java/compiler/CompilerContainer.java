@@ -4,7 +4,11 @@ import android.util.Log;
 
 import androidx.annotation.GuardedBy;
 
+import com.sun.source.util.JavacTask;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.util.Context;
 import com.tyron.completion.java.BuildConfig;
+import com.tyron.completion.java.compiler.services.CancelService;
 import com.tyron.completion.progress.ProcessCanceledException;
 import com.tyron.completion.progress.ProgressManager;
 
@@ -43,12 +47,33 @@ public class CompilerContainer {
 
     }
 
+    private void cancel() {
+        if (mCompileTask == null) {
+            return;
+        }
+
+        JavacTask task = mCompileTask.task;
+        if (!(task instanceof JavacTaskImpl)) {
+            return;
+        }
+
+        JavacTaskImpl taskImpl = ((JavacTaskImpl) task);
+        Context context = taskImpl.getContext();
+        if (context == null) {
+            return;
+        }
+
+        ReusableCompiler.CancelServiceImpl cancelService =
+                (ReusableCompiler.CancelServiceImpl) ReusableCompiler.CancelServiceImpl.instance(context);
+    }
+
     /**
      * This is for codes that will use the compile information,
      * it ensures that all other threads accessing the compile information
      * are synchronized
      */
     public void run(Consumer<CompileTask> consumer) {
+        cancel();
         semaphore.acquireUninterruptibly();
         try {
             consumer.accept(mCompileTask);
@@ -58,6 +83,7 @@ public class CompilerContainer {
     }
 
     public <T> T get(Function1<CompileTask, T> fun) {
+        cancel();
         try {
             semaphore.acquire();
         } catch (InterruptedException e) {
@@ -100,6 +126,9 @@ public class CompilerContainer {
             if (mCompileTask != null) {
                 mCompileTask.close();
             }
+
+            cancel();
+
             runnable.run();
         } finally {
             mIsWriting = false;

@@ -2,12 +2,21 @@ package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.api.Plugin;
 import com.tyron.builder.api.internal.CollectionCallbackActionDecorator;
+import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.MutationGuards;
+import com.tyron.builder.api.internal.artifacts.DependencyManagementServices;
+import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.collections.DefaultDomainObjectCollectionFactory;
 import com.tyron.builder.api.internal.collections.DomainObjectCollectionFactory;
+import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.temp.DefaultTemporaryFileProvider;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
+import com.tyron.builder.api.internal.initialization.DefaultScriptHandlerFactory;
+import com.tyron.builder.api.internal.initialization.ScriptClassPathResolver;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerInternal;
+import com.tyron.builder.api.internal.model.NamedObjectInstantiator;
 import com.tyron.builder.api.internal.plugins.DefaultPluginManager;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
@@ -25,12 +34,14 @@ import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
 import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
+import com.tyron.builder.internal.model.ModelContainer;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.TextUriResourceLoader;
+import com.tyron.builder.util.Path;
 
 import java.io.File;
 
@@ -71,9 +82,16 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
 
 
     protected TaskContainerInternal createTaskContainerInternal(
-            BuildOperationExecutor buildOperationExecutor
+            BuildOperationExecutor buildOperationExecutor,
+            CrossProjectConfigurator crossProjectConfigurator,
+            CollectionCallbackActionDecorator collectionCallbackActionDecorator
     ) {
-        return new DefaultTaskContainer(project, buildOperationExecutor);
+        return new DefaultTaskContainer(
+                project,
+                buildOperationExecutor,
+                crossProjectConfigurator,
+                collectionCallbackActionDecorator
+        );
     }
 
     protected TaskDependencyFactory createTaskDependencyFactory() {
@@ -143,5 +161,73 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
     protected TemporaryFileProvider createTemporaryFileProvider() {
         return new DefaultTemporaryFileProvider(() -> new File(project.getBuildDir(), "tmp"));
     }
+
+    protected ScriptHandlerInternal createScriptHandler(DependencyManagementServices dependencyManagementServices, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, DependencyMetaDataProvider dependencyMetaDataProvider, ScriptClassPathResolver scriptClassPathResolver, NamedObjectInstantiator instantiator) {
+        ScriptHandlerFactory factory = new DefaultScriptHandlerFactory(
+                dependencyManagementServices,
+                fileResolver,
+                fileCollectionFactory,
+                dependencyMetaDataProvider,
+                scriptClassPathResolver,
+                instantiator);
+        return factory.create(project.getBuildScriptSource(), project.getClassLoaderScope(), new ScriptScopedContext(project));
+    }
+
+    private static class ScriptScopedContext implements DomainObjectContext {
+        private final DomainObjectContext delegate;
+
+        public ScriptScopedContext(DomainObjectContext delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Path identityPath(String name) {
+            return delegate.identityPath(name);
+        }
+
+        @Override
+        public Path projectPath(String name) {
+            return delegate.projectPath(name);
+        }
+
+        @Override
+        public Path getProjectPath() {
+            return delegate.getProjectPath();
+        }
+
+        @Nullable
+        @Override
+        public ProjectInternal getProject() {
+            return delegate.getProject();
+        }
+
+        @Override
+        public ModelContainer<?> getModel() {
+            return delegate.getModel();
+        }
+
+        @Override
+        public Path getBuildPath() {
+            return delegate.getBuildPath();
+        }
+
+        @Override
+        public boolean isScript() {
+            return true;
+        }
+
+        @Override
+        public boolean isRootScript() {
+            return false;
+        }
+
+        @Override
+        public boolean isPluginContext() {
+            return false;
+        }
+    }
+
+
+
 
 }

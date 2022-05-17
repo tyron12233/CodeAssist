@@ -43,12 +43,12 @@ public class DefaultPluginManager implements PluginManagerInternal {
     private final PluginRegistry pluginRegistry;
     private final DefaultPluginContainer pluginContainer;
     private final Map<Class<?>, PluginImplementation<?>> plugins = Maps.newHashMap();
-    private final Map<Class<?>, Plugin> instances = Maps.newLinkedHashMap();
+    private final Map<Class<?>, Plugin<?>> instances = Maps.newLinkedHashMap();
     private final Map<PluginId, DomainObjectSet<PluginWithId>> idMappings = Maps.newHashMap();
 
     private final BuildOperationExecutor buildOperationExecutor;
     private final UserCodeApplicationContext userCodeApplicationContext;
-    private DomainObjectCollectionFactory domainObjectCollectionFactory;
+    private final DomainObjectCollectionFactory domainObjectCollectionFactory;
 
     public DefaultPluginManager(final PluginRegistry pluginRegistry, Instantiator instantiator, final PluginTarget target, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator callbackDecorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
         this.instantiator = instantiator;

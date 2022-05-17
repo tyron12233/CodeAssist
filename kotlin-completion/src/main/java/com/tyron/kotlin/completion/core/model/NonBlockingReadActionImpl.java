@@ -38,24 +38,13 @@ public class NonBlockingReadActionImpl<T> implements NonBlockingReadAction<T> {
     @Override
     public NonBlockingReadAction<T> finishOnUiThread(ModalityState modalityState,
                                                      Consumer<? super T> consumer) {
-        ListenableFuture<T> result =
-                ProgressManager.getInstance().computeNonCancelableAsync(new AsyncCallable<T>() {
-                    @Override
-                    public ListenableFuture<T> call() throws Exception {
-                        return Futures.immediateFuture(myCallable.call());
-                    }
-                });
-        Futures.addCallback(result, new FutureCallback<T>() {
-            @Override
-            public void onSuccess(@Nullable T result) {
-                consumer.accept(result);
-            }
-
-            @Override
-            public void onFailure(Throwable t) {
-
-            }
-        }, runnable -> ProgressManager.getInstance().runLater(runnable));
+        T call = null;
+        try {
+            call = myCallable.call();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        consumer.accept(call);
         return this;
     }
 

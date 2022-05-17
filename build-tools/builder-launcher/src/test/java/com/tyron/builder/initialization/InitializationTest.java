@@ -1,10 +1,10 @@
 package com.tyron.builder.initialization;
 
-import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
 import com.tyron.builder.launcher.ProjectLauncher;
+import com.tyron.builder.plugin.CodeAssistPlugin;
 import com.tyron.common.TestUtil;
 
 import org.junit.Before;
@@ -18,6 +18,9 @@ public class InitializationTest {
 
     @Before
     public void setup() {
+        System.setProperty("org.gradle.native", "true");
+
+        CodeAssistPlugin plugin = null;
         File resourcesDir = TestUtil.getResourcesDirectory();
         File projectDir = new File(resourcesDir, "TestProject");
 
@@ -32,6 +35,10 @@ public class InitializationTest {
 
             }
         };
+    }
+
+    public interface SomeInterface {
+        void log(String message);
     }
 
     @Test

@@ -23,7 +23,20 @@ import com.sun.tools.javac.model.JavacElements;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.DefinedBy;
 import com.sun.tools.javac.util.Log;
+import com.tyron.common.logging.IdeLog;
+import com.tyron.completion.java.compiler.services.CancelService;
+import com.tyron.completion.java.compiler.services.NBAttr;
+import com.tyron.completion.java.compiler.services.NBClassFinder;
+import com.tyron.completion.java.compiler.services.NBEnter;
+import com.tyron.completion.java.compiler.services.NBJavaCompiler;
+import com.tyron.completion.java.compiler.services.NBJavacTrees;
+import com.tyron.completion.java.compiler.services.NBLog;
+import com.tyron.completion.java.compiler.services.NBMemberEnter;
+import com.tyron.completion.java.compiler.services.NBParserFactory;
+import com.tyron.completion.java.compiler.services.NBResolve;
+import com.tyron.completion.java.compiler.services.NBTreeMaker;
 
+import java.io.PrintWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -31,6 +44,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -63,12 +77,47 @@ import me.xdrop.diffutils.DiffUtils;
 
 public class ReusableCompiler {
 
-    private static final Logger LOG = Logger.getLogger("main");
+    private static final Logger LOG = IdeLog.getCurrentLogger(ReusableCompiler.class);
     private static final JavacTool systemProvider = JavacTool.create();
 
     private final List<String> currentOptions = new ArrayList<>();
     private ReusableContext currentContext;
     private volatile boolean checkedOut;
+
+    private final CancelServiceImpl cancelService = new CancelServiceImpl();
+
+    public static class CancelServiceImpl extends CancelService {
+
+        private final AtomicBoolean canceled = new AtomicBoolean(false);
+        private final AtomicBoolean running = new AtomicBoolean(false);
+
+        public void cancel() {
+            canceled.set(true);
+        }
+
+        public boolean isRunning() {
+            return running.get();
+        }
+
+        public void setRunning(boolean value) {
+            running.set(value);
+        }
+
+        @Override
+        public boolean isCanceled() {
+            return false;
+        }
+
+        @Override
+        protected void onCancel() {
+            LOG.info("Compilation task cancelled.x");
+            running.set(false);
+        }
+    }
+
+    public CancelServiceImpl getCancelService() {
+        return cancelService;
+    }
 
     /**
      * Creates a new task as if by JavaCompiler and runs the provided worker with it. The
@@ -106,14 +155,16 @@ public class ReusableCompiler {
             LOG.warning("Options changed, creating new compiler \n difference: " + difference);
             currentOptions.clear();
             currentOptions.addAll(opts);
-            currentContext = new ReusableContext(new ArrayList<>(opts));
+            currentContext = new ReusableContext(new ArrayList<>(opts), cancelService);
         }
         JavacTaskImpl task =
 			(JavacTaskImpl)
 			systemProvider.getTask(
 			null, fileManager, diagnosticListener, opts, classes, compilationUnits, currentContext);
-
         task.addTaskListener(currentContext);
+
+        cancelService.setRunning(true);
+
         return new Borrow(task, currentContext);
     }
 
@@ -152,11 +203,25 @@ public class ReusableCompiler {
 
         List<String> arguments;
 
-        ReusableContext(List<String> arguments) {
+        ReusableContext(List<String> arguments, CancelService cancelService) {
             super();
             this.arguments = arguments;
             put(Log.logKey, ReusableLog.factory);
             put(JavaCompiler.compilerKey, ReusableJavaCompiler.factory);
+            registerServices(this, cancelService);
+        }
+
+        private static void registerServices(Context context, CancelService cancelService) {
+            NBAttr.preRegister(context);
+            NBParserFactory.preRegister(context);
+            NBTreeMaker.preRegister(context);
+            NBJavacTrees.preRegister(context);
+            NBResolve.preRegister(context);
+            NBEnter.preRegister(context);
+            NBMemberEnter.preRegister(context, false);
+            NBClassFinder.preRegister(context);
+
+            context.put(CancelService.cancelServiceKey, cancelService);
         }
 
         public void clear() {
@@ -171,7 +236,7 @@ public class ReusableCompiler {
 
             if (ht.get(Log.logKey) instanceof ReusableLog) {
                 // log already inited - not first round
-                ((ReusableLog) Log.instance(this)).clear();
+                ((ReusableLog) ReusableLog.instance(this)).clear();
                 Enter.instance(this).newRound();
                 ((ReusableJavaCompiler) ReusableJavaCompiler.instance(this)).clear();
                 Types.instance(this).newRound();
@@ -207,7 +272,7 @@ public class ReusableCompiler {
          * Reusable JavaCompiler; exposes a method to clean up the component from leftovers associated with previous
          * compilations.
          */
-        static class ReusableJavaCompiler extends JavaCompiler {
+        static class ReusableJavaCompiler extends NBJavaCompiler {
 
             static final Factory<JavaCompiler> factory = ReusableJavaCompiler::new;
 
@@ -236,7 +301,7 @@ public class ReusableCompiler {
          */
         static class ReusableLog extends Log {
 
-            static final Factory<Log> factory = ReusableLog::new;
+            private static final Factory<Log> factory = ReusableLog::new;
 
             Context context;
 
