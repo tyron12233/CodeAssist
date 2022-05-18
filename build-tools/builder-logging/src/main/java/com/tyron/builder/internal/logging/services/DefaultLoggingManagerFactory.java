@@ -23,7 +23,7 @@ public class DefaultLoggingManagerFactory implements Factory<LoggingManagerInter
         rootManager = newManager();
     }
 
-    public LoggingManagerInternal getRoot() {
+    public LoggingManagerInternal   getRoot() {
         return rootManager;
     }
 

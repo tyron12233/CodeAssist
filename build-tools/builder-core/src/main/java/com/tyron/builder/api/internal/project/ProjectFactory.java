@@ -5,6 +5,7 @@ import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.groovy.scripts.TextResourceScriptSource;
 import com.tyron.builder.initialization.DefaultProjectDescriptor;
+import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.resource.TextFileResourceLoader;
 import com.tyron.builder.util.internal.NameValidator;
 
@@ -14,9 +15,11 @@ import java.io.File;
 
 public class ProjectFactory implements IProjectFactory {
 
+    private final Instantiator instantiator;
     private final TextFileResourceLoader textFileResourceLoader;
 
-    public ProjectFactory(TextFileResourceLoader textFileResourceLoader) {
+    public ProjectFactory(Instantiator instantiator, TextFileResourceLoader textFileResourceLoader) {
+        this.instantiator = instantiator;
         this.textFileResourceLoader = textFileResourceLoader;
     }
 
@@ -31,7 +34,8 @@ public class ProjectFactory implements IProjectFactory {
         File buildFile = descriptor.getBuildFile();
         TextResourceScriptSource source = new TextResourceScriptSource(
                 textFileResourceLoader.loadFile("build file", buildFile));
-        DefaultProject project = new DefaultProject(
+        DefaultProject project = instantiator.newInstance(
+                DefaultProject.class,
                 descriptor.getName(),
                 parent,
                 descriptor.getProjectDir(),

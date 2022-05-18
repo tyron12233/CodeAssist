@@ -7,12 +7,17 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.DefaultTask;
 import com.tyron.builder.api.InvalidUserDataException;
+import com.tyron.builder.api.NamedDomainObjectContainer;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.Transformer;
+import com.tyron.builder.api.internal.CollectionCallbackActionDecorator;
+import com.tyron.builder.api.internal.MutationGuards;
+import com.tyron.builder.api.internal.project.CrossProjectConfigurator;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.api.internal.collections.ElementSource;
 import com.tyron.builder.api.internal.collections.ListElementSource;
 import com.tyron.builder.internal.exceptions.Contextual;
+import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.operations.BuildOperationContext;
 import com.tyron.builder.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -24,6 +29,7 @@ import com.tyron.builder.api.internal.provider.Providers;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.TaskProvider;
+import com.tyron.builder.internal.reflect.DirectInstantiator;
 
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
@@ -37,7 +43,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 
-public class DefaultTaskContainer implements TaskContainerInternal {
+import groovy.lang.Closure;
+
+public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements TaskContainerInternal {
 
     private static final Object[] NO_ARGS = new Object[0];
     public final static String EAGERLY_CREATE_LAZY_TASKS_PROPERTY = "org.gradle.internal.tasks.eager";
@@ -60,8 +68,11 @@ public class DefaultTaskContainer implements TaskContainerInternal {
 
     public DefaultTaskContainer(
             ProjectInternal project,
-            BuildOperationExecutor buildOperationExecutor
+            BuildOperationExecutor buildOperationExecutor,
+            CrossProjectConfigurator crossProjectConfigurator,
+            CollectionCallbackActionDecorator callbackDecorator
     ) {
+        super(Task.class, DirectInstantiator.INSTANCE, project, MutationGuards.of(crossProjectConfigurator), callbackDecorator);
         this.project = project;
         this.buildOperationExecutor = buildOperationExecutor;
         nameToTask = new HashMap<>();
@@ -108,9 +119,58 @@ public class DefaultTaskContainer implements TaskContainerInternal {
     }
 
     @Override
+    public Task create(String name) throws InvalidUserDataException {
+        return null;
+    }
+
+    @Override
+    public Task maybeCreate(String name) {
+        return null;
+    }
+
+    @Override
+    public Task create(String name, Closure configureClosure) throws InvalidUserDataException {
+        return null;
+    }
+
+    @Override
+    public Task create(String name,
+                       Action<? super Task> configureAction) throws InvalidUserDataException {
+        return null;
+    }
+
+    @Override
+    public NamedDomainObjectContainer<Task> configure(Closure configureClosure) {
+        return null;
+    }
+
+    @Override
     public TaskProvider<Task> register(String name, Action<? super Task> configurationAction) throws InvalidUserDataException {
         assertMutable("register(String, Action)");
         return Cast.uncheckedCast(register(name, DefaultTask.class, configurationAction));
+    }
+
+    @Override
+    public <U extends Task> U create(String name, Class<U> type) throws InvalidUserDataException {
+        return null;
+    }
+
+    @Override
+    public <U extends Task> U maybeCreate(String name,
+                                          Class<U> type) throws InvalidUserDataException {
+        return null;
+    }
+
+    @Override
+    public <U extends Task> U create(String name,
+                                     Class<U> type,
+                                     Action<? super U> configuration) throws InvalidUserDataException {
+        return null;
+    }
+
+    @Override
+    public <U extends Task> NamedDomainObjectContainer<U> containerWithType(Class<U> type) {
+        return null;
     }
 
     @Override
@@ -126,7 +186,7 @@ public class DefaultTaskContainer implements TaskContainerInternal {
     }
 
     @Override
-    public <T extends Task> TaskProvider<T> register(String name) throws InvalidUserDataException {
+    public TaskProvider<Task> register(String name) throws InvalidUserDataException {
         assertMutable("register(String)");
         return Cast.uncheckedCast(register(name, DefaultTask.class));
     }
@@ -135,10 +195,6 @@ public class DefaultTaskContainer implements TaskContainerInternal {
     public <T extends Task> TaskProvider<T> register(String name, Class<T> type, Object... constructorArgs) {
         assertMutable("register(String, Class, Object...)");
         return registerTask(name, type, null, constructorArgs);
-    }
-
-    private void assertMutable(String s) {
-
     }
 
     private <T extends Task> TaskProvider<T> registerTask(final String name, final Class<T> type, @Nullable final Action<? super T> configurationAction, final Object... constructorArgs) {
@@ -205,9 +261,15 @@ public class DefaultTaskContainer implements TaskContainerInternal {
     public Task getByPath(String path) {
         Task task = findByPath(path);
         if (task == null) {
-            throw new BuildException(String.format("Task with path '%s' not found in %s.", path, project));
+            throw new BuildException(String.format("Task with path '%s' not found in %s.", path,
+                    project));
         }
         return task;
+    }
+
+    @Override
+    public DynamicObject getTasksAsDynamicObject() {
+        return null;
     }
 
     public Task findByPath(String path) {

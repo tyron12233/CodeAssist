@@ -92,8 +92,7 @@ public class DefaultConvention implements Convention, ExtensionContainerInternal
         if (extension instanceof Class) {
             create(name, (Class<?>) extension);
         } else {
-//            addWithDefaultPublicType(name, extension);
-            throw new UnsupportedOperationException();
+            addWithDefaultPublicType(name, extension);
         }
     }
 
@@ -196,7 +195,6 @@ public class DefaultConvention implements Convention, ExtensionContainerInternal
     }
 
     private void addWithDefaultPublicType(String name, Object extension) {
-        add (TypeOf.<Object>typeOf(extension.getClass()), name, extension);
         add(new DslObject(extension).getPublicType(), name, extension);
     }
 

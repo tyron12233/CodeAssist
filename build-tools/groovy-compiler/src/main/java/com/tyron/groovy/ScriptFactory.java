@@ -19,6 +19,7 @@ import org.codehaus.groovy.control.CompilerConfiguration;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,7 +29,9 @@ import java.util.Set;
 import dalvik.system.InMemoryDexClassLoader;
 import dalvik.system.PathClassLoader;
 import groovy.lang.GrooidClassLoader;
+import groovy.lang.Reference;
 import groovy.lang.Script;
+import groovyjarjarasm.asm.ClassReader;
 
 public class ScriptFactory {
 
@@ -43,6 +46,48 @@ public class ScriptFactory {
         try {
             return createScriptInternal(scriptText);
         } catch (CompilationFailedException e) {
+            throw new ScriptCompilationException(e);
+        }
+    }
+
+    public Class<?> defineClass(byte[] data) {
+        try {
+            return defineClassInternal(data);
+        } catch (CompilationFailedException e) {
+            throw new ScriptCompilationException(e);
+        }
+    }
+
+    private Class<?> defineClassInternal(byte[] data) throws CompilationFailedException {
+        ClassReader reader = new ClassReader(data);
+        String name = reader.getClassName();
+
+        D8Command.Builder builder = D8Command.builder();
+        builder.setDisableDesugaring(true);
+        builder.setMinApiLevel(26);
+        builder.addClassProgramData(data, Origin.root());
+
+        Reference<byte[]> ref = new Reference<>();
+        builder.setProgramConsumer(new DexIndexedConsumer() {
+            @Override
+            public void finished(DiagnosticsHandler diagnosticsHandler) {
+
+            }
+
+            @Override
+            public void accept(int fileIndex,
+                               ByteDataView data,
+                               Set<String> descriptors,
+                               DiagnosticsHandler handler) {
+                ref.set(data.copyByteData());
+            }
+        });
+        D8.run(builder.build());
+        ByteBuffer buffer = ByteBuffer.wrap(ref.get());
+        InMemoryDexClassLoader classLoader = new InMemoryDexClassLoader(buffer, this.classLoader);
+        try {
+            return classLoader.loadClass(name);
+        } catch (ClassNotFoundException e) {
             throw new ScriptCompilationException(e);
         }
     }

@@ -40,6 +40,16 @@ public interface Task extends Comparable<Task> {
     String TASK_CONSTRUCTOR_ARGS = "constructorArgs";
 
     /**
+     * A {@link com.tyron.builder.api.Namer} namer for tasks that returns {@link #getName()}.
+     */
+    class Namer implements com.tyron.builder.api.Namer<Task> {
+        @Override
+        public String determineName(Task c) {
+            return c.getName();
+        }
+    }
+
+    /**
      * Returns the name of this task. This name uniquely identifies the task within its Project
      * @return The name of this task, never returns null.
      */

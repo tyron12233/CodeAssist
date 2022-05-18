@@ -48,7 +48,10 @@ dependencies {
     implementation 'org.jetbrains.exposed:exposed-jdbc:0.32.1'
     implementation 'com.h2database:h2:1.4.200'
     implementation 'androidx.annotation:annotation:1.3.0'
+    
     testImplementation 'junit:junit:4.+'
+    testImplementation projects.buildTools.kotlinc
+
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 
