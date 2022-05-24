@@ -1,17 +1,18 @@
 package com.tyron.builder.plugin;
 
-import com.tyron.builder.BuildAdapter;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.api.DefaultTask;
 import com.tyron.builder.api.Plugin;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.invocation.Gradle;
+import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.ProjectBuilder;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.util.GUtil;
+
+import java.util.Locale;
 
 @SuppressWarnings("Convert2Lambda")
 public class CodeAssistPlugin implements Plugin<BuildProject> {
@@ -41,12 +42,42 @@ public class CodeAssistPlugin implements Plugin<BuildProject> {
                             p.open();
                             p.index();
 
-                            ProjectBuilder projectBuilder = new ProjectBuilder(p, ILogger.EMPTY);
+                            ILogger logger = new CodeAssistLoggerDelegate(task.getLogger());
+                            ProjectBuilder projectBuilder = new ProjectBuilder(p, logger);
                             projectBuilder.build(BuildType.DEBUG);
                         });
                     }
                 });
             }
         });
+    }
+
+    private static class CodeAssistLoggerDelegate implements ILogger {
+
+        private final Logger delegate;
+
+        private CodeAssistLoggerDelegate(Logger logger) {
+            this.delegate = logger;
+        }
+
+        @Override
+        public void info(DiagnosticWrapper wrapper) {
+            delegate.info(wrapper.getMessage(Locale.ENGLISH));
+        }
+
+        @Override
+        public void debug(DiagnosticWrapper wrapper) {
+            delegate.debug(wrapper.getMessage(Locale.ENGLISH));
+        }
+
+        @Override
+        public void warning(DiagnosticWrapper wrapper) {
+            delegate.warn(wrapper.getMessage(Locale.ENGLISH));
+        }
+
+        @Override
+        public void error(DiagnosticWrapper wrapper) {
+            delegate.error(wrapper.getMessage(Locale.ENGLISH));
+        }
     }
 }

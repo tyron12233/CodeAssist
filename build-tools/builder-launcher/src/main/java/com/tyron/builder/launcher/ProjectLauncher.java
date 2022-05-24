@@ -3,6 +3,7 @@ package com.tyron.builder.launcher;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.configuration.GradleLauncherMetaData;
@@ -14,6 +15,7 @@ import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.Stoppable;
+import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.reflect.service.ServiceRegistry;
@@ -61,10 +63,12 @@ public class ProjectLauncher {
         VirtualFileSystem virtualFileSystem =
                 gradleUserHomeScopeServices.get(VirtualFileSystem.class);
         FileSystemAccess fileSystemAccess = gradleUserHomeScopeServices.get(FileSystemAccess.class);
+
+        ListenerManager listenerManager = gradleUserHomeScopeServices.get(ListenerManager.class);
+        System.out.println(listenerManager);
     }
 
     public void execute() {
-
         Runnable runnable = runBuildAndCloseServices(
                 startParameter,
                 globalServices.get(BuildExecuter.class),
