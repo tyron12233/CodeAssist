@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.initialization.Settings;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
+import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.initialization.DefaultProjectDescriptor;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.initialization.IncludedBuildSpec;
@@ -33,4 +34,6 @@ public interface SettingsInternal extends Settings {
     ClassLoaderScope getClassLoaderScope();
 
     List<IncludedBuildSpec> getIncludedBuilds();
+
+    ScriptSource getSettingsScript();
 }

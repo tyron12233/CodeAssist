@@ -130,6 +130,11 @@ public class DefaultSettings implements SettingsInternal {
     }
 
     @Override
+    public ScriptSource getSettingsScript() {
+        return settingsScript;
+    }
+
+    @Override
     public File getRootDir() {
         return null;
     }
