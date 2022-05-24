@@ -97,56 +97,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         addProvider(new ExecutionGradleServices());
     }
 
-    ChecksumService createChecksumService() {
-        return new ChecksumService() {
-            @Override
-            public HashCode md5(File file) {
-                try {
-                    return Hashing.md5().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode sha1(File file) {
-                try {
-                    return Hashing.sha1().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode sha256(File file) {
-                try {
-                    return Hashing.sha256().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode sha512(File file) {
-                try {
-                    return Hashing.sha512().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode hash(File src, String algorithm) {
-                switch (algorithm) {
-                    case "md5": return md5(src);
-                    case "sha1": return sha1(src);
-                    case "sha256": return sha256(src);
-                    default: return sha512(src);
-                }
-            }
-        };
-    }
-
     FileAccessTracker createFileAccessTracker() {
         return file -> {
 

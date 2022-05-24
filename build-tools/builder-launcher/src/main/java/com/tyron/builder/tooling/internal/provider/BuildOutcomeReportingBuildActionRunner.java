@@ -41,10 +41,6 @@ public class BuildOutcomeReportingBuildActionRunner implements BuildActionRunner
 
     @Override
     public Result run(BuildAction action, BuildTreeLifecycleController buildController) {
-
-        Logger logger = Logging.getLogger(BuildLogger.class);
-        logger.lifecycle("ANOTHER LIFECYCLE");
-
         StartParameter startParameter = action.getStartParameter();
 //        TaskExecutionStatisticsEventAdapter taskStatisticsCollector = new TaskExecutionStatisticsEventAdapter();
 //        listenerManager.addListener(taskStatisticsCollector);

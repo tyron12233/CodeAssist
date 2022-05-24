@@ -1,14 +1,19 @@
 package com.tyron.builder.internal.session;
 
+import com.google.common.hash.HashCode;
+import com.google.common.hash.Hashing;
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
+import com.tyron.builder.api.internal.changedetection.state.FileHasherStatistics;
 import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.project.BuildOperationCrossProjectConfigurator;
 import com.tyron.builder.api.internal.project.CrossProjectConfigurator;
 import com.tyron.builder.cache.CacheRepository;
 import com.tyron.builder.cache.internal.BuildScopeCacheDir;
+import com.tyron.builder.cache.internal.CleanupActionFactory;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildTreeScopedCache;
 import com.tyron.builder.cache.scopes.BuildTreeScopedCache;
@@ -23,11 +28,14 @@ import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.initialization.layout.ProjectCacheDir;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
 import com.tyron.builder.internal.buildevents.BuildStartedTime;
+import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.event.DefaultListenerManager;
 import com.tyron.builder.internal.file.Deleter;
+import com.tyron.builder.internal.hash.ChecksumService;
 import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.internal.model.StateTransitionControllerFactory;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.reflect.service.ServiceRegistration;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
@@ -36,7 +44,11 @@ import com.tyron.builder.internal.service.scopes.WorkerSharedBuildSessionScopeSe
 import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.Closeable;
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 // accessed reflectively
@@ -148,9 +160,9 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
 //        return new FeaturePreviews();
 //    }
 //
-//    CleanupActionFactory createCleanupActionFactory(BuildOperationExecutor buildOperationExecutor) {
-//        return new CleanupActionFactory(buildOperationExecutor);
-//    }
+    CleanupActionFactory createCleanupActionFactory(BuildOperationExecutor buildOperationExecutor) {
+        return new CleanupActionFactory(buildOperationExecutor);
+    }
 //
 //    protected ExecFactory decorateExecFactory(ExecFactory execFactory, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, Instantiator instantiator, BuildCancellationToken buildCancellationToken, ObjectFactory objectFactory, JavaModuleDetector javaModuleDetector) {
 //        return execFactory.forContext()
@@ -177,6 +189,56 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
 //    ) {
 //        return new DefaultChecksumService(stringInterner, crossBuildCache.delegate, fileSystem, inspector, statisticsCollector);
 //    }
+
+    protected ChecksumService createChecksumService() {
+        return new ChecksumService() {
+            @Override
+            public HashCode md5(File file) {
+                try {
+                    return Hashing.md5().hashBytes(FileUtils.readFileToByteArray(file));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+
+            @Override
+            public HashCode sha1(File file) {
+                try {
+                    return Hashing.sha1().hashBytes(FileUtils.readFileToByteArray(file));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+
+            @Override
+            public HashCode sha256(File file) {
+                try {
+                    return Hashing.sha256().hashBytes(FileUtils.readFileToByteArray(file));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+
+            @Override
+            public HashCode sha512(File file) {
+                try {
+                    return Hashing.sha512().hashBytes(FileUtils.readFileToByteArray(file));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+
+            @Override
+            public HashCode hash(File src, String algorithm) {
+                switch (algorithm) {
+                    case "md5": return md5(src);
+                    case "sha1": return sha1(src);
+                    case "sha256": return sha256(src);
+                    default: return sha512(src);
+                }
+            }
+        };
+    }
 
 //    UserInputHandler createUserInputHandler(BuildRequestMetaData requestMetaData, OutputEventListenerManager outputEventListenerManager, Clock clock) {
 //        if (!requestMetaData.isInteractive()) {
