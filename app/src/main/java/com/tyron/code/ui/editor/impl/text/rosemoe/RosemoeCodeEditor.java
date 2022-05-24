@@ -86,10 +86,10 @@ public class RosemoeCodeEditor implements TextEditor {
         return Objects.hash(mFile);
     }
 
-    private static RosemoeEditorFacade createEditor(Context context, FileObject file) {
+    private RosemoeEditorFacade createEditor(Context context, FileObject file) {
         try {
             Content content = FileDocumentManager.getInstance().getContent(file);
-            return new RosemoeEditorFacade(context, content, file);
+            return new RosemoeEditorFacade(this, context, content, file);
         } catch (FileSystemException e) {
             throw new RuntimeException(e);
         }
