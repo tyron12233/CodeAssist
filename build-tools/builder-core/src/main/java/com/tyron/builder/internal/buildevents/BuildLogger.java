@@ -2,6 +2,8 @@ package com.tyron.builder.internal.buildevents;
 
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.BuildResult;
+import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
@@ -47,8 +49,26 @@ public class BuildLogger implements InternalBuildListener, TaskExecutionGraphLis
         resultLogger = new BuildResultLogger(textOutputFactory, buildStartedTime, clock, new TersePrettyDurationFormatter(), workValidationWarningReporter);
     }
 
+    @SuppressWarnings("deprecation") // StartParameter.getSettingsFile() and StartParameter.getBuildFile()
+    @Override
+    public void beforeSettings(Settings settings) {
+        StartParameter startParameter = settings.getStartParameter();
+        logger.info("Starting Build");
+        if (logger.isDebugEnabled()) {
+            logger.debug("Gradle user home: {}", startParameter.getGradleUserHomeDir());
+            logger.debug("Current dir: {}", startParameter.getCurrentDir());
+            logger.debug("Settings file: {}", startParameter.getSettingsFile());
+            logger.debug("Build file: {}", startParameter.getBuildFile());
+        }
+    }
+
     @Override
     public void settingsEvaluated(Settings settings) {
+        SettingsInternal settingsInternal = (SettingsInternal) settings;
+        if (logger.isInfoEnabled()) {
+            logger.info("Settings evaluated using {}.",
+                    settingsInternal.getSettingsScript().getDisplayName());
+        }
     }
 
     @Override
@@ -56,7 +76,7 @@ public class BuildLogger implements InternalBuildListener, TaskExecutionGraphLis
         if (logger.isInfoEnabled()) {
             ProjectInternal projectInternal = (ProjectInternal) gradle.getRootProject();
             logger.info("Projects loaded. Root project using {}.",
-                    projectInternal.getDisplayName());
+                    projectInternal.getBuildScriptSource().getDisplayName());
             logger.info("Included projects: {}", projectInternal.getAllprojects());
         }
     }
