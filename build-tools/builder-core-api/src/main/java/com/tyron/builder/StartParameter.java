@@ -434,6 +434,10 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         return buildCacheEnabled;
     }
 
+    public void setBuildCacheEnabled(boolean enabled) {
+        buildCacheEnabled = enabled;
+    }
+
     public boolean isOffline() {
         return offline;
     }

@@ -250,12 +250,13 @@ public class CompilerService extends Service {
         startParameter.setConfigurationCache(BuildOption.Value.value(true));
         startParameter.setConfigurationCacheDebug(true);
         startParameter.setWarningMode(WarningMode.All);
-        startParameter.setTaskNames(Collections.singletonList("codeAssistAssembleTask"));
+        startParameter.setBuildCacheEnabled(true);
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
         startParameter.setLogLevel(LogLevel.LIFECYCLE);
         startParameter.setConsoleOutput(ConsoleOutput.Rich);
         startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
+        startParameter.setTaskNames(Collections.singletonList("codeAssistAssembleTask"));
 
         AndroidStyledTextOutput abstractStyledTextOutput = new AndroidStyledTextOutput();
 
