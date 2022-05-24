@@ -3,6 +3,7 @@ package com.tyron.builder.internal.buildevents;
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.BuildResult;
 import com.tyron.builder.api.invocation.Gradle;
+import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
@@ -10,6 +11,9 @@ import com.tyron.builder.execution.WorkValidationWarningReporter;
 import com.tyron.builder.api.initialization.Settings;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.internal.logging.format.TersePrettyDurationFormatter;
+import com.tyron.builder.internal.logging.services.LoggingBackedStyledTextOutput;
+import com.tyron.builder.internal.logging.text.AbstractStyledTextOutputFactory;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.internal.time.Clock;
@@ -45,7 +49,6 @@ public class BuildLogger implements InternalBuildListener, TaskExecutionGraphLis
 
     @Override
     public void settingsEvaluated(Settings settings) {
-
     }
 
     @Override

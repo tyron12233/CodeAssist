@@ -4,10 +4,17 @@ import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.CharacterStyle;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -16,30 +23,25 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import com.tyron.builder.api.logging.LogLevel;
-import com.tyron.builder.api.logging.StandardOutputListener;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
 import com.tyron.builder.api.logging.configuration.WarningMode;
 import com.tyron.builder.execution.MultipleBuildFailures;
 import com.tyron.builder.initialization.ReportedException;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.compiler.AndroidAppBuilder;
 import com.tyron.builder.compiler.AndroidAppBundleBuilder;
 import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
 import com.tyron.builder.compiler.ProjectBuilder;
-import com.tyron.builder.internal.Factory;
-import com.tyron.builder.internal.MutableBoolean;
 import com.tyron.builder.internal.buildoption.BuildOption;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.events.OutputEvent;
 import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;
-import com.tyron.builder.internal.logging.services.DefaultLoggingManagerFactory;
-import com.tyron.builder.internal.logging.sink.OutputEventRenderer;
-import com.tyron.builder.internal.time.Time;
+import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -52,12 +54,7 @@ import com.tyron.code.util.ApkInstaller;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
-import org.apache.commons.lang3.StringUtils;
-
-import java.io.BufferedReader;
-import java.io.Console;
 import java.io.File;
-import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 
@@ -231,6 +228,7 @@ public class CompilerService extends Service {
 
     private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
+        startParameter.setVfsVerboseLogging(false);
         startParameter.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
         startParameter.setConfigurationCache(BuildOption.Value.value(true));
         startParameter.setConfigurationCacheDebug(true);
@@ -239,27 +237,47 @@ public class CompilerService extends Service {
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
         startParameter.setLogLevel(LogLevel.INFO);
+        startParameter.setConsoleOutput(ConsoleOutput.Rich);
         startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
 
-        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter) {
-            @Override
-            public void configure(BuildProject project) {
+        AndroidStyledTextOutput abstractStyledTextOutput = new AndroidStyledTextOutput();
 
+        OutputEventListener outputEventListener = new OutputEventListener() {
+            @Override
+            public void onOutput(OutputEvent event) {
+                if (event instanceof ProgressStartEvent) {
+                    logger.info(((ProgressStartEvent) event).getDescription());
+                } else if (event instanceof RenderableOutputEvent) {
+                    RenderableOutputEvent renderableOutputEvent = (RenderableOutputEvent) event;
+                    renderableOutputEvent.render(abstractStyledTextOutput);
+
+                    CharSequence contents = abstractStyledTextOutput.getBufferString();
+                    switch (event.getLogLevel() == null ? LogLevel.INFO : event.getLogLevel()) {
+                        case DEBUG:
+                        case INFO:
+                        case LIFECYCLE:
+                            logger.debug(contents);
+                            break;
+                        case WARN:
+                            logger.warning(contents);
+                            break;
+                        case QUIET:
+                            logger.verbose(contents.toString());
+                            break;
+                        case ERROR:
+                            logger.error(contents);
+                            break;
+                    }
+                }
             }
         };
+        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter, outputEventListener);
 
-        StandardOutputListener standardOutputListener = output -> logger.info(output.toString());
-        StandardOutputListener standardErrorListener = output -> logger.error(output.toString());
-        DefaultLoggingManagerFactory factory =
-                (DefaultLoggingManagerFactory) projectLauncher.getGlobalServices().getFactory(LoggingManagerInternal.class);
-        factory.getRoot();
         LoggingManagerInternal loggingManagerInternal =
                 projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
+        loggingManagerInternal.addOutputEventListener(outputEventListener);
+        loggingManagerInternal.captureSystemSources();
         loggingManagerInternal.start();
-//        loggingManagerInternal.enableUserStandardOutputListeners();
-//
-//        loggingManagerInternal.addStandardOutputListener(standardOutputListener);
-//        loggingManagerInternal.addStandardErrorListener(standardErrorListener);
 
         try {
             projectLauncher.execute();
@@ -277,8 +295,7 @@ public class CompilerService extends Service {
         }
 
         loggingManagerInternal.stop();
-//        loggingManagerInternal.removeStandardOutputListener(standardOutputListener);
-//        loggingManagerInternal.removeStandardErrorListener(standardErrorListener);
+        loggingManagerInternal.removeOutputEventListener(outputEventListener);
 
         stopSelf();
         stopForeground(true);
@@ -377,5 +394,103 @@ public class CompilerService extends Service {
             return new AndroidAppBuilder(mProject, (AndroidModule) module, logger);
         }
         return null;
+    }
+
+    public static class AndroidStyledTextOutput implements StyledTextOutput {
+
+        private final SpannableStringBuilder buffer = new SpannableStringBuilder();
+
+        @Override
+        public StyledTextOutput append(char c) {
+            buffer.append(c);
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput append(CharSequence csq) {
+            buffer.append(csq);
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput append(CharSequence csq, int start, int end) {
+            buffer.append(csq, start, end);
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput style(Style style) {
+            buffer.setSpan(getForStyle(style), 0, buffer.length(), Spanned.SPAN_INCLUSIVE_INCLUSIVE);
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput withStyle(Style style) {
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput text(Object text) {
+            append(text == null ? "null" : text.toString());
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput println(Object text) {
+            append(text == null ? "null" : text.toString());
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput format(String pattern, Object... args) {
+            text(String.format(pattern, args));
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput formatln(String pattern, Object... args) {
+            format(pattern, args);
+            println();
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput println() {
+            text("\n");
+            return this;
+        }
+
+        @Override
+        public StyledTextOutput exception(Throwable throwable) {
+            return this;
+        }
+
+        private CharacterStyle getForStyle(Style style) {
+            switch (style) {
+                case Header:
+                case UserInput:
+                    return new StyleSpan(Typeface.BOLD);
+                case SuccessHeader:
+                case Success:
+                case Identifier:
+                    return new ForegroundColorSpan(Color.GREEN);
+                case FailureHeader:
+                case Failure:
+                case Error:
+                    return new ForegroundColorSpan(Color.RED);
+                case ProgressStatus:
+                case Description:
+                case Info:
+                    return new ForegroundColorSpan(Color.YELLOW);
+                case Normal:
+                default: return new ForegroundColorSpan(Color.WHITE);
+            }
+        }
+
+        public CharSequence getBufferString() {
+            CharSequence string = new SpannableStringBuilder(buffer);
+            buffer.clear();
+            return string;
+        }
     }
 }

@@ -133,7 +133,7 @@ public class GradleScopeServices extends DefaultServiceRegistry {
             @Override
             public ServiceRegistry createFor(Object domainObject) {
                 if (domainObject instanceof ProjectInternal) {
-                    ProjectScopeServices projectScopeServices = new ProjectScopeServices(services, (ProjectInternal) domainObject);
+                    ProjectScopeServices projectScopeServices = new ProjectScopeServices(services, (ProjectInternal) domainObject, loggingManagerInternalFactory);
                     registries.add(projectScopeServices);
                     return projectScopeServices;
                 }

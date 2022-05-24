@@ -54,31 +54,6 @@ fun StorageComponentContainer.configureJavaTopDownAnalysis(
     useImpl<LazyTopDownAnalyzer>()
     useImpl<JavaDescriptorResolver>()
     useImpl<DeserializationComponentsForJava>()
-    useInstance(object: JavaFileManager {
-        override fun findPackage(p0: String): PsiPackage? {
-            TODO("Not yet implemented")
-        }
-
-        override fun findClass(p0: String, p1: GlobalSearchScope): PsiClass? {
-            TODO("Not yet implemented")
-        }
-
-        override fun findClasses(p0: String, p1: GlobalSearchScope): Array<PsiClass> {
-            TODO("Not yet implemented")
-        }
-
-        override fun getNonTrivialPackagePrefixes(): MutableCollection<String> {
-            TODO("Not yet implemented")
-        }
-
-        override fun findModules(
-            p0: String,
-            p1: GlobalSearchScope
-        ): MutableCollection<PsiJavaModule> {
-            TODO("Not yet implemented")
-        }
-
-    })
     useInstance(VirtualFileFinderFactory.SERVICE.getInstance(project).create(moduleContentScope))
 
 //    useImpl<EclipseJavaPropertyInitializerEvaluator>()

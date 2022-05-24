@@ -45,7 +45,7 @@ public class DefaultWorkerLeaseService implements WorkerLeaseService, Stoppable 
     private final ProjectLockStatisticsImpl projectLockStatistics = new ProjectLockStatisticsImpl();
 
     public DefaultWorkerLeaseService(ResourceLockCoordinationService coordinationService) {
-        this.maxWorkerCount = 1;
+        this.maxWorkerCount = 8;
         this.coordinationService = coordinationService;
         this.projectLockRegistry = new ProjectLockRegistry(coordinationService, false);
         this.taskLockRegistry = new TaskExecutionLockRegistry(coordinationService, projectLockRegistry);

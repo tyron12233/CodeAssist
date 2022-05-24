@@ -85,6 +85,9 @@ dependencies {
     implementation projects.buildTools.builderCoreApi
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderLauncher
+    implementation projects.buildTools.builderBuildOperations
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderEnterpriseWorkers
     implementation projects.buildTools.builderConfigurationCache
     implementation project(path: ':build-tools:builder-api')
     implementation project(path: ':build-tools:builder-java')

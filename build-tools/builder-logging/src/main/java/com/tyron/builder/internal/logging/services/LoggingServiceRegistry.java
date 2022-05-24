@@ -117,6 +117,7 @@ public abstract class LoggingServiceRegistry extends DefaultServiceRegistry {
 
     protected DefaultLoggingManagerFactory createLoggingManagerFactory() {
         OutputEventListener outputEventBroadcaster = outputEventListenerManager.getBroadcaster();
+
         LoggingSourceSystem stdout = new DefaultStdOutLoggingSystem(getStdoutListener(), get(Clock.class));
         stdout.setLevel(LogLevel.QUIET);
         LoggingSourceSystem stderr = new DefaultStdErrLoggingSystem(new TextStreamOutputEventListener(outputEventBroadcaster), get(Clock.class));

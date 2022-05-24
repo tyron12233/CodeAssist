@@ -29,12 +29,7 @@ public class InitializationTest {
         startParameterInternal.setProjectDir(projectDir);
         startParameterInternal.setGradleUserHomeDir(new File(resourcesDir, ".gradle"));
 
-        projectLauncher = new ProjectLauncher(startParameterInternal) {
-            @Override
-            public void configure(BuildProject project) {
-
-            }
-        };
+        projectLauncher = new ProjectLauncher(startParameterInternal);
     }
 
     public interface SomeInterface {

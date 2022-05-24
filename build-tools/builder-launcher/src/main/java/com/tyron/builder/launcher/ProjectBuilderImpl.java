@@ -110,12 +110,10 @@ public class ProjectBuilderImpl {
     }
 
     public static ServiceRegistry createGlobalServices(StartParameterInternal startParameterInternal) {
-        LoggingServiceRegistry serviceRegistry =
-                LoggingServiceRegistry.newCommandLineProcessLogging();
         NativeServices.initializeOnDaemon(startParameterInternal.getGradleUserHomeDir());
         return ServiceRegistryBuilder
                 .builder()
-                .parent(serviceRegistry)
+                .parent(LoggingServiceRegistry.newEmbeddableLogging())
                 .parent(NativeServices.getInstance())
                 .displayName("global services")
                 .provider(new GlobalServices(true, ClassPath.EMPTY))

@@ -5,14 +5,12 @@ import com.tyron.builder.execution.WorkValidationWarningReporter;
 import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.initialization.BuildEventConsumer;
 import com.tyron.builder.initialization.BuildRequestMetaData;
-import com.tyron.builder.initialization.exception.ExceptionAnalyser;
-import com.tyron.builder.initialization.layout.BuildLayout;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
 import com.tyron.builder.internal.build.BuildStateRegistry;
+import com.tyron.builder.internal.buildevents.BuildStartedTime;
 import com.tyron.builder.internal.buildtree.BuildActionRunner;
 import com.tyron.builder.internal.buildtree.BuildTreeActionExecutor;
 import com.tyron.builder.internal.buildtree.BuildTreeModelControllerServices;
-import com.tyron.builder.internal.buildevents.BuildStartedTime;
 import com.tyron.builder.internal.classpath.CachedClasspathTransformer;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
@@ -43,6 +41,7 @@ import com.tyron.builder.launcher.exec.ChainingBuildActionRunner;
 import com.tyron.builder.launcher.exec.RootBuildLifecycleBuildActionExecutor;
 import com.tyron.builder.launcher.exec.RunAsBuildOperationBuildActionExecutor;
 import com.tyron.builder.launcher.exec.RunAsWorkerThreadBuildActionExecutor;
+import com.tyron.builder.tooling.internal.provider.BuildOutcomeReportingBuildActionRunner;
 import com.tyron.builder.tooling.internal.provider.BuildSessionLifecycleBuildActionExecuter;
 import com.tyron.builder.tooling.internal.provider.ExecuteBuildActionRunner;
 import com.tyron.builder.tooling.internal.provider.FileSystemWatchingBuildActionRunner;
@@ -151,41 +150,37 @@ public class LauncherServices extends AbstractPluginServiceRegistry {
     }
 
     static class ToolingBuildTreeScopeServices {
-        BuildTreeActionExecutor createActionExecutor(
-                List<BuildActionRunner> buildActionRunners,
-                StyledTextOutputFactory styledTextOutputFactory,
-                BuildStateRegistry buildStateRegistry,
-                BuildOperationProgressEventEmitter eventEmitter,
-                WorkValidationWarningReporter workValidationWarningReporter,
-                ListenerManager listenerManager,
-                BuildStartedTime buildStartedTime,
-                BuildRequestMetaData buildRequestMetaData,
+        BuildTreeActionExecutor createActionExecutor(List<BuildActionRunner> buildActionRunners,
+                                                     StyledTextOutputFactory styledTextOutputFactory,
+                                                     BuildStateRegistry buildStateRegistry,
+                                                     BuildOperationProgressEventEmitter eventEmitter,
+                                                     WorkValidationWarningReporter workValidationWarningReporter,
+                                                     ListenerManager listenerManager,
+                                                     BuildStartedTime buildStartedTime,
+                                                     BuildRequestMetaData buildRequestMetaData,
 //                GradleEnterprisePluginManager gradleEnterprisePluginManager,
-                BuildLifecycleAwareVirtualFileSystem virtualFileSystem,
+                                                     BuildLifecycleAwareVirtualFileSystem virtualFileSystem,
 //                StatStatistics.Collector statStatisticsCollector,
 //                FileHasherStatistics.Collector fileHasherStatisticsCollector,
-                DirectorySnapshotterStatistics.Collector directorySnapshotterStatisticsCollector,
-                BuildOperationRunner buildOperationRunner
-//                Clock clock,
+                                                     DirectorySnapshotterStatistics.Collector directorySnapshotterStatisticsCollector,
+                                                     BuildOperationRunner buildOperationRunner,
+                                                     Clock clock
 //                BuildLayout buildLayout,
 //                ExceptionAnalyser exceptionAnalyser
         ) {
             return new RootBuildLifecycleBuildActionExecutor(buildStateRegistry,
                     new BuildCompletionNotifyingBuildActionRunner(
-                            new FileSystemWatchingBuildActionRunner(
-                                    eventEmitter,
-                                    virtualFileSystem,
+                            new FileSystemWatchingBuildActionRunner(eventEmitter, virtualFileSystem,
                                     new StatStatistics.Collector(),
                                     new FileHasherStatistics.Collector(),
-                                    directorySnapshotterStatisticsCollector,
-                                    buildOperationRunner,
-                                    new ChainingBuildActionRunner(
-                                            buildActionRunners
-                                    )
-                            ),
-                            new GradleEnterprisePluginManager()
-                    )
-            );
+                                    directorySnapshotterStatisticsCollector, buildOperationRunner,
+
+                                    new BuildOutcomeReportingBuildActionRunner(
+                                            styledTextOutputFactory, workValidationWarningReporter,
+                                            listenerManager,
+                                            new ChainingBuildActionRunner(buildActionRunners),
+                                            buildStartedTime, buildRequestMetaData, clock)),
+                            new GradleEnterprisePluginManager()));
         }
     }
 }

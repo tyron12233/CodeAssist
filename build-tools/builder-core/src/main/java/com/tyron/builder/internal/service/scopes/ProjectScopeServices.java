@@ -33,7 +33,9 @@ import com.tyron.builder.api.internal.tasks.TaskDependencyFactory;
 import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
 import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.internal.Cast;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
+import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.model.ModelContainer;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -50,11 +52,14 @@ import javax.annotation.Nullable;
 public class ProjectScopeServices extends DefaultServiceRegistry {
 
     private final ProjectInternal project;
+    private final Factory<LoggingManagerInternal> loggingManagerInternalFactory;
 
-    public ProjectScopeServices(final ServiceRegistry parent, final ProjectInternal project) {
+    public ProjectScopeServices(final ServiceRegistry parent,
+                                final ProjectInternal project,
+                                Factory<LoggingManagerInternal> loggingManagerInternalFactory) {
         super(parent);
         this.project = project;
-//        this.loggingManagerInternalFactory = loggingManagerInternalFactory;
+        this.loggingManagerInternalFactory = loggingManagerInternalFactory;
         register(registration -> {
             registration.add(ProjectInternal.class, project);
 //            parent.get(DependencyManagementServices.class).addDslServices(registration, project);
@@ -72,6 +77,10 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
                 temporaryFileProvider,
                 textResourceAdapterFactory
         );
+    }
+
+    protected LoggingManagerInternal createLoggingManager() {
+        return loggingManagerInternalFactory.create();
     }
 
     // TODO: move this to DependencyManagementServices
@@ -226,8 +235,4 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
             return false;
         }
     }
-
-
-
-
 }

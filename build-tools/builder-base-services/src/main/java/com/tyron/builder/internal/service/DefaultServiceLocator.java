@@ -45,7 +45,7 @@ public class DefaultServiceLocator implements ServiceLocator {
     @Override
     public <T> List<T> getAll(Class<T> serviceType) throws UnknownServiceException {
         List<ServiceFactory<T>> factories = findFactoriesForServiceType(serviceType);
-        ArrayList<T> services = new ArrayList<T>();
+        ArrayList<T> services = new ArrayList<>();
         for (ServiceFactory<T> factory : factories) {
             services.add(factory.create());
         }

@@ -337,6 +337,11 @@ public class DefaultGradle implements GradleInternal {
     }
 
     @Override
+    public void useLogger(Object logger) {
+        getListenerManager().useLogger(logger);
+    }
+
+    @Override
     public Collection<IncludedBuild> getIncludedBuilds() {
         if (includedBuilds == null) {
             includedBuilds = new ArrayList<>();

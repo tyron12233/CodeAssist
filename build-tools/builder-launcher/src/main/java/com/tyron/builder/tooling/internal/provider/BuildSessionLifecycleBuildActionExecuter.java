@@ -37,12 +37,11 @@ public class BuildSessionLifecycleBuildActionExecuter implements BuildActionExec
             // When creating a model, do not use continuous mode
             startParameter.setContinuous(false);
         }
-        BuildActionResult run;
         ActionImpl actionWrapper = new ActionImpl(action, requestContext);
         try {
             try (CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter)) {
                 try (BuildSessionState buildSessionState = new BuildSessionState(userHomeServiceRegistry, crossBuildSessionState, startParameter, requestContext, actionParameters.getInjectedPluginClasspath(), requestContext.getCancellationToken(), requestContext.getClient(), requestContext.getEventConsumer())) {
-                    run = buildSessionState.run(actionWrapper);
+                    return buildSessionState.run(actionWrapper);
                 }
             }
         } catch (Throwable t) {
@@ -59,11 +58,6 @@ public class BuildSessionLifecycleBuildActionExecuter implements BuildActionExec
                         .throwAsUncheckedException(actionWrapper.result.addFailure(t).getBuildFailure());
             }
         }
-
-        if (run.hasFailure()) {
-            run.rethrow();
-        }
-        return run;
     }
 
     private static RuntimeException wrap(Throwable failure) {
@@ -99,8 +93,8 @@ public class BuildSessionLifecycleBuildActionExecuter implements BuildActionExec
             if (requestContext.getCancellationToken().isCancellationRequested()) {
                 return BuildActionResult.cancelled(payloadSerializer.serialize(result.getBuildFailure()));
             }
-//            return BuildActionResult.failed(payloadSerializer.serialize(result.getClientFailure()));
-            return BuildActionResult.failed(wrap(result.getClientFailure()));
+            return BuildActionResult.failed(payloadSerializer.serialize(result.getClientFailure()));
+//            return BuildActionResult.failed(wrap(result.getClientFailure()));
         }
     }
 }
