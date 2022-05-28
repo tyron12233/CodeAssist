@@ -17,7 +17,7 @@ public interface SettingsInternal extends Settings {
     @Override
     StartParameter getStartParameter();
 
-//    ScriptSource getSettingsScript();
+//    ScriptSourceIn getSettingsScript();
 
     @Override
     GradleInternal getGradle();

@@ -6,7 +6,7 @@ import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.metaobject.AbstractDynamicObject;
 import com.tyron.builder.internal.metaobject.BeanDynamicObject;
 import com.tyron.builder.internal.metaobject.DynamicObject;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceLookup;
 
 import javax.annotation.Nullable;
 

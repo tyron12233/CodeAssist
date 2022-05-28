@@ -1,5 +1,6 @@
 package com.tyron.builder.composite.internal;
 
+
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.ExecutionResult;
 
@@ -12,10 +13,14 @@ interface BuildControllers extends Closeable {
     void populateWorkGraphs();
 
     /**
-     * Runs any scheduled tasks, blocking until complete. Does nothing when {@link #populateWorkGraphs()} has not been called to schedule the tasks.
+     * Starts running any scheduled tasks. Does nothing when {@link #populateWorkGraphs()} has not been called to schedule the tasks.
+     */
+    void startExecution();
+
+    /**
      * Blocks until all scheduled tasks have completed.
      */
-    ExecutionResult<Void> execute();
+    ExecutionResult<Void> awaitCompletion();
 
     /**
      * Locates the controller for a given build, adding it if not present.

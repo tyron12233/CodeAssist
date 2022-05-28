@@ -7,6 +7,7 @@ import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.RegularFile;
 import com.tyron.builder.api.file.RegularFileProperty;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
+import com.tyron.builder.api.file.SourceDirectorySet;
 import com.tyron.builder.internal.service.scopes.Scope;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.api.provider.ListProperty;
@@ -78,7 +79,7 @@ public interface ObjectFactory {
      * @param displayName A human consumable display name for the set.
      * @since 5.0
      */
-//    SourceDirectorySet sourceDirectorySet(String name, String displayName);
+    SourceDirectorySet sourceDirectorySet(String name, String displayName);
 
     /**
      * Creates a new {@link ConfigurableFileCollection}. The collection is initially empty.

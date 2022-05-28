@@ -3,6 +3,7 @@ package com.tyron.builder.internal.execution.fingerprint;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.api.tasks.FileNormalizer;
 
@@ -28,4 +29,9 @@ public interface FileCollectionFingerprinter {
      * Returns an empty fingerprint.
      */
     CurrentFileCollectionFingerprint empty();
+
+    /**
+     * Returns the normalized path to use for the given root
+     */
+    String normalizePath(FileSystemLocationSnapshot root);
 }

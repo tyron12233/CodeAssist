@@ -44,9 +44,8 @@ import com.tyron.builder.internal.reflect.JavaPropertyReflectionUtil;
 import com.tyron.builder.internal.reflect.MethodSet;
 import com.tyron.builder.internal.reflect.PropertyAccessorType;
 import com.tyron.builder.internal.reflect.PropertyDetails;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.util.ConfigureUtil;
+import com.tyron.builder.internal.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;

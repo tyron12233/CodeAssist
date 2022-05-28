@@ -2,7 +2,7 @@ package com.tyron.builder.internal.build;
 
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistration;
 import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;

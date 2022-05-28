@@ -1,7 +1,6 @@
 package com.tyron.builder.cache.internal;
 
-import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.DocumentationRegistry.GradleVersion;
+import com.tyron.builder.util.GradleVersion;
 
 import java.util.SortedSet;
 

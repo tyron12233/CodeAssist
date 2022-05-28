@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal.lambdas;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Transformer;
+import com.tyron.builder.api.specs.Spec;
 import com.tyron.builder.internal.Factory;
 
 import java.io.Serializable;
@@ -14,7 +15,11 @@ import java.util.function.Predicate;
  */
 public class SerializableLambdas {
 
-    public static <T> Predicate<T> spec(SerializableSpec<T> spec) {
+    public static <T> Predicate<T> predicate(SerializableSpec<T> spec) {
+        return spec;
+    }
+
+    public static <T> Spec<T> spec(SerializableSpec<T> spec) {
         return spec;
     }
 
@@ -33,7 +38,7 @@ public class SerializableLambdas {
     /**
      * A {@link Serializable} version of {@link Spec}.
      */
-    public interface SerializableSpec<T> extends Predicate<T>, Serializable {
+    public interface SerializableSpec<T> extends Spec<T>, Serializable {
     }
 
     /**

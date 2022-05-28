@@ -8,8 +8,8 @@ import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
 import com.tyron.builder.internal.classpath.ClassPath;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceRegistryBuilder;
+import com.tyron.builder.internal.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistryBuilder;
 import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 
 import com.tyron.builder.internal.service.scopes.GlobalServices;

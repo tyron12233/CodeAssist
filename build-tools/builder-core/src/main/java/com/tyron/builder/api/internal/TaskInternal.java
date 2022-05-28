@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal;
 
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
@@ -68,6 +69,10 @@ public interface TaskInternal extends Task {
 
     @Internal
     TaskIdentity<?> getTaskIdentity();
+
+    void prependParallelSafeAction(Action<? super Task> action);
+
+    void appendParallelSafeAction(Action<? super Task> action);
 
     @Internal
     Path getIdentityPath();

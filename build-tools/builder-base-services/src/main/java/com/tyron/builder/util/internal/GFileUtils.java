@@ -1,5 +1,7 @@
 package com.tyron.builder.util.internal;
 
+import static org.apache.commons.io.FilenameUtils.removeExtension;
+
 import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.util.GUtil;
 
@@ -18,6 +20,10 @@ import java.util.List;
 import java.util.zip.Checksum;
 
 public class GFileUtils {
+
+    public static String readFile(File file) {
+        return GUtil.uncheckedCall(() -> FileUtils.readFileToString(file, StandardCharsets.UTF_8));
+    }
 
     public static void forceDelete(File file) {
         try {
@@ -227,5 +233,16 @@ public class GFileUtils {
 
     public static String readFileToString(File sourceFile) {
         return GUtil.uncheckedCall(() -> FileUtils.readFileToString(sourceFile, StandardCharsets.UTF_8));
+    }
+
+    public static boolean hasExtensionIgnoresCase(String name, String extension) {
+        return FilenameUtils.getExtension(name).equalsIgnoreCase(extension);
+    }
+
+    public static String withExtension(String filePath, String extension) {
+        if (filePath.toLowerCase().endsWith(extension)) {
+            return filePath;
+        }
+        return removeExtension(filePath) + extension;
     }
 }

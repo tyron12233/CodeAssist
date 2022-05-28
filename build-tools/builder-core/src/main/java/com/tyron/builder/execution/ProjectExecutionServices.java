@@ -1,22 +1,13 @@
 package com.tyron.builder.execution;
 
-import static com.tyron.builder.cache.FileLockManager.LockMode.OnDemand;
-import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
-
-import com.google.common.hash.HashCode;
-import com.google.common.hash.Hashing;
-import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionListener;
-import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
-import com.tyron.builder.api.internal.changedetection.state.DefaultResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizingFileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.changedetection.state.ResourceEntryFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileOperations;
-import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.CatchExceptionTaskExecuter;
@@ -27,18 +18,7 @@ import com.tyron.builder.api.internal.tasks.execution.FinalizePropertiesTaskExec
 import com.tyron.builder.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter;
 import com.tyron.builder.api.internal.tasks.execution.SkipOnlyIfTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter;
-import com.tyron.builder.cache.CacheBuilder;
-import com.tyron.builder.cache.CacheRepository;
-import com.tyron.builder.cache.PersistentCache;
-import com.tyron.builder.cache.PersistentIndexedCache;
-import com.tyron.builder.cache.PersistentIndexedCacheParameters;
-import com.tyron.builder.internal.cache.StringInterner;
-import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
-import com.tyron.builder.cache.scopes.BuildScopedCache;
-import com.tyron.builder.caching.local.internal.BuildCacheTempFileStore;
-import com.tyron.builder.caching.local.internal.DefaultBuildCacheTempFileStore;
-import com.tyron.builder.caching.local.internal.DirectoryBuildCacheService;
-import com.tyron.builder.caching.local.internal.LocalBuildCacheService;
+import com.tyron.builder.api.internal.cache.StringInterner;
 import com.tyron.builder.execution.plan.ExecutionNodeAccessHierarchies;
 import com.tyron.builder.execution.taskgraph.TaskListenerInternal;
 import com.tyron.builder.initialization.BuildCancellationToken;
@@ -67,18 +47,13 @@ import com.tyron.builder.internal.fingerprint.impl.RelativePathFileCollectionFin
 import com.tyron.builder.internal.hash.ChecksumService;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.resource.local.DefaultPathKeyFileStore;
 import com.tyron.builder.internal.resource.local.PathKeyFileStore;
-import com.tyron.builder.internal.serialize.HashCodeSerializer;
 import com.tyron.builder.internal.service.scopes.ExecutionGradleServices;
 import com.tyron.builder.internal.snapshot.ValueSnapshotter;
 import com.tyron.builder.internal.work.AsyncWorkTracker;
 
-import org.apache.commons.io.FileUtils;
-
-import java.io.File;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 

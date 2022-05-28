@@ -12,7 +12,7 @@ import com.tyron.builder.groovy.scripts.internal.FactoryBackedCompileOperation;
 import com.tyron.builder.groovy.scripts.internal.InitialPassStatementTransformer;
 import com.tyron.builder.groovy.scripts.internal.NoDataCompileOperation;
 import com.tyron.builder.groovy.scripts.internal.SubsetScriptTransformer;
-import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.cache.StringInterner;
 
 public class DefaultCompileOperationFactory implements CompileOperationFactory {
     private static final StringInterner INTERNER = new StringInterner();

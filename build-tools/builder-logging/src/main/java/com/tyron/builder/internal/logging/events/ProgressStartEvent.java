@@ -12,8 +12,8 @@ import javax.annotation.Nullable;
 
 @SuppressWarnings("deprecation")
 public class ProgressStartEvent extends CategorisedOutputEvent implements ProgressStartBuildOperationProgressDetails {
-    public static final String TASK_CATEGORY = "class org.gradle.internal.buildevents.TaskExecutionLogger";
-    public static final String BUILD_OP_CATEGORY = "org.gradle.internal.logging.progress.ProgressLoggerFactory";
+    public static final String TASK_CATEGORY = "class com.tyron.builder.internal.buildevents.TaskExecutionLogger";
+    public static final String BUILD_OP_CATEGORY = "com.tyron.builder.internal.logging.progress.ProgressLoggerFactory";
 
     private final OperationIdentifier progressOperationId;
     private final OperationIdentifier parentProgressOperationId;

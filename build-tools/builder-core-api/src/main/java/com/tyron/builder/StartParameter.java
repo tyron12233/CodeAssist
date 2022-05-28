@@ -4,6 +4,7 @@ import static java.util.Collections.emptyList;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.tyron.builder.api.artifacts.verification.DependencyVerificationMode;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
@@ -77,6 +78,11 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 //    private DependencyVerificationMode verificationMode = DependencyVerificationMode.STRICT;
     private boolean isRefreshKeys;
     private boolean isExportKeys;
+    private boolean isWriteDependencyLocks;
+    private boolean isBuildProjectDependencies;
+    private boolean isRefreshDependencies;
+    private DependencyVerificationMode dependencyVerificationMode;
+    private boolean exportKeys;
 
 
     /**
@@ -444,5 +450,65 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 
     public boolean isBuildCacheDebugLogging() {
         return buildCacheDebugLogging;
+    }
+
+    public boolean isWriteDependencyLocks() {
+        return isWriteDependencyLocks;
+    }
+
+    public boolean isBuildProjectDependencies() {
+        return isBuildProjectDependencies;
+    }
+
+    public void setBuildProjectDependencies(boolean buildProjectDependencies) {
+        isBuildProjectDependencies = buildProjectDependencies;
+    }
+
+    public void setWriteDependencyLocks(boolean writeDependencyLocks) {
+        isWriteDependencyLocks = writeDependencyLocks;
+    }
+
+    public boolean isRefreshKeys() {
+        return isRefreshKeys;
+    }
+
+    public boolean isRefreshDependencies() {
+        return isRefreshDependencies;
+    }
+
+    public void setRefreshDependencies(boolean refreshDependencies) {
+        isRefreshDependencies = refreshDependencies;
+    }
+
+    public List<String> getWriteDependencyVerifications() {
+        return writeDependencyVerifications;
+    }
+
+    public void setWriteDependencyVerifications(List<String> writeDependencyVerifications) {
+        this.writeDependencyVerifications = writeDependencyVerifications;
+    }
+
+    public DependencyVerificationMode getDependencyVerificationMode() {
+        return dependencyVerificationMode;
+    }
+
+    public void setDependencyVerificationMode(DependencyVerificationMode dependencyVerificationMode) {
+        this.dependencyVerificationMode = dependencyVerificationMode;
+    }
+
+    public boolean isExportKeys() {
+        return exportKeys;
+    }
+
+    public void setExportKeys(boolean exportKeys) {
+        this.exportKeys = exportKeys;
+    }
+
+    public List<String> getLockedDependenciesToUpdate() {
+        return writeDependencyVerifications;
+    }
+
+    public void setLockedDependenciesToUpdate(List<String> lockedDependenciesToUpdate) {
+        this.writeDependencyVerifications = lockedDependenciesToUpdate;
     }
 }

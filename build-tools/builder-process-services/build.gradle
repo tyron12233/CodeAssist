@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+
+    implementation common.slf4j
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

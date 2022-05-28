@@ -1,8 +1,13 @@
 package com.tyron.builder.composite.internal;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.tyron.builder.execution.plan.PlanExecutor;
+import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.internal.build.BuildLifecycleController;
+import com.tyron.builder.internal.build.BuildState;
+import com.tyron.builder.internal.build.BuildStateRegistry;
+import com.tyron.builder.internal.build.ExecutionResult;
+import com.tyron.builder.internal.build.ExportedTaskNode;
+import com.tyron.builder.internal.buildtree.BuildTreeWorkGraph;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.internal.concurrent.ManagedExecutor;
@@ -10,22 +15,13 @@ import com.tyron.builder.internal.operations.BuildOperationContext;
 import com.tyron.builder.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.RunnableBuildOperation;
-import com.tyron.builder.internal.work.WorkerLeaseService;
-import com.tyron.builder.internal.build.BuildLifecycleController;
-import com.tyron.builder.internal.build.BuildState;
-import com.tyron.builder.internal.build.BuildStateRegistry;
-import com.tyron.builder.internal.build.ExecutionResult;
-import com.tyron.builder.internal.build.ExportedTaskNode;
-import com.tyron.builder.internal.buildtree.BuildTreeWorkGraph;
 import com.tyron.builder.internal.taskgraph.CalculateTreeTaskGraphBuildOperationType;
+import com.tyron.builder.internal.work.WorkerLeaseService;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import javax.inject.Inject;
 
 
 public class DefaultIncludedBuildTaskGraph implements BuildTreeWorkGraphController, Closeable {
@@ -36,44 +32,23 @@ public class DefaultIncludedBuildTaskGraph implements BuildTreeWorkGraphControll
     private final BuildOperationExecutor buildOperationExecutor;
     private final BuildStateRegistry buildRegistry;
     private final WorkerLeaseService workerLeaseService;
-    private final PlanExecutor planExecutor;
-    private final int monitoringPollTime;
-    private final TimeUnit monitoringPollTimeUnit;
     private final ManagedExecutor executorService;
     private final ThreadLocal<DefaultBuildTreeWorkGraph> current = new ThreadLocal<>();
 
-    @Inject
     public DefaultIncludedBuildTaskGraph(
             ExecutorFactory executorFactory,
             BuildOperationExecutor buildOperationExecutor,
             BuildStateRegistry buildRegistry,
-            WorkerLeaseService workerLeaseService,
-            PlanExecutor planExecutor
-    ) {
-        this(executorFactory, buildOperationExecutor, buildRegistry, workerLeaseService, planExecutor, 30, TimeUnit.SECONDS);
-    }
-
-    @VisibleForTesting
-    DefaultIncludedBuildTaskGraph(
-            ExecutorFactory executorFactory,
-            BuildOperationExecutor buildOperationExecutor,
-            BuildStateRegistry buildRegistry,
-            WorkerLeaseService workerLeaseService,
-            PlanExecutor planExecutor,
-            int monitoringPollTime,
-            TimeUnit monitoringPollTimeUnit
+            WorkerLeaseService workerLeaseService
     ) {
         this.buildOperationExecutor = buildOperationExecutor;
         this.buildRegistry = buildRegistry;
         this.executorService = executorFactory.create("included builds");
         this.workerLeaseService = workerLeaseService;
-        this.planExecutor = planExecutor;
-        this.monitoringPollTime = monitoringPollTime;
-        this.monitoringPollTimeUnit = monitoringPollTimeUnit;
     }
 
     private DefaultBuildControllers createControllers() {
-        return new DefaultBuildControllers(executorService, workerLeaseService, planExecutor, monitoringPollTime, monitoringPollTimeUnit);
+        return new DefaultBuildControllers(executorService, workerLeaseService);
     }
 
     @Override
@@ -93,10 +68,19 @@ public class DefaultIncludedBuildTaskGraph implements BuildTreeWorkGraphControll
     }
 
     @Override
-    public IncludedBuildTaskResource locateTask(TaskIdentifier taskIdentifier) {
+    public IncludedBuildTaskResource locateTask(BuildIdentifier targetBuild, TaskInternal task) {
         return withState(workGraph -> {
-            BuildState build = buildRegistry.getBuild(taskIdentifier.getBuildIdentifier());
-            ExportedTaskNode taskNode = build.getWorkGraph().locateTask(taskIdentifier);
+            BuildState build = buildRegistry.getBuild(targetBuild);
+            ExportedTaskNode taskNode = build.getWorkGraph().locateTask(task);
+            return new TaskBackedResource(workGraph, build, taskNode);
+        });
+    }
+
+    @Override
+    public IncludedBuildTaskResource locateTask(BuildIdentifier targetBuild, String taskPath) {
+        return withState(workGraph -> {
+            BuildState build = buildRegistry.getBuild(targetBuild);
+            ExportedTaskNode taskNode = build.getWorkGraph().locateTask(taskPath);
             return new TaskBackedResource(workGraph, build, taskNode);
         });
     }
@@ -174,7 +158,8 @@ public class DefaultIncludedBuildTaskGraph implements BuildTreeWorkGraphControll
             expectInState(State.ReadyToRun);
             state = State.Running;
             try {
-                return controllers.execute();
+                controllers.startExecution();
+                return controllers.awaitCompletion();
             } finally {
                 state = State.Finished;
             }
@@ -224,11 +209,6 @@ public class DefaultIncludedBuildTaskGraph implements BuildTreeWorkGraphControll
         }
 
         @Override
-        public void onComplete(Runnable action) {
-            taskNode.onComplete(action);
-        }
-
-        @Override
         public TaskInternal getTask() {
             return taskNode.getTask();
         }
@@ -239,3 +219,4 @@ public class DefaultIncludedBuildTaskGraph implements BuildTreeWorkGraphControll
         }
     }
 }
+

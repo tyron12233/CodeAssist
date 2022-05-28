@@ -1,7 +1,7 @@
 package com.tyron.builder.groovy.scripts;
 
 import com.tyron.builder.api.GradleScriptException;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 /**
  * Executes a script of type T.

@@ -6,7 +6,7 @@ import static com.tyron.builder.cache.internal.locklistener.FileLockPacketType.U
 import static com.tyron.builder.cache.internal.locklistener.FileLockPacketType.UNLOCK_REQUEST_CONFIRMATION;
 
 import com.tyron.builder.internal.UncheckedException;
-import com.tyron.builder.internal.remote.inet.InetAddressFactory;
+import com.tyron.builder.internal.remote.internal.inet.InetAddressFactory;
 import com.tyron.common.logging.IdeLog;
 
 import java.io.IOException;

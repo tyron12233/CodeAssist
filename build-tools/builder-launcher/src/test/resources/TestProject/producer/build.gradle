@@ -1,0 +1,8 @@
+import com.tyron.builder.api.tasks.*
+import com.tyron.builder.api.attributes.*
+
+tasks.register("someTask") {
+    it.doLast {
+        println("PRODUCING...")
+    }
+}

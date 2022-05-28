@@ -1,6 +1,7 @@
 package com.tyron.builder.model.dsl.internal.transform;
 
-import com.tyron.builder.internal.model.internal.core.rule.describe.ModelRuleDescriptor;
+import com.tyron.builder.model.internal.core.rule.describe.ModelRuleDescriptor;
+import com.tyron.builder.model.internal.core.rule.describe.SimpleModelRuleDescriptor;
 
 import javax.annotation.Nullable;
 import java.net.URI;
@@ -51,7 +52,7 @@ public class SourceLocation {
     }
 
     public ModelRuleDescriptor asDescriptor() {
-//        return new SimpleModelRuleDescriptor(expression + " @ " + toString());
-        throw new UnsupportedOperationException();
+        return new SimpleModelRuleDescriptor(expression + " @ " + toString());
+//        throw new UnsupportedOperationException();
     }
 }

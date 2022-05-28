@@ -56,6 +56,22 @@ public interface TaskOutputs {
     void cacheIf(String cachingEnabledReason, final Predicate<? super Task> spec);
 
     /**
+     * <p>Disable caching the results of the task if the given spec is satisfied. The spec will be evaluated at task execution time, not
+     * during configuration.</p>
+     *
+     * <p>As opposed to {@link #cacheIf(String, Spec)}, this method never enables caching for a task, it can only be used to disable caching.</p>
+     *
+     * <p>You may add multiple such predicates. The results of the task are not cached if any of the predicates return {@code true},
+     * or if any of the predicates passed to {@link #cacheIf(String, Spec)} returns {@code false}.</p>
+     *
+     * @param cachingDisabledReason the reason why caching would be disabled by the spec.
+     * @param spec specifies if the results of the task should not be cached.
+     *
+     * @since 3.4
+     */
+    void doNotCacheIf(String cachingDisabledReason, Predicate<? super Task> spec);
+
+    /**
      * Returns true if this task has declared any outputs. Note that a task may be able to produce output files and
      * still have an empty set of output files.
      *

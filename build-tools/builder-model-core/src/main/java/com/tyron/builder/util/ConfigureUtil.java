@@ -49,7 +49,7 @@ import groovy.lang.Closure;
  *     }
  * </pre>
  * <p>
- * Gradle automatically generates a Closure-taking method at runtime for each method with an {@link Action} as a single argument as long as the object is created with {@link org.gradle.api.model.ObjectFactory#newInstance(Class, Object...)}.
+ * Gradle automatically generates a Closure-taking method at runtime for each method with an {@link Action} as a single argument as long as the object is created with {@link com.tyron.builder.api.model.ObjectFactory#newInstance(Class, Object...)}.
  * <p>
  * As a last resort, to apply some configuration represented by a Groovy Closure, a plugin can use {@link BuildProject#configure(Object, Closure)}.
  *

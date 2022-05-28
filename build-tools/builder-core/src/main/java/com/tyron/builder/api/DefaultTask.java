@@ -1,21 +1,24 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.hash.HashCode;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.AbstractTask;
+import com.tyron.builder.api.internal.tasks.DefaultTaskDestroyables;
+import com.tyron.builder.api.internal.tasks.DefaultTaskLocalState;
+import com.tyron.builder.api.plugins.Convention;
+import com.tyron.builder.api.plugins.ExtensionContainer;
+import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
+import com.tyron.builder.internal.extensibility.ExtensibleDynamicObject;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.internal.hash.Hashes;
-import com.tyron.builder.internal.hash.PrimitiveHasher;
+import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.resources.ResourceLock;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.api.internal.tasks.DefaultTaskInputs;
@@ -32,7 +35,6 @@ import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
 import com.tyron.builder.api.logging.LoggingManager;
-import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.internal.tasks.DefaultTaskDependency;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
@@ -45,7 +47,9 @@ import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.slf4j.ContextAwareTaskLogger;
 import com.tyron.builder.internal.logging.slf4j.DefaultContextAwareTaskLogger;
 
+import org.codehaus.groovy.runtime.InvokerInvocationException;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -57,7 +61,7 @@ import java.util.Set;
 
 import bsh.NameSpace;
 import bsh.This;
-import bsh.XThis;
+import groovy.lang.Closure;
 
 public class DefaultTask extends AbstractTask {
 
@@ -65,10 +69,14 @@ public class DefaultTask extends AbstractTask {
 
     private final TaskStateInternal state;
     private final TaskMutator taskMutator;
+    private final TaskDestroyablesInternal taskDestroyables;
     private String name;
-    private ServiceRegistry servcices;
+    private ServiceRegistry services;
     private LoggingManagerInternal loggingManager;
     private final ContextAwareTaskLogger logger = new DefaultContextAwareTaskLogger(BUILD_LOGGER);
+    private ExtensibleDynamicObject extensibleDynamicObject;
+    private boolean hasCustomActions;
+    private final TaskLocalState localState;
 
     public String toString() {
         return taskIdentity.name;
@@ -109,9 +117,8 @@ public class DefaultTask extends AbstractTask {
         super(taskInfo);
         this.taskIdentity = taskInfo.identity;
         this.name = taskIdentity.name;
-
         this.project = taskInfo.project;
-        this.servcices = project.getServices();
+        this.services = project.getServices();
 
         TaskContainerInternal tasks = (TaskContainerInternal) project.getTasks();
 
@@ -122,15 +129,14 @@ public class DefaultTask extends AbstractTask {
         dependencies = new DefaultTaskDependency(tasks, ImmutableSet.of(lifecycleDependencies));
 
         state = new TaskStateInternal();
+
+        PropertyWalker emptyWalker = services.get(PropertyWalker.class);
+        FileCollectionFactory factory = services.get(FileCollectionFactory.class);
         taskMutator = new TaskMutator(this);
-
-        PropertyWalker emptyWalker = (instance, validationContext, visitor) -> {
-
-        };
-        FileCollectionFactory factory =
-                project.getServices().get(FileCollectionFactory.class);
-        outputs = new DefaultTaskOutputs(this, taskMutator, emptyWalker, factory);
         inputs = new DefaultTaskInputs(this, taskMutator, emptyWalker, factory);
+        outputs = new DefaultTaskOutputs(this, taskMutator, emptyWalker, factory);
+        taskDestroyables = new DefaultTaskDestroyables(taskMutator, factory);
+        localState = new DefaultTaskLocalState(taskMutator, factory);
     }
 
 
@@ -145,7 +151,37 @@ public class DefaultTask extends AbstractTask {
 
     @Internal
     protected ServiceRegistry getServices() {
-        return servcices;
+        return services;
+    }
+
+    @Override
+    public Task doFirst(final Closure action) {
+        hasCustomActions = true;
+        if (action == null) {
+            throw new InvalidUserDataException("Action must not be null!");
+        }
+        taskMutator.mutate("Task.doFirst(Closure)", new Runnable() {
+            @Override
+            public void run() {
+                getTaskActions().add(0, convertClosureToAction(action, "doFirst {} action"));
+            }
+        });
+        return this;
+    }
+
+    @Override
+    public Task doLast(final Closure action) {
+        hasCustomActions = true;
+        if (action == null) {
+            throw new InvalidUserDataException("Action must not be null!");
+        }
+        taskMutator.mutate("Task.doLast(Closure)", new Runnable() {
+            @Override
+            public void run() {
+                getTaskActions().add(convertClosureToAction(action, "doLast {} action"));
+            }
+        });
+        return this;
     }
 
     @Override
@@ -213,6 +249,13 @@ public class DefaultTask extends AbstractTask {
     @Override
     public TaskStateInternal getState() {
         return state;
+    }
+
+    private void assertDynamicObject() {
+        if (extensibleDynamicObject == null) {
+            extensibleDynamicObject = new ExtensibleDynamicObject(this, taskIdentity.type, services.get(
+                    InstanceGenerator.class));
+        }
     }
 
     @Internal
@@ -305,6 +348,20 @@ public class DefaultTask extends AbstractTask {
 
     @Internal
     @Override
+    @Deprecated
+    public Convention getConvention() {
+        assertDynamicObject();
+        return extensibleDynamicObject.getConvention();
+    }
+
+    @Internal
+    @Override
+    public ExtensionContainer getExtensions() {
+        return getConvention();
+    }
+
+    @Internal
+    @Override
     public String getDescription() {
         return description;
     }
@@ -327,6 +384,12 @@ public class DefaultTask extends AbstractTask {
 
     @Internal
     @Override
+    public TaskDestroyablesInternal getDestroyables() {
+        return taskDestroyables;
+    }
+
+    @Internal
+    @Override
     public TaskInputsInternal getInputs() {
         return inputs;
     }
@@ -336,47 +399,77 @@ public class DefaultTask extends AbstractTask {
     public TaskOutputsInternal getOutputs() {
         return outputs;
     }
-
-    @Internal
-    @Override
-    public TaskDestroyables getDestroyables() {
-        return new TaskDestroyablesInternal() {
-            @Override
-            public void visitRegisteredProperties(PropertyVisitor visitor) {
-
-            }
-
-            @Override
-            public FileCollection getRegisteredFiles() {
-                return null;
-            }
-
-            @Override
-            public void register(Object... paths) {
-
-            }
-        };
-    }
-
     @Internal
     @Override
     public TaskLocalState getLocalState() {
-        return new TaskLocalStateInternal() {
-            @Override
-            public void visitRegisteredProperties(PropertyVisitor visitor) {
+        return localState;
+    }
 
+    private static class ClosureTaskAction implements InputChangesAwareTaskAction {
+        private final Closure<?> closure;
+        private final String actionName;
+        @Nullable
+        private final UserCodeApplicationContext.Application application;
+
+        private ClosureTaskAction(Closure<?> closure, String actionName, @Nullable UserCodeApplicationContext.Application application) {
+            this.closure = closure;
+            this.actionName = actionName;
+            this.application = application;
+        }
+
+        @Override
+        public void setInputChanges(InputChangesInternal inputChanges) {
+        }
+
+        @Override
+        public void clearInputChanges() {
+        }
+
+        @Override
+        public void execute(Task task) {
+            if (application == null) {
+                doExecute(task);
+            } else {
+                application.reapply(() -> doExecute(task));
             }
+        }
 
-            @Override
-            public FileCollection getRegisteredFiles() {
-                return null;
+        private void doExecute(Task task) {
+            closure.setDelegate(task);
+            closure.setResolveStrategy(Closure.DELEGATE_FIRST);
+            ClassLoader original = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(closure.getClass().getClassLoader());
+            try {
+                if (closure.getMaximumNumberOfParameters() == 0) {
+                    closure.call();
+                } else {
+                    closure.call(task);
+                }
+            } catch (InvokerInvocationException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof RuntimeException) {
+                    throw (RuntimeException) cause;
+                }
+                throw e;
+            } finally {
+                Thread.currentThread().setContextClassLoader(original);
             }
+        }
 
-            @Override
-            public void register(Object... paths) {
+        @Override
+        public ImplementationSnapshot getActionImplementation(ClassLoaderHierarchyHasher hasher) {
+            return ImplementationSnapshot.of(AbstractTask.getActionClassName(closure), hasher.getClassLoaderHash(closure.getClass().getClassLoader()));
+        }
 
-            }
-        };
+        @Override
+        public String getDisplayName() {
+            return "Execute " + actionName;
+        }
+    }
+
+    private InputChangesAwareTaskAction convertClosureToAction(Closure actionClosure, String actionName) {
+        return new ClosureTaskAction(actionClosure, actionName, getServices().get(
+                UserCodeApplicationContext.class).current());
     }
 
     @Internal
@@ -458,130 +551,6 @@ public class DefaultTask extends AbstractTask {
         return 0;
     }
 
-    private InputChangesAwareTaskAction wrap(final Action<? super Task> action) {
-        return wrap(action, "unnamed action");
-    }
-
-    private InputChangesAwareTaskAction wrap(final Action<? super Task> action, String actionName) {
-        if (action instanceof InputChangesAwareTaskAction) {
-            return (InputChangesAwareTaskAction) action;
-        }
-        return new TaskActionWrapper(action, actionName);
-    }
-
-    private static class TaskActionWrapper implements InputChangesAwareTaskAction {
-        private final Action<? super Task> action;
-        private final String maybeActionName;
-
-        /**
-         * The <i>action name</i> is used to construct a human readable name for
-         * the actions to be used in progress logging. It is only used if
-         * the wrapped action does not already implement {@link Describable}.
-         */
-        public TaskActionWrapper(Action<? super Task> action, String maybeActionName) {
-            this.action = action;
-            this.maybeActionName = maybeActionName;
-        }
-
-        @Override
-        public void setInputChanges(InputChangesInternal inputChanges) {
-        }
-
-        @Override
-        public void clearInputChanges() {
-        }
-
-        @Override
-        public void execute(Task task) {
-            ClassLoader original = Thread.currentThread().getContextClassLoader();
-            Thread.currentThread().setContextClassLoader(action.getClass().getClassLoader());
-            try {
-                action.execute(task);
-            } finally {
-                Thread.currentThread().setContextClassLoader(original);
-            }
-        }
-
-        public ImplementationSnapshot getActionImplementation(ClassLoaderHierarchyHasher hasher) {
-            return ImplementationSnapshot.of(getActionClassName(action), hasher.getClassLoaderHash(action.getClass().getClassLoader()));
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof TaskActionWrapper)) {
-                return false;
-            }
-
-            TaskActionWrapper that = (TaskActionWrapper) o;
-            return action.equals(that.action);
-        }
-
-        @Override
-        public int hashCode() {
-            return action.hashCode();
-        }
-
-        @Override
-        public String getDisplayName() {
-            if (action instanceof Describable) {
-                return ((Describable) action).getDisplayName();
-            }
-            return "Execute " + maybeActionName;
-        }
-    }
-
-    private static String getActionClassName(Object action) {
-//        if (action instanceof ScriptOrigin) {
-//            ScriptOrigin origin = (ScriptOrigin) action;
-//            return origin.getOriginalClassName() + "_" + origin.getContentHash();
-//        } else {
-//
-//        }
-
-        if (Proxy.isProxyClass(action.getClass())) {
-            InvocationHandler invocationHandler = Proxy.getInvocationHandler(action);
-            if (invocationHandler.getClass().getName().equals("bsh.XThis$Handler")) {
-                return BeanShellUtils.getAnonymousName(invocationHandler);
-            }
-        }
-
-        return action.getClass().getName();
-    }
-
-    private static class BeanShellUtils {
-
-        private static String getAnonymousName(InvocationHandler handler) {
-            NameSpace namespace = getNamespace(handler);
-            NameSpace root = getRootNamespace(namespace);
-            return "";
-        }
-
-        private static NameSpace getRootNamespace(NameSpace nameSpace) {
-            NameSpace current = nameSpace;
-            while (current.getParent() != null) {
-                current = current.getParent();
-            }
-            return current;
-        }
-
-        private static NameSpace getNamespace(InvocationHandler handler) {
-            try {
-                Field this$0 = handler.getClass().getDeclaredField("this$0");
-                this$0.setAccessible(true);
-                Object o = this$0.get(handler);
-
-                Field namespace = This.class.getDeclaredField("namespace");
-                namespace.setAccessible(true);
-                return (NameSpace) namespace.get(o);
-            } catch (ReflectiveOperationException e) {
-                throw new Error(e);
-            }
-        }
-    }
-
     @Override
     public Logger getLogger() {
         return logger;
@@ -594,7 +563,7 @@ public class DefaultTask extends AbstractTask {
 
     private LoggingManagerInternal loggingManager() {
         if (loggingManager == null) {
-            loggingManager = servcices.getFactory(LoggingManagerInternal.class).create();
+            loggingManager = services.getFactory(LoggingManagerInternal.class).create();
         }
         return loggingManager;
     }

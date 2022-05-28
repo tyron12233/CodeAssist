@@ -16,7 +16,7 @@
 
 package com.tyron.builder.plugin.use.resolve.internal.local;
 
-import com.tyron.builder.api.internal.artifacts.ivyservice.projectmodule.ProjectPublication;
+import coms.tyron.builder.api.internal.artifacts.ivyservice.projectmodule.ProjectPublication;
 import com.tyron.builder.plugin.use.PluginId;
 
 public interface PluginPublication extends ProjectPublication {

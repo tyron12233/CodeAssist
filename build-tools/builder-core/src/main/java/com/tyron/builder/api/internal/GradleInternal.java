@@ -7,7 +7,7 @@ import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;

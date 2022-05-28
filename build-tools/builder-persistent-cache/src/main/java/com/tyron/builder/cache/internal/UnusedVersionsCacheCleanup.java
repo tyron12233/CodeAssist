@@ -1,5 +1,14 @@
 package com.tyron.builder.cache.internal;
 
+import static org.apache.commons.io.filefilter.FileFilterUtils.asFileFilter;
+import static org.apache.commons.io.filefilter.FileFilterUtils.directoryFileFilter;
+import static java.util.Collections.singleton;
+
+import com.google.common.collect.Sets;
+import com.tyron.builder.cache.CleanableStore;
+import com.tyron.builder.cache.CleanupProgressMonitor;
+import com.tyron.builder.util.GradleVersion;
+
 import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.io.filefilter.RegexFileFilter;
 import org.slf4j.Logger;
@@ -14,16 +23,6 @@ import java.util.SortedSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static java.util.Collections.singleton;
-import static org.apache.commons.io.filefilter.FileFilterUtils.asFileFilter;
-import static org.apache.commons.io.filefilter.FileFilterUtils.directoryFileFilter;
-
-import com.google.common.collect.Sets;
-import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.DocumentationRegistry.GradleVersion;
-import com.tyron.builder.cache.CleanableStore;
-import com.tyron.builder.cache.CleanupProgressMonitor;
-
 public class UnusedVersionsCacheCleanup extends AbstractCacheCleanup {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UnusedVersionsCacheCleanup.class);
@@ -34,17 +33,28 @@ public class UnusedVersionsCacheCleanup extends AbstractCacheCleanup {
 
     private Set<CacheVersion> usedVersions;
 
-    public static UnusedVersionsCacheCleanup create(String cacheName, CacheVersionMapping cacheVersionMapping, UsedGradleVersions usedGradleVersions) {
-        Pattern cacheNamePattern = Pattern.compile('^' + Pattern.quote(cacheName) + "-((?:\\d+" + Pattern.quote(CacheVersion.COMPONENT_SEPARATOR) + ")*\\d+)$");
-        return new UnusedVersionsCacheCleanup(cacheNamePattern, cacheVersionMapping, usedGradleVersions);
+    public static UnusedVersionsCacheCleanup create(String cacheName,
+                                                    CacheVersionMapping cacheVersionMapping,
+                                                    UsedGradleVersions usedGradleVersions) {
+        Pattern cacheNamePattern = Pattern.compile('^' +
+                                                   Pattern.quote(cacheName) +
+                                                   "-((?:\\d+" +
+                                                   Pattern.quote(CacheVersion.COMPONENT_SEPARATOR) +
+                                                   ")*\\d+)$");
+        return new UnusedVersionsCacheCleanup(cacheNamePattern, cacheVersionMapping,
+                usedGradleVersions);
     }
 
-    private UnusedVersionsCacheCleanup(final Pattern cacheNamePattern, CacheVersionMapping cacheVersionMapping, UsedGradleVersions usedGradleVersions) {
+    private UnusedVersionsCacheCleanup(final Pattern cacheNamePattern,
+                                       CacheVersionMapping cacheVersionMapping,
+                                       UsedGradleVersions usedGradleVersions) {
         super(new FilesFinder() {
             @Override
             public Iterable<File> find(File baseDir, FileFilter filter) {
-                FileFilter combinedFilter = FileFilterUtils.and(directoryFileFilter(), new RegexFileFilter(cacheNamePattern), asFileFilter(filter),
-                    asFileFilter(new NonReservedFileFilter(singleton(baseDir))));
+                FileFilter combinedFilter = FileFilterUtils
+                        .and(directoryFileFilter(), new RegexFileFilter(cacheNamePattern),
+                                asFileFilter(filter),
+                                asFileFilter(new NonReservedFileFilter(singleton(baseDir))));
                 File[] result = baseDir.getParentFile().listFiles(combinedFilter);
                 return result == null ? Collections.<File>emptySet() : Arrays.asList(result);
             }
@@ -76,7 +86,8 @@ public class UnusedVersionsCacheCleanup extends AbstractCacheCleanup {
         Matcher matcher = cacheNamePattern.matcher(cacheDir.getName());
         if (matcher.matches()) {
             CacheVersion version = CacheVersion.parse(matcher.group(1));
-            return version.compareTo(cacheVersionMapping.getLatestVersion()) < 0 && !usedVersions.contains(version);
+            return version.compareTo(cacheVersionMapping.getLatestVersion()) < 0 &&
+                   !usedVersions.contains(version);
         }
         return false;
     }

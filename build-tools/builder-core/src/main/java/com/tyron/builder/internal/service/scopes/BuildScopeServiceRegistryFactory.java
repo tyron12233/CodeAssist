@@ -3,7 +3,7 @@ package com.tyron.builder.internal.service.scopes;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 import java.io.Closeable;
 

@@ -16,6 +16,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import javax.inject.Inject;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
@@ -26,7 +27,7 @@ public class JdkJavaCompiler implements Compiler<JavaCompileSpec>, Serializable 
     private static final Logger LOGGER = LoggerFactory.getLogger(JdkJavaCompiler.class);
     private final Factory<JavaCompiler> javaHomeBasedJavaCompilerFactory;
 
-//    @Inject
+    @Inject
     public JdkJavaCompiler(Factory<JavaCompiler> javaHomeBasedJavaCompilerFactory) {
         this.javaHomeBasedJavaCompilerFactory = javaHomeBasedJavaCompilerFactory;
     }

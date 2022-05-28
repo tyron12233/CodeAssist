@@ -6,8 +6,8 @@ import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
 import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 public class SettingsScopeServices extends DefaultServiceRegistry {
     private final SettingsInternal settings;

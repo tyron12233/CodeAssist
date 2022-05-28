@@ -1,11 +1,11 @@
 package com.tyron.builder.cache.internal;
 
 import com.google.common.base.Preconditions;
-import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.DocumentationRegistry.GradleVersion;
+import com.tyron.builder.util.GradleVersion;
+
+import java.io.File;
 
 import javax.annotation.Nonnull;
-import java.io.File;
 
 public class VersionSpecificCacheDirectory implements Comparable<VersionSpecificCacheDirectory> {
 

@@ -1,14 +1,10 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.api.ProjectState;
-import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.project.ProjectStateUnk;
 import com.tyron.builder.util.Path;
 
-import org.jetbrains.annotations.Nullable;
-
+import javax.annotation.Nullable;
 import java.util.Set;
-import java.util.function.Consumer;
 
 public interface BuildProjectRegistry {
     /**
@@ -35,18 +31,4 @@ public interface BuildProjectRegistry {
      */
     @Nullable
     ProjectStateUnk findProject(Path projectPath);
-
-    /**
-     * Allows a section of code to run against the mutable state of all projects of this build. No other thread will be able to access the state of any project of this build while the given action is running.
-     *
-     * <p>Any attempt to lock a project by some other thread will block while the given action is running. This includes calls to {@link ProjectState#applyToMutableState(Consumer)}.
-     */
-    void withMutableStateOfAllProjects(Runnable runnable);
-
-    /**
-     * Allows a section of code to run against the mutable state of all projects of this build. No other thread will be able to access the state of any project of this build while the given action is running.
-     *
-     * <p>Any attempt to lock a project by some other thread will block while the given action is running. This includes calls to {@link ProjectState#applyToMutableState(Consumer)}.
-     */
-    <T> T withMutableStateOfAllProjects(Factory<T> factory);
 }

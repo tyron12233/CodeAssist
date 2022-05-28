@@ -7,6 +7,8 @@ import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
 import com.tyron.builder.api.initialization.ProjectDescriptor;
 import com.tyron.builder.api.initialization.Settings;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
+import com.tyron.builder.api.initialization.resolve.DependencyResolutionManagement;
+import com.tyron.builder.api.internal.FeaturePreviews;
 import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.Actions;
 import com.tyron.builder.api.internal.GradleInternal;
@@ -14,7 +16,9 @@ import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.deprecation.DeprecationLogger;
+import com.tyron.builder.internal.management.DependencyResolutionManagementInternal;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
@@ -44,7 +48,7 @@ public class DefaultSettings implements SettingsInternal {
     private final ServiceRegistry services;
 
     private final List<IncludedBuildSpec> includedBuildSpecs = new ArrayList<>();
-//    private final DependencyResolutionManagementInternal dependencyResolutionManagement;
+    private DependencyResolutionManagementInternal dependencyResolutionManagement;
 
 
     public DefaultSettings(
@@ -66,7 +70,7 @@ public class DefaultSettings implements SettingsInternal {
         this.startParameter = startParameter;
         this.services = serviceRegistryFactory.createFor(this);
         this.rootProjectDescriptor = createProjectDescriptor(null, settingsDir.getName(), settingsDir);
-//        this.dependencyResolutionManagement = services.get(DependencyResolutionManagementInternal.class);
+        this.dependencyResolutionManagement = services.get(DependencyResolutionManagementInternal.class);
     }
 
     public DefaultProjectDescriptor createProjectDescriptor(@Nullable DefaultProjectDescriptor parent, String name, File dir) {
@@ -207,7 +211,22 @@ public class DefaultSettings implements SettingsInternal {
 
     @Override
     public void enableFeaturePreview(String name) {
+        FeaturePreviews.Feature feature = FeaturePreviews.Feature.withName(name);
+        if (feature.isActive()) {
+            services.get(FeaturePreviews.class).enableFeature(feature);
+        } else {
+            DeprecationLogger
+                    .deprecate("enableFeaturePreview('" + feature.name() + "')")
+                    .withAdvice("The feature flag is no longer relevant, please remove it from your settings file.")
+                    .willBeRemovedInGradle8()
+                    .withUserManual("feature_lifecycle", "feature_preview")
+                    .nagUser();
+        }
+    }
 
+    @Override
+    public void dependencyResolutionManagement(Action<? super DependencyResolutionManagement> dependencyResolutionConfiguration) {
+        dependencyResolutionConfiguration.execute(dependencyResolutionManagement);
     }
 
     @Override
@@ -244,5 +263,10 @@ public class DefaultSettings implements SettingsInternal {
     @Override
     public List<IncludedBuildSpec> getIncludedBuilds() {
         return includedBuildSpecs;
+    }
+
+    @Override
+    public DependencyResolutionManagementInternal getDependencyResolutionManagement() {
+        return dependencyResolutionManagement;
     }
 }

@@ -6,6 +6,7 @@ dependencies {
     implementation projects.common
 
     implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderProcessServices
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderPersistentCache
@@ -19,6 +20,7 @@ dependencies {
     implementation projects.buildTools.builderResources
 
     implementation common.slf4j
+    implementation 'javax.inject:javax.inject:1'
 }
 
 java {

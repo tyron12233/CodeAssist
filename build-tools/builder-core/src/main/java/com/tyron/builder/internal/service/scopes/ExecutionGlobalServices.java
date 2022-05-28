@@ -4,7 +4,13 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.Generated;
+import com.tyron.builder.api.artifacts.transform.CacheableTransform;
+import com.tyron.builder.api.artifacts.transform.InputArtifact;
+import com.tyron.builder.api.artifacts.transform.InputArtifactDependencies;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
+import com.tyron.builder.api.internal.DefaultNamedDomainObjectSet;
+import com.tyron.builder.api.internal.project.taskfactory.DefaultTaskClassInfoStore;
+import com.tyron.builder.api.internal.project.taskfactory.TaskClassInfoStore;
 import com.tyron.builder.api.tasks.CacheableTask;
 import com.tyron.builder.internal.instantiation.DeserializationInstantiator;
 import com.tyron.builder.internal.instantiation.InstanceFactory;
@@ -13,9 +19,8 @@ import com.tyron.builder.internal.instantiation.InstantiationScheme;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.reflect.annotations.TypeAnnotationMetadataStore;
 import com.tyron.builder.internal.reflect.annotations.impl.DefaultTypeAnnotationMetadataStore;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceLookup;
 import com.tyron.builder.internal.scripts.ScriptOrigin;
-import com.tyron.builder.internal.state.ManagedFactory;
 import com.tyron.builder.api.internal.tasks.properties.InspectionScheme;
 import com.tyron.builder.api.internal.tasks.properties.InspectionSchemeFactory;
 import com.tyron.builder.api.internal.tasks.properties.ModifierAnnotationCategory;
@@ -57,6 +62,7 @@ import com.tyron.builder.api.tasks.OutputFiles;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.SkipWhenEmpty;
 import com.tyron.builder.api.tasks.options.OptionValues;
+import com.tyron.builder.util.internal.ConfigureUtil;
 import com.tyron.builder.work.DisableCachingByDefault;
 import com.tyron.builder.work.Incremental;
 import com.tyron.builder.work.NormalizeLineEndings;
@@ -77,8 +83,8 @@ public class ExecutionGlobalServices {
             Console.class,
             Destroys.class,
             Input.class,
-//            InputArtifact.class,
-//            InputArtifactDependencies.class,
+            InputArtifact.class,
+            InputArtifactDependencies.class,
             InputDirectory.class,
             InputFile.class,
             InputFiles.class,
@@ -108,7 +114,7 @@ public class ExecutionGlobalServices {
         return new DefaultTypeAnnotationMetadataStore(
                 ImmutableSet.of(
                         CacheableTask.class,
-//                        CacheableTransform.class,
+                        CacheableTransform.class,
                         DisableCachingByDefault.class
 //                        UntrackedTask.class
                 ),
@@ -121,9 +127,9 @@ public class ExecutionGlobalServices {
                 ImmutableSet.of(
                         // Used by a nested bean with action in a task, example:
                         // `NestedInputIntegrationTest.implementation of nested closure in decorated bean is tracked`
-//                        ConfigureUtil.WrappedConfigureAction.class,
+                        ConfigureUtil.WrappedConfigureAction.class,
                         // DefaultTestTaskReports used by AbstractTestTask extends this class
-//                        DefaultNamedDomainObjectSet.class,
+                        DefaultNamedDomainObjectSet.class,
                         // Used in gradle-base so it can't have annotations anyway
                         Describable.class
                 ),
@@ -187,58 +193,12 @@ public class ExecutionGlobalServices {
         return new TaskScheme(instantiationScheme, inspectionScheme);
     }
 
-    InspectionScheme createInspectionScheme(InspectionSchemeFactory schemeFactory) {
-        ImmutableSet.Builder<Class<? extends Annotation>> allPropertyTypes = ImmutableSet.builder();
-        allPropertyTypes.addAll(ImmutableSet.of(
-                Input.class,
-                InputFile.class,
-                InputFiles.class,
-                InputDirectory.class,
-                OutputFile.class,
-                OutputFiles.class,
-                OutputDirectory.class,
-                OutputDirectories.class,
-                Destroys.class,
-                LocalState.class,
-                Nested.class,
-                Console.class,
-                ReplacedBy.class,
-                Internal.class,
-                OptionValues.class
-        ));
-        return schemeFactory.inspectionScheme(allPropertyTypes.build(),
-                ImmutableSet.of(Classpath.class, CompileClasspath.class, Incremental.class, Optional.class,
-                        PathSensitive.class, SkipWhenEmpty.class, IgnoreEmptyDirectories.class,
-                        NormalizeLineEndings.class), new InstantiationScheme() {
-                    @Override
-                    public Set<Class<? extends Annotation>> getInjectionAnnotations() {
-                        return Collections.emptySet();
-                    }
-
-                    @Override
-                    public <T> InstanceFactory<T> forType(Class<T> type) {
-                        return null;
-                    }
-
-                    @Override
-                    public InstantiationScheme withServices(ServiceLookup services) {
-                        return null;
-                    }
-
-                    @Override
-                    public InstanceGenerator instantiator() {
-                        return null;
-                    }
-
-                    @Override
-                    public DeserializationInstantiator deserializationInstantiator() {
-                        return null;
-                    }
-                });
+    TaskClassInfoStore createTaskClassInfoStore(CrossBuildInMemoryCacheFactory cacheFactory) {
+        return new DefaultTaskClassInfoStore(cacheFactory);
     }
 
-    PropertyWalker createPropertyWalker(InspectionScheme taskScheme) {
-        return taskScheme.getPropertyWalker();
+    PropertyWalker createPropertyWalker(TaskScheme taskScheme) {
+        return taskScheme.getInspectionScheme().getPropertyWalker();
     }
 
     TypeAnnotationHandler createCacheableTaskPropertyAnnotationHandler() {

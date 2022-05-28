@@ -1,14 +1,13 @@
 package com.tyron.builder.cache.internal.scopes;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.cache.internal.CacheScopeMapping;
 import com.tyron.builder.cache.internal.VersionStrategy;
+import com.tyron.builder.util.GradleVersion;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-
 import java.util.regex.Pattern;
 
 public class DefaultCacheScopeMapping implements CacheScopeMapping {
@@ -18,15 +17,17 @@ public class DefaultCacheScopeMapping implements CacheScopeMapping {
     private static final Pattern CACHE_KEY_NAME_PATTERN = Pattern.compile("\\p{Alpha}+[-/.\\w]*");
 
     private final File globalCacheDir;
-    private final DocumentationRegistry.GradleVersion version;
+    private final GradleVersion version;
 
-    public DefaultCacheScopeMapping(File rootDir, DocumentationRegistry.GradleVersion version) {
+    public DefaultCacheScopeMapping(File rootDir, GradleVersion version) {
         this.globalCacheDir = rootDir;
         this.version = version;
     }
 
     @Override
-    public File getBaseDirectory(@Nullable File baseDir, String key, VersionStrategy versionStrategy) {
+    public File getBaseDirectory(@Nullable File baseDir,
+                                 String key,
+                                 VersionStrategy versionStrategy) {
         if (!CACHE_KEY_NAME_PATTERN.matcher(key).matches()) {
             throw new IllegalArgumentException(String.format("Unsupported cache key '%s'.", key));
         }

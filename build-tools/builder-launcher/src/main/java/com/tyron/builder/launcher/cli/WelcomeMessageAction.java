@@ -3,22 +3,22 @@ package com.tyron.builder.launcher.cli;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.DocumentationRegistry.GradleVersion;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
 import com.tyron.builder.launcher.bootstrap.ExecutionListener;
 import com.tyron.builder.launcher.configuration.BuildLayoutResult;
+import com.tyron.builder.util.GradleVersion;
 import com.tyron.builder.util.internal.GFileUtils;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
+
+import javax.annotation.Nullable;
 
 class WelcomeMessageAction implements Action<ExecutionListener> {
 
@@ -29,17 +29,22 @@ class WelcomeMessageAction implements Action<ExecutionListener> {
     private final Action<ExecutionListener> action;
 
     WelcomeMessageAction(BuildLayoutResult buildLayout, Action<ExecutionListener> action) {
-        this(Logging.getLogger(WelcomeMessageAction.class), buildLayout, GradleVersion.current(), new Function<String, InputStream>() {
-            @Nullable
-            @Override
-            public InputStream apply(@Nullable String input) {
-                return getClass().getClassLoader().getResourceAsStream(input);
-            }
-        }, action);
+        this(Logging.getLogger(WelcomeMessageAction.class), buildLayout, GradleVersion.current(),
+                new Function<String, InputStream>() {
+                    @Nullable
+                    @Override
+                    public InputStream apply(@Nullable String input) {
+                        return getClass().getClassLoader().getResourceAsStream(input);
+                    }
+                }, action);
     }
 
     @VisibleForTesting
-    WelcomeMessageAction(Logger logger, BuildLayoutResult buildLayout, GradleVersion gradleVersion, Function<String, InputStream> inputStreamProvider, Action<ExecutionListener> action) {
+    WelcomeMessageAction(Logger logger,
+                         BuildLayoutResult buildLayout,
+                         GradleVersion gradleVersion,
+                         Function<String, InputStream> inputStreamProvider,
+                         Action<ExecutionListener> action) {
         this.logger = logger;
         this.buildLayout = buildLayout;
         this.gradleVersion = gradleVersion;
@@ -66,7 +71,9 @@ class WelcomeMessageAction implements Action<ExecutionListener> {
 
                 if (!gradleVersion.isSnapshot()) {
                     logger.lifecycle("");
-                    logger.lifecycle("For more details see https://docs.gradle.org/" + gradleVersion.getVersion() + "/release-notes.html");
+                    logger.lifecycle("For more details see https://docs.gradle.org/" +
+                                     gradleVersion.getVersion() +
+                                     "/release-notes.html");
                 }
 
                 logger.lifecycle("");
@@ -82,7 +89,8 @@ class WelcomeMessageAction implements Action<ExecutionListener> {
      * In user environments the system property will never be available.
      */
     private boolean isWelcomeMessageEnabled() {
-        String messageEnabled = System.getProperty("org.gradle.internal.launcher.welcomeMessageEnabled");
+        String messageEnabled =
+                System.getProperty("org.gradle.internal.launcher.welcomeMessageEnabled");
 
         if (messageEnabled == null) {
             return true;

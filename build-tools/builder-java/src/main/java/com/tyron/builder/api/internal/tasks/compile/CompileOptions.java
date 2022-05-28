@@ -21,6 +21,8 @@ import com.tyron.builder.api.tasks.OutputDirectory;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.PathSensitivity;
 import com.tyron.builder.api.tasks.compile.AbstractCompile;
+import com.tyron.builder.api.tasks.compile.ForkOptions;
+import com.tyron.builder.api.tasks.compile.JavaCompile;
 import com.tyron.builder.util.internal.CollectionUtils;
 
 import org.jetbrains.annotations.Nullable;

@@ -17,6 +17,7 @@ dependencies {
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderResources
     implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderProcessServices
 
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.jetbrains:annotations:23.0.0'

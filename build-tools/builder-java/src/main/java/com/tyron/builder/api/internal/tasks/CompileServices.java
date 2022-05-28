@@ -4,7 +4,7 @@ import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.internal.hash.FileHasher;
 import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistration;
 import com.tyron.builder.api.internal.tasks.compile.incremental.IncrementalCompilerFactory;
 import com.tyron.builder.api.internal.tasks.compile.incremental.analyzer.CachingClassDependenciesAnalyzer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.analyzer.ClassDependenciesAnalyzer;
@@ -14,7 +14,7 @@ import com.tyron.builder.api.internal.tasks.compile.incremental.cache.UserHomeSc
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.CachingClassSetAnalyzer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.ClassSetAnalyzer;
 import com.tyron.builder.api.internal.tasks.compile.incremental.classpath.DefaultClassSetAnalyzer;
-import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.cache.StringInterner;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.internal.service.scopes.AbstractPluginServiceRegistry;

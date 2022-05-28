@@ -32,6 +32,8 @@ dependencies {
     testImplementation projects.buildTools.builderConfigurationCache
     testImplementation projects.buildTools.builderBaseServicesGroovy
     testImplementation projects.buildTools.groovyCompiler
+    testImplementation projects.buildTools.builderDependencyManagement
+    testImplementation projects.buildTools.builderPlatformBase
 }
 
 java {

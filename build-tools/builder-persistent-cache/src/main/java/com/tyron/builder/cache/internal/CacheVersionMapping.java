@@ -1,12 +1,11 @@
 package com.tyron.builder.cache.internal;
 
-import static com.tyron.builder.api.internal.DocumentationRegistry.*;
-
 import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.util.GradleVersion;
 
 import java.util.Map;
 import java.util.NavigableMap;

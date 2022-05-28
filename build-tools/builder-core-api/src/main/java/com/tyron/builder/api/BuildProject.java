@@ -1,9 +1,13 @@
 package com.tyron.builder.api;
 
+import com.tyron.builder.api.artifacts.ConfigurationContainer;
+import com.tyron.builder.api.artifacts.dsl.ArtifactHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
+import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
 import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryTree;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.file.ProjectLayout;
 import com.tyron.builder.api.file.RegularFile;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.invocation.Gradle;
@@ -18,10 +22,12 @@ import com.tyron.builder.api.plugins.Convention;
 import com.tyron.builder.api.plugins.ExtensionAware;
 import com.tyron.builder.api.plugins.PluginAware;
 import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.api.tasks.TaskContainer;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
+import com.tyron.builder.internal.resource.TextResource;
 import com.tyron.builder.util.Path;
 
 import org.jetbrains.annotations.Nullable;
@@ -104,6 +110,24 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
     void setBuildDir(Object path);
 
     /**
+     * Returns a handler to create repositories which are used for retrieving dependencies and uploading artifacts
+     * produced by the project.
+     *
+     * @return the repository handler. Never returns null.
+     */
+    RepositoryHandler getRepositories();
+
+    /**
+     * <p>Configures the repositories for this project.
+     *
+     * <p>This method executes the given closure against the {@link RepositoryHandler} for this project. The {@link
+     * RepositoryHandler} is passed to the closure as the closure's delegate.
+     *
+     * @param configureClosure the closure to use to configure the repositories.
+     */
+    void repositories(Closure configureClosure);
+
+    /**
      * Returns the dependency handler of this project. The returned dependency handler instance can be used for adding
      * new dependencies. For accessing already declared dependencies, the configurations can be used.
      *
@@ -166,6 +190,89 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * Returns a human-consumable display name for this project.
      */
     String getDisplayName();
+
+    /**
+     * Returns the configurations of this project.
+     *
+     * <h3>Examples:</h3> See docs for {@link ConfigurationContainer}
+     *
+     * @return The configuration of this project.
+     */
+    ConfigurationContainer getConfigurations();
+
+    /**
+     * <p>Configures the dependency configurations for this project.
+     *
+     * <p>This method executes the given closure against the {@link ConfigurationContainer}
+     * for this project. The {@link ConfigurationContainer} is passed to the closure as the closure's delegate.
+     *
+     * <h3>Examples:</h3> See docs for {@link ConfigurationContainer}
+     *
+     * @param configureClosure the closure to use to configure the dependency configurations.
+     */
+    void configurations(Closure configureClosure);
+
+    /**
+     * Returns a handler for assigning artifacts produced by the project to configurations.
+     * <h3>Examples:</h3>See docs for {@link ArtifactHandler}
+     */
+    ArtifactHandler getArtifacts();
+
+    /**
+     * <p>Configures the published artifacts for this project.
+     *
+     * <p>This method executes the given closure against the {@link ArtifactHandler} for this project. The {@link
+     * ArtifactHandler} is passed to the closure as the closure's delegate.
+     *
+     * <p>Example:
+     * <pre class='autoTested'>
+     * configurations {
+     *   //declaring new configuration that will be used to associate with artifacts
+     *   schema
+     * }
+     *
+     * task schemaJar(type: Jar) {
+     *   //some imaginary task that creates a jar artifact with the schema
+     * }
+     *
+     * //associating the task that produces the artifact with the configuration
+     * artifacts {
+     *   //configuration name and the task:
+     *   schema schemaJar
+     * }
+     * </pre>
+     *
+     * @param configureClosure the closure to use to configure the published artifacts.
+     */
+    void artifacts(Closure configureClosure);
+
+    /**
+     * <p>Configures the published artifacts for this project.
+     *
+     * <p>This method executes the given action against the {@link ArtifactHandler} for this project.
+     *
+     * <p>Example:
+     * <pre class='autoTested'>
+     * configurations {
+     *   //declaring new configuration that will be used to associate with artifacts
+     *   schema
+     * }
+     *
+     * task schemaJar(type: Jar) {
+     *   //some imaginary task that creates a jar artifact with the schema
+     * }
+     *
+     * //associating the task that produces the artifact with the configuration
+     * artifacts {
+     *   //configuration name and the task:
+     *   schema schemaJar
+     * }
+     * </pre>
+     *
+     * @param configureAction the action to use to configure the published artifacts.
+     * @since 3.5
+     */
+    void artifacts(Action<? super ArtifactHandler> configureAction);
 
     Convention getConvention();
 
@@ -617,7 +724,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
     /**
      * Creates a new {@code FileTree} which contains the contents of the given TAR file. The given tarPath path can be:
      * <ul>
-     *   <li>an instance of {@link org.gradle.api.resources.Resource}</li>
+     *   <li>an instance of {@link com.tyron.builder.api.resources.Resource}</li>
      *   <li>any other object is evaluated as per {@link #file(Object)}</li>
      * </ul>
      *
@@ -646,7 +753,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * }
      * </pre>
      *
-     * @param tarPath The TAR file or an instance of {@link org.gradle.api.resources.Resource}.
+     * @param tarPath The TAR file or an instance of {@link com.tyron.builder.api.resources.Resource}.
      * @return the file tree. Never returns null.
      */
     FileTree tarTree(Object tarPath);
@@ -656,25 +763,32 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @param value The {@code java.util.concurrent.Callable} use to calculate the value.
      * @return The provider. Never returns null.
-     * @throws org.gradle.api.InvalidUserDataException If the provided value is null.
-     * @see org.gradle.api.provider.ProviderFactory#provider(Callable)
+     * @throws com.tyron.builder.api.InvalidUserDataException If the provided value is null.
+     * @see com.tyron.builder.api.provider.ProviderFactory#provider(Callable)
      * @since 4.0
      */
     <T> Provider<T> provider(Callable<T> value);
 
-//    /**
-//     * Provides access to methods to create various kinds of {@link Provider} instances.
-//     *
-//     * @since 4.0
-//     */
-//    ProviderFactory getProviders();
-//
-//    /**
-//     * Provides access to methods to create various kinds of model objects.
-//     *
-//     * @since 4.0
-//     */
+    /**
+     * Provides access to methods to create various kinds of {@link Provider} instances.
+     *
+     * @since 4.0
+     */
+    ProviderFactory getProviders();
+
+    /**
+     * Provides access to methods to create various kinds of model objects.
+     *
+     * @since 4.0
+     */
     ObjectFactory getObjects();
+
+    /**
+     * Provides access to various important directories for this project.
+     *
+     * @since 4.1
+     */
+    ProjectLayout getLayout();
 
 
     /**
@@ -840,7 +954,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @param propertyName The name of the property.
      * @return The value of the property, possibly null.
      * @throws MissingPropertyException When the given property is unknown.
-     * @see Project#findProperty(String)
+     * @see BuildProject#findProperty(String)
      */
     @Nullable
     Object property(String propertyName); // throws MissingPropertyException;
@@ -872,7 +986,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @param propertyName The name of the property.
      * @since 2.13
      * @return The value of the property, possibly null or null if not found.
-     * @see Project#property(String)
+     * @see BuildProject#property(String)
      */
     @Nullable
     Object findProperty(String propertyName);

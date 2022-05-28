@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.instantiation;
 
 import com.tyron.builder.internal.reflect.Instantiator;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceLookup;
 
 import java.lang.annotation.Annotation;
 

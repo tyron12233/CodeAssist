@@ -3,20 +3,27 @@ package com.tyron.builder.internal.session;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.api.artifacts.component.ModuleComponentSelector;
+import com.tyron.builder.api.internal.FeaturePreviews;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.attributes.DefaultImmutableAttributesFactory;
 import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
-import com.tyron.builder.api.internal.changedetection.state.FileHasherStatistics;
 import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.api.internal.model.NamedObjectInstantiator;
 import com.tyron.builder.api.internal.project.BuildOperationCrossProjectConfigurator;
 import com.tyron.builder.api.internal.project.CrossProjectConfigurator;
+import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.cache.CacheRepository;
 import com.tyron.builder.cache.internal.BuildScopeCacheDir;
 import com.tyron.builder.cache.internal.CleanupActionFactory;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.internal.scopes.DefaultBuildTreeScopedCache;
 import com.tyron.builder.cache.scopes.BuildTreeScopedCache;
+import com.tyron.builder.groovy.scripts.internal.DefaultScriptSourceHasher;
+import com.tyron.builder.groovy.scripts.internal.ScriptSourceHasher;
 import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.initialization.BuildClientMetaData;
 import com.tyron.builder.initialization.BuildEventConsumer;
@@ -28,21 +35,26 @@ import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.initialization.layout.ProjectCacheDir;
 import com.tyron.builder.internal.build.BuildLayoutValidator;
 import com.tyron.builder.internal.buildevents.BuildStartedTime;
-import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.event.DefaultListenerManager;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.hash.ChecksumService;
+import com.tyron.builder.internal.isolation.IsolatableFactory;
 import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
+import com.tyron.builder.internal.model.CalculatedValueContainerFactory;
 import com.tyron.builder.internal.model.StateTransitionControllerFactory;
-import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.scopeids.id.UserScopeId;
+import com.tyron.builder.internal.service.ServiceRegistration;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.WorkerSharedBuildSessionScopeServices;
 import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
+import com.tyron.builder.vcs.VcsMapping;
+import com.tyron.builder.vcs.VersionControlSpec;
+import com.tyron.builder.vcs.internal.VcsMappingsStore;
+import com.tyron.builder.vcs.internal.VcsResolver;
 
 import org.apache.commons.io.FileUtils;
 
@@ -50,6 +62,8 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+
+import javax.annotation.Nullable;
 
 // accessed reflectively
 @SuppressWarnings("unused")
@@ -80,7 +94,7 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
         registration.add(BuildRequestMetaData.class, buildRequestMetaData);
         registration.add(BuildClientMetaData.class, buildClientMetaData);
         registration.add(BuildEventConsumer.class, buildEventConsumer);
-//        registration.add(CalculatedValueContainerFactory.class);
+        registration.add(CalculatedValueContainerFactory.class);
         registration.add(StateTransitionControllerFactory.class);
         registration.add(BuildLayoutValidator.class);
         registration.add(DefaultAsyncWorkTracker.class);
@@ -135,13 +149,13 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
 //        return new BuildSessionScopeFileTimeStampInspector(workDir);
 //    }
 //
-//    ScriptSourceHasher createScriptSourceHasher() {
-//        return new DefaultScriptSourceHasher();
-//    }
-//
-//    DefaultImmutableAttributesFactory createImmutableAttributesFactory(IsolatableFactory isolatableFactory, NamedObjectInstantiator instantiator) {
-//        return new DefaultImmutableAttributesFactory(isolatableFactory, instantiator);
-//    }
+    ScriptSourceHasher createScriptSourceHasher() {
+        return new DefaultScriptSourceHasher();
+    }
+
+    DefaultImmutableAttributesFactory createImmutableAttributesFactory(IsolatableFactory isolatableFactory, NamedObjectInstantiator instantiator) {
+        return new DefaultImmutableAttributesFactory(isolatableFactory, instantiator);
+    }
 
 //    UserScopeId createUserScopeId(PersistentScopeIdLoader persistentScopeIdLoader) {
 //        return persistentScopeIdLoader.getUser();
@@ -156,9 +170,9 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
         return BuildStartedTime.startingAt(Math.min(currentTime, buildRequestMetaData.getStartTime()));
     }
 
-//    FeaturePreviews createExperimentalFeatures() {
-//        return new FeaturePreviews();
-//    }
+    FeaturePreviews createExperimentalFeatures() {
+        return new FeaturePreviews();
+    }
 //
     CleanupActionFactory createCleanupActionFactory(BuildOperationExecutor buildOperationExecutor) {
         return new CleanupActionFactory(buildOperationExecutor);
@@ -260,6 +274,34 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
         @Override
         public void close() {
             delegate.close();
+        }
+    }
+
+    VcsMappingsStore createVcsMappingStore() {
+        return new VcsMappingStoreImpl();
+    }
+
+    private static class VcsMappingStoreImpl implements VcsMappingsStore, VcsResolver {
+
+        @Override
+        public VcsResolver asResolver() {
+            return this;
+        }
+
+        @Override
+        public void addRule(Action<? super VcsMapping> rule, Gradle gradle) {
+
+        }
+
+        @Nullable
+        @Override
+        public VersionControlSpec locateVcsFor(ModuleComponentSelector selector) {
+            return null;
+        }
+
+        @Override
+        public boolean hasRules() {
+            return false;
         }
     }
 }

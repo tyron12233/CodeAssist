@@ -5,7 +5,7 @@ import com.tyron.builder.groovy.scripts.Script;
 import com.tyron.builder.groovy.scripts.ScriptRunner;
 import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.reflect.Instantiator;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.scripts.ScriptExecutionListener;
 
 public class DefaultScriptRunnerFactory implements ScriptRunnerFactory {

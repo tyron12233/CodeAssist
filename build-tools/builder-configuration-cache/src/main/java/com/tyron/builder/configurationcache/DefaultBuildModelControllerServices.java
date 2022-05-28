@@ -1,11 +1,17 @@
 package com.tyron.builder.configurationcache;
 
+import com.tyron.builder.api.internal.artifacts.ivyservice.projectmodule.DefaultLocalComponentRegistry;
+import com.tyron.builder.api.internal.artifacts.ivyservice.projectmodule.LocalComponentInAnotherBuildProvider;
+import com.tyron.builder.api.internal.artifacts.ivyservice.projectmodule.LocalComponentProvider;
+import com.tyron.builder.api.internal.artifacts.ivyservice.projectmodule.LocalComponentRegistry;
+import com.tyron.builder.api.internal.project.ProjectStateRegistry;
 import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.project.ProjectEvaluator;
 import com.tyron.builder.execution.TaskSelector;
 import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.internal.event.ListenerManager;
+import com.tyron.builder.internal.model.CalculatedValueContainerFactory;
 import com.tyron.builder.invocation.DefaultGradle;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -120,6 +126,22 @@ public class DefaultBuildModelControllerServices implements BuildModelController
                             new BuildScriptProcessor(configurerFactory)
                     );
             return new LifecycleProjectEvaluator(buildOperationExecutor, configure, buildCancellationToken);
+        }
+
+        public LocalComponentRegistry createLocalComponentRegistry(
+                BuildState currentBuild,
+                ProjectStateRegistry projectStateRegistry,
+                CalculatedValueContainerFactory calculatedValueContainerFactory,
+                LocalComponentProvider provider,
+                LocalComponentInAnotherBuildProvider anotherBuildProvider
+        ) {
+            return new DefaultLocalComponentRegistry(
+                    currentBuild.getBuildIdentifier(),
+                    projectStateRegistry,
+                    calculatedValueContainerFactory,
+                    provider,
+                    anotherBuildProvider
+            );
         }
     }
 

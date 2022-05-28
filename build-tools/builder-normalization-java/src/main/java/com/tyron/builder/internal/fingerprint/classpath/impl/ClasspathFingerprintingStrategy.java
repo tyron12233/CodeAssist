@@ -233,4 +233,9 @@ public class ClasspathFingerprintingStrategy extends AbstractFingerprintingStrat
     public FingerprintHashingStrategy getHashingStrategy() {
         return FingerprintHashingStrategy.KEEP_ORDER;
     }
+
+    @Override
+    public String normalizePath(FileSystemLocationSnapshot snapshot) {
+        return "";
+    }
 }

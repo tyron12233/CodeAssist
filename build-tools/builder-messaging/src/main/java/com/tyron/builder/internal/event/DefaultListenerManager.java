@@ -5,7 +5,7 @@ import com.tyron.builder.internal.dispatch.Dispatch;
 import com.tyron.builder.internal.dispatch.MethodInvocation;
 import com.tyron.builder.internal.dispatch.ProxyDispatchAdapter;
 import com.tyron.builder.internal.dispatch.ReflectionDispatch;
-import com.tyron.builder.internal.reflect.service.AnnotatedServiceLifecycleHandler;
+import com.tyron.builder.internal.service.AnnotatedServiceLifecycleHandler;
 import com.tyron.builder.internal.service.scopes.EventScope;
 import com.tyron.builder.internal.service.scopes.Scope;
 import com.tyron.builder.internal.service.scopes.StatefulListener;

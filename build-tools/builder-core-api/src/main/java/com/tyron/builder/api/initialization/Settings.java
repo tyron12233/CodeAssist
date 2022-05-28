@@ -1,7 +1,9 @@
 package com.tyron.builder.api.initialization;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.Incubating;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
+import com.tyron.builder.api.initialization.resolve.DependencyResolutionManagement;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.UnknownProjectException;
@@ -260,7 +262,7 @@ public interface Settings {
      *
      * @since 6.8
      */
-//    @Incubating
+    @Incubating
     ProviderFactory getProviders();
 
     /**
@@ -344,14 +346,14 @@ public interface Settings {
      *
      * @since 6.8
      */
-//    @Incubating
-//    void dependencyResolutionManagement(Action<? super DependencyResolutionManagement> dependencyResolutionConfiguration);
+    @Incubating
+    void dependencyResolutionManagement(Action<? super DependencyResolutionManagement> dependencyResolutionConfiguration);
 
     /**
      * Returns the dependency resolution management handler.
      *
      * @since 6.8
      */
-//    @Incubating
-//    DependencyResolutionManagement getDependencyResolutionManagement();
+    @Incubating
+    DependencyResolutionManagement getDependencyResolutionManagement();
 }

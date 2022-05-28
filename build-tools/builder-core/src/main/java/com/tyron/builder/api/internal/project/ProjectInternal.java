@@ -14,19 +14,21 @@ import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
 import com.tyron.builder.api.internal.plugins.PluginAwareInternal;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
-import com.tyron.builder.api.plugins.PluginManager;
 import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.metaobject.DynamicObject;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.model.RuleBasedPluginListener;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.model.internal.registry.ModelRegistry;
+import com.tyron.builder.model.internal.registry.ModelRegistryScope;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
 
-public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScriptServices, DomainObjectContext, PluginAwareInternal {
+public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScriptServices, DomainObjectContext, ModelRegistryScope, PluginAwareInternal {
 
     // These constants are defined here and not with the rest of their kind in HelpTasksPlugin because they are referenced
     // in the ‘core’ modules, which don't depend on ‘plugins’ where HelpTasksPlugin is defined.
@@ -58,6 +60,8 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScr
     ScriptSource getBuildScriptSource();
 
     ProjectEvaluationListener getProjectEvaluationBroadcaster();
+
+    void addRuleBasedPluginListener(RuleBasedPluginListener listener);
 
     @Override
     ProjectInternal project(String path) throws UnknownProjectException;
@@ -94,7 +98,12 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScr
 
     ProjectStateInternal getState();
 
+    @Override
+    ModelRegistry getModelRegistry();
+
     GradleInternal getGradle();
+
+    void prepareForRuleBasedPlugins();
 
     ClassLoaderScope getClassLoaderScope();
 
@@ -104,6 +113,8 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScr
 
     @Override
     PluginManagerInternal getPluginManager();
+
+    void fireDeferredConfiguration();
 
     void addDeferredConfiguration(Runnable configuration);
 
