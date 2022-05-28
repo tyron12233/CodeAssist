@@ -1,16 +1,17 @@
 package com.flipkart.android.proteus.value;
 
 import androidx.annotation.NonNull;
-import androidx.core.view.GravityCompat;
 
 import com.flipkart.android.proteus.parser.ParseHelper;
+import com.flipkart.android.proteus.util.GravityIntMapping;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class Gravity extends Value {
 
-    private static final Map<Integer, String> GRAVITY_VALUES = new HashMap<>();
+    private static final Map<Integer, String> GRAVITY_VALUES = new LinkedHashMap<>();
+    private final GravityIntMapping gravityIntMapping = new GravityIntMapping();
 
     static {
         GRAVITY_VALUES.put(android.view.Gravity.LEFT, "left");
@@ -45,16 +46,7 @@ public class Gravity extends Value {
 
     @Override
     public String getAsString() {
-        StringBuilder sb = new StringBuilder();
-
-
-        GRAVITY_VALUES.forEach((k, v) -> {
-            if ((gravity & k) == k) {
-                sb.append(v);
-                sb.append("|");
-            }
-        });
-        return sb.substring(0, sb.length() - 1);
+        return String.join("|", gravityIntMapping.fromIntValue(gravity));
     }
 
     @Override
