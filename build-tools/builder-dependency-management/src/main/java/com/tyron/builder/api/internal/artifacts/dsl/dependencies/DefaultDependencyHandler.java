@@ -147,7 +147,6 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
         addProviderConvertible(configurationName, dependencyNotation, Actions.doNothing());
     }
 
-    @SuppressWarnings("ConstantConditions")
     private <U extends ExternalModuleDependency> Closure<Object> closureOf(Action<? super U> configuration) {
         return new Closure<Object>(this, this) {
             @Override
@@ -236,11 +235,10 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
     }
 
     private Dependency doAddConfiguration(Configuration configuration, Configuration dependencyNotation) {
-        Configuration other = dependencyNotation;
-        if (!configurationContainer.contains(other)) {
+        if (!configurationContainer.contains(dependencyNotation)) {
             throw new UnsupportedOperationException("Currently you can only declare dependencies on configurations from the same project.");
         }
-        configuration.extendsFrom(other);
+        configuration.extendsFrom(dependencyNotation);
         return null;
     }
 

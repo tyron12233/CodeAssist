@@ -876,11 +876,8 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public DependencyMetaDataProvider getDependencyMetaDataProvider() {
-        return () -> {
-            throw new UnsupportedOperationException();
-        };
-    }
+    @Inject
+    public abstract DependencyMetaDataProvider getDependencyMetaDataProvider();
 
     @Override
     public GradleInternal getGradle() {

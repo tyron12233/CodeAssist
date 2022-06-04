@@ -5,6 +5,8 @@ import com.tyron.builder.api.internal.CollectionCallbackActionDecorator;
 import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.MutationGuards;
 import com.tyron.builder.api.internal.artifacts.DependencyManagementServices;
+import com.tyron.builder.api.internal.artifacts.Module;
+import com.tyron.builder.api.internal.artifacts.ProjectBackedModule;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.artifacts.dsl.dependencies.ProjectFinder;
 import com.tyron.builder.api.internal.collections.DefaultDomainObjectCollectionFactory;
@@ -132,6 +134,7 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         return parentRegistry.createChild(project.getClassLoaderScope());
     }
 
+
     protected DeferredProjectConfiguration createDeferredProjectConfiguration() {
         return new DeferredProjectConfiguration(project);
     }
@@ -196,6 +199,17 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
 
     protected ProjectFinder createProjectFinder() {
         return new DefaultProjectFinder(() -> project);
+    }
+
+    protected DependencyMetaDataProvider createDependencyMetaDataProvider() {
+        return new ProjectBackedModuleMetaDataProvider();
+    }
+
+    private class ProjectBackedModuleMetaDataProvider implements DependencyMetaDataProvider {
+        @Override
+        public Module getModule() {
+            return new ProjectBackedModule(project);
+        }
     }
 
     protected ModelRegistry createModelRegistry(ModelRuleExtractor ruleExtractor) {
