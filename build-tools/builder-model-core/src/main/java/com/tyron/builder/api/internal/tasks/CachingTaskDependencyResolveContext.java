@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal.tasks;
 import static java.lang.String.format;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.api.Buildable;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.internal.graph.CachingDirectedGraphWalker;
 import com.tyron.builder.internal.graph.DirectedGraph;
@@ -83,21 +84,21 @@ public class CachingTaskDependencyResolveContext<T> extends AbstractTaskDependen
                 connectedNodes.addAll(queue);
                 return;
             }
-//            if (node instanceof Buildable) {
-//                Buildable buildable = (Buildable) node;
-//                connectedNodes.add(buildable.getBuildDependencies());
-//                return;
-//            }
-//            if (node instanceof FinalizeAction) {
-//                FinalizeAction finalizeAction = (FinalizeAction) node;
-//                TaskDependencyContainer dependencies = finalizeAction.getDependencies();
-//                Set<T> deps = new CachingTaskDependencyResolveContext<T>(workResolvers).getDependencies(task, dependencies);
-//                for (T dep : deps) {
-//                    attachFinalizerTo(dep, finalizeAction);
-//                    values.add(dep);
-//                }
-//                return;
-//            }
+            if (node instanceof Buildable) {
+                Buildable buildable = (Buildable) node;
+                connectedNodes.add(buildable.getBuildDependencies());
+                return;
+            }
+            if (node instanceof FinalizeAction) {
+                FinalizeAction finalizeAction = (FinalizeAction) node;
+                TaskDependencyContainer dependencies = finalizeAction.getDependencies();
+                Set<T> deps = new CachingTaskDependencyResolveContext<T>(workResolvers).getDependencies(task, dependencies);
+                for (T dep : deps) {
+                    attachFinalizerTo(dep, finalizeAction);
+                    values.add(dep);
+                }
+                return;
+            }
             for (WorkDependencyResolver<T> workResolver : workResolvers) {
                 if (workResolver.resolve(task, node, values::add)) {
                     return;

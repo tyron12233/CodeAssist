@@ -26,9 +26,13 @@ import com.tyron.builder.configuration.ImportsReader;
 import com.tyron.builder.execution.DefaultWorkValidationWarningRecorder;
 import com.tyron.builder.initialization.ClassLoaderRegistry;
 import com.tyron.builder.initialization.DefaultClassLoaderRegistry;
+import com.tyron.builder.initialization.DefaultJdkToolsInitializer;
+import com.tyron.builder.initialization.JdkToolsInitializer;
 import com.tyron.builder.initialization.LegacyTypesSupport;
 import com.tyron.builder.internal.Factory;
+import com.tyron.builder.internal.classloader.DefaultClassLoaderFactory;
 import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.execution.history.OverlappingOutputDetector;
 import com.tyron.builder.internal.execution.history.changes.DefaultExecutionStateChangeDetector;
@@ -83,6 +87,12 @@ import com.tyron.builder.model.internal.manage.schema.extract.ModelSchemaAspectE
 import com.tyron.builder.model.internal.manage.schema.extract.ModelSchemaAspectExtractor;
 import com.tyron.builder.model.internal.manage.schema.extract.ModelSchemaExtractionStrategy;
 import com.tyron.builder.model.internal.manage.schema.extract.ModelSchemaExtractor;
+import com.tyron.builder.process.internal.health.memory.DefaultJvmMemoryInfo;
+import com.tyron.builder.process.internal.health.memory.DefaultMemoryManager;
+import com.tyron.builder.process.internal.health.memory.DefaultOsMemoryInfo;
+import com.tyron.builder.process.internal.health.memory.JvmMemoryInfo;
+import com.tyron.builder.process.internal.health.memory.MemoryManager;
+import com.tyron.builder.process.internal.health.memory.OsMemoryInfo;
 
 import net.rubygrapefruit.platform.file.FileSystems;
 import net.rubygrapefruit.platform.internal.PosixFileSystems;
@@ -112,8 +122,6 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
             pluginServiceRegistry.registerGlobalServices(registration);
         }
         registration.add(BuildLayoutFactory.class);
-
-        registration.addProvider(new ExecutionGlobalServices());
     }
 
 
@@ -170,6 +178,10 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
             ListenerManager listenerManager
     ) {
         return listenerManager.getBroadcaster(BuildOperationListener.class);
+    }
+
+    JdkToolsInitializer createJdkToolsInitializer() {
+        return new DefaultJdkToolsInitializer(new DefaultClassLoaderFactory());
     }
 
     InstanceGenerator createInstantiator(InstantiatorFactory instantiatorFactory) {
@@ -278,6 +290,18 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
 
     InstantiatorFactory createInstantiatorFactory(CrossBuildInMemoryCacheFactory cacheFactory, List<InjectAnnotationHandler> injectHandlers, List<AbstractOutputPropertyAnnotationHandler> outputHandlers) {
         return new DefaultInstantiatorFactory(cacheFactory, injectHandlers, new OutputPropertyRoleAnnotationHandler(outputHandlers));
+    }
+
+    OsMemoryInfo createOsMemoryInfo() {
+        return new DefaultOsMemoryInfo();
+    }
+
+    JvmMemoryInfo createJvmMemoryInfo() {
+        return new DefaultJvmMemoryInfo();
+    }
+
+    MemoryManager createMemoryManager(OsMemoryInfo osMemoryInfo, JvmMemoryInfo jvmMemoryInfo, ListenerManager listenerManager, ExecutorFactory executorFactory) {
+        return new DefaultMemoryManager(osMemoryInfo, jvmMemoryInfo, listenerManager, executorFactory);
     }
 
     ObjectFactory createObjectFactory(

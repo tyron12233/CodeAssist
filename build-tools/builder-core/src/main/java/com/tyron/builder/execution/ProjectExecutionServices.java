@@ -68,8 +68,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
 
         BuildCancellationToken token = new DefaultBuildCancellationToken();
         add(BuildCancellationToken.class, token);
-
-        addProvider(new ExecutionGradleServices());
     }
 
     FileAccessTracker createFileAccessTracker() {
@@ -213,6 +211,23 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                         Collections.emptyMap(),
                         interner,
                         LineEndingSensitivity.DEFAULT
+                )
+        );
+    }
+
+    FingerprinterRegistration createRelativePathDefaultDefaultFingerprinter(
+            FileSystemLocationSnapshotHasher hasher,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            StringInterner interner
+    ) {
+        return FingerprinterRegistration.registration(
+                DirectorySensitivity.DEFAULT,
+                LineEndingSensitivity.DEFAULT,
+                new RelativePathFileCollectionFingerprinter(
+                        interner,
+                        DirectorySensitivity.DEFAULT,
+                        fileCollectionSnapshotter,
+                        hasher
                 )
         );
     }

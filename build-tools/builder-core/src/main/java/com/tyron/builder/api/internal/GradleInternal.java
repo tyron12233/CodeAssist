@@ -1,6 +1,7 @@
 package com.tyron.builder.api.internal;
 
 import com.tyron.builder.BuildListener;
+import com.tyron.builder.api.internal.plugins.PluginAwareInternal;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
@@ -18,7 +19,7 @@ import java.io.File;
 import java.util.Collection;
 import java.util.List;
 
-public interface GradleInternal extends Gradle {
+public interface GradleInternal extends Gradle, PluginAwareInternal {
 
     @Override
     ProjectInternal getRootProject() throws IllegalStateException;

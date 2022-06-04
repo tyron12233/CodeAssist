@@ -4,6 +4,8 @@ import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.artifacts.dsl.ArtifactHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
+import com.tyron.builder.api.component.SoftwareComponentContainer;
+import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryTree;
 import com.tyron.builder.api.file.FileCollection;
@@ -801,6 +803,44 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      */
     void buildscript(Closure configureClosure);
 
+    /**
+     * Creates a {@link CopySpec} which can later be used to copy files or create an archive. The given closure is used
+     * to configure the {@link CopySpec} before it is returned by this method.
+     *
+     * <pre class='autoTested'>
+     * def baseSpec = copySpec {
+     *    from "source"
+     *    include "**&#47;*.java"
+     * }
+     *
+     * task copy(type: Copy) {
+     *    into "target"
+     *    with baseSpec
+     * }
+     * </pre>
+     *
+     * @param closure Closure to configure the CopySpec
+     * @return The CopySpec
+     */
+    CopySpec copySpec(Closure closure);
+
+    /**
+     * Creates a {@link CopySpec} which can later be used to copy files or create an archive. The given action is used
+     * to configure the {@link CopySpec} before it is returned by this method.
+     *
+     * @see #copySpec(Closure)
+     * @param action Action to configure the CopySpec
+     * @return The CopySpec
+     */
+    CopySpec copySpec(Action<? super CopySpec> action);
+
+    /**
+     * Creates a {@link CopySpec} which can later be used to copy files or create an archive.
+     *
+     * @return a newly created copy spec
+     */
+    CopySpec copySpec();
+
 
     /**
      * Creates a directory and returns a file pointing to it.
@@ -1021,4 +1061,11 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
     Path getProjectPath();
 
     Path getIdentityPath();
+
+    /**
+     * Returns the software components produced by this project.
+     *
+     * @return The components for this project.
+     */
+    SoftwareComponentContainer getComponents();
 }

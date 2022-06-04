@@ -3,7 +3,7 @@ package com.tyron.builder.internal.composite;
 
 import com.google.common.base.Preconditions;
 import com.tyron.builder.api.tasks.TaskReference;
-import com.tyron.builder.initialization.ConfigurableIncludedPluginBuild;
+import com.tyron.builder.api.initialization.ConfigurableIncludedPluginBuild;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

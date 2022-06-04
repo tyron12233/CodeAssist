@@ -8,9 +8,12 @@ import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.plugins.ExtensionAware;
+import com.tyron.builder.api.plugins.PluginAware;
 import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
+import com.tyron.builder.plugin.management.PluginManagementSpec;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -55,7 +58,7 @@ import java.util.Collections;
  *
  * </ul>
  */
-public interface Settings {
+public interface Settings extends PluginAware, ExtensionAware {
     /**
      * <p>The default name for the settings file.</p>
      */
@@ -308,14 +311,14 @@ public interface Settings {
      *
      * @since 3.5
      */
-//    void pluginManagement(Action<? super PluginManagementSpec> pluginManagementSpec);
+    void pluginManagement(Action<? super PluginManagementSpec> pluginManagementSpec);
 
     /**
      * Returns the plugin management configuration.
      *
      * @since 3.5
      */
-//    PluginManagementSpec getPluginManagement();
+    PluginManagementSpec getPluginManagement();
 
     /**
      * Configures source control.

@@ -17,7 +17,7 @@
 package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.artifacts.Configuration;
 import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.artifacts.PublishArtifact;
@@ -44,7 +44,7 @@ import java.util.concurrent.Callable;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/war_plugin.html">WAR plugin reference</a>
  */
-public class WarPlugin implements Plugin<Project> {
+public class WarPlugin implements Plugin<BuildProject> {
     public static final String PROVIDED_COMPILE_CONFIGURATION_NAME = "providedCompile";
     public static final String PROVIDED_RUNTIME_CONFIGURATION_NAME = "providedRuntime";
     public static final String WAR_TASK_NAME = "war";
@@ -60,7 +60,7 @@ public class WarPlugin implements Plugin<Project> {
     }
 
     @Override
-    public void apply(final Project project) {
+    public void apply(final BuildProject project) {
         project.getPluginManager().apply(JavaPlugin.class);
         final WarPluginConvention pluginConvention = new DefaultWarPluginConvention(project);
         project.getConvention().getPlugins().put("war", pluginConvention);
@@ -114,7 +114,7 @@ public class WarPlugin implements Plugin<Project> {
             .withUpgradeGuideSection(7, "plugin_configuration_consumption"));
     }
 
-    private void configureComponent(Project project, PublishArtifact warArtifact) {
+    private void configureComponent(BuildProject project, PublishArtifact warArtifact) {
         AttributeContainer attributes = attributesFactory.mutable()
             .attribute(Usage.USAGE_ATTRIBUTE, objectFactory.named(Usage.class, Usage.JAVA_RUNTIME));
         project.getComponents().add(objectFactory.newInstance(WebApplication.class, warArtifact, "master", attributes));

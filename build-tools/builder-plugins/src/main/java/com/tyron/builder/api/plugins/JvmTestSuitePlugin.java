@@ -16,11 +16,10 @@
 
 package com.tyron.builder.api.plugins;
 
-import org.apache.commons.lang.StringUtils;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.ExtensiblePolymorphicDomainObjectContainer;
 import com.tyron.builder.api.Incubating;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
 import com.tyron.builder.api.artifacts.Configuration;
 import com.tyron.builder.api.artifacts.type.ArtifactTypeDefinition;
 import com.tyron.builder.api.attributes.Category;
@@ -38,6 +37,8 @@ import com.tyron.builder.api.tasks.testing.Test;
 import com.tyron.builder.testing.base.TestSuite;
 import com.tyron.builder.testing.base.TestingExtension;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
  * A {@link com.tyron.builder.api.Plugin} that adds extensions for declaring, compiling and running {@link JvmTestSuite}s.
  * <p>
@@ -52,14 +53,14 @@ import com.tyron.builder.testing.base.TestingExtension;
  * @see <a href="https://docs.gradle.org/current/userguide/test_suite_plugin.html">Test Suite plugin reference</a>
  */
 @Incubating
-public class JvmTestSuitePlugin implements Plugin<Project> {
+public class JvmTestSuitePlugin implements Plugin<BuildProject> {
     public static final String DEFAULT_TEST_SUITE_NAME = SourceSet.TEST_SOURCE_SET_NAME;
     private static final String TEST_RESULTS_ELEMENTS_VARIANT_PREFIX = "testResultsElementsFor";
 
     @Override
-    public void apply(Project project) {
-        project.getPluginManager().apply("com.tyron.builder.test-suite-base");
-        project.getPluginManager().apply("com.tyron.builder.java-base");
+    public void apply(BuildProject project) {
+        project.getPluginManager().apply("org.gradle.test-suite-base");
+        project.getPluginManager().apply("org.gradle.java-base");
         JavaPluginExtension java = project.getExtensions().getByType(JavaPluginExtension.class);
         TestingExtension testing = project.getExtensions().getByType(TestingExtension.class);
         ExtensiblePolymorphicDomainObjectContainer<TestSuite> testSuites = testing.getSuites();
@@ -89,7 +90,7 @@ public class JvmTestSuitePlugin implements Plugin<Project> {
         configureTestDataElementsVariants(project);
     }
 
-    private void configureTestDataElementsVariants(Project project) {
+    private void configureTestDataElementsVariants(BuildProject project) {
         final TestingExtension testing = project.getExtensions().getByType(TestingExtension.class);
         final ExtensiblePolymorphicDomainObjectContainer<TestSuite> testSuites = testing.getSuites();
 
@@ -100,23 +101,33 @@ public class JvmTestSuitePlugin implements Plugin<Project> {
         });
     }
 
-    private Configuration createTestDataVariant(Project project, JvmTestSuite suite, JvmTestSuiteTarget target) {
-        final Configuration variant = project.getConfigurations().create(TEST_RESULTS_ELEMENTS_VARIANT_PREFIX + StringUtils.capitalize(target.getName()));
+    private Configuration createTestDataVariant(BuildProject project, JvmTestSuite suite,
+                                                JvmTestSuiteTarget target) {
+        final Configuration variant = project.getConfigurations().create
+        (TEST_RESULTS_ELEMENTS_VARIANT_PREFIX + StringUtils.capitalize(target.getName()));
         variant.setVisible(false);
         variant.setCanBeResolved(false);
         variant.setCanBeConsumed(true);
-        variant.extendsFrom(project.getConfigurations().getByName(suite.getSources().getImplementationConfigurationName()),
-            project.getConfigurations().getByName(suite.getSources().getRuntimeOnlyConfigurationName()));
+        variant.extendsFrom(project.getConfigurations().getByName(suite.getSources()
+        .getImplementationConfigurationName()),
+            project.getConfigurations().getByName(suite.getSources()
+            .getRuntimeOnlyConfigurationName()));
 
 
         final ObjectFactory objects = project.getObjects();
         variant.attributes(attributes -> {
-            attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, Usage.VERIFICATION));
-            attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, Category.DOCUMENTATION));
-            attributes.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.class, DocsType.TEST_RESULTS));
-            attributes.attribute(Verification.TEST_SUITE_NAME_ATTRIBUTE, objects.named(Verification.class, suite.getName()));
-            attributes.attribute(Verification.TARGET_NAME_ATTRIBUTE, objects.named(Verification.class, suite.getName()));
-            attributes.attributeProvider(TestType.TEST_TYPE_ATTRIBUTE, suite.getTestType().map(tt -> objects.named(TestType.class, tt)));
+            attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, Usage
+            .VERIFICATION));
+            attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class,
+            Category.DOCUMENTATION));
+            attributes.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.class,
+            DocsType.TEST_RESULTS));
+            attributes.attribute(Verification.TEST_SUITE_NAME_ATTRIBUTE, objects.named
+            (Verification.class, suite.getName()));
+            attributes.attribute(Verification.TARGET_NAME_ATTRIBUTE, objects.named(Verification
+            .class, suite.getName()));
+            attributes.attributeProvider(TestType.TEST_TYPE_ATTRIBUTE, suite.getTestType().map
+            (tt -> objects.named(TestType.class, tt)));
         });
 
         variant.getOutgoing().artifact(

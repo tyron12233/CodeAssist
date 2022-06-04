@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal;
 
+import static com.tyron.builder.api.internal.lambdas.SerializableLambdas.factory;
 import static com.tyron.builder.util.GUtil.uncheckedCall;
 
 import com.tyron.builder.api.Action;
@@ -12,14 +13,17 @@ import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.tasks.Internal;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.scripts.ScriptOrigin;
+import com.tyron.builder.internal.serialization.Cached;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.util.Predicates;
 import com.tyron.builder.util.internal.ConfigureUtil;
 import com.tyron.builder.work.DisableCachingByDefault;
 
+import java.io.File;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.concurrent.Callable;
@@ -34,6 +38,7 @@ public abstract class AbstractTask implements TaskInternal {
 
     private Predicate<? super Task> onlyIf = Predicates.satisfyAll();
     private String reasonNotToTrackState;
+    private boolean impliesSubProjects;
 
     protected AbstractTask() {
         this(taskInfo());
@@ -50,7 +55,12 @@ public abstract class AbstractTask implements TaskInternal {
     @Internal
     @Override
     public boolean getImpliesSubProjects() {
-        return false;
+        return impliesSubProjects;
+    }
+
+    @Override
+    public void setImpliesSubProjects(boolean impliesSubProjects) {
+        this.impliesSubProjects = impliesSubProjects;
     }
 
     @Internal
@@ -83,6 +93,13 @@ public abstract class AbstractTask implements TaskInternal {
             throw new InvalidUserDataException("Action must not be null!");
         }
         getTaskActions().add(0, wrap(action));
+    }
+
+    @Override
+    public Factory<File> getTemporaryDirFactory() {
+        // Cached during serialization so it can be isolated from this task
+        final Cached<File> temporaryDir = Cached.of(this::getTemporaryDir);
+        return factory(temporaryDir::get);
     }
 
     protected InputChangesAwareTaskAction wrap(final Action<? super Task> action) {

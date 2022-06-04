@@ -20,15 +20,9 @@ import com.tyron.builder.api.DefaultTask;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.tasks.Classpath;
 import com.tyron.builder.api.tasks.Input;
-import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskAction;
-import com.tyron.builder.deployment.internal.DeploymentRegistry;
-import com.tyron.builder.internal.jvm.Jvm;
-import com.tyron.builder.process.internal.JavaExecHandleBuilder;
-import com.tyron.builder.process.internal.JavaExecHandleFactory;
 import com.tyron.builder.work.DisableCachingByDefault;
 
-import javax.inject.Inject;
 import java.util.Collection;
 
 @DisableCachingByDefault(because = "Produces no cacheable output")
@@ -36,7 +30,8 @@ public class RunApplication extends DefaultTask {
     private String mainClassName;
     private Collection<String> arguments;
     private FileCollection classpath;
-    private DeploymentRegistry.ChangeBehavior changeBehavior = DeploymentRegistry.ChangeBehavior.RESTART;
+//    private DeploymentRegistry.ChangeBehavior changeBehavior = DeploymentRegistry
+//    .ChangeBehavior.RESTART;
 
     @Classpath
     public FileCollection getClasspath() {
@@ -67,34 +62,35 @@ public class RunApplication extends DefaultTask {
 
     @TaskAction
     public void startApplication() {
-        DeploymentRegistry registry = getDeploymentRegistry();
-        JavaApplicationHandle handle = registry.get(getPath(), JavaApplicationHandle.class);
-        if (handle == null) {
-            JavaExecHandleBuilder builder = getExecActionFactory().newJavaExec();
-            builder.setExecutable(Jvm.current().getJavaExecutable());
-            builder.setClasspath(classpath);
-            builder.getMainClass().set(mainClassName);
-            builder.setArgs(arguments);
-            registry.start(getPath(), changeBehavior, JavaApplicationHandle.class, builder);
-        }
-    }
-
-    @Inject
-    protected DeploymentRegistry getDeploymentRegistry() {
+//        DeploymentRegistry registry = getDeploymentRegistry();
+//        JavaApplicationHandle handle = registry.get(getPath(), JavaApplicationHandle.class);
+//        if (handle == null) {
+//            JavaExecHandleBuilder builder = getExecActionFactory().newJavaExec();
+//            builder.setExecutable(Jvm.current().getJavaExecutable());
+//            builder.setClasspath(classpath);
+//            builder.getMainClass().set(mainClassName);
+//            builder.setArgs(arguments);
+//            registry.start(getPath(), changeBehavior, JavaApplicationHandle.class, builder);
+//        }
         throw new UnsupportedOperationException();
     }
 
-    @Inject
-    protected JavaExecHandleFactory getExecActionFactory() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Internal
-    public DeploymentRegistry.ChangeBehavior getChangeBehavior() {
-        return changeBehavior;
-    }
-
-    public void setChangeBehavior(DeploymentRegistry.ChangeBehavior changeBehavior) {
-        this.changeBehavior = changeBehavior;
-    }
+//    @Inject
+//    protected DeploymentRegistry getDeploymentRegistry() {
+//        throw new UnsupportedOperationException();
+//    }
+//
+//    @Inject
+//    protected JavaExecHandleFactory getExecActionFactory() {
+//        throw new UnsupportedOperationException();
+//    }
+//
+//    @Internal
+//    public DeploymentRegistry.ChangeBehavior getChangeBehavior() {
+//        return changeBehavior;
+//    }
+//
+//    public void setChangeBehavior(DeploymentRegistry.ChangeBehavior changeBehavior) {
+//        this.changeBehavior = changeBehavior;
+//    }
 }

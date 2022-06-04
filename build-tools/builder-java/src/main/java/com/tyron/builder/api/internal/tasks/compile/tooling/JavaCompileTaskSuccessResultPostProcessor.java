@@ -12,6 +12,7 @@ import com.tyron.builder.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.internal.operations.OperationFinishEvent;
 import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.internal.operations.OperationStartEvent;
+import com.tyron.builder.tooling.internal.protocol.events.InternalJavaCompileTaskOperationResult;
 import com.tyron.builder.tooling.internal.protocol.events.InternalJavaCompileTaskOperationResult.InternalAnnotationProcessorResult;
 
 import java.time.Duration;
@@ -23,23 +24,31 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JavaCompileTaskSuccessResultPostProcessor implements OperationResultPostProcessor {
 
     private static final Object TASK_MARKER = new Object();
-    private final Map<OperationIdentifier, CompileJavaBuildOperationType.Result> results = new ConcurrentHashMap<>();
-    private final Map<OperationIdentifier, Object> parentsOfOperationsWithJavaCompileTaskAncestor = new ConcurrentHashMap<>();
+    private final Map<OperationIdentifier, CompileJavaBuildOperationType.Result> results =
+            new ConcurrentHashMap<>();
+    private final Map<OperationIdentifier, Object> parentsOfOperationsWithJavaCompileTaskAncestor =
+            new ConcurrentHashMap<>();
 
     @Override
     public void started(BuildOperationDescriptor buildOperation, OperationStartEvent startEvent) {
         if (buildOperation.getDetails() instanceof ExecuteTaskBuildOperationType.Details) {
             parentsOfOperationsWithJavaCompileTaskAncestor.put(buildOperation.getId(), TASK_MARKER);
-        } else if (buildOperation.getParentId() != null && parentsOfOperationsWithJavaCompileTaskAncestor.containsKey(buildOperation.getParentId())) {
-            parentsOfOperationsWithJavaCompileTaskAncestor.put(buildOperation.getId(), buildOperation.getParentId());
+        } else if (buildOperation.getParentId() != null &&
+                   parentsOfOperationsWithJavaCompileTaskAncestor
+                           .containsKey(buildOperation.getParentId())) {
+            parentsOfOperationsWithJavaCompileTaskAncestor
+                    .put(buildOperation.getId(), buildOperation.getParentId());
         }
     }
 
     @Override
-    public void finished(BuildOperationDescriptor buildOperation, OperationFinishEvent finishEvent) {
+    public void finished(BuildOperationDescriptor buildOperation,
+                         OperationFinishEvent finishEvent) {
         if (finishEvent.getResult() instanceof CompileJavaBuildOperationType.Result) {
-            CompileJavaBuildOperationType.Result result = (CompileJavaBuildOperationType.Result) finishEvent.getResult();
-            OperationIdentifier taskBuildOperationId = findTaskOperationId(buildOperation.getParentId());
+            CompileJavaBuildOperationType.Result result =
+                    (CompileJavaBuildOperationType.Result) finishEvent.getResult();
+            OperationIdentifier taskBuildOperationId =
+                    findTaskOperationId(buildOperation.getParentId());
             results.put(taskBuildOperationId, result);
         }
         parentsOfOperationsWithJavaCompileTaskAncestor.remove(buildOperation.getId());
@@ -54,10 +63,12 @@ public class JavaCompileTaskSuccessResultPostProcessor implements OperationResul
     }
 
     @Override
-    public AbstractTaskResult process(AbstractTaskResult taskResult, OperationIdentifier taskBuildOperationId) {
+    public AbstractTaskResult process(AbstractTaskResult taskResult,
+                                      OperationIdentifier taskBuildOperationId) {
         CompileJavaBuildOperationType.Result compileResult = results.remove(taskBuildOperationId);
         if (taskResult instanceof DefaultTaskSuccessResult && compileResult != null) {
-            return new DefaultJavaCompileTaskSuccessResult((DefaultTaskSuccessResult) taskResult, toAnnotationProcessorResults(compileResult.getAnnotationProcessorDetails()));
+            return new DefaultJavaCompileTaskSuccessResult((DefaultTaskSuccessResult) taskResult,
+                    toAnnotationProcessorResults(compileResult.getAnnotationProcessorDetails()));
         }
         return taskResult;
     }
@@ -66,7 +77,8 @@ public class JavaCompileTaskSuccessResultPostProcessor implements OperationResul
         if (allDetails == null) {
             return null;
         }
-        List<InternalAnnotationProcessorResult> results = new ArrayList<InternalAnnotationProcessorResult>(allDetails.size());
+        List<InternalAnnotationProcessorResult> results =
+                new ArrayList<InternalAnnotationProcessorResult>(allDetails.size());
         for (AnnotationProcessorDetails details : allDetails) {
             results.add(toAnnotationProcessorResult(details));
         }
@@ -74,7 +86,9 @@ public class JavaCompileTaskSuccessResultPostProcessor implements OperationResul
     }
 
     private InternalAnnotationProcessorResult toAnnotationProcessorResult(AnnotationProcessorDetails details) {
-        return new DefaultAnnotationProcessorResult(details.getClassName(), toAnnotationProcessorType(details.getType()), Duration.ofMillis(details.getExecutionTimeInMillis()));
+        return new DefaultAnnotationProcessorResult(details.getClassName(),
+                toAnnotationProcessorType(details.getType()),
+                Duration.ofMillis(details.getExecutionTimeInMillis()));
     }
 
     private String toAnnotationProcessorType(AnnotationProcessorDetails.Type type) {

@@ -16,7 +16,7 @@
 package com.tyron.builder.api.internal.tasks;
 
 import groovy.lang.Closure;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.SourceDirectorySet;

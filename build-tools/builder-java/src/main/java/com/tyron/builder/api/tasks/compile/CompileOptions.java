@@ -4,8 +4,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.tasks.compile.AbstractOptions;
-import com.tyron.builder.api.internal.tasks.compile.CommandLineArgumentProvider;
 import com.tyron.builder.api.internal.tasks.compile.DebugOptions;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.model.ReplacedBy;
@@ -23,6 +21,7 @@ import com.tyron.builder.api.tasks.Optional;
 import com.tyron.builder.api.tasks.OutputDirectory;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.PathSensitivity;
+import com.tyron.builder.process.CommandLineArgumentProvider;
 import com.tyron.builder.util.internal.CollectionUtils;
 
 import org.jetbrains.annotations.Nullable;
@@ -30,6 +29,8 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.util.List;
 import java.util.Map;
+
+import javax.inject.Inject;
 
 /**
  * Main options for Java compilation.
@@ -78,7 +79,7 @@ public class CompileOptions extends AbstractOptions {
 
     private final DirectoryProperty headerOutputDirectory;
 
-//    @Inject
+    @Inject
     public CompileOptions(ObjectFactory objectFactory) {
         this.javaModuleVersion = objectFactory.property(String.class);
         this.javaModuleMainClass = objectFactory.property(String.class);
@@ -302,7 +303,8 @@ public class CompileOptions extends AbstractOptions {
     }
 
     /**
-     * Returns all compiler arguments, added to the {@link #getCompilerArgs()} or the {@link #getCompilerArgumentProviders()} property.
+     * Returns all compiler arguments, added to the {@link #getCompilerArgs()} or the
+     * {@link #getCompilerArgumentProviders()} property.
      *
      * @since 4.5
      */

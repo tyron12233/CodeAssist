@@ -16,7 +16,7 @@
 
 package com.tyron.builder.api.internal.plugins;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.artifacts.Configuration;
 import com.tyron.builder.api.artifacts.ConfigurationContainer;

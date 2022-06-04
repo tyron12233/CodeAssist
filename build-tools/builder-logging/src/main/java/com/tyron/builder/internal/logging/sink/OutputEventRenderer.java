@@ -31,7 +31,7 @@ import com.tyron.builder.internal.logging.events.ProgressEvent;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;
 import com.tyron.builder.internal.logging.format.PrettyPrefixedLogHeaderFormatter;
 import com.tyron.builder.internal.logging.StreamBackedStandardOutputListener;
-import com.tyron.builder.internal.logging.StreamingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StreamingStyledTextOutput;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
 import com.tyron.builder.internal.nativeintegration.console.FallbackConsoleMetaData;
 

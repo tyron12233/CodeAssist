@@ -16,11 +16,10 @@
 
 package com.tyron.builder.api.distribution.plugins;
 
-import org.apache.commons.lang.StringUtils;
+import com.tyron.builder.api.BuildException;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.DefaultTask;
-import com.tyron.builder.api.GradleException;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
 import com.tyron.builder.api.artifacts.PublishArtifact;
 import com.tyron.builder.api.distribution.Distribution;
 import com.tyron.builder.api.distribution.DistributionContainer;
@@ -39,15 +38,18 @@ import com.tyron.builder.api.tasks.bundling.Zip;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.util.internal.TextUtil;
 
-import javax.inject.Inject;
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.concurrent.Callable;
+
+import javax.inject.Inject;
 
 /**
  * <p>A {@link Plugin} to package project as a distribution.</p>
  *
  * @see <a href="https://docs.gradle.org/current/userguide/distribution_plugin.html">Distribution plugin reference</a>
  */
-public class DistributionPlugin implements Plugin<Project> {
+public class DistributionPlugin implements Plugin<BuildProject> {
     /**
      * Name of the main distribution
      */
@@ -71,7 +73,7 @@ public class DistributionPlugin implements Plugin<Project> {
     }
 
     @Override
-    public void apply(final Project project) {
+    public void apply(final BuildProject project) {
         project.getPluginManager().apply(BasePlugin.class);
         DistributionContainer distributions = project.getExtensions().create(DistributionContainer.class, "distributions", DefaultDistributionContainer.class, Distribution.class, instantiator, project.getObjects(), fileOperations, callbackActionDecorator);
 
@@ -108,13 +110,13 @@ public class DistributionPlugin implements Plugin<Project> {
         project.afterEvaluate(p -> {
             distributions.forEach(distribution -> {
                 if (distribution.getDistributionBaseName().get().equals("")) {
-                    throw new GradleException(String.format("Distribution '%s' must not have an empty distributionBaseName.", distribution.getName()));
+                    throw new BuildException(String.format("Distribution '%s' must not have an empty distributionBaseName.", distribution.getName()));
                 }
             });
         });
     }
 
-    private <T extends AbstractArchiveTask> void addArchiveTask(final Project project, String taskName, Class<T> type, final Distribution distribution) {
+    private <T extends AbstractArchiveTask> void addArchiveTask(final BuildProject project, String taskName, Class<T> type, final Distribution distribution) {
         final TaskProvider<T> archiveTask = project.getTasks().register(taskName, type, task -> {
             task.setDescription("Bundles the project as a distribution.");
             task.setGroup(DISTRIBUTION_GROUP);
@@ -130,7 +132,7 @@ public class DistributionPlugin implements Plugin<Project> {
         project.getExtensions().getByType(DefaultArtifactPublicationSet.class).addCandidate(archiveArtifact);
     }
 
-    private void addInstallTask(final Project project, final String taskName, final Distribution distribution) {
+    private void addInstallTask(final BuildProject project, final String taskName, final Distribution distribution) {
         project.getTasks().register(taskName, Sync.class, installTask -> {
             installTask.setDescription("Installs the project as a distribution as-is.");
             installTask.setGroup(DISTRIBUTION_GROUP);
@@ -139,7 +141,7 @@ public class DistributionPlugin implements Plugin<Project> {
         });
     }
 
-    private void addAssembleTask(Project project, final String taskName, final Distribution distribution, final String... tasks) {
+    private void addAssembleTask(BuildProject project, final String taskName, final Distribution distribution, final String... tasks) {
         project.getTasks().register(taskName, DefaultTask.class, assembleTask -> {
             assembleTask.setDescription("Assembles the " + distribution.getName() + " distributions");
             assembleTask.setGroup(DISTRIBUTION_GROUP);

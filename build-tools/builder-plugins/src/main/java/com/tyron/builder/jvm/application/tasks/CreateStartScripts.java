@@ -17,7 +17,7 @@
 package com.tyron.builder.jvm.application.tasks;
 
 import com.google.common.collect.Lists;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.ConventionTask;
 import com.tyron.builder.api.internal.plugins.StartScriptGenerator;

@@ -19,7 +19,7 @@ package com.tyron.builder.api.internal.plugins;
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.jvm.application.scripts.JavaAppStartScriptGenerationDetails;
 import com.tyron.builder.util.internal.CollectionUtils;
@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 public class StartScriptTemplateBindingFactory implements Transformer<Map<String, String>, JavaAppStartScriptGenerationDetails> {
 
@@ -65,22 +67,16 @@ public class StartScriptTemplateBindingFactory implements Transformer<Map<String
 
     private String createJoinedPath(Iterable<String> path) {
         if (windows) {
-            return Joiner.on(";").join(Iterables.transform(path, new Function<String, String>() {
-                @Override
-                public String apply(String input) {
-                    return "%APP_HOME%\\" + input.replace("/", "\\");
-                }
-            }));
+            return Joiner.on(";").join(StreamSupport.stream(path.spliterator(), false)
+                    .map(input -> "%APP_HOME%\\" + input.replace("/", "\\"))
+                    .collect(Collectors.toList()));
         } else {
             if (!path.iterator().hasNext()) {
                 return "\"\\\\\\\"\\\\\\\"\""; // empty path argument for shell script
             }
-            return Joiner.on(":").join(Iterables.transform(path, new Function<String, String>() {
-                @Override
-                public String apply(String input) {
-                    return "$APP_HOME/" + input.replace("\\", "/");
-                }
-            }));
+            return Joiner.on(":").join(StreamSupport.stream(path.spliterator(), false)
+                    .map(input -> "$APP_HOME/" + input.replace("\\", "/"))
+                    .collect(Collectors.toList()));
         }
     }
 
@@ -90,12 +86,9 @@ public class StartScriptTemplateBindingFactory implements Transformer<Map<String
                 return "";
             }
 
-            Iterable<String> quotedDefaultJvmOpts = Iterables.transform(CollectionUtils.toStringList(defaultJvmOpts), new Function<String, String>() {
-                @Override
-                public String apply(String jvmOpt) {
-                    return "\"" + escapeWindowsJvmOpt(jvmOpt) + "\"";
-                }
-            });
+            Iterable<String> quotedDefaultJvmOpts = CollectionUtils.toStringList(defaultJvmOpts).stream()
+                            .map(jvmOpt -> "\"" + escapeWindowsJvmOpt(jvmOpt) + "\"")
+                            .collect(Collectors.toList());
 
             Joiner spaceJoiner = Joiner.on(" ");
             return spaceJoiner.join(quotedDefaultJvmOpts);
@@ -104,18 +97,17 @@ public class StartScriptTemplateBindingFactory implements Transformer<Map<String
                 return "";
             }
 
-            Iterable<String> quotedDefaultJvmOpts = Iterables.transform(CollectionUtils.toStringList(defaultJvmOpts), new Function<String, String>() {
-                @Override
-                public String apply(String jvmOpt) {
-                    //quote ', ", \, $. Probably not perfect. TODO: identify non-working cases, fail-fast on them
-                    jvmOpt = jvmOpt.replace("\\", "\\\\");
-                    jvmOpt = jvmOpt.replace("\"", "\\\"");
-                    jvmOpt = jvmOpt.replace("'", "'\"'\"'");
-                    jvmOpt = jvmOpt.replace("`", "'\"`\"'");
-                    jvmOpt = jvmOpt.replace("$", "\\$");
-                    return "\"" + jvmOpt + "\"";
-                }
-            });
+            Iterable<String> quotedDefaultJvmOpts =
+                    CollectionUtils.toStringList(defaultJvmOpts).stream().map(jvmOpt -> {
+                        //quote ', ", \, $. Probably not perfect. TODO: identify non-working
+                        // cases, fail-fast on them
+                        jvmOpt = jvmOpt.replace("\\", "\\\\");
+                        jvmOpt = jvmOpt.replace("\"", "\\\"");
+                        jvmOpt = jvmOpt.replace("'", "'\"'\"'");
+                        jvmOpt = jvmOpt.replace("`", "'\"`\"'");
+                        jvmOpt = jvmOpt.replace("$", "\\$");
+                        return "\"" + jvmOpt + "\"";
+                    }).collect(Collectors.toList());
 
             //put the whole arguments string in single quotes, unless defaultJvmOpts was empty,
             // in which case we output "" to stay compatible with existing builds that scan the script for it

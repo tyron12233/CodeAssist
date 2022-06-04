@@ -15,7 +15,7 @@
  */
 package com.tyron.builder.api.plugins.jvm.internal;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.file.Directory;

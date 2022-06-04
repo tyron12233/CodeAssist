@@ -13,6 +13,7 @@ import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.artifacts.dsl.ArtifactHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
+import com.tyron.builder.api.component.SoftwareComponentContainer;
 import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.internal.DynamicObjectAware;
 import com.tyron.builder.api.internal.ProcessOperations;
@@ -117,6 +118,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     private ArtifactHandler artifactHandler;
     private final ListenerBroadcast<RuleBasedPluginListener> ruleBasedPluginListenerBroadcast = new ListenerBroadcast<>(RuleBasedPluginListener.class);
     private boolean preparedForRuleBasedPlugins;
+    private FileResolver fileResolver;
 
     public DefaultProject(String name,
                           @Nullable ProjectInternal parent,
@@ -289,6 +291,11 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
         return loggingManagerInternal;
     }
 
+
+    @Inject
+    @Override
+    public abstract SoftwareComponentContainer getComponents();
+
     @Override
     public StandardOutputCapture getStandardOutputCapture() {
         return getLogging();
@@ -441,22 +448,22 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
     @Override
     public ConfigurableFileTree fileTree(Map<String, ?> args) {
-        return null;
+        return getFileOperations().fileTree(args);
     }
 
     @Override
     public FileTree zipTree(Object zipPath) {
-        return null;
+        return getFileOperations().zipTree(zipPath);
     }
 
     @Override
     public FileTree tarTree(Object tarPath) {
-        return null;
+        return getFileOperations().tarTree(tarPath);
     }
 
     @Override
     public <T> Provider<T> provider(Callable<T> value) {
-        return null;
+        return getProviders().provider(value);
     }
 
     @Override
@@ -967,8 +974,12 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
         return services.get(ConfigurationTargetIdentifier.class);
     }
 
-    protected FileResolver getFileResolver() {
-        return services.get(FileResolver.class);
+    @Override
+    public FileResolver getFileResolver() {
+        if (fileResolver == null) {
+            fileResolver = services.get(FileResolver.class);
+        }
+        return fileResolver;
     }
 
     protected ScriptPluginFactory getScriptPluginFactory() {

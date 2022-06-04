@@ -10,10 +10,11 @@ import com.tyron.builder.api.execution.TaskExecutionGraphListener;
 import com.tyron.builder.api.execution.TaskExecutionListener;
 import com.tyron.builder.api.initialization.IncludedBuild;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.plugins.PluginAware;
 
 import java.util.Collection;
 
-public interface Gradle {
+public interface Gradle extends PluginAware {
     /**
      * Returns the root project of this build.
      *

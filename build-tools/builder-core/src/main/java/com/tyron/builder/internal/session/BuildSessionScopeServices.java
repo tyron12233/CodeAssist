@@ -51,6 +51,7 @@ import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.WorkerSharedBuildSessionScopeServices;
 import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
+import com.tyron.builder.plugin.use.internal.InjectedPluginClasspath;
 import com.tyron.builder.vcs.VcsMapping;
 import com.tyron.builder.vcs.VersionControlSpec;
 import com.tyron.builder.vcs.internal.VcsMappingsStore;
@@ -89,7 +90,7 @@ public class BuildSessionScopeServices extends WorkerSharedBuildSessionScopeServ
         for (PluginServiceRegistry pluginServiceRegistry : pluginServiceRegistries) {
             pluginServiceRegistry.registerBuildSessionServices(registration);
         }
-//        registration.add(InjectedPluginClasspath.class, new InjectedPluginClasspath(injectedPluginClassPath));
+        registration.add(InjectedPluginClasspath.class, new InjectedPluginClasspath(injectedPluginClassPath));
         registration.add(BuildCancellationToken.class, buildCancellationToken);
         registration.add(BuildRequestMetaData.class, buildRequestMetaData);
         registration.add(BuildClientMetaData.class, buildClientMetaData);

@@ -16,7 +16,7 @@
 
 package com.tyron.builder.api.plugins.internal;
 
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.plugins.ApplicationPluginConvention;
 import com.tyron.builder.api.reflect.HasPublicType;
@@ -33,9 +33,9 @@ public class DefaultApplicationPluginConvention extends ApplicationPluginConvent
     private String executableDir = "bin";
     private CopySpec applicationDistribution;
 
-    private final Project project;
+    private final BuildProject project;
 
-    public DefaultApplicationPluginConvention(Project project) {
+    public DefaultApplicationPluginConvention(BuildProject project) {
         this.project = project;
         applicationDistribution = project.copySpec();
     }
@@ -96,7 +96,7 @@ public class DefaultApplicationPluginConvention extends ApplicationPluginConvent
     }
 
     @Override
-    public Project getProject() {
+    public BuildProject getProject() {
         return project;
     }
 }

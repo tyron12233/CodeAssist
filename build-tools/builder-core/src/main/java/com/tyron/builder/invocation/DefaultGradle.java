@@ -5,9 +5,15 @@ import com.tyron.builder.BuildListener;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
+import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
+import com.tyron.builder.api.internal.project.AbstractPluginAware;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.initialization.IncludedBuild;
+import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.initialization.ClassLoaderScopeRegistry;
 import com.tyron.builder.internal.event.ListenerBroadcast;
 import com.tyron.builder.internal.event.ListenerManager;
@@ -17,6 +23,7 @@ import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.BuildProject;
@@ -31,7 +38,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
-public class DefaultGradle implements GradleInternal {
+import javax.inject.Inject;
+
+public abstract class DefaultGradle extends AbstractPluginAware implements GradleInternal {
 
     private SettingsInternal settings;
     private final BuildState parent;
@@ -335,5 +344,33 @@ public class DefaultGradle implements GradleInternal {
         }
         return null;
     }
+
+    @Override
+    @Inject
+    public abstract PluginManagerInternal getPluginManager();
+
+    @Override
+    protected DefaultObjectConfigurationAction createObjectConfigurationAction() {
+        return new DefaultObjectConfigurationAction(
+                getFileResolver(),
+                getScriptPluginFactory(),
+                getScriptHandlerFactory(),
+                getClassLoaderScope(),
+                getResourceLoaderFactory(),
+                this
+        );
+    }
+
+    @Inject
+    protected abstract TextUriResourceLoader.Factory getResourceLoaderFactory();
+
+    @Inject
+    protected abstract ScriptHandlerFactory getScriptHandlerFactory();
+
+    @Inject
+    protected abstract ScriptPluginFactory getScriptPluginFactory();
+
+    @Inject
+    protected abstract FileResolver getFileResolver();
 
 }

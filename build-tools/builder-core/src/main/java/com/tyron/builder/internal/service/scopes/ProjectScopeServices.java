@@ -1,6 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.api.Plugin;
+import com.tyron.builder.api.component.SoftwareComponentContainer;
 import com.tyron.builder.api.internal.CollectionCallbackActionDecorator;
 import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.MutationGuards;
@@ -11,6 +12,8 @@ import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDat
 import com.tyron.builder.api.internal.artifacts.dsl.dependencies.ProjectFinder;
 import com.tyron.builder.api.internal.collections.DefaultDomainObjectCollectionFactory;
 import com.tyron.builder.api.internal.collections.DomainObjectCollectionFactory;
+import com.tyron.builder.api.internal.component.ComponentRegistry;
+import com.tyron.builder.api.internal.component.DefaultSoftwareComponentContainer;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.temp.DefaultTemporaryFileProvider;
@@ -24,6 +27,7 @@ import com.tyron.builder.api.internal.plugins.DefaultPluginManager;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
 import com.tyron.builder.api.internal.plugins.PluginTarget;
+import com.tyron.builder.api.internal.plugins.RuleBasedPluginTarget;
 import com.tyron.builder.api.internal.project.CrossProjectConfigurator;
 import com.tyron.builder.api.internal.project.DeferredProjectConfiguration;
 import com.tyron.builder.api.internal.project.ProjectInternal;
@@ -54,6 +58,7 @@ import com.tyron.builder.internal.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.model.internal.inspect.ModelRuleExtractor;
+import com.tyron.builder.model.internal.inspect.ModelRuleSourceDetector;
 import com.tyron.builder.model.internal.registry.DefaultModelRegistry;
 import com.tyron.builder.model.internal.registry.ModelRegistry;
 import com.tyron.builder.util.Path;
@@ -115,6 +120,12 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         ).create();
     }
 
+    protected SoftwareComponentContainer createSoftwareComponentContainer(CollectionCallbackActionDecorator decorator) {
+        Instantiator instantiator = get(Instantiator.class);
+        return instantiator.newInstance(DefaultSoftwareComponentContainer.class, instantiator, decorator);
+    }
+
+
     protected TaskDependencyFactory createTaskDependencyFactory() {
         return DefaultTaskDependencyFactory.forProject(project.getTasks());
     }
@@ -140,45 +151,15 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
     }
 
 
-    protected PluginManagerInternal createPluginManager(
-            PluginRegistry pluginRegistry,
-            BuildOperationExecutor buildOperationExecutor,
-            UserCodeApplicationContext userCodeApplicationContext,
-            CollectionCallbackActionDecorator collectionCallbackActionDecorator,
-            DomainObjectCollectionFactory domainObjectCollectionFactory
-    ) {
-        PluginTarget target = new PluginTarget() {
-            @Override
-            public ConfigurationTargetIdentifier getConfigurationTargetIdentifier() {
-                return ConfigurationTargetIdentifier.of(project);
-            }
-
-            @Override
-            public void applyImperative(@Nullable String pluginId, Plugin<?> plugin) {
-                Plugin<ProjectInternal> internalPlugin = Cast.uncheckedCast(plugin);
-                internalPlugin.apply(project);
-            }
-
-            @Override
-            public void applyRules(@Nullable String pluginId, Class<?> clazz) {
-
-            }
-
-            @Override
-            public void applyImperativeRulesHybrid(@Nullable String pluginId, Plugin<?> plugin) {
-
-            }
-        };
-        return new DefaultPluginManager(
-                pluginRegistry,
-                DirectInstantiator.INSTANCE,
-                target,
-                buildOperationExecutor,
-                userCodeApplicationContext,
-                collectionCallbackActionDecorator,
-                domainObjectCollectionFactory
+    protected PluginManagerInternal createPluginManager(Instantiator instantiator, InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator decorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
+        PluginTarget target = new RuleBasedPluginTarget(
+                project,
+                get(ModelRuleExtractor.class),
+                get(ModelRuleSourceDetector.class)
         );
+        return instantiator.newInstance(DefaultPluginManager.class, get(PluginRegistry.class), instantiatorFactory.inject(this), target, buildOperationExecutor, userCodeApplicationContext, decorator, domainObjectCollectionFactory);
     }
+
 
     protected ITaskFactory createTaskFactory(ITaskFactory parentFactory, TaskScheme taskScheme) {
         return parentFactory.createChild(project, taskScheme.getInstantiationScheme().withServices(this));
@@ -210,6 +191,10 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         public Module getModule() {
             return new ProjectBackedModule(project);
         }
+    }
+
+    protected ComponentRegistry createComponentRegistry() {
+        return new ComponentRegistry();
     }
 
     protected ModelRegistry createModelRegistry(ModelRuleExtractor ruleExtractor) {

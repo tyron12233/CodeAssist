@@ -36,8 +36,10 @@ import com.tyron.builder.api.internal.plugins.DefaultPluginRegistry;
 import com.tyron.builder.api.internal.plugins.PluginInspector;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
 import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
+import com.tyron.builder.api.internal.project.DefaultProjectTaskLister;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.project.ProjectTaskLister;
 import com.tyron.builder.api.internal.project.taskfactory.AnnotationProcessingTaskFactory;
 import com.tyron.builder.api.internal.project.taskfactory.ITaskFactory;
 import com.tyron.builder.api.internal.project.taskfactory.TaskClassInfoStore;
@@ -202,12 +204,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
 
     TextFileResourceLoader createTextFileResourceLoader() {
-        return new TextFileResourceLoader() {
-            @Override
-            public TextResource loadFile(String description, @Nullable File sourceFile) {
-                return new StringTextResource(description, GFileUtils.readFileToString(sourceFile));
-            }
-        };
+        return (description, sourceFile) -> new StringTextResource(description, GFileUtils.readFileToString(sourceFile));
     }
 
     protected DefaultResourceHandler.Factory createResourceHandlerFactory(FileResolver fileResolver, FileSystem fileSystem, TemporaryFileProvider temporaryFileProvider, ApiTextResourceAdapter.Factory textResourceAdapterFactory) {
@@ -229,6 +226,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
     }
 
     SettingsProcessor createSettingsProcessor(
+            Instantiator instantiator,
             ScriptPluginFactory scriptPluginFactory,
             ScriptHandlerFactory scriptHandlerFactory,
             ServiceRegistryFactory serviceRegistryFactory,
@@ -239,7 +237,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new ScriptEvaluatingSettingsProcessor(
                 scriptPluginFactory,
                 new SettingsFactory(
-                        DirectInstantiator.INSTANCE,
+                        instantiator,
                         serviceRegistryFactory,
                         scriptHandlerFactory
                 ),
@@ -300,9 +298,9 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 instantiator);
     }
 
-//    protected ProjectTaskLister createProjectTaskLister() {
-//        return new DefaultProjectTaskLister();
-//    }
+    protected ProjectTaskLister createProjectTaskLister() {
+        return new DefaultProjectTaskLister();
+    }
 
 
     protected ComponentTypeRegistry createComponentTypeRegistry() {
@@ -415,11 +413,11 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return scriptPluginFactorySelector;
     }
 
-    protected ScriptRunnerFactory createScriptRunnerFactory(ListenerManager listenerManager) {
+    protected ScriptRunnerFactory createScriptRunnerFactory(ListenerManager listenerManager, InstantiatorFactory instantiatorFactory) {
         ScriptExecutionListener scriptExecutionListener = listenerManager.getBroadcaster(ScriptExecutionListener.class);
         return new DefaultScriptRunnerFactory(
                 scriptExecutionListener,
-                DirectInstantiator.INSTANCE
+                instantiatorFactory.inject()
         );
     }
 
@@ -431,16 +429,6 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 get(AutoAppliedPluginHandler.class),
                 get(PluginRequestApplicator.class),
                 get(CompileOperationFactory.class));
-    }
-
-    public AutoAppliedPluginHandler createAutoAppliedPluginHandler() {
-        return (initialRequests, pluginTarget) -> initialRequests;
-    }
-
-    public PluginRequestApplicator createPluginRequestsApplicator() {
-        return (requests, scriptHandler, target, classLoaderScope) -> {
-
-        };
     }
 
     public CompileOperationFactory createCompileOperationFactory(DocumentationRegistry documentationRegistry) {

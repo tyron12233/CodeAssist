@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.internal.resources.ResourceLock;
@@ -14,6 +15,7 @@ import com.tyron.builder.api.internal.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
 import com.tyron.builder.util.Path;
 
+import java.io.File;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -43,13 +45,27 @@ public interface TaskInternal extends Task {
     @Internal
     List<? extends ResourceLock> getSharedResources();
 
+    @Override
     TaskOutputsInternal getOutputs();
 
+    @Override
     TaskInputsInternal getInputs();
 
+    @Override
     TaskStateInternal getState();
 
+    @Internal
     boolean getImpliesSubProjects();
+
+    void setImpliesSubProjects(boolean impliesSubProjects);
+
+    /**
+     * The returned factory is expected to return the same file each time.
+     * <p>
+     * The getTemporaryDir() method creates the directory which can be problematic. Use this to delay that creation.
+     */
+    @Internal
+    Factory<File> getTemporaryDirFactory();
 
     @Internal
     StandardOutputCapture getStandardOutputCapture();

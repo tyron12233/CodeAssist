@@ -9,6 +9,7 @@ import com.tyron.builder.api.attributes.Attribute;
 import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
+import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.HasScriptServices;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
@@ -104,6 +105,8 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScr
     GradleInternal getGradle();
 
     void prepareForRuleBasedPlugins();
+
+    FileResolver getFileResolver();
 
     ClassLoaderScope getClassLoaderScope();
 

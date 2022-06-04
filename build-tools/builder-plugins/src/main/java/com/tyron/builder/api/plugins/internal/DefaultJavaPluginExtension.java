@@ -16,8 +16,15 @@
 
 package com.tyron.builder.api.plugins.internal;
 
+import static com.tyron.builder.api.attributes.DocsType.JAVADOC;
+import static com.tyron.builder.api.attributes.DocsType.SOURCES;
+import static com.tyron.builder.api.plugins.JavaPlugin.JAVADOC_ELEMENTS_CONFIGURATION_NAME;
+import static com.tyron.builder.api.plugins.JavaPlugin.SOURCES_ELEMENTS_CONFIGURATION_NAME;
+import static com.tyron.builder.api.plugins.internal.JvmPluginsHelper.configureDocumentationVariantWithArtifact;
+import static com.tyron.builder.api.plugins.internal.JvmPluginsHelper.findJavaComponent;
+import static com.tyron.builder.util.internal.ConfigureUtil.configure;
+
 import com.google.common.collect.ImmutableList;
-import groovy.lang.Closure;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.JavaVersion;
@@ -35,7 +42,6 @@ import com.tyron.builder.api.plugins.FeatureSpec;
 import com.tyron.builder.api.plugins.JavaPluginExtension;
 import com.tyron.builder.api.plugins.JavaResolutionConsistency;
 import com.tyron.builder.api.plugins.jvm.internal.JvmPluginServices;
-import com.tyron.builder.api.reporting.ReportingExtension;
 import com.tyron.builder.api.tasks.SourceSet;
 import com.tyron.builder.api.tasks.SourceSetContainer;
 import com.tyron.builder.api.tasks.TaskContainer;
@@ -45,18 +51,12 @@ import com.tyron.builder.internal.jvm.DefaultModularitySpec;
 import com.tyron.builder.jvm.toolchain.JavaToolchainSpec;
 import com.tyron.builder.jvm.toolchain.internal.DefaultToolchainSpec;
 import com.tyron.builder.jvm.toolchain.internal.ToolchainSpecInternal;
-import com.tyron.builder.testing.base.plugins.TestingBasePlugin;
 
-import javax.inject.Inject;
 import java.util.regex.Pattern;
 
-import static com.tyron.builder.api.attributes.DocsType.JAVADOC;
-import static com.tyron.builder.api.attributes.DocsType.SOURCES;
-import static com.tyron.builder.api.plugins.JavaPlugin.JAVADOC_ELEMENTS_CONFIGURATION_NAME;
-import static com.tyron.builder.api.plugins.JavaPlugin.SOURCES_ELEMENTS_CONFIGURATION_NAME;
-import static com.tyron.builder.api.plugins.internal.JvmPluginsHelper.configureDocumentationVariantWithArtifact;
-import static com.tyron.builder.api.plugins.internal.JvmPluginsHelper.findJavaComponent;
-import static com.tyron.builder.util.internal.ConfigureUtil.configure;
+import javax.inject.Inject;
+
+import groovy.lang.Closure;
 
 public class DefaultJavaPluginExtension implements JavaPluginExtension {
     private static final Pattern VALID_FEATURE_NAME = Pattern.compile("[a-zA-Z0-9]+");
@@ -94,8 +94,9 @@ public class DefaultJavaPluginExtension implements JavaPluginExtension {
 
     private void configureDefaults() {
         docsDir.convention(project.getLayout().getBuildDirectory().dir("docs"));
-        testResultsDir.convention(project.getLayout().getBuildDirectory().dir(TestingBasePlugin.TEST_RESULTS_DIR_NAME));
-        testReportDir.convention(project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory().dir(TestingBasePlugin.TESTS_DIR_NAME));
+//        testResultsDir.convention(project.getLayout().getBuildDirectory().dir(TestingBasePlugin
+//        .TEST_RESULTS_DIR_NAME));
+//        testReportDir.convention(project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory().dir(TestingBasePlugin.TESTS_DIR_NAME));
     }
 
     @Override

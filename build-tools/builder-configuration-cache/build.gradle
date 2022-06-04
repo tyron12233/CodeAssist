@@ -1,6 +1,7 @@
 plugins {
     id 'java-library'
 }
+apply plugin: 'kotlin'
 
 description = "Configuration cache implementation"
 
@@ -31,6 +32,7 @@ dependencies {
     implementation projects.buildTools.snapshots
 
     implementation common.slf4j
+    implementation project(path: ':build-tools:builder-plugin-use')
 }
 
 java {

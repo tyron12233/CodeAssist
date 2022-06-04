@@ -16,7 +16,7 @@
 package com.tyron.builder.api.plugins.catalog.internal;
 
 import com.tyron.builder.api.DefaultTask;
-import com.tyron.builder.api.GradleException;
+import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.file.RegularFileProperty;
 import com.tyron.builder.api.internal.catalog.DefaultVersionCatalog;
 import com.tyron.builder.api.provider.Property;
@@ -47,7 +47,7 @@ public abstract class TomlFileGenerator extends DefaultTask {
         if (outputDir.exists() || outputFile.mkdirs()) {
             doGenerate(model, outputFile);
         } else {
-            throw new GradleException("Unable to generate TOML dependencies file into " + outputDir);
+            throw new BuildException("Unable to generate TOML dependencies file into " + outputDir);
         }
     }
 

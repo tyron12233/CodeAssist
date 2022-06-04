@@ -1,5 +1,6 @@
 package com.tyron.builder.initialization;
 
+import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.internal.StartParameterInternal;
 import com.tyron.builder.api.logging.LogLevel;
@@ -32,6 +33,7 @@ public class InitializationTest {
         startParameterInternal.setProjectDir(projectDir);
         startParameterInternal.setBuildCacheEnabled(true);
         startParameterInternal.setGradleUserHomeDir(new File(resourcesDir, ".gradle"));
+        startParameterInternal.setTaskNames(ImmutableList.of(":consumer:compileJava"));
 
         projectLauncher = new ProjectLauncher(startParameterInternal);
 

@@ -15,8 +15,8 @@
  */
 package com.tyron.builder.api.plugins;
 
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
 import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.artifacts.ProjectDependency;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
@@ -43,7 +43,7 @@ import static com.tyron.builder.internal.component.external.model.TestFixturesSu
  * @since 5.6
  * @see <a href="https://docs.gradle.org/current/userguide/java_testing.html#sec:java_test_fixtures">Java Test Fixtures reference</a>
  */
-public class JavaTestFixturesPlugin implements Plugin<Project> {
+public class JavaTestFixturesPlugin implements Plugin<BuildProject> {
 
     private final JvmModelingServices jvmEcosystemUtilities;
 
@@ -53,7 +53,7 @@ public class JavaTestFixturesPlugin implements Plugin<Project> {
     }
 
     @Override
-    public void apply(Project project) {
+    public void apply(BuildProject project) {
         project.getPluginManager().withPlugin("java", plugin -> {
             jvmEcosystemUtilities.createJvmVariant(TEST_FIXTURES_FEATURE_NAME, builder ->
                 builder
@@ -64,7 +64,7 @@ public class JavaTestFixturesPlugin implements Plugin<Project> {
         });
     }
 
-    private void createImplicitTestFixturesDependencies(Project project, JavaPluginExtension extension) {
+    private void createImplicitTestFixturesDependencies(BuildProject project, JavaPluginExtension extension) {
         DependencyHandler dependencies = project.getDependencies();
         dependencies.add(TEST_FIXTURES_API, dependencies.create(project));
         SourceSet testSourceSet = findTestSourceSet(extension);
@@ -83,7 +83,7 @@ public class JavaTestFixturesPlugin implements Plugin<Project> {
         return extension.getSourceSets().getByName("test");
     }
 
-    private JavaPluginExtension findJavaExtension(Project project) {
+    private JavaPluginExtension findJavaExtension(BuildProject project) {
         return project.getExtensions().getByType(JavaPluginExtension.class);
     }
 

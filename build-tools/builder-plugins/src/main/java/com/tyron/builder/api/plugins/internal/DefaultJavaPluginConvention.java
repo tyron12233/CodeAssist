@@ -16,7 +16,8 @@
 
 package com.tyron.builder.api.plugins.internal;
 
-import groovy.lang.Closure;
+import static com.tyron.builder.api.reflect.TypeOf.typeOf;
+
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.JavaVersion;
 import com.tyron.builder.api.file.DirectoryProperty;
@@ -26,13 +27,12 @@ import com.tyron.builder.api.plugins.JavaPluginConvention;
 import com.tyron.builder.api.plugins.JavaPluginExtension;
 import com.tyron.builder.api.reflect.HasPublicType;
 import com.tyron.builder.api.reflect.TypeOf;
-import com.tyron.builder.api.reporting.ReportingExtension;
 import com.tyron.builder.api.tasks.SourceSetContainer;
-import com.tyron.builder.util.internal.RelativePathUtil;
+import com.tyron.builder.util.RelativePathUtil;
 
 import java.io.File;
 
-import static com.tyron.builder.api.reflect.TypeOf.typeOf;
+import groovy.lang.Closure;
 
 public class DefaultJavaPluginConvention extends JavaPluginConvention implements HasPublicType {
 
@@ -131,17 +131,25 @@ public class DefaultJavaPluginConvention extends JavaPluginConvention implements
 
     @Override
     public void setTestResultsDirName(String testResultsDirName) {
-        extension.getTestResultsDir().set(project.getLayout().getBuildDirectory().dir(testResultsDirName));
+        extension.getTestResultsDir()
+                .set(project.getLayout().getBuildDirectory().dir(testResultsDirName));
     }
 
     @Override
     public String getTestReportDirName() {
-        return relativePath(project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory(), extension.getTestReportDir());
+        throw new UnsupportedOperationException();
+//        return relativePath(
+//                project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory(),
+//                extension.getTestReportDir());
     }
 
     @Override
     public void setTestReportDirName(String testReportDirName) {
-        extension.getTestReportDir().set(project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory().dir(testReportDirName));
+        throw new UnsupportedOperationException();
+//        extension.getTestReportDir()
+//                .set(project.getExtensions().getByType(ReportingExtension.class)
+//                .getBaseDirectory()
+//                        .dir(testReportDirName));
     }
 
     @Override
@@ -165,11 +173,14 @@ public class DefaultJavaPluginConvention extends JavaPluginConvention implements
     }
 
     private File getReportsDir() {
-        // This became public API by accident as Groovy has access to private methods and we show an example in our docs
+        // This became public API by accident as Groovy has access to private methods and we show
+        // an example in our docs
         // see subprojects/docs/src/snippets/java/customDirs/groovy/build.gradle
         // and https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
-        return project.getExtensions().getByType(ReportingExtension.class).getBaseDir();
+//        return project.getExtensions().getByType(ReportingExtension.class).getBaseDir();
+        throw new UnsupportedOperationException();
     }
+
 
     private static String relativePath(DirectoryProperty from, DirectoryProperty to) {
         return RelativePathUtil.relativePath(from.get().getAsFile(), to.get().getAsFile());

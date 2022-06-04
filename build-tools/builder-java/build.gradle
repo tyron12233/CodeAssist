@@ -33,6 +33,11 @@ dependencies {
     implementation common.slf4j
     implementation project(path: ':build-tools:builder-language-jvm')
     implementation project(path: ':build-tools:builder-jvm-services')
+    implementation project(path: ':build-tools:builder-platform-jvm')
+    implementation project(path: ':build-tools:builder-platform-base')
+    implementation project(path: ':build-tools:builder-worker-processes')
+    implementation project(path: ':build-tools:builder-build-events')
+    implementation project(path: ':build-tools:builder-tooling-api')
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.apache.commons:commons-lang3:3.12.0'

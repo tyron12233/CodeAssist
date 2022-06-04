@@ -17,7 +17,6 @@
 package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.api.Project;
 
 import java.io.File;
 

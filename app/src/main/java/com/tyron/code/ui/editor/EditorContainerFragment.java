@@ -14,6 +14,8 @@ import androidx.annotation.Nullable;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.lifecycle.ViewModelProviderKt;
+import androidx.lifecycle.ViewModelStoreOwner;
 import androidx.transition.TransitionManager;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -66,6 +68,7 @@ public class EditorContainerFragment extends Fragment implements
     private BottomSheetBehavior<View> mBehavior;
 
     private MainViewModel mMainViewModel;
+    private EditorContainerViewModel mEditorContainerViewModel;
 
     private FileEditorManager mFileEditorManager;
     private SharedPreferences pref;
@@ -86,6 +89,7 @@ public class EditorContainerFragment extends Fragment implements
 
         pref = ApplicationLoader.getDefaultPreferences();
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
+        mEditorContainerViewModel = new ViewModelProvider((ViewModelStoreOwner) this).get(EditorContainerViewModel.class);
         requireActivity().getOnBackPressedDispatcher().addCallback(this, mOnBackPressedCallback);
     }
 

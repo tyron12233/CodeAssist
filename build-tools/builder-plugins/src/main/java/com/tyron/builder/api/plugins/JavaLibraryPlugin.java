@@ -17,7 +17,6 @@ package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
 import com.tyron.builder.api.artifacts.Configuration;
 import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.plugins.internal.JvmPluginsHelper;

@@ -16,7 +16,7 @@
 
 package com.tyron.builder.api.plugins;
 
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.file.CopySpec;
 
 /**
@@ -92,5 +92,5 @@ public abstract class ApplicationPluginConvention {
 
     public abstract void setApplicationDistribution(CopySpec applicationDistribution);
 
-    public abstract Project getProject();
+    public abstract BuildProject getProject();
 }

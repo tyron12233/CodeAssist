@@ -3,8 +3,12 @@ package com.tyron.builder.internal.service.scopes;
 import com.tyron.builder.api.internal.BuildScopeListenerRegistrationListener;
 import com.tyron.builder.api.internal.CollectionCallbackActionDecorator;
 import com.tyron.builder.api.internal.artifacts.dsl.dependencies.ProjectFinder;
+import com.tyron.builder.api.internal.collections.DomainObjectCollectionFactory;
+import com.tyron.builder.api.internal.plugins.DefaultPluginManager;
+import com.tyron.builder.api.internal.plugins.ImperativeOnlyPluginTarget;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
+import com.tyron.builder.api.internal.plugins.PluginTarget;
 import com.tyron.builder.api.internal.project.ProjectStateRegistry;
 import com.tyron.builder.cache.GlobalCacheLocations;
 import com.tyron.builder.cache.internal.DefaultFileContentCacheFactory;
@@ -144,10 +148,10 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         return parentRegistry.createChild(get(GradleInternal.class).getClassLoaderScope());
     }
 
-//    PluginManagerInternal createPluginManager(Instantiator instantiator, GradleInternal gradleInternal, PluginRegistry pluginRegistry, InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator decorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
-//        PluginTarget target = new ImperativeOnlyPluginTarget<>(gradleInternal);
-//        return instantiator.newInstance(DefaultPluginManager.class, pluginRegistry, instantiatorFactory.inject(this), target, buildOperationExecutor, userCodeApplicationContext, decorator, domainObjectCollectionFactory);
-//    }
+    PluginManagerInternal createPluginManager(Instantiator instantiator, GradleInternal gradleInternal, PluginRegistry pluginRegistry, InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator decorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
+        PluginTarget target = new ImperativeOnlyPluginTarget<GradleInternal>(gradleInternal);
+        return instantiator.newInstance(DefaultPluginManager.class, pluginRegistry, instantiatorFactory.inject(this), target, buildOperationExecutor, userCodeApplicationContext, decorator, domainObjectCollectionFactory);
+    }
 
     FileContentCacheFactory createFileContentCacheFactory(
             GlobalCacheLocations globalCacheLocations,

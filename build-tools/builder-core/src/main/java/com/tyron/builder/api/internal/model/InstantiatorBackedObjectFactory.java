@@ -49,26 +49,26 @@ public class InstantiatorBackedObjectFactory implements ObjectFactory {
         throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing file trees");
     }
 
-//    @Override
-//    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType) {
-//        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object containers");
-//    }
-//
-//    @Override
-//    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType, NamedDomainObjectFactory<T> factory) {
-//        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object containers");
-//    }
-//
-//    @Override
-//    public <T> ExtensiblePolymorphicDomainObjectContainer<T> polymorphicDomainObjectContainer(Class<T> elementType) {
-//        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object containers");
-//    }
-//
+    @Override
+    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType) {
+        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object containers");
+    }
+
+    @Override
+    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType, NamedDomainObjectFactory<T> factory) {
+        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object containers");
+    }
+
+    @Override
+    public <T> ExtensiblePolymorphicDomainObjectContainer<T> polymorphicDomainObjectContainer(Class<T> elementType) {
+        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object containers");
+    }
+
 //    @Override
 //    public <T> DomainObjectSet<T> domainObjectSet(Class<T> elementType) {
 //        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing domain object sets");
 //    }
-//
+
 //    @Override
 //    public <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType) {
 //        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object sets");

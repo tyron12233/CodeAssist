@@ -18,7 +18,6 @@ package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
 import com.tyron.builder.api.distribution.DistributionContainer;
 import com.tyron.builder.api.distribution.plugins.DistributionPlugin;
 import com.tyron.builder.api.file.CopySpec;

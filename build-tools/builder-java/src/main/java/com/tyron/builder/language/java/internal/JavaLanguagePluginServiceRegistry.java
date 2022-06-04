@@ -1,12 +1,13 @@
 package com.tyron.builder.language.java.internal;
 
+import static java.util.Collections.emptyList;
+
 import com.tyron.builder.api.internal.component.ArtifactType;
 import com.tyron.builder.api.internal.component.ComponentTypeRegistry;
 import com.tyron.builder.api.internal.tasks.compile.processing.AnnotationProcessorDetector;
 import com.tyron.builder.api.internal.tasks.compile.tooling.JavaCompileTaskSuccessResultPostProcessor;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
-import com.tyron.builder.api.tasks.javadoc.internal.JavadocToolAdapter;
 import com.tyron.builder.cache.internal.FileContentCacheFactory;
 import com.tyron.builder.internal.build.event.OperationResultPostProcessorFactory;
 import com.tyron.builder.internal.service.ServiceRegistration;
@@ -18,11 +19,10 @@ import com.tyron.builder.jvm.toolchain.internal.ToolchainToolFactory;
 import com.tyron.builder.language.java.artifact.JavadocArtifact;
 import com.tyron.builder.process.internal.ExecActionFactory;
 import com.tyron.builder.tooling.events.OperationType;
+
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
-
-import static java.util.Collections.emptyList;
 
 public class JavaLanguagePluginServiceRegistry extends AbstractPluginServiceRegistry {
     @Override
@@ -71,7 +71,8 @@ public class JavaLanguagePluginServiceRegistry extends AbstractPluginServiceRegi
                 @Override
                 public <T> T create(Class<T> toolType, JavaToolchain toolchain) {
                     if (toolType == JavadocTool.class) {
-                        return toolType.cast(new JavadocToolAdapter(generator, toolchain));
+//                        return toolType.cast(new JavadocToolAdapter(generator, toolchain));
+                        throw new UnsupportedOperationException();
                     }
                     return null;
                 }

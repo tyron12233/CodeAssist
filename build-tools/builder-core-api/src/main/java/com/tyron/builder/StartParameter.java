@@ -75,7 +75,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     private boolean writeDependencyLocks;
     private List<String> writeDependencyVerifications = emptyList();
     private List<String> lockedDependenciesToUpdate = emptyList();
-//    private DependencyVerificationMode verificationMode = DependencyVerificationMode.STRICT;
+    private DependencyVerificationMode verificationMode = DependencyVerificationMode.STRICT;
     private boolean isRefreshKeys;
     private boolean isExportKeys;
     private boolean isWriteDependencyLocks;
@@ -83,6 +83,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     private boolean isRefreshDependencies;
     private DependencyVerificationMode dependencyVerificationMode;
     private boolean exportKeys;
+    private boolean isConfigureOnDemand;
 
 
     /**
@@ -510,5 +511,9 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 
     public void setLockedDependenciesToUpdate(List<String> lockedDependenciesToUpdate) {
         this.writeDependencyVerifications = lockedDependenciesToUpdate;
+    }
+
+    public boolean isConfigureOnDemand() {
+        return isConfigureOnDemand;
     }
 }

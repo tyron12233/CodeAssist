@@ -3,6 +3,7 @@ package com.tyron.builder.configurationcache;
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.internal.BuildType;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.configurationcache.initialization.VintageInjectedClasspathInstrumentationStrategy;
 import com.tyron.builder.internal.service.ServiceRegistration;
 import com.tyron.builder.internal.buildtree.BuildActionModelRequirements;
 import com.tyron.builder.internal.buildtree.BuildModelParameters;
@@ -38,11 +39,18 @@ public class DefaultBuildTreeControllerServices implements BuildTreeModelControl
         if (modelParameters.isConfigurationCache()) {
 
         }
+        registration.add(VintageInjectedClasspathInstrumentationStrategy.class);
         registration.add(VintageBuildTreeLifecycleControllerFactory.class);
     }
 
     @Override
     public Supplier servicesForNestedBuildTree(StartParameterInternal startParameter) {
-        return null;
+        return registration -> {
+            BuildModelParameters buildModelParameters = new BuildModelParameters(
+                    startParameter.isConfigureOnDemand(), false, false, true, false, false, true
+            );
+            RunTasksRequirements requirements = new RunTasksRequirements(startParameter);
+            registerServices(registration, buildModelParameters, requirements);
+        };
     }
 }

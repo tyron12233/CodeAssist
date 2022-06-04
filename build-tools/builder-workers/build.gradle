@@ -18,6 +18,7 @@ dependencies {
     implementation projects.buildTools.builderFiles
     implementation projects.buildTools.builderNative
     implementation projects.buildTools.builderResources
+    implementation projects.buildTools.builderWorkerProcesses
 
     implementation common.slf4j
     implementation 'javax.inject:javax.inject:1'

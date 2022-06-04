@@ -19,7 +19,7 @@ import com.google.common.collect.Sets;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.InvalidUserCodeException;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.artifacts.Configuration;
 import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.attributes.Category;
@@ -49,7 +49,7 @@ import java.util.Set;
  * @since 5.2
  * @see <a href="https://docs.gradle.org/current/userguide/java_platform_plugin.html">Java Platform plugin reference</a>
  */
-public class JavaPlatformPlugin implements Plugin<Project> {
+public class JavaPlatformPlugin implements Plugin<BuildProject> {
     // Buckets of dependencies
     public static final String API_CONFIGURATION_NAME = "api";
     public static final String RUNTIME_CONFIGURATION_NAME = "runtime";
@@ -90,7 +90,7 @@ public class JavaPlatformPlugin implements Plugin<Project> {
     }
 
     @Override
-    public void apply(Project project) {
+    public void apply(BuildProject project) {
         if (project.getPluginManager().hasPlugin("java")) {
             // This already throws when creating `apiElements` so be eager to have a clear error message
             throw new IllegalStateException(
@@ -110,14 +110,14 @@ public class JavaPlatformPlugin implements Plugin<Project> {
         metadataHandler.setVariantDerivationStrategy(JavaEcosystemVariantDerivationStrategy.getInstance());
     }
 
-    private void createSoftwareComponent(Project project, Configuration apiElements, Configuration runtimeElements) {
+    private void createSoftwareComponent(BuildProject project, Configuration apiElements, Configuration runtimeElements) {
         AdhocComponentWithVariants component = softwareComponentFactory.adhoc("javaPlatform");
         project.getComponents().add(component);
         component.addVariantsFromConfiguration(apiElements, new JavaConfigurationVariantMapping("compile", false));
         component.addVariantsFromConfiguration(runtimeElements, new JavaConfigurationVariantMapping("runtime", false));
     }
 
-    private void createConfigurations(Project project) {
+    private void createConfigurations(BuildProject project) {
         ConfigurationContainer configurations = project.getConfigurations();
         Capability enforcedCapability = new DefaultShadowedCapability(new ProjectDerivedCapability(project), "-derived-enforced-platform");
 
@@ -140,7 +140,7 @@ public class JavaPlatformPlugin implements Plugin<Project> {
         createSoftwareComponent(project, apiElements, runtimeElements);
     }
 
-    private Configuration createConsumableRuntime(Project project, Configuration apiElements, String name, String platformKind) {
+    private Configuration createConsumableRuntime(BuildProject project, Configuration apiElements, String name, String platformKind) {
         Configuration runtimeElements = project.getConfigurations().create(name, AS_CONSUMABLE_CONFIGURATION);
         runtimeElements.extendsFrom(apiElements);
         declareConfigurationUsage(project.getObjects(), runtimeElements, Usage.JAVA_RUNTIME);
@@ -148,7 +148,7 @@ public class JavaPlatformPlugin implements Plugin<Project> {
         return runtimeElements;
     }
 
-    private Configuration createConsumableApi(Project project, ConfigurationContainer configurations, Configuration api, String name, String platformKind) {
+    private Configuration createConsumableApi(BuildProject project, ConfigurationContainer configurations, Configuration api, String name, String platformKind) {
         Configuration apiElements = configurations.create(name, AS_CONSUMABLE_CONFIGURATION);
         apiElements.extendsFrom(api);
         declareConfigurationUsage(project.getObjects(), apiElements, Usage.JAVA_API);
@@ -169,7 +169,7 @@ public class JavaPlatformPlugin implements Plugin<Project> {
         configuration.getAttributes().attribute(Usage.USAGE_ATTRIBUTE, objectFactory.named(Usage.class, usage));
     }
 
-    private void configureExtension(Project project) {
+    private void configureExtension(BuildProject project) {
         final DefaultJavaPlatformExtension platformExtension = (DefaultJavaPlatformExtension) project.getExtensions().create(JavaPlatformExtension.class, "javaPlatform", DefaultJavaPlatformExtension.class);
         project.afterEvaluate(project1 -> {
             if (!platformExtension.isAllowDependencies()) {
@@ -178,7 +178,7 @@ public class JavaPlatformPlugin implements Plugin<Project> {
         });
     }
 
-    private void checkNoDependencies(Project project) {
+    private void checkNoDependencies(BuildProject project) {
         checkNoDependencies(project.getConfigurations().getByName(RUNTIME_CONFIGURATION_NAME), Sets.<Configuration>newHashSet());
     }
 

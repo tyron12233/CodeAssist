@@ -16,7 +16,7 @@
 package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.artifacts.type.ArtifactTypeDefinition;
 import com.tyron.builder.api.attributes.AttributesSchema;
 import com.tyron.builder.api.attributes.LibraryElements;
@@ -39,7 +39,7 @@ import javax.inject.Inject;
  * @since 6.7
  * @see <a href="https://docs.gradle.org/current/userguide/java_plugin.html">Java plugin reference</a>
  */
-public class JvmEcosystemPlugin implements Plugin<Project> {
+public class JvmEcosystemPlugin implements Plugin<BuildProject> {
     private final ObjectFactory objectFactory;
     private final JvmPluginServices jvmPluginServices;
     private final SourceSetContainer sourceSets;
@@ -52,7 +52,7 @@ public class JvmEcosystemPlugin implements Plugin<Project> {
     }
 
     @Override
-    public void apply(Project project) {
+    public void apply(BuildProject project) {
         ProjectInternal p = (ProjectInternal) project;
         project.getExtensions().add(SourceSetContainer.class, "sourceSets", sourceSets);
         configureVariantDerivationStrategy(p);

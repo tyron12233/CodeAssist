@@ -16,22 +16,22 @@
 
 package com.tyron.builder.api.plugins.internal;
 
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.plugins.BasePluginExtension;
 import com.tyron.builder.api.provider.Property;
-import com.tyron.builder.util.internal.RelativePathUtil;
+import com.tyron.builder.util.RelativePathUtil;
 
 import java.io.File;
 
 public class DefaultBasePluginExtension implements BasePluginExtension {
 
-    private final Project project;
+    private final BuildProject project;
     private final DirectoryProperty distsDirectory;
     private final DirectoryProperty libsDirectory;
     private final Property<String> archivesName;
 
-    public DefaultBasePluginExtension(Project project) {
+    public DefaultBasePluginExtension(BuildProject project) {
         this.project = project;
         this.distsDirectory = project.getObjects().directoryProperty();
         this.libsDirectory = project.getObjects().directoryProperty();

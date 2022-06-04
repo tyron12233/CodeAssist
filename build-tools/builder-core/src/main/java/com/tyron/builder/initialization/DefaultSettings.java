@@ -9,6 +9,13 @@ import com.tyron.builder.api.initialization.Settings;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.initialization.resolve.DependencyResolutionManagement;
 import com.tyron.builder.api.internal.FeaturePreviews;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
+import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
+import com.tyron.builder.api.internal.project.AbstractPluginAware;
+import com.tyron.builder.api.plugins.ExtensionContainer;
+import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
+import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.groovy.scripts.ScriptSource;
 import com.tyron.builder.internal.Actions;
 import com.tyron.builder.api.internal.GradleInternal;
@@ -18,18 +25,22 @@ import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import com.tyron.builder.internal.management.DependencyResolutionManagementInternal;
+import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
+import com.tyron.builder.plugin.management.PluginManagementSpec;
+import com.tyron.builder.plugin.management.internal.PluginManagementSpecInternal;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
+import javax.inject.Inject;
 
-public class DefaultSettings implements SettingsInternal {
+public class DefaultSettings extends AbstractPluginAware implements SettingsInternal {
     private ScriptSource settingsScript;
 
     private StartParameter startParameter;
@@ -210,6 +221,18 @@ public class DefaultSettings implements SettingsInternal {
     }
 
     @Override
+    public void pluginManagement(Action<? super PluginManagementSpec> rule) {
+        rule.execute(getPluginManagement());
+        includedBuildSpecs.addAll(((PluginManagementSpecInternal) getPluginManagement()).getIncludedBuilds());
+    }
+
+    @Override
+    @Inject
+    public PluginManagementSpec getPluginManagement() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void enableFeaturePreview(String name) {
         FeaturePreviews.Feature feature = FeaturePreviews.Feature.withName(name);
         if (feature.isActive()) {
@@ -268,5 +291,43 @@ public class DefaultSettings implements SettingsInternal {
     @Override
     public DependencyResolutionManagementInternal getDependencyResolutionManagement() {
         return dependencyResolutionManagement;
+    }
+
+    @Override
+    public ExtensionContainer getExtensions() {
+        return null;
+    }
+
+    @Override
+    public PluginManagerInternal getPluginManager() {
+        return services.get(PluginManagerInternal.class);
+    }
+
+    @Override
+    protected DefaultObjectConfigurationAction createObjectConfigurationAction() {
+        return new DefaultObjectConfigurationAction(
+                getFileResolver(),
+                getScriptPluginFactory(),
+                getScriptHandlerFactory(),
+                baseClassLoaderScope,
+                getTextUriResourceLoaderFactory(),
+                this);
+    }
+
+    protected ScriptHandlerFactory getScriptHandlerFactory() {
+        return services.get(ScriptHandlerFactory.class);
+    }
+
+    protected ScriptPluginFactory getScriptPluginFactory() {
+        return services.get(ScriptPluginFactory.class);
+    }
+
+    public TextUriResourceLoader.Factory getTextUriResourceLoaderFactory() {
+        return services.get(TextUriResourceLoader.Factory.class);
+    }
+
+    @Override
+    public ConfigurationTargetIdentifier getConfigurationTargetIdentifier() {
+        return services.get(ConfigurationTargetIdentifier.class);
     }
 }

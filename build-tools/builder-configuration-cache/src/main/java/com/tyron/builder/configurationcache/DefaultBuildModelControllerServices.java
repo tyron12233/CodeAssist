@@ -12,6 +12,7 @@ import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.model.CalculatedValueContainerFactory;
+import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.invocation.DefaultGradle;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -85,8 +86,8 @@ public class DefaultBuildModelControllerServices implements BuildModelController
             this.services = services;
         }
 
-        GradleInternal createGradleModel(ServiceRegistryFactory registryFactory) {
-            return new DefaultGradle(parentBuild, buildDefinition.getStartParameter(), registryFactory);
+        GradleInternal createGradleModel(Instantiator instantiator, ServiceRegistryFactory registryFactory) {
+            return instantiator.newInstance(DefaultGradle.class, parentBuild, buildDefinition.getStartParameter(), registryFactory);
         }
 
         BuildLifecycleController createBuildLifecycleController(BuildLifecycleControllerFactory factory) {

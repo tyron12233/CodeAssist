@@ -95,20 +95,20 @@ public class DefaultObjectFactory implements ObjectFactory {
         return filePropertyFactory.newFileProperty();
     }
 
-//    @Override
-//    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType) {
-//        return domainObjectCollectionFactory.newNamedDomainObjectContainer(elementType);
-//    }
-//
-//    @Override
-//    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType, NamedDomainObjectFactory<T> factory) {
-//        return domainObjectCollectionFactory.newNamedDomainObjectContainer(elementType, factory);
-//    }
-//
-//    @Override
-//    public <T> ExtensiblePolymorphicDomainObjectContainer<T> polymorphicDomainObjectContainer(Class<T> elementType) {
-//        return domainObjectCollectionFactory.newPolymorphicDomainObjectContainer(elementType);
-//    }
+    @Override
+    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType) {
+        return domainObjectCollectionFactory.newNamedDomainObjectContainer(elementType);
+    }
+
+    @Override
+    public <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType, NamedDomainObjectFactory<T> factory) {
+        return domainObjectCollectionFactory.newNamedDomainObjectContainer(elementType, factory);
+    }
+
+    @Override
+    public <T> ExtensiblePolymorphicDomainObjectContainer<T> polymorphicDomainObjectContainer(Class<T> elementType) {
+        return domainObjectCollectionFactory.newPolymorphicDomainObjectContainer(elementType);
+    }
 
 //    @Override
 //    public <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType) {

@@ -20,7 +20,7 @@ import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.NamedDomainObjectContainer;
 import com.tyron.builder.api.NamedDomainObjectProvider;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.artifacts.ArtifactView;
 import com.tyron.builder.api.artifacts.Configuration;
@@ -53,7 +53,6 @@ import com.tyron.builder.api.tasks.SourceSet;
 import com.tyron.builder.api.tasks.SourceSetContainer;
 import com.tyron.builder.api.tasks.TaskProvider;
 import com.tyron.builder.api.tasks.bundling.Jar;
-import com.tyron.builder.api.tasks.testing.Test;
 import com.tyron.builder.internal.component.local.model.OpaqueComponentIdentifier;
 import com.tyron.builder.internal.deprecation.DeprecatableConfiguration;
 import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
@@ -278,7 +277,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
         final ProjectInternal projectInternal = (ProjectInternal) project;
 
         project.getPluginManager().apply(JavaBasePlugin.class);
-        project.getPluginManager().apply("com.tyron.builder.jvm-test-suite");
+        project.getPluginManager().apply("org.gradle.jvm-test-suite");
 
         JavaPluginExtension javaExtension = project.getExtensions().getByType(JavaPluginExtension.class);
         projectInternal.getServices().get(ComponentRegistry.class).setMainComponent(new BuildableJavaComponentImpl(project, javaExtension));
@@ -296,8 +295,8 @@ public class JavaPlugin implements Plugin<BuildProject> {
     private void configureSourceSets(BuildProject project, JavaPluginExtension pluginExtension, final BuildOutputCleanupRegistry buildOutputCleanupRegistry, SourceSet mainSourceSet) {
         SourceSetContainer sourceSets = pluginExtension.getSourceSets();
 
-        // The built-in test suite must be configured after the main source set is available due to some
-        // special handling in the IntelliJ model builder
+//        The built-in test suite must be configured after the main source set is available due to some
+//        special handling in the IntelliJ model builder
         configureBuiltInTest(project, project.getExtensions().getByType(TestingExtension.class), pluginExtension, mainSourceSet);
 
         // Register the project's source set output directories

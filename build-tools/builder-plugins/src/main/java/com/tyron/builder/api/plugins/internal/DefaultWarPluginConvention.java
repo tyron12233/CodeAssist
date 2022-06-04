@@ -16,7 +16,7 @@
 
 package com.tyron.builder.api.plugins.internal;
 
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.plugins.WarPluginConvention;
 import com.tyron.builder.api.reflect.HasPublicType;
 import com.tyron.builder.api.reflect.TypeOf;
@@ -27,9 +27,9 @@ import static com.tyron.builder.api.reflect.TypeOf.typeOf;
 
 public class DefaultWarPluginConvention extends WarPluginConvention implements HasPublicType {
     private String webAppDirName;
-    private final Project project;
+    private final BuildProject project;
 
-    public DefaultWarPluginConvention(Project project) {
+    public DefaultWarPluginConvention(BuildProject project) {
         this.project = project;
         webAppDirName = "src/main/webapp";
     }
@@ -55,7 +55,7 @@ public class DefaultWarPluginConvention extends WarPluginConvention implements H
     }
 
     @Override
-    public Project getProject() {
+    public BuildProject getProject() {
         return project;
     }
 }

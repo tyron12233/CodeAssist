@@ -16,7 +16,6 @@
 package com.tyron.builder.api.internal.plugins;
 
 import com.google.common.base.Charsets;
-import org.apache.tools.ant.taskdefs.Chmod;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.internal.IoActions;
 import com.tyron.builder.jvm.application.scripts.JavaAppStartScriptGenerationDetails;
@@ -124,11 +123,12 @@ public class StartScriptGenerator {
     static class AntUnixFileOperation implements UnixFileOperation {
         @Override
         public void createExecutablePermission(File file) {
-            Chmod chmod = new Chmod();
-            chmod.setFile(file);
-            chmod.setPerm("ugo+rx");
-            chmod.setProject(AntUtil.createProject());
-            chmod.execute();
+//            Chmod chmod = new Chmod();
+//            chmod.setFile(file);
+//            chmod.setPerm("ugo+rx");
+//            chmod.setProject(AntUtil.createProject());
+//            chmod.execute();
+            throw new UnsupportedOperationException("Not yet implemented.");
         }
     }
 

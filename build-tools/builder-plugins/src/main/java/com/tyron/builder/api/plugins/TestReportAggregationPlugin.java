@@ -19,7 +19,7 @@ package com.tyron.builder.api.plugins;
 import com.tyron.builder.api.ExtensiblePolymorphicDomainObjectContainer;
 import com.tyron.builder.api.Incubating;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.artifacts.Configuration;
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
 import com.tyron.builder.api.attributes.Category;
@@ -47,13 +47,13 @@ import java.util.concurrent.Callable;
  * @see <a href="https://docs.gradle.org/current/userguide/test_report_aggregation_plugin.html">Test Report Aggregation Plugin reference</a>
  */
 @Incubating
-public abstract class TestReportAggregationPlugin implements Plugin<Project> {
+public abstract class TestReportAggregationPlugin implements Plugin<BuildProject> {
 
     public static final String TEST_REPORT_AGGREGATION_CONFIGURATION_NAME = "testReportAggregation";
 
     @Override
-    public void apply(Project project) {
-        project.getPluginManager().apply("com.tyron.builder.reporting-base");
+    public void apply(BuildProject project) {
+        project.getPluginManager().apply("org.gradle.reporting-base");
 
         final Configuration testAggregation = project.getConfigurations().create(TEST_REPORT_AGGREGATION_CONFIGURATION_NAME);
         testAggregation.setDescription("A configuration to collect test execution results");

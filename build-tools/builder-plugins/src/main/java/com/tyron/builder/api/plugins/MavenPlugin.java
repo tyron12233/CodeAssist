@@ -18,7 +18,6 @@ package com.tyron.builder.api.plugins;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.InvalidUserCodeException;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 
 import javax.inject.Inject;

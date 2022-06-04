@@ -18,11 +18,6 @@ package com.tyron.builder.api.plugins;
 
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Project;
-import com.tyron.builder.api.file.SourceDirectorySet;
-import com.tyron.builder.api.tasks.GroovySourceDirectorySet;
-import com.tyron.builder.api.tasks.SourceSet;
-import com.tyron.builder.api.tasks.javadoc.Groovydoc;
 
 /**
  * <p>A {@link Plugin} which extends the {@link JavaPlugin} to provide support for compiling and documenting Groovy
@@ -41,15 +36,18 @@ public class GroovyPlugin implements Plugin<BuildProject> {
     }
 
     private void configureGroovydoc(final BuildProject project) {
-        project.getTasks().register(GROOVYDOC_TASK_NAME, Groovydoc.class, groovyDoc -> {
-            groovyDoc.setDescription("Generates Groovydoc API documentation for the main source code.");
-            groovyDoc.setGroup(JavaBasePlugin.DOCUMENTATION_GROUP);
-
-            SourceSet sourceSet = project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME);
-            groovyDoc.setClasspath(sourceSet.getOutput().plus(sourceSet.getCompileClasspath()));
-
-            SourceDirectorySet groovySourceSet = sourceSet.getExtensions().getByType(GroovySourceDirectorySet.class);
-            groovyDoc.setSource(groovySourceSet);
-        });
+//        project.getTasks().register(GROOVYDOC_TASK_NAME, Groovydoc.class, groovyDoc -> {
+//            groovyDoc.setDescription("Generates Groovydoc API documentation for the main source
+//            code.");
+//            groovyDoc.setGroup(JavaBasePlugin.DOCUMENTATION_GROUP);
+//
+//            SourceSet sourceSet = project.getExtensions().getByType(JavaPluginExtension.class)
+//            .getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME);
+//            groovyDoc.setClasspath(sourceSet.getOutput().plus(sourceSet.getCompileClasspath()));
+//
+//            SourceDirectorySet groovySourceSet = sourceSet.getExtensions().getByType
+//            (GroovySourceDirectorySet.class);
+//            groovyDoc.setSource(groovySourceSet);
+//        });
     }
 }

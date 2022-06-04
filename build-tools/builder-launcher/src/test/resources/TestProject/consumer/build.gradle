@@ -1,8 +1,14 @@
 import com.tyron.builder.api.tasks.*
 import com.tyron.builder.api.attributes.*
 
-tasks.register("taskA") {
-    it.doLast {
-        println "TEST"
-    }
+plugins {
+    id "java"
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(path: ':producer')
 }

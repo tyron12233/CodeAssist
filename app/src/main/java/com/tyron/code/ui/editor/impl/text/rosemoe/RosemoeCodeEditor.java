@@ -4,6 +4,8 @@ import android.content.Context;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.lifecycle.ViewModelStore;
+import androidx.lifecycle.ViewModelStoreOwner;
 
 import com.tyron.editor.Content;
 import com.tyron.fileeditor.api.FileDocumentManager;

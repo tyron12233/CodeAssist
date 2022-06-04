@@ -11,12 +11,14 @@ import org.apache.commons.io.FilenameUtils;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.zip.Checksum;
 
 public class GFileUtils {
@@ -236,6 +238,9 @@ public class GFileUtils {
     }
 
     public static boolean hasExtensionIgnoresCase(String name, String extension) {
+        if (extension.startsWith(".")) {
+            extension = extension.substring(1);
+        }
         return FilenameUtils.getExtension(name).equalsIgnoreCase(extension);
     }
 
@@ -244,5 +249,58 @@ public class GFileUtils {
             return filePath;
         }
         return removeExtension(filePath) + extension;
+    }
+
+    public static void copyURLToFile(URL source, File destination) {
+        try {
+            FileUtils.copyURLToFile(source, destination);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static void writeFile(String content, File file, String s) {
+        try {
+            FileUtils.writeStringToFile(file, content, s);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Converts a string into a string that is safe to use as a file name. The result will only include ascii characters and numbers, and the "-","_", #, $ and "." characters.
+     */
+    public static String toSafeFileName(String name) {
+        int size = name.length();
+        StringBuilder rc = new StringBuilder(size * 2);
+        for (int i = 0; i < size; i++) {
+            char c = name.charAt(i);
+            boolean valid = c >= 'a' && c <= 'z';
+            valid = valid || (c >= 'A' && c <= 'Z');
+            valid = valid || (c >= '0' && c <= '9');
+            valid = valid || (c == '_') || (c == '-') || (c == '.') || (c == '$');
+            if (valid) {
+                rc.append(c);
+            } else {
+                // Encode the character using hex notation
+                rc.append('#');
+                rc.append(Integer.toHexString(c));
+            }
+        }
+        return rc.toString();
+    }
+
+    /**
+     * Checks if the given file path ends with the given extension.
+     * @param file the file
+     * @param extension candidate extension including leading dot
+     * @return true if {@code file.getPath().endsWith(extension)}
+     */
+    public static boolean hasExtension(File file, String extension) {
+        return file.getPath().endsWith(extension);
+    }
+
+    public static List<String> toPaths(List<File> files) {
+        return files.stream().map(File::getAbsolutePath).collect(Collectors.toList());
     }
 }
