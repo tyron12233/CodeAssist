@@ -13,6 +13,7 @@ import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.artifacts.dsl.ArtifactHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
+import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.internal.DynamicObjectAware;
 import com.tyron.builder.api.internal.ProcessOperations;
 import com.tyron.builder.api.internal.file.DefaultProjectLayout;
@@ -32,6 +33,7 @@ import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.groovy.scripts.ScriptSource;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.deprecation.DeprecationLogger;
@@ -461,6 +463,22 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     public void buildscript(Closure configureClosure) {
         ConfigureUtil.configure(configureClosure, getBuildscript());
     }
+
+    @Override
+    public CopySpec copySpec(Closure closure) {
+        return ConfigureUtil.configure(closure, copySpec());
+    }
+
+    @Override
+    public CopySpec copySpec(Action<? super CopySpec> action) {
+        return Actions.with(copySpec(), action);
+    }
+
+    @Override
+    public CopySpec copySpec() {
+        return getFileOperations().copySpec();
+    }
+
 
     @Override
     public File mkdir(Object path) {
