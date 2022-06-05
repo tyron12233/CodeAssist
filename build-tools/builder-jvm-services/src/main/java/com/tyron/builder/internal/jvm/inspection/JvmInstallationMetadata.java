@@ -53,7 +53,7 @@ public interface JvmInstallationMetadata {
 
     boolean isValidInstallation();
 
-    class DefaultJvmInstallationMetadata implements JvmInstallationMetadata {
+    static class DefaultJvmInstallationMetadata implements JvmInstallationMetadata {
 
         private final JavaVersion languageVersion;
         private final String vendor;
@@ -65,7 +65,13 @@ public interface JvmInstallationMetadata {
         private final String jvmVersion;
         private final Cached<Set<JavaInstallationCapability>> capabilities = Cached.of(this::gatherCapabilities);
 
-        private DefaultJvmInstallationMetadata(File javaHome, String implementationVersion, String runtimeVersion, String jvmVersion, String vendor, String implementationName, String architecture) {
+        public DefaultJvmInstallationMetadata(File javaHome,
+                                              String implementationVersion,
+                                              String runtimeVersion,
+                                              String jvmVersion,
+                                              String vendor,
+                                              String implementationName,
+                                              String architecture) {
             this.javaHome = javaHome.toPath();
             this.implementationVersion = implementationVersion;
             this.languageVersion = JavaVersion.toVersion(implementationVersion);
