@@ -12,6 +12,7 @@ import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.jvm.Jvm;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
+import com.tyron.common.TestUtil;
 
 import javax.lang.model.SourceVersion;
 import javax.tools.DiagnosticListener;
@@ -54,15 +55,18 @@ public class JdkTools {
         JavaVersion javaVersion = jvm.getJavaVersion();
         boolean java9Compatible = javaVersion.isJava9Compatible();
         ClassLoader filteringClassLoader = getSystemFilteringClassLoader(defaultClassLoaderFactory);
-        if (!java9Compatible) {
+
+        // use the bundled javac compiler
+        if (!java9Compatible && !TestUtil.isDalvik()) {
             File toolsJar = jvm.getToolsJar();
             if (toolsJar == null) {
-                throw new IllegalStateException("Could not find tools.jar. Please check that "
-                    + jvm.getJavaHome().getAbsolutePath()
-                    + " contains a valid JDK installation.");
+                throw new IllegalStateException("Could not find tools.jar. Please check that " +
+                                                jvm.getJavaHome().getAbsolutePath() +
+                                                " contains a valid JDK installation.");
             }
             ClassPath defaultClassPath = DefaultClassPath.of(toolsJar).plus(compilerPlugins);
-            isolatedToolsLoader = new VisitableURLClassLoader("jdk-tools", filteringClassLoader, defaultClassPath.getAsURLs());
+            isolatedToolsLoader = new VisitableURLClassLoader("jdk-tools", filteringClassLoader,
+                    defaultClassPath.getAsURLs());
             isJava9Compatible = false;
         } else {
             isolatedToolsLoader = getClass().getClassLoader();

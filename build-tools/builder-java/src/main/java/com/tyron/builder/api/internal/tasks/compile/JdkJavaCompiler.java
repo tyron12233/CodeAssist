@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
+import com.tyron.builder.api.JavaVersion;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.api.internal.tasks.compile.processing.AnnotationProcessorDeclaration;
@@ -52,7 +53,7 @@ public class JdkJavaCompiler implements Compiler<JavaCompileSpec>, Serializable 
         Charset charset = compileOptions.getEncoding() != null ? Charset.forName(compileOptions.getEncoding()) : null;
         StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(null, null, charset);
         Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromFiles(spec.getSourceFiles());
-        boolean hasEmptySourcepaths = false; //JavaVersion.current().isJava9Compatible() && emptySourcepathIn(options);
+        boolean hasEmptySourcepaths = JavaVersion.current().isJava9Compatible() && emptySourcepathIn(options);
         JavaFileManager fileManager = GradleStandardJavaFileManager
                 .wrap(standardFileManager, DefaultClassPath
                 .of(spec.getAnnotationProcessorPath()), hasEmptySourcepaths);

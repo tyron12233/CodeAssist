@@ -55,6 +55,7 @@ import com.tyron.builder.language.base.internal.compile.Compiler;
 import com.tyron.builder.work.Incremental;
 import com.tyron.builder.work.InputChanges;
 import com.tyron.builder.work.NormalizeLineEndings;
+import com.tyron.common.TestUtil;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -125,6 +126,12 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
     @TaskAction
     protected void compile(InputChanges inputs) {
         DefaultJavaCompileSpec spec = createSpec();
+
+        // temporary fix
+        if (TestUtil.isDalvik()) {
+            spec.getCompileOptions().setBootClasspath("/data/data/com.tyron.code/files/rt.jar");
+        }
+
         if (!compileOptions.isIncremental()) {
             performFullCompilation(spec);
         } else {
