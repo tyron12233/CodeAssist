@@ -27,6 +27,7 @@ import com.tyron.builder.api.plugins.JavaPluginConvention;
 import com.tyron.builder.api.plugins.JavaPluginExtension;
 import com.tyron.builder.api.reflect.HasPublicType;
 import com.tyron.builder.api.reflect.TypeOf;
+import com.tyron.builder.api.reporting.ReportingExtension;
 import com.tyron.builder.api.tasks.SourceSetContainer;
 import com.tyron.builder.util.RelativePathUtil;
 
@@ -137,19 +138,17 @@ public class DefaultJavaPluginConvention extends JavaPluginConvention implements
 
     @Override
     public String getTestReportDirName() {
-        throw new UnsupportedOperationException();
-//        return relativePath(
-//                project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory(),
-//                extension.getTestReportDir());
+        return relativePath(
+                project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory(),
+                extension.getTestReportDir());
     }
 
     @Override
     public void setTestReportDirName(String testReportDirName) {
-        throw new UnsupportedOperationException();
-//        extension.getTestReportDir()
-//                .set(project.getExtensions().getByType(ReportingExtension.class)
-//                .getBaseDirectory()
-//                        .dir(testReportDirName));
+        extension.getTestReportDir()
+                .set(project.getExtensions().getByType(ReportingExtension.class)
+                .getBaseDirectory()
+                        .dir(testReportDirName));
     }
 
     @Override
@@ -177,8 +176,7 @@ public class DefaultJavaPluginConvention extends JavaPluginConvention implements
         // an example in our docs
         // see subprojects/docs/src/snippets/java/customDirs/groovy/build.gradle
         // and https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
-//        return project.getExtensions().getByType(ReportingExtension.class).getBaseDir();
-        throw new UnsupportedOperationException();
+        return project.getExtensions().getByType(ReportingExtension.class).getBaseDir();
     }
 
 

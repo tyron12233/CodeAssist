@@ -222,15 +222,14 @@ public class NamedObjectInstantiator implements ManagedFactory {
         methodVisitor.visitMaxs(0, 0);
         methodVisitor.visitEnd();
 
-        String generatedTypeName = generator.getGeneratedTypeName();
-        byte[] bytes = generator.getVisitor().toByteArray();
+        Class<Object> define = generator.define();
 
         //
         // Generate factory class
         //
 
+
         generator = new AsmClassGenerator(publicClass, factorySuffix);
-        String factoryClassName = generator.getGeneratedTypeName();
 
         visitor = generator.getVisitor();
         visitor.visit(V1_5, ACC_PUBLIC | ACC_SYNTHETIC, generator.getGeneratedType().getInternalName(), null, CLASS_GENERATING_LOADER.getInternalName(), EMPTY_STRINGS);
@@ -266,16 +265,10 @@ public class NamedObjectInstantiator implements ManagedFactory {
 
         visitor.visitEnd();
 
-        byte[] factoryBytes = generator.getVisitor().toByteArray();
 
-        ScriptFactory scriptFactory = new ScriptFactory(publicClass.getClassLoader());
-        ClassLoader classLoader = scriptFactory.defineClassLoader(bytes, factoryBytes);
-
+        Class<Object> factoryClass = generator.define();
 
         try {
-            Class<?> aClass = classLoader.loadClass(generatedTypeName);
-            Class<?> factoryClass = classLoader.loadClass(factoryClassName);
-
             return (ClassGeneratingLoader) factoryClass.getConstructor().newInstance();
         } catch (Exception e) {
             throw UncheckedException.throwAsUncheckedException(e);

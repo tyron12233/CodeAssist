@@ -22,7 +22,7 @@ public class TaskDependencyResolver {
     }
 
     private static CachingTaskDependencyResolveContext<Node> createTaskDependencyResolverContext(List<DependencyResolver> workResolvers) {
-        return new CachingTaskDependencyResolveContext<Node>(workResolvers);
+        return new CachingTaskDependencyResolveContext<>(workResolvers);
     }
 
     public Set<Node> resolveDependenciesFor(@Nullable TaskInternal task, Object dependencies) {

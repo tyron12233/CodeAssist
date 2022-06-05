@@ -2,7 +2,7 @@ import com.tyron.builder.api.tasks.*
 import com.tyron.builder.api.attributes.*
 
 plugins {
-    id "java"
+    id "java-library"
 }
 
 repositories {
@@ -10,5 +10,10 @@ repositories {
 }
 
 dependencies {
-    implementation project(path: ':producer')
+    implementation it.project(path: ':producer')
+}
+
+java {
+    sourceCompatibility = "1.8"
+    targetCompatibility = "1.8"
 }

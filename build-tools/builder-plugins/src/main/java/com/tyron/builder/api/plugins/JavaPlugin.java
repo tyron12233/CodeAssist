@@ -53,6 +53,7 @@ import com.tyron.builder.api.tasks.SourceSet;
 import com.tyron.builder.api.tasks.SourceSetContainer;
 import com.tyron.builder.api.tasks.TaskProvider;
 import com.tyron.builder.api.tasks.bundling.Jar;
+import com.tyron.builder.api.tasks.testing.Test;
 import com.tyron.builder.internal.component.local.model.OpaqueComponentIdentifier;
 import com.tyron.builder.internal.deprecation.DeprecatableConfiguration;
 import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;

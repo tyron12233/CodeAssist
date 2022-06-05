@@ -253,7 +253,7 @@ public class CompilerService extends Service {
         startParameter.setBuildCacheEnabled(true);
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
-        startParameter.setLogLevel(LogLevel.LIFECYCLE);
+        startParameter.setLogLevel(LogLevel.INFO);
         startParameter.setConsoleOutput(ConsoleOutput.Rich);
         startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
         startParameter.setTaskNames(Collections.singletonList(":app:assemble"));
