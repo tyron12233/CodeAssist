@@ -41,9 +41,15 @@ public abstract class JavaEcosystemSupport {
         configureTargetEnvironment(attributesSchema);
         configureConsumerDescriptors((DescribableAttributesSchema) attributesSchema);
 
-        AttributeContainerInternal attributes = (AttributeContainerInternal) attributesSchema.getAttributes();
-        if (!attributes.contains(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE)) {
-            attributes.attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, objectFactory.named(TargetJvmEnvironment.class, TargetJvmEnvironment.STANDARD_JVM));
+        // CodeAssist workaround: for some reason the TargetJvmEnvironment attribute
+        // is not properly set on each configurations.
+        // this is to ensure that each configuration has that attribute
+        if (attributesSchema.getAttributes() instanceof AttributeContainerInternal) {
+            AttributeContainerInternal attributes = (AttributeContainerInternal) attributesSchema.getAttributes();
+            if (!attributes.contains(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE)) {
+                attributes.attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                        objectFactory.named(TargetJvmEnvironment.class, TargetJvmEnvironment.STANDARD_JVM));
+            }
         }
     }
 
