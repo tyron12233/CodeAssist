@@ -1,14 +1,14 @@
 package com.tyron.builder.internal.resource.transport.http;
 
-import org.apache.http.Header;
-import org.apache.http.HttpRequest;
-import org.apache.http.auth.AuthenticationException;
-import org.apache.http.auth.ContextAwareAuthScheme;
-import org.apache.http.auth.Credentials;
-import org.apache.http.auth.MalformedChallengeException;
-import org.apache.http.protocol.BasicHttpContext;
-import org.apache.http.protocol.HttpContext;
-import org.apache.http.util.Args;
+import cz.msebera.android.httpclient.Header;
+import cz.msebera.android.httpclient.HttpRequest;
+import cz.msebera.android.httpclient.auth.AuthenticationException;
+import cz.msebera.android.httpclient.auth.ContextAwareAuthScheme;
+import cz.msebera.android.httpclient.auth.Credentials;
+import cz.msebera.android.httpclient.auth.MalformedChallengeException;
+import cz.msebera.android.httpclient.protocol.BasicHttpContext;
+import cz.msebera.android.httpclient.protocol.HttpContext;
+import cz.msebera.android.httpclient.util.Args;
 
 public class HttpHeaderAuthScheme implements ContextAwareAuthScheme {
 

@@ -1,15 +1,15 @@
 package com.tyron.builder.internal.resource.transport.http;
 
-import org.apache.http.annotation.Contract;
-import org.apache.http.annotation.ThreadingBehavior;
-import org.apache.http.auth.AuthScheme;
-import org.apache.http.protocol.HttpContext;
+import cz.msebera.android.httpclient.annotation.Contract;
+import cz.msebera.android.httpclient.annotation.ThreadingBehavior;
+import cz.msebera.android.httpclient.auth.AuthScheme;
+import cz.msebera.android.httpclient.protocol.HttpContext;
 
 import java.nio.charset.Charset;
 
 @Contract(threading = ThreadingBehavior.IMMUTABLE)
 @SuppressWarnings("deprecation")
-public class HttpHeaderSchemeFactory implements org.apache.http.auth.AuthSchemeFactory, org.apache.http.auth.AuthSchemeProvider {
+public class HttpHeaderSchemeFactory implements cz.msebera.android.httpclient.auth.AuthSchemeFactory, cz.msebera.android.httpclient.auth.AuthSchemeProvider {
 
     public HttpHeaderSchemeFactory(final Charset charset) {
         super();
@@ -20,7 +20,7 @@ public class HttpHeaderSchemeFactory implements org.apache.http.auth.AuthSchemeF
     }
 
     @Override
-    public AuthScheme newInstance(final org.apache.http.params.HttpParams params) {
+    public AuthScheme newInstance(final cz.msebera.android.httpclient.params.HttpParams params) {
         return new HttpHeaderAuthScheme();
     }
 

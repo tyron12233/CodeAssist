@@ -2,16 +2,16 @@ package com.tyron.builder.internal.resource.transport.http;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
-import org.apache.http.HttpHeaders;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.protocol.BasicHttpContext;
-import org.apache.http.protocol.HttpContext;
+import cz.msebera.android.httpclient.HttpHeaders;
+import cz.msebera.android.httpclient.client.methods.CloseableHttpResponse;
+import cz.msebera.android.httpclient.client.methods.HttpGet;
+import cz.msebera.android.httpclient.client.methods.HttpHead;
+import cz.msebera.android.httpclient.client.methods.HttpRequestBase;
+import cz.msebera.android.httpclient.client.utils.URIBuilder;
+import cz.msebera.android.httpclient.impl.client.CloseableHttpClient;
+import cz.msebera.android.httpclient.impl.client.HttpClientBuilder;
+import cz.msebera.android.httpclient.protocol.BasicHttpContext;
+import cz.msebera.android.httpclient.protocol.HttpContext;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.internal.UncheckedException;
 import org.slf4j.Logger;
@@ -29,7 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-import static org.apache.http.client.protocol.HttpClientContext.REDIRECT_LOCATIONS;
+import static cz.msebera.android.httpclient.client.protocol.HttpClientContext.REDIRECT_LOCATIONS;
 
 /**
  * Provides some convenience and unified logging.

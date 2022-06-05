@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.resource.transport.http;
 
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.entity.ContentType;
+import cz.msebera.android.httpclient.client.methods.HttpPut;
+import cz.msebera.android.httpclient.entity.ContentType;
 import com.tyron.builder.internal.resource.ExternalResourceName;
 import com.tyron.builder.internal.resource.ReadableContent;
 import com.tyron.builder.internal.resource.transfer.ExternalResourceUploader;

@@ -5,8 +5,8 @@ import com.tyron.builder.internal.resource.metadata.DefaultExternalResourceMetaD
 import com.tyron.builder.internal.resource.metadata.ExternalResourceMetaData;
 import com.tyron.builder.internal.resource.transfer.ExternalResourceReadResponse;
 
-import org.apache.http.HttpHeaders;
-import org.apache.http.client.utils.DateUtils;
+import cz.msebera.android.httpclient.HttpHeaders;
+import cz.msebera.android.httpclient.client.utils.DateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

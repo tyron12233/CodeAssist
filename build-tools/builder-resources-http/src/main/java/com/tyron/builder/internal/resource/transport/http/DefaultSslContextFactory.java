@@ -4,13 +4,18 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
-import org.apache.http.ssl.SSLInitializationException;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.SystemProperties;
+import com.tyron.common.TestUtil;
+
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
+import javax.security.auth.callback.Callback;
+import javax.security.auth.callback.CallbackHandler;
+import javax.security.auth.callback.UnsupportedCallbackException;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -23,6 +28,8 @@ import java.security.cert.CertificateException;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+
+import cz.msebera.android.httpclient.conn.ssl.SSLInitializationException;
 
 public class DefaultSslContextFactory implements SslContextFactory {
     private static final char[] EMPTY_PASSWORD = "".toCharArray();
@@ -132,14 +139,18 @@ public class DefaultSslContextFactory implements SslContextFactory {
                     }
                     tmFactory.init(trustStore);
                 } else {
-                    trustStoreFile = trustStoreFile(props);
                     tmFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
                     KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
-                    char[] trustStorePassword = trustStorePassword(props);
-                    try (FileInputStream instream = new FileInputStream(trustStoreFile)) {
-                        trustStore.load(instream, trustStorePassword);
+                    if (TestUtil.isDalvik()) {
+                        tmFactory.init((KeyStore)null);
+                    } else {
+                        trustStoreFile = trustStoreFile(props);
+                        char[] trustStorePassword = trustStorePassword(props);
+                        try (FileInputStream instream = new FileInputStream(trustStoreFile)) {
+                            trustStore.load(instream, trustStorePassword);
+                        }
+                        tmFactory.init(trustStore);
                     }
-                    tmFactory.init(trustStore);
                 }
             }
             return tmFactory;

@@ -1,11 +1,11 @@
 package com.tyron.builder.internal.resource.transport.http;
 
-import org.apache.http.HttpRequest;
-import org.apache.http.HttpResponse;
-import org.apache.http.ProtocolException;
-import org.apache.http.client.RedirectStrategy;
-import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.protocol.HttpContext;
+import cz.msebera.android.httpclient.HttpRequest;
+import cz.msebera.android.httpclient.HttpResponse;
+import cz.msebera.android.httpclient.ProtocolException;
+import cz.msebera.android.httpclient.client.RedirectStrategy;
+import cz.msebera.android.httpclient.client.methods.HttpUriRequest;
+import cz.msebera.android.httpclient.protocol.HttpContext;
 import com.tyron.builder.internal.verifier.HttpRedirectVerifier;
 
 import java.util.Collections;

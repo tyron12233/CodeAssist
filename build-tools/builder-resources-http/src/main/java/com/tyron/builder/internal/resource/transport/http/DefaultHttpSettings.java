@@ -3,19 +3,20 @@ package com.tyron.builder.internal.resource.transport.http;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
-import org.apache.http.conn.ssl.DefaultHostnameVerifier;
 import com.tyron.builder.authentication.Authentication;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.verifier.HttpRedirectVerifier;
 
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
+import cz.msebera.android.httpclient.conn.ssl.StrictHostnameVerifier;
 
 public class DefaultHttpSettings implements HttpSettings {
     private final Collection<Authentication> authenticationSettings;
@@ -124,7 +125,7 @@ public class DefaultHttpSettings implements HttpSettings {
 
         public Builder withSslContextFactory(SslContextFactory sslContextFactory) {
             this.sslContextFactory = sslContextFactory;
-            this.hostnameVerifier = new DefaultHostnameVerifier(null);
+            this.hostnameVerifier = new StrictHostnameVerifier();
             return this;
         }
 
@@ -155,15 +156,10 @@ public class DefaultHttpSettings implements HttpSettings {
         }
     }
 
-    private static final HostnameVerifier ALL_TRUSTING_HOSTNAME_VERIFIER = new HostnameVerifier() {
-        @Override
-        public boolean verify(String hostname, SSLSession session) {
-            return true;
-        }
-    };
+    private static final HostnameVerifier ALL_TRUSTING_HOSTNAME_VERIFIER = (hostname, session) -> true;
 
     private static final SslContextFactory ALL_TRUSTING_SSL_CONTEXT_FACTORY = new SslContextFactory() {
-        private final Supplier<SSLContext> sslContextSupplier = Suppliers.memoize(new Supplier<SSLContext>() {
+        private final java.util.function.Supplier<SSLContext> sslContextSupplier = Suppliers.memoize(new Supplier<SSLContext>() {
             @Override
             public SSLContext get() {
                 try {

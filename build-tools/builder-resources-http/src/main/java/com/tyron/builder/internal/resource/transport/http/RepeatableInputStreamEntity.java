@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.resource.transport.http;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.http.entity.AbstractHttpEntity;
-import org.apache.http.entity.ContentType;
+import cz.msebera.android.httpclient.entity.AbstractHttpEntity;
+import cz.msebera.android.httpclient.entity.ContentType;
 import com.tyron.builder.internal.IoActions;
 import com.tyron.builder.internal.resource.ReadableContent;
 

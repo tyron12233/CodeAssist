@@ -1,12 +1,12 @@
 package com.tyron.builder.internal.resource.transport.http;
 
-import org.apache.http.HttpEntityEnclosingRequest;
-import org.apache.http.HttpRequest;
-import org.apache.http.HttpResponse;
-import org.apache.http.ProtocolException;
-import org.apache.http.client.methods.*;
-import org.apache.http.impl.client.DefaultRedirectStrategy;
-import org.apache.http.protocol.HttpContext;
+import cz.msebera.android.httpclient.HttpEntityEnclosingRequest;
+import cz.msebera.android.httpclient.HttpRequest;
+import cz.msebera.android.httpclient.HttpResponse;
+import cz.msebera.android.httpclient.ProtocolException;
+import cz.msebera.android.httpclient.client.methods.*;
+import cz.msebera.android.httpclient.impl.client.DefaultRedirectStrategy;
+import cz.msebera.android.httpclient.protocol.HttpContext;
 
 import java.net.URI;
 

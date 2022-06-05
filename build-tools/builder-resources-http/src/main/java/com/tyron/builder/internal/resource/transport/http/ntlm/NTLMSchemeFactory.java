@@ -2,12 +2,12 @@ package com.tyron.builder.internal.resource.transport.http.ntlm;
 
 import java.io.IOException;
 
-import org.apache.http.auth.AuthScheme;
-import org.apache.http.auth.AuthSchemeProvider;
-import org.apache.http.impl.auth.NTLMEngine;
-import org.apache.http.impl.auth.NTLMEngineException;
-import org.apache.http.impl.auth.NTLMScheme;
-import org.apache.http.protocol.HttpContext;
+import cz.msebera.android.httpclient.auth.AuthScheme;
+import cz.msebera.android.httpclient.auth.AuthSchemeProvider;
+import cz.msebera.android.httpclient.impl.auth.NTLMEngine;
+import cz.msebera.android.httpclient.impl.auth.NTLMEngineException;
+import cz.msebera.android.httpclient.impl.auth.NTLMScheme;
+import cz.msebera.android.httpclient.protocol.HttpContext;
 
 import jcifs.ntlmssp.NtlmFlags;
 import jcifs.ntlmssp.Type1Message;

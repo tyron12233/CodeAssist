@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.resource.transport.http;
 
-import org.apache.http.Header;
-import org.apache.http.auth.Credentials;
-import org.apache.http.message.BasicHeader;
+import cz.msebera.android.httpclient.Header;
+import cz.msebera.android.httpclient.auth.Credentials;
+import cz.msebera.android.httpclient.message.BasicHeader;
 
 import java.security.Principal;
 
