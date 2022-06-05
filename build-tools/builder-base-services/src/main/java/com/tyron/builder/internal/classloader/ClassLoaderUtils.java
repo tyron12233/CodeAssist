@@ -5,14 +5,28 @@ import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.reflect.JavaMethod;
+import com.tyron.builder.util.GUtil;
+import com.tyron.common.TestUtil;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
+
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.Path;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
 public abstract class ClassLoaderUtils {
     private static final ClassDefiner CLASS_DEFINER;
@@ -20,7 +34,11 @@ public abstract class ClassLoaderUtils {
     private static final ClassLoaderPackagesFetcher CLASS_LOADER_PACKAGES_FETCHER;
 
     static {
-        CLASS_DEFINER = JavaVersion.current().isJava9Compatible() ? new LookupClassDefiner() : new ReflectionClassDefiner();
+        CLASS_DEFINER = TestUtil.isDalvik()
+                ? new AndroidClassDefiner()
+                : JavaVersion.current().isJava9Compatible()
+                    ? new LookupClassDefiner()
+                    : new ReflectionClassDefiner();
         CLASS_LOADER_PACKAGES_FETCHER = JavaVersion.current().isJava9Compatible() ? new LookupPackagesFetcher() : new ReflectionPackagesFetcher();
     }
 
@@ -114,6 +132,7 @@ public abstract class ClassLoaderUtils {
      * Usually, this class and the target Gradle-managed class loader exist in the same module, so everything works.
      * Otherwise, an {@link IllegalAccessException} will be thrown, and {@link ClassLoader} class will be used as the lookup object.
      */
+    @SuppressWarnings("Since15")
     private static class AbstractClassLoaderLookuper {
         protected MethodHandles.Lookup baseLookup;
 
@@ -146,6 +165,79 @@ public abstract class ClassLoaderUtils {
         }
     }
 
+
+    private static class AndroidClassDefiner implements ClassDefiner {
+
+        private static final String SCRIPT_FACTORY_CLASS = "com.tyron.groovy.ScriptFactory";
+
+        private final AppDataDirGuesser appDataDirGuesser = new AppDataDirGuesser();
+        private File appDataDir;
+
+        private File getAppDataDir() {
+            if (appDataDir == null) {
+                appDataDir = appDataDirGuesser.guess();
+            }
+            return appDataDir;
+        }
+
+        private File getDexDir() {
+            File dataDir = getAppDataDir();
+            File dexDir = new File(dataDir, "dex");
+            GUtil.unchecked(() -> {
+                if (!dexDir.exists() && !dexDir.mkdirs()) {
+                    throw new IOException("Failed to create dex directory");
+                }
+            });
+            return dexDir;
+        }
+
+        @Override
+        public <T> Class<T> defineClass(ClassLoader classLoader,
+                                        String className,
+                                        byte[] classBytes) {
+            File classFile = new File(getDexDir(), className);
+            GUtil.unchecked(() -> {
+                if (classFile.exists()) {
+                    FileUtils.deleteDirectory(classFile);
+                }
+                if (!classFile.mkdir()) {
+                    throw new IOException("Failed to create dex directory");
+                }
+
+                Class<?> scriptFactoryClass = Class.forName(SCRIPT_FACTORY_CLASS);
+                Constructor<?> constructor = scriptFactoryClass.getConstructor(ClassLoader.class);
+                Object scriptFactory = constructor.newInstance(classLoader);
+                Method generateDexFile = scriptFactoryClass
+                        .getDeclaredMethod("generateDexFile", Path.class, byte[].class);
+                String paths = (String) generateDexFile.invoke(scriptFactory, classFile.toPath(), classBytes);
+                String[] individualPaths = StringUtils.split(paths, File.pathSeparator);
+
+                Method addDexPath =
+                        classLoader.getClass().getMethod("addDexPath", String.class, Boolean.TYPE);
+                for (String path : individualPaths) {
+                    addDexPath.invoke(classLoader, path, true);
+                }
+
+
+            });
+
+            try {
+                //noinspection unchecked
+                return (Class<T>) classLoader.loadClass(className);
+            } catch (ClassNotFoundException e) {
+                return null;
+            }
+        }
+
+        @Override
+        public <T> Class<T> defineDecoratorClass(Class<?> decoratedClass,
+                                                 ClassLoader classLoader,
+                                                 String className,
+                                                 byte[] classBytes) {
+            return defineClass(classLoader, className, classBytes);
+        }
+    }
+
     private static class ReflectionClassDefiner implements ClassDefiner {
         @SuppressWarnings("rawtypes")
         private final JavaMethod<ClassLoader, Class> defineClassMethod;
@@ -166,8 +258,9 @@ public abstract class ClassLoaderUtils {
         }
     }
 
+    @SuppressWarnings("Since15")
     private static class LookupClassDefiner extends AbstractClassLoaderLookuper implements ClassDefiner {
-        private MethodType defineClassMethodType = MethodType.methodType(Class.class, new Class<?>[]{String.class, byte[].class, int.class, int.class});
+        private final MethodType defineClassMethodType = MethodType.methodType(Class.class, new Class<?>[]{String.class, byte[].class, int.class, int.class});
 
         @Override
         @SuppressWarnings("unchecked")
@@ -177,7 +270,7 @@ public abstract class ClassLoaderUtils {
                 // we have to use the fallback defineClass() if they're not same, which is the case of ManagedProxyClassGenerator
                 if (decoratedClass.getClassLoader() == classLoader) {
                     MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(decoratedClass, baseLookup);
-                    return (Class) lookup.defineClass(classBytes);
+                    return (Class<T>) lookup.defineClass(classBytes);
                 } else {
                     return defineClass(classLoader, className, classBytes);
                 }
@@ -208,8 +301,8 @@ public abstract class ClassLoaderUtils {
     }
 
     private static class LookupPackagesFetcher extends AbstractClassLoaderLookuper implements ClassLoaderPackagesFetcher {
-        private MethodType getPackagesMethodType = MethodType.methodType(Package[].class, new Class<?>[]{});
-        private MethodType getDefinedPackageMethodType = MethodType.methodType(Package.class, new Class<?>[]{String.class});
+        private final MethodType getPackagesMethodType = MethodType.methodType(Package[].class, new Class<?>[]{});
+        private final MethodType getDefinedPackageMethodType = MethodType.methodType(Package.class, new Class<?>[]{String.class});
 
         @Override
         public Package[] getPackages(ClassLoader classLoader) {
