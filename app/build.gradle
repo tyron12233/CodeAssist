@@ -92,6 +92,8 @@ dependencies {
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderEnterpriseWorkers
     implementation projects.buildTools.builderConfigurationCache
+    implementation projects.buildTools.builderPlugins
+    implementation projects.buildTools.builderJava
     implementation project(path: ':build-tools:builder-api')
     implementation project(path: ':build-tools:builder-java')
     implementation project(path: ':build-tools:build-logic')

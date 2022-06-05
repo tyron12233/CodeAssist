@@ -256,7 +256,7 @@ public class CompilerService extends Service {
         startParameter.setLogLevel(LogLevel.LIFECYCLE);
         startParameter.setConsoleOutput(ConsoleOutput.Rich);
         startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
-        startParameter.setTaskNames(Collections.singletonList("codeAssistAssembleTask"));
+        startParameter.setTaskNames(Collections.singletonList(":app:assemble"));
 
         AndroidStyledTextOutput abstractStyledTextOutput = new AndroidStyledTextOutput();
 
