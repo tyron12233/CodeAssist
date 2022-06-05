@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Jvm implements JavaInfo {
 
+    private static final String ANDROID_VENDOR = "The Android Project";
+
     private final static Logger LOGGER = LoggerFactory.getLogger(Jvm.class);
 
     private final OperatingSystem os;
@@ -53,6 +55,9 @@ public class Jvm implements JavaInfo {
         }
         if (vendor.toLowerCase().startsWith("ibm corporation")) {
             return new IbmJvm(OperatingSystem.current());
+        }
+        if (ANDROID_VENDOR.equals(vendor)) {
+            return new DalvikVm(OperatingSystem.current());
         }
         return new JvmImplementation(OperatingSystem.current());
     }
@@ -306,10 +311,7 @@ public class Jvm implements JavaInfo {
             return standaloneJre;
         }
         File embeddedJre = getEmbeddedJre();
-        if (embeddedJre != null) {
-            return embeddedJre;
-        }
-        return null;
+        return embeddedJre;
     }
 
     private File findToolsJar(File javaHome) {
@@ -354,6 +356,21 @@ public class Jvm implements JavaInfo {
         JvmImplementation(OperatingSystem os) {
             super(os);
         }
+
+        public JvmImplementation(OperatingSystem os,
+                                 File suppliedJavaBase,
+                                 String implementationJavaVersion,
+                                 JavaVersion javaVersion) {
+            super(os, suppliedJavaBase, implementationJavaVersion, javaVersion);
+        }
+
+        public JvmImplementation(OperatingSystem os,
+                                 File suppliedJavaBase,
+                                 String implementationJavaVersion,
+                                 JavaVersion javaVersion,
+                                 boolean userSupplied) {
+            super(os, suppliedJavaBase, implementationJavaVersion, javaVersion, userSupplied);
+        }
     }
 
     static class IbmJvm extends JvmImplementation {
@@ -364,6 +381,13 @@ public class Jvm implements JavaInfo {
         @Override
         public boolean isIbmJvm() {
             return true;
+        }
+    }
+
+    static class DalvikVm extends JvmImplementation {
+
+        DalvikVm(OperatingSystem os) {
+            super(os, new File("java.home"), "1.8", JavaVersion.current(), false);
         }
     }
 
