@@ -36,7 +36,7 @@ import java.util.Optional;
 
 import javax.annotation.Nullable;
 
-public class DefaultBuildCacheController implements BuildCacheController {
+    public class DefaultBuildCacheController implements BuildCacheController {
 
     @VisibleForTesting
     final BuildCacheServiceHandle remote;
