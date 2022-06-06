@@ -79,7 +79,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     private boolean isRefreshKeys;
     private boolean isExportKeys;
     private boolean isWriteDependencyLocks;
-    private boolean isBuildProjectDependencies;
+    private boolean isBuildProjectDependencies = true;
     private boolean isRefreshDependencies;
     private DependencyVerificationMode dependencyVerificationMode;
     private boolean exportKeys;
@@ -515,5 +515,21 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 
     public boolean isConfigureOnDemand() {
         return isConfigureOnDemand;
+    }
+
+    public boolean isNoBuildScan() {
+        return noBuildScan;
+    }
+
+    public void setNoBuildScan(boolean noBuildScan) {
+        this.noBuildScan = noBuildScan;
+    }
+
+    public boolean isBuildScan() {
+        return buildScan;
+    }
+
+    public void setBuildScan(boolean buildScan) {
+        this.buildScan = buildScan;
     }
 }
