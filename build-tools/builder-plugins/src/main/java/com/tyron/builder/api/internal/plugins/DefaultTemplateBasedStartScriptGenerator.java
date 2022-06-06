@@ -16,15 +16,27 @@
 
 package com.tyron.builder.api.internal.plugins;
 
+import com.google.common.base.Charsets;
+import com.google.common.io.CharSource;
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.api.internal.resources.CharSourceBackedTextResource;
 import com.tyron.builder.api.resources.TextResource;
+import com.tyron.builder.internal.io.IoUtils;
 import com.tyron.builder.jvm.application.scripts.JavaAppStartScriptGenerationDetails;
 import com.tyron.builder.jvm.application.scripts.TemplateBasedScriptGenerator;
+import com.tyron.builder.util.internal.TextUtil;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.Writer;
 import java.util.Map;
+
+import groovy.text.SimpleTemplateEngine;
+import groovy.text.Template;
 
 public class DefaultTemplateBasedStartScriptGenerator implements TemplateBasedScriptGenerator {
 
@@ -65,37 +77,32 @@ public class DefaultTemplateBasedStartScriptGenerator implements TemplateBasedSc
     }
 
     private String generateStartScriptContentFromTemplate(final Map<String, String> binding) {
-//        return IoUtils.get(getTemplate().asReader(), new Transformer<String, Reader>() {
-//            @Override
-//            public String transform(Reader reader) {
-//                try {
-//                    SimpleTemplateEngine engine = new SimpleTemplateEngine();
-//                    Template template = engine.createTemplate(reader);
-//                    String output = template.make(binding).toString();
-//                    return TextUtil.convertLineSeparators(output, lineSeparator);
-//                } catch (IOException e) {
-//                    throw new UncheckedIOException(e);
-//                }
-//            }
-//        });
-        throw new UnsupportedOperationException();
+        return IoUtils.get(getTemplate().asReader(), reader -> {
+            try {
+                SimpleTemplateEngine engine = new SimpleTemplateEngine();
+                Template template = engine.createTemplate(reader);
+                String output = template.make(binding).toString();
+                return TextUtil.convertLineSeparators(output, lineSeparator);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
     }
 
     protected static TextResource utf8ClassPathResource(final Class<?> clazz,
                                                         final String filename) {
-//        return new CharSourceBackedTextResource("Classpath resource '" + filename + "'", new
-//        CharSource() {
-//            @Override
-//            public Reader openStream() throws IOException {
-//                InputStream stream = clazz.getResourceAsStream(filename);
-//                if (stream == null) {
-//                    throw new IllegalStateException("Could not find class path resource " +
-//                    filename + " relative to " + clazz.getName());
-//                }
-//                return new BufferedReader(new InputStreamReader(stream, Charsets.UTF_8));
-//            }
-//        });
-        throw new UnsupportedOperationException();
+        return new CharSourceBackedTextResource("Classpath resource '" + filename + "'", new
+        CharSource() {
+            @Override
+            public Reader openStream() throws IOException {
+                InputStream stream = clazz.getResourceAsStream(filename);
+                if (stream == null) {
+                    throw new IllegalStateException("Could not find class path resource " +
+                    filename + " relative to " + clazz.getName());
+                }
+                return new BufferedReader(new InputStreamReader(stream, Charsets.UTF_8));
+            }
+        });
     }
 
 }
