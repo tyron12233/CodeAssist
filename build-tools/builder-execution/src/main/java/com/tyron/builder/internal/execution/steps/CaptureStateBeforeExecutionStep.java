@@ -3,9 +3,11 @@ package com.tyron.builder.internal.execution.steps;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.internal.execution.OutputSnapshotter;
+import com.tyron.builder.internal.execution.OutputSnapshotter.OutputFileSnapshottingException;
 import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.WorkValidationContext;
 import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter.InputFileFingerprintingException;
 import com.tyron.builder.internal.execution.history.BeforeExecutionState;
 import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
 import com.tyron.builder.internal.execution.history.InputExecutionState;
@@ -22,10 +24,10 @@ import com.tyron.builder.internal.operations.BuildOperationType;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.util.Optional;
 
@@ -107,12 +109,13 @@ public class CaptureStateBeforeExecutionStep<C extends PreviousExecutionContext,
         });
     }
 
+    @Nonnull
     private Optional<BeforeExecutionState> captureExecutionState(UnitOfWork work, PreviousExecutionContext context) {
         return operation(operationContext -> {
                     ImmutableSortedMap<String, FileSystemSnapshot> unfilteredOutputSnapshots;
                     try {
                         unfilteredOutputSnapshots = outputSnapshotter.snapshotOutputs(work, context.getWorkspace());
-                    } catch (OutputSnapshotter.OutputFileSnapshottingException e) {
+                    } catch (OutputFileSnapshottingException e) {
                         work.handleUnreadableOutputs(e);
                         operationContext.setResult(Operation.Result.INSTANCE);
                         return Optional.empty();
@@ -122,7 +125,7 @@ public class CaptureStateBeforeExecutionStep<C extends PreviousExecutionContext,
                         BeforeExecutionState executionState = captureExecutionStateWithOutputs(work, context, unfilteredOutputSnapshots);
                         operationContext.setResult(Operation.Result.INSTANCE);
                         return Optional.of(executionState);
-                    } catch (InputFingerprinter.InputFileFingerprintingException e) {
+                    } catch (InputFileFingerprintingException e) {
                         // Note that we let InputFingerprintException fall through as we've already
                         // been failing for non-file value fingerprinting problems even for tasks
                         work.handleUnreadableInputs(e);
@@ -145,8 +148,8 @@ public class CaptureStateBeforeExecutionStep<C extends PreviousExecutionContext,
         ImmutableList<ImplementationSnapshot> additionalImplementations = implementationsBuilder.getAdditionalImplementations();
 
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Implementation for " + work.getDisplayName() + " : " + implementation);
-            LOGGER.debug("Additional implementations for " + work.getDisplayName() + ": " + additionalImplementations);
+            LOGGER.debug("Implementation for {}: {}", work.getDisplayName(), implementation);
+            LOGGER.debug("Additional implementations for {}: {}", work.getDisplayName(), additionalImplementations);
         }
 
         ImmutableSortedMap<String, ValueSnapshot> previousInputProperties = previousExecutionState
@@ -238,5 +241,4 @@ public class CaptureStateBeforeExecutionStep<C extends PreviousExecutionContext,
             };
         }
     }
-
 }

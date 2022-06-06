@@ -5,8 +5,8 @@ import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.execution.OutputSnapshotter;
 import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.file.TreeType;
+import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 
 import java.io.File;
 

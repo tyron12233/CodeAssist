@@ -2,7 +2,6 @@ package com.tyron.builder.internal.execution.history.changes;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.internal.execution.history.BeforeExecutionState;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
 
 /**
  * Represents the complete changes in execution state

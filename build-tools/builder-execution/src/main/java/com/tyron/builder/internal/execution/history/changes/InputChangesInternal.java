@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.execution.history;
+package com.tyron.builder.internal.execution.history.changes;
 
 import com.tyron.builder.api.tasks.incremental.InputFileDetails;
 import com.tyron.builder.work.InputChanges;

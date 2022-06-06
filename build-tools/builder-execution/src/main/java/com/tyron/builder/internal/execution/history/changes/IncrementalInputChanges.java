@@ -3,7 +3,6 @@ package com.tyron.builder.internal.execution.history.changes;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileSystemLocation;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.tasks.incremental.InputFileDetails;
 import com.tyron.builder.work.FileChange;

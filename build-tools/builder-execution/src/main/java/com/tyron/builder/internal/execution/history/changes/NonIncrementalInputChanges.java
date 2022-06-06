@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.file.FileSystemLocation;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
 import com.tyron.builder.internal.file.FileType;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.api.provider.Provider;
