@@ -29,6 +29,7 @@ import com.tyron.builder.api.artifacts.type.ArtifactTypeDefinition;
 import com.tyron.builder.api.attributes.Category;
 import com.tyron.builder.api.attributes.HasConfigurableAttributes;
 import com.tyron.builder.api.attributes.LibraryElements;
+import com.tyron.builder.api.attributes.java.TargetJvmEnvironment;
 import com.tyron.builder.api.capabilities.Capability;
 import com.tyron.builder.api.component.AdhocComponentWithVariants;
 import com.tyron.builder.api.component.ConfigurationVariantDetails;
