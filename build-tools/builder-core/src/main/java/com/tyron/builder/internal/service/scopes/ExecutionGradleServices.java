@@ -66,6 +66,7 @@ import com.tyron.builder.internal.resources.ResourceLockCoordinationService;
 import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 import com.tyron.builder.internal.work.WorkerLeaseService;
+import com.tyron.builder.util.GradleVersion;
 
 import java.util.Collections;
 import java.util.function.Supplier;
@@ -79,20 +80,26 @@ public class ExecutionGradleServices {
         return new DefaultExecutionHistoryCacheAccess(cacheRepository);
     }
 
-    ExecutionHistoryStore createExecutionHistoryStore(ExecutionHistoryCacheAccess executionHistoryCacheAccess,
-                                                      InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
-                                                      StringInterner stringInterner) {
-        return new DefaultExecutionHistoryStore(executionHistoryCacheAccess,
-                inMemoryCacheDecoratorFactory, stringInterner);
+    ExecutionHistoryStore createExecutionHistoryStore(
+            ExecutionHistoryCacheAccess executionHistoryCacheAccess,
+            InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
+            StringInterner stringInterner
+    ) {
+        return new DefaultExecutionHistoryStore(
+                executionHistoryCacheAccess,
+                inMemoryCacheDecoratorFactory,
+                stringInterner
+        );
     }
 
-    OutputFilesRepository createOutputFilesRepository(BuildScopedCache cacheRepository,
-                                                      InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory) {
-        PersistentCache cacheAccess = cacheRepository.crossVersionCache("buildOutputCleanup")
+    OutputFilesRepository createOutputFilesRepository(BuildScopedCache cacheRepository, InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory) {
+        PersistentCache cacheAccess = cacheRepository
+                .crossVersionCache("buildOutputCleanup")
                 .withCrossVersionCache(CacheBuilder.LockTarget.DefaultTarget)
                 .withDisplayName("Build Output Cleanup Cache")
                 .withLockOptions(mode(FileLockManager.LockMode.OnDemand))
-                .withProperties(Collections.singletonMap("gradle.version", "0.0.1")).open();
+                .withProperties(Collections.singletonMap("gradle.version", GradleVersion.current().getVersion()))
+                .open();
         return new DefaultOutputFilesRepository(cacheAccess, inMemoryCacheDecoratorFactory);
     }
 

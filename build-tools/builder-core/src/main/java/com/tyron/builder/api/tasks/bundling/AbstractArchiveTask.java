@@ -141,11 +141,10 @@ public abstract class AbstractArchiveTask extends AbstractCopyTask {
     @ReplacedBy("archiveFile")
     public File getArchivePath() {
         // This is used by the Kotlin plugin, we should upstream a fix to avoid this API first. https://github.com/gradle/gradle/issues/16783
-        /*DeprecationLogger.deprecateProperty(AbstractArchiveTask.class, "archivePath").replaceWith("archiveFile")
+        DeprecationLogger.deprecateProperty(AbstractArchiveTask.class, "archivePath").replaceWith("archiveFile")
             .willBeRemovedInGradle8()
             .withDslReference()
-            .nagUser();*/
-
+            .nagUser();
         return getArchiveFile().get().getAsFile();
     }
 
@@ -417,10 +416,10 @@ public abstract class AbstractArchiveTask extends AbstractCopyTask {
     @Deprecated
     public void setClassifier(@Nullable String classifier) {
         // This is used by the Kotlin plugin, we should upstream a fix to avoid this API first. https://github.com/gradle/gradle/issues/16783
-        /*DeprecationLogger.deprecateProperty(AbstractArchiveTask.class, "classifier").replaceWith("archiveClassifier")
+        DeprecationLogger.deprecateProperty(AbstractArchiveTask.class, "classifier").replaceWith("archiveClassifier")
             .willBeRemovedInGradle8()
             .withDslReference()
-            .nagUser();*/
+            .nagUser();
 
         archiveClassifier.convention(classifier);
         archiveClassifier.set(classifier);
@@ -544,7 +543,6 @@ public abstract class AbstractArchiveTask extends AbstractCopyTask {
     protected CopyActionExecuter createCopyActionExecuter() {
         Instantiator instantiator = getInstantiator();
         FileSystem fileSystem = getFileSystem();
-
         return new CopyActionExecuter(instantiator, getObjectFactory(), fileSystem, isReproducibleFileOrder(), getDocumentationRegistry());
     }
 }
