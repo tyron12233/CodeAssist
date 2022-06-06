@@ -10,7 +10,7 @@ import com.tyron.builder.internal.fingerprint.classpath.ClasspathFingerprinter;
 import com.tyron.builder.internal.fingerprint.impl.AbstractFileCollectionFingerprinter;
 import com.tyron.builder.api.tasks.ClasspathNormalizer;
 import com.tyron.builder.api.tasks.FileNormalizer;
-import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.cache.StringInterner;
 
 import java.util.Map;
 

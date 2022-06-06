@@ -3,6 +3,8 @@ package com.tyron.builder.api.internal.file.collections;
 import com.tyron.builder.api.file.FileTreeElement;
 import com.tyron.builder.api.file.FileVisitDetails;
 import com.tyron.builder.api.file.FileVisitor;
+import com.tyron.builder.api.internal.file.FileCollectionInternal;
+import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
 import com.tyron.builder.api.tasks.util.PatternFilterable;
 import com.tyron.builder.api.tasks.util.PatternSet;
@@ -46,8 +48,14 @@ public class FilteredMinimalFileTree implements MinimalFileTree, FileSystemMirro
     }
 
     @Override
-    public void visitStructure(MinimalFileTreeStructureVisitor visitor, FileTreeInternal owner) {
-        tree.visitStructure(new MinimalFileTreeStructureVisitor() {
+    public void visitStructure(FileCollectionStructureVisitor visitor, FileTreeInternal owner) {
+        tree.visitStructure(new FileCollectionStructureVisitor() {
+            @Override
+            public void visitCollection(FileCollectionInternal.Source source,
+                                        Iterable<File> contents) {
+                visitor.visitCollection(source, contents);
+            }
+
             @Override
             public void visitGenericFileTree(FileTreeInternal fileTree, FileSystemMirroringFileTree sourceTree) {
                 visitor.visitGenericFileTree(owner, FilteredMinimalFileTree.this);

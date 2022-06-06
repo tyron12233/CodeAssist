@@ -7,6 +7,7 @@ import com.tyron.builder.api.file.FileVisitDetails;
 import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.internal.file.DefaultFileVisitDetails;
+import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
 import com.tyron.builder.internal.file.pattern.PatternStep;
 import com.tyron.builder.internal.file.pattern.PatternStepFactory;
@@ -61,7 +62,7 @@ public class SingleIncludePatternFileTree implements MinimalFileTree, LocalFileT
     }
 
     @Override
-    public void visitStructure(MinimalFileTreeStructureVisitor visitor, FileTreeInternal owner) {
+    public void visitStructure(FileCollectionStructureVisitor visitor, FileTreeInternal owner) {
         visitor.visitFileTree(baseDir, getPatterns(), owner);
     }
 

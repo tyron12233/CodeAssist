@@ -2,7 +2,6 @@ package com.tyron.builder.model;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Incubating;
-import com.tyron.builder.internal.model.RuleSource;
 
 import javax.annotation.Nullable;
 import java.util.Collection;

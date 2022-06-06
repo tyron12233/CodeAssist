@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * An {@code org.gradle.logging.internal.OutputEventListener} implementation which generates output events to log the
+ * An {@code com.tyron.builder.logging.internal.OutputEventListener} implementation which generates output events to log the
  * progress of operations.
  *
  * <p>This listener forwards nothing unless it receives periodic {@link UpdateNowEvent} clock events.</p>

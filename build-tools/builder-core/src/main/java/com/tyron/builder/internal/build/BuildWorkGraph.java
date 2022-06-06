@@ -1,11 +1,9 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.internal.concurrent.Stoppable;
-
 import java.util.Collection;
 import java.util.function.Consumer;
 
-public interface BuildWorkGraph extends Stoppable {
+public interface BuildWorkGraph {
     /**
      * Schedules the given tasks and all of their dependencies in this work graph.
      */

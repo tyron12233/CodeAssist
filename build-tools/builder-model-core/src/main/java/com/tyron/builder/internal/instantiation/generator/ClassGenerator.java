@@ -4,7 +4,7 @@ package com.tyron.builder.internal.instantiation.generator;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.internal.instantiation.ClassGenerationException;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceLookup;
 
 import javax.annotation.Nullable;
 import java.lang.annotation.Annotation;

@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile;
 
 import com.tyron.builder.api.tasks.Input;
 import com.tyron.builder.api.tasks.Optional;
+import com.tyron.builder.api.tasks.compile.AbstractOptions;
 
 import org.jetbrains.annotations.Nullable;
 

@@ -6,7 +6,7 @@ import com.google.common.hash.Hasher;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.internal.Pair;
-import com.tyron.builder.internal.asm.AsmClassGeneratorUtils;
+import com.tyron.builder.model.internal.asm.AsmClassGeneratorUtils;
 
 import org.codehaus.groovy.runtime.callsite.CallSiteArray;
 import org.objectweb.asm.ClassVisitor;
@@ -45,7 +45,6 @@ import static org.objectweb.asm.Type.getObjectType;
 import static org.objectweb.asm.Type.getType;
 
 
-import java.io.IOException;
 import java.util.function.Predicate;
 
 public class InstrumentingTransformer implements CachedClasspathTransformer.Transform {

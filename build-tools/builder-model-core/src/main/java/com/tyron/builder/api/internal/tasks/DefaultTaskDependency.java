@@ -9,7 +9,6 @@ import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.provider.ProviderInternal;
 import com.tyron.builder.api.internal.provider.ValueSupplier;
 import com.tyron.builder.api.tasks.TaskDependency;
-import com.tyron.builder.api.tasks.TaskResolver;
 import com.tyron.builder.internal.typeconversion.UnsupportedNotationException;
 
 import java.nio.file.Path;

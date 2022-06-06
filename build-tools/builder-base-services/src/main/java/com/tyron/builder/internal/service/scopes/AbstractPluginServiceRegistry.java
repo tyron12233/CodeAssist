@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.service.scopes;
 
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistration;
 
 /**
  * Base no-op implementation of the {@link PluginServiceRegistry}.

@@ -2,6 +2,7 @@ package com.tyron.builder.launcher.exec;
 
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 
 import java.io.File;
 import java.util.Map;
@@ -18,4 +19,9 @@ public interface BuildActionParameters {
     boolean isUseDaemon();
 
     ClassPath getInjectedPluginClasspath();
+
+    // TODO: CodeAssist added
+    default OutputEventListener getOutputEventListener() {
+        return null;
+    }
 }

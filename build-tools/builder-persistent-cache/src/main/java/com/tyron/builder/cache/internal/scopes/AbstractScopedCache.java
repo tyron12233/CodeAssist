@@ -1,11 +1,11 @@
 package com.tyron.builder.cache.internal.scopes;
 
-import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.CacheRepository;
 import com.tyron.builder.cache.internal.CacheScopeMapping;
 import com.tyron.builder.cache.internal.VersionStrategy;
 import com.tyron.builder.cache.scopes.ScopedCache;
+import com.tyron.builder.util.GradleVersion;
 
 import java.io.File;
 
@@ -16,8 +16,7 @@ public abstract class AbstractScopedCache implements ScopedCache {
 
     public AbstractScopedCache(File rootDir, CacheRepository cacheRepository) {
         this.rootDir = rootDir;
-        this.cacheScopeMapping = new DefaultCacheScopeMapping(rootDir, DocumentationRegistry.GradleVersion
-                .current());
+        this.cacheScopeMapping = new DefaultCacheScopeMapping(rootDir, GradleVersion.current());
         this.cacheRepository = cacheRepository;
     }
 

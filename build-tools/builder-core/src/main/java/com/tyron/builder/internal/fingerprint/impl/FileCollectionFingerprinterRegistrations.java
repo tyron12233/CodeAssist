@@ -25,7 +25,7 @@ import com.tyron.builder.internal.execution.fingerprint.impl.FingerprinterRegist
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
-import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.cache.StringInterner;
 
 public class FileCollectionFingerprinterRegistrations {
     private final Set<FingerprinterRegistration> registrants;

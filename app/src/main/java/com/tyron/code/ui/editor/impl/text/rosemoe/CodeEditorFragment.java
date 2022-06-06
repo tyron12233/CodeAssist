@@ -230,7 +230,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         View topView = view.findViewById(R.id.top_view);
         EditorViewModel viewModel =
-                new ViewModelProvider((ViewModelStoreOwner) this).get(EditorViewModel.class);
+                new ViewModelProvider((ViewModelStoreOwner) requireParentFragment()).get(EditorViewModel.class);
         viewModel.getAnalyzeState().observe(getViewLifecycleOwner(), analyzing -> {
             if (analyzing) {
                 topView.setVisibility(View.VISIBLE);

@@ -4,6 +4,8 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.internal.AbstractTask;
+import com.tyron.builder.api.internal.project.taskfactory.ITaskFactory;
+import com.tyron.builder.api.internal.project.taskfactory.TaskInstantiator;
 import com.tyron.builder.api.tasks.TaskProvider;
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.internal.UncheckedException;
@@ -25,12 +27,14 @@ public class DefaultTaskProvider<T extends Task> implements TaskProvider<T>, Pro
     private final Class<T> type;
     private final Object[] constructorArgs;
     private ProjectInternal project;
+    private ITaskFactory taskInstantiator;
     private TaskIdentity<T> taskIdentity;
     private T value;
     private boolean computed;
 
-    public DefaultTaskProvider(ProjectInternal project, TaskIdentity<T> taskIdentity, Action<? super T> configurationAction, Class<T> type, Object[] constructorArgs) {
+    public DefaultTaskProvider(ProjectInternal project, ITaskFactory taskInstantiator, TaskIdentity<T> taskIdentity, Action<? super T> configurationAction, Class<T> type, Object[] constructorArgs) {
         this.project = project;
+        this.taskInstantiator = taskInstantiator;
         this.taskIdentity = taskIdentity;
         this.configurationAction = configurationAction;
         this.type = type;
@@ -44,11 +48,7 @@ public class DefaultTaskProvider<T extends Task> implements TaskProvider<T>, Pro
         }
 
         try {
-            value = AbstractTask.injectIntoNewInstance(project, taskIdentity, () -> {
-                Constructor<T> declaredConstructor = type.getDeclaredConstructor();
-                return declaredConstructor.newInstance();
-            });
-
+            value = taskInstantiator.create(taskIdentity, constructorArgs);
         } catch (Throwable e) {
             throw UncheckedException.throwAsUncheckedException(e);
         } finally {

@@ -4,7 +4,7 @@ import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.initialization.GradleUserHomeDirProvider;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistration;
 
 public class GradleUserHomeCleanupServices {
 

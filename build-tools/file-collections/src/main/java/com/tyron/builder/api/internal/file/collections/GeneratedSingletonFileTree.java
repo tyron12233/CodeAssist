@@ -5,6 +5,7 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.file.FileVisitDetails;
 import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.api.file.RelativePath;
+import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.AbstractFileTreeElement;
 import com.tyron.builder.internal.file.Chmod;
@@ -85,7 +86,7 @@ public class GeneratedSingletonFileTree implements FileSystemMirroringFileTree, 
     }
 
     @Override
-    public void visitStructure(MinimalFileTreeStructureVisitor visitor, FileTreeInternal owner) {
+    public void visitStructure(FileCollectionStructureVisitor visitor, FileTreeInternal owner) {
         visitor.visitFileTree(getFile(), new PatternSet(), owner);
     }
 

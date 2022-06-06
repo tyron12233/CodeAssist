@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.builderExecution
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderJvmServices
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderNormalizationJava
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderPlatformBase
+    implementation projects.buildTools.builderProcessServices
+    implementation projects.buildTools.builderResources
+
+    implementation projects.common
+    implementation common.slf4j
+    implementation common.commonsLang3
+    implementation 'javax.inject:javax.inject:1'
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

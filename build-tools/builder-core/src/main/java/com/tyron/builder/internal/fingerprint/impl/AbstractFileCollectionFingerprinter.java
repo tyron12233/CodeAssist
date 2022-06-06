@@ -1,11 +1,13 @@
 package com.tyron.builder.internal.fingerprint.impl;
 
+import com.tyron.builder.api.NonNullApi;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
 import com.tyron.builder.internal.fingerprint.FingerprintingStrategy;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 
 import org.jetbrains.annotations.Nullable;
@@ -13,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Responsible for calculating a {@link FileCollectionFingerprint} for a particular {@link FileCollection}.
  */
-//@NonNullApi
+@NonNullApi
 public abstract class AbstractFileCollectionFingerprinter implements FileCollectionFingerprinter {
 
     private final FileCollectionSnapshotter fileCollectionSnapshotter;
@@ -38,5 +40,10 @@ public abstract class AbstractFileCollectionFingerprinter implements FileCollect
     @Override
     public CurrentFileCollectionFingerprint empty() {
         return fingerprintingStrategy.getEmptyFingerprint();
+    }
+
+    @Override
+    public String normalizePath(FileSystemLocationSnapshot root) {
+        return fingerprintingStrategy.normalizePath(root);
     }
 }

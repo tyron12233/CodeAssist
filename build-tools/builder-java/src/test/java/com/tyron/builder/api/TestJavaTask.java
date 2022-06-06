@@ -2,8 +2,7 @@ package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.builder.api.internal.tasks.CompileServices;
-import com.tyron.builder.api.internal.tasks.compile.JavaCompile;
-import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.tasks.compile.JavaCompile;
 import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
 
 import java.util.List;

@@ -1,41 +1,11 @@
 package com.tyron.builder.api.internal;
 
+import com.tyron.builder.util.GradleVersion;
+
 import org.jetbrains.annotations.NotNull;
 
 public class DocumentationRegistry {
 
-    public static class GradleVersion implements Comparable {
-
-        public static GradleVersion current() {
-            return new GradleVersion("0.0.1");
-        }
-
-        private final String version;
-
-        public GradleVersion(String version) {
-            this.version = version;
-        }
-
-        public String getVersion() {
-            return version;
-        }
-
-        public static GradleVersion version(String version) {
-            return new GradleVersion(version);
-        }
-        @Override
-        public int compareTo(@NotNull Object o) {
-            return version.compareTo(((GradleVersion) o).version);
-        }
-
-        public boolean isSnapshot() {
-            return false;
-        }
-
-        public GradleVersion getBaseVersion() {
-            return current();
-        }
-    }
     private final GradleVersion gradleVersion;
 
     public DocumentationRegistry() {

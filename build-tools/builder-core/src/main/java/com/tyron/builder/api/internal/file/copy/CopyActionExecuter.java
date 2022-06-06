@@ -24,14 +24,13 @@ public class CopyActionExecuter {
     }
 
     public WorkResult execute(final CopySpecInternal spec, CopyAction action) {
-        throw new UnsupportedOperationException();
-//        final CopyAction effectiveVisitor = new DuplicateHandlingCopyActionDecorator(
-//                new NormalizingCopyActionDecorator(action, fileSystem),
-//                documentationRegistry
-//        );
-//
-//        CopyActionProcessingStream processingStream = new CopySpecBackedCopyActionProcessingStream(spec, instantiator, objectFactory, fileSystem, reproducibleFileOrder);
-//        return effectiveVisitor.execute(processingStream);
+        final CopyAction effectiveVisitor = new DuplicateHandlingCopyActionDecorator(
+                new NormalizingCopyActionDecorator(action, fileSystem),
+                documentationRegistry
+        );
+
+        CopyActionProcessingStream processingStream = new CopySpecBackedCopyActionProcessingStream(spec, instantiator, objectFactory, fileSystem, reproducibleFileOrder);
+        return effectiveVisitor.execute(processingStream);
     }
 
 }

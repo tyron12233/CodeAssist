@@ -1,22 +1,26 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.internal.service.scopes.Scopes;
-import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.composite.internal.TaskIdentifier;
+import com.tyron.builder.api.internal.TaskInternal;
 
 import java.util.Collection;
 
 /**
  * Allows the work graph for a particular build in the build tree to be populated and executed.
  */
-@ServiceScope(Scopes.Build.class)
 public interface BuildWorkGraphController {
     /**
      * Locates a future task node in this build's work graph, for use from some other build's work graph.
      *
      * <p>This method does not schedule the task for execution, use {@link BuildWorkGraph#schedule(Collection)} to schedule the task.
      */
-    ExportedTaskNode locateTask(TaskIdentifier taskIdentifier);
+    ExportedTaskNode locateTask(TaskInternal task);
+
+    /**
+     * Locates a future task node in this build's work graph, for use from some other build's work graph.
+     *
+     * <p>This method does not schedule the task for execution, use {@link BuildWorkGraph#schedule(Collection)} to schedule the task.
+     */
+    ExportedTaskNode locateTask(String taskPath);
 
     /**
      * Creates a new, empty work graph for this build.

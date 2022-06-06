@@ -56,7 +56,7 @@
 //    }
 //
 //    public static class LogLevelOption extends AbstractBuildOption<LoggingConfiguration, CommandLineOptionConfiguration> {
-//        public static final String GRADLE_PROPERTY = "org.gradle.logging.level";
+//        public static final String GRADLE_PROPERTY = "com.tyron.builder.logging.level";
 //        public static final String QUIET_LONG_OPTION = "quiet";
 //        public static final String QUIET_SHORT_OPTION = "q";
 //        public static final String WARN_LONG_OPTION = "warn";
@@ -125,7 +125,7 @@
 //    }
 //
 //    public static class StacktraceOption extends AbstractBuildOption<LoggingConfiguration, CommandLineOptionConfiguration> {
-//        public static final String GRADLE_PROPERTY = "org.gradle.logging.stacktrace";
+//        public static final String GRADLE_PROPERTY = "com.tyron.builder.logging.stacktrace";
 //        public static final String STACKTRACE_LONG_OPTION = "stacktrace";
 //        public static final String STACKTRACE_SHORT_OPTION = "s";
 //        public static final String FULL_STACKTRACE_LONG_OPTION = "full-stacktrace";
@@ -174,7 +174,7 @@
 //
 //    public static class ConsoleOption extends StringBuildOption<LoggingConfiguration> {
 //        public static final String LONG_OPTION = "console";
-//        public static final String GRADLE_PROPERTY = "org.gradle.console";
+//        public static final String GRADLE_PROPERTY = "com.tyron.builder.console";
 //
 //        public ConsoleOption() {
 //            super(GRADLE_PROPERTY, CommandLineOptionConfiguration.create(LONG_OPTION, "Specifies which type of console output to generate. Values are 'plain', 'auto' (default), 'rich' or 'verbose'."));
@@ -194,7 +194,7 @@
 //
 //    public static class WarningsOption extends StringBuildOption<LoggingConfiguration> {
 //        public static final String LONG_OPTION = "warning-mode";
-//        public static final String GRADLE_PROPERTY = "org.gradle.warning.mode";
+//        public static final String GRADLE_PROPERTY = "com.tyron.builder.warning.mode";
 //
 //        public WarningsOption() {
 //            super(GRADLE_PROPERTY, CommandLineOptionConfiguration.create(LONG_OPTION, "Specifies which mode of warnings to generate. Values are 'all', 'fail', 'summary'(default) or 'none'"));

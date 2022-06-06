@@ -1,44 +1,30 @@
 package com.tyron.builder.invocation;
 
-import com.google.common.hash.HashCode;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.BuildListener;
-import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.internal.file.FileCollectionFactory;
-import com.tyron.builder.api.internal.initialization.ClassLoaderIds;
-import com.tyron.builder.api.internal.initialization.ClassLoaderScopeIdentifier;
-import com.tyron.builder.api.internal.initialization.DefaultClassLoaderScope;
-import com.tyron.builder.api.internal.initialization.loadercache.ClassLoaderCache;
-import com.tyron.builder.api.internal.initialization.loadercache.ClassLoaderId;
-import com.tyron.builder.api.internal.initialization.loadercache.DefaultClassLoaderCache;
-import com.tyron.builder.api.internal.initialization.loadercache.DefaultClasspathHasher;
+import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
+import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
+import com.tyron.builder.api.internal.project.AbstractPluginAware;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.initialization.IncludedBuild;
-import com.tyron.builder.api.tasks.ClasspathNormalizer;
-import com.tyron.builder.initialization.ClassLoaderScopeId;
+import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.initialization.ClassLoaderScopeRegistry;
-import com.tyron.builder.initialization.ClassLoaderScopeRegistryListener;
-import com.tyron.builder.internal.classloader.HashingClassLoaderFactory;
-import com.tyron.builder.internal.classpath.ClassPath;
 import com.tyron.builder.internal.event.ListenerBroadcast;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
-import com.tyron.builder.caching.configuration.BuildCacheConfiguration;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
-import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
-import com.tyron.builder.internal.execution.fingerprint.FileNormalizationSpec;
-import com.tyron.builder.internal.execution.fingerprint.impl.DefaultFileNormalizationSpec;
-import com.tyron.builder.internal.fingerprint.classpath.impl.DefaultClasspathFingerprinter;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.resource.TextUriResourceLoader;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.util.Path;
@@ -52,7 +38,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
-public class DefaultGradle implements GradleInternal {
+import javax.inject.Inject;
+
+public abstract class DefaultGradle extends AbstractPluginAware implements GradleInternal {
 
     private SettingsInternal settings;
     private final BuildState parent;
@@ -337,6 +325,11 @@ public class DefaultGradle implements GradleInternal {
     }
 
     @Override
+    public void useLogger(Object logger) {
+        getListenerManager().useLogger(logger);
+    }
+
+    @Override
     public Collection<IncludedBuild> getIncludedBuilds() {
         if (includedBuilds == null) {
             includedBuilds = new ArrayList<>();
@@ -351,5 +344,33 @@ public class DefaultGradle implements GradleInternal {
         }
         return null;
     }
+
+    @Override
+    @Inject
+    public abstract PluginManagerInternal getPluginManager();
+
+    @Override
+    protected DefaultObjectConfigurationAction createObjectConfigurationAction() {
+        return new DefaultObjectConfigurationAction(
+                getFileResolver(),
+                getScriptPluginFactory(),
+                getScriptHandlerFactory(),
+                getClassLoaderScope(),
+                getResourceLoaderFactory(),
+                this
+        );
+    }
+
+    @Inject
+    protected abstract TextUriResourceLoader.Factory getResourceLoaderFactory();
+
+    @Inject
+    protected abstract ScriptHandlerFactory getScriptHandlerFactory();
+
+    @Inject
+    protected abstract ScriptPluginFactory getScriptPluginFactory();
+
+    @Inject
+    protected abstract FileResolver getFileResolver();
 
 }

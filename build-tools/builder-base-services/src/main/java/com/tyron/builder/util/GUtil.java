@@ -1,6 +1,7 @@
 package com.tyron.builder.util;
 
 import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 
 import com.tyron.builder.api.Transformer;
 import com.tyron.builder.api.UncheckedIOException;
@@ -22,6 +23,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
@@ -191,6 +193,28 @@ public class GUtil {
             }
         }
         return addTo;
+    }
+
+    /**
+     * Flattens input collections (including arrays *but* not maps). If input is not a collection wraps it in a collection and returns it.
+     *
+     * @param input any object
+     * @return collection of flattened input or single input wrapped in a collection.
+     */
+    public static Collection<?> collectionize(Object input) {
+        if (input == null) {
+            return emptyList();
+        } else if (input instanceof Collection) {
+            Collection<?> out = new LinkedList<>();
+            flatten((Collection<?>) input, out, false, true);
+            return out;
+        } else if (input.getClass().isArray()) {
+            Collection<?> out = new LinkedList<>();
+            flatten(asList((Object[]) input), out, false, true);
+            return out;
+        } else {
+            return Collections.singletonList(input);
+        }
     }
 
     public interface RunnableThrowable{

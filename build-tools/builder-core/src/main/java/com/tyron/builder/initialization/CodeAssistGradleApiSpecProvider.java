@@ -27,6 +27,9 @@ public class CodeAssistGradleApiSpecProvider implements GradleApiSpecProvider {
                 ImmutableSet.of(
                         "com.tyron.builder.plugin",
                         "com.tyron.builder.api",
+                        "com.tyron.builder.api.project",
+                        "com.tyron.builder.api.tasks",
+                        "com.tyron.builder.api.attributes",
                         "groovy.lang",
                         "org.codehaus.groovy.reflection",
                         "org.codehaus.groovy.runtime"

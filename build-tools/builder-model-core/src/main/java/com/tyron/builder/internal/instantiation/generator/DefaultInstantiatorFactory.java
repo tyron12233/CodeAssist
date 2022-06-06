@@ -8,9 +8,9 @@ import com.tyron.builder.internal.instantiation.InstantiationScheme;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.instantiation.ManagedTypeFactory;
 import com.tyron.builder.internal.instantiation.PropertyRoleAnnotationHandler;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.state.ManagedFactory;
 
 import javax.annotation.Nullable;

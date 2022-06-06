@@ -121,7 +121,7 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.ViewHolder>{
                         new ForegroundColorSpan(getColor(diagnostic.getKind())),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             } else {
-                builder.append(diagnostic.getMessage(Locale.getDefault()));
+                builder.append(diagnostic.getMessageCharSequence());
             }
             if (diagnostic.getSource() != null) {
                 builder.append(' ');

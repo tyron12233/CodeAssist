@@ -1,1 +1,2 @@
-com.tyron.builder.api.internal.tasks.CompileServices
+com.tyron.builder.language.java.internal.JavaToolChainServiceRegistry
+com.tyron.builder.language.java.internal.JavaLanguagePluginServiceRegistry

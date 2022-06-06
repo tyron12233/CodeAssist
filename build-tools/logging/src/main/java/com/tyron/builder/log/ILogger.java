@@ -87,11 +87,25 @@ public interface ILogger {
         debug(wrap(message));
     }
 
+    default void info(CharSequence message) {
+        debug(wrap(message));
+    }
+
     default void debug(String message) {
         debug(wrap(message));
     }
 
+    default void debug(CharSequence message) {
+        debug(wrap(message));
+    }
+
     default void warning(String message) {
+        DiagnosticWrapper wrapped = wrap(message);
+        wrapped.setKind(Diagnostic.Kind.WARNING);
+        warning(wrapped);
+    }
+
+    default void warning(CharSequence message) {
         DiagnosticWrapper wrapped = wrap(message);
         wrapped.setKind(Diagnostic.Kind.WARNING);
         warning(wrapped);
@@ -103,11 +117,18 @@ public interface ILogger {
        error(wrapped);
     }
 
+    default void error(CharSequence message) {
+        DiagnosticWrapper wrapped = wrap(message);
+        wrapped.setKind(Diagnostic.Kind.ERROR);
+        error(wrapped);
+    }
+
+
     default void verbose(String message) {
 
     }
 
-    static DiagnosticWrapper wrap(String message) {
+    static DiagnosticWrapper wrap(CharSequence message) {
         DiagnosticWrapper wrapper = new DiagnosticWrapper();
         wrapper.setMessage(message);
         return wrapper;

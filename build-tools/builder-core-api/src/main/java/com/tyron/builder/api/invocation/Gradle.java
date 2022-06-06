@@ -4,14 +4,17 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.UnknownDomainObjectException;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
+import com.tyron.builder.api.execution.TaskExecutionListener;
 import com.tyron.builder.api.initialization.IncludedBuild;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.plugins.PluginAware;
 
 import java.util.Collection;
 
-public interface Gradle {
+public interface Gradle extends PluginAware {
     /**
      * Returns the root project of this build.
      *
@@ -144,6 +147,21 @@ public interface Gradle {
      * @param listener The listener to remove. Does nothing if this listener has not been added.
      */
     void removeListener(Object listener);
+
+    /**
+     * Uses the given object as a logger.
+     *
+     * The logger object may implement any of the listener interfaces supported by
+     * {@link #addListener(Object)}.
+     * <p>
+     * Each listener interface has exactly one associated logger. When you call this
+     * method with a logger of a given listener type, the new logger will replace whichever logger is currently
+     * associated with the listener type. This allows you to selectively replace the standard logging which Gradle
+     * provides with your own implementation, for certain types of events.
+     *
+     * @param logger The logger to use.
+     */
+    void useLogger(Object logger);
 
     /**
      * Returns the build services that are shared by all projects of this build.

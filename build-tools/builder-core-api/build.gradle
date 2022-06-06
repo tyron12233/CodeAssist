@@ -17,13 +17,19 @@ dependencies {
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderResources
     implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderProcessServices
 
+    implementation 'org.apache.ant:ant:1.10.12'
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.jetbrains:annotations:23.0.0'
-    implementation common.slf4j
-    implementation 'org.apache.commons:commons-compress:1.20'
+    implementation 'org.apache.commons:commons-compress:1.21'
     implementation 'org.apache.commons:commons-vfs2:2.9.0'
     implementation common.commonsLang3
+    implementation common.slf4j
 
     implementation 'org.codehaus.groovy:groovy:3.0.7:grooid'
+    //noinspection GradleDependency
+    implementation('org.codehaus.groovy:groovy-ant:3.0.7') {
+        transitive = false
+    }
 }

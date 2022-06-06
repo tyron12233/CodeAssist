@@ -15,7 +15,7 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.internal.concurrent.ExecutorFactory;
 import com.tyron.builder.internal.concurrent.ManagedExecutor;
 import com.tyron.builder.internal.concurrent.Stoppable;
-import com.tyron.builder.internal.remote.inet.InetAddressFactory;
+import com.tyron.builder.internal.remote.internal.inet.InetAddressFactory;
 import com.tyron.builder.cache.FileLockReleasedSignal;
 
 import org.slf4j.Logger;

@@ -1,6 +1,7 @@
 package com.tyron.builder.initialization;
 
 import com.tyron.builder.api.internal.GradleInternal;
+import com.tyron.builder.groovy.scripts.TextResourceScriptSource;
 import com.tyron.builder.internal.operations.BuildOperationContext;
 import com.tyron.builder.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
@@ -37,7 +38,7 @@ public class InitScriptHandler {
             public void run(BuildOperationContext context) {
                 for (File script : initScripts) {
                     TextResource resource = resourceLoader.loadFile("initialization script", script);
-//                    processor.process(new TextResourceScriptSource(resource), gradle);
+                    processor.process(new TextResourceScriptSource(resource), gradle);
                 }
             }
 

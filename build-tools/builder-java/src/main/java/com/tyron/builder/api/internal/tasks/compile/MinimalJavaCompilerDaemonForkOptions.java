@@ -1,5 +1,7 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
+import com.tyron.builder.api.tasks.compile.ForkOptions;
+
 import javax.annotation.Nullable;
 import java.io.File;
 
