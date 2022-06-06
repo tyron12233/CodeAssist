@@ -24,6 +24,8 @@ import java.util.RandomAccess;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
+import groovy.lang.Closure;
+
 public class DefaultTaskDependency extends AbstractTaskDependency {
 
     private final ImmutableSet<Object> immutableValues;
@@ -73,12 +75,12 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
                 }
             } else if (dependency instanceof TaskDependencyContainer) {
                 ((TaskDependencyContainer) dependency).visitDependencies(context);
-//            } else if (dependency instanceof Closure) {
-//                Closure closure = (Closure) dependency;
-//                Object closureResult = closure.call(context.getTask());
-//                if (closureResult != null) {
-//                    queue.addFirst(closureResult);
-//                }
+            } else if (dependency instanceof Closure) {
+                Closure closure = (Closure) dependency;
+                Object closureResult = closure.call(context.getTask());
+                if (closureResult != null) {
+                    queue.addFirst(closureResult);
+                }
             } else if (dependency instanceof List) {
                 List<?> list = (List<?>) dependency;
                 if (list instanceof RandomAccess) {
@@ -116,7 +118,7 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
             } else if (resolver != null && dependency instanceof CharSequence) {
                 context.add(resolver.resolveTask(dependency.toString()));
             } else {
-                List<String> formats = new ArrayList<String>();
+                List<String> formats = new ArrayList<>();
                 if (resolver != null) {
                     formats.add("A String or CharSequence task name or path");
                 }
