@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
+import com.tyron.builder.api.internal.tasks.TaskValidationContext;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.internal.reflect.validation.ReplayingTypeValidationContext;

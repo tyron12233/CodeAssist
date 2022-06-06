@@ -1,15 +1,15 @@
 package com.tyron.builder.api;
 
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.internal.AbstractTask;
 import com.tyron.builder.api.internal.tasks.DefaultTaskDestroyables;
 import com.tyron.builder.api.internal.tasks.DefaultTaskLocalState;
 import com.tyron.builder.api.plugins.Convention;
 import com.tyron.builder.api.plugins.ExtensionContainer;
+import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.internal.Cast;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.internal.extensibility.ExtensibleDynamicObject;
@@ -27,10 +27,8 @@ import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.internal.tasks.TaskDestroyablesInternal;
 import com.tyron.builder.api.internal.tasks.TaskInputsInternal;
-import com.tyron.builder.api.internal.tasks.TaskLocalStateInternal;
 import com.tyron.builder.api.internal.tasks.TaskMutator;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
-import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
@@ -38,7 +36,6 @@ import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.internal.tasks.DefaultTaskDependency;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
-import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskLocalState;
 import com.tyron.builder.api.internal.TaskOutputsInternal;
 import com.tyron.builder.util.internal.GFileUtils;
@@ -52,15 +49,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import bsh.NameSpace;
-import bsh.This;
 import groovy.lang.Closure;
 
 public class DefaultTask extends AbstractTask {
@@ -71,15 +64,16 @@ public class DefaultTask extends AbstractTask {
     private final TaskMutator taskMutator;
     private final TaskDestroyablesInternal taskDestroyables;
     private String name;
-    private ServiceRegistry services;
+    private final ServiceRegistry services;
     private LoggingManagerInternal loggingManager;
     private final ContextAwareTaskLogger logger = new DefaultContextAwareTaskLogger(BUILD_LOGGER);
     private ExtensibleDynamicObject extensibleDynamicObject;
-    private boolean hasCustomActions;
+        private boolean hasCustomActions;
     private final TaskLocalState localState;
+    private final Property<Duration> timeout;
 
     public String toString() {
-        return taskIdentity.name;
+        return getPath();
     }
 
     private List<InputChangesAwareTaskAction> actions;
@@ -93,7 +87,7 @@ public class DefaultTask extends AbstractTask {
 
     private final DefaultTaskDependency mustRunAfter;
     private final DefaultTaskDependency shouldRunAfter;
-    private final TaskDependency finalizedBy;
+    private final DefaultTaskDependency finalizedBy;
 
     private final TaskInputsInternal inputs;
     private final TaskOutputsInternal outputs;
@@ -120,14 +114,6 @@ public class DefaultTask extends AbstractTask {
         this.project = taskInfo.project;
         this.services = project.getServices();
 
-        TaskContainerInternal tasks = (TaskContainerInternal) project.getTasks();
-
-        lifecycleDependencies = new DefaultTaskDependency(tasks);
-        mustRunAfter = new DefaultTaskDependency(tasks);
-        shouldRunAfter = new DefaultTaskDependency(tasks);
-        finalizedBy = new DefaultTaskDependency(tasks);
-        dependencies = new DefaultTaskDependency(tasks, ImmutableSet.of(lifecycleDependencies));
-
         state = new TaskStateInternal();
 
         PropertyWalker emptyWalker = services.get(PropertyWalker.class);
@@ -137,6 +123,16 @@ public class DefaultTask extends AbstractTask {
         outputs = new DefaultTaskOutputs(this, taskMutator, emptyWalker, factory);
         taskDestroyables = new DefaultTaskDestroyables(taskMutator, factory);
         localState = new DefaultTaskLocalState(taskMutator, factory);
+
+        TaskContainerInternal tasks = (TaskContainerInternal) project.getTasks();
+
+        lifecycleDependencies = new DefaultTaskDependency(tasks);
+        mustRunAfter = new DefaultTaskDependency(tasks);
+        shouldRunAfter = new DefaultTaskDependency(tasks);
+        finalizedBy = new DefaultTaskDependency(tasks);
+        dependencies = new DefaultTaskDependency(tasks, ImmutableSet.of(inputs, lifecycleDependencies));
+
+        this.timeout = project.getObjects().property(Duration.class);
     }
 
 
@@ -160,12 +156,7 @@ public class DefaultTask extends AbstractTask {
         if (action == null) {
             throw new InvalidUserDataException("Action must not be null!");
         }
-        taskMutator.mutate("Task.doFirst(Closure)", new Runnable() {
-            @Override
-            public void run() {
-                getTaskActions().add(0, convertClosureToAction(action, "doFirst {} action"));
-            }
-        });
+        taskMutator.mutate("Task.doFirst(Closure)", () -> getTaskActions().add(0, convertClosureToAction(action, "doFirst {} action")));
         return this;
     }
 
@@ -211,13 +202,10 @@ public class DefaultTask extends AbstractTask {
 
     @Override
     public void setActions(List<Action<? super Task>> replacements) {
-        taskMutator.mutate("Task.setActions(List<Action>)", new Runnable() {
-            @Override
-            public void run() {
-                getTaskActions().clear();
-                for (Action<? super Task> action : replacements) {
-                    doLast(action);
-                }
+        taskMutator.mutate("Task.setActions(List<Action>)", () -> {
+            getTaskActions().clear();
+            for (Action<? super Task> action : replacements) {
+                doLast(action);
             }
         });
     }
@@ -301,12 +289,8 @@ public class DefaultTask extends AbstractTask {
         if (action == null) {
             throw new InvalidUserDataException("Action must not be null!");
         }
-        taskMutator.mutate("Task.doFirst(Action)", new Runnable() {
-            @Override
-            public void run() {
-                getTaskActions().add(0, wrap(action, actionName));
-            }
-        });
+        taskMutator.mutate("Task.doFirst(Action)",
+                () -> getTaskActions().add(0, wrap(action, actionName)));
         return this;
     }
 
@@ -333,6 +317,11 @@ public class DefaultTask extends AbstractTask {
             actions = new ArrayList<>(3);
         }
         return actions;
+    }
+
+    @Override
+    public boolean hasTaskActions() {
+        return actions != null && !actions.isEmpty();
     }
 
     @Internal
@@ -403,6 +392,17 @@ public class DefaultTask extends AbstractTask {
     @Override
     public TaskLocalState getLocalState() {
         return localState;
+    }
+
+    @Override
+    public boolean isHasCustomActions() {
+        return hasCustomActions;
+    }
+
+    @Internal
+    @Override
+    public Property<Duration> getTimeout() {
+        return timeout;
     }
 
     private static class ClosureTaskAction implements InputChangesAwareTaskAction {
@@ -498,13 +498,17 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
-    public Task finalizedBy(Object... paths) {
-        return null;
+    public void setFinalizedBy(final Iterable<?> finalizedByTasks) {
+        taskMutator.mutate("Task.setFinalizedBy(Iterable)",
+                () -> finalizedBy.setValues(finalizedByTasks));
     }
 
     @Override
-    public void setFinalizedBy(Iterable<?> finalizedBy) {
-
+    public Task finalizedBy(final Object... paths) {
+        taskMutator.mutate("Task.finalizedBy(Object...)", () -> {
+            finalizedBy.add(paths);
+        });
+        return this;
     }
 
     @Internal
@@ -547,8 +551,13 @@ public class DefaultTask extends AbstractTask {
     }
 
     @Override
-    public int compareTo(@NotNull Task task) {
-        return 0;
+    public int compareTo(@NotNull Task otherTask) {
+        int depthCompare = project.compareTo(otherTask.getProject());
+        if (depthCompare == 0) {
+            return getPath().compareTo(otherTask.getPath());
+        } else {
+            return depthCompare;
+        }
     }
 
     @Override

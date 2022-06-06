@@ -40,21 +40,18 @@ public abstract class JavaEcosystemSupport {
         configureTargetPlatform(attributesSchema);
         configureTargetEnvironment(attributesSchema);
         configureConsumerDescriptors((DescribableAttributesSchema) attributesSchema);
-
-        // CodeAssist workaround: for some reason the TargetJvmEnvironment attribute
-        // is not properly set on each configurations.
-        // this is to ensure that each configuration has that attribute
-        if (attributesSchema.getAttributes() instanceof AttributeContainerInternal) {
-            AttributeContainerInternal attributes = (AttributeContainerInternal) attributesSchema.getAttributes();
-            if (!attributes.contains(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE)) {
-                attributes.attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
-                        objectFactory.named(TargetJvmEnvironment.class, TargetJvmEnvironment.STANDARD_JVM));
-            }
-        }
     }
 
     private static void configureConsumerDescriptors(DescribableAttributesSchema attributesSchema) {
         attributesSchema.addConsumerDescriber(new JavaEcosystemAttributesDescriber());
+    }
+
+    public static void configureDefaultTargetEnvironment(HasAttributes configuration, TargetJvmEnvironment defaultTargetnEnvironment) {
+        AttributeContainerInternal attributes = (AttributeContainerInternal) configuration.getAttributes();
+        // If nobody said anything about this variant's target platform, use whatever the convention says
+        if (!attributes.contains(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE)) {
+            attributes.attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, defaultTargetnEnvironment);
+        }
     }
 
     public static void configureDefaultTargetPlatform(HasAttributes configuration, int majorVersion) {
