@@ -44,7 +44,7 @@ import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
 import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter.FileValueSupplier;
 import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter.InputVisitor;
 import com.tyron.builder.internal.execution.fingerprint.impl.DefaultFileNormalizationSpec;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.internal.execution.history.OverlappingOutputs;
 import com.tyron.builder.internal.execution.workspace.WorkspaceProvider;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
