@@ -2,6 +2,7 @@ package com.tyron.builder.api.internal.tasks.compile;
 
 import static com.tyron.builder.api.internal.tasks.compile.filter.AnnotationProcessorFilter.getFilteredClassLoader;
 
+import com.tyron.builder.api.BuildException;
 import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.api.internal.tasks.compile.incremental.processing.AnnotationProcessingResult;
@@ -14,6 +15,9 @@ import com.tyron.builder.api.internal.tasks.compile.processing.IsolatingProcesso
 import com.tyron.builder.api.internal.tasks.compile.processing.NonIncrementalProcessor;
 import com.tyron.builder.api.internal.tasks.compile.processing.SupportedOptionsCollectingProcessor;
 import com.tyron.builder.api.internal.tasks.compile.processing.TimeTrackingProcessor;
+import com.tyron.common.TestUtil;
+
+import org.codehaus.groovy.reflection.android.AndroidSupport;
 
 import java.io.File;
 import java.util.List;
@@ -107,6 +111,9 @@ class AnnotationProcessingCompileTask implements JavaCompiler.CompilationTask {
     }
 
     ClassLoader createProcessorClassLoader() {
+        if (AndroidSupport.isRunningAndroid()) {
+            throw new BuildException("Annotation processors on Android is not yet supported");
+        }
         return new URLClassLoader(
                 DefaultClassPath.of(annotationProcessorPath).getAsURLArray(),
                 getFilteredClassLoader(delegate.getClass().getClassLoader())
