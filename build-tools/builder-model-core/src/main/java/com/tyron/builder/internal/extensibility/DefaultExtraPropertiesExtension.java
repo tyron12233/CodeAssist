@@ -1,12 +1,16 @@
 package com.tyron.builder.internal.extensibility;
 
+import groovy.lang.Closure;
+import groovy.lang.GroovyObjectSupport;
+import groovy.lang.MissingPropertyException;
+import groovy.lang.ReadOnlyPropertyException;
 import com.tyron.builder.api.plugins.ExtraPropertiesExtension;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 
-public class DefaultExtraPropertiesExtension implements ExtraPropertiesExtension {
+public class DefaultExtraPropertiesExtension extends GroovyObjectSupport implements ExtraPropertiesExtension {
 
     private final Map<String, Object> storage = new HashMap<>();
 
@@ -35,41 +39,42 @@ public class DefaultExtraPropertiesExtension implements ExtraPropertiesExtension
         storage.put(name, value);
     }
 
-//    @Override
-//    @Nullable
-//    public Object getProperty(String name) {
-//        if (name.equals("properties")) {
-//            return getProperties();
-//        }
-//
-//        if (storage.containsKey(name)) {
-//            return storage.get(name);
-//        } else {
-//            throw new MissingPropertyException(UnknownPropertyException.createMessage(name), name, null);
-//        }
-//    }
-//
-//    @Override
-//    public void setProperty(String name, @Nullable Object newValue) {
-//        if (name.equals("properties")) {
-//            throw new ReadOnlyPropertyException("name", ExtraPropertiesExtension.class);
-//        }
-//        set(name, newValue);
-//    }
+    @Override
+    @Nullable
+    public Object getProperty(String name) {
+        if (name.equals("properties")) {
+            return getProperties();
+        }
+
+        if (storage.containsKey(name)) {
+            return storage.get(name);
+        } else {
+            throw new MissingPropertyException(UnknownPropertyException.createMessage(name), name, null);
+        }
+    }
+
+    @Override
+    public void setProperty(String name, @Nullable Object newValue) {
+        if (name.equals("properties")) {
+            throw new ReadOnlyPropertyException("name", ExtraPropertiesExtension.class);
+        }
+        set(name, newValue);
+    }
 
     @Override
     public Map<String, Object> getProperties() {
         return new HashMap<>(storage);
     }
 
-//    public Object methodMissing(String name, Object args) {
-//        Object item = find(name);
-//        if (item instanceof Closure) {
-//            Closure closure = (Closure) item;
-//            return closure.call((Object[]) args);
-//        } else {
-//            throw new groovy.lang.MissingMethodException(name, getClass(), (Object[]) args);
-//        }
-//    }
+    public Object methodMissing(String name, Object args) {
+        Object item = find(name);
+        if (item instanceof Closure) {
+            Closure closure = (Closure) item;
+            return closure.call((Object[]) args);
+        } else {
+            throw new groovy.lang.MissingMethodException(name, getClass(), (Object[]) args);
+        }
+    }
 }
+
 
