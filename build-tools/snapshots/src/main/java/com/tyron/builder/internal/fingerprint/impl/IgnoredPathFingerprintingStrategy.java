@@ -32,6 +32,11 @@ public class IgnoredPathFingerprintingStrategy extends AbstractFingerprintingStr
         this.normalizedContentHasher = normalizedContentHasher;
     }
 
+    @Override
+    public String normalizePath(FileSystemLocationSnapshot snapshot) {
+        return IGNORED_PATH;
+    }
+
     private IgnoredPathFingerprintingStrategy() {
         this(FileSystemLocationSnapshotHasher.DEFAULT);
     }

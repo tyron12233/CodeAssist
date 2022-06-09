@@ -3,8 +3,10 @@ plugins {
 }
 
 dependencies {
-    implementation project (path: ':build-tools:eclipse-standalone')
+    implementation projects.buildTools.eclipseStandalone
+
     testImplementation 'junit:junit:4.13.2'
+    testImplementation projects.common
 }
 
 java {

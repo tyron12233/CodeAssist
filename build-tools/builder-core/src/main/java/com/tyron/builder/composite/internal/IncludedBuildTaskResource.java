@@ -25,14 +25,9 @@ public interface IncludedBuildTaskResource {
     }
 
     /**
-     * Queues the task for execution, but does not schedule it. Use {@link BuildTreeWorkGraph#scheduleWork(Consumer)} to schedule queued tasks.
+     * Queues a task for execution, but does not schedule it. Use {@link com.tyron.builder.internal.buildtree.BuildTreeWorkGraph#scheduleWork(Consumer)} to schedule queued tasks.
      */
     void queueForExecution();
-
-    /**
-     * Invokes the given action when this task completes (as per {@link Node#isComplete()}). Does nothing if this task has already completed.
-     */
-    void onComplete(Runnable action);
 
     TaskInternal getTask();
 

@@ -3,8 +3,6 @@ package com.tyron.builder.internal.snapshot.impl;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
-import com.tyron.builder.api.attributes.Attribute;
-import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.serialize.AbstractSerializer;
 import com.tyron.builder.internal.serialize.Decoder;
 import com.tyron.builder.internal.serialize.Encoder;
@@ -32,17 +30,11 @@ public class SnapshotSerializer extends AbstractSerializer<ValueSnapshot> {
     private static final int IMMUTABLE_MANAGED_SNAPSHOT = 16;
     private static final int IMPLEMENTATION_SNAPSHOT = 17;
     private static final int HASH_SNAPSHOT = 18;
-    private static final int ATTRIBUTE = 19;
-    private static final int GRADLE_SERIALIZED_SNAPSHOT = 20;
-    private static final int DEFAULT_SNAPSHOT = 21;
+    private static final int DEFAULT_SNAPSHOT = 19;
 
     private final HashCodeSerializer serializer = new HashCodeSerializer();
-    private final Serializer<ImplementationSnapshot> implementationSnapshotSerializer = new ImplementationSnapshotSerializer();
-    private final ClassLoaderHierarchyHasher classLoaderHasher;
-
-    public SnapshotSerializer(ClassLoaderHierarchyHasher classLoaderHasher) {
-        this.classLoaderHasher = classLoaderHasher;
-    }
+    private final Serializer<ImplementationSnapshot> implementationSnapshotSerializer =
+            new ImplementationSnapshotSerializer();
 
     @Override
     public ValueSnapshot read(Decoder decoder) throws Exception {
@@ -91,7 +83,8 @@ public class SnapshotSerializer extends AbstractSerializer<ValueSnapshot> {
                 return new SetValueSnapshot(setBuilder.build());
             case MAP_SNAPSHOT:
                 size = decoder.readSmallInt();
-                ImmutableList.Builder<MapEntrySnapshot<ValueSnapshot>> mapBuilder = ImmutableList.builderWithExpectedSize(size);
+                ImmutableList.Builder<MapEntrySnapshot<ValueSnapshot>> mapBuilder =
+                        ImmutableList.builderWithExpectedSize(size);
                 for (int i = 0; i < size; i++) {
                     mapBuilder.add(new MapEntrySnapshot<>(read(decoder), read(decoder)));
                 }
@@ -106,22 +99,19 @@ public class SnapshotSerializer extends AbstractSerializer<ValueSnapshot> {
                 return new ImmutableManagedValueSnapshot(className, value);
             case IMPLEMENTATION_SNAPSHOT:
                 return implementationSnapshotSerializer.read(decoder);
-            case ATTRIBUTE:
-                return new AttributeDefinitionSnapshot(
-                        Attribute.of(decoder.readString(), Thread.currentThread().getContextClassLoader().loadClass(decoder.readString())),
-                        classLoaderHasher
-                );
-            case GRADLE_SERIALIZED_SNAPSHOT:
-                return new GradleSerializedValueSnapshot(decoder.readBoolean() ? serializer.read(decoder) : null, decoder.readBinary());
             case DEFAULT_SNAPSHOT:
-                return new JavaSerializedValueSnapshot(decoder.readBoolean() ? serializer.read(decoder) : null, decoder.readBinary());
+                return new SerializedValueSnapshot(
+                        decoder.readBoolean() ? serializer.read(decoder) : null,
+                        decoder.readBinary());
             default:
-                throw new IllegalArgumentException("Don't know how to deserialize a snapshot with type tag " + type);
+                throw new IllegalArgumentException(
+                        "Don't know how to deserialize a snapshot with type tag " + type);
         }
     }
 
     private ImmutableList<ValueSnapshot> readList(Decoder decoder, int size) throws Exception {
-        ImmutableList.Builder<ValueSnapshot> arrayElements = ImmutableList.builderWithExpectedSize(size);
+        ImmutableList.Builder<ValueSnapshot> arrayElements =
+                ImmutableList.builderWithExpectedSize(size);
         for (int i = 0; i < size; i++) {
             arrayElements.add(read(decoder));
         }
@@ -187,23 +177,8 @@ public class SnapshotSerializer extends AbstractSerializer<ValueSnapshot> {
             ImplementationSnapshot implementationSnapshot = (ImplementationSnapshot) snapshot;
             encoder.writeSmallInt(IMPLEMENTATION_SNAPSHOT);
             implementationSnapshotSerializer.write(encoder, implementationSnapshot);
-        } else if (snapshot instanceof AttributeDefinitionSnapshot) {
-            AttributeDefinitionSnapshot valueSnapshot = (AttributeDefinitionSnapshot) snapshot;
-            encoder.writeSmallInt(ATTRIBUTE);
-            encoder.writeString(valueSnapshot.getValue().getName());
-            encoder.writeString(valueSnapshot.getValue().getType().getName());
-        } else if (snapshot instanceof GradleSerializedValueSnapshot) {
-            GradleSerializedValueSnapshot valueSnapshot = (GradleSerializedValueSnapshot) snapshot;
-            encoder.writeSmallInt(GRADLE_SERIALIZED_SNAPSHOT);
-            if (valueSnapshot.getImplementationHash() == null) {
-                encoder.writeBoolean(false);
-            } else {
-                encoder.writeBoolean(true);
-                serializer.write(encoder, valueSnapshot.getImplementationHash());
-            }
-            encoder.writeBinary(valueSnapshot.getValue());
-        } else if (snapshot instanceof JavaSerializedValueSnapshot) {
-            JavaSerializedValueSnapshot valueSnapshot = (JavaSerializedValueSnapshot) snapshot;
+        } else if (snapshot instanceof SerializedValueSnapshot) {
+            SerializedValueSnapshot valueSnapshot = (SerializedValueSnapshot) snapshot;
             encoder.writeSmallInt(DEFAULT_SNAPSHOT);
             if (valueSnapshot.getImplementationHash() == null) {
                 encoder.writeBoolean(false);
@@ -242,7 +217,8 @@ public class SnapshotSerializer extends AbstractSerializer<ValueSnapshot> {
             encoder.writeString(managedTypeSnapshot.getClassName());
             write(encoder, managedTypeSnapshot.getState());
         } else {
-            throw new IllegalArgumentException("Don't know how to serialize a value of type " + snapshot.getClass().getSimpleName());
+            throw new IllegalArgumentException("Don't know how to serialize a value of type " +
+                                               snapshot.getClass().getSimpleName());
         }
     }
 }

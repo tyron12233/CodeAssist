@@ -6,8 +6,8 @@ package com.tyron.builder.api.logging;
  *
  * <p>You can obtain a {@code Logger} instance using {@link Logging#getLogger(Class)} or {@link
  * Logging#getLogger(String)}. A {@code Logger} instance is also available through {@link
- * org.gradle.api.Project#getLogger()}, {@link org.gradle.api.Task#getLogger()} and {@link
- * org.gradle.api.Script#getLogger()}.</p>
+ * com.tyron.builder.api.Project#getLogger()}, {@link com.tyron.builder.api.Task#getLogger()} and {@link
+ * com.tyron.builder.api.Script#getLogger()}.</p>
  * <br>
  * <p><b>CAUTION!</b>
  * Logging sensitive information (credentials, tokens, certain environment variables) above {@link Logger#debug} level is a security vulnerability.

@@ -1,10 +1,9 @@
 package com.tyron.builder.internal.logging.services;
 
 import com.tyron.builder.internal.logging.events.OutputEventListener;
-import com.tyron.builder.internal.logging.services.DefaultStyledTextOutputFactory;
 import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.time.Clock;
 import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.api.logging.LogLevel;
@@ -117,6 +116,7 @@ public abstract class LoggingServiceRegistry extends DefaultServiceRegistry {
 
     protected DefaultLoggingManagerFactory createLoggingManagerFactory() {
         OutputEventListener outputEventBroadcaster = outputEventListenerManager.getBroadcaster();
+
         LoggingSourceSystem stdout = new DefaultStdOutLoggingSystem(getStdoutListener(), get(Clock.class));
         stdout.setLevel(LogLevel.QUIET);
         LoggingSourceSystem stderr = new DefaultStdErrLoggingSystem(new TextStreamOutputEventListener(outputEventBroadcaster), get(Clock.class));

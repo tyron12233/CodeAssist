@@ -41,6 +41,11 @@ public class Hashes {
         return signature("CLASS:" + type.getName());
     }
 
+
+    public static HashFunction sha1() {
+        return SHA1;
+    }
+
     /**
      * Returns a new {@link PrimitiveHasher} based on the default hashing implementation.
      */

@@ -136,7 +136,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
         mCompletionWindow = new CodeAssistCompletionWindow(this);
         mCompletionWindow.setAdapter(new CodeAssistCompletionAdapter());
         replaceComponent(EditorAutoCompletion.class, mCompletionWindow);
-        replaceComponent(EditorTextActionWindow.class, new ActionsWindow(this));
+        replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
     }
 
     @Override

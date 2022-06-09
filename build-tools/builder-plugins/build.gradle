@@ -7,6 +7,8 @@ dependencies {
     
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderProcessServices
+    implementation projects.buildTools.builderPlatformBase
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderPersistentCache
     implementation projects.buildTools.builderCoreApi
@@ -18,8 +20,14 @@ dependencies {
     implementation projects.buildTools.builderExecution
     implementation projects.buildTools.snapshots
     implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderPlatformJvm
 
+    implementation common.commonsLang3
     implementation 'javax.inject:javax.inject:1'
+    implementation project(path: ':build-tools:builder-testing-base')
+    implementation project(path: ':build-tools:builder-testing-jvm')
+    implementation project(path: ':build-tools:builder-reporting')
+
 }
 
 java {

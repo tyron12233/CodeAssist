@@ -19,12 +19,15 @@ import com.tyron.builder.cache.scopes.BuildTreeScopedCache;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
 import com.tyron.builder.initialization.RootBuildLifecycleListener;
 import com.tyron.builder.internal.build.BuildAddedListener;
-import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.cache.StringInterner;
 import com.tyron.builder.internal.classloader.ClasspathHasher;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.execution.OutputChangeListener;
 import com.tyron.builder.internal.execution.OutputSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
+import com.tyron.builder.internal.execution.fingerprint.impl.DefaultFileCollectionFingerprinterRegistry;
 import com.tyron.builder.internal.execution.impl.DefaultOutputSnapshotter;
 import com.tyron.builder.internal.file.Stat;
 import com.tyron.builder.internal.fingerprint.GenericFileTreeSnapshotter;
@@ -33,14 +36,15 @@ import com.tyron.builder.internal.fingerprint.classpath.ClasspathFingerprinter;
 import com.tyron.builder.internal.fingerprint.classpath.impl.DefaultClasspathFingerprinter;
 import com.tyron.builder.internal.fingerprint.impl.DefaultFileCollectionSnapshotter;
 import com.tyron.builder.internal.fingerprint.impl.DefaultGenericFileTreeSnapshotter;
-import com.tyron.builder.internal.hash.DefaultFileHasher;
+import com.tyron.builder.internal.fingerprint.impl.DefaultInputFingerprinter;
+import com.tyron.builder.internal.fingerprint.impl.FileCollectionFingerprinterRegistrations;
 import com.tyron.builder.internal.hash.FileHasher;
-import com.tyron.builder.internal.hash.StreamHasher;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
 import com.tyron.builder.internal.os.OperatingSystem;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistration;
 import com.tyron.builder.internal.serialize.HashCodeSerializer;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
+import com.tyron.builder.internal.snapshot.ValueSnapshotter;
 import com.tyron.builder.internal.snapshot.impl.DirectorySnapshotterStatistics;
 import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
@@ -66,6 +70,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -325,6 +330,38 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
 
         FileCollectionSnapshotter createFileCollectionSnapshotter(FileSystemAccess fileSystemAccess, GenericFileTreeSnapshotter genericFileTreeSnapshotter, Stat stat) {
             return new DefaultFileCollectionSnapshotter(fileSystemAccess, genericFileTreeSnapshotter, stat);
+        }
+
+        FileCollectionFingerprinterRegistrations createFileCollectionFingerprinterRegistrations(
+                StringInterner stringInterner,
+                FileCollectionSnapshotter fileCollectionSnapshotter,
+                ResourceSnapshotterCacheService resourceSnapshotterCacheService
+        ) {
+            return new FileCollectionFingerprinterRegistrations(
+                    stringInterner,
+                    fileCollectionSnapshotter,
+                    resourceSnapshotterCacheService,
+                    ResourceFilter.FILTER_NOTHING,
+                    ResourceEntryFilter.FILTER_NOTHING,
+                    new HashMap<>()
+            );
+        }
+
+        FileCollectionFingerprinterRegistry createFileCollectionFingerprinterRegistry(
+                FileCollectionFingerprinterRegistrations fileCollectionFingerprinterRegistrations) {
+            return new DefaultFileCollectionFingerprinterRegistry(fileCollectionFingerprinterRegistrations.getRegistrants());
+        }
+
+        InputFingerprinter createInputFingerprinter(
+                FileCollectionSnapshotter fileCollectionSnapshotter,
+                FileCollectionFingerprinterRegistry fileCollectionFingerprinterRegistry,
+                ValueSnapshotter valueSnapshotter
+        ) {
+            return new DefaultInputFingerprinter(
+                    fileCollectionSnapshotter,
+                    fileCollectionFingerprinterRegistry,
+                    valueSnapshotter
+            );
         }
 
         OutputSnapshotter createOutputSnapshotter(FileCollectionSnapshotter fileCollectionSnapshotter) {

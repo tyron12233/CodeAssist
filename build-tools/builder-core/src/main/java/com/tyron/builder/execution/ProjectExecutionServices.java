@@ -1,22 +1,13 @@
 package com.tyron.builder.execution;
 
-import static com.tyron.builder.cache.FileLockManager.LockMode.OnDemand;
-import static com.tyron.builder.cache.internal.filelock.LockOptionsBuilder.mode;
-
-import com.google.common.hash.HashCode;
-import com.google.common.hash.Hashing;
-import com.tyron.builder.api.UncheckedIOException;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionListener;
-import com.tyron.builder.api.internal.changedetection.state.CrossBuildFileHashCache;
-import com.tyron.builder.api.internal.changedetection.state.DefaultResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizingFileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.changedetection.state.ResourceEntryFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileOperations;
-import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.CatchExceptionTaskExecuter;
@@ -27,18 +18,7 @@ import com.tyron.builder.api.internal.tasks.execution.FinalizePropertiesTaskExec
 import com.tyron.builder.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter;
 import com.tyron.builder.api.internal.tasks.execution.SkipOnlyIfTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter;
-import com.tyron.builder.cache.CacheBuilder;
-import com.tyron.builder.cache.CacheRepository;
-import com.tyron.builder.cache.PersistentCache;
-import com.tyron.builder.cache.PersistentIndexedCache;
-import com.tyron.builder.cache.PersistentIndexedCacheParameters;
-import com.tyron.builder.internal.cache.StringInterner;
-import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
-import com.tyron.builder.cache.scopes.BuildScopedCache;
-import com.tyron.builder.caching.local.internal.BuildCacheTempFileStore;
-import com.tyron.builder.caching.local.internal.DefaultBuildCacheTempFileStore;
-import com.tyron.builder.caching.local.internal.DirectoryBuildCacheService;
-import com.tyron.builder.caching.local.internal.LocalBuildCacheService;
+import com.tyron.builder.api.internal.cache.StringInterner;
 import com.tyron.builder.execution.plan.ExecutionNodeAccessHierarchies;
 import com.tyron.builder.execution.taskgraph.TaskListenerInternal;
 import com.tyron.builder.initialization.BuildCancellationToken;
@@ -67,18 +47,13 @@ import com.tyron.builder.internal.fingerprint.impl.RelativePathFileCollectionFin
 import com.tyron.builder.internal.hash.ChecksumService;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
 import com.tyron.builder.internal.resource.local.DefaultPathKeyFileStore;
 import com.tyron.builder.internal.resource.local.PathKeyFileStore;
-import com.tyron.builder.internal.serialize.HashCodeSerializer;
 import com.tyron.builder.internal.service.scopes.ExecutionGradleServices;
 import com.tyron.builder.internal.snapshot.ValueSnapshotter;
 import com.tyron.builder.internal.work.AsyncWorkTracker;
 
-import org.apache.commons.io.FileUtils;
-
-import java.io.File;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -93,58 +68,6 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
 
         BuildCancellationToken token = new DefaultBuildCancellationToken();
         add(BuildCancellationToken.class, token);
-
-        addProvider(new ExecutionGradleServices());
-    }
-
-    ChecksumService createChecksumService() {
-        return new ChecksumService() {
-            @Override
-            public HashCode md5(File file) {
-                try {
-                    return Hashing.md5().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode sha1(File file) {
-                try {
-                    return Hashing.sha1().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode sha256(File file) {
-                try {
-                    return Hashing.sha256().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode sha512(File file) {
-                try {
-                    return Hashing.sha512().hashBytes(FileUtils.readFileToByteArray(file));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-
-            @Override
-            public HashCode hash(File src, String algorithm) {
-                switch (algorithm) {
-                    case "md5": return md5(src);
-                    case "sha1": return sha1(src);
-                    case "sha256": return sha256(src);
-                    default: return sha512(src);
-                }
-            }
-        };
     }
 
     FileAccessTracker createFileAccessTracker() {
@@ -288,6 +211,23 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                         Collections.emptyMap(),
                         interner,
                         LineEndingSensitivity.DEFAULT
+                )
+        );
+    }
+
+    FingerprinterRegistration createRelativePathDefaultDefaultFingerprinter(
+            FileSystemLocationSnapshotHasher hasher,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            StringInterner interner
+    ) {
+        return FingerprinterRegistration.registration(
+                DirectorySensitivity.DEFAULT,
+                LineEndingSensitivity.DEFAULT,
+                new RelativePathFileCollectionFingerprinter(
+                        interner,
+                        DirectorySensitivity.DEFAULT,
+                        fileCollectionSnapshotter,
+                        hasher
                 )
         );
     }

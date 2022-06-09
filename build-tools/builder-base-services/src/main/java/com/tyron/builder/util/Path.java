@@ -2,6 +2,7 @@ package com.tyron.builder.util;
 
 import com.google.common.base.Strings;
 
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
@@ -28,7 +29,7 @@ public class Path implements Comparable<Path> {
     }
 
     private static Path parsePath(String path) {
-        String[] segments = path.split(SEPARATOR);
+        String[] segments = StringUtils.split(path, SEPARATOR);
         boolean absolute = path.startsWith(SEPARATOR);
         return new Path(segments, absolute);
     }

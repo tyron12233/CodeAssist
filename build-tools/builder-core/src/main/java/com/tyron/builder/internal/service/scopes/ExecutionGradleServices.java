@@ -51,7 +51,6 @@ import com.tyron.builder.internal.execution.steps.legacy.MarkSnapshottingInputsF
 import com.tyron.builder.internal.execution.timeout.TimeoutHandler;
 import com.tyron.builder.internal.execution.timeout.impl.DefaultTimeoutHandler;
 import com.tyron.builder.internal.file.Deleter;
-import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.CurrentBuildOperationRef;
@@ -59,16 +58,10 @@ import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.cache.CacheBuilder;
 import com.tyron.builder.cache.FileLockManager;
 import com.tyron.builder.cache.PersistentCache;
-import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.cache.StringInterner;
 import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
 import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.caching.internal.controller.BuildCacheController;
-import com.tyron.builder.caching.internal.controller.DefaultBuildCacheController;
-import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
-import com.tyron.builder.caching.internal.packaging.BuildCacheEntryPacker;
-import com.tyron.builder.caching.internal.service.BuildCacheServicesConfiguration;
-import com.tyron.builder.caching.local.internal.LocalBuildCacheService;
-import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.vfs.VirtualFileSystem;
 
 import java.util.Collections;
@@ -86,14 +79,12 @@ public class ExecutionGradleServices {
     ExecutionHistoryStore createExecutionHistoryStore(
             ExecutionHistoryCacheAccess executionHistoryCacheAccess,
             InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
-            StringInterner stringInterner,
-            ClassLoaderHierarchyHasher classLoaderHasher
+            StringInterner stringInterner
     ) {
         return new DefaultExecutionHistoryStore(
                 executionHistoryCacheAccess,
                 inMemoryCacheDecoratorFactory,
-                stringInterner,
-                classLoaderHasher
+                stringInterner
         );
     }
 
@@ -110,24 +101,6 @@ public class ExecutionGradleServices {
 
     OutputChangeListener createOutputChangeListener(ListenerManager listenerManager) {
         return listenerManager.getBroadcaster(OutputChangeListener.class);
-    }
-
-    ExecutionStateChangeDetector createExecutionStateChangeDetector() {
-        return new DefaultExecutionStateChangeDetector();
-    }
-
-
-    OverlappingOutputDetector createOverlappingOutputDetector() {
-        return new DefaultOverlappingOutputDetector();
-    }
-
-    TimeoutHandler createTimeoutHandler(
-            ExecutorFactory executorFactory
-    ) {
-        return new DefaultTimeoutHandler(
-                executorFactory.createScheduled("TimeoutHandler", 1),
-                CurrentBuildOperationRef.instance()
-        );
     }
 
     ValidateStep.ValidationWarningRecorder createWarningRecorder() {

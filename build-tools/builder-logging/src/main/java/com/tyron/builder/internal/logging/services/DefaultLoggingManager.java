@@ -28,9 +28,9 @@ public class DefaultLoggingManager implements LoggingManagerInternal, Closeable 
     private final StartableLoggingRouter loggingRouter;
     private boolean enableStdOutListeners;
     private final LoggingOutputInternal loggingOutput;
-    private final Set<StandardOutputListener> stdoutListeners = new LinkedHashSet<StandardOutputListener>();
-    private final Set<StandardOutputListener> stderrListeners = new LinkedHashSet<StandardOutputListener>();
-    private final Set<OutputEventListener> outputEventListeners = new LinkedHashSet<OutputEventListener>();
+    private final Set<StandardOutputListener> stdoutListeners = new LinkedHashSet<>();
+    private final Set<StandardOutputListener> stderrListeners = new LinkedHashSet<>();
+    private final Set<OutputEventListener> outputEventListeners = new LinkedHashSet<>();
 
     public DefaultLoggingManager(LoggingSourceSystem slf4jLoggingSystem, LoggingSourceSystem javaUtilLoggingSystem, LoggingSourceSystem stdOutLoggingSystem,
                                  LoggingSourceSystem stdErrLoggingSystem, LoggingRouter loggingRouter) {

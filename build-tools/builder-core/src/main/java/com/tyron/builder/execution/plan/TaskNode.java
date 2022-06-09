@@ -5,7 +5,7 @@ import com.google.common.collect.Sets;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.TaskInternal;
-
+import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,48 +13,40 @@ import java.util.NavigableSet;
 import java.util.Set;
 
 public abstract class TaskNode extends Node {
-
     private static final Logger LOGGER = LoggerFactory.getLogger(TaskNode.class);
-
-    public static final int UNKNOWN_ORDINAL = -1;
 
     private final NavigableSet<Node> mustSuccessors = Sets.newTreeSet();
     private final Set<Node> mustPredecessors = Sets.newHashSet();
     private final NavigableSet<Node> shouldSuccessors = Sets.newTreeSet();
     private final NavigableSet<Node> finalizers = Sets.newTreeSet();
     private final NavigableSet<Node> finalizingSuccessors = Sets.newTreeSet();
-    private int ordinal = UNKNOWN_ORDINAL;
 
     @Override
     public boolean doCheckDependenciesComplete() {
         if (!super.doCheckDependenciesComplete()) {
             return false;
         }
-        LOGGER.debug("Checking if all must successors are complete for " + this);
+        LOGGER.debug("Checking if all must successors are complete for {}", this);
         for (Node dependency : mustSuccessors) {
             if (!dependency.isComplete()) {
                 return false;
             }
         }
 
-        LOGGER.debug("Checking if all finalizing successors are complete for " + this);
+        LOGGER.debug("Checking if all finalizing successors are complete for {}", this);
         for (Node dependency : finalizingSuccessors) {
             if (!dependency.isComplete()) {
                 return false;
             }
         }
 
-        LOGGER.debug("All task dependencies are complete for " + this);
+        LOGGER.debug("All task dependencies are complete for {}", this);
         return true;
     }
 
     public Set<Node> getMustSuccessors() {
         return mustSuccessors;
     }
-
-    public abstract Set<Node> getLifecycleSuccessors();
-
-    public abstract void setLifecycleSuccessors(Set<Node> successors);
 
     @Override
     public Set<Node> getFinalizers() {
@@ -153,22 +145,18 @@ public abstract class TaskNode extends Node {
 
     public abstract TaskInternal getTask();
 
+    @Override
+    public boolean isPublicNode() {
+        return true;
+    }
+
     private void deprecateLifecycleHookReferencingNonLocalTask(String hookName, Node taskNode) {
-//        if (taskNode instanceof   TaskInAnotherBuild) {
-//            DeprecationLogger.deprecateAction("Using " + hookName + " to reference tasks from another build")
-//                    .willBecomeAnErrorInGradle8()
-//                    .withUpgradeGuideSection(6, "referencing_tasks_from_included_builds")
-//                    .nagUser();
-//        }
-    }
-
-    public int getOrdinal() {
-        return ordinal;
-    }
-
-    public void maybeSetOrdinal(int ordinal) {
-        if (this.ordinal == UNKNOWN_ORDINAL || this.ordinal > ordinal) {
-            this.ordinal = ordinal;
+        if (taskNode instanceof TaskInAnotherBuild) {
+            DeprecationLogger.deprecateAction("Using " + hookName + " to reference tasks from another build")
+                    .willBecomeAnErrorInGradle8()
+                    .withUpgradeGuideSection(6, "referencing_tasks_from_included_builds")
+                    .nagUser();
         }
     }
+
 }

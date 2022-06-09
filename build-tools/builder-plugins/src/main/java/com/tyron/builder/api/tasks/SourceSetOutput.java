@@ -1,3 +1,19 @@
+/*
+ * Copyright 2010 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.tyron.builder.api.tasks;
 
 import com.tyron.builder.api.file.FileCollection;
@@ -38,33 +54,36 @@ import java.util.Map;
  *
  * <pre class='autoTested'>
  * plugins {
- *   id 'java'
+ *     id 'java'
  * }
  *
- * def generateResourcesTask = tasks.register("generate-resources", GenerateResourcesTask) {
- *   resourcesDir.set(layout.buildDirectory.dir("generated-resources/main"))
- * }
+ * def generatedResources = "$buildDir/generated-resources/main"
  *
- * // Include all outputs of the `generate-resources` task as outputs of the main sourceSet.
  * sourceSets {
  *   main {
- *     output.dir(generateResourcesTask)
+ *     //let's register an output folder on the main SourceSet:
+ *     output.dir(generatedResources, builtBy: 'generateMyResources')
+ *     //it is now a part of the 'main' classpath and will be a part of the jar
  *   }
  * }
  *
- * abstract class GenerateResourcesTask extends DefaultTask {
- *   {@literal @}OutputDirectory
- *   abstract DirectoryProperty getResourcesDir()
- *
- *   {@literal @}TaskAction
- *   def generateResources() {
- *     def generated = resourcesDir.file("myGeneratedResource.properties").get().asFile
+ * //a task that generates the resources:
+ * task generateMyResources {
+ *   outputs.dir generatedResources
+ *   doLast {
+ *     def generated = new File(generatedResources, "myGeneratedResource.properties")
  *     generated.text = "message=Stay happy!"
  *   }
  * }
+ *
+ * //Java plugin task 'classes' and 'testClasses' will automatically depend on relevant tasks registered with 'builtBy'
+ *
+ * //Eclipse/IDEA plugins will automatically depend on 'generateMyResources'
+ * //because the output dir was registered with 'builtBy' information
+ * apply plugin: 'idea'; apply plugin: 'eclipse'
  * </pre>
  *
- * Find more information in {@link #dir(Object)} and {@link #getDirs()}
+ * Find more information in {@link #dir(java.util.Map, Object)} and {@link #getDirs()}
  */
 public interface SourceSetOutput extends FileCollection {
 

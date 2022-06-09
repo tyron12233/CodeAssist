@@ -2,6 +2,7 @@ package com.tyron.builder.initialization;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.initialization.ConfigurableIncludedBuild;
+import com.tyron.builder.api.initialization.ConfigurableIncludedPluginBuild;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.internal.ImmutableActionSet;
 import com.tyron.builder.api.internal.StartParameterInternal;
@@ -23,7 +24,7 @@ public abstract class IncludedBuildSpec {
 
     public abstract BuildDefinition toBuildDefinition(StartParameterInternal startParameter, PublicBuildPath publicBuildPath, Instantiator instantiator);
 
-    public static IncludedBuildSpec includedPluginBuild(File rootDir, Action<? super ConfigurableIncludedPluginBuild> configurer) {
+    public static IncludedBuildSpec includedPluginBuild(File rootDir, Action<? super com.tyron.builder.api.initialization.ConfigurableIncludedPluginBuild> configurer) {
         return new IncludedPluginBuildSpec(rootDir, configurer);
     }
 
@@ -59,7 +60,7 @@ public abstract class IncludedBuildSpec {
 
     private static class IncludedPluginBuildSpec extends IncludedBuildSpec {
 
-        private final Action<? super ConfigurableIncludedPluginBuild> configurer;
+        private final Action<? super com.tyron.builder.api.initialization.ConfigurableIncludedPluginBuild> configurer;
 
         private IncludedPluginBuildSpec(File rootDir, Action<? super ConfigurableIncludedPluginBuild> configurer) {
             super(rootDir);

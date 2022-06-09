@@ -2,33 +2,28 @@ package com.tyron.builder.internal.build;
 
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.BuildResult;
-import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.UncheckedIOException;
-import com.tyron.builder.execution.BuildWorkExecutor;
-import com.tyron.builder.execution.plan.ExecutionPlan;
-import com.tyron.builder.execution.plan.LocalTaskNode;
-import com.tyron.builder.execution.plan.Node;
-import com.tyron.builder.internal.Describables;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
-import com.tyron.builder.internal.service.scopes.BuildScopeServices;
+import com.tyron.builder.execution.BuildWorkExecutor;
 import com.tyron.builder.execution.plan.BuildWorkPlan;
+import com.tyron.builder.execution.plan.ExecutionPlan;
+import com.tyron.builder.execution.plan.Node;
+import com.tyron.builder.initialization.BuildCompletionListener;
 import com.tyron.builder.initialization.exception.ExceptionAnalyser;
 import com.tyron.builder.initialization.internal.InternalBuildFinishedListener;
+import com.tyron.builder.internal.Describables;
+import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.model.StateTransitionController;
 import com.tyron.builder.internal.model.StateTransitionControllerFactory;
+import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 
 import javax.annotation.Nullable;
-
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-@SuppressWarnings("deprecation")
 public class DefaultBuildLifecycleController implements BuildLifecycleController {
     private enum State implements StateTransitionController.State {
         // Configuring the build, can access build model
@@ -42,6 +37,7 @@ public class DefaultBuildLifecycleController implements BuildLifecycleController
 
     private final ExceptionAnalyser exceptionAnalyser;
     private final BuildListener buildListener;
+    private final BuildCompletionListener buildCompletionListener;
     private final InternalBuildFinishedListener buildFinishedListener;
     private final BuildWorkPreparer workPreparer;
     private final BuildWorkExecutor workExecutor;
@@ -57,6 +53,7 @@ public class DefaultBuildLifecycleController implements BuildLifecycleController
             BuildModelController buildModelController,
             ExceptionAnalyser exceptionAnalyser,
             BuildListener buildListener,
+            BuildCompletionListener buildCompletionListener,
             InternalBuildFinishedListener buildFinishedListener,
             BuildWorkPreparer workPreparer,
             BuildWorkExecutor workExecutor,
@@ -70,6 +67,7 @@ public class DefaultBuildLifecycleController implements BuildLifecycleController
         this.buildListener = buildListener;
         this.workPreparer = workPreparer;
         this.workExecutor = workExecutor;
+        this.buildCompletionListener = buildCompletionListener;
         this.buildFinishedListener = buildFinishedListener;
         this.buildServices = buildServices;
         this.toolingModelControllerFactory = toolingModelControllerFactory;
@@ -140,9 +138,6 @@ public class DefaultBuildLifecycleController implements BuildLifecycleController
     public void finalizeWorkGraph(BuildWorkPlan plan) {
         DefaultBuildWorkPlan workPlan = unpack(plan);
         state.transition(State.TaskSchedule, State.ReadyToRun, () -> {
-            for (Consumer<LocalTaskNode> handler : workPlan.handlers) {
-                workPlan.plan.onComplete(handler);
-            }
             workPreparer.finalizeWorkGraph(gradle, workPlan.plan);
         });
     }
@@ -193,7 +188,7 @@ public class DefaultBuildLifecycleController implements BuildLifecycleController
 
     /**
      * <p>Adds a listener to this build instance. The listener is notified of events which occur during the execution of the build.
-     * See {@link Gradle#addListener(Object)} for supported listener types.</p>
+     * See {@link com.tyron.builder.api.invocation.Gradle#addListener(Object)} for supported listener types.</p>
      *
      * @param listener The listener to add. Has no effect if the listener has already been added.
      */
@@ -202,28 +197,22 @@ public class DefaultBuildLifecycleController implements BuildLifecycleController
         getGradle().addListener(listener);
     }
 
+    @Override
+    public void stop() {
+        try {
+            CompositeStoppable.stoppable(buildServices).stop();
+        } finally {
+            buildCompletionListener.completed();
+        }
+    }
+
     private static class DefaultBuildWorkPlan implements BuildWorkPlan {
         private final DefaultBuildLifecycleController owner;
         private final ExecutionPlan plan;
-        private final List<Consumer<LocalTaskNode>> handlers = new ArrayList<>();
 
         public DefaultBuildWorkPlan(DefaultBuildLifecycleController owner, ExecutionPlan plan) {
             this.owner = owner;
             this.plan = plan;
-        }
-
-        @Override
-        public void stop() {
-            try {
-                plan.close();
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        }
-
-        @Override
-        public void onComplete(Consumer<LocalTaskNode> handler) {
-            handlers.add(handler);
         }
     }
 

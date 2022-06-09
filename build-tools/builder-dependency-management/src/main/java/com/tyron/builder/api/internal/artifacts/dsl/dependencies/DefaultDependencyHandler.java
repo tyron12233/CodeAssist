@@ -1,6 +1,24 @@
+/*
+ * Copyright 2009 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.tyron.builder.api.internal.artifacts.dsl.dependencies;
 
 import groovy.lang.Closure;
+import com.tyron.builder.api.internal.catalog.DependencyBundleValueSource;
+
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.Transformer;
@@ -27,22 +45,27 @@ import com.tyron.builder.api.attributes.AttributesSchema;
 import com.tyron.builder.api.attributes.Category;
 import com.tyron.builder.api.attributes.HasConfigurableAttributes;
 import com.tyron.builder.api.internal.artifacts.VariantTransformRegistry;
+import com.tyron.builder.api.internal.artifacts.dependencies.DefaultMinimalDependencyVariant;
+import com.tyron.builder.api.internal.artifacts.query.ArtifactResolutionQueryFactory;
+
+import com.tyron.builder.api.internal.provider.DefaultValueSourceProviderFactory;
 import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.api.provider.ListProperty;
 import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.provider.ProviderConvertible;
+import com.tyron.builder.api.provider.ValueSource;
 import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.component.external.model.ImmutableCapability;
+import com.tyron.builder.internal.component.external.model.ProjectTestFixtures;
 import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import com.tyron.builder.internal.metaobject.MethodAccess;
 import com.tyron.builder.internal.metaobject.MethodMixIn;
-import com.tyron.builder.util.ConfigureUtil;
+import com.tyron.builder.util.internal.ConfigureUtil;
 
 import javax.annotation.Nullable;
-
-import java.lang.reflect.Method;
+import javax.inject.Inject;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -57,13 +80,13 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
     private final DependencyConstraintHandler dependencyConstraintHandler;
     private final ComponentMetadataHandler componentMetadataHandler;
     private final ComponentModuleMetadataHandler componentModuleMetadataHandler;
-//    private final ArtifactResolutionQueryFactory resolutionQueryFactory;
+    private final ArtifactResolutionQueryFactory resolutionQueryFactory;
     private final AttributesSchema attributesSchema;
     private final VariantTransformRegistry transforms;
     private final Factory<ArtifactTypeContainer> artifactTypeContainer;
     private final ObjectFactory objects;
-//    private final PlatformSupport platformSupport;
-//    private final DynamicAddDependencyMethods dynamicMethods;
+    private final PlatformSupport platformSupport;
+    private final DynamicAddDependencyMethods dynamicMethods;
 
     public DefaultDependencyHandler(ConfigurationContainer configurationContainer,
                                     DependencyFactory dependencyFactory,
@@ -71,27 +94,26 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
                                     DependencyConstraintHandler dependencyConstraintHandler,
                                     ComponentMetadataHandler componentMetadataHandler,
                                     ComponentModuleMetadataHandler componentModuleMetadataHandler,
-//                                    ArtifactResolutionQueryFactory resolutionQueryFactory,
+                                    ArtifactResolutionQueryFactory resolutionQueryFactory,
                                     AttributesSchema attributesSchema,
                                     VariantTransformRegistry transforms,
                                     Factory<ArtifactTypeContainer> artifactTypeContainer,
-                                    ObjectFactory objects
-//                                    PlatformSupport platformSupport
-    ) {
+                                    ObjectFactory objects,
+                                    PlatformSupport platformSupport) {
         this.configurationContainer = configurationContainer;
         this.dependencyFactory = dependencyFactory;
         this.projectFinder = projectFinder;
         this.dependencyConstraintHandler = dependencyConstraintHandler;
         this.componentMetadataHandler = componentMetadataHandler;
         this.componentModuleMetadataHandler = componentModuleMetadataHandler;
-//        this.resolutionQueryFactory = resolutionQueryFactory;
+        this.resolutionQueryFactory = resolutionQueryFactory;
         this.attributesSchema = attributesSchema;
         this.transforms = transforms;
         this.artifactTypeContainer = artifactTypeContainer;
         this.objects = objects;
-//        this.platformSupport = platformSupport;
+        this.platformSupport = platformSupport;
         configureSchema();
-//        dynamicMethods = new DynamicAddDependencyMethods(configurationContainer, new DirectDependencyAdder());
+        dynamicMethods = new DynamicAddDependencyMethods(configurationContainer, new DirectDependencyAdder());
     }
 
     @Override
@@ -125,7 +147,6 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
         addProviderConvertible(configurationName, dependencyNotation, Actions.doNothing());
     }
 
-    @SuppressWarnings("ConstantConditions")
     private <U extends ExternalModuleDependency> Closure<Object> closureOf(Action<? super U> configuration) {
         return new Closure<Object>(this, this) {
             @Override
@@ -181,12 +202,12 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
     }
 
     private Dependency doAddProvider(Configuration configuration, Provider<?> dependencyNotation, Closure<?> configureClosure) {
-//        if (dependencyNotation instanceof DefaultValueSourceProviderFactory.ValueSourceProvider) {
-//            Class<? extends ValueSource<?, ?>> valueSourceType = ((DefaultValueSourceProviderFactory.ValueSourceProvider<?, ?>) dependencyNotation).getValueSourceType();
-//            if (valueSourceType.isAssignableFrom(DependencyBundleValueSource.class)) {
-//                return doAddListProvider(configuration, dependencyNotation, configureClosure);
-//            }
-//        }
+        if (dependencyNotation instanceof DefaultValueSourceProviderFactory.ValueSourceProvider) {
+            Class<? extends ValueSource<?, ?>> valueSourceType = ((DefaultValueSourceProviderFactory.ValueSourceProvider<?, ?>) dependencyNotation).getValueSourceType();
+            if (valueSourceType.isAssignableFrom(DependencyBundleValueSource.class)) {
+                return doAddListProvider(configuration, dependencyNotation, configureClosure);
+            }
+        }
         Provider<Dependency> lazyDependency = dependencyNotation.map(mapDependencyProvider(configuration, configureClosure));
         configuration.getDependencies().addLater(lazyDependency);
         // Return null here because we don't want to prematurely realize the dependency
@@ -214,11 +235,10 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
     }
 
     private Dependency doAddConfiguration(Configuration configuration, Configuration dependencyNotation) {
-        Configuration other = dependencyNotation;
-        if (!configurationContainer.contains(other)) {
+        if (!configurationContainer.contains(dependencyNotation)) {
             throw new UnsupportedOperationException("Currently you can only declare dependencies on configurations from the same project.");
         }
-        configuration.extendsFrom(other);
+        configuration.extendsFrom(dependencyNotation);
         return null;
     }
 
@@ -255,8 +275,7 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
 
     @Override
     public MethodAccess getAdditionalMethods() {
-//        return dynamicMethods;
-        throw new UnsupportedOperationException();
+        return dynamicMethods;
     }
 
     @Override
@@ -291,8 +310,7 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
 
     @Override
     public ArtifactResolutionQuery createArtifactResolutionQuery() {
-        throw new UnsupportedOperationException();
-//        return resolutionQueryFactory.createArtifactResolutionQuery();
+        return resolutionQueryFactory.createArtifactResolutionQuery();
     }
 
     @Override
@@ -338,16 +356,15 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
 
     @Override
     public Dependency platform(Object notation) {
-        throw new UnsupportedOperationException();
-//        Dependency dependency = create(notation);
-//        if (dependency instanceof ModuleDependency) {
-//            ModuleDependency moduleDependency = (ModuleDependency) dependency;
-//            moduleDependency.endorseStrictVersions();
-//            platformSupport.addPlatformAttribute(moduleDependency, toCategory(Category.REGULAR_PLATFORM));
-//        } else if (dependency instanceof HasConfigurableAttributes) {
-//            platformSupport.addPlatformAttribute((HasConfigurableAttributes<?>) dependency, toCategory(Category.REGULAR_PLATFORM));
-//        }
-//        return dependency;
+        Dependency dependency = create(notation);
+        if (dependency instanceof ModuleDependency) {
+            ModuleDependency moduleDependency = (ModuleDependency) dependency;
+            moduleDependency.endorseStrictVersions();
+            platformSupport.addPlatformAttribute(moduleDependency, toCategory(Category.REGULAR_PLATFORM));
+        } else if (dependency instanceof HasConfigurableAttributes) {
+            platformSupport.addPlatformAttribute((HasConfigurableAttributes<?>) dependency, toCategory(Category.REGULAR_PLATFORM));
+        }
+        return dependency;
     }
 
     @Override
@@ -360,16 +377,15 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
     @Override
     @SuppressWarnings("deprecation")
     public Dependency enforcedPlatform(Object notation) {
-//        Dependency platformDependency = create(notation);
-//        if (platformDependency instanceof ExternalModuleDependency) {
-//            ExternalModuleDependency externalModuleDependency = (ExternalModuleDependency) platformDependency;
-//            DeprecationLogger.whileDisabled(() -> externalModuleDependency.setForce(true));
-//            platformSupport.addPlatformAttribute(externalModuleDependency, toCategory(Category.ENFORCED_PLATFORM));
-//        } else if (platformDependency instanceof HasConfigurableAttributes) {
-//            platformSupport.addPlatformAttribute((HasConfigurableAttributes<?>) platformDependency, toCategory(Category.ENFORCED_PLATFORM));
-//        }
-//        return platformDependency;
-        throw new UnsupportedOperationException();
+        Dependency platformDependency = create(notation);
+        if (platformDependency instanceof ExternalModuleDependency) {
+            ExternalModuleDependency externalModuleDependency = (ExternalModuleDependency) platformDependency;
+            DeprecationLogger.whileDisabled(() -> externalModuleDependency.setForce(true));
+            platformSupport.addPlatformAttribute(externalModuleDependency, toCategory(Category.ENFORCED_PLATFORM));
+        } else if (platformDependency instanceof HasConfigurableAttributes) {
+            platformSupport.addPlatformAttribute((HasConfigurableAttributes<?>) platformDependency, toCategory(Category.ENFORCED_PLATFORM));
+        }
+        return platformDependency;
     }
 
     @Override
@@ -381,19 +397,18 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
 
     @Override
     public Dependency testFixtures(Object notation) {
-//        Dependency testFixturesDependency = create(notation);
-//        if (testFixturesDependency instanceof ProjectDependency) {
-//            ProjectDependency projectDependency = (ProjectDependency) testFixturesDependency;
-//            projectDependency.capabilities(new ProjectTestFixtures(projectDependency.getDependencyProject()));
-//        } else if (testFixturesDependency instanceof ModuleDependency) {
-//            ModuleDependency moduleDependency = (ModuleDependency) testFixturesDependency;
-//            moduleDependency.capabilities(capabilities -> capabilities.requireCapability(new ImmutableCapability(
-//                moduleDependency.getGroup(),
-//                moduleDependency.getName() + TEST_FIXTURES_CAPABILITY_APPENDIX,
-//                null)));
-//        }
-//        return testFixturesDependency;
-        throw new UnsupportedOperationException();
+        Dependency testFixturesDependency = create(notation);
+        if (testFixturesDependency instanceof ProjectDependency) {
+            ProjectDependency projectDependency = (ProjectDependency) testFixturesDependency;
+            projectDependency.capabilities(new ProjectTestFixtures(projectDependency.getDependencyProject()));
+        } else if (testFixturesDependency instanceof ModuleDependency) {
+            ModuleDependency moduleDependency = (ModuleDependency) testFixturesDependency;
+            moduleDependency.capabilities(capabilities -> capabilities.requireCapability(new ImmutableCapability(
+                moduleDependency.getGroup(),
+                moduleDependency.getName() + TEST_FIXTURES_CAPABILITY_APPENDIX,
+                null)));
+        }
+        return testFixturesDependency;
     }
 
     @Override
@@ -408,8 +423,7 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
         return dependencyProvider.map(dep -> {
             DefaultExternalModuleDependencyVariantSpec spec = objects.newInstance(DefaultExternalModuleDependencyVariantSpec.class, objects, dep);
             variantSpec.execute(spec);
-            throw new UnsupportedOperationException();
-//            return new DefaultMinimalDependencyVariant(dep, spec.attributesAction, spec.capabilitiesMutator, spec.classifier, spec.artifactType);
+            return new DefaultMinimalDependencyVariant(dep, spec.attributesAction, spec.capabilitiesMutator, spec.classifier, spec.artifactType);
         });
     }
 
@@ -431,14 +445,14 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
         return objects.named(Category.class, category);
     }
 
-//    private class DirectDependencyAdder implements DynamicAddDependencyMethods.DependencyAdder<Dependency> {
-//
-//        @Override
-//        @SuppressWarnings("rawtypes")
-//        public Dependency add(Configuration configuration, Object dependencyNotation, @Nullable Closure configureAction) {
-//            return doAdd(configuration, dependencyNotation, configureAction);
-//        }
-//    }
+    private class DirectDependencyAdder implements DynamicAddDependencyMethods.DependencyAdder<Dependency> {
+
+        @Override
+        @SuppressWarnings("rawtypes")
+        public Dependency add(Configuration configuration, Object dependencyNotation, @Nullable Closure configureAction) {
+            return doAdd(configuration, dependencyNotation, configureAction);
+        }
+    }
 
     public static class DefaultExternalModuleDependencyVariantSpec implements ExternalModuleDependencyVariantSpec {
 
@@ -449,7 +463,7 @@ public abstract class DefaultDependencyHandler implements DependencyHandler, Met
         private String classifier;
         private String artifactType;
 
-//        @Inject
+        @Inject
         public DefaultExternalModuleDependencyVariantSpec(ObjectFactory objects, MinimalExternalModuleDependency dep) {
             this.objects = objects;
             this.dep = dep;

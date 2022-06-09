@@ -22,7 +22,7 @@ import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.reflect.Instantiator;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 public class DefaultDomainObjectCollectionFactory implements DomainObjectCollectionFactory {
     private final InstantiatorFactory instantiatorFactory;

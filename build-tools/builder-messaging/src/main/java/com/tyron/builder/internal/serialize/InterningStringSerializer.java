@@ -1,9 +1,6 @@
 package com.tyron.builder.internal.serialize;
 
-import com.tyron.builder.internal.cache.StringInterner;
-import com.tyron.builder.internal.serialize.AbstractSerializer;
-import com.tyron.builder.internal.serialize.Decoder;
-import com.tyron.builder.internal.serialize.Encoder;
+import com.tyron.builder.api.internal.cache.StringInterner;
 
 public class InterningStringSerializer extends AbstractSerializer<String> {
     private final StringInterner stringInterner;

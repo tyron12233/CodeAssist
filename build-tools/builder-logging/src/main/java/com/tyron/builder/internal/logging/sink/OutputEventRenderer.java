@@ -31,7 +31,7 @@ import com.tyron.builder.internal.logging.events.ProgressEvent;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;
 import com.tyron.builder.internal.logging.format.PrettyPrefixedLogHeaderFormatter;
 import com.tyron.builder.internal.logging.StreamBackedStandardOutputListener;
-import com.tyron.builder.internal.logging.StreamingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StreamingStyledTextOutput;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
 import com.tyron.builder.internal.nativeintegration.console.FallbackConsoleMetaData;
 
@@ -320,8 +320,8 @@ public class OutputEventRenderer implements OutputEventListener, LoggingRouter {
         // Then, a pipeline can be added for each listener as required
         synchronized (lock) {
             if (userStdoutListeners == null) {
-                userStdoutListeners = new ListenerBroadcast<StandardOutputListener>(StandardOutputListener.class);
-                userStderrListeners = new ListenerBroadcast<StandardOutputListener>(StandardOutputListener.class);
+                userStdoutListeners = new ListenerBroadcast<>(StandardOutputListener.class);
+                userStderrListeners = new ListenerBroadcast<>(StandardOutputListener.class);
                 final OutputEventListener stdOutChain = new StyledTextOutputBackedRenderer(new StreamingStyledTextOutput(userStdoutListeners.getSource()));
                 final OutputEventListener stdErrChain = new StyledTextOutputBackedRenderer(new StreamingStyledTextOutput(userStderrListeners.getSource()));
                 userListenerChain = new BuildLogLevelFilterRenderer(

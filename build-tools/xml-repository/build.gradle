@@ -12,6 +12,7 @@ dependencies {
     implementation project(path: ':build-tools:manifmerger')
 
     api files('libs/org.eclipse.lemminx-0.11.0-uber.jar')
+    implementation 'xerces:xercesImpl:2.12.2'
     implementation common.commonsLang3
     implementation project(path: ':build-tools:project')
 

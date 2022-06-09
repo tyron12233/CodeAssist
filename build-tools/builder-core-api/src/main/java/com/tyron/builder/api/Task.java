@@ -3,6 +3,8 @@ package com.tyron.builder.api;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.plugins.Convention;
+import com.tyron.builder.api.plugins.ExtensionAware;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;
@@ -16,7 +18,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
-public interface Task extends Comparable<Task> {
+import groovy.lang.Closure;
+
+public interface Task extends Comparable<Task>, ExtensionAware {
 
     String TASK_NAME = "name";
 
@@ -48,6 +52,8 @@ public interface Task extends Comparable<Task> {
             return c.getName();
         }
     }
+
+    void doNotTrackState(String reasonNotToTrackState);
 
     /**
      * Returns the name of this task. This name uniquely identifies the task within its Project
@@ -167,6 +173,15 @@ public interface Task extends Comparable<Task> {
     Task doFirst(Action<? super Task> action);
 
     /**
+     * <p>Adds the given closure to the beginning of this task's action list. The closure is passed this task as a
+     * parameter when executed.</p>
+     *
+     * @param action The action closure to execute.
+     * @return This task.
+     */
+    Task doFirst(Closure action);
+
+    /**
      * <p>Adds the given {@link Action} to the beginning of this task's action list.</p>
      *
      * @param actionName An arbitrary string that is used for logging.
@@ -184,6 +199,15 @@ public interface Task extends Comparable<Task> {
      * @return the task object this method is applied to
      */
     Task doLast(Action<? super Task> action);
+
+    /**
+     * <p>Adds the given closure to the end of this task's action list.  The closure is passed this task as a parameter
+     * when executed.</p>
+     *
+     * @param action The action closure to execute.
+     * @return This task.
+     */
+    Task doLast(Closure action);
 
     /**
      * <p>Adds the given {@link Action} to the end of this task's action list.</p>
@@ -210,6 +234,18 @@ public interface Task extends Comparable<Task> {
      * @param enabled The enabled state of this task (true or false)
      */
     void setEnabled(boolean enabled);
+
+    /**
+     * <p>Returns the {@link Convention} object for this task. A {@link Plugin} can use the convention object to
+     * contribute properties and methods to this task.</p>
+     *
+     * @return The convention object. Never returns null.
+     * @deprecated The concept of conventions is deprecated. Use extensions if possible.
+     * @see ExtensionAware#getExtensions()
+     */
+    @Internal
+    @Deprecated
+    Convention getConvention();
 
     /**
      * Returns the description of this task.

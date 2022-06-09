@@ -1,11 +1,11 @@
 package com.tyron.builder.internal.build;
 
-import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.execution.plan.Node;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.execution.plan.BuildWorkPlan;
+import com.tyron.builder.execution.plan.Node;
+import com.tyron.builder.internal.concurrent.Stoppable;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.function.Function;
 /**
  * Controls the lifecycle of an individual build in the build tree.
  */
-public interface BuildLifecycleController {
+public interface BuildLifecycleController extends Stoppable {
     /**
      * Returns the current state of the mutable model for this build.
      *
@@ -109,7 +109,7 @@ public interface BuildLifecycleController {
 
     interface WorkGraphBuilder {
         /**
-         * Adds requested tasks, as defined in the {@link StartParameter}, and their dependencies to the work graph for this build.
+         * Adds requested tasks, as defined in the {@link com.tyron.builder.StartParameter}, and their dependencies to the work graph for this build.
          */
         void addRequestedTasks();
 

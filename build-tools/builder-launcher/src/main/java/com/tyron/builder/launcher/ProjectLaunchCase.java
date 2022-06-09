@@ -18,12 +18,7 @@ public abstract class ProjectLaunchCase {
         startParameter.setProjectDir(getRootDirectory());
         startParameter.setTaskNames(getTasks());
 
-        launcher = new ProjectLauncher(startParameter, getPluginServiceRegistries()) {
-            @Override
-            public void configure(BuildProject project) {
-                ProjectLaunchCase.this.configure(project);
-            }
-        };
+        launcher = new ProjectLauncher(startParameter);
     }
 
     public void execute() {
