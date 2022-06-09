@@ -55,10 +55,12 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ApkInstaller;
+import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
@@ -257,8 +259,8 @@ public class CompilerService extends Service {
 
     private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
-        startParameter.setVfsVerboseLogging(false);
-        startParameter.setShowStacktrace(ShowStacktrace.INTERNAL_EXCEPTIONS);
+        startParameter.setVfsVerboseLogging(getVerboseVfsLogging());
+        startParameter.setShowStacktrace(getShowStacktrace());
         startParameter.setParallelProjectExecutionEnabled(true);
         startParameter.setConfigurationCache(BuildOption.Value.value(true));
         startParameter.setConfigurationCacheDebug(true);
@@ -266,7 +268,7 @@ public class CompilerService extends Service {
         startParameter.setBuildCacheEnabled(true);
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
-        startParameter.setLogLevel(LogLevel.LIFECYCLE);
+        startParameter.setLogLevel(getLogLevel());
         startParameter.setConsoleOutput(ConsoleOutput.Rich);
         startParameter.setGradleUserHomeDir(new File(getCacheDir(), ".gradle"));
         startParameter.setTaskNames(Collections.singletonList(":app:assemble"));
@@ -276,7 +278,7 @@ public class CompilerService extends Service {
         LoggingManagerInternal loggingManagerInternal =
                 projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
         loggingManagerInternal.captureSystemSources();
-        loggingManagerInternal.attachConsole(AppLogFragment.outputStream, AppLogFragment.errorOutputStream, ConsoleOutput.Rich, new ConsoleMetaData() {
+        loggingManagerInternal.attachConsole(AppLogFragment.outputStream, AppLogFragment.errorOutputStream, ConsoleOutput.Verbose, new ConsoleMetaData() {
             @Override
             public boolean isStdOut() {
                 return true;
@@ -322,6 +324,35 @@ public class CompilerService extends Service {
 
         stopSelf();
         stopForeground(true);
+    }
+
+    private boolean getVerboseVfsLogging() {
+        return ApplicationLoader.getDefaultPreferences().getBoolean(SharedPreferenceKeys.GRADLE_VERBOSE_VFS_LOGGING, false);
+    }
+
+    private ShowStacktrace getShowStacktrace() {
+        String showStacktrace = ApplicationLoader.getDefaultPreferences()
+                .getString(SharedPreferenceKeys.GRADLE_STACKTRACE_MODE, "LIFECYCLE");
+        switch (showStacktrace) {
+            case "ALWAYS": return ShowStacktrace.ALWAYS;
+            case "ALWAYS_FULL": return ShowStacktrace.ALWAYS_FULL;
+            default:
+            case "INTERNAL_EXCEPTIONS": return ShowStacktrace.INTERNAL_EXCEPTIONS;
+        }
+    }
+
+    private LogLevel getLogLevel() {
+        String logLevel = ApplicationLoader.getDefaultPreferences()
+                .getString(SharedPreferenceKeys.GRADLE_LOG_LEVEL, "LIFECYCLE");
+        switch (logLevel) {
+            case "ERROR": return LogLevel.ERROR;
+            case "DEBUG": return LogLevel.DEBUG;
+            case "INFO": return LogLevel.INFO;
+            case "QUIET": return LogLevel.QUIET;
+            case "WARN": return LogLevel.WARN;
+            case "LIFECYCLE":
+            default: return LogLevel.LIFECYCLE;
+        }
     }
 
     private void buildProject(Project project, BuildType type) {
