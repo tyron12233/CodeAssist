@@ -6,6 +6,7 @@ import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.hash.Hashes;
+import com.tyron.common.TestUtil;
 
 import javax.annotation.Nullable;
 import java.util.Map;
@@ -53,6 +54,11 @@ public class ConfigurableClassLoaderHierarchyHasher implements ClassLoaderHierar
                 hasher.putBytes(knownId);
                 return false;
             }
+
+            if (TestUtil.isDalvik() && cl.getClass().getName().equals("java.lang.BootClassLoader")) {
+                return false;
+            }
+
             if (cl instanceof CachingClassLoader || cl instanceof MultiParentClassLoader) {
                 return true;
             }

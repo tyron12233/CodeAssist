@@ -1,9 +1,11 @@
 package com.tyron.builder.internal.classloader;
 
+import com.google.common.hash.HashCode;
 import com.tyron.builder.api.JavaVersion;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
+import com.tyron.builder.internal.hash.Hashes;
 import com.tyron.builder.internal.reflect.JavaMethod;
 import com.tyron.builder.util.GUtil;
 import com.tyron.common.TestUtil;
@@ -25,6 +27,11 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -195,30 +202,34 @@ public abstract class ClassLoaderUtils {
         public <T> Class<T> defineClass(ClassLoader classLoader,
                                         String className,
                                         byte[] classBytes) {
-            File classFile = new File(getDexDir(), className);
+            HashCode hashCode = Hashes.hashBytes(classBytes);
+            File classFolder = new File(getDexDir(), hashCode.toString());
             GUtil.unchecked(() -> {
-                if (classFile.exists()) {
-                    FileUtils.deleteDirectory(classFile);
-                }
-                if (!classFile.mkdir()) {
-                    throw new IOException("Failed to create dex directory");
+                List<String> individualPaths = new ArrayList<>(3);
+
+                File[] dexFiles = classFolder.listFiles(c -> c.getName().endsWith(".dex"));
+
+                if (dexFiles == null || !classFolder.exists()) {
+                    if (!classFolder.mkdir()) {
+                        throw new IOException("Failed to create dex directory");
+                    }
+
+                    Class<?> scriptFactoryClass = Class.forName(SCRIPT_FACTORY_CLASS);
+                    Constructor<?> constructor = scriptFactoryClass.getConstructor(ClassLoader.class);
+                    Object scriptFactory = constructor.newInstance(classLoader);
+                    Method generateDexFile = scriptFactoryClass.getDeclaredMethod("generateDexFile", Path.class, byte[].class);
+                    String paths = (String) generateDexFile.invoke(scriptFactory, classFolder.toPath(), classBytes);
+                    individualPaths.addAll(Arrays.asList(paths.split(File.pathSeparator)));
+                } else {
+                    for (File dexFile : dexFiles) {
+                        individualPaths.add(dexFile.getAbsolutePath());
+                    }
                 }
 
-                Class<?> scriptFactoryClass = Class.forName(SCRIPT_FACTORY_CLASS);
-                Constructor<?> constructor = scriptFactoryClass.getConstructor(ClassLoader.class);
-                Object scriptFactory = constructor.newInstance(classLoader);
-                Method generateDexFile = scriptFactoryClass
-                        .getDeclaredMethod("generateDexFile", Path.class, byte[].class);
-                String paths = (String) generateDexFile.invoke(scriptFactory, classFile.toPath(), classBytes);
-                String[] individualPaths = StringUtils.split(paths, File.pathSeparator);
-
-                Method addDexPath =
-                        classLoader.getClass().getMethod("addDexPath", String.class, Boolean.TYPE);
+                Method addDexPath = classLoader.getClass().getMethod("addDexPath", String.class, Boolean.TYPE);
                 for (String path : individualPaths) {
                     addDexPath.invoke(classLoader, path, true);
                 }
-
-
             });
 
             try {
