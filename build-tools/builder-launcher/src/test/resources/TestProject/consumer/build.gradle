@@ -1,0 +1,14 @@
+import com.tyron.builder.api.tasks.*
+import com.tyron.builder.api.attributes.*
+
+plugins {
+    id "java"
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(path: ':producer')
+}

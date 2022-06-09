@@ -1,13 +1,12 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
+import com.tyron.builder.internal.snapshot.impl.DefaultValueSnapshotter;
+import com.tyron.builder.internal.state.ManagedFactoryRegistry;
 
 public class WorkerSharedUserHomeScopeServices {
 
-//    IsolatableFactory createIsolatableFactory(
-//            ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
-//            ManagedFactoryRegistry managedFactoryRegistry
-//    ) {
-//        return new DefaultIsolatableFactory(classLoaderHierarchyHasher, managedFactoryRegistry);
-//    }
+    DefaultValueSnapshotter createValueSnapshotter(ClassLoaderHierarchyHasher classLoaderHierarchyHasher, ManagedFactoryRegistry managedFactoryRegistry) {
+        return new DefaultValueSnapshotter(classLoaderHierarchyHasher, managedFactoryRegistry);
+    }
 }

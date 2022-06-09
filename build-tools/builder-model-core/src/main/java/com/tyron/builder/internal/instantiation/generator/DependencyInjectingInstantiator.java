@@ -7,8 +7,8 @@ import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.internal.logging.text.TreeFormatter;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.JavaReflectionUtil;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.ServiceLookup;
 
 import org.jetbrains.annotations.NotNull;
 

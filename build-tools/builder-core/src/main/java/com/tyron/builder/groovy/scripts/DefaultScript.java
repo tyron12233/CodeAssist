@@ -17,6 +17,7 @@ import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.api.internal.file.HasScriptServices;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
+import com.tyron.builder.api.internal.model.InstantiatorBackedObjectFactory;
 import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
@@ -29,8 +30,9 @@ import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.reflect.Instantiator;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.TextUriResourceLoader;
+import com.tyron.builder.process.internal.ExecFactory;
 import com.tyron.builder.util.ConfigureUtil;
 
 import java.io.File;
@@ -68,14 +70,11 @@ public abstract class DefaultScript extends BasicScript {
                 FileResolver resolver = fileLookup.getFileResolver(sourceFile.getParentFile());
                 FileCollectionFactory fileCollectionFactoryWithBase = fileCollectionFactory.withResolver(resolver);
                 fileOperations = DefaultFileOperations.createSimple(resolver, fileCollectionFactoryWithBase, services);
-//                processOperations = services.get(ExecFactory.class).forContext(resolver, fileCollectionFactoryWithBase, instantiator, new InstantiatorBackedObjectFactory(instantiator));
+                processOperations = services.get(ExecFactory.class).forContext(resolver, fileCollectionFactoryWithBase, instantiator, new InstantiatorBackedObjectFactory(instantiator));
             } else {
                 fileOperations = DefaultFileOperations.createSimple(fileLookup.getFileResolver(), fileCollectionFactory, services);
-//                processOperations = services.get(ExecFactory.class);
+                processOperations = services.get(ExecFactory.class);
             }
-
-            processOperations = new ProcessOperations() {
-            };
         }
 
         providerFactory = services.get(ProviderFactory.class);

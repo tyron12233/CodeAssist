@@ -4,31 +4,20 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.UnknownProjectException;
-import com.tyron.builder.api.artifacts.Dependency;
-import com.tyron.builder.api.artifacts.ExternalModuleDependency;
-import com.tyron.builder.api.artifacts.MinimalExternalModuleDependency;
-import com.tyron.builder.api.artifacts.dsl.ComponentMetadataHandler;
-import com.tyron.builder.api.artifacts.dsl.ComponentModuleMetadataHandler;
-import com.tyron.builder.api.artifacts.dsl.DependencyConstraintHandler;
+import com.tyron.builder.api.artifacts.ConfigurationContainer;
+import com.tyron.builder.api.artifacts.dsl.ArtifactHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
-import com.tyron.builder.api.artifacts.dsl.ExternalModuleDependencyVariantSpec;
-import com.tyron.builder.api.artifacts.query.ArtifactResolutionQuery;
-import com.tyron.builder.api.artifacts.transform.TransformAction;
-import com.tyron.builder.api.artifacts.transform.TransformParameters;
-import com.tyron.builder.api.artifacts.transform.TransformSpec;
-import com.tyron.builder.api.artifacts.transform.VariantTransform;
-import com.tyron.builder.api.artifacts.type.ArtifactTypeContainer;
-import com.tyron.builder.api.attributes.AttributesSchema;
-import com.tyron.builder.api.initialization.dsl.ScriptHandler;
+import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
+import com.tyron.builder.api.component.SoftwareComponentContainer;
+import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.internal.DynamicObjectAware;
 import com.tyron.builder.api.internal.ProcessOperations;
-import com.tyron.builder.api.internal.artifacts.Module;
+import com.tyron.builder.api.internal.file.DefaultProjectLayout;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerInternal;
@@ -36,12 +25,7 @@ import com.tyron.builder.api.internal.plugins.DefaultObjectConfigurationAction;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
-import com.tyron.builder.api.logging.LoggingManager;
-import com.tyron.builder.api.plugins.ExtensionContainer;
-import com.tyron.builder.api.plugins.ObjectConfigurationAction;
-import com.tyron.builder.api.plugins.PluginContainer;
-import com.tyron.builder.api.plugins.PluginManager;
-import com.tyron.builder.api.provider.ProviderConvertible;
+import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
 import com.tyron.builder.configuration.ScriptPluginFactory;
 import com.tyron.builder.configuration.project.ProjectEvaluator;
@@ -50,6 +34,7 @@ import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.groovy.scripts.ScriptSource;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.deprecation.DeprecationLogger;
@@ -60,15 +45,14 @@ import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.api.internal.file.FileResolver;
 import com.tyron.builder.internal.extensibility.ExtensibleDynamicObject;
-import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.model.ModelContainer;
-import com.tyron.builder.internal.reflect.DirectInstantiator;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.model.RuleBasedPluginListener;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
@@ -77,11 +61,11 @@ import com.tyron.builder.api.plugins.Convention;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.api.provider.Provider;
-import com.tyron.builder.api.reflect.ObjectInstantiationException;
 import com.tyron.builder.api.tasks.WorkResult;
+import com.tyron.builder.model.internal.registry.ModelRegistry;
+import com.tyron.builder.util.Configurable;
 import com.tyron.builder.util.ConfigureUtil;
 import com.tyron.builder.util.Path;
-import com.tyron.builder.internal.extensibility.DefaultConvention;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -129,6 +113,12 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     private Property<Object> status;
     private File buildDir;
     private ListenerBroadcast<ProjectEvaluationListener> evaluationListener = newProjectEvaluationListenerBroadcast();
+    private ConfigurationContainer configurationContainer;
+    private DependencyHandler dependencyHandler;
+    private ArtifactHandler artifactHandler;
+    private final ListenerBroadcast<RuleBasedPluginListener> ruleBasedPluginListenerBroadcast = new ListenerBroadcast<>(RuleBasedPluginListener.class);
+    private boolean preparedForRuleBasedPlugins;
+    private FileResolver fileResolver;
 
     public DefaultProject(String name,
                           @Nullable ProjectInternal parent,
@@ -188,6 +178,30 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     @Override
     public ProjectInternal getRootProject(ProjectInternal referrer) {
         return getCrossProjectModelAccess().access(referrer, rootProject);
+    }
+
+    @Override
+    public ArtifactHandler getArtifacts() {
+        if (artifactHandler == null) {
+            artifactHandler = services.get(ArtifactHandler.class);
+        }
+        return artifactHandler;
+    }
+
+    public void setArtifactHandler(ArtifactHandler artifactHandler) {
+        this.artifactHandler = artifactHandler;
+    }
+
+    @Inject
+    @Override
+    public abstract RepositoryHandler getRepositories();
+
+    @Override
+    public ConfigurationContainer getConfigurations() {
+        if (configurationContainer == null) {
+            configurationContainer = services.get(ConfigurationContainer.class);
+        }
+        return configurationContainer;
     }
 
     @Override
@@ -277,6 +291,11 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
         return loggingManagerInternal;
     }
 
+
+    @Inject
+    @Override
+    public abstract SoftwareComponentContainer getComponents();
+
     @Override
     public StandardOutputCapture getStandardOutputCapture() {
         return getLogging();
@@ -356,12 +375,24 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
     @Override
     public File getProjectDir() {
-        return owner.getProjectDir();
+        return projectDir;
     }
 
     @Override
     @Inject
     public abstract FileOperations getFileOperations();
+
+    @Override
+    @Inject
+    public abstract ProviderFactory getProviders();
+
+    @Override
+    @Inject
+    public abstract ObjectFactory getObjects();
+
+    @Override
+    @Inject
+    public abstract DefaultProjectLayout getLayout();
 
     private FileResolver getProjectFileResolver() {
         FileLookup fileLookup = getServices().get(FileLookup.class);
@@ -417,33 +448,44 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
     @Override
     public ConfigurableFileTree fileTree(Map<String, ?> args) {
-        return null;
+        return getFileOperations().fileTree(args);
     }
 
     @Override
     public FileTree zipTree(Object zipPath) {
-        return null;
+        return getFileOperations().zipTree(zipPath);
     }
 
     @Override
     public FileTree tarTree(Object tarPath) {
-        return null;
+        return getFileOperations().tarTree(tarPath);
     }
 
     @Override
     public <T> Provider<T> provider(Callable<T> value) {
-        return null;
-    }
-
-    @Override
-    public ObjectFactory getObjects() {
-        return getServices().get(ObjectFactory.class);
+        return getProviders().provider(value);
     }
 
     @Override
     public void buildscript(Closure configureClosure) {
         ConfigureUtil.configure(configureClosure, getBuildscript());
     }
+
+    @Override
+    public CopySpec copySpec(Closure closure) {
+        return ConfigureUtil.configure(closure, copySpec());
+    }
+
+    @Override
+    public CopySpec copySpec(Action<? super CopySpec> action) {
+        return Actions.with(copySpec(), action);
+    }
+
+    @Override
+    public CopySpec copySpec() {
+        return getFileOperations().copySpec();
+    }
+
 
     @Override
     public File mkdir(Object path) {
@@ -568,12 +610,36 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
     @Override
     public DependencyHandler getDependencies() {
-        return null;
+        if (dependencyHandler == null) {
+            dependencyHandler = services.get(DependencyHandler.class);
+        }
+        return dependencyHandler;
     }
+
 
     @Override
     public void dependencies(Closure configureClosure) {
-        BUILD_LOGGER.warn("Dependencies block is not yet supported.");
+        ConfigureUtil.configure(configureClosure, getDependencies());
+    }
+
+    @Override
+    public void artifacts(Closure configureClosure) {
+        ConfigureUtil.configure(configureClosure, getArtifacts());
+    }
+
+    @Override
+    public void artifacts(Action<? super ArtifactHandler> configureAction) {
+        configureAction.execute(getArtifacts());
+    }
+
+    @Override
+    public void configurations(Closure configureClosure) {
+        ((Configurable<?>) getConfigurations()).configure(configureClosure);
+    }
+
+    @Override
+    public void repositories(Closure configureClosure) {
+        ConfigureUtil.configure(configureClosure, getRepositories());
     }
 
     @Inject
@@ -835,11 +901,8 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public DependencyMetaDataProvider getDependencyMetaDataProvider() {
-        return () -> {
-            throw new UnsupportedOperationException();
-        };
-    }
+    @Inject
+    public abstract DependencyMetaDataProvider getDependencyMetaDataProvider();
 
     @Override
     public GradleInternal getGradle() {
@@ -869,13 +932,34 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
     @Override
     public void addDeferredConfiguration(Runnable configuration) {
-
+        getDeferredProjectConfiguration().add(configuration);
     }
 
     @Override
-    public PluginManagerInternal getPluginManager() {
-        return services.get(PluginManagerInternal.class);
+    public void addRuleBasedPluginListener(RuleBasedPluginListener listener) {
+        if (preparedForRuleBasedPlugins) {
+            listener.prepareForRuleBasedPlugins(this);
+        } else {
+            ruleBasedPluginListenerBroadcast.add(listener);
+        }
     }
+
+    @Override
+    public void prepareForRuleBasedPlugins() {
+        if (!preparedForRuleBasedPlugins) {
+            preparedForRuleBasedPlugins = true;
+            ruleBasedPluginListenerBroadcast.getSource().prepareForRuleBasedPlugins(this);
+        }
+    }
+
+    @Inject
+    @Override
+    public abstract ModelRegistry getModelRegistry();
+
+    @Inject
+    @Override
+    public abstract PluginManagerInternal getPluginManager();
+
 
     @Override
     protected DefaultObjectConfigurationAction createObjectConfigurationAction() {
@@ -890,8 +974,12 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
         return services.get(ConfigurationTargetIdentifier.class);
     }
 
-    protected FileResolver getFileResolver() {
-        return services.get(FileResolver.class);
+    @Override
+    public FileResolver getFileResolver() {
+        if (fileResolver == null) {
+            fileResolver = services.get(FileResolver.class);
+        }
+        return fileResolver;
     }
 
     protected ScriptPluginFactory getScriptPluginFactory() {
@@ -900,6 +988,14 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
     protected ScriptHandlerFactory getScriptHandlerFactory() {
         return services.get(ScriptHandlerFactory.class);
+    }
+
+    @Inject
+    protected abstract DeferredProjectConfiguration getDeferredProjectConfiguration();
+
+    @Override
+    public void fireDeferredConfiguration() {
+        getDeferredProjectConfiguration().fire();
     }
 
     @Inject

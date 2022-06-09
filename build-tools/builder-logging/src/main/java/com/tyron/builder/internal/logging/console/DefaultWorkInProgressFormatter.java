@@ -18,7 +18,7 @@ public class DefaultWorkInProgressFormatter {
     public List<StyledTextOutputEvent.Span> format(ProgressOperation op) {
         StringBuilder builder = new StringBuilder();
         ProgressOperation current = op;
-        while (current != null && !"org.gradle.internal.progress.BuildProgressLogger".equals(current.getCategory())) {
+        while (current != null && !"com.tyron.builder.internal.progress.BuildProgressLogger".equals(current.getCategory())) {
             String message = current.getMessage();
             current = current.getParent();
 

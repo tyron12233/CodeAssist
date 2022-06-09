@@ -1,6 +1,6 @@
 package com.tyron.builder.configurationcache;
 
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistration;
 import com.tyron.builder.internal.service.scopes.AbstractPluginServiceRegistry;
 
 public class ConfigurationCacheServices extends AbstractPluginServiceRegistry {

@@ -1,7 +1,7 @@
 package com.tyron.builder.groovy.scripts;
 
 import com.tyron.builder.internal.logging.StandardOutputCapture;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 /**
  * The base class for all scripts executed by Gradle.

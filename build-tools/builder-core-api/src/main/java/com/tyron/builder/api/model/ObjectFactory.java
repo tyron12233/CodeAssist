@@ -1,12 +1,16 @@
 package com.tyron.builder.api.model;
 
+import com.tyron.builder.api.ExtensiblePolymorphicDomainObjectContainer;
 import com.tyron.builder.api.Named;
+import com.tyron.builder.api.NamedDomainObjectContainer;
+import com.tyron.builder.api.NamedDomainObjectFactory;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.Directory;
 import com.tyron.builder.api.file.DirectoryProperty;
 import com.tyron.builder.api.file.RegularFile;
 import com.tyron.builder.api.file.RegularFileProperty;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
+import com.tyron.builder.api.file.SourceDirectorySet;
 import com.tyron.builder.internal.service.scopes.Scope;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
 import com.tyron.builder.api.provider.ListProperty;
@@ -78,7 +82,7 @@ public interface ObjectFactory {
      * @param displayName A human consumable display name for the set.
      * @since 5.0
      */
-//    SourceDirectorySet sourceDirectorySet(String name, String displayName);
+    SourceDirectorySet sourceDirectorySet(String name, String displayName);
 
     /**
      * Creates a new {@link ConfigurableFileCollection}. The collection is initially empty.
@@ -110,7 +114,7 @@ public interface ObjectFactory {
      * @return The container. Never returns null.
      * @since 5.5
      */
-//    <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType);
+    <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType);
 
     /**
      * <p>Creates a new {@link NamedDomainObjectContainer} for managing named objects of the specified type. The given factory is used to create object instances.</p>
@@ -123,7 +127,7 @@ public interface ObjectFactory {
      * @return The container. Never returns null.
      * @since 5.5
      */
-//    <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType, NamedDomainObjectFactory<T> factory);
+    <T> NamedDomainObjectContainer<T> domainObjectContainer(Class<T> elementType, NamedDomainObjectFactory<T> factory);
 
     /**
      * <p>Creates a new {@link ExtensiblePolymorphicDomainObjectContainer} for managing named objects of the specified type.</p>
@@ -135,7 +139,7 @@ public interface ObjectFactory {
      * @return The container.
      * @since 6.1
      */
-//    <T> ExtensiblePolymorphicDomainObjectContainer<T> polymorphicDomainObjectContainer(Class<T> elementType);
+    <T> ExtensiblePolymorphicDomainObjectContainer<T> polymorphicDomainObjectContainer(Class<T> elementType);
 
     /**
      * Creates a new {@link DomainObjectSet} for managing objects of the specified type.

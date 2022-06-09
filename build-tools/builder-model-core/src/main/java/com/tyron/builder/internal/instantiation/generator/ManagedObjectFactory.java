@@ -1,7 +1,6 @@
 package com.tyron.builder.internal.instantiation.generator;
 
 import com.tyron.builder.api.Describable;
-import com.tyron.builder.api.DomainObjectSet;
 import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.DirectoryProperty;
@@ -14,7 +13,7 @@ import com.tyron.builder.api.provider.SetProperty;
 import com.tyron.builder.internal.DisplayName;
 import com.tyron.builder.internal.instantiation.InstanceGenerator;
 import com.tyron.builder.internal.instantiation.PropertyRoleAnnotationHandler;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceLookup;
 import com.tyron.builder.internal.serialization.Cached;
 import com.tyron.builder.internal.state.ModelObject;
 import com.tyron.builder.internal.state.OwnerAware;

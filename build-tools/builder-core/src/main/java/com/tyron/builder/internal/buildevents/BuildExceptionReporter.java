@@ -11,7 +11,7 @@ import com.tyron.builder.internal.exceptions.ContextAwareException;
 import com.tyron.builder.util.GUtil;
 import com.tyron.builder.internal.exceptions.ExceptionContextVisitor;
 import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
-import com.tyron.builder.api.internal.exceptions.StyledException;
+import com.tyron.builder.internal.exceptions.StyledException;
 import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.internal.logging.text.LinePrefixingStyledTextOutput;
 import com.tyron.builder.internal.logging.text.BufferingStyledTextOutput;

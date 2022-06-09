@@ -22,7 +22,6 @@ import com.tyron.builder.api.internal.plugins.PluginInspector;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
 import com.tyron.builder.plugin.management.internal.InvalidPluginRequestException;
 import com.tyron.builder.plugin.management.internal.PluginRequestInternal;
-import com.tyron.builder.plugin.management.internal.autoapply.AutoAppliedGradleEnterprisePlugin;
 import com.tyron.builder.plugin.use.PluginId;
 
 public class AlreadyOnClasspathPluginResolver implements PluginResolver {
@@ -46,19 +45,26 @@ public class AlreadyOnClasspathPluginResolver implements PluginResolver {
         if (isCorePlugin(pluginId) || !isPresentOnClasspath(pluginId)) {
             delegate.resolve(pluginRequest, result);
         } else if (pluginRequest.getOriginalRequest().getVersion() != null) {
-            if (pluginRequest.getId().equals(AutoAppliedGradleEnterprisePlugin.BUILD_SCAN_PLUGIN_ID)) {
-                if (isPresentOnClasspath(AutoAppliedGradleEnterprisePlugin.ID)) {
-                    // The JAR that contains the enterprise plugin also contains the build scan plugin.
-                    // If the user is in the process of migrating to Gradle 6 and has not yet moved away from the scan plugin,
-                    // they might hit this scenario when running with --scan as that will have auto applied the new plugin.
-                    // Instead of a generic failure, we provide more specific feedback to help people upgrade.
-                    // We use the same message the user would have seen if they didn't use --scan and trigger the auto apply.
-                    throw new InvalidPluginRequestException(pluginRequest,
-                        "The build scan plugin is not compatible with this version of Gradle.\n"
-                            + "Please see https://gradle.com/help/gradle-6-build-scan-plugin for more information."
-                    );
-                }
-            }
+//            if (pluginRequest.getId().equals(AutoAppliedGradleEnterprisePlugin
+//            .BUILD_SCAN_PLUGIN_ID)) {
+//                if (isPresentOnClasspath(AutoAppliedGradleEnterprisePlugin.ID)) {
+//                    // The JAR that contains the enterprise plugin also contains the build scan
+//                    plugin.
+//                    // If the user is in the process of migrating to Gradle 6 and has not yet
+//                    moved away from the scan plugin,
+//                    // they might hit this scenario when running with --scan as that will have
+//                    auto applied the new plugin.
+//                    // Instead of a generic failure, we provide more specific feedback to help
+//                    people upgrade.
+//                    // We use the same message the user would have seen if they didn't use
+//                    --scan and trigger the auto apply.
+//                    throw new InvalidPluginRequestException(pluginRequest,
+//                        "The build scan plugin is not compatible with this version of Gradle.\n"
+//                            + "Please see https://gradle.com/help/gradle-6-build-scan-plugin
+//                            for more information."
+//                    );
+//                }
+//            }
             throw new InvalidPluginRequestException(pluginRequest, "Plugin request for plugin already on the classpath must not include a version");
         } else {
             resolveAlreadyOnClasspath(pluginId, result);

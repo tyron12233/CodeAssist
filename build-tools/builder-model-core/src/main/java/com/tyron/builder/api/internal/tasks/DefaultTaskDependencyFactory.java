@@ -1,7 +1,5 @@
 package com.tyron.builder.api.internal.tasks;
 
-import com.tyron.builder.api.tasks.TaskResolver;
-
 import org.jetbrains.annotations.Nullable;
 
 public class DefaultTaskDependencyFactory implements TaskDependencyFactory {

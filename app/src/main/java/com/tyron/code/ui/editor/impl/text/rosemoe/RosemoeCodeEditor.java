@@ -4,6 +4,8 @@ import android.content.Context;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.lifecycle.ViewModelStore;
+import androidx.lifecycle.ViewModelStoreOwner;
 
 import com.tyron.editor.Content;
 import com.tyron.fileeditor.api.FileDocumentManager;
@@ -86,10 +88,10 @@ public class RosemoeCodeEditor implements TextEditor {
         return Objects.hash(mFile);
     }
 
-    private static RosemoeEditorFacade createEditor(Context context, FileObject file) {
+    private RosemoeEditorFacade createEditor(Context context, FileObject file) {
         try {
             Content content = FileDocumentManager.getInstance().getContent(file);
-            return new RosemoeEditorFacade(context, content, file);
+            return new RosemoeEditorFacade(this, context, content, file);
         } catch (FileSystemException e) {
             throw new RuntimeException(e);
         }

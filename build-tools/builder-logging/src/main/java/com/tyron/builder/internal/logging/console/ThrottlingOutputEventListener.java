@@ -27,7 +27,7 @@ public class ThrottlingOutputEventListener implements OutputEventListener {
     private final List<OutputEvent> queue = new ArrayList<OutputEvent>();
 
     public ThrottlingOutputEventListener(OutputEventListener listener, Clock clock) {
-        this(listener, Integer.getInteger("org.gradle.internal.console.throttle", 100), Executors.newSingleThreadScheduledExecutor(), clock);
+        this(listener, Integer.getInteger("com.tyron.builder.internal.console.throttle", 100), Executors.newSingleThreadScheduledExecutor(), clock);
     }
 
     ThrottlingOutputEventListener(OutputEventListener listener, int throttleMs, ScheduledExecutorService executor, Clock clock) {

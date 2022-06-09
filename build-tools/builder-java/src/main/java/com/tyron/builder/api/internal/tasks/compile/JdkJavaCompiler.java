@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
+import com.tyron.builder.api.JavaVersion;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.api.internal.tasks.compile.processing.AnnotationProcessorDeclaration;
@@ -16,6 +17,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import javax.inject.Inject;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
@@ -26,7 +28,7 @@ public class JdkJavaCompiler implements Compiler<JavaCompileSpec>, Serializable 
     private static final Logger LOGGER = LoggerFactory.getLogger(JdkJavaCompiler.class);
     private final Factory<JavaCompiler> javaHomeBasedJavaCompilerFactory;
 
-//    @Inject
+    @Inject
     public JdkJavaCompiler(Factory<JavaCompiler> javaHomeBasedJavaCompilerFactory) {
         this.javaHomeBasedJavaCompilerFactory = javaHomeBasedJavaCompilerFactory;
     }
@@ -51,7 +53,7 @@ public class JdkJavaCompiler implements Compiler<JavaCompileSpec>, Serializable 
         Charset charset = compileOptions.getEncoding() != null ? Charset.forName(compileOptions.getEncoding()) : null;
         StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(null, null, charset);
         Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromFiles(spec.getSourceFiles());
-        boolean hasEmptySourcepaths = false; //JavaVersion.current().isJava9Compatible() && emptySourcepathIn(options);
+        boolean hasEmptySourcepaths = JavaVersion.current().isJava9Compatible() && emptySourcepathIn(options);
         JavaFileManager fileManager = GradleStandardJavaFileManager
                 .wrap(standardFileManager, DefaultClassPath
                 .of(spec.getAnnotationProcessorPath()), hasEmptySourcepaths);

@@ -1,8 +1,6 @@
 package com.tyron.builder.internal.deprecation;
 
-import static com.tyron.builder.api.internal.DocumentationRegistry.*;
-
-import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.util.GradleVersion;
 
 class DeprecationTimeline {
     private final String messagePattern;
@@ -22,7 +20,9 @@ class DeprecationTimeline {
     }
 
     static DeprecationTimeline behaviourWillBeRemovedInVersion(GradleVersion version) {
-        return new DeprecationTimeline("This behaviour has been deprecated and is scheduled to be removed in %s.", version);
+        return new DeprecationTimeline(
+                "This behaviour has been deprecated and is scheduled to be removed in %s.",
+                version);
     }
 
     @Override

@@ -79,8 +79,8 @@ public abstract class FeatureUsage {
             className.startsWith("sun.") ||
             className.startsWith("com.sun.") ||
             className.startsWith("org.codehaus.groovy.") ||
-            className.startsWith("org.gradle.internal.metaobject.") ||
-            className.startsWith("org.gradle.kotlin.dsl.execution.");
+            className.startsWith("com.tyron.builder.internal.metaobject.") ||
+            className.startsWith("com.tyron.builder.kotlin.dsl.execution.");
     }
 
     public String formattedMessage() {

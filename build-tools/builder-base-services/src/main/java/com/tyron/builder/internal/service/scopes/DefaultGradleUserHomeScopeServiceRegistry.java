@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceRegistryBuilder;
+import com.tyron.builder.internal.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistryBuilder;
 import com.tyron.builder.initialization.GradleUserHomeDirProvider;
 
 import java.io.Closeable;

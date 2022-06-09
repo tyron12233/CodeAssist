@@ -1,11 +1,11 @@
 package com.tyron.builder.internal.deprecation;
 
 import com.google.common.base.Joiner;
-import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.DocumentationRegistry.GradleVersion;
+import com.tyron.builder.util.GradleVersion;
+
+import java.util.List;
 
 import javax.annotation.CheckReturnValue;
-import java.util.List;
 
 @CheckReturnValue
 public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
@@ -75,7 +75,8 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
     }
 
     DeprecationMessage build() {
-        return new DeprecationMessage(summary, deprecationTimeline.toString(), advice, context, documentation, usageType);
+        return new DeprecationMessage(summary, deprecationTimeline.toString(), advice, context,
+                documentation, usageType);
     }
 
     public static class WithDeprecationTimeline {
@@ -86,7 +87,8 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
         }
 
         /**
-         * Allows proceeding to terminal {@link WithDocumentation#nagUser()} operation without including any documentation reference.
+         * Allows proceeding to terminal {@link WithDocumentation#nagUser()} operation without
+         * including any documentation reference.
          * Consider using one of the documentation providing methods instead.
          */
         public WithDocumentation undocumented() {
@@ -120,7 +122,8 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
         /**
          * Output: Consult the upgrading guide for further information: UPGRADE_GUIDE_URL
          */
-        public WithDocumentation withUpgradeGuideSection(int majorVersion, String upgradeGuideSection) {
+        public WithDocumentation withUpgradeGuideSection(int majorVersion,
+                                                         String upgradeGuideSection) {
             builder.setDocumentation(Documentation.upgradeGuide(majorVersion, upgradeGuideSection));
             return new WithDocumentation(builder);
         }
@@ -151,7 +154,7 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
 
         /**
          * Constructs advice message based on the context.
-         *
+         * <p>
          * deprecateProperty: Please use the ${replacement} property instead.
          * deprecateMethod/deprecateInvocation: Please use the ${replacement} method instead.
          * deprecatePlugin: Please use the ${replacement} plugin instead.
@@ -184,7 +187,8 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
         }
     }
 
-    public static class DeprecateNamedParameter extends WithReplacement<String, DeprecateNamedParameter> {
+    public static class DeprecateNamedParameter extends WithReplacement<String,
+            DeprecateNamedParameter> {
 
         DeprecateNamedParameter(String parameter) {
             super(parameter);
@@ -250,7 +254,8 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
         }
     }
 
-    public static class DeprecateSystemProperty extends WithReplacement<String, DeprecateSystemProperty> {
+    public static class DeprecateSystemProperty extends WithReplacement<String,
+            DeprecateSystemProperty> {
         private final String systemProperty;
 
         DeprecateSystemProperty(String systemProperty) {
@@ -285,23 +290,28 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
         }
 
         public DeprecateConfiguration forArtifactDeclaration() {
-            return new DeprecateConfiguration(configuration, ConfigurationDeprecationType.ARTIFACT_DECLARATION);
+            return new DeprecateConfiguration(configuration,
+                    ConfigurationDeprecationType.ARTIFACT_DECLARATION);
         }
 
         public DeprecateConfiguration forConsumption() {
-            return new DeprecateConfiguration(configuration, ConfigurationDeprecationType.CONSUMPTION);
+            return new DeprecateConfiguration(configuration,
+                    ConfigurationDeprecationType.CONSUMPTION);
         }
 
         public DeprecateConfiguration forDependencyDeclaration() {
-            return new DeprecateConfiguration(configuration, ConfigurationDeprecationType.DEPENDENCY_DECLARATION);
+            return new DeprecateConfiguration(configuration,
+                    ConfigurationDeprecationType.DEPENDENCY_DECLARATION);
         }
 
         public DeprecateConfiguration forResolution() {
-            return new DeprecateConfiguration(configuration, ConfigurationDeprecationType.RESOLUTION);
+            return new DeprecateConfiguration(configuration,
+                    ConfigurationDeprecationType.RESOLUTION);
         }
     }
 
-    public static class DeprecateConfiguration extends WithReplacement<List<String>, DeprecateConfiguration> {
+    public static class DeprecateConfiguration extends WithReplacement<List<String>,
+            DeprecateConfiguration> {
         private final ConfigurationDeprecationType deprecationType;
 
         DeprecateConfiguration(String configuration, ConfigurationDeprecationType deprecationType) {
@@ -314,12 +324,14 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
 
         @Override
         String formatSummary(String configuration) {
-            return String.format("The %s configuration has been deprecated for %s.", configuration, deprecationType.displayName());
+            return String.format("The %s configuration has been deprecated for %s.", configuration,
+                    deprecationType.displayName());
         }
 
         @Override
         String formatAdvice(List<String> replacements) {
-            return String.format("Please %s the %s configuration instead.", deprecationType.usage, Joiner.on(" or ").join(replacements));
+            return String.format("Please %s the %s configuration instead.", deprecationType.usage,
+                    Joiner.on(" or ").join(replacements));
         }
     }
 
@@ -396,7 +408,9 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
 
         @Override
         String formatSummary(String type) {
-            return String.format("The task type %s (used by the %s task) has been deprecated.", type, path);
+            return String
+                    .format("The task type %s (used by the %s task) has been deprecated.", type,
+                            path);
         }
 
         @Override
@@ -420,7 +434,9 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
 
         @Override
         String formatAdvice(String replacement) {
-            return externalReplacement ? String.format("Consider using the %s plugin instead.", replacement) : String.format("Please use the %s plugin instead.", replacement);
+            return externalReplacement ? String
+                    .format("Consider using the %s plugin instead.", replacement) : String
+                    .format("Please use the %s plugin instead.", replacement);
         }
 
         /**

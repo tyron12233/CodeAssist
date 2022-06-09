@@ -9,6 +9,7 @@ import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.file.CompositeFileCollection;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileCollectionInternal;
+import com.tyron.builder.api.internal.tasks.properties.GetOutputFilesVisitor;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertySpec;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertyType;
 import com.tyron.builder.api.internal.tasks.properties.OutputFilesCollector;
@@ -21,6 +22,8 @@ import com.tyron.builder.api.internal.TaskOutputsInternal;
 import com.tyron.builder.util.Predicates;
 
 import java.io.File;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -34,6 +37,8 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
     private final PropertyWalker propertyWalker;
     private FileCollection previousOutputFiles;
     private Predicate<TaskInternal> upToDateSpec = Predicates.satisfyNone();
+    private final List<Predicate<? super TaskInternal>> cacheIfSpecs = new LinkedList<>();
+    private final List<Predicate<? super TaskInternal>> doNotCacheIfSpecs = new LinkedList<>();
     private final FileCollectionFactory fileCollectionFactory;
     private final FilePropertyContainer<TaskOutputFilePropertyRegistration> registeredFileProperties = FilePropertyContainer.create();
     private final TaskInternal task;
@@ -60,12 +65,17 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
 
     @Override
     public void cacheIf(Predicate<? super Task> spec) {
-
+        cacheIfSpecs.add(spec);
     }
 
     @Override
     public void cacheIf(String cachingEnabledReason, Predicate<? super Task> spec) {
+        cacheIfSpecs.add(spec);
+    }
 
+    @Override
+    public void doNotCacheIf(String cachingDisabledReason, Predicate<? super Task> spec) {
+        doNotCacheIfSpecs.add(spec);
     }
 
     @Override
@@ -88,9 +98,6 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
         OutputFilesCollector collector = new OutputFilesCollector();
         TaskPropertyUtils.visitProperties(propertyWalker, task, new OutputUnpacker(task.toString(), fileCollectionFactory, false, false, collector));
         return collector.getFileProperties();
-//        GetOutputFilesVisitor visitor = new GetOutputFilesVisitor(this.task.toString(), this.fileCollectionFactory, false);
-//        TaskPropertyUtils.visitProperties(this.propertyWalker, this.task, visitor);
-//        return visitor.getFileProperties();
     }
 
     @Override

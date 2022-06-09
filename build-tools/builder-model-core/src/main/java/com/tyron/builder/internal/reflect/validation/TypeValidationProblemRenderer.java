@@ -107,7 +107,7 @@ public class TypeValidationProblemRenderer {
     // (if using "adhoc" tasks) but isn't visible to this
     // class so we have to rely on text matching for now.
     private static boolean shouldRenderType(Class<?> clazz) {
-        return !("org.gradle.api.DefaultTask".equals(clazz.getName()));
+        return !("com.tyron.builder.api.DefaultTask".equals(clazz.getName()));
     }
 
     private static String maybeAppendDot(String txt) {

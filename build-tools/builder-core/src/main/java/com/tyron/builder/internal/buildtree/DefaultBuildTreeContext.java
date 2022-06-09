@@ -3,7 +3,7 @@ package com.tyron.builder.internal.buildtree;
 
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.invocation.BuildAction;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 class DefaultBuildTreeContext implements BuildTreeContext {
     private final ServiceRegistry services;

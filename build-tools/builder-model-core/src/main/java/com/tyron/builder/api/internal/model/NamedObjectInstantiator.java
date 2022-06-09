@@ -6,6 +6,7 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import groovy.lang.GroovyObject;
+
 import com.tyron.builder.api.BuildException;
 import com.tyron.builder.api.Named;
 import com.tyron.builder.api.reflect.ObjectInstantiationException;
@@ -20,6 +21,9 @@ import com.tyron.builder.model.internal.asm.ClassGeneratorSuffixRegistry;
 import com.tyron.builder.model.internal.inspect.FormattingValidationProblemCollector;
 import com.tyron.builder.model.internal.inspect.ValidationProblemCollector;
 import com.tyron.builder.model.internal.type.ModelType;
+import com.tyron.groovy.ScriptCompilationException;
+import com.tyron.groovy.ScriptFactory;
+
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -58,7 +62,14 @@ public class NamedObjectInstantiator implements ManagedFactory {
     private final CrossBuildInMemoryCache<Class<?>, LoadingCache<String, Object>> generatedTypes;
     private final String implSuffix;
     private final String factorySuffix;
-    private final Function<Class<?>, LoadingCache<String, Object>> cacheFactory = type -> CacheBuilder.newBuilder().build(loaderFor(type));
+    private final Function<Class<?>, LoadingCache<String, Object>> cacheFactory =
+            new Function<Class<?>, LoadingCache<String, Object>>() {
+                @Override
+                public LoadingCache<String, Object> apply(Class<?> type) {
+                    return CacheBuilder.newBuilder()
+                            .build(loaderFor(type));
+                }
+            };
 
     public NamedObjectInstantiator(CrossBuildInMemoryCacheFactory cacheFactory) {
         implSuffix = ClassGeneratorSuffixRegistry.assign("$Impl");
@@ -93,6 +104,8 @@ public class NamedObjectInstantiator implements ManagedFactory {
         //
         // Generate implementation class
         //
+
+        ClassLoader target = publicClass.getClassLoader();
 
         FormattingValidationProblemCollector problemCollector = new FormattingValidationProblemCollector("Named implementation class", ModelType.of(publicClass));
         visitFields(publicClass, problemCollector);
@@ -209,13 +222,16 @@ public class NamedObjectInstantiator implements ManagedFactory {
         methodVisitor.visitMaxs(0, 0);
         methodVisitor.visitEnd();
 
-        Class<?> implClass = generator.define();
+        String generatedTypeName = generator.getGeneratedTypeName();
+        byte[] bytes = generator.getVisitor().toByteArray();
 
         //
         // Generate factory class
         //
 
         generator = new AsmClassGenerator(publicClass, factorySuffix);
+        String factoryClassName = generator.getGeneratedTypeName();
+
         visitor = generator.getVisitor();
         visitor.visit(V1_5, ACC_PUBLIC | ACC_SYNTHETIC, generator.getGeneratedType().getInternalName(), null, CLASS_GENERATING_LOADER.getInternalName(), EMPTY_STRINGS);
 
@@ -249,8 +265,17 @@ public class NamedObjectInstantiator implements ManagedFactory {
         methodVisitor.visitEnd();
 
         visitor.visitEnd();
-        Class<Object> factoryClass = generator.define();
+
+        byte[] factoryBytes = generator.getVisitor().toByteArray();
+
+        ScriptFactory scriptFactory = new ScriptFactory(publicClass.getClassLoader());
+        ClassLoader classLoader = scriptFactory.defineClassLoader(bytes, factoryBytes);
+
+
         try {
+            Class<?> aClass = classLoader.loadClass(generatedTypeName);
+            Class<?> factoryClass = classLoader.loadClass(factoryClassName);
+
             return (ClassGeneratingLoader) factoryClass.getConstructor().newInstance();
         } catch (Exception e) {
             throw UncheckedException.throwAsUncheckedException(e);

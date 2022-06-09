@@ -1,0 +1,30 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderProcessServices
+    implementation projects.buildTools.builderWorkerProcesses
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderPlatformBase
+    implementation project(path: ':build-tools:builder-reporting')
+
+    implementation projects.common
+    implementation common.commonsLang3
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.apache.ant:ant:1.10.12'
+    implementation 'com.esotericsoftware:kryo:5.3.0'
+
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

@@ -1,8 +1,13 @@
 package com.tyron.builder.cache.internal;
 
-import static com.tyron.builder.api.internal.DocumentationRegistry.*;
+import static org.apache.commons.io.filefilter.FileFilterUtils.directoryFileFilter;
 
-import javax.annotation.Nullable;
+import com.google.common.collect.ImmutableSortedSet;
+import com.tyron.builder.util.GradleVersion;
+
+import org.apache.commons.io.filefilter.FileFilterUtils;
+import org.apache.commons.io.filefilter.RegexFileFilter;
+
 import java.io.File;
 import java.io.FileFilter;
 import java.util.Arrays;
@@ -10,13 +15,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.SortedSet;
 
-import static org.apache.commons.io.filefilter.FileFilterUtils.directoryFileFilter;
-
-import com.google.common.collect.ImmutableSortedSet;
-import com.tyron.builder.api.internal.DocumentationRegistry;
-
-import org.apache.commons.io.filefilter.FileFilterUtils;
-import org.apache.commons.io.filefilter.RegexFileFilter;
+import javax.annotation.Nullable;
 
 public class VersionSpecificCacheDirectoryScanner {
 
@@ -35,7 +34,8 @@ public class VersionSpecificCacheDirectoryScanner {
     }
 
     public SortedSet<VersionSpecificCacheDirectory> getExistingDirectories() {
-        ImmutableSortedSet.Builder<VersionSpecificCacheDirectory> builder = ImmutableSortedSet.naturalOrder();
+        ImmutableSortedSet.Builder<VersionSpecificCacheDirectory> builder =
+                ImmutableSortedSet.naturalOrder();
         for (File subDir : listVersionSpecificCacheDirs()) {
             GradleVersion version = tryParseGradleVersion(subDir);
             if (version != null) {
@@ -46,7 +46,8 @@ public class VersionSpecificCacheDirectoryScanner {
     }
 
     private Collection<File> listVersionSpecificCacheDirs() {
-        FileFilter combinedFilter = FileFilterUtils.and(directoryFileFilter(), new RegexFileFilter("^\\d.*"));
+        FileFilter combinedFilter =
+                FileFilterUtils.and(directoryFileFilter(), new RegexFileFilter("^\\d.*"));
         File[] result = baseDir.listFiles(combinedFilter);
         return result == null ? Collections.<File>emptySet() : Arrays.asList(result);
     }

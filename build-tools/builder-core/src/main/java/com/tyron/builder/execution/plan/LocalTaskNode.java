@@ -2,34 +2,30 @@ package com.tyron.builder.execution.plan;
 
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.internal.ImmutableActionSet;
 import com.tyron.builder.api.internal.TaskInternal;
-import com.tyron.builder.internal.execution.WorkValidationContext;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.internal.resources.ResourceLock;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
-import com.tyron.builder.api.tasks.TaskExecutionException;
 import com.tyron.builder.api.internal.tasks.properties.DefaultTaskProperties;
-import com.tyron.builder.api.internal.tasks.properties.OutputFilePropertySpec;
 import com.tyron.builder.api.internal.tasks.properties.PropertyWalker;
 import com.tyron.builder.api.internal.tasks.properties.TaskProperties;
-
-import java.io.File;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import com.tyron.builder.api.tasks.TaskExecutionException;
+import com.tyron.builder.internal.ImmutableActionSet;
+import com.tyron.builder.internal.execution.WorkValidationContext;
+import com.tyron.builder.internal.resources.ResourceLock;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 import javax.annotation.Nullable;
+import java.io.File;
+import java.util.List;
+import java.util.Set;
 
-public class LocalTaskNode extends TaskNode  {
-
+/**
+ * A {@link TaskNode} implementation for a task in the current build.
+ */
+public class LocalTaskNode extends TaskNode {
     private final TaskInternal task;
     private final WorkValidationContext validationContext;
-    private final ResolveMutationsNode resolveMutationsNode;
     private ImmutableActionSet<Task> postAction = ImmutableActionSet.empty();
     private Set<Node> lifecycleSuccessors;
 
@@ -37,24 +33,9 @@ public class LocalTaskNode extends TaskNode  {
     private List<? extends ResourceLock> resourceLocks;
     private TaskProperties taskProperties;
 
-    public LocalTaskNode(TaskInternal task, NodeValidator nodeValidator, WorkValidationContext workValidationContext) {
+    public LocalTaskNode(TaskInternal task, WorkValidationContext workValidationContext) {
         this.task = task;
         this.validationContext = workValidationContext;
-        resolveMutationsNode = new ResolveMutationsNode(this, nodeValidator);
-    }
-
-    public WorkValidationContext getValidationContext() {
-        return validationContext;
-    }
-
-    @Override
-    public String toString() {
-        return task.toString();
-    }
-
-    @Override
-    public ImmutableActionSet<Task> getPostAction() {
-        return postAction;
     }
 
     /**
@@ -64,14 +45,8 @@ public class LocalTaskNode extends TaskNode  {
         isolated = true;
     }
 
-    @Override
-    public TaskInternal getTask() {
-        return task;
-    }
-
-    @Override
-    public boolean isPublicNode() {
-        return true;
+    public WorkValidationContext getValidationContext() {
+        return validationContext;
     }
 
     @Nullable
@@ -88,6 +63,7 @@ public class LocalTaskNode extends TaskNode  {
     @Nullable
     @Override
     public ProjectInternal getOwningProject() {
+        // Task requires its owning project's execution services
         return (ProjectInternal) task.getProject();
     }
 
@@ -97,6 +73,20 @@ public class LocalTaskNode extends TaskNode  {
             resourceLocks = task.getSharedResources();
         }
         return resourceLocks;
+    }
+
+    @Override
+    public TaskInternal getTask() {
+        return task;
+    }
+
+    @Override
+    public Action<? super Task> getPostAction() {
+        return postAction;
+    }
+
+    public TaskProperties getTaskProperties() {
+        return taskProperties;
     }
 
     @Override
@@ -115,7 +105,7 @@ public class LocalTaskNode extends TaskNode  {
     }
 
     @Override
-    public void prepareForExecution(Action<Node> monitor) {
+    public void prepareForExecution() {
         ((TaskContainerInternal) task.getProject().getTasks()).prepareForExecution(task);
     }
 
@@ -141,6 +131,11 @@ public class LocalTaskNode extends TaskNode  {
         for (Node targetNode : getShouldRunAfter(dependencyResolver)) {
             addShouldSuccessor(targetNode);
         }
+    }
+
+    @Override
+    public boolean requiresMonitoring() {
+        return false;
     }
 
     private void addFinalizerNode(TaskNode finalizerNode) {
@@ -172,14 +167,15 @@ public class LocalTaskNode extends TaskNode  {
             return getClass().getName().compareTo(other.getClass().getName());
         }
         LocalTaskNode localTask = (LocalTaskNode) other;
-        return Objects.compare(task, localTask.task, Comparator.comparingInt(Object::hashCode));
+        return task.compareTo(localTask.task);
     }
 
     @Override
-    public Node getPrepareNode() {
-        return resolveMutationsNode;
+    public String toString() {
+        return task.getIdentityPath().toString();
     }
 
+    @Override
     public void resolveMutations() {
         final LocalTaskNode taskNode = this;
         final TaskInternal task = getTask();
@@ -190,15 +186,25 @@ public class LocalTaskNode extends TaskNode  {
         PropertyWalker propertyWalker = serviceRegistry.get(PropertyWalker.class);
         try {
             taskProperties = DefaultTaskProperties.resolve(propertyWalker, fileCollectionFactory, task);
-
-            addOutputFilesToMutations(taskProperties.getOutputFileProperties());
-            addLocalStateFilesToMutations(taskProperties.getLocalStateFiles());
-            addDestroyablesToMutations(taskProperties.getDestroyableFiles());
-
+            taskProperties.getOutputFileProperties().forEach(spec -> {
+                File outputLocation = spec.getOutputFile();
+                if (outputLocation != null) {
+                    mutations.outputPaths.add(outputLocation.getAbsolutePath());
+                }
+                mutations.hasOutputs = true;
+            });
+            taskProperties.getLocalStateFiles().forEach(file -> {
+                mutations.outputPaths.add(file.getAbsolutePath());
+                mutations.hasLocalState = true;
+            });
+            taskProperties.getDestroyableFiles()
+                    .forEach(file -> mutations.destroyablePaths.add(file.getAbsolutePath()));
             mutations.hasFileInputs = !taskProperties.getInputFileProperties().isEmpty();
         } catch (Exception e) {
             throw new TaskExecutionException(task, e);
         }
+
+        mutations.resolved = true;
 
         if (!mutations.destroyablePaths.isEmpty()) {
             if (mutations.hasOutputs) {
@@ -213,45 +219,6 @@ public class LocalTaskNode extends TaskNode  {
         }
     }
 
-    private void addOutputFilesToMutations(Set<OutputFilePropertySpec> outputFilePropertySpecs) {
-        final MutationInfo mutations = getMutationInfo();
-        outputFilePropertySpecs.forEach(spec -> {
-            File outputLocation = spec.getOutputFile();
-            if (outputLocation != null) {
-                mutations.outputPaths.add(outputLocation.getAbsolutePath());
-            }
-            mutations.hasOutputs = true;
-        });
-    }
-
-    private void addLocalStateFilesToMutations(FileCollection localStateFiles) {
-        final MutationInfo mutations = getMutationInfo();
-        localStateFiles.forEach(file -> {
-            mutations.outputPaths.add(file.getAbsolutePath());
-            mutations.hasLocalState = true;
-        });
-    }
-
-    private void addDestroyablesToMutations(FileCollection destroyables) {
-        destroyables
-                .forEach(file -> getMutationInfo().destroyablePaths.add(file.getAbsolutePath()));
-    }
-
-
-    @Override
-    public Set<Node> getLifecycleSuccessors() {
-        return lifecycleSuccessors;
-    }
-
-    @Override
-    public void setLifecycleSuccessors(Set<Node> lifecycleSuccessors) {
-        this.lifecycleSuccessors = lifecycleSuccessors;
-    }
-
-    public TaskProperties getTaskProperties() {
-        return taskProperties;
-    }
-
     /**
      * Used to determine whether a {@link Node} consumes the <b>outcome</b> of a successor task vs. its output(s).
      *
@@ -263,3 +230,4 @@ public class LocalTaskNode extends TaskNode  {
         return lifecycleSuccessors.contains(dependency);
     }
 }
+

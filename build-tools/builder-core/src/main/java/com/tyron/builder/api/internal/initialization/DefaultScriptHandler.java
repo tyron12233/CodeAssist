@@ -1,17 +1,22 @@
 package com.tyron.builder.api.internal.initialization;
 
+import com.tyron.builder.api.JavaVersion;
 import com.tyron.builder.api.artifacts.Configuration;
 import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyLockingHandler;
 import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
 import com.tyron.builder.api.attributes.AttributeContainer;
+import com.tyron.builder.api.attributes.Bundling;
 import com.tyron.builder.api.attributes.Category;
 import com.tyron.builder.api.attributes.LibraryElements;
 import com.tyron.builder.api.attributes.Usage;
+import com.tyron.builder.api.attributes.java.TargetJvmVersion;
+import com.tyron.builder.api.attributes.plugin.GradlePluginApiVersion;
 import com.tyron.builder.api.initialization.dsl.ScriptHandler;
 import com.tyron.builder.api.internal.DynamicObjectAware;
 import com.tyron.builder.api.internal.artifacts.DependencyResolutionServices;
+import com.tyron.builder.api.internal.artifacts.JavaEcosystemSupport;
 import com.tyron.builder.api.internal.model.NamedObjectInstantiator;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.Logging;
@@ -22,6 +27,7 @@ import com.tyron.builder.internal.metaobject.BeanDynamicObject;
 import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.resource.ResourceLocation;
 import com.tyron.builder.util.ConfigureUtil;
+import com.tyron.builder.util.GradleVersion;
 
 import java.io.File;
 import java.net.URI;
@@ -57,7 +63,7 @@ public class DefaultScriptHandler implements ScriptHandler, ScriptHandlerInterna
         this.scriptClassPathResolver = scriptClassPathResolver;
         this.instantiator = instantiator;
         this.dependencyLockingHandler = dependencyResolutionServices.getDependencyLockingHandler();
-//        JavaEcosystemSupport.configureSchema(dependencyResolutionServices.getAttributesSchema(), dependencyResolutionServices.getObjectFactory());
+        JavaEcosystemSupport.configureSchema(dependencyResolutionServices.getAttributesSchema(), dependencyResolutionServices.getObjectFactory());
     }
 
     @Override
@@ -121,9 +127,9 @@ public class DefaultScriptHandler implements ScriptHandler, ScriptHandlerInterna
             attributes.attribute(Usage.USAGE_ATTRIBUTE, instantiator.named(Usage.class, Usage.JAVA_RUNTIME));
             attributes.attribute(Category.CATEGORY_ATTRIBUTE, instantiator.named(Category.class, Category.LIBRARY));
             attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, instantiator.named(LibraryElements.class, LibraryElements.JAR));
-//            attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, instantiator.named(Bundling.class, Bundling.EXTERNAL));
-//            attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, Integer.parseInt(JavaVersion.current().getMajorVersion()));
-//            attributes.attribute(GradlePluginApiVersion.GRADLE_PLUGIN_API_VERSION_ATTRIBUTE, instantiator.named(GradlePluginApiVersion.class, GradleVersion.current().getVersion()));
+            attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, instantiator.named(Bundling.class, Bundling.EXTERNAL));
+            attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, Integer.parseInt(JavaVersion.current().getMajorVersion()));
+            attributes.attribute(GradlePluginApiVersion.GRADLE_PLUGIN_API_VERSION_ATTRIBUTE, instantiator.named(GradlePluginApiVersion.class, GradleVersion.current().getVersion()));
         }
     }
 

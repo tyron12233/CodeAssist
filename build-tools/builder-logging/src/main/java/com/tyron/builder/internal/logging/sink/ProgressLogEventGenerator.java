@@ -21,7 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * An {@code org.gradle.logging.internal.OutputEventListener} implementation which generates output events to log the
+ * An {@code com.tyron.builder.logging.internal.OutputEventListener} implementation which generates output events to log the
  * progress of operations.
  */
 public class ProgressLogEventGenerator implements OutputEventListener {

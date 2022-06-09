@@ -33,10 +33,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 
-import dalvik.system.DexFile;
 import kotlin.jvm.functions.Function0;
 
 public class IncrementalKotlinCompiler extends Task<AndroidModule> {

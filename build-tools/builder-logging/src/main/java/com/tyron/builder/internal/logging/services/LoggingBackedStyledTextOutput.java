@@ -22,7 +22,7 @@ public class LoggingBackedStyledTextOutput extends AbstractLineChoppingStyledTex
     private final LogLevel logLevel;
     private final Clock clock;
     private final StringBuilder buffer = new StringBuilder();
-    private List<StyledTextOutputEvent.Span> spans = new ArrayList<StyledTextOutputEvent.Span>();
+    private List<StyledTextOutputEvent.Span> spans = new ArrayList<>();
     private Style style = Style.Normal;
 
     public LoggingBackedStyledTextOutput(OutputEventListener listener, String category, LogLevel logLevel, Clock clock) {

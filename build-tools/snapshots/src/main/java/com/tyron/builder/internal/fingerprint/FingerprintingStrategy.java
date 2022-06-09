@@ -2,6 +2,7 @@ package com.tyron.builder.internal.fingerprint;
 
 
 import com.google.common.hash.HashCode;
+import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 
 import java.util.Map;
@@ -28,6 +29,8 @@ public interface FingerprintingStrategy {
     String getIdentifier();
 
     CurrentFileCollectionFingerprint getEmptyFingerprint();
+
+    String normalizePath(FileSystemLocationSnapshot snapshot);
 
     HashCode getConfigurationHash();
 }

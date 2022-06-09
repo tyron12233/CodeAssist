@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.tyron.builder.api.internal.tasks.compile.processing.AnnotationProcessorDeclaration;
+import com.tyron.builder.api.tasks.compile.CompileOptions;
 
 import java.io.File;
 import java.util.List;
