@@ -59,6 +59,8 @@ configurations.implementation {
 }
 
 dependencies {
+    implementation projects.terminalview
+
     // TODO: Removed these modules, the features that are using these modules
     // should be moved into its own module.
 
@@ -94,6 +96,10 @@ dependencies {
     implementation projects.buildTools.builderConfigurationCache
     implementation projects.buildTools.builderPlugins
     implementation projects.buildTools.builderJava
+    implementation projects.buildTools.builderNative
+    // emulating console
+    implementation 'org.fusesource.jansi:jansi:2.4.0'
+
     implementation project(path: ':build-tools:builder-api')
     implementation project(path: ':build-tools:builder-java')
     implementation project(path: ':build-tools:build-logic')
