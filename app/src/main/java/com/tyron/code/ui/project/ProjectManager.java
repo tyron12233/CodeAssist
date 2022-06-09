@@ -122,78 +122,70 @@ public class ProjectManager {
             logger.warning("Failed to open project: " + exception.getMessage());
         }
 
-        Module module = mCurrentProject.getMainModule();
+//        Module module = mCurrentProject.getMainModule();
+//
+//        if (module instanceof AndroidModule) {
+//            mListener.onTaskStarted("Generating resource files.");
+//
+//            ManifestMergeTask manifestMergeTask =
+//                    new ManifestMergeTask(project, (AndroidModule) module, logger);
+//            IncrementalAapt2Task task =
+//                    new IncrementalAapt2Task(project, (AndroidModule) module, logger, false);
+//            try {
+//                manifestMergeTask.prepare(BuildType.DEBUG);
+//                manifestMergeTask.run();
+//
+//                task.prepare(BuildType.DEBUG);
+//                task.run();
+//            } catch (IOException | CompilationFailedException e) {
+//                logger.warning("Unable to generate resource classes " + e.getMessage());
+//            }
+//        }
+//
+//        if (module instanceof JavaModule) {
+//            if (module instanceof AndroidModule) {
+//                mListener.onTaskStarted("Indexing XML files.");
+//
+//                XmlIndexProvider index = CompilerService.getInstance()
+//                        .getIndex(XmlIndexProvider.KEY);
+//                index.clear();
+//
+//                XmlRepository xmlRepository = index.get(project, module);
+//                try {
+//                    xmlRepository.initialize((AndroidModule) module);
+//                } catch (IOException e) {
+//                    String message = "Unable to initialize resource repository. " +
+//                                     "Resource code completion might be incomplete or unavailable. \n" +
+//                                     "Reason: " + e.getMessage();
+//                    LOG.warning(message);
+//                }
+//            }
+//
+//            mListener.onTaskStarted("Indexing");
+//            try {
+//                JavaCompilerProvider provider = CompilerService.getInstance()
+//                        .getIndex(JavaCompilerProvider.KEY);
+//                JavaCompilerService service = provider.get(project, module);
+//
+//                if (module instanceof AndroidModule) {
+//                    InjectResourcesTask.inject(project, (AndroidModule) module);
+//                    InjectViewBindingTask.inject(project, (AndroidModule) module);
+//                }
+//
+//                JavaModule javaModule = ((JavaModule) module);
+//                Collection<File> files = javaModule.getJavaFiles().values();
+//                File first = CollectionsKt.firstOrNull(files);
+//                if (first != null) {
+//                    service.compile(first.toPath());
+//                }
+//            } catch (Throwable e) {
+//                String message =
+//                        "Failure indexing project.\n" + Throwables.getStackTraceAsString(e);
+//
+//            }
 
-        if (module instanceof JavaModule) {
-            JavaModule javaModule = (JavaModule) module;
-            try {
-                downloadLibraries(javaModule, mListener, logger);
-            } catch (IOException e) {
-                logger.error(e.getMessage());
-            }
-        }
-
-
-        if (module instanceof AndroidModule) {
-            mListener.onTaskStarted("Generating resource files.");
-
-            ManifestMergeTask manifestMergeTask =
-                    new ManifestMergeTask(project, (AndroidModule) module, logger);
-            IncrementalAapt2Task task =
-                    new IncrementalAapt2Task(project, (AndroidModule) module, logger, false);
-            try {
-                manifestMergeTask.prepare(BuildType.DEBUG);
-                manifestMergeTask.run();
-
-                task.prepare(BuildType.DEBUG);
-                task.run();
-            } catch (IOException | CompilationFailedException e) {
-                logger.warning("Unable to generate resource classes " + e.getMessage());
-            }
-        }
-
-        if (module instanceof JavaModule) {
-            if (module instanceof AndroidModule) {
-                mListener.onTaskStarted("Indexing XML files.");
-
-                XmlIndexProvider index = CompilerService.getInstance()
-                        .getIndex(XmlIndexProvider.KEY);
-                index.clear();
-
-                XmlRepository xmlRepository = index.get(project, module);
-                try {
-                    xmlRepository.initialize((AndroidModule) module);
-                } catch (IOException e) {
-                    String message = "Unable to initialize resource repository. " +
-                                     "Resource code completion might be incomplete or unavailable. \n" +
-                                     "Reason: " + e.getMessage();
-                    LOG.warning(message);
-                }
-            }
-
-            mListener.onTaskStarted("Indexing");
-            try {
-                JavaCompilerProvider provider = CompilerService.getInstance()
-                        .getIndex(JavaCompilerProvider.KEY);
-                JavaCompilerService service = provider.get(project, module);
-
-                if (module instanceof AndroidModule) {
-                    InjectResourcesTask.inject(project, (AndroidModule) module);
-                    InjectViewBindingTask.inject(project, (AndroidModule) module);
-                }
-
-                JavaModule javaModule = ((JavaModule) module);
-                Collection<File> files = javaModule.getJavaFiles().values();
-                File first = CollectionsKt.firstOrNull(files);
-                if (first != null) {
-                    service.compile(first.toPath());
-                }
-            } catch (Throwable e) {
-                String message =
-                        "Failure indexing project.\n" + Throwables.getStackTraceAsString(e);
-                mListener.onComplete(project, false, message);
-            }
-        }
+//            mListener.onComplete(project, false, message);
+//        }
 
         mCurrentProject.setIndexing(false);
         mListener.onComplete(project, true, "Index successful");
