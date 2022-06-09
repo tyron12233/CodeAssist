@@ -33,7 +33,33 @@ public class ConsoleConfigureAction {
 //        if (metaData != null) {
 //            return metaData;
 //        }
-        return FallbackConsoleMetaData.NOT_ATTACHED;
+        return new ConsoleMetaData() {
+            @Override
+            public boolean isStdOut() {
+                return true;
+            }
+
+            @Override
+            public boolean isStdErr() {
+                return true;
+            }
+
+            @Override
+            public int getCols() {
+                return 65;
+            }
+
+            @Override
+            public int getRows() {
+                return 56;
+            }
+
+            @Override
+            public boolean isWrapStreams() {
+                return true;
+            }
+        };
+        //return FallbackConsoleMetaData.ATTACHED;
     }
 
     private static void configureAutoConsole(OutputEventRenderer renderer, ConsoleMetaData consoleMetaData, OutputStream stdout, OutputStream stderr) {
@@ -81,7 +107,7 @@ public class ConsoleConfigureAction {
 
     private static Console consoleFor(OutputStream stdout, ConsoleMetaData consoleMetaData, ColorMap colourMap) {
         boolean force = !consoleMetaData.isWrapStreams();
-        OutputStreamWriter outStr = new OutputStreamWriter(force ? stdout : stdout);
+        OutputStreamWriter outStr = new OutputStreamWriter(force ? stdout : AnsiConsoleUtil.wrapOutputStream(stdout));
         return new AnsiConsole(outStr, outStr, colourMap, consoleMetaData, force);
     }
 }

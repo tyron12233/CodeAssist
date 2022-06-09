@@ -1,16 +1,16 @@
 package com.tyron.builder.internal.logging.console;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.tyron.builder.internal.logging.events.OutputEvent;
-import com.tyron.builder.internal.logging.events.OutputEventListener;
-import com.tyron.builder.internal.operations.BuildOperationCategory;
-import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.internal.logging.events.EndOutputEvent;
 import com.tyron.builder.internal.logging.events.FlushOutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.ProgressCompleteEvent;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;
 import com.tyron.builder.internal.logging.events.UpdateNowEvent;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.OperationIdentifier;
 
 import java.util.HashSet;
 import java.util.Set;

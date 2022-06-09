@@ -11,7 +11,7 @@ import com.tyron.builder.internal.logging.LoggingOutputInternal;
 import com.tyron.builder.internal.logging.config.LoggingRouter;
 import com.tyron.builder.internal.logging.config.LoggingSourceSystem;
 import com.tyron.builder.internal.logging.config.LoggingSystem;
-import com.tyron.builder.internal.logging.StreamBackedStandardOutputListener;
+import com.tyron.builder.internal.logging.text.StreamBackedStandardOutputListener;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
 
 import java.io.Closeable;

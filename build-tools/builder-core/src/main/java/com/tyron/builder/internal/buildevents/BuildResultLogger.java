@@ -7,6 +7,7 @@ import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Suc
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.BuildResult;
 import com.tyron.builder.execution.WorkValidationWarningReporter;
+import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.internal.logging.format.DurationFormatter;
 import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
@@ -40,7 +41,7 @@ public class BuildResultLogger {
 
     public void buildFinished(BuildResult result) {
         // Summary of deprecations is considered a part of the build summary
-//        DeprecationLogger.reportSuppressedDeprecations();
+        DeprecationLogger.reportSuppressedDeprecations();
 
         // Summary of validation warnings during the build
         workValidationWarningReporter.reportWorkValidationWarningsAtEndOfBuild();

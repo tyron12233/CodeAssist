@@ -37,10 +37,18 @@ import com.tyron.builder.execution.MultipleBuildFailures;
 import com.tyron.builder.initialization.ReportedException;
 import com.tyron.builder.internal.buildoption.BuildOption;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
+import com.tyron.builder.internal.logging.console.AnsiConsole;
+import com.tyron.builder.internal.logging.console.ColorMap;
+import com.tyron.builder.internal.logging.console.Console;
+import com.tyron.builder.internal.logging.console.DefaultColorMap;
 import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;
 import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
+import com.tyron.builder.internal.logging.sink.OutputEventRenderer;
 import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
+import com.tyron.builder.internal.nativeintegration.console.FallbackConsoleMetaData;
+import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.launcher.ProjectLauncher;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
@@ -49,11 +57,15 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
+import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ApkInstaller;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
 import java.io.File;
+import java.io.Flushable;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 
@@ -246,39 +258,50 @@ public class CompilerService extends Service {
     private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setVfsVerboseLogging(false);
-        startParameter.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
+        startParameter.setShowStacktrace(ShowStacktrace.INTERNAL_EXCEPTIONS);
+        startParameter.setParallelProjectExecutionEnabled(true);
         startParameter.setConfigurationCache(BuildOption.Value.value(true));
         startParameter.setConfigurationCacheDebug(true);
         startParameter.setWarningMode(WarningMode.All);
         startParameter.setBuildCacheEnabled(true);
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
-        startParameter.setLogLevel(LogLevel.INFO);
+        startParameter.setLogLevel(LogLevel.LIFECYCLE);
         startParameter.setConsoleOutput(ConsoleOutput.Rich);
-        startParameter.setGradleUserHomeDir(new File(rootFile, ".gradle"));
+        startParameter.setGradleUserHomeDir(new File(getCacheDir(), ".gradle"));
         startParameter.setTaskNames(Collections.singletonList(":app:assemble"));
 
-        AndroidStyledTextOutput abstractStyledTextOutput = new AndroidStyledTextOutput();
-
-        OutputEventListener outputEventListener = event -> {
-            if (event instanceof ProgressStartEvent) {
-                ProgressStartEvent progressStartEvent = ((ProgressStartEvent) event);
-                log(progressStartEvent.getLogLevel(), progressStartEvent.getDescription());
-            } else if (event instanceof RenderableOutputEvent) {
-                RenderableOutputEvent renderableOutputEvent = (RenderableOutputEvent) event;
-                renderableOutputEvent.render(abstractStyledTextOutput);
-
-                CharSequence contents = abstractStyledTextOutput.getBufferString();
-                log(event.getLogLevel() == null ? LogLevel.LIFECYCLE : event.getLogLevel(), contents);
-            }
-        };
-        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter, outputEventListener);
+        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter, null);
 
         LoggingManagerInternal loggingManagerInternal =
                 projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
-        loggingManagerInternal.addOutputEventListener(outputEventListener);
         loggingManagerInternal.captureSystemSources();
-        loggingManagerInternal.start();
+        loggingManagerInternal.attachConsole(AppLogFragment.outputStream, AppLogFragment.errorOutputStream, ConsoleOutput.Rich, new ConsoleMetaData() {
+            @Override
+            public boolean isStdOut() {
+                return true;
+            }
+
+            @Override
+            public boolean isStdErr() {
+                return true;
+            }
+
+            @Override
+            public int getCols() {
+                return 60;
+            }
+
+            @Override
+            public int getRows() {
+                return 20;
+            }
+
+            @Override
+            public boolean isWrapStreams() {
+                return false;
+            }
+        });
 
         try {
             projectLauncher.execute();
@@ -296,7 +319,6 @@ public class CompilerService extends Service {
         }
 
         loggingManagerInternal.stop();
-        loggingManagerInternal.removeOutputEventListener(outputEventListener);
 
         stopSelf();
         stopForeground(true);
