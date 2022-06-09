@@ -4,52 +4,78 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.Plugin;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.api.file.FileCollection;
 import com.tyron.builder.api.logging.Logger;
+import com.tyron.builder.api.plugins.JavaPlugin;
+import com.tyron.builder.api.specs.Specs;
+import com.tyron.builder.api.tasks.compile.JavaCompile;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.ProjectBuilder;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.plugin.tasks.TransformAnnotationProcessorsTask;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.util.GUtil;
 
+import org.codehaus.groovy.reflection.android.AndroidSupport;
+
+import java.io.File;
 import java.util.Locale;
 
 @SuppressWarnings("Convert2Lambda")
 public class CodeAssistPlugin implements Plugin<BuildProject> {
 
-    private static final String TASK_NAME = "codeAssistAssembleTask";
+    private static final String TRANSFORM_ANNOTATION_PROCESSORS_TASK_NAME = "transformAnnotationProcessors";
 
     @Override
     public void apply(BuildProject project) {
-        CodeAssistPluginExtension extension =
-                project.getExtensions().create("codeAssist", CodeAssistPluginExtension.class);
-        RepositoryExtension repositoryExtension = new RepositoryExtension() {
-            @Override
-            public void maven() {
-                System.out.println("Maven called");
-            }
-        };
-        project.getExtensions().add("codeAssistRepositories", repositoryExtension);
+        boolean hasJavaPlugin = hasJavaPlugin(project);
 
-        project.getTasks().register(TASK_NAME, new Action<Task>() {
-            @Override
-            public void execute(Task task) {
-                task.doLast(new Action<Task>() {
+        if (AndroidSupport.isRunningAndroid() && hasJavaPlugin) {
+            registerTransformAnnotationProcessorsTask(project);
+        }
+    }
+
+    private void registerTransformAnnotationProcessorsTask(BuildProject project) {
+        JavaCompile compileJava = (JavaCompile) project.getTasks().getByName("compileJava");
+        project.getTasks().register(
+                TRANSFORM_ANNOTATION_PROCESSORS_TASK_NAME,
+                TransformAnnotationProcessorsTask.class,
+                task -> {
+            task.setSource(project.getConfigurations().getByName(JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME).getAsFileTree());
+        });
+        compileJava.dependsOn(TRANSFORM_ANNOTATION_PROCESSORS_TASK_NAME);
+
+        project.getTasks().register(
+                "modifyAnnotationProcessorsPath", new Action<Task>() {
                     @Override
                     public void execute(Task task) {
-                        GUtil.unchecked(() -> {
-                            Project p = new Project(project.getRootDir());
-                            p.open();
-                            p.index();
+                        task.getOutputs().upToDateWhen(Specs.SATISFIES_NONE);
+                        task.mustRunAfter(TRANSFORM_ANNOTATION_PROCESSORS_TASK_NAME);
 
-                            ILogger logger = new CodeAssistLoggerDelegate(task.getLogger());
-                            ProjectBuilder projectBuilder = new ProjectBuilder(p, logger);
-                            projectBuilder.build(BuildType.DEBUG);
+                        task.doLast(new Action<Task>() {
+                            @Override
+                            public void execute(Task task) {
+                                Task transformTask = project.getTasks()
+                                        .getByName(TRANSFORM_ANNOTATION_PROCESSORS_TASK_NAME);
+                                FileCollection files = transformTask.getOutputs().getFiles();
+
+                                File[] processors = files.getSingleFile().listFiles(c -> c.getName().endsWith(".jar"));
+                                compileJava.getOptions().setAnnotationProcessorPath(
+                                        processors == null
+                                            ? null
+                                            : project.files((Object[]) processors)
+                                );
+                            }
                         });
                     }
-                });
-            }
-        });
+                }
+        );
+        compileJava.dependsOn("modifyAnnotationProcessorsPath");
+    }
+
+    private boolean hasJavaPlugin(BuildProject project) {
+        return project.getPlugins().hasPlugin("java");
     }
 
     private static class CodeAssistLoggerDelegate implements ILogger {

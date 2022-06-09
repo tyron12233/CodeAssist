@@ -15,11 +15,13 @@ import com.tyron.builder.api.internal.tasks.compile.processing.IsolatingProcesso
 import com.tyron.builder.api.internal.tasks.compile.processing.NonIncrementalProcessor;
 import com.tyron.builder.api.internal.tasks.compile.processing.SupportedOptionsCollectingProcessor;
 import com.tyron.builder.api.internal.tasks.compile.processing.TimeTrackingProcessor;
+import com.tyron.builder.util.internal.GUtil;
 import com.tyron.common.TestUtil;
 
 import org.codehaus.groovy.reflection.android.AndroidSupport;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Set;
 
@@ -32,6 +34,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 /**
  * Wraps another {@link JavaCompiler.CompilationTask} and sets up its annotation processors
@@ -112,7 +115,19 @@ class AnnotationProcessingCompileTask implements JavaCompiler.CompilationTask {
 
     ClassLoader createProcessorClassLoader() {
         if (AndroidSupport.isRunningAndroid()) {
-            throw new BuildException("Annotation processors on Android is not yet supported");
+            return GUtil.uncheckedCall(() -> {
+                Class<?> dexClassLoader = Class.forName("dalvik.system.DexClassLoader");
+                Constructor<?> constructor = dexClassLoader.getConstructor(
+                        String.class,
+                        String.class,
+                        String.class,
+                        ClassLoader.class
+                );
+
+                String paths = annotationProcessorPath.stream().map(File::getAbsolutePath)
+                        .collect(Collectors.joining(File.pathSeparator));
+                return (ClassLoader) constructor.newInstance(paths, null, null, delegate.getClass().getClassLoader());
+            });
         }
         return new URLClassLoader(
                 DefaultClassPath.of(annotationProcessorPath).getAsURLArray(),

@@ -5,6 +5,7 @@ import com.tyron.builder.api.JavaVersion;
 import com.tyron.builder.internal.SystemProperties;
 import com.tyron.builder.internal.os.OperatingSystem;
 import com.tyron.builder.util.internal.GFileUtils;
+import com.tyron.common.TestUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -181,9 +182,13 @@ public class Jvm implements JavaInfo {
             return pathExecutable;
         }
 
-        LOGGER.warn("Unable to find the '{}' executable. Tried the java home: {} and the PATH."
-                + " We will assume the executable can be run in the current working folder.",
-            command, getJavaHome());
+        // CodeAssist changed: theres no JVM executable so its not worth the warning
+        if (!TestUtil.isDalvik()) {
+            LOGGER.warn(
+                    "Unable to find the '{}' executable. Tried the java home: {} and the PATH." +
+                    " We will assume the executable can be run in the current working folder.",
+                    command, getJavaHome());
+        }
         return new File(os.getExecutableName(command));
     }
 
