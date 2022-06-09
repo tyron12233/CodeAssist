@@ -119,9 +119,33 @@
     <string name="font_size_summary">Specify the default font size of the editor</string>
     <string name="keyboard_settings_title">Keyboard</string>
     <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
+
+    <!-- Build and Run Settings Section -->
     <string name="settings_build_run_title">Build &amp; Run</string>
     <string name="settings_build_run_desc">Configure build and execution settings</string>
     <string name="run_title">Run</string>
+
+    <string name="gradle_title">Gradle</string>
+    <string name="gradle_log_level">Log level</string>
+    <string-array name="gradle_log_levels" translatable="false">
+        <item>DEBUG</item>
+        <item>INFO</item>
+        <item>LIFECYCLE</item>
+        <item>WARN</item>
+        <item>QUIET</item>
+        <item>ERROR</item>
+    </string-array>
+
+    <string name="gradle_stacktrace">Stacktrace Mode</string>
+    <string name="gradle_stacktrace_summary">Determines how stacktraces are displayed in logs.</string>
+    <string-array name="gradle_stacktrace_values" translatable="false">
+        <item>ALWAYS</item>
+        <item>ALWAYS_FULL</item>
+        <item>INTERNAL_EXCEPTIONS</item>
+    </string-array>
+    <string name="gradle_verbose_vfs_logging">Verbose VFS Logging</string>
+    <string name="gradle_verbose_vfs_logging_summary">Log extra information about the Virtual File System</string>
+
     <string name="settings_install_apk_title">APK Installation Prompt</string>
     <string name="settings_install_desc">Show APK installation prompt after successful compilation.</string>
     <string-array name="java_versions" translatable="false">

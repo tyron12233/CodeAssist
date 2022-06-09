@@ -1,16 +1,13 @@
 package com.tyron.code.ui.editor.log;
 
 import android.os.Bundle;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -24,32 +21,12 @@ import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.fileeditor.api.FileEditorManager;
 import com.tyron.terminal.TerminalSession;
-import com.tyron.terminal.TerminalSessionClient;
 import com.tyron.terminal.TerminalSessionClientAdapter;
 import com.tyron.terminal.view.TerminalView;
-import com.tyron.terminal.view.TerminalViewClient;
 import com.tyron.terminal.view.TerminalViewClientAdapter;
-import com.tyron.terminalview.EmulatorView;
-import com.tyron.terminalview.TermSession;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.output.ByteArrayOutputStream;
-
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.ByteArrayInputStream;
-import java.io.Console;
-import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PipedInputStream;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.logging.Handler;
 
