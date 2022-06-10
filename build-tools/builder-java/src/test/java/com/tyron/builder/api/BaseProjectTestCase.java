@@ -1,6 +1,6 @@
-package com.tyron.builder.api;
+package org.gradle.api;
 
-import com.tyron.builder.launcher.ProjectLaunchCase;
+import org.gradle.launcher.ProjectLaunchCase;
 
 import org.junit.Test;
 

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.testng;
+package org.gradle.api.internal.tasks.testing.testng;
 
-import com.tyron.builder.api.BuildException;
+import org.gradle.api.BuildException;
 
 import org.testng.ITestResult;
 

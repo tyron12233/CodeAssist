@@ -1,8 +1,8 @@
 package com.tyron.builder.plugin;
 
-import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.api.Plugin;
+import org.gradle.api.BuildException;
+import org.gradle.api.BuildProject;
+import org.gradle.api.Plugin;
 
 public class AppPlugin implements Plugin<BuildProject> {
 

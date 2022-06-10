@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 
-import static com.tyron.builder.internal.file.FileMetadata.*;
+import static org.gradle.internal.file.FileMetadata.*;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
@@ -9,18 +9,18 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.hash.HashCode;
 import com.google.errorprone.annotations.CheckReturnValue;
-import com.tyron.builder.internal.file.FileMetadata;
-import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.internal.file.impl.DefaultFileMetadata;
-import com.tyron.builder.internal.hash.FileHasher;
-import com.tyron.builder.internal.snapshot.DirectorySnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemLeafSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
-import com.tyron.builder.internal.snapshot.RegularFileSnapshot;
-import com.tyron.builder.internal.snapshot.RelativePathTracker;
-import com.tyron.builder.internal.snapshot.SnapshottingFilter;
-import com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder;
+import org.gradle.internal.file.FileMetadata;
+import org.gradle.internal.file.FileType;
+import org.gradle.internal.file.impl.DefaultFileMetadata;
+import org.gradle.internal.hash.FileHasher;
+import org.gradle.internal.snapshot.DirectorySnapshot;
+import org.gradle.internal.snapshot.FileSystemLeafSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.MissingFileSnapshot;
+import org.gradle.internal.snapshot.RegularFileSnapshot;
+import org.gradle.internal.snapshot.RelativePathTracker;
+import org.gradle.internal.snapshot.SnapshottingFilter;
+import org.gradle.internal.snapshot.DirectorySnapshotBuilder;
 
 import java.io.File;
 import java.io.IOException;

@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
-import com.tyron.builder.internal.RelativePathSupplier;
+import org.gradle.internal.RelativePathSupplier;
 
 import java.util.ArrayDeque;
 import java.util.Collection;

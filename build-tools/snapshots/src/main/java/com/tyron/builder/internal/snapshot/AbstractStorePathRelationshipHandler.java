@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
 public abstract class AbstractStorePathRelationshipHandler<T> implements ChildMap.Entry.PathRelationshipHandler<ChildMap<T>, T> {
 

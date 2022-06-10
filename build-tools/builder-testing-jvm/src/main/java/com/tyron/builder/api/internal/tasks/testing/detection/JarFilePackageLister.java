@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
-import com.tyron.builder.api.BuildException;
-import com.tyron.builder.util.internal.GFileUtils;
+import org.gradle.api.BuildException;
+import org.gradle.util.internal.GFileUtils;
 
 import java.io.File;
 import java.io.IOException;

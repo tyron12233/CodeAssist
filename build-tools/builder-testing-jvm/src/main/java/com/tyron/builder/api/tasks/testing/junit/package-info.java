@@ -17,4 +17,4 @@
 /**
  * JUnit specific testing classes.
  */
-package com.tyron.builder.api.tasks.testing.junit;
+package org.gradle.api.tasks.testing.junit;

@@ -1,6 +1,6 @@
-package com.tyron.builder.android.aapt2;
+package org.gradle.android.aapt2;
 
-import com.tyron.builder.util.GUtil;
+import org.gradle.util.GUtil;
 import com.tyron.common.util.BinaryExecutor;
 
 import java.io.File;

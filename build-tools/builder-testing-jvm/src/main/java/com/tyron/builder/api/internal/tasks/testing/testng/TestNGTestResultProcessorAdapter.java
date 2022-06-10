@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.testng;
+package org.gradle.api.internal.tasks.testing.testng;
 
-import com.tyron.builder.api.internal.tasks.testing.DefaultTestClassDescriptor;
-import com.tyron.builder.api.internal.tasks.testing.DefaultTestMethodDescriptor;
-import com.tyron.builder.api.internal.tasks.testing.DefaultTestSuiteDescriptor;
-import com.tyron.builder.api.internal.tasks.testing.TestCompleteEvent;
-import com.tyron.builder.api.internal.tasks.testing.TestDescriptorInternal;
-import com.tyron.builder.api.internal.tasks.testing.TestResultProcessor;
-import com.tyron.builder.api.internal.tasks.testing.TestStartEvent;
-import com.tyron.builder.api.tasks.testing.TestResult;
-import com.tyron.builder.internal.id.IdGenerator;
-import com.tyron.builder.internal.time.Clock;
+import org.gradle.api.internal.tasks.testing.DefaultTestClassDescriptor;
+import org.gradle.api.internal.tasks.testing.DefaultTestMethodDescriptor;
+import org.gradle.api.internal.tasks.testing.DefaultTestSuiteDescriptor;
+import org.gradle.api.internal.tasks.testing.TestCompleteEvent;
+import org.gradle.api.internal.tasks.testing.TestDescriptorInternal;
+import org.gradle.api.internal.tasks.testing.TestResultProcessor;
+import org.gradle.api.internal.tasks.testing.TestStartEvent;
+import org.gradle.api.tasks.testing.TestResult;
+import org.gradle.internal.id.IdGenerator;
+import org.gradle.internal.time.Clock;
 import org.testng.IMethodInstance;
 import org.testng.ISuite;
 import org.testng.ISuiteListener;

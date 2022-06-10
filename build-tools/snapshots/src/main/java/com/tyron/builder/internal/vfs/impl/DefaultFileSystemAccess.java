@@ -1,25 +1,25 @@
-package com.tyron.builder.internal.vfs.impl;
+package org.gradle.internal.vfs.impl;
 
-import static com.tyron.builder.internal.file.FileMetadata.*;
+import static org.gradle.internal.file.FileMetadata.*;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Interner;
 import com.google.common.hash.HashCode;
 import com.google.common.util.concurrent.Striped;
-import com.tyron.builder.internal.file.FileMetadata;
-import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.internal.file.Stat;
-import com.tyron.builder.internal.hash.FileHasher;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
-import com.tyron.builder.internal.snapshot.RegularFileSnapshot;
-import com.tyron.builder.internal.snapshot.SnapshottingFilter;
-import com.tyron.builder.internal.snapshot.impl.DirectorySnapshotter;
-import com.tyron.builder.internal.snapshot.impl.DirectorySnapshotterStatistics;
-import com.tyron.builder.internal.snapshot.impl.FileSystemSnapshotFilter;
-import com.tyron.builder.internal.vfs.FileSystemAccess;
-import com.tyron.builder.internal.vfs.VirtualFileSystem;
+import org.gradle.internal.file.FileMetadata;
+import org.gradle.internal.file.FileType;
+import org.gradle.internal.file.Stat;
+import org.gradle.internal.hash.FileHasher;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.snapshot.MissingFileSnapshot;
+import org.gradle.internal.snapshot.RegularFileSnapshot;
+import org.gradle.internal.snapshot.SnapshottingFilter;
+import org.gradle.internal.snapshot.impl.DirectorySnapshotter;
+import org.gradle.internal.snapshot.impl.DirectorySnapshotterStatistics;
+import org.gradle.internal.snapshot.impl.FileSystemSnapshotFilter;
+import org.gradle.internal.vfs.FileSystemAccess;
+import org.gradle.internal.vfs.VirtualFileSystem;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,8 +1,8 @@
-package com.tyron.builder.internal.fingerprint;
+package org.gradle.internal.fingerprint;
 
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
 
 import java.util.Map;
 

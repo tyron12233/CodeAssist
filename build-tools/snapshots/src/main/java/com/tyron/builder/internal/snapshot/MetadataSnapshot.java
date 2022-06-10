@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
-import com.tyron.builder.internal.file.FileType;
+import org.gradle.internal.file.FileType;
 
 /**
  * A snapshot where we know the metadata (i.e. the type).

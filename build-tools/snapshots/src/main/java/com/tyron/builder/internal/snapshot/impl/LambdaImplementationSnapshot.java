@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;

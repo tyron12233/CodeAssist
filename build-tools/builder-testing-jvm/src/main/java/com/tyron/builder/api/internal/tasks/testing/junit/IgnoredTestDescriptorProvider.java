@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.junit;
+package org.gradle.api.internal.tasks.testing.junit;
 
-import com.tyron.builder.api.internal.tasks.testing.TestSuiteExecutionException;
+import org.gradle.api.internal.tasks.testing.TestSuiteExecutionException;
 import org.junit.runner.Description;
 import org.junit.runner.Request;
 import org.junit.runner.Runner;

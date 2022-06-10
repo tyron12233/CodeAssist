@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.junitplatform;
+package org.gradle.api.internal.tasks.testing.junitplatform;
 
-import com.tyron.builder.api.internal.tasks.testing.junit.AbstractJUnitSpec;
-import com.tyron.builder.api.tasks.testing.junitplatform.JUnitPlatformOptions;
+import org.gradle.api.internal.tasks.testing.junit.AbstractJUnitSpec;
+import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions;
 
 import java.util.ArrayList;
 import java.util.List;

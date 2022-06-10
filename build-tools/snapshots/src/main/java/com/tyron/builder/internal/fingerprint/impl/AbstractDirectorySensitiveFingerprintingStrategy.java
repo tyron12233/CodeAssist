@@ -1,7 +1,7 @@
-package com.tyron.builder.internal.fingerprint.impl;
+package org.gradle.internal.fingerprint.impl;
 
-import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
-import com.tyron.builder.internal.fingerprint.hashing.ConfigurableNormalizer;
+import org.gradle.internal.fingerprint.DirectorySensitivity;
+import org.gradle.internal.fingerprint.hashing.ConfigurableNormalizer;
 
 public abstract class AbstractDirectorySensitiveFingerprintingStrategy extends AbstractFingerprintingStrategy {
     private final DirectorySensitivity directorySensitivity;

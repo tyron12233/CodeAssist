@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.junit;
+package org.gradle.api.internal.tasks.testing.junit;
 
 import org.apache.commons.lang3.StringUtils;
-import com.tyron.builder.api.InvalidUserDataException;
+import org.gradle.api.InvalidUserDataException;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.Description;
 import org.junit.runner.manipulation.Filter;

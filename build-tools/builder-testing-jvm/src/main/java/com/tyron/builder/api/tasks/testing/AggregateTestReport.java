@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.tasks.testing;
+package org.gradle.api.tasks.testing;
 
-import com.tyron.builder.api.Incubating;
-import com.tyron.builder.api.provider.Property;
-import com.tyron.builder.api.reporting.ReportSpec;
-import com.tyron.builder.api.tasks.TaskProvider;
+import org.gradle.api.Incubating;
+import org.gradle.api.provider.Property;
+import org.gradle.api.reporting.ReportSpec;
+import org.gradle.api.tasks.TaskProvider;
 
 /**
  * A container for the inputs of an aggregated test report.
@@ -37,7 +37,7 @@ public interface AggregateTestReport extends ReportSpec {
     TaskProvider<TestReport> getReportTask();
 
     /**
-     * Contains a value representing the type of test suite this task belongs to.  See static constants on {@link com.tyron.builder.api.attributes.TestType} for examples.
+     * Contains a value representing the type of test suite this task belongs to.  See static constants on {@link org.gradle.api.attributes.TestType} for examples.
      *
      * @return this report's test type
      */

@@ -1,6 +1,6 @@
-package com.tyron.builder.android.aapt2.impl;
+package org.gradle.android.aapt2.impl;
 
-import com.tyron.builder.android.aapt2.Aapt2BinaryProvider;
+import org.gradle.android.aapt2.Aapt2BinaryProvider;
 
 import java.io.File;
 import java.io.IOException;

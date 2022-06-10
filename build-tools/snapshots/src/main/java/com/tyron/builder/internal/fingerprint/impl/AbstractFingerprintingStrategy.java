@@ -1,13 +1,13 @@
-package com.tyron.builder.internal.fingerprint.impl;
+package org.gradle.internal.fingerprint.impl;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
-import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
-import com.tyron.builder.internal.fingerprint.FingerprintingStrategy;
-import com.tyron.builder.internal.fingerprint.hashing.ConfigurableNormalizer;
-import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
+import org.gradle.internal.fingerprint.FingerprintingStrategy;
+import org.gradle.internal.fingerprint.hashing.ConfigurableNormalizer;
+import org.gradle.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
 
 
 import org.jetbrains.annotations.Nullable;

@@ -1,12 +1,12 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
-import static com.tyron.builder.internal.snapshot.SnapshotVisitResult.CONTINUE;
+import static org.gradle.internal.snapshot.SnapshotVisitResult.CONTINUE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.file.FileMetadata.AccessType;
-import com.tyron.builder.internal.file.FileType;
+import org.gradle.internal.file.FileMetadata.AccessType;
+import org.gradle.internal.file.FileType;
 
 import java.util.List;
 import java.util.Optional;

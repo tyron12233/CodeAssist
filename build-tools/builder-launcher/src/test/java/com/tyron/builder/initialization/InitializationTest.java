@@ -1,13 +1,14 @@
-package com.tyron.builder.initialization;
+package org.gradle.initialization;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.logging.LogLevel;
-import com.tyron.builder.api.logging.configuration.ShowStacktrace;
-import com.tyron.builder.internal.logging.LoggingManagerInternal;
-import com.tyron.builder.launcher.ProjectLauncher;
-import com.tyron.builder.plugin.CodeAssistPlugin;
+import org.gradle.api.BuildProject;
+import org.gradle.api.internal.StartParameterInternal;
+import org.gradle.api.logging.LogLevel;
+import org.gradle.api.logging.configuration.ConsoleOutput;
+import org.gradle.api.logging.configuration.ShowStacktrace;
+import org.gradle.internal.logging.LoggingManagerInternal;
+import org.gradle.launcher.ProjectLauncher;
+import org.gradle.plugin.CodeAssistPlugin;
 import com.tyron.common.TestUtil;
 
 import org.junit.Before;
@@ -23,23 +24,23 @@ public class InitializationTest {
     public void setup() {
         System.setProperty("org.gradle.native", "true");
 
-        CodeAssistPlugin plugin = null;
         File resourcesDir = TestUtil.getResourcesDirectory();
         File projectDir = new File(resourcesDir, "TestProject");
 
         StartParameterInternal startParameterInternal = new StartParameterInternal();
-        startParameterInternal.setLogLevel(LogLevel.DEBUG);
+        startParameterInternal.setLogLevel(LogLevel.LIFECYCLE);
         startParameterInternal.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
         startParameterInternal.setProjectDir(projectDir);
-        startParameterInternal.setBuildCacheEnabled(false);
+        startParameterInternal.setBuildCacheEnabled(true);
         startParameterInternal.setGradleUserHomeDir(new File(resourcesDir, ".gradle"));
-        startParameterInternal.setTaskNames(ImmutableList.of(":consumer:compileJava"));
+        startParameterInternal.setTaskNames(ImmutableList.of(":consumer:assemble"));
 
         projectLauncher = new ProjectLauncher(startParameterInternal);
 
         LoggingManagerInternal loggingManagerInternal =
                 projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
         loggingManagerInternal.attachSystemOutAndErr();
+        loggingManagerInternal.attachProcessConsole(ConsoleOutput.Plain);
     }
 
     @Test

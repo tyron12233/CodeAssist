@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
 /**
  * The snapshot of a leaf element in the file system that can have no children of its own.

@@ -14,32 +14,32 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.classpath.ModuleRegistry;
-import com.tyron.builder.api.internal.tasks.testing.JvmTestExecutionSpec;
-import com.tyron.builder.api.internal.tasks.testing.TestClassProcessor;
-import com.tyron.builder.api.internal.tasks.testing.TestExecuter;
-import com.tyron.builder.api.internal.tasks.testing.TestFramework;
-import com.tyron.builder.api.internal.tasks.testing.TestResultProcessor;
-import com.tyron.builder.api.internal.tasks.testing.WorkerTestClassProcessorFactory;
-import com.tyron.builder.api.internal.tasks.testing.filter.DefaultTestFilter;
-import com.tyron.builder.api.internal.tasks.testing.processors.MaxNParallelTestClassProcessor;
-import com.tyron.builder.api.internal.tasks.testing.processors.PatternMatchTestClassProcessor;
-import com.tyron.builder.api.internal.tasks.testing.processors.RestartEveryNTestClassProcessor;
-import com.tyron.builder.api.internal.tasks.testing.processors.RunPreviousFailedFirstTestClassProcessor;
-import com.tyron.builder.api.internal.tasks.testing.processors.TestMainAction;
-import com.tyron.builder.api.internal.tasks.testing.worker.ForkingTestClassProcessor;
-import com.tyron.builder.api.logging.Logger;
-import com.tyron.builder.api.logging.Logging;
-import com.tyron.builder.internal.Factory;
-import com.tyron.builder.internal.actor.ActorFactory;
-import com.tyron.builder.internal.time.Clock;
-import com.tyron.builder.internal.work.WorkerLeaseService;
-import com.tyron.builder.process.internal.worker.WorkerProcessFactory;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.internal.DocumentationRegistry;
+import org.gradle.api.internal.classpath.ModuleRegistry;
+import org.gradle.api.internal.tasks.testing.JvmTestExecutionSpec;
+import org.gradle.api.internal.tasks.testing.TestClassProcessor;
+import org.gradle.api.internal.tasks.testing.TestExecuter;
+import org.gradle.api.internal.tasks.testing.TestFramework;
+import org.gradle.api.internal.tasks.testing.TestResultProcessor;
+import org.gradle.api.internal.tasks.testing.WorkerTestClassProcessorFactory;
+import org.gradle.api.internal.tasks.testing.filter.DefaultTestFilter;
+import org.gradle.api.internal.tasks.testing.processors.MaxNParallelTestClassProcessor;
+import org.gradle.api.internal.tasks.testing.processors.PatternMatchTestClassProcessor;
+import org.gradle.api.internal.tasks.testing.processors.RestartEveryNTestClassProcessor;
+import org.gradle.api.internal.tasks.testing.processors.RunPreviousFailedFirstTestClassProcessor;
+import org.gradle.api.internal.tasks.testing.processors.TestMainAction;
+import org.gradle.api.internal.tasks.testing.worker.ForkingTestClassProcessor;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
+import org.gradle.internal.Factory;
+import org.gradle.internal.actor.ActorFactory;
+import org.gradle.internal.time.Clock;
+import org.gradle.internal.work.WorkerLeaseService;
+import org.gradle.process.internal.worker.WorkerProcessFactory;
 
 import java.io.File;
 import java.util.List;

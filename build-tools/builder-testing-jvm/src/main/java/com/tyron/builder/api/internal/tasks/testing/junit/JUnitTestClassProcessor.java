@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.junit;
+package org.gradle.api.internal.tasks.testing.junit;
 
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.tasks.testing.TestResultProcessor;
-import com.tyron.builder.api.internal.tasks.testing.results.AttachParentTestResultProcessor;
-import com.tyron.builder.internal.actor.Actor;
-import com.tyron.builder.internal.actor.ActorFactory;
-import com.tyron.builder.internal.id.IdGenerator;
-import com.tyron.builder.internal.time.Clock;
+import org.gradle.api.Action;
+import org.gradle.api.internal.tasks.testing.TestResultProcessor;
+import org.gradle.api.internal.tasks.testing.results.AttachParentTestResultProcessor;
+import org.gradle.internal.actor.Actor;
+import org.gradle.internal.actor.ActorFactory;
+import org.gradle.internal.id.IdGenerator;
+import org.gradle.internal.time.Clock;
 
 public class JUnitTestClassProcessor extends AbstractJUnitTestClassProcessor<JUnitSpec> {
 

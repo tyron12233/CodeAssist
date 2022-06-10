@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing;
+package org.gradle.api.internal.tasks.testing;
 
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.tasks.TaskContainer;
-import com.tyron.builder.api.tasks.TaskProvider;
-import com.tyron.builder.api.tasks.testing.AggregateTestReport;
-import com.tyron.builder.api.tasks.testing.TestReport;
-import com.tyron.builder.language.base.plugins.LifecycleBasePlugin;
+import org.gradle.api.Action;
+import org.gradle.api.tasks.TaskContainer;
+import org.gradle.api.tasks.TaskProvider;
+import org.gradle.api.tasks.testing.AggregateTestReport;
+import org.gradle.api.tasks.testing.TestReport;
+import org.gradle.language.base.plugins.LifecycleBasePlugin;
 
 import javax.inject.Inject;
 

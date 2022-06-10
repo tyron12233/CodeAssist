@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.testng;
+package org.gradle.api.internal.tasks.testing.testng;
 
-import com.tyron.builder.api.internal.tasks.testing.detection.AbstractTestFrameworkDetector;
-import com.tyron.builder.api.internal.tasks.testing.detection.ClassFileExtractionManager;
+import org.gradle.api.internal.tasks.testing.detection.AbstractTestFrameworkDetector;
+import org.gradle.api.internal.tasks.testing.detection.ClassFileExtractionManager;
 
 class TestNGDetector extends AbstractTestFrameworkDetector<TestNGTestClassDetector> {
     TestNGDetector(ClassFileExtractionManager classFileExtractionManager) {

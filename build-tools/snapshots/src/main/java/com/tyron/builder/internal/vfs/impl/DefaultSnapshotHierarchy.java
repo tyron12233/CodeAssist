@@ -1,16 +1,16 @@
-package com.tyron.builder.internal.vfs.impl;
+package org.gradle.internal.vfs.impl;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.internal.snapshot.CaseSensitivity;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemNode;
-import com.tyron.builder.internal.snapshot.MetadataSnapshot;
-import com.tyron.builder.internal.snapshot.PartialDirectoryNode;
-import com.tyron.builder.internal.snapshot.SingletonChildMap;
-import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
-import com.tyron.builder.internal.snapshot.UnknownFileSystemNode;
-import com.tyron.builder.internal.snapshot.VfsRelativePath;
+import org.gradle.internal.file.FileType;
+import org.gradle.internal.snapshot.CaseSensitivity;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemNode;
+import org.gradle.internal.snapshot.MetadataSnapshot;
+import org.gradle.internal.snapshot.PartialDirectoryNode;
+import org.gradle.internal.snapshot.SingletonChildMap;
+import org.gradle.internal.snapshot.SnapshotHierarchy;
+import org.gradle.internal.snapshot.UnknownFileSystemNode;
+import org.gradle.internal.snapshot.VfsRelativePath;
 
 import java.util.Optional;
 import java.util.stream.Stream;

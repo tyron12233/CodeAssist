@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.testng;
+package org.gradle.api.internal.tasks.testing.testng;
 
 import java.io.Serializable;
 import java.util.Set;
 
-import com.tyron.builder.api.internal.tasks.testing.filter.DefaultTestFilter;
-import com.tyron.builder.api.tasks.testing.testng.TestNGOptions;
+import org.gradle.api.internal.tasks.testing.filter.DefaultTestFilter;
+import org.gradle.api.tasks.testing.testng.TestNGOptions;
 
 public class TestNGSpec implements Serializable {
     private static final long serialVersionUID = 1;

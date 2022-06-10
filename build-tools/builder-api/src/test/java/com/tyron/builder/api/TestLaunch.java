@@ -1,9 +1,9 @@
-package com.tyron.builder.api;
+package org.gradle.api;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.StartParameterInternal;
-import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.launcher.ProjectLauncher;
+import org.gradle.api.internal.StartParameterInternal;
+import org.gradle.api.BuildProject;
+import org.gradle.launcher.ProjectLauncher;
 import com.tyron.common.TestUtil;
 
 import org.junit.Test;

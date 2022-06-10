@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
 import org.apache.commons.lang3.text.StrBuilder;
-import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.internal.file.temp.DefaultTemporaryFileProvider;
-import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
-import com.tyron.builder.internal.Factory;
-import com.tyron.builder.util.internal.JarUtil;
+import org.gradle.api.BuildException;
+import org.gradle.api.internal.file.temp.DefaultTemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
+import org.gradle.internal.Factory;
+import org.gradle.util.internal.JarUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

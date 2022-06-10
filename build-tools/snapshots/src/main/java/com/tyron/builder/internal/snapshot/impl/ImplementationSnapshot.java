@@ -1,9 +1,9 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.internal.snapshot.ValueSnapshot;
-import com.tyron.builder.internal.snapshot.ValueSnapshotter;
+import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
+import org.gradle.internal.snapshot.ValueSnapshot;
+import org.gradle.internal.snapshot.ValueSnapshotter;
 
 import org.jetbrains.annotations.Nullable;
 

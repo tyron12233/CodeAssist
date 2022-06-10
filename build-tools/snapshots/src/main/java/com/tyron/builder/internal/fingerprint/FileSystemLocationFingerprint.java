@@ -1,9 +1,9 @@
-package com.tyron.builder.internal.fingerprint;
+package org.gradle.internal.fingerprint;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.internal.hash.Hashable;
-import com.tyron.builder.internal.hash.Hashes;
+import org.gradle.internal.file.FileType;
+import org.gradle.internal.hash.Hashable;
+import org.gradle.internal.hash.Hashes;
 
 /**
  * An immutable fingerprint of some aspects of a file's metadata and content.

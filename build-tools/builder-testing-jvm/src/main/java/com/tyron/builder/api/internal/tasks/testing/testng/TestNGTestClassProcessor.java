@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.testng;
+package org.gradle.api.internal.tasks.testing.testng;
 
-import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.internal.tasks.testing.TestClassProcessor;
-import com.tyron.builder.api.internal.tasks.testing.TestClassRunInfo;
-import com.tyron.builder.api.internal.tasks.testing.TestResultProcessor;
-import com.tyron.builder.api.internal.tasks.testing.filter.TestSelectionMatcher;
-import com.tyron.builder.internal.actor.Actor;
-import com.tyron.builder.internal.actor.ActorFactory;
-import com.tyron.builder.internal.id.IdGenerator;
-import com.tyron.builder.internal.reflect.JavaMethod;
-import com.tyron.builder.internal.reflect.JavaReflectionUtil;
-import com.tyron.builder.internal.reflect.NoSuchMethodException;
-import com.tyron.builder.internal.time.Clock;
-import com.tyron.builder.util.internal.CollectionUtils;
-import com.tyron.builder.util.internal.GFileUtils;
+import org.gradle.api.BuildException;
+import org.gradle.api.internal.tasks.testing.TestClassProcessor;
+import org.gradle.api.internal.tasks.testing.TestClassRunInfo;
+import org.gradle.api.internal.tasks.testing.TestResultProcessor;
+import org.gradle.api.internal.tasks.testing.filter.TestSelectionMatcher;
+import org.gradle.internal.actor.Actor;
+import org.gradle.internal.actor.ActorFactory;
+import org.gradle.internal.id.IdGenerator;
+import org.gradle.internal.reflect.JavaMethod;
+import org.gradle.internal.reflect.JavaReflectionUtil;
+import org.gradle.internal.reflect.NoSuchMethodException;
+import org.gradle.internal.time.Clock;
+import org.gradle.util.internal.CollectionUtils;
+import org.gradle.util.internal.GFileUtils;
 import org.testng.IMethodInstance;
 import org.testng.IMethodInterceptor;
 import org.testng.ISuite;
@@ -43,7 +43,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
-import static com.tyron.builder.api.tasks.testing.testng.TestNGOptions.DEFAULT_CONFIG_FAILURE_POLICY;
+import static org.gradle.api.tasks.testing.testng.TestNGOptions.DEFAULT_CONFIG_FAILURE_POLICY;
 
 public class TestNGTestClassProcessor implements TestClassProcessor {
     private final List<Class<?>> testClasses = new ArrayList<Class<?>>();

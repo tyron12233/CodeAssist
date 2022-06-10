@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.junit;
+package org.gradle.api.internal.tasks.testing.junit;
 
-import com.tyron.builder.internal.classanalysis.AsmConstants;
-import com.tyron.builder.api.internal.tasks.testing.detection.TestClassVisitor;
-import com.tyron.builder.api.internal.tasks.testing.detection.TestFrameworkDetector;
+import org.gradle.internal.classanalysis.AsmConstants;
+import org.gradle.api.internal.tasks.testing.detection.TestClassVisitor;
+import org.gradle.api.internal.tasks.testing.detection.TestFrameworkDetector;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.MethodVisitor;
 

@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing;
+package org.gradle.api.internal.tasks.testing;
 
-import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.initialization.ClassLoaderIds;
-import com.tyron.builder.api.internal.initialization.loadercache.ClassLoaderCache;
-import com.tyron.builder.internal.Factory;
-import com.tyron.builder.internal.classpath.DefaultClassPath;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.initialization.ClassLoaderIds;
+import org.gradle.api.internal.initialization.loadercache.ClassLoaderCache;
+import org.gradle.internal.Factory;
+import org.gradle.internal.classpath.DefaultClassPath;
 
 import javax.inject.Inject;
 

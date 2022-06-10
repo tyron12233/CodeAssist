@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.fingerprint;
+package org.gradle.internal.fingerprint;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.hash.Hasher;

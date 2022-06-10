@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
-import com.tyron.builder.internal.classanalysis.AsmConstants;
+import org.gradle.internal.classanalysis.AsmConstants;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Opcodes;
 

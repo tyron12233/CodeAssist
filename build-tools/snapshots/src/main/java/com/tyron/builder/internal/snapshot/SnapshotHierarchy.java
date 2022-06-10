@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
 import java.util.Collection;
 import java.util.Optional;

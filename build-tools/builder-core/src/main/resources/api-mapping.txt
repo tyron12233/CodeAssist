@@ -1,10 +1,10 @@
-JavaVersion:com.tyron.builder.api.JavaVersion
-RepositoriesMode:com.tyron.builder.api.initialization.resolve.RepositoriesMode
-DependencyResolutionManagement:com.tyron.builder.api.initialization.resolve.DependencyResolutionManagement
-RulesMode:com.tyron.builder.api.initialization.resolve.RulesMode
-ProjectDescriptor:com.tyron.builder.api.initialization.ProjectDescriptor
-Settings:com.tyron.builder.api.initialization.Settings
-Delete:com.tyron.builder.api.tasks.Delete
-Copy:com.tyron.builder.api.tasks.Copy
-Zip:com.tyron.builder.api.tasks.bundling.Zip
+JavaVersion:org.gradle.api.JavaVersion
+RepositoriesMode:org.gradle.api.initialization.resolve.RepositoriesMode
+DependencyResolutionManagement:org.gradle.api.initialization.resolve.DependencyResolutionManagement
+RulesMode:org.gradle.api.initialization.resolve.RulesMode
+ProjectDescriptor:org.gradle.api.initialization.ProjectDescriptor
+Settings:org.gradle.api.initialization.Settings
+Delete:org.gradle.api.tasks.Delete
+Copy:org.gradle.api.tasks.Copy
+Zip:org.gradle.api.tasks.bundling.Zip
 

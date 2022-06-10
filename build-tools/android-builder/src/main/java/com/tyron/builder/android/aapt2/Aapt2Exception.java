@@ -1,4 +1,4 @@
-package com.tyron.builder.android.aapt2;
+package org.gradle.android.aapt2;
 
 /** Exception thrown when an error occurs during `aapt2` processing.  */
 public class Aapt2Exception extends RuntimeException {

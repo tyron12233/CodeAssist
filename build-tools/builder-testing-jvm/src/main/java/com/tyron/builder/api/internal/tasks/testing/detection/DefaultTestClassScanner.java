@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
-import com.tyron.builder.api.file.EmptyFileVisitor;
-import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.file.FileVisitDetails;
-import com.tyron.builder.api.file.ReproducibleFileVisitor;
-import com.tyron.builder.api.internal.file.RelativeFile;
-import com.tyron.builder.api.internal.tasks.testing.DefaultTestClassRunInfo;
-import com.tyron.builder.api.internal.tasks.testing.TestClassProcessor;
-import com.tyron.builder.api.internal.tasks.testing.TestClassRunInfo;
+import org.gradle.api.file.EmptyFileVisitor;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.file.FileVisitDetails;
+import org.gradle.api.file.ReproducibleFileVisitor;
+import org.gradle.api.internal.file.RelativeFile;
+import org.gradle.api.internal.tasks.testing.DefaultTestClassRunInfo;
+import org.gradle.api.internal.tasks.testing.TestClassProcessor;
+import org.gradle.api.internal.tasks.testing.TestClassRunInfo;
 
 import java.util.regex.Pattern;
 

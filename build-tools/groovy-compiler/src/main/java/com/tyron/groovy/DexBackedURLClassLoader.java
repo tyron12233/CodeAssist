@@ -1,12 +1,12 @@
 package com.tyron.groovy;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.classloader.AppDataDirGuesser;
-import com.tyron.builder.internal.classpath.ClassPath;
-import com.tyron.builder.internal.hash.DefaultFileHasher;
-import com.tyron.builder.internal.hash.DefaultStreamHasher;
-import com.tyron.builder.internal.hash.FileHasher;
-import com.tyron.builder.util.internal.GFileUtils;
+import org.gradle.internal.classloader.AppDataDirGuesser;
+import org.gradle.internal.classpath.ClassPath;
+import org.gradle.internal.hash.DefaultFileHasher;
+import org.gradle.internal.hash.DefaultStreamHasher;
+import org.gradle.internal.hash.FileHasher;
+import org.gradle.util.internal.GFileUtils;
 import com.tyron.common.TestUtil;
 
 import org.apache.commons.io.FilenameUtils;

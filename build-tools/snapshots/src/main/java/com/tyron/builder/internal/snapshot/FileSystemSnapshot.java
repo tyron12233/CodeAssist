@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
 /**
  * A snapshot of a part of the file system.

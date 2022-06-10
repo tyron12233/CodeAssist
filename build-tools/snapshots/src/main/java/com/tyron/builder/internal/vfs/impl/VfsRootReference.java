@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.vfs.impl;
+package org.gradle.internal.vfs.impl;
 
-import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
+import org.gradle.internal.snapshot.SnapshotHierarchy;
 
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.UnaryOperator;

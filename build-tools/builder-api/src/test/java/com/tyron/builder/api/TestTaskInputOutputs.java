@@ -1,8 +1,8 @@
-package com.tyron.builder.api;
+package org.gradle.api;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.api.tasks.TaskContainer;
+import org.gradle.api.BuildProject;
+import org.gradle.api.tasks.TaskContainer;
 
 import java.io.File;
 import java.util.List;

@@ -1,19 +1,19 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.internal.RelativePathSupplier;
-import com.tyron.builder.internal.snapshot.DirectorySnapshot;
-import com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder;
-import com.tyron.builder.internal.snapshot.FileSystemLeafSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.internal.snapshot.MerkleDirectorySnapshotBuilder;
-import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
-import com.tyron.builder.internal.snapshot.RegularFileSnapshot;
-import com.tyron.builder.internal.snapshot.RelativePathTracker;
-import com.tyron.builder.internal.snapshot.RelativePathTrackingFileSystemSnapshotHierarchyVisitor;
-import com.tyron.builder.internal.snapshot.SnapshotVisitResult;
-import com.tyron.builder.internal.snapshot.SnapshottingFilter;
+import org.gradle.internal.RelativePathSupplier;
+import org.gradle.internal.snapshot.DirectorySnapshot;
+import org.gradle.internal.snapshot.DirectorySnapshotBuilder;
+import org.gradle.internal.snapshot.FileSystemLeafSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.snapshot.MerkleDirectorySnapshotBuilder;
+import org.gradle.internal.snapshot.MissingFileSnapshot;
+import org.gradle.internal.snapshot.RegularFileSnapshot;
+import org.gradle.internal.snapshot.RelativePathTracker;
+import org.gradle.internal.snapshot.RelativePathTrackingFileSystemSnapshotHierarchyVisitor;
+import org.gradle.internal.snapshot.SnapshotVisitResult;
+import org.gradle.internal.snapshot.SnapshottingFilter;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 

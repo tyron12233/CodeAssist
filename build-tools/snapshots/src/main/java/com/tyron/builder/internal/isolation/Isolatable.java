@@ -1,7 +1,7 @@
-package com.tyron.builder.internal.isolation;
+package org.gradle.internal.isolation;
 
-import com.tyron.builder.internal.hash.Hashable;
-import com.tyron.builder.internal.snapshot.ValueSnapshot;
+import org.gradle.internal.hash.Hashable;
+import org.gradle.internal.snapshot.ValueSnapshot;
 
 import org.jetbrains.annotations.Nullable;
 

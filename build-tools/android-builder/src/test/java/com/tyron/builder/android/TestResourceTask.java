@@ -1,9 +1,9 @@
-package com.tyron.builder.android;
+package org.gradle.android;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.android.aapt2.Aapt2Task;
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.BuildProject;
+import org.gradle.android.aapt2.Aapt2Task;
+import org.gradle.api.Action;
+import org.gradle.api.BuildProject;
 
 import java.io.File;
 import java.util.List;

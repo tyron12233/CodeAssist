@@ -1,4 +1,4 @@
-package com.tyron.builder.internal;
+package org.gradle.internal;
 
 import java.util.Collection;
 

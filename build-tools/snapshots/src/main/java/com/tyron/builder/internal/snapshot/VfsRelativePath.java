@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
-import static com.tyron.builder.internal.snapshot.CaseSensitivity.CASE_SENSITIVE;
+import static org.gradle.internal.snapshot.CaseSensitivity.CASE_SENSITIVE;
 
 import com.google.common.annotations.VisibleForTesting;
 

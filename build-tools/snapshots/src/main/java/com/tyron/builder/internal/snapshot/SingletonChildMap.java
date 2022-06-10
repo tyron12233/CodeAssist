@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
-import static com.tyron.builder.internal.snapshot.ChildMapFactory.childMap;
+import static org.gradle.internal.snapshot.ChildMapFactory.childMap;
 
 import java.util.stream.Stream;
 

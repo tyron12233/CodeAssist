@@ -1,7 +1,7 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 
 //
-//import com.tyron.builder.internal.serialize.SerializerRegistry;
+//import org.gradle.internal.serialize.SerializerRegistry;
 //
 //public interface ValueSnapshotterSerializerRegistry extends SerializerRegistry {
 //}

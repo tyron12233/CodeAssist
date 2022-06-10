@@ -1,10 +1,10 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 import com.google.common.base.Objects;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
-import com.tyron.builder.internal.snapshot.ValueSnapshot;
-import com.tyron.builder.internal.snapshot.ValueSnapshotter;
-import com.tyron.builder.internal.snapshot.ValueSnapshottingException;
+import org.gradle.internal.snapshot.ValueSnapshot;
+import org.gradle.internal.snapshot.ValueSnapshotter;
+import org.gradle.internal.snapshot.ValueSnapshottingException;
 
 import org.apache.commons.io.input.ClassLoaderObjectInputStream;
 import org.jetbrains.annotations.Nullable;

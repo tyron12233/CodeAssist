@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing;
+package org.gradle.api.internal.tasks.testing;
 
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.internal.tasks.testing.detection.TestFrameworkDetector;
-import com.tyron.builder.api.tasks.Internal;
-import com.tyron.builder.api.tasks.Nested;
-import com.tyron.builder.api.tasks.testing.TestFrameworkOptions;
-import com.tyron.builder.internal.scan.UsedByScanPlugin;
-import com.tyron.builder.process.internal.worker.WorkerProcessBuilder;
+import org.gradle.api.Action;
+import org.gradle.api.internal.tasks.testing.detection.TestFrameworkDetector;
+import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Nested;
+import org.gradle.api.tasks.testing.TestFrameworkOptions;
+import org.gradle.internal.scan.UsedByScanPlugin;
+import org.gradle.process.internal.worker.WorkerProcessBuilder;
 
 import java.io.Closeable;
 import java.util.List;
@@ -41,9 +41,9 @@ public interface TestFramework extends Closeable {
     TestFrameworkOptions getOptions();
 
     /**
-     * Returns a factory which is used to create a {@link com.tyron.builder.api.internal.tasks.testing.TestClassProcessor} in
+     * Returns a factory which is used to create a {@link org.gradle.api.internal.tasks.testing.TestClassProcessor} in
      * each worker process. This factory is serialized across to the worker process, and then its {@link
-     * com.tyron.builder.api.internal.tasks.testing.WorkerTestClassProcessorFactory#create(com.tyron.builder.internal.service.ServiceRegistry)}
+     * org.gradle.api.internal.tasks.testing.WorkerTestClassProcessorFactory#create(org.gradle.internal.service.ServiceRegistry)}
      * method is called to create the test processor.
      */
     @Internal

@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
-import com.tyron.builder.internal.hash.Hashable;
+import org.gradle.internal.hash.Hashable;
 
 import org.jetbrains.annotations.Nullable;
 

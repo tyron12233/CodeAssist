@@ -1,21 +1,15 @@
 package com.tyron.builder.plugin;
 
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.api.Plugin;
-import com.tyron.builder.api.Task;
-import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.logging.Logger;
-import com.tyron.builder.api.plugins.JavaPlugin;
-import com.tyron.builder.api.specs.Specs;
-import com.tyron.builder.api.tasks.compile.JavaCompile;
-import com.tyron.builder.compiler.BuildType;
-import com.tyron.builder.compiler.ProjectBuilder;
-import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.DiagnosticWrapper;
+import org.gradle.api.Action;
+import org.gradle.api.BuildProject;
+import org.gradle.api.Plugin;
+import org.gradle.api.Task;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.plugins.JavaPlugin;
+import org.gradle.api.specs.Specs;
+import org.gradle.api.tasks.compile.JavaCompile;
 import com.tyron.builder.plugin.tasks.TransformAnnotationProcessorsTask;
-import com.tyron.builder.project.Project;
-import com.tyron.builder.util.GUtil;
 
 import org.codehaus.groovy.reflection.android.AndroidSupport;
 
@@ -76,34 +70,5 @@ public class CodeAssistPlugin implements Plugin<BuildProject> {
 
     private boolean hasJavaPlugin(BuildProject project) {
         return project.getPlugins().hasPlugin("java");
-    }
-
-    private static class CodeAssistLoggerDelegate implements ILogger {
-
-        private final Logger delegate;
-
-        private CodeAssistLoggerDelegate(Logger logger) {
-            this.delegate = logger;
-        }
-
-        @Override
-        public void info(DiagnosticWrapper wrapper) {
-            delegate.info(wrapper.getMessage(Locale.ENGLISH));
-        }
-
-        @Override
-        public void debug(DiagnosticWrapper wrapper) {
-            delegate.debug(wrapper.getMessage(Locale.ENGLISH));
-        }
-
-        @Override
-        public void warning(DiagnosticWrapper wrapper) {
-            delegate.warn(wrapper.getMessage(Locale.ENGLISH));
-        }
-
-        @Override
-        public void error(DiagnosticWrapper wrapper) {
-            delegate.error(wrapper.getMessage(Locale.ENGLISH));
-        }
     }
 }

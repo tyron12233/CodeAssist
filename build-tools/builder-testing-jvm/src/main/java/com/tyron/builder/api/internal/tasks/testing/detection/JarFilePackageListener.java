@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
 public interface JarFilePackageListener {
     void receivePackage(String packageName);

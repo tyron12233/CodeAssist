@@ -1,17 +1,17 @@
-package com.tyron.builder.internal.fingerprint.impl;
+package org.gradle.internal.fingerprint.impl;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Interner;
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
-import com.tyron.builder.internal.fingerprint.FileSystemLocationFingerprint;
-import com.tyron.builder.internal.fingerprint.FingerprintHashingStrategy;
-import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.internal.snapshot.RelativePathTracker;
-import com.tyron.builder.internal.snapshot.SnapshotVisitResult;
+import org.gradle.internal.file.FileType;
+import org.gradle.internal.fingerprint.DirectorySensitivity;
+import org.gradle.internal.fingerprint.FileSystemLocationFingerprint;
+import org.gradle.internal.fingerprint.FingerprintHashingStrategy;
+import org.gradle.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.snapshot.RelativePathTracker;
+import org.gradle.internal.snapshot.SnapshotVisitResult;
 
 import org.jetbrains.annotations.Nullable;
 

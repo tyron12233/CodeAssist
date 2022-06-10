@@ -1,10 +1,10 @@
-package com.tyron.builder.internal.vfs.impl;
+package org.gradle.internal.vfs.impl;
 
 
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.MetadataSnapshot;
-import com.tyron.builder.internal.snapshot.SnapshotHierarchy;
-import com.tyron.builder.internal.vfs.VirtualFileSystem;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.MetadataSnapshot;
+import org.gradle.internal.snapshot.SnapshotHierarchy;
+import org.gradle.internal.vfs.VirtualFileSystem;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

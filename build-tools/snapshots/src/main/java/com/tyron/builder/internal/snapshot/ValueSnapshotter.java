@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
 import org.jetbrains.annotations.Nullable;
 

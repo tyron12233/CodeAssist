@@ -1,13 +1,13 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 
-import com.tyron.builder.internal.file.FileMetadata;
-import com.tyron.builder.internal.snapshot.DirectorySnapshot;
-import com.tyron.builder.internal.snapshot.DirectorySnapshotBuilder;
-import com.tyron.builder.internal.snapshot.FileSystemLeafSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.MerkleDirectorySnapshotBuilder;
-import com.tyron.builder.internal.snapshot.RootTrackingFileSystemSnapshotHierarchyVisitor;
-import com.tyron.builder.internal.snapshot.SnapshotVisitResult;
+import org.gradle.internal.file.FileMetadata;
+import org.gradle.internal.snapshot.DirectorySnapshot;
+import org.gradle.internal.snapshot.DirectorySnapshotBuilder;
+import org.gradle.internal.snapshot.FileSystemLeafSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.MerkleDirectorySnapshotBuilder;
+import org.gradle.internal.snapshot.RootTrackingFileSystemSnapshotHierarchyVisitor;
+import org.gradle.internal.snapshot.SnapshotVisitResult;
 
 import org.jetbrains.annotations.Nullable;
 

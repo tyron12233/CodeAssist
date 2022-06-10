@@ -1,7 +1,7 @@
 package org.slf4j.impl;
 
-import com.tyron.builder.internal.time.Time;
-import com.tyron.builder.internal.logging.slf4j.OutputEventListenerBackedLoggerContext;
+import org.gradle.internal.time.Time;
+import org.gradle.internal.logging.slf4j.OutputEventListenerBackedLoggerContext;
 
 import org.slf4j.ILoggerFactory;
 import org.slf4j.spi.LoggerFactoryBinder;

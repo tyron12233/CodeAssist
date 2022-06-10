@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.junit;
+package org.gradle.api.internal.tasks.testing.junit;
 
 import com.google.common.collect.ImmutableSet;
-import com.tyron.builder.api.internal.tasks.testing.detection.AbstractTestFrameworkDetector;
-import com.tyron.builder.api.internal.tasks.testing.detection.ClassFileExtractionManager;
+import org.gradle.api.internal.tasks.testing.detection.AbstractTestFrameworkDetector;
+import org.gradle.api.internal.tasks.testing.detection.ClassFileExtractionManager;
 
 public class JUnitDetector extends AbstractTestFrameworkDetector<JUnitTestClassDetector> {
     private static final String TEST_CASE = "junit/framework/TestCase";

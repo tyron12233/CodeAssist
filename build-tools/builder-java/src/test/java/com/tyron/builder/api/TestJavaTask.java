@@ -1,9 +1,9 @@
-package com.tyron.builder.api;
+package org.gradle.api;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.internal.tasks.CompileServices;
-import com.tyron.builder.api.tasks.compile.JavaCompile;
-import com.tyron.builder.internal.service.scopes.PluginServiceRegistry;
+import org.gradle.api.internal.tasks.CompileServices;
+import org.gradle.api.tasks.compile.JavaCompile;
+import org.gradle.internal.service.scopes.PluginServiceRegistry;
 
 import java.util.List;
 

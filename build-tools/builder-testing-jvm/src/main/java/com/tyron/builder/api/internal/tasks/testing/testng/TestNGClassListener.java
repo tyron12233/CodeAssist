@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.testng;
+package org.gradle.api.internal.tasks.testing.testng;
 
 import org.testng.IMethodInstance;
 import org.testng.ITestClass;

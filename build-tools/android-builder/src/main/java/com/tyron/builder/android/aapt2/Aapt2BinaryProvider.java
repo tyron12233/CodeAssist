@@ -1,4 +1,4 @@
-package com.tyron.builder.android.aapt2;
+package org.gradle.android.aapt2;
 
 import java.io.File;
 import java.io.IOException;

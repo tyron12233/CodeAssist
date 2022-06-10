@@ -1,8 +1,8 @@
-package com.tyron.builder.internal.vfs;
+package org.gradle.internal.vfs;
 
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.SnapshottingFilter;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.SnapshottingFilter;
 
 import java.util.Optional;
 import java.util.function.Consumer;

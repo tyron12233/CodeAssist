@@ -1,16 +1,16 @@
-package com.tyron.builder.internal.fingerprint.impl;
+package org.gradle.internal.fingerprint.impl;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.hash.HashCode;
-import com.tyron.builder.internal.fingerprint.FileSystemLocationFingerprint;
-import com.tyron.builder.internal.fingerprint.FingerprintHashingStrategy;
-import com.tyron.builder.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot.FileSystemLocationSnapshotVisitor;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
-import com.tyron.builder.internal.snapshot.MissingFileSnapshot;
-import com.tyron.builder.internal.snapshot.RegularFileSnapshot;
-import com.tyron.builder.internal.snapshot.SnapshotVisitResult;
+import org.gradle.internal.fingerprint.FileSystemLocationFingerprint;
+import org.gradle.internal.fingerprint.FingerprintHashingStrategy;
+import org.gradle.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot.FileSystemLocationSnapshotVisitor;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.snapshot.MissingFileSnapshot;
+import org.gradle.internal.snapshot.RegularFileSnapshot;
+import org.gradle.internal.snapshot.SnapshotVisitResult;
 
 import java.util.HashSet;
 import java.util.Map;

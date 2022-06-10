@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
-import com.tyron.builder.api.internal.file.RelativeFile;
-import com.tyron.builder.api.internal.tasks.testing.TestClassProcessor;
+import org.gradle.api.internal.file.RelativeFile;
+import org.gradle.api.internal.tasks.testing.TestClassProcessor;
 
 import java.io.File;
 import java.util.Set;

@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.fingerprint.hashing;
+package org.gradle.internal.fingerprint.hashing;
 
 import com.google.common.hash.HashCode;
 

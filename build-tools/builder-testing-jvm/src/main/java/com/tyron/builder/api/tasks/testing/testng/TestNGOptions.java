@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.tasks.testing.testng;
+package org.gradle.api.tasks.testing.testng;
 
 import groovy.lang.MissingMethodException;
 import groovy.lang.MissingPropertyException;
 import groovy.xml.MarkupBuilder;
-import com.tyron.builder.api.file.ProjectLayout;
-import com.tyron.builder.api.tasks.Input;
-import com.tyron.builder.api.tasks.InputFiles;
-import com.tyron.builder.api.tasks.Internal;
-import com.tyron.builder.api.tasks.Optional;
-import com.tyron.builder.api.tasks.OutputDirectory;
-import com.tyron.builder.api.tasks.PathSensitive;
-import com.tyron.builder.api.tasks.PathSensitivity;
-import com.tyron.builder.api.tasks.testing.TestFrameworkOptions;
-import com.tyron.builder.internal.ErroringAction;
-import com.tyron.builder.internal.IoActions;
+import org.gradle.api.file.ProjectLayout;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.testing.TestFrameworkOptions;
+import org.gradle.internal.ErroringAction;
+import org.gradle.internal.IoActions;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;

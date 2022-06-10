@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.fingerprint;
+package org.gradle.internal.fingerprint;
 
 
 public enum LineEndingSensitivity {

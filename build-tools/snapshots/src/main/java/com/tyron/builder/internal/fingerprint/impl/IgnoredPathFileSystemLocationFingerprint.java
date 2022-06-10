@@ -1,10 +1,10 @@
-package com.tyron.builder.internal.fingerprint.impl;
+package org.gradle.internal.fingerprint.impl;
 
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
-import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.internal.fingerprint.FileSystemLocationFingerprint;
+import org.gradle.internal.file.FileType;
+import org.gradle.internal.fingerprint.FileSystemLocationFingerprint;
 
 import java.util.Comparator;
 

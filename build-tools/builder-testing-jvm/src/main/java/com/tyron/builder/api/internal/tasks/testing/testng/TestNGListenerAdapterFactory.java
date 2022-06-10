@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.tyron.builder.api.internal.tasks.testing.testng;
+package org.gradle.api.internal.tasks.testing.testng;
 
-import com.tyron.builder.internal.reflect.JavaMethod;
-import com.tyron.builder.internal.reflect.JavaReflectionUtil;
+import org.gradle.internal.reflect.JavaMethod;
+import org.gradle.internal.reflect.JavaReflectionUtil;
 import org.testng.ISuiteListener;
 import org.testng.ITestListener;
 

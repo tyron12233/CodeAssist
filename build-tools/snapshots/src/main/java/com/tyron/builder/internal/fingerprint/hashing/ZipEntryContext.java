@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.fingerprint.hashing;
+package org.gradle.internal.fingerprint.hashing;
 
-import com.tyron.builder.internal.file.archive.ZipEntry;
+import org.gradle.internal.file.archive.ZipEntry;
 
 import java.util.function.Supplier;
 

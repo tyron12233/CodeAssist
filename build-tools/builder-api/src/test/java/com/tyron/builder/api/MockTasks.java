@@ -1,26 +1,26 @@
-package com.tyron.builder.api;
+package org.gradle.api;
 
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.api.file.ConfigurableFileTree;
-import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.internal.project.taskfactory.IncrementalTaskAction;
-import com.tyron.builder.api.BuildProject;
-import com.tyron.builder.api.tasks.CacheableTask;
-import com.tyron.builder.api.tasks.CompileClasspath;
-import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;
-import com.tyron.builder.api.tasks.InputFiles;
-import com.tyron.builder.api.tasks.Internal;
-import com.tyron.builder.api.tasks.OutputDirectory;
-import com.tyron.builder.api.tasks.PathSensitive;
-import com.tyron.builder.api.tasks.PathSensitivity;
-import com.tyron.builder.api.tasks.SkipWhenEmpty;
-import com.tyron.builder.api.tasks.SourceTask;
-import com.tyron.builder.api.tasks.TaskContainer;
-import com.tyron.builder.api.tasks.compile.AbstractCompile;
-import com.tyron.builder.work.FileChange;
-import com.tyron.builder.work.InputChanges;
-import com.tyron.builder.work.NormalizeLineEndings;
+import org.gradle.api.file.ConfigurableFileTree;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.internal.project.taskfactory.IncrementalTaskAction;
+import org.gradle.api.BuildProject;
+import org.gradle.api.tasks.CacheableTask;
+import org.gradle.api.tasks.CompileClasspath;
+import org.gradle.api.tasks.IgnoreEmptyDirectories;
+import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.SkipWhenEmpty;
+import org.gradle.api.tasks.SourceTask;
+import org.gradle.api.tasks.TaskContainer;
+import org.gradle.api.tasks.compile.AbstractCompile;
+import org.gradle.work.FileChange;
+import org.gradle.work.InputChanges;
+import org.gradle.work.NormalizeLineEndings;
 
 import org.jetbrains.annotations.Nullable;
 

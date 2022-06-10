@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.tasks.testing.junitplatform;
+package org.gradle.api.tasks.testing.junitplatform;
 
-import com.tyron.builder.api.tasks.Input;
-import com.tyron.builder.api.tasks.testing.TestFrameworkOptions;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.testing.TestFrameworkOptions;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;

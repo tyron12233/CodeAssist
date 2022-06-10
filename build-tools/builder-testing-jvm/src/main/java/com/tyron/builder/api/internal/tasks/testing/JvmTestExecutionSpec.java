@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing;
+package org.gradle.api.internal.tasks.testing;
 
-import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.internal.scan.UsedByScanPlugin;
-import com.tyron.builder.process.JavaForkOptions;
-import com.tyron.builder.util.Path;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileTree;
+import org.gradle.internal.scan.UsedByScanPlugin;
+import org.gradle.process.JavaForkOptions;
+import org.gradle.util.Path;
 
 import java.io.File;
 import java.util.Collections;

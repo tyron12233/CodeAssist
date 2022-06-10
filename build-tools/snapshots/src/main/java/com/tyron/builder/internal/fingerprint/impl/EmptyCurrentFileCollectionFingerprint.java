@@ -1,14 +1,14 @@
-package com.tyron.builder.internal.fingerprint.impl;
+package org.gradle.internal.fingerprint.impl;
 
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
-import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
-import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
-import com.tyron.builder.internal.fingerprint.FileSystemLocationFingerprint;
-import com.tyron.builder.internal.fingerprint.FingerprintingStrategy;
-import com.tyron.builder.internal.hash.Hashes;
-import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
+import org.gradle.internal.fingerprint.FileCollectionFingerprint;
+import org.gradle.internal.fingerprint.FileSystemLocationFingerprint;
+import org.gradle.internal.fingerprint.FingerprintingStrategy;
+import org.gradle.internal.hash.Hashes;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
 
 import java.util.Collections;
 import java.util.Map;

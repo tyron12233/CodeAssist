@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.detection;
+package org.gradle.api.internal.tasks.testing.detection;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import com.tyron.builder.api.internal.file.RelativeFile;
-import com.tyron.builder.api.internal.tasks.testing.DefaultTestClassRunInfo;
-import com.tyron.builder.api.internal.tasks.testing.TestClassProcessor;
-import com.tyron.builder.internal.Factories;
-import com.tyron.builder.internal.Factory;
-import com.tyron.builder.internal.IoActions;
-import com.tyron.builder.util.internal.GFileUtils;
+import org.gradle.api.internal.file.RelativeFile;
+import org.gradle.api.internal.tasks.testing.DefaultTestClassRunInfo;
+import org.gradle.api.internal.tasks.testing.TestClassProcessor;
+import org.gradle.internal.Factories;
+import org.gradle.internal.Factory;
+import org.gradle.internal.IoActions;
+import org.gradle.util.internal.GFileUtils;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Type;

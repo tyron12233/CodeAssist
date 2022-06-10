@@ -1,6 +1,6 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
-import static com.tyron.builder.internal.file.FileMetadata.*;
+import static org.gradle.internal.file.FileMetadata.*;
 
 import java.util.Optional;
 import java.util.stream.Stream;

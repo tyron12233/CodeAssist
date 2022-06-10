@@ -1,6 +1,6 @@
-package com.tyron.builder.android.services;
+package org.gradle.android.services;
 
-import com.tyron.builder.android.aapt2.Aapt2Runner;
+import org.gradle.android.aapt2.Aapt2Runner;
 
 public class AndroidGlobalServices {
 

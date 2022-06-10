@@ -1,6 +1,6 @@
 package com.tyron.builder.plugin.tasks
 
-import com.tyron.builder.api.DefaultTask
+import org.gradle.api.DefaultTask
 
 class CompileJavaTask : DefaultTask() {
 

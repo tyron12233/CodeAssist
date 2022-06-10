@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.isolation;
+package org.gradle.internal.isolation;
 
 import javax.annotation.Nullable;
 

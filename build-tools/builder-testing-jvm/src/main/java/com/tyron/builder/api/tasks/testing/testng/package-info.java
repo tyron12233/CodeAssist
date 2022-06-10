@@ -17,4 +17,4 @@
 /**
  * TestNG specific testing classes.
  */
-package com.tyron.builder.api.tasks.testing.testng;
+package org.gradle.api.tasks.testing.testng;

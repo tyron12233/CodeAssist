@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
 /**
  * Ways to continue visiting a snapshot hierarchy after an entry has been visited.

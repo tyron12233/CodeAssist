@@ -1,7 +1,7 @@
-package com.tyron.builder.internal.fingerprint;
+package org.gradle.internal.fingerprint;
 
-import com.tyron.builder.internal.file.FileType;
-import com.tyron.builder.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.file.FileType;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
 
 import java.util.function.Predicate;
 

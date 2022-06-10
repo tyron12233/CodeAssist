@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.snapshot;
+package org.gradle.internal.snapshot;
 
 /**
  * Visitor for {@link FileSystemSnapshot}.

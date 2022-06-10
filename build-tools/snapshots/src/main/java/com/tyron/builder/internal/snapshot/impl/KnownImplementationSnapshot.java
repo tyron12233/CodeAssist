@@ -1,8 +1,8 @@
-package com.tyron.builder.internal.snapshot.impl;
+package org.gradle.internal.snapshot.impl;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
-import com.tyron.builder.internal.hash.Hashes;
+import org.gradle.internal.hash.Hashes;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;

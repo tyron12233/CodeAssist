@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.tyron.builder.api.internal.tasks.testing.junit;
+package org.gradle.api.internal.tasks.testing.junit;
 
-import com.tyron.builder.internal.Cast;
+import org.gradle.internal.Cast;
 import org.junit.internal.builders.AllDefaultPossibilitiesBuilder;
 import org.junit.internal.builders.IgnoredBuilder;
 import org.junit.internal.builders.JUnit4Builder;
