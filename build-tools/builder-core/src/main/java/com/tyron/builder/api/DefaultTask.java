@@ -38,6 +38,7 @@ import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskLocalState;
 import com.tyron.builder.api.internal.TaskOutputsInternal;
+import com.tyron.builder.util.internal.ConfigureUtil;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
@@ -333,6 +334,11 @@ public class DefaultTask extends AbstractTask {
     @Override
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    @Override
+    public Task configure(Closure configureClosure) {
+        return ConfigureUtil.configureSelf(configureClosure, this);
     }
 
     @Internal

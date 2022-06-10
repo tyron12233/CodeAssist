@@ -1,5 +1,9 @@
 package com.tyron.builder.api.internal.project;
 
+import static com.tyron.builder.util.internal.GUtil.addMaps;
+
+import static java.util.Collections.singletonMap;
+
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
@@ -469,6 +473,47 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     @Override
     public void buildscript(Closure configureClosure) {
         ConfigureUtil.configure(configureClosure, getBuildscript());
+    }
+
+    @Override
+    public Task task(String task) {
+        return taskContainer.create(task);
+    }
+
+    public Task task(Object task) {
+        return taskContainer.create(task.toString());
+    }
+
+    @Override
+    public Task task(String task, Action<? super Task> configureAction) {
+        return taskContainer.create(task, configureAction);
+    }
+
+    @Override
+    public Task task(String task, Closure configureClosure) {
+        return taskContainer.create(task).configure(configureClosure);
+    }
+
+    public Task task(Object task, Closure configureClosure) {
+        return task(task.toString(), configureClosure);
+    }
+
+    @Override
+    public Task task(Map options, String task) {
+        return taskContainer.create(addMaps(Cast.uncheckedNonnullCast(options), singletonMap(Task.TASK_NAME, task)));
+    }
+
+    public Task task(Map options, Object task) {
+        return task(options, task.toString());
+    }
+
+    @Override
+    public Task task(Map options, String task, Closure configureClosure) {
+        return taskContainer.create(addMaps(Cast.uncheckedNonnullCast(options), singletonMap(Task.TASK_NAME, task))).configure(configureClosure);
+    }
+
+    public Task task(Map options, Object task, Closure configureClosure) {
+        return task(options, task.toString(), configureClosure);
     }
 
     @Override

@@ -396,6 +396,110 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
     Set<BuildProject> getSubprojects();
 
     /**
+     * <p>Creates a {@link Task} with the given name and adds it to this project. Calling this method is equivalent to
+     * calling {@link #task(java.util.Map, String)} with an empty options map.</p>
+     *
+     * <p>After the task is added to the project, it is made available as a property of the project, so that you can
+     * reference the task by name in your build file.  See <a href="#properties">here</a> for more details</p>
+     *
+     * <p>If a task with the given name already exists in this project, an exception is thrown.</p>
+     *
+     * @param name The name of the task to be created
+     * @return The newly created task object
+     * @throws InvalidUserDataException If a task with the given name already exists in this project.
+     */
+    Task task(String name) throws InvalidUserDataException;
+
+    /**
+     * <p>Creates a {@link Task} with the given name and adds it to this project. A map of creation options can be
+     * passed to this method to control how the task is created. The following options are available:</p>
+     *
+     * <table>
+     *
+     * <tr><th>Option</th><th>Description</th><th>Default Value</th></tr>
+     *
+     * <tr><td><code>{@value com.tyron.builder.api.Task#TASK_TYPE}</code></td><td>The class of the task to
+     * create.</td><td>{@link com.tyron.builder.api.DefaultTask}</td></tr>
+     *
+     * <tr><td><code>{@value com.tyron.builder.api.Task#TASK_OVERWRITE}</code></td><td>Replace an existing
+     * task?</td><td><code>false</code></td></tr>
+     *
+     *
+     * <tr><td><code>{@value com.tyron.builder.api.Task#TASK_DEPENDS_ON}</code></td><td>A task name or set of task names which
+     * this task depends on</td><td><code>[]</code></td></tr>
+     *
+     * <tr><td><code>{@value com.tyron.builder.api.Task#TASK_ACTION}</code></td><td>A closure or {@link Action} to add to the
+     * task.</td><td><code>null</code></td></tr>
+     *
+     * <tr><td><code>{@value com.tyron.builder.api.Task#TASK_DESCRIPTION}</code></td><td>A description of the task.
+     * </td><td><code>null</code></td></tr>
+     *
+     * <tr><td><code>{@value com.tyron.builder.api.Task#TASK_GROUP}</code></td><td>A task group which this task belongs to.
+     * </td><td><code>null</code></td></tr>
+     *
+     * </table>
+     *
+     * <p>After the task is added to the project, it is made available as a property of the project, so that you can
+     * reference the task by name in your build file.  See <a href="#properties">here</a> for more details</p>
+     *
+     * <p>If a task with the given name already exists in this project and the <code>override</code> option is not set
+     * to true, an exception is thrown.</p>
+     *
+     * @param args The task creation options.
+     * @param name The name of the task to be created
+     * @return The newly created task object
+     * @throws InvalidUserDataException If a task with the given name already exists in this project.
+     */
+    Task task(Map<String, ?> args, String name) throws InvalidUserDataException;
+
+    /**
+     * <p>Creates a {@link Task} with the given name and adds it to this project. Before the task is returned, the given
+     * closure is executed to configure the task. A map of creation options can be passed to this method to control how
+     * the task is created. See {@link #task(java.util.Map, String)} for the available options.</p>
+     *
+     * <p>After the task is added to the project, it is made available as a property of the project, so that you can
+     * reference the task by name in your build file.  See <a href="#properties">here</a> for more details</p>
+     *
+     * <p>If a task with the given name already exists in this project and the <code>override</code> option is not set
+     * to true, an exception is thrown.</p>
+     *
+     * @param args The task creation options.
+     * @param name The name of the task to be created
+     * @param configureClosure The closure to use to configure the created task.
+     * @return The newly created task object
+     * @throws InvalidUserDataException If a task with the given name already exists in this project.
+     */
+    Task task(Map<String, ?> args, String name, Closure configureClosure);
+
+    /**
+     * <p>Creates a {@link Task} with the given name and adds it to this project. Before the task is returned, the given
+     * closure is executed to configure the task.</p> <p>After the task is added to the project, it is made
+     * available as a property of the project, so that you can reference the task by name in your build file.  See <a
+     * href="#properties">here</a> for more details</p>
+     *
+     * @param name The name of the task to be created
+     * @param configureClosure The closure to use to configure the created task.
+     * @return The newly created task object
+     * @throws InvalidUserDataException If a task with the given name already exists in this project.
+     */
+    Task task(String name, Closure configureClosure);
+
+    /**
+     * <p>Creates a {@link Task} with the given name and adds it to this project. Before the task is returned, the given
+     * action is executed to configure the task.</p> <p>After the task is added to the project, it is made
+     * available as a property of the project, so that you can reference the task by name in your build file.  See <a
+     * href="#properties">here</a> for more details</p>
+     *
+     * @param name The name of the task to be created
+     * @param configureAction The action to use to configure the created task.
+     * @return The newly created task object
+     * @throws InvalidUserDataException If a task with the given name already exists in this project.
+     * @see TaskContainer#create(String, Action)
+     * @since 4.10
+     */
+    Task task(String name, Action<? super Task> configureAction);
+
+    /**
      * <p>Returns the path of this project.  The path is the fully qualified name of the project.</p>
      *
      * @return The path. Never returns null.

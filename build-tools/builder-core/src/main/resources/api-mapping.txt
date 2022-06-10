@@ -4,7 +4,6 @@ DependencyResolutionManagement:com.tyron.builder.api.initialization.resolve.Depe
 RulesMode:com.tyron.builder.api.initialization.resolve.RulesMode
 ProjectDescriptor:com.tyron.builder.api.initialization.ProjectDescriptor
 Settings:com.tyron.builder.api.initialization.Settings
-
 Delete:com.tyron.builder.api.tasks.Delete
 Copy:com.tyron.builder.api.tasks.Copy
 Zip:com.tyron.builder.api.tasks.bundling.Zip

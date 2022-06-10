@@ -246,6 +246,15 @@ public interface Task extends Comparable<Task>, ExtensionAware {
     void setEnabled(boolean enabled);
 
     /**
+     * <p>Applies the statements of the closure against this task object. The delegate object for the closure is set to
+     * this task.</p>
+     *
+     * @param configureClosure The closure to be applied (can be null).
+     * @return This task
+     */
+    Task configure(Closure configureClosure);
+
+    /**
      * <p>Returns the {@link Convention} object for this task. A {@link Plugin} can use the convention object to
      * contribute properties and methods to this task.</p>
      *
