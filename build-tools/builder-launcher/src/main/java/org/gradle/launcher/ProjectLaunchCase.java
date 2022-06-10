@@ -2,7 +2,7 @@ package org.gradle.launcher;
 
 import com.google.common.collect.ImmutableList;
 import org.gradle.api.internal.StartParameterInternal;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.internal.service.scopes.PluginServiceRegistry;
 import com.tyron.common.TestUtil;
 
@@ -33,7 +33,7 @@ public abstract class ProjectLaunchCase {
      * Configures the root project and any other project that is registered.
      * @param project The project to configure
      */
-    public abstract void configure(BuildProject project);
+    public abstract void configure(Project project);
 
     /**
      * @return The root directory of the project

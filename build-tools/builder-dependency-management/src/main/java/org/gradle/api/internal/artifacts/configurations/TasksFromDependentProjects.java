@@ -16,7 +16,7 @@
 
 package org.gradle.api.internal.artifacts.configurations;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ProjectDependency;
@@ -43,7 +43,7 @@ class TasksFromDependentProjects extends AbstractTaskDependency {
 
     @Override
     public void visitDependencies(TaskDependencyResolveContext context) {
-        BuildProject thisProject = context.getTask().getProject();
+        Project thisProject = context.getTask().getProject();
         Set<Task> tasksWithName = thisProject.getRootProject().getTasksByName(taskName, true);
         for (Task nextTask : tasksWithName) {
             if (context.getTask() != nextTask) {
@@ -57,12 +57,12 @@ class TasksFromDependentProjects extends AbstractTaskDependency {
 
     static class TaskDependencyChecker {
         //checks if candidate project is dependent of the origin project with given configuration
-        boolean isDependent(BuildProject originProject, String configurationName, BuildProject candidateProject) {
+        boolean isDependent(Project originProject, String configurationName, Project candidateProject) {
             Configuration configuration = candidateProject.getConfigurations().findByName(configurationName);
             return configuration != null && doesConfigurationDependOnProject(configuration, originProject);
         }
 
-        private static boolean doesConfigurationDependOnProject(Configuration configuration, BuildProject project) {
+        private static boolean doesConfigurationDependOnProject(Configuration configuration, Project project) {
             Set<ProjectDependency> projectDependencies = configuration.getAllDependencies().withType(ProjectDependency.class);
             for (ProjectDependency projectDependency : projectDependencies) {
                 if (projectDependency.getDependencyProject().equals(project)) {

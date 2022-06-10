@@ -3,7 +3,7 @@ package org.gradle.util;
 import static org.gradle.util.internal.CollectionUtils.toStringList;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.internal.Actions;
 import org.gradle.internal.metaobject.ConfigureDelegate;
 import org.gradle.internal.metaobject.DynamicInvokeResult;
@@ -51,7 +51,7 @@ import groovy.lang.Closure;
  * <p>
  * Gradle automatically generates a Closure-taking method at runtime for each method with an {@link Action} as a single argument as long as the object is created with {@link org.gradle.api.model.ObjectFactory#newInstance(Class, Object...)}.
  * <p>
- * As a last resort, to apply some configuration represented by a Groovy Closure, a plugin can use {@link BuildProject#configure(Object, Closure)}.
+ * As a last resort, to apply some configuration represented by a Groovy Closure, a plugin can use {@link Project#configure(Object, Closure)}.
  *
  * @deprecated Will be removed in Gradle 8.0.
  */

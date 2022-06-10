@@ -16,7 +16,7 @@
 
 package org.gradle.api.reporting.dependencies.internal;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Transformer;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionComparator;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
@@ -43,7 +43,7 @@ import java.util.Set;
  *
  * @see JsonProjectDependencyRenderer
  */
-public class HtmlDependencyReporter extends ReportRenderer<Set<BuildProject>, File> {
+public class HtmlDependencyReporter extends ReportRenderer<Set<Project>, File> {
     private File outputDirectory;
     private final JsonProjectDependencyRenderer renderer;
 
@@ -52,18 +52,18 @@ public class HtmlDependencyReporter extends ReportRenderer<Set<BuildProject>, Fi
     }
 
     @Override
-    public void render(final Set<BuildProject> projects, File outputDirectory) {
+    public void render(final Set<Project> projects, File outputDirectory) {
         this.outputDirectory = outputDirectory;
 
         HtmlReportRenderer renderer = new HtmlReportRenderer();
-        renderer.render(projects, new ReportRenderer<Set<BuildProject>, HtmlReportBuilder>() {
+        renderer.render(projects, new ReportRenderer<Set<Project>, HtmlReportBuilder>() {
             @Override
-            public void render(Set<BuildProject> model, HtmlReportBuilder builder) {
-                Transformer<String, BuildProject> htmlPageScheme = projectNamingScheme("html");
-                Transformer<String, BuildProject> jsScheme = projectNamingScheme("js");
+            public void render(Set<Project> model, HtmlReportBuilder builder) {
+                Transformer<String, Project> htmlPageScheme = projectNamingScheme("html");
+                Transformer<String, Project> jsScheme = projectNamingScheme("js");
                 ProjectPageRenderer projectPageRenderer = new ProjectPageRenderer(jsScheme);
                 builder.renderRawHtmlPage("index.html", projects, new ProjectsPageRenderer(htmlPageScheme));
-                for (BuildProject project : projects) {
+                for (Project project : projects) {
                     String jsFileName = jsScheme.transform(project);
                     generateJsFile(project, jsFileName);
                     String htmlFileName = htmlPageScheme.transform(project);
@@ -75,17 +75,17 @@ public class HtmlDependencyReporter extends ReportRenderer<Set<BuildProject>, Fi
         }, outputDirectory);
     }
 
-    private void generateJsFile(BuildProject project, String fileName) {
+    private void generateJsFile(Project project, String fileName) {
         String json = renderer.render(project);
         String content = "var projectDependencyReport = " + json + ";";
         GFileUtils.writeFile(content, new File(outputDirectory, fileName), "utf-8");
     }
 
-    private Transformer<String, BuildProject> projectNamingScheme(final String extension) {
+    private Transformer<String, Project> projectNamingScheme(final String extension) {
         return project -> toFileName(project, "." + extension);
     }
 
-    private String toFileName(BuildProject project, String extension) {
+    private String toFileName(Project project, String extension) {
         String name = project.getPath();
         if (name.equals(":")) {
             return "root" + extension;

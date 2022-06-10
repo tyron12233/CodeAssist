@@ -2,7 +2,7 @@ package org.gradle.api.file;
 
 import org.gradle.internal.service.scopes.Scopes;
 import org.gradle.internal.service.scopes.ServiceScope;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.provider.Provider;
 
 import java.io.File;
@@ -39,7 +39,7 @@ public interface ProjectLayout {
     Provider<Directory> dir(Provider<File> file);
 
     /**
-     * <p>Creates a read-only {@link FileCollection} containing the given files, as defined by {@link BuildProject#files(Object...)}.
+     * <p>Creates a read-only {@link FileCollection} containing the given files, as defined by {@link Project#files(Object...)}.
      *
      * <p>This method can also be used to create an empty collection, but the collection may not be mutated later.</p>
      *

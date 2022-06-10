@@ -1,6 +1,6 @@
 package org.gradle.api.initialization;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -9,7 +9,7 @@ import java.util.Set;
 
 /**
  * <p>A {@code ProjectDescriptor} declares the configuration required to create and evaluate a {@link
- * BuildProject}.</p>
+ * Project}.</p>
  *
  * <p> A {@code ProjectDescriptor} is created when you add a project to the build from the settings script, using {@link
  * Settings#include(String...)}. You can access the descriptors using one of

@@ -1,6 +1,7 @@
 package org.gradle.api.artifacts.repositories;
 
 import org.gradle.api.Action;
+import org.gradle.api.Project;
 
 import java.net.URI;
 import java.util.Set;
@@ -35,7 +36,7 @@ public interface MavenArtifactRepository extends ArtifactRepository, UrlArtifact
      * Sets the base URL of this repository. This URL is used to find both POMs and artifact files. You can add additional URLs to use to look for artifact files, such as jars, using {@link
      * #setArtifactUrls(Iterable)}.
      *
-     * <p>The provided value is evaluated as per {@link org.gradle.api.BuildProject#uri(Object)}. This means, for example, you can pass in a {@code File} object, or a relative path to be evaluated relative
+     * <p>The provided value is evaluated as per {@link Project#uri(Object)}. This means, for example, you can pass in a {@code File} object, or a relative path to be evaluated relative
      * to the project directory.
      *
      * @param url The base URL.
@@ -53,7 +54,7 @@ public interface MavenArtifactRepository extends ArtifactRepository, UrlArtifact
     /**
      * Adds some additional URLs to use to find artifact files. Note that these URLs are not used to find POM files.
      *
-     * <p>The provided values are evaluated as per {@link org.gradle.api.BuildProject#uri(Object)}. This means, for example, you can pass in a {@code File} object, or a relative path to be evaluated
+     * <p>The provided values are evaluated as per {@link Project#uri(Object)}. This means, for example, you can pass in a {@code File} object, or a relative path to be evaluated
      * relative to the project directory.
      *
      * @param urls The URLs to add.
@@ -71,7 +72,7 @@ public interface MavenArtifactRepository extends ArtifactRepository, UrlArtifact
     /**
      * Sets the additional URLs to use to find artifact files. Note that these URLs are not used to find POM files.
      *
-     * <p>The provided values are evaluated as per {@link org.gradle.api.BuildProject#uri(Object)}. This means, for example, you can pass in a {@code File} object, or a relative path to be evaluated
+     * <p>The provided values are evaluated as per {@link Project#uri(Object)}. This means, for example, you can pass in a {@code File} object, or a relative path to be evaluated
      * relative to the project directory.
      *
      * @param urls The URLs.

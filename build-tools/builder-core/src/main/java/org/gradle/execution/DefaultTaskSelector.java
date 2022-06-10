@@ -1,6 +1,6 @@
 package org.gradle.execution;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.internal.GradleInternal;
@@ -120,7 +120,7 @@ public class DefaultTaskSelector extends TaskSelector {
             if (!element.getName().equals(taskName)) {
                 return true;
             }
-            for (BuildProject current = element.getProject(); current != null; current = current.getParent()) {
+            for (Project current = element.getProject(); current != null; current = current.getParent()) {
                 if (current.equals(targetProject)) {
                     return false;
                 }

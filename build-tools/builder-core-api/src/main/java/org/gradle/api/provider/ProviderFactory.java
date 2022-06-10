@@ -3,6 +3,7 @@ package org.gradle.api.provider;
 import org.gradle.api.Action;
 import org.gradle.api.Incubating;
 import org.gradle.api.NonExtensible;
+import org.gradle.api.Project;
 import org.gradle.api.credentials.AwsCredentials;
 import org.gradle.api.credentials.Credentials;
 import org.gradle.api.credentials.PasswordCredentials;
@@ -20,7 +21,7 @@ import java.util.function.BiFunction;
  *
  * <p>
  * An instance of the factory can be injected into a task, plugin or other object by annotating a public constructor or property getter method with {@code javax.inject.Inject}.
- * It is also available via {@link org.gradle.api.BuildProject#getProviders()} and {@link Settings#getProviders()}.
+ * It is also available via {@link Project#getProviders()} and {@link Settings#getProviders()}.
  *
  * @since 4.0
  */

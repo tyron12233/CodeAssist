@@ -15,7 +15,7 @@
  */
 package org.gradle.api.tasks.diagnostics;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.tasks.Internal;
@@ -58,7 +58,7 @@ public abstract class AbstractDependencyReportTask extends ProjectBasedReportTas
     }
 
     @Override
-    public void generate(BuildProject project) throws IOException {
+    public void generate(Project project) throws IOException {
         SortedSet<Configuration> sortedConfigurations = new TreeSet<>(Comparator.comparing(Configuration::getName));
         sortedConfigurations.addAll(getReportConfigurations());
         for (Configuration configuration : sortedConfigurations) {

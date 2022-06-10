@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.file.CopySpec;
 
 /**
@@ -92,5 +92,5 @@ public abstract class ApplicationPluginConvention {
 
     public abstract void setApplicationDistribution(CopySpec applicationDistribution);
 
-    public abstract BuildProject getProject();
+    public abstract Project getProject();
 }

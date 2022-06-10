@@ -19,7 +19,7 @@ package org.gradle.testing.base.plugins;
 import org.gradle.api.Action;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.language.base.plugins.ComponentModelBasePlugin;
 import org.gradle.model.Finalize;
@@ -46,9 +46,9 @@ import org.gradle.testing.base.internal.BaseTestSuiteSpec;
  * - Copies test binaries from {@code testSuites} into {@code binaries}.
  */
 @Incubating
-public class TestingModelBasePlugin implements Plugin<BuildProject> {
+public class TestingModelBasePlugin implements Plugin<Project> {
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply(ComponentModelBasePlugin.class);
     }
 

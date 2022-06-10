@@ -15,7 +15,7 @@
  */
 package org.gradle.api.tasks.diagnostics;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.tasks.diagnostics.internal.PropertyReportRenderer;
 import org.gradle.api.tasks.diagnostics.internal.ReportRenderer;
 import org.gradle.work.DisableCachingByDefault;
@@ -42,7 +42,7 @@ public class PropertyReportTask extends ProjectBasedReportTask {
     }
 
     @Override
-    public void generate(BuildProject project) {
+    public void generate(Project project) {
         for (Map.Entry<String, ?> entry : new TreeMap<String, Object>(project.getProperties())
                 .entrySet()) {
             if (entry.getKey().equals("properties")) {

@@ -62,7 +62,7 @@ import org.gradle.internal.service.scopes.ServiceRegistryFactory;
 import org.gradle.api.internal.tasks.TaskContainerInternal;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.Convention;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.WorkResult;
@@ -93,7 +93,7 @@ import groovy.lang.Script;
 
 public abstract class DefaultProject extends AbstractPluginAware implements ProjectInternal, DynamicObjectAware {
 
-    private static final Logger BUILD_LOGGER = Logging.getLogger(BuildProject.class);
+    private static final Logger BUILD_LOGGER = Logging.getLogger(Project.class);
 
     private final ProjectStateUnk owner;
     private final ProjectInternal rootProject;
@@ -150,7 +150,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
         services = serviceRegistryFactory.createFor(this);
         taskContainer = services.get(TaskContainerInternal.class);
 
-        extensibleDynamicObject = new ExtensibleDynamicObject(this, BuildProject.class, services.get(
+        extensibleDynamicObject = new ExtensibleDynamicObject(this, Project.class, services.get(
                 InstantiatorFactory.class).decorateLenient(services));
         if (parent != null) {
             extensibleDynamicObject.setParent(parent.getInheritedScope());
@@ -214,7 +214,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public BuildProject evaluate() {
+    public Project evaluate() {
         getProjectEvaluator().evaluate(this, state);
         return this;
     }
@@ -243,12 +243,12 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public void beforeEvaluate(Action<? super BuildProject> action) {
+    public void beforeEvaluate(Action<? super Project> action) {
 
     }
 
     @Override
-    public void afterEvaluate(Action<? super BuildProject> action) {
+    public void afterEvaluate(Action<? super Project> action) {
 
     }
 
@@ -316,7 +316,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public BuildProject project(String path, Action<? super BuildProject> configureAction) {
+    public Project project(String path, Action<? super Project> configureAction) {
         ProjectInternal project = project(path);
         configureAction.execute(project);
         return project;
@@ -338,9 +338,9 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public Map<BuildProject, Set<Task>> getAllTasks(boolean recursive) {
-        final Map<BuildProject, Set<Task>> foundTargets = new TreeMap<>();
-        Action<BuildProject> action = project -> {
+    public Map<Project, Set<Task>> getAllTasks(boolean recursive) {
+        final Map<Project, Set<Task>> foundTargets = new TreeMap<>();
+        Action<Project> action = project -> {
             // Don't force evaluation of rules here, let the task container do what it needs to
             ((ProjectInternal) project).getOwner().ensureTasksDiscovered();
 
@@ -360,7 +360,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
             throw new InvalidUserDataException("Name is not specified!");
         }
         final Set<Task> foundTasks = new HashSet<>();
-        Action<BuildProject> action = project -> {
+        Action<Project> action = project -> {
             // Don't force evaluation of rules here, let the task container do what it needs to
             ((ProjectInternal) project).getOwner().ensureTasksDiscovered();
 
@@ -558,7 +558,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public ProjectInternal project(ProjectInternal referrer, String path, Action<? super BuildProject> configureAction) {
+    public ProjectInternal project(ProjectInternal referrer, String path, Action<? super Project> configureAction) {
         ProjectInternal project = project(referrer, path);
         getProjectConfigurator().project(project, configureAction);
         return project;
@@ -578,12 +578,12 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
 
     @Override
-    public void subprojects(Action<? super BuildProject> action) {
+    public void subprojects(Action<? super Project> action) {
         subprojects(this, action);
     }
 
     @Override
-    public void subprojects(ProjectInternal referrer, Action<? super BuildProject> configureAction) {
+    public void subprojects(ProjectInternal referrer, Action<? super Project> configureAction) {
         getProjectConfigurator().subprojects(getCrossProjectModelAccess().getSubprojects(referrer, this), configureAction);
     }
 
@@ -593,7 +593,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public Set<BuildProject> getSubprojects() {
+    public Set<Project> getSubprojects() {
         return Cast.uncheckedCast(getSubprojects(this));
     }
 
@@ -603,13 +603,13 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public void allprojects(Action<? super BuildProject> action) {
+    public void allprojects(Action<? super Project> action) {
         allprojects(this, action);
     }
 
     @Override
     public void allprojects(ProjectInternal referrer,
-                            Action<? super BuildProject> configureAction) {
+                            Action<? super Project> configureAction) {
         getProjectConfigurator().allprojects(getCrossProjectModelAccess().getAllprojects(referrer, this), configureAction);
     }
 
@@ -792,8 +792,8 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public Map<String, BuildProject> getChildProjects() {
-        Map<String, BuildProject> childProjects = Maps.newTreeMap();
+    public Map<String, Project> getChildProjects() {
+        Map<String, Project> childProjects = Maps.newTreeMap();
         for (ProjectStateUnk project : owner.getChildProjects()) {
             childProjects.put(project.getName(), project.getMutableModel());
         }
@@ -811,7 +811,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public Set<BuildProject> getAllprojects() {
+    public Set<Project> getAllprojects() {
         return Cast.uncheckedCast(getAllprojects(this));
     }
 
@@ -834,7 +834,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     }
 
     @Override
-    public BuildProject evaluationDependsOn(String path) throws UnknownProjectException {
+    public Project evaluationDependsOn(String path) throws UnknownProjectException {
         return null;
     }
 
@@ -872,12 +872,12 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
 
     @Override
-    public int depthCompare(BuildProject otherProject) {
+    public int depthCompare(Project otherProject) {
         return Ints.compare(getDepth(), otherProject.getDepth());
     }
 
     @Override
-    public int compareTo(BuildProject otherProject) {
+    public int compareTo(Project otherProject) {
         int depthCompare = depthCompare(otherProject);
         if (depthCompare == 0) {
             return getProjectPath().compareTo(((ProjectInternal) otherProject).getProjectPath());

@@ -16,9 +16,8 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.internal.plugins.BuildConfigurationRule;
@@ -36,13 +35,13 @@ import org.gradle.language.base.plugins.LifecycleBasePlugin;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/base_plugin.html">Base plugin reference</a>
  */
-public class BasePlugin implements Plugin<BuildProject> {
+public class BasePlugin implements Plugin<Project> {
     public static final String CLEAN_TASK_NAME = LifecycleBasePlugin.CLEAN_TASK_NAME;
     public static final String ASSEMBLE_TASK_NAME = LifecycleBasePlugin.ASSEMBLE_TASK_NAME;
     public static final String BUILD_GROUP = LifecycleBasePlugin.BUILD_GROUP;
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         project.getPluginManager().apply(LifecycleBasePlugin.class);
 
         BasePluginExtension baseExtension = project.getExtensions().create(BasePluginExtension.class, "base", DefaultBasePluginExtension.class, project);
@@ -57,13 +56,13 @@ public class BasePlugin implements Plugin<BuildProject> {
         configureAssemble((ProjectInternal) project);
     }
 
-    private void configureExtension(BuildProject project, BasePluginExtension extension) {
+    private void configureExtension(Project project, BasePluginExtension extension) {
         extension.getArchivesName().convention(project.getName());
         extension.getLibsDirectory().convention(project.getLayout().getBuildDirectory().dir("libs"));
         extension.getDistsDirectory().convention(project.getLayout().getBuildDirectory().dir("distributions"));
     }
 
-    private void configureArchiveDefaults(final BuildProject project, final BasePluginExtension extension) {
+    private void configureArchiveDefaults(final Project project, final BasePluginExtension extension) {
         project.getTasks().withType(AbstractArchiveTask.class).configureEach(task -> {
             if (task instanceof Jar) {
                 task.getDestinationDirectory().convention(extension.getLibsDirectory());
@@ -72,18 +71,18 @@ public class BasePlugin implements Plugin<BuildProject> {
             }
 
             task.getArchiveVersion().convention(
-                project.provider(() -> project.getVersion() == BuildProject.DEFAULT_VERSION ? null : project.getVersion().toString())
+                project.provider(() -> project.getVersion() == Project.DEFAULT_VERSION ? null : project.getVersion().toString())
             );
 
             task.getArchiveBaseName().convention(extension.getArchivesName());
         });
     }
 
-    private void configureBuildConfigurationRule(BuildProject project) {
+    private void configureBuildConfigurationRule(Project project) {
         project.getTasks().addRule(new BuildConfigurationRule(project.getConfigurations(), project.getTasks()));
     }
 
-    private void configureConfigurations(final BuildProject project) {
+    private void configureConfigurations(final Project project) {
         ConfigurationContainer configurations = project.getConfigurations();
         ((ProjectInternal)project).getInternalStatus().convention("integration");
 

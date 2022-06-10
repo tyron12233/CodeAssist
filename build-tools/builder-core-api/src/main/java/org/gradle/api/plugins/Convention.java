@@ -1,7 +1,7 @@
 package org.gradle.api.plugins;
 
 import org.gradle.api.Task;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.internal.metaobject.DynamicObject;
 
 import javax.annotation.Nullable;
@@ -11,7 +11,7 @@ import java.util.Map;
  * <p>A {@code Convention} manages a set of <i>convention objects</i>. When you add a convention object to a {@code
  * Convention}, and the properties and methods of the convention object become available as properties and methods of
  * the object which the convention is associated to. A convention object is simply a POJO or POGO. Usually, a {@code
- * Convention} is used by plugins to extend a {@link BuildProject} or a {@link Task}.</p>
+ * Convention} is used by plugins to extend a {@link Project} or a {@link Task}.</p>
  */
 public interface Convention extends ExtensionContainer {
 

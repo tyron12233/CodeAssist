@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins.internal;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.plugins.BasePluginExtension;
 import org.gradle.api.provider.Property;
@@ -26,12 +26,12 @@ import java.io.File;
 
 public class DefaultBasePluginExtension implements BasePluginExtension {
 
-    private final BuildProject project;
+    private final Project project;
     private final DirectoryProperty distsDirectory;
     private final DirectoryProperty libsDirectory;
     private final Property<String> archivesName;
 
-    public DefaultBasePluginExtension(BuildProject project) {
+    public DefaultBasePluginExtension(Project project) {
         this.project = project;
         this.distsDirectory = project.getObjects().directoryProperty();
         this.libsDirectory = project.getObjects().directoryProperty();

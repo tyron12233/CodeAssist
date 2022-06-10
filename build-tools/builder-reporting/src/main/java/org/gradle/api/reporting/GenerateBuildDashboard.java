@@ -18,7 +18,7 @@ package org.gradle.api.reporting;
 
 import com.google.common.collect.Sets;
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.NamedDomainObjectSet;
 import org.gradle.api.Task;
@@ -108,9 +108,9 @@ public class GenerateBuildDashboard extends DefaultTask implements Reporting<Bui
 
     private Set<Reporting<? extends ReportContainer<?>>> getAggregatedTasks() {
         final Set<Reporting<? extends ReportContainer<?>>> reports = Sets.newHashSet();
-        getProject().allprojects(new Action<BuildProject>() {
+        getProject().allprojects(new Action<Project>() {
             @Override
-            public void execute(BuildProject project) {
+            public void execute(Project project) {
                 project.getTasks().all(new Action<Task>() {
                     @Override
                     public void execute(Task task) {

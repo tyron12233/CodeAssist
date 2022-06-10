@@ -6,7 +6,7 @@ import org.gradle.BuildListener;
 import org.gradle.BuildResult;
 import org.gradle.StartParameter;
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.ProjectEvaluationListener;
 import org.gradle.api.UnknownDomainObjectException;
 import org.gradle.api.initialization.IncludedBuild;
@@ -66,7 +66,7 @@ public abstract class DefaultGradle extends AbstractPluginAware implements Gradl
     private final ListenerBroadcast<ProjectEvaluationListener> projectEvaluationListenerBroadcast;
     private final CrossProjectConfigurator crossProjectConfigurator;
     private List<IncludedBuildInternal> includedBuilds;
-    private final MutableActionSet<BuildProject> rootProjectActions = new MutableActionSet<BuildProject>();
+    private final MutableActionSet<Project> rootProjectActions = new MutableActionSet<Project>();
     private boolean projectsLoaded;
     private Path identityPath;
     private Supplier<? extends ClassLoaderScope> classLoaderScope;
@@ -212,11 +212,11 @@ public abstract class DefaultGradle extends AbstractPluginAware implements Gradl
     }
 
     @Override
-    public void rootProject(Action<? super BuildProject> action) {
+    public void rootProject(Action<? super Project> action) {
         rootProject("Gradle.rootProject", action);
     }
 
-    private void rootProject(String registrationPoint, Action<? super BuildProject> action) {
+    private void rootProject(String registrationPoint, Action<? super Project> action) {
         if (projectsLoaded) {
             assert rootProject != null;
             action.execute(rootProject);
@@ -227,10 +227,10 @@ public abstract class DefaultGradle extends AbstractPluginAware implements Gradl
     }
 
     @Override
-    public void allprojects(final Action<? super BuildProject> action) {
-        rootProject("Gradle.allprojects", new Action<BuildProject>() {
+    public void allprojects(final Action<? super Project> action) {
+        rootProject("Gradle.allprojects", new Action<Project>() {
             @Override
-            public void execute(BuildProject project) {
+            public void execute(Project project) {
                 project.allprojects(action);
             }
         });
@@ -275,7 +275,7 @@ public abstract class DefaultGradle extends AbstractPluginAware implements Gradl
     }
 
     @Override
-    public void beforeProject(Action<? super BuildProject> action) {
+    public void beforeProject(Action<? super Project> action) {
         assertProjectMutatingMethodAllowed("beforeProject(Action)");
         projectEvaluationListenerBroadcast.add("beforeEvaluate", getListenerBuildOperationDecorator().decorate("Gradle.beforeProject", action));
     }
@@ -287,7 +287,7 @@ public abstract class DefaultGradle extends AbstractPluginAware implements Gradl
     }
 
     @Override
-    public void afterProject(Action<? super BuildProject> action) {
+    public void afterProject(Action<? super Project> action) {
         assertProjectMutatingMethodAllowed("afterProject(Action)");
         projectEvaluationListenerBroadcast.add("afterEvaluate", getListenerBuildOperationDecorator().decorate("Gradle.afterProject", action));
     }

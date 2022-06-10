@@ -5,6 +5,7 @@ import org.gradle.api.Action;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.PolymorphicDomainObjectContainer;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.UnknownTaskException;
 import org.gradle.api.provider.Provider;
@@ -16,7 +17,7 @@ import java.util.Map;
 /**
  * <p>A {@code TaskContainer} is responsible for managing a set of {@link Task} instances.</p>
  *
- * <p>You can obtain a {@code TaskContainer} instance by calling {@link org.gradle.api.BuildProject#getTasks()}, or using the
+ * <p>You can obtain a {@code TaskContainer} instance by calling {@link Project#getTasks()}, or using the
  * {@code tasks} property in your build script.</p>
  */
 @HasInternalProtocol

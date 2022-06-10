@@ -25,7 +25,7 @@ import groovy.lang.Closure;
  * directly in your script.</p>
  *
  * <p>Generally, a {@code Script} object will have a delegate object attached to it. For example, a build script will
- * have a {@link BuildProject} instance attached to it, and an initialization script will have a {@link
+ * have a {@link Project} instance attached to it, and an initialization script will have a {@link
  * Gradle} instance attached to it. Any property reference or method call which is not found
  * on this {@code Script} object is forwarded to the delegate object.</p>
  */

@@ -2,7 +2,6 @@ package org.gradle.api;
 
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.LoggingManager;
-import org.gradle.api.BuildProject;
 import org.gradle.api.plugins.Convention;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.provider.Property;
@@ -168,7 +167,7 @@ public interface Task extends Comparable<Task>, ExtensionAware {
 
     /**
      * <p>Returns the path of the task, which is a fully qualified name for the task. The path of a task is the path of
-     * its {@link BuildProject} plus the name of the task, separated by <code>:</code>.</p>
+     * its {@link Project} plus the name of the task, separated by <code>:</code>.</p>
      *
      * @return the path of the task, which is equal to the path of the project plus the name of the task.
      */
@@ -511,7 +510,7 @@ public interface Task extends Comparable<Task>, ExtensionAware {
     Property<Duration> getTimeout();
 
 
-    BuildProject getProject();
+    Project getProject();
 
     /**
      * <p>Returns the logger for this task. You can use this in your build file to write log messages.</p>

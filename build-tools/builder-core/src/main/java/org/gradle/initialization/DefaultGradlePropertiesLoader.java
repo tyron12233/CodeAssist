@@ -1,6 +1,6 @@
 package org.gradle.initialization;
 
-import static org.gradle.api.BuildProject.GRADLE_PROPERTIES;
+import static org.gradle.api.Project.GRADLE_PROPERTIES;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +11,7 @@ import java.util.Map;
 
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.properties.GradleProperties;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.internal.Cast;
 
 public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
@@ -79,7 +79,7 @@ public class DefaultGradlePropertiesLoader implements IGradlePropertiesLoader {
         if (properties.isEmpty()) {
             return;
         }
-        String prefix = BuildProject.SYSTEM_PROP_PREFIX + '.';
+        String prefix = Project.SYSTEM_PROP_PREFIX + '.';
         int prefixLength = prefix.length();
         for (String key : properties.keySet()) {
             if (key.length() > prefixLength && key.startsWith(prefix)) {

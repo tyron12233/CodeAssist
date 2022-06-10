@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.distribution.DistributionContainer;
 import org.gradle.api.distribution.plugins.DistributionPlugin;
@@ -27,9 +27,9 @@ import org.gradle.api.file.CopySpec;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/java_library_distribution_plugin.html">Java Library Distribution plugin reference</a>
  */
-public class JavaLibraryDistributionPlugin implements Plugin<BuildProject> {
+public class JavaLibraryDistributionPlugin implements Plugin<Project> {
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         project.getPluginManager().apply(JavaLibraryPlugin.class);
         project.getPluginManager().apply(DistributionPlugin.class);
 

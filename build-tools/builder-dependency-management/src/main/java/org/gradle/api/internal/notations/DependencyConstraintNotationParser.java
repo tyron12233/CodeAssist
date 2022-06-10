@@ -17,7 +17,7 @@
 package org.gradle.api.internal.notations;
 
 import com.google.common.collect.Interner;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.artifacts.DependencyConstraint;
 import org.gradle.api.artifacts.MinimalExternalModuleDependency;
@@ -49,7 +49,7 @@ public class DependencyConstraintNotationParser {
                         new DependencyStringNotationConverter<>(instantiator,
                                 DefaultDependencyConstraint.class, stringInterner)).converter(
                         new DependencyMapNotationConverter<>(instantiator,
-                                DefaultDependencyConstraint.class)).fromType(BuildProject.class,
+                                DefaultDependencyConstraint.class)).fromType(Project.class,
                         new DependencyConstraintProjectNotationConverter(dependencyFactory))
                 .converter(new ProjectDependencyNotationConverter()).invalidNotationMessage(
                         "Comprehensive documentation on dependency notations is available in DSL " +

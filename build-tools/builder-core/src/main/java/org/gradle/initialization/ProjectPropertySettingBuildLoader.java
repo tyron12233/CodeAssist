@@ -3,7 +3,7 @@ package org.gradle.initialization;
 import static java.util.Collections.emptyMap;
 
 import com.google.common.collect.Maps;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.SettingsInternal;
 import org.gradle.api.internal.properties.GradleProperties;
@@ -39,19 +39,19 @@ public class ProjectPropertySettingBuildLoader implements BuildLoader {
     @Override
     public void load(SettingsInternal settings, GradleInternal gradle) {
         buildLoader.load(settings, gradle);
-        BuildProject rootProject = gradle.getRootProject();
+        Project rootProject = gradle.getRootProject();
         setProjectProperties(rootProject, new CachingPropertyApplicator(rootProject.getClass()));
     }
 
-    private void setProjectProperties(BuildProject project, CachingPropertyApplicator applicator) {
+    private void setProjectProperties(Project project, CachingPropertyApplicator applicator) {
         addPropertiesToProject(project, applicator);
-        for (BuildProject childProject : project.getChildProjects().values()) {
+        for (Project childProject : project.getChildProjects().values()) {
             setProjectProperties(childProject, applicator);
         }
     }
 
-    private void addPropertiesToProject(BuildProject project, CachingPropertyApplicator applicator) {
-        File projectPropertiesFile = new File(project.getProjectDir(), BuildProject.GRADLE_PROPERTIES);
+    private void addPropertiesToProject(Project project, CachingPropertyApplicator applicator) {
+        File projectPropertiesFile = new File(project.getProjectDir(), Project.GRADLE_PROPERTIES);
         LOGGER.debug("Looking for project properties from: {}", projectPropertiesFile);
         fileResourceListener.fileObserved(projectPropertiesFile);
         if (projectPropertiesFile.isFile()) {
@@ -68,7 +68,7 @@ public class ProjectPropertySettingBuildLoader implements BuildLoader {
     // {@code mergedProperties} should really be <String, Object>, however properties loader signature expects a <String, String>
     // even if in practice it was never enforced (one can pass other property types, such as boolean) and
     // fixing the method signature would be a binary breaking change in a public API.
-    private void configurePropertiesOf(BuildProject project, CachingPropertyApplicator applicator, Map<String, Object> properties) {
+    private void configurePropertiesOf(Project project, CachingPropertyApplicator applicator, Map<String, Object> properties) {
         for (Map.Entry<String, Object> entry : gradleProperties.mergeProperties(properties).entrySet()) {
             applicator.configureProperty(project, entry.getKey(), entry.getValue());
         }
@@ -79,15 +79,15 @@ public class ProjectPropertySettingBuildLoader implements BuildLoader {
      * to avoid too many searches.
      */
     private static class CachingPropertyApplicator {
-        private final Class<? extends BuildProject> projectClass;
+        private final Class<? extends Project> projectClass;
         private final Map<Pair<String, ? extends Class<?>>, PropertyMutator> mutators = Maps
                 .newHashMap();
 
-        CachingPropertyApplicator(Class<? extends BuildProject> projectClass) {
+        CachingPropertyApplicator(Class<? extends Project> projectClass) {
             this.projectClass = projectClass;
         }
 
-        void configureProperty(BuildProject project, String name, @Nullable Object value) {
+        void configureProperty(Project project, String name, @Nullable Object value) {
             if (isPossibleProperty(name)) {
                 assert project.getClass() == projectClass;
                 PropertyMutator propertyMutator = propertyMutatorFor(name, typeOf(value));
@@ -99,7 +99,7 @@ public class ProjectPropertySettingBuildLoader implements BuildLoader {
             }
         }
 
-        private void setExtraPropertyOf(BuildProject project, String name, @Nullable Object value) {
+        private void setExtraPropertyOf(Project project, String name, @Nullable Object value) {
 //            project.getExtensions().getExtraProperties().set(name, value);
         }
 

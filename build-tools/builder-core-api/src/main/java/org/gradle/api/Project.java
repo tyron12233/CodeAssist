@@ -44,7 +44,7 @@ import java.util.concurrent.Callable;
 import groovy.lang.Closure;
 import groovy.lang.MissingPropertyException;
 
-public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, PluginAware {
+public interface Project extends Comparable<Project>, ExtensionAware, PluginAware {
 
     /**
      * The default project build file name.
@@ -75,7 +75,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @return The root project. Never returns null.
      */
-    BuildProject getRootProject();
+    Project getRootProject();
 
     /**
      * <p>Returns the root directory of this project. The root directory is the project directory of the root
@@ -177,8 +177,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @return The parent project, or null if this is the root project.
      */
-    @Nullable
-    BuildProject getParent();
+    @Nullable Project getParent();
 
     /**
      * <p>Returns the name of this project. The project's name is not necessarily unique within a project hierarchy. You
@@ -347,7 +346,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @return A map from child project name to child project. Returns an empty map if this project does not have
      *         any children.
      */
-    Map<String, BuildProject> getChildProjects();
+    Map<String, Project> getChildProjects();
 
     /**
      * <p>Sets a property of this project.  This method searches for a property with the given name in the following
@@ -379,21 +378,21 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @return This project. Never returns null.
      */
-    BuildProject getProject();
+    Project getProject();
 
     /**
      * <p>Returns the set containing this project and its subprojects.</p>
      *
      * @return The set of projects.
      */
-    Set<BuildProject> getAllprojects();
+    Set<Project> getAllprojects();
 
     /**
      * <p>Returns the set containing the subprojects of this project.</p>
      *
      * @return The set of projects.  Returns an empty set if this project has no subprojects.
      */
-    Set<BuildProject> getSubprojects();
+    Set<Project> getSubprojects();
 
     /**
      * <p>Creates a {@link Task} with the given name and adds it to this project. Calling this method is equivalent to
@@ -537,7 +536,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @return The project which this project depends on.
      * @throws UnknownProjectException If no project with the given path exists.
      */
-    BuildProject evaluationDependsOn(String path) throws UnknownProjectException;
+    Project evaluationDependsOn(String path) throws UnknownProjectException;
 
     /**
      * <p>Declares that this project has an evaluation dependency on each of its child projects.</p>
@@ -551,8 +550,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @param path The path.
      * @return The project with the given path. Returns null if no such project exists.
      */
-    @Nullable
-    BuildProject findProject(String path);
+    @Nullable Project findProject(String path);
 
     /**
      * <p>Locates a project by path. If the path is relative, it is interpreted relative to this project.</p>
@@ -561,7 +559,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @return The project with the given path. Never returns null.
      * @throws UnknownProjectException If no project with the given path exists.
      */
-    BuildProject project(String path) throws UnknownProjectException;
+    Project project(String path) throws UnknownProjectException;
 
     /**
      * <p>Locates a project by path and configures it using the given action. If the path is relative, it is
@@ -574,7 +572,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @since 3.4
      */
-    BuildProject project(String path, Action<? super BuildProject> configureAction);
+    Project project(String path, Action<? super Project> configureAction);
 
     /**
      * <p>Returns a map of the tasks contained in this project, and optionally its subprojects.</p>
@@ -583,7 +581,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * just this project.
      * @return A map from project to a set of tasks.
      */
-    Map<BuildProject, Set<Task>> getAllTasks(boolean recursive);
+    Map<Project, Set<Task>> getAllTasks(boolean recursive);
 
     /**
      * <p>Returns the set of tasks with the given name contained in this project, and optionally its subprojects.
@@ -960,7 +958,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * <p>
      * This will not follow symlinks. If you need to follow symlinks too use {@link #delete(Action)}.
      *
-     * @param paths Any type of object accepted by {@link BuildProject#files(Object...)}
+     * @param paths Any type of object accepted by {@link Project#files(Object...)}
      * @return true if anything got deleted, false otherwise
      */
     boolean delete(Object... paths);
@@ -1005,7 +1003,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *         or greater than the specified object.
      * @see #getDepth()
      */
-    int depthCompare(BuildProject otherProject);
+    int depthCompare(Project otherProject);
 
     /**
      * <p>Returns the nesting level of a project in a multi-project hierarchy. For single project builds this is always
@@ -1029,7 +1027,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @param action The action to execute.
      */
-    void subprojects(Action<? super BuildProject> action);
+    void subprojects(Action<? super Project> action);
 
     /**
      * <p>Configures this project and each of its sub-projects.</p>
@@ -1038,7 +1036,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @param action The action to execute.
      */
-    void allprojects(Action<? super BuildProject> action);
+    void allprojects(Action<? super Project> action);
 
 
     /**
@@ -1046,14 +1044,14 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      *
      * @param action the action to execute.
      */
-    void beforeEvaluate(Action<? super BuildProject> action);
+    void beforeEvaluate(Action<? super Project> action);
 
     /**
      * Adds an action to execute immediately after this project is evaluated.
      *
      * @param action the action to execute.
      */
-    void afterEvaluate(Action<? super BuildProject> action);
+    void afterEvaluate(Action<? super Project> action);
 
     /**
      * <p>Determines if this project has the given property. See <a href="#properties">here</a> for details of the
@@ -1098,7 +1096,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @param propertyName The name of the property.
      * @return The value of the property, possibly null.
      * @throws MissingPropertyException When the given property is unknown.
-     * @see BuildProject#findProperty(String)
+     * @see Project#findProperty(String)
      */
     @Nullable
     Object property(String propertyName); // throws MissingPropertyException;
@@ -1130,7 +1128,7 @@ public interface BuildProject extends Comparable<BuildProject>, ExtensionAware, 
      * @param propertyName The name of the property.
      * @since 2.13
      * @return The value of the property, possibly null or null if not found.
-     * @see BuildProject#property(String)
+     * @see Project#property(String)
      */
     @Nullable
     Object findProperty(String propertyName);

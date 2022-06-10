@@ -17,7 +17,7 @@ package org.gradle.api.tasks;
 
 import com.google.common.collect.Iterables;
 import org.gradle.api.BuildException;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Buildable;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
@@ -77,7 +77,7 @@ public class GroovyRuntime {
 
     private final ProjectInternal project;
 
-    public GroovyRuntime(BuildProject project) {
+    public GroovyRuntime(Project project) {
         this.project = (ProjectInternal) project;
     }
 

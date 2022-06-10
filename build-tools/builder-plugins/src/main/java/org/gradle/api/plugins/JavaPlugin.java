@@ -16,11 +16,10 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.NamedDomainObjectProvider;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.ArtifactView;
 import org.gradle.api.artifacts.Configuration;
@@ -78,7 +77,7 @@ import static org.gradle.api.plugins.internal.JvmPluginsHelper.configureJavaDocT
  * @see <a href="https://docs.gradle.org/current/userguide/java_plugin.html">Java plugin reference</a>
  * @see <a href="https://docs.gradle.org/current/userguide/jvm_test_suite_plugin.html">JVM test suite plugin reference</a>
  */
-public class JavaPlugin implements Plugin<BuildProject> {
+public class JavaPlugin implements Plugin<Project> {
     /**
      * The name of the task that processes resources.
      */
@@ -270,7 +269,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         if (project.getPluginManager().hasPlugin("java-platform")) {
             throw new IllegalStateException("The \"java\" or \"java-library\" plugin cannot be applied together with the \"java-platform\" plugin. " +
                 "A project is either a platform or a library but cannot be both at the same time.");
@@ -293,7 +292,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
         configureBuild(project);
     }
 
-    private void configureSourceSets(BuildProject project, JavaPluginExtension pluginExtension, final BuildOutputCleanupRegistry buildOutputCleanupRegistry, SourceSet mainSourceSet) {
+    private void configureSourceSets(Project project, JavaPluginExtension pluginExtension, final BuildOutputCleanupRegistry buildOutputCleanupRegistry, SourceSet mainSourceSet) {
         SourceSetContainer sourceSets = pluginExtension.getSourceSets();
 
 //        The built-in test suite must be configured after the main source set is available due to some
@@ -306,7 +305,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
         );
     }
 
-    private void configureBuiltInTest(BuildProject project, TestingExtension testing, JavaPluginExtension java, SourceSet mainSourceSet) {
+    private void configureBuiltInTest(Project project, TestingExtension testing, JavaPluginExtension java, SourceSet mainSourceSet) {
         final NamedDomainObjectProvider<JvmTestSuite> testSuite = testing.getSuites().register(DEFAULT_TEST_SUITE_NAME, JvmTestSuite.class, suite -> {
             final FileCollection mainSourceSetOutput = mainSourceSet.getOutput();
             final FileCollection testSourceSetOutput = suite.getSources().getOutput();
@@ -321,7 +320,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
         project.getTasks().named(JavaBasePlugin.CHECK_TASK_NAME, task -> task.dependsOn(testSuite));
     }
 
-    private void configureArchivesAndComponent(BuildProject project, final JavaPluginExtension pluginExtension) {
+    private void configureArchivesAndComponent(Project project, final JavaPluginExtension pluginExtension) {
         PublishArtifact jarArtifact = new LazyPublishArtifact(registerJarTaskFor(project, pluginExtension));
         Configuration apiElementConfiguration = project.getConfigurations().getByName(API_ELEMENTS_CONFIGURATION_NAME);
         Configuration runtimeElementsConfiguration = project.getConfigurations().getByName(RUNTIME_ELEMENTS_CONFIGURATION_NAME);
@@ -335,7 +334,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
         registerSoftwareComponents(project);
     }
 
-    private TaskProvider<Jar> registerJarTaskFor(BuildProject project, JavaPluginExtension pluginExtension) {
+    private TaskProvider<Jar> registerJarTaskFor(Project project, JavaPluginExtension pluginExtension) {
         return project.getTasks().register(JAR_TASK_NAME, Jar.class, jar -> {
             jar.setDescription("Assembles a jar archive containing the main classes.");
             jar.setGroup(BasePlugin.BUILD_GROUP);
@@ -351,12 +350,12 @@ public class JavaPlugin implements Plugin<BuildProject> {
         return pluginExtension.getSourceSets().getByName(mainSourceSetName);
     }
 
-    private void configureJavadocTask(BuildProject project, JavaPluginExtension javaPluginExtension) {
+    private void configureJavadocTask(Project project, JavaPluginExtension javaPluginExtension) {
         SourceSet main = mainSourceSetOf(javaPluginExtension);
         configureJavaDocTask(null, main, project.getTasks(), javaPluginExtension);
     }
 
-    private void registerSoftwareComponents(BuildProject project) {
+    private void registerSoftwareComponents(Project project) {
         ConfigurationContainer configurations = project.getConfigurations();
         // the main "Java" component
         AdhocComponentWithVariants java = softwareComponentFactory.adhoc("java");
@@ -394,14 +393,14 @@ public class JavaPlugin implements Plugin<BuildProject> {
         });
     }
 
-    private void configureBuild(BuildProject project) {
+    private void configureBuild(Project project) {
         project.getTasks().named(JavaBasePlugin.BUILD_NEEDED_TASK_NAME, task -> addDependsOnTaskInOtherProjects(task, true,
             JavaBasePlugin.BUILD_NEEDED_TASK_NAME, TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME));
         project.getTasks().named(JavaBasePlugin.BUILD_DEPENDENTS_TASK_NAME, task -> addDependsOnTaskInOtherProjects(task, false,
             JavaBasePlugin.BUILD_DEPENDENTS_TASK_NAME, TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME));
     }
 
-    private void configureConfigurations(BuildProject project, JavaPluginExtension extension, SourceSet mainSourceSet) {
+    private void configureConfigurations(Project project, JavaPluginExtension extension, SourceSet mainSourceSet) {
         ConfigurationContainer configurations = project.getConfigurations();
 
         Configuration defaultConfiguration = configurations.getByName(Dependency.DEFAULT_CONFIGURATION);
@@ -431,7 +430,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
         createSourcesVariant(project, extension, mainSourceSet);
     }
 
-    private Configuration createSourcesVariant(BuildProject project, JavaPluginExtension java, SourceSet mainSourceSet) {
+    private Configuration createSourcesVariant(Project project, JavaPluginExtension java, SourceSet mainSourceSet) {
         final Configuration variant = project.getConfigurations().create(SOURCE_ELEMENTS_VARIANT_NAME);
         variant.setVisible(false);
         variant.setCanBeResolved(false);
@@ -464,7 +463,7 @@ public class JavaPlugin implements Plugin<BuildProject> {
      */
     private void addDependsOnTaskInOtherProjects(final Task task, boolean useDependedOn, String otherProjectTaskName,
                                                  String configurationName) {
-        BuildProject project = task.getProject();
+        Project project = task.getProject();
         final Configuration configuration = project.getConfigurations().getByName(configurationName);
         task.dependsOn(configuration.getTaskDependencyFromProjectDependency(useDependedOn, otherProjectTaskName));
     }
@@ -473,10 +472,10 @@ public class JavaPlugin implements Plugin<BuildProject> {
      * This is only used by buildSrc to add to the buildscript classpath.
      */
     private static class BuildableJavaComponentImpl implements BuildableJavaComponent {
-        private final BuildProject project;
+        private final Project project;
         private final JavaPluginExtension extension;
 
-        public BuildableJavaComponentImpl(BuildProject project, JavaPluginExtension extension) {
+        public BuildableJavaComponentImpl(Project project, JavaPluginExtension extension) {
             this.project = project;
             this.extension = extension;
         }

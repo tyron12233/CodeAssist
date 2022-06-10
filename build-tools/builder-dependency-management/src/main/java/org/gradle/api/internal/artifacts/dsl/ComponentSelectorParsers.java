@@ -18,7 +18,7 @@ package org.gradle.api.internal.artifacts.dsl;
 
 import org.gradle.api.IllegalDependencyNotation;
 import org.gradle.api.InvalidUserDataException;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier;
@@ -43,7 +43,7 @@ public class ComponentSelectorParsers {
             .toType(ComponentSelector.class)
             .fromCharSequence(new StringConverter())
             .converter(new MapConverter())
-            .fromType(BuildProject.class, new ProjectConverter());
+            .fromType(Project.class, new ProjectConverter());
 
     public static NotationParser<Object, Set<ComponentSelector>> multiParser() {
         return builder().toFlatteningComposite();
@@ -96,7 +96,7 @@ public class ComponentSelectorParsers {
         }
     }
 
-    static class ProjectConverter implements NotationConverter<BuildProject, ComponentSelector> {
+    static class ProjectConverter implements NotationConverter<Project, ComponentSelector> {
 
         @Override
         public void describe(DiagnosticsVisitor visitor) {
@@ -104,7 +104,7 @@ public class ComponentSelectorParsers {
         }
 
         @Override
-        public void convert(BuildProject notation, NotationConvertResult<? super ComponentSelector> result) throws TypeConversionException {
+        public void convert(Project notation, NotationConvertResult<? super ComponentSelector> result) throws TypeConversionException {
             result.converted(DefaultProjectComponentSelector.newSelector(notation));
         }
     }

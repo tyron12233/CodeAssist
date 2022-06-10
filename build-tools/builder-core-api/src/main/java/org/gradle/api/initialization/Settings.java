@@ -7,7 +7,7 @@ import org.gradle.api.initialization.resolve.DependencyResolutionManagement;
 import org.gradle.api.invocation.Gradle;
 import org.gradle.StartParameter;
 import org.gradle.api.UnknownProjectException;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.PluginAware;
 import org.gradle.api.provider.Provider;
@@ -22,7 +22,7 @@ import java.util.Collections;
 
 /**
  * <p>Declares the configuration required to instantiate and configure the hierarchy of {@link
- * BuildProject} instances which are to participate in a build.</p>
+ * Project} instances which are to participate in a build.</p>
  *
  * <p>There is a one-to-one correspondence between a <code>Settings</code> instance and a <code>{@value
  * #DEFAULT_SETTINGS_FILE}</code> settings file. Before Gradle assembles the projects for a build, it creates a
@@ -48,10 +48,10 @@ import java.util.Collections;
  *
  * <ul>
  *
- * <li>Defined in the {@value BuildProject#GRADLE_PROPERTIES} file located in the settings directory of the
+ * <li>Defined in the {@value Project#GRADLE_PROPERTIES} file located in the settings directory of the
  * build.</li>
  *
- * <li>Defined the {@value BuildProject#GRADLE_PROPERTIES} file located in the user's {@code .gradle}
+ * <li>Defined the {@value Project#GRADLE_PROPERTIES} file located in the user's {@code .gradle}
  * directory.</li>
  *
  * <li>Provided on the command-line using the -P option.</li>

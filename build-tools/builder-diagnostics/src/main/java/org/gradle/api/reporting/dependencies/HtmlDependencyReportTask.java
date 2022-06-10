@@ -18,9 +18,8 @@ package org.gradle.api.reporting.dependencies;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Incubating;
-import org.gradle.api.BuildProject;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.ConventionTask;
@@ -68,7 +67,7 @@ import java.util.Set;
  */
 @UntrackedTask(because = "We can't describe the dependency tree of all projects as input")
 public class HtmlDependencyReportTask extends ConventionTask implements Reporting<DependencyReportContainer> {
-    private Set<BuildProject> projects;
+    private Set<Project> projects;
     private final DirectoryProperty reportDir;
     private final DependencyReportContainer reports;
 
@@ -159,7 +158,7 @@ public class HtmlDependencyReportTask extends ConventionTask implements Reportin
      * @return The set of files.
      */
     @Internal
-    public Set<BuildProject> getProjects() {
+    public Set<Project> getProjects() {
         return projects;
     }
 
@@ -168,7 +167,7 @@ public class HtmlDependencyReportTask extends ConventionTask implements Reportin
      *
      * @param projects The set of projects. Must not be null.
      */
-    public void setProjects(Set<BuildProject> projects) {
+    public void setProjects(Set<Project> projects) {
         this.projects = projects;
     }
 }

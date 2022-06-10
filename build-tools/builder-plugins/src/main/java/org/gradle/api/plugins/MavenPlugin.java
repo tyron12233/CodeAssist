@@ -15,7 +15,7 @@
  */
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.Plugin;
 import org.gradle.api.internal.DocumentationRegistry;
@@ -27,7 +27,7 @@ import javax.inject.Inject;
  * of plugins which use the `plugins.withPlugin` pattern.
  */
 @Deprecated
-public abstract class MavenPlugin implements Plugin<BuildProject> {
+public abstract class MavenPlugin implements Plugin<Project> {
     private final DocumentationRegistry documentationRegistry;
 
     @Inject
@@ -36,7 +36,7 @@ public abstract class MavenPlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(BuildProject target) {
+    public void apply(Project target) {
         throw new InvalidUserCodeException(
             "The legacy `maven` plugin was removed in Gradle 7. Please use the `maven-publish` plugin instead. See " +
             documentationRegistry.getDocumentationFor("publishing_maven", "publishing_maven") + " for details");

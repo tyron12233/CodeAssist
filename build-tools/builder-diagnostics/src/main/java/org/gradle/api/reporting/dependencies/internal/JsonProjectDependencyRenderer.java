@@ -20,8 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import groovy.json.JsonBuilder;
 
-import org.gradle.api.BuildProject;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Transformer;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ModuleIdentifier;
@@ -126,14 +125,14 @@ public class JsonProjectDependencyRenderer {
      * @param project the project for which the report must be generated
      * @return the generated JSON, as a String
      */
-    public String render(BuildProject project) {
+    public String render(Project project) {
         JsonBuilder json = new JsonBuilder();
         renderProject(project, json);
         return json.toString();
     }
 
     // Historic note: this class still uses the Groovy JsonBuilder, as it was originally developed as a Groovy class.
-    private void renderProject(BuildProject project, JsonBuilder json) {
+    private void renderProject(Project project, JsonBuilder json) {
 
         Map<String, Object> overall = Maps.newLinkedHashMap();
         overall.put("gradleVersion", GradleVersion.current().toString());
@@ -148,7 +147,7 @@ public class JsonProjectDependencyRenderer {
         json.call(overall);
     }
 
-    private List<Configuration> getNonDeprecatedConfigurations(BuildProject project) {
+    private List<Configuration> getNonDeprecatedConfigurations(Project project) {
         List<Configuration> filteredConfigurations = new ArrayList<>();
         for (Configuration configuration : project.getConfigurations()) {
             if (!((DeprecatableConfiguration) configuration).isFullyDeprecated()) {
@@ -163,7 +162,7 @@ public class JsonProjectDependencyRenderer {
         return configuration.isCanBeResolved() && !isDeprecatedForResolving;
     }
 
-    private List<Map<String, Object>> createConfigurations(BuildProject project) {
+    private List<Map<String, Object>> createConfigurations(Project project) {
         Iterable<Configuration> configurations = getNonDeprecatedConfigurations(project);
         return CollectionUtils.collect(configurations, configuration -> {
             LinkedHashMap<String, Object> map = new LinkedHashMap<>(4);

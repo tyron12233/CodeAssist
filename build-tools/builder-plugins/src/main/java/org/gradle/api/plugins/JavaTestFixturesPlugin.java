@@ -15,7 +15,7 @@
  */
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.ProjectDependency;
@@ -43,7 +43,7 @@ import static org.gradle.internal.component.external.model.TestFixturesSupport.T
  * @since 5.6
  * @see <a href="https://docs.gradle.org/current/userguide/java_testing.html#sec:java_test_fixtures">Java Test Fixtures reference</a>
  */
-public class JavaTestFixturesPlugin implements Plugin<BuildProject> {
+public class JavaTestFixturesPlugin implements Plugin<Project> {
 
     private final JvmModelingServices jvmEcosystemUtilities;
 
@@ -53,7 +53,7 @@ public class JavaTestFixturesPlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().withPlugin("java", plugin -> {
             jvmEcosystemUtilities.createJvmVariant(TEST_FIXTURES_FEATURE_NAME, builder ->
                 builder
@@ -64,7 +64,7 @@ public class JavaTestFixturesPlugin implements Plugin<BuildProject> {
         });
     }
 
-    private void createImplicitTestFixturesDependencies(BuildProject project, JavaPluginExtension extension) {
+    private void createImplicitTestFixturesDependencies(Project project, JavaPluginExtension extension) {
         DependencyHandler dependencies = project.getDependencies();
         dependencies.add(TEST_FIXTURES_API, dependencies.create(project));
         SourceSet testSourceSet = findTestSourceSet(extension);
@@ -83,7 +83,7 @@ public class JavaTestFixturesPlugin implements Plugin<BuildProject> {
         return extension.getSourceSets().getByName("test");
     }
 
-    private JavaPluginExtension findJavaExtension(BuildProject project) {
+    private JavaPluginExtension findJavaExtension(Project project) {
         return project.getExtensions().getByType(JavaPluginExtension.class);
     }
 

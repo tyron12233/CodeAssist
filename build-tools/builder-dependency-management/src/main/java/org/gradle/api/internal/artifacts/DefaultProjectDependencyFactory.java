@@ -16,7 +16,7 @@
 
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.capabilities.Capability;
 import org.gradle.api.internal.artifacts.dependencies.DefaultProjectDependency;
@@ -49,7 +49,7 @@ public class DefaultProjectDependencyFactory {
         projectDependency.setCapabilityNotationParser(capabilityNotationParser);
     }
 
-    public ProjectDependency create(BuildProject project) {
+    public ProjectDependency create(Project project) {
         DefaultProjectDependency projectDependency = instantiator.newInstance(DefaultProjectDependency.class, project, buildProjectDependencies);
         prepareProject(projectDependency);
         return projectDependency;

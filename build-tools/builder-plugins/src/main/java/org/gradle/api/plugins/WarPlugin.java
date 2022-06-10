@@ -17,7 +17,7 @@
 package org.gradle.api.plugins;
 
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.PublishArtifact;
@@ -44,7 +44,7 @@ import java.util.concurrent.Callable;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/war_plugin.html">WAR plugin reference</a>
  */
-public class WarPlugin implements Plugin<BuildProject> {
+public class WarPlugin implements Plugin<Project> {
     public static final String PROVIDED_COMPILE_CONFIGURATION_NAME = "providedCompile";
     public static final String PROVIDED_RUNTIME_CONFIGURATION_NAME = "providedRuntime";
     public static final String WAR_TASK_NAME = "war";
@@ -60,7 +60,7 @@ public class WarPlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         project.getPluginManager().apply(JavaPlugin.class);
         final WarPluginConvention pluginConvention = new DefaultWarPluginConvention(project);
         project.getConvention().getPlugins().put("war", pluginConvention);
@@ -114,7 +114,7 @@ public class WarPlugin implements Plugin<BuildProject> {
             .withUpgradeGuideSection(7, "plugin_configuration_consumption"));
     }
 
-    private void configureComponent(BuildProject project, PublishArtifact warArtifact) {
+    private void configureComponent(Project project, PublishArtifact warArtifact) {
         AttributeContainer attributes = attributesFactory.mutable()
             .attribute(Usage.USAGE_ATTRIBUTE, objectFactory.named(Usage.class, Usage.JAVA_RUNTIME));
         project.getComponents().add(objectFactory.newInstance(WebApplication.class, warArtifact, "master", attributes));

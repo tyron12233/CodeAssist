@@ -17,7 +17,7 @@
 package org.gradle.api.plugins.internal;
 
 import org.gradle.api.NonNullApi;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.reflect.HasPublicType;
 import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.reporting.ReportingExtension;
@@ -32,9 +32,9 @@ import static org.gradle.api.reflect.TypeOf.typeOf;
 @NonNullApi
 public class DefaultProjectReportsPluginConvention extends org.gradle.api.plugins.ProjectReportsPluginConvention implements HasPublicType {
     private String projectReportDirName = "project";
-    private final BuildProject project;
+    private final Project project;
 
-    public DefaultProjectReportsPluginConvention(BuildProject project) {
+    public DefaultProjectReportsPluginConvention(Project project) {
         this.project = project;
     }
 
@@ -59,7 +59,7 @@ public class DefaultProjectReportsPluginConvention extends org.gradle.api.plugin
     }
 
     @Override
-    public Set<BuildProject> getProjects() {
+    public Set<Project> getProjects() {
         return WrapUtil.toSet(project);
     }
 }

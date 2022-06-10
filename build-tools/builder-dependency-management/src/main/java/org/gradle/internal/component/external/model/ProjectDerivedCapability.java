@@ -16,7 +16,7 @@
 package org.gradle.internal.component.external.model;
 
 import com.google.common.base.Objects;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.capabilities.Capability;
 import org.gradle.util.internal.TextUtil;
@@ -24,14 +24,14 @@ import org.gradle.util.internal.TextUtil;
 import javax.annotation.Nullable;
 
 public class ProjectDerivedCapability implements CapabilityInternal {
-    private final BuildProject project;
+    private final Project project;
     private final String featureName;
 
-    public ProjectDerivedCapability(BuildProject project) {
+    public ProjectDerivedCapability(Project project) {
         this(project, null);
     }
 
-    public ProjectDerivedCapability(BuildProject project, @Nullable String featureName) {
+    public ProjectDerivedCapability(Project project, @Nullable String featureName) {
         this.project = project;
         this.featureName = featureName;
     }

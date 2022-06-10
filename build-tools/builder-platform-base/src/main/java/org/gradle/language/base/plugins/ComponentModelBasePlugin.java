@@ -21,7 +21,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import org.gradle.api.Action;
 import org.gradle.api.BuildException;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
@@ -93,10 +93,10 @@ import java.util.Set;
  * that binary.
  */
 @Incubating
-public class ComponentModelBasePlugin implements Plugin<BuildProject> {
+public class ComponentModelBasePlugin implements Plugin<Project> {
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply(LanguageBasePlugin.class);
         project.getPluginManager().apply(BinaryBasePlugin.class);
     }

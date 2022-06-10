@@ -1,11 +1,10 @@
 package com.tyron.builder.plugin;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.Task;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.logging.Logger;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.specs.Specs;
 import org.gradle.api.tasks.compile.JavaCompile;
@@ -14,15 +13,14 @@ import com.tyron.builder.plugin.tasks.TransformAnnotationProcessorsTask;
 import org.codehaus.groovy.reflection.android.AndroidSupport;
 
 import java.io.File;
-import java.util.Locale;
 
 @SuppressWarnings("Convert2Lambda")
-public class CodeAssistPlugin implements Plugin<BuildProject> {
+public class CodeAssistPlugin implements Plugin<Project> {
 
     private static final String TRANSFORM_ANNOTATION_PROCESSORS_TASK_NAME = "transformAnnotationProcessors";
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         boolean hasJavaPlugin = hasJavaPlugin(project);
 
         if (AndroidSupport.isRunningAndroid() && hasJavaPlugin) {
@@ -30,7 +28,7 @@ public class CodeAssistPlugin implements Plugin<BuildProject> {
         }
     }
 
-    private void registerTransformAnnotationProcessorsTask(BuildProject project) {
+    private void registerTransformAnnotationProcessorsTask(Project project) {
         JavaCompile compileJava = (JavaCompile) project.getTasks().getByName("compileJava");
         project.getTasks().register(
                 TRANSFORM_ANNOTATION_PROCESSORS_TASK_NAME,
@@ -68,7 +66,7 @@ public class CodeAssistPlugin implements Plugin<BuildProject> {
         compileJava.dependsOn("modifyAnnotationProcessorsPath");
     }
 
-    private boolean hasJavaPlugin(BuildProject project) {
+    private boolean hasJavaPlugin(Project project) {
         return project.getPlugins().hasPlugin("java");
     }
 }

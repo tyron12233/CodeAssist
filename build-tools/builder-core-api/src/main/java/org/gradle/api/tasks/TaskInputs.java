@@ -2,7 +2,7 @@ package org.gradle.api.tasks;
 
 import org.gradle.api.Task;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.provider.Provider;
 
 import org.jetbrains.annotations.Nullable;
@@ -33,7 +33,7 @@ public interface TaskInputs {
     /**
      * Registers some input files for this task.
      *
-     * @param paths The input files. The given paths are evaluated as per {@link BuildProject#files(Object...)}.
+     * @param paths The input files. The given paths are evaluated as per {@link Project#files(Object...)}.
      * @return a property builder to further configure the property.
      */
     TaskInputFilePropertyBuilder files(Object... paths);
@@ -41,7 +41,7 @@ public interface TaskInputs {
     /**
      * Registers some input file for this task.
      *
-     * @param path The input file. The given path is evaluated as per {@link BuildProject#file(Object)}.
+     * @param path The input file. The given path is evaluated as per {@link Project#file(Object)}.
      * @return a property builder to further configure the property.
      */
     TaskInputFilePropertyBuilder file(Object path);
@@ -52,7 +52,7 @@ public interface TaskInputs {
      *
      * <p>An input directory hierarchy ignores empty directories by default. See {@link TaskInputFilePropertyBuilder#ignoreEmptyDirectories()}.</p>
      *
-     * @param dirPath The directory. The path is evaluated as per {@link BuildProject#file(Object)}.
+     * @param dirPath The directory. The path is evaluated as per {@link Project#file(Object)}.
      * @return a property builder to further configure the property.
      */
     TaskInputFilePropertyBuilder dir(Object dirPath);

@@ -1,7 +1,7 @@
 package org.gradle.initialization;
 
 import com.google.common.collect.ImmutableList;
-import org.gradle.api.BuildProject;
+
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.configuration.ConsoleOutput;

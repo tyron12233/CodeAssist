@@ -1,6 +1,6 @@
 package org.gradle.api.tasks;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileTreeElement;
@@ -46,7 +46,7 @@ public class SourceTask extends ConventionTask implements PatternFilterable {
 
     /**
      * Sets the source for this task. The given source object is evaluated as per
-     * {@link BuildProject#files(Object...)}.
+     * {@link Project#files(Object...)}.
      *
      * @param source The source.
      */
@@ -56,7 +56,7 @@ public class SourceTask extends ConventionTask implements PatternFilterable {
 
     /**
      * Adds some source to this task. The given source objects will be evaluated as per
-     * {@link BuildProject#files(Object...)}.
+     * {@link Project#files(Object...)}.
      *
      * @param sources The source to add
      * @return this

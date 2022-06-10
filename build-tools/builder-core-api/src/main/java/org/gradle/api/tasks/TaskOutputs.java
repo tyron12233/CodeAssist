@@ -1,6 +1,8 @@
 package org.gradle.api.tasks;
 
 import groovy.lang.Closure;
+
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.specs.Spec;
@@ -117,10 +119,10 @@ public interface TaskOutputs {
      * will be associated with an identity.
      * The keys of the map must be non-empty strings.
      * The values of the map will be evaluated to individual files as per
-     * {@link org.gradle.api.BuildProject#file(Object)}.</p>
+     * {@link Project#file(Object)}.</p>
      *
      * <p>Otherwise the given files will be evaluated as per
-     * {@link org.gradle.api.BuildProject#files(Object...)}.</p>
+     * {@link Project#files(Object...)}.</p>
      *
      * @param paths The output files.
      *
@@ -135,10 +137,10 @@ public interface TaskOutputs {
      * will be associated with an identity.
      * The keys of the map must be non-empty strings.
      * The values of the map will be evaluated to individual directories as per
-     * {@link org.gradle.api.BuildProject#file(Object)}.</p>
+     * {@link Project#file(Object)}.</p>
      *
      * <p>Otherwise the given directories will be evaluated as per
-     * {@link org.gradle.api.BuildProject#files(Object...)}.</p>
+     * {@link Project#files(Object...)}.</p>
      *
      * @param paths The output files.
      *
@@ -151,7 +153,7 @@ public interface TaskOutputs {
     /**
      * Registers some output file for this task.
      *
-     * @param path The output file. The given path is evaluated as per {@link org.gradle.api.BuildProject#file(Object)}.
+     * @param path The output file. The given path is evaluated as per {@link Project#file(Object)}.
      * @return a property builder to further configure this property.
      */
     TaskOutputFilePropertyBuilder file(Object path);
@@ -159,7 +161,7 @@ public interface TaskOutputs {
     /**
      * Registers an output directory for this task.
      *
-     * @param path The output directory. The given path is evaluated as per {@link org.gradle.api.BuildProject#file(Object)}.
+     * @param path The output directory. The given path is evaluated as per {@link Project#file(Object)}.
      * @return a property builder to further configure this property.
      */
     TaskOutputFilePropertyBuilder dir(Object path);

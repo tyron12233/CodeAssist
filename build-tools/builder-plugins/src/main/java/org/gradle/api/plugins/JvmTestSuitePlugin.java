@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.ExtensiblePolymorphicDomainObjectContainer;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
@@ -53,12 +53,12 @@ import org.apache.commons.lang3.StringUtils;
  * @see <a href="https://docs.gradle.org/current/userguide/test_suite_plugin.html">Test Suite plugin reference</a>
  */
 @Incubating
-public class JvmTestSuitePlugin implements Plugin<BuildProject> {
+public class JvmTestSuitePlugin implements Plugin<Project> {
     public static final String DEFAULT_TEST_SUITE_NAME = SourceSet.TEST_SOURCE_SET_NAME;
     private static final String TEST_RESULTS_ELEMENTS_VARIANT_PREFIX = "testResultsElementsFor";
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply("org.gradle.test-suite-base");
         project.getPluginManager().apply("org.gradle.java-base");
         JavaPluginExtension java = project.getExtensions().getByType(JavaPluginExtension.class);
@@ -90,7 +90,7 @@ public class JvmTestSuitePlugin implements Plugin<BuildProject> {
         configureTestDataElementsVariants(project);
     }
 
-    private void configureTestDataElementsVariants(BuildProject project) {
+    private void configureTestDataElementsVariants(Project project) {
         final TestingExtension testing = project.getExtensions().getByType(TestingExtension.class);
         final ExtensiblePolymorphicDomainObjectContainer<TestSuite> testSuites = testing.getSuites();
 
@@ -101,7 +101,7 @@ public class JvmTestSuitePlugin implements Plugin<BuildProject> {
         });
     }
 
-    private Configuration createTestDataVariant(BuildProject project, JvmTestSuite suite,
+    private Configuration createTestDataVariant(Project project, JvmTestSuite suite,
                                                 JvmTestSuiteTarget target) {
         final Configuration variant = project.getConfigurations().create
         (TEST_RESULTS_ELEMENTS_VARIANT_PREFIX + StringUtils.capitalize(target.getName()));

@@ -15,17 +15,17 @@
  */
 package org.gradle.api.tasks.diagnostics.internal;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.util.Path;
 
 import java.util.Set;
 
 public class TaskDetailsFactory {
-    private final Set<BuildProject> projects;
-    private final BuildProject project;
+    private final Set<Project> projects;
+    private final Project project;
 
-    public TaskDetailsFactory(BuildProject project) {
+    public TaskDetailsFactory(Project project) {
         this.project = project;
         this.projects = project.getAllprojects();
     }

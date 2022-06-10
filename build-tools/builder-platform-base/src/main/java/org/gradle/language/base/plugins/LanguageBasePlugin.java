@@ -15,10 +15,9 @@
  */
 package org.gradle.language.base.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.language.base.LanguageSourceSet;
@@ -39,9 +38,9 @@ import org.gradle.platform.base.plugins.ComponentBasePlugin;
  * - Registers the base {@link LanguageSourceSet} type.
  */
 @Incubating
-public class LanguageBasePlugin implements Plugin<BuildProject> {
+public class LanguageBasePlugin implements Plugin<Project> {
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply(ComponentBasePlugin.class);
     }
 

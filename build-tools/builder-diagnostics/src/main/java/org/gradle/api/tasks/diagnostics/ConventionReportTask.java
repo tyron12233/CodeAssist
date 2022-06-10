@@ -20,7 +20,7 @@ import static org.gradle.internal.serialization.Transient.varOf;
 import static java.util.Collections.singleton;
 import static java.util.Objects.requireNonNull;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.internal.ConventionTask;
 import org.gradle.api.tasks.Internal;
@@ -49,7 +49,7 @@ import javax.inject.Inject;
 @DisableCachingByDefault(because = "Abstract super-class, not to be instantiated directly")
 public abstract class ConventionReportTask extends ConventionTask {
     // todo annotate as required
-    private final Transient.Var<Set<BuildProject>> projects =
+    private final Transient.Var<Set<Project>> projects =
             varOf(new HashSet<>(singleton(getProject())));
     private final DirectoryProperty reportDir;
     private File outputFile;
@@ -111,7 +111,7 @@ public abstract class ConventionReportTask extends ConventionTask {
      */
     @Internal
     // TODO:LPTR Have the paths of the projects serve as @Input maybe?
-    public Set<BuildProject> getProjects() {
+    public Set<Project> getProjects() {
         return requireNonNull(projects.get());
     }
 
@@ -120,7 +120,7 @@ public abstract class ConventionReportTask extends ConventionTask {
      *
      * @param projects The set of projects. Must not be null.
      */
-    public void setProjects(Set<BuildProject> projects) {
+    public void setProjects(Set<Project> projects) {
         this.projects.set(projects);
     }
 

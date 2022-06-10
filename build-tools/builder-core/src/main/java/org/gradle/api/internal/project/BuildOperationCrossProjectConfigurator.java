@@ -9,7 +9,7 @@ import org.gradle.internal.operations.BuildOperationContext;
 import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.RunnableBuildOperation;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import java.util.Collections;
 
@@ -23,30 +23,30 @@ public class BuildOperationCrossProjectConfigurator implements CrossProjectConfi
     }
 
     @Override
-    public void project(ProjectInternal project, Action<? super BuildProject> configureAction) {
+    public void project(ProjectInternal project, Action<? super Project> configureAction) {
         runProjectConfigureAction(project, configureAction);
     }
 
     @Override
-    public void subprojects(Iterable<? extends ProjectInternal> projects, Action<? super BuildProject> configureAction) {
+    public void subprojects(Iterable<? extends ProjectInternal> projects, Action<? super Project> configureAction) {
         runBlockConfigureAction(SUBPROJECTS_DETAILS, projects, configureAction);
     }
 
     @Override
-    public void allprojects(Iterable<? extends ProjectInternal> projects, Action<? super BuildProject> configureAction) {
+    public void allprojects(Iterable<? extends ProjectInternal> projects, Action<? super Project> configureAction) {
         runBlockConfigureAction(ALLPROJECTS_DETAILS, projects, configureAction);
     }
 
     @Override
-    public void rootProject(ProjectInternal project, Action<? super BuildProject> buildOperationExecutor) {
+    public void rootProject(ProjectInternal project, Action<? super Project> buildOperationExecutor) {
         runBlockConfigureAction(ROOT_PROJECT_DETAILS, Collections.singleton(project), buildOperationExecutor);
     }
 
-    private void runBlockConfigureAction(final BuildOperationDescriptor.Builder details, final Iterable<? extends ProjectInternal> projects, final Action<? super BuildProject> configureAction) {
+    private void runBlockConfigureAction(final BuildOperationDescriptor.Builder details, final Iterable<? extends ProjectInternal> projects, final Action<? super Project> configureAction) {
         buildOperationExecutor.run(new BlockConfigureBuildOperation(details, projects, configureAction));
     }
 
-    private void runProjectConfigureAction(final ProjectInternal project, final Action<? super BuildProject> configureAction) {
+    private void runProjectConfigureAction(final ProjectInternal project, final Action<? super Project> configureAction) {
         project.getOwner().applyToMutableState(p -> buildOperationExecutor.run(new CrossConfigureProjectBuildOperation(project) {
             @Override
             public void run(BuildOperationContext context) {
@@ -76,9 +76,9 @@ public class BuildOperationCrossProjectConfigurator implements CrossProjectConfi
 
         private final BuildOperationDescriptor.Builder details;
         private final Iterable<? extends ProjectInternal> projects;
-        private final Action<? super BuildProject> configureAction;
+        private final Action<? super Project> configureAction;
 
-        private BlockConfigureBuildOperation(BuildOperationDescriptor.Builder details, Iterable<? extends ProjectInternal> projects, Action<? super BuildProject> configureAction) {
+        private BlockConfigureBuildOperation(BuildOperationDescriptor.Builder details, Iterable<? extends ProjectInternal> projects, Action<? super Project> configureAction) {
             this.details = details;
             this.projects = projects;
             this.configureAction = configureAction;
@@ -98,9 +98,9 @@ public class BuildOperationCrossProjectConfigurator implements CrossProjectConfi
     }
 
     private static abstract class CrossConfigureProjectBuildOperation implements RunnableBuildOperation {
-        private final BuildProject project;
+        private final Project project;
 
-        private CrossConfigureProjectBuildOperation(BuildProject project) {
+        private CrossConfigureProjectBuildOperation(Project project) {
             this.project = project;
         }
 

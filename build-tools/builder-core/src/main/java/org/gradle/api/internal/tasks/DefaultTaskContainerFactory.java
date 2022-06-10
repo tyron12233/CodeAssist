@@ -1,6 +1,5 @@
 package org.gradle.api.internal.tasks;
 
-import org.gradle.api.BuildProject;
 import org.gradle.api.Task;
 import org.gradle.api.Transformer;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
@@ -10,7 +9,6 @@ import org.gradle.api.internal.project.taskfactory.ITaskFactory;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.internal.BiAction;
 import org.gradle.internal.Factory;
-import org.gradle.internal.model.RuleBasedPluginListener;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.model.collection.internal.BridgedCollections;

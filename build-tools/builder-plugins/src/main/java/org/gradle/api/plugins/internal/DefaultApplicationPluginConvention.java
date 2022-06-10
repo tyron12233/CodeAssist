@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins.internal;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.file.CopySpec;
 import org.gradle.api.plugins.ApplicationPluginConvention;
 import org.gradle.api.reflect.HasPublicType;
@@ -33,9 +33,9 @@ public class DefaultApplicationPluginConvention extends ApplicationPluginConvent
     private String executableDir = "bin";
     private CopySpec applicationDistribution;
 
-    private final BuildProject project;
+    private final Project project;
 
-    public DefaultApplicationPluginConvention(BuildProject project) {
+    public DefaultApplicationPluginConvention(Project project) {
         this.project = project;
         applicationDistribution = project.copySpec();
     }
@@ -96,7 +96,7 @@ public class DefaultApplicationPluginConvention extends ApplicationPluginConvent
     }
 
     @Override
-    public BuildProject getProject() {
+    public Project getProject() {
         return project;
     }
 }

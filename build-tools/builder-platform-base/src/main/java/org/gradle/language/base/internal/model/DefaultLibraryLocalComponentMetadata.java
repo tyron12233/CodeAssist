@@ -17,7 +17,7 @@ package org.gradle.language.base.internal.model;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.DependencyConstraint;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
@@ -110,7 +110,7 @@ public class DefaultLibraryLocalComponentMetadata extends DefaultLocalComponentM
     }
 
     private DefaultLibraryLocalComponentMetadata(ModuleVersionIdentifier id, ComponentIdentifier componentIdentifier) {
-        super(id, componentIdentifier, BuildProject.DEFAULT_STATUS, EmptySchema.INSTANCE);
+        super(id, componentIdentifier, Project.DEFAULT_STATUS, EmptySchema.INSTANCE);
     }
 
     private void addDependencies(Iterable<DependencySpec> dependencies, String projectPath, String usageConfigurationName) {

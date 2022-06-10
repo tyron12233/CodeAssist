@@ -1,7 +1,7 @@
 package org.gradle.api.internal.project;
 
 import com.google.common.collect.Lists;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -12,13 +12,13 @@ public class DeferredProjectConfiguration {
 
     private final static String TRACE = "org.gradle.trace.deferred.project.configuration";
 
-    private final BuildProject project;
+    private final Project project;
     private final List<Runnable> configuration = Lists.newLinkedList();
     private boolean fired;
 
     private Throwable firedSentinel;
 
-    public DeferredProjectConfiguration(BuildProject project) {
+    public DeferredProjectConfiguration(Project project) {
         this.project = project;
     }
 

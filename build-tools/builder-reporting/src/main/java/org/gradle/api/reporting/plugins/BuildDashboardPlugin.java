@@ -18,7 +18,7 @@ package org.gradle.api.reporting.plugins;
 
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.plugins.ReportingBasePlugin;
 import org.gradle.api.reporting.DirectoryReport;
@@ -32,12 +32,12 @@ import org.gradle.api.tasks.TaskProvider;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/bNuild_dashboard_plugin.html">Build Dashboard plugin reference</a>
  */
-public class BuildDashboardPlugin implements Plugin<BuildProject> {
+public class BuildDashboardPlugin implements Plugin<Project> {
 
     public static final String BUILD_DASHBOARD_TASK_NAME = "buildDashboard";
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         project.getPluginManager().apply(ReportingBasePlugin.class);
 
         final TaskProvider<GenerateBuildDashboard> buildDashboard = project.getTasks().register(BUILD_DASHBOARD_TASK_NAME, GenerateBuildDashboard.class, new Action<GenerateBuildDashboard>() {
@@ -51,7 +51,7 @@ public class BuildDashboardPlugin implements Plugin<BuildProject> {
             }
         });
 
-        for (BuildProject aProject : project.getAllprojects()) {
+        for (Project aProject : project.getAllprojects()) {
             aProject.getTasks().configureEach(new Action<Task>() {
                 @Override
                 public void execute(Task task) {

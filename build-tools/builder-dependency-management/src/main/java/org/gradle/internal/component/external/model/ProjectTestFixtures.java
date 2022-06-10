@@ -18,13 +18,13 @@ package org.gradle.internal.component.external.model;
 import static org.gradle.internal.component.external.model.TestFixturesSupport.TEST_FIXTURES_FEATURE_NAME;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.ModuleDependencyCapabilitiesHandler;
 
 public class ProjectTestFixtures implements Action<ModuleDependencyCapabilitiesHandler> {
-    private final BuildProject project;
+    private final Project project;
 
-    public ProjectTestFixtures(BuildProject project) {
+    public ProjectTestFixtures(Project project) {
         this.project = project;
     }
 

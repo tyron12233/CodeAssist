@@ -21,7 +21,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.artifacts.ArtifactView;
 import org.gradle.api.artifacts.Configuration;
@@ -369,8 +369,8 @@ public class WriteDependencyVerificationFile implements DependencyVerificationOv
 
     private void resolveAllConfigurationsConcurrently(Gradle gradle) {
         buildOperationExecutor.runAllWithAccessToProjectState(queue -> {
-            Set<BuildProject> allprojects = gradle.getRootProject().getAllprojects();
-            for (BuildProject project : allprojects) {
+            Set<Project> allprojects = gradle.getRootProject().getAllprojects();
+            for (Project project : allprojects) {
                 queue.add(new RunnableBuildOperation() {
                     @Override
                     public void run(BuildOperationContext context) {
@@ -519,7 +519,7 @@ public class WriteDependencyVerificationFile implements DependencyVerificationOv
         }
     }
 
-    private static void resolveAllConfigurationsAndForceDownload(BuildProject project) {
+    private static void resolveAllConfigurationsAndForceDownload(Project project) {
         ((ProjectInternal) project).getOwner()
                 .applyToMutableState(p -> p.getConfigurations().all(cnf -> {
                     if (((DeprecatableConfiguration) cnf).canSafelyBeResolved()) {

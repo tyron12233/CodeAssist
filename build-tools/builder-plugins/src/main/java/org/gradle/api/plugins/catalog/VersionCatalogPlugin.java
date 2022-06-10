@@ -15,7 +15,7 @@
  */
 package org.gradle.api.plugins.catalog;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
 import org.gradle.api.artifacts.Configuration;
@@ -42,7 +42,7 @@ import javax.inject.Inject;
  * @since 7.0
  */
 @Incubating
-public class VersionCatalogPlugin implements Plugin<BuildProject> {
+public class VersionCatalogPlugin implements Plugin<Project> {
     private final static Logger LOGGER = Logging.getLogger(VersionCatalogPlugin.class);
 
     public static final String GENERATE_CATALOG_FILE_TASKNAME = "generateCatalogAsToml";
@@ -57,14 +57,14 @@ public class VersionCatalogPlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         Configuration dependenciesConfiguration = createDependenciesConfiguration(project);
         CatalogExtensionInternal extension = createExtension(project, dependenciesConfiguration);
         TaskProvider<TomlFileGenerator> generator = createGenerator(project, extension);
         createPublication(project, generator);
     }
 
-    private void createPublication(BuildProject project,
+    private void createPublication(Project project,
                                    TaskProvider<TomlFileGenerator> generator) {
         Configuration exported =
                 project.getConfigurations().create(VERSION_CATALOG_ELEMENTS, cnf -> {
@@ -86,7 +86,7 @@ public class VersionCatalogPlugin implements Plugin<BuildProject> {
                 new JavaConfigurationVariantMapping("compile", true));
     }
 
-    private Configuration createDependenciesConfiguration(BuildProject project) {
+    private Configuration createDependenciesConfiguration(Project project) {
         return project.getConfigurations().create(GRADLE_PLATFORM_DEPENDENCIES, cnf -> {
             cnf.setVisible(false);
             cnf.setCanBeConsumed(false);
@@ -94,13 +94,13 @@ public class VersionCatalogPlugin implements Plugin<BuildProject> {
         });
     }
 
-    private TaskProvider<TomlFileGenerator> createGenerator(BuildProject project,
+    private TaskProvider<TomlFileGenerator> createGenerator(Project project,
                                                             CatalogExtensionInternal extension) {
         return project.getTasks().register(GENERATE_CATALOG_FILE_TASKNAME, TomlFileGenerator.class,
                 t -> configureTask(project, extension, t));
     }
 
-    private void configureTask(BuildProject project,
+    private void configureTask(Project project,
                                CatalogExtensionInternal extension,
                                TomlFileGenerator task) {
         task.setGroup(BasePlugin.BUILD_GROUP);
@@ -110,7 +110,7 @@ public class VersionCatalogPlugin implements Plugin<BuildProject> {
         task.getDependenciesModel().convention(extension.getVersionCatalog());
     }
 
-    private CatalogExtensionInternal createExtension(BuildProject project,
+    private CatalogExtensionInternal createExtension(Project project,
                                                      Configuration dependenciesConfiguration) {
         return (CatalogExtensionInternal) project.getExtensions()
                 .create(CatalogPluginExtension.class, "catalog",

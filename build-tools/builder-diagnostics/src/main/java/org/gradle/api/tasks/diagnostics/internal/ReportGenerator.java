@@ -16,7 +16,7 @@
 
 package org.gradle.api.tasks.diagnostics.internal;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.initialization.BuildClientMetaData;
 import org.gradle.internal.logging.text.StyledTextOutputFactory;
@@ -51,8 +51,8 @@ public final class ReportGenerator {
         void execute(T project) throws IOException;
     }
 
-    public void generateReport(Set<BuildProject> projects,
-                               ReportAction<BuildProject> projectReportGenerator) {
+    public void generateReport(Set<Project> projects,
+                               ReportAction<Project> projectReportGenerator) {
         generateReport(projects, ProjectDetails::of, projectReportGenerator);
     }
 

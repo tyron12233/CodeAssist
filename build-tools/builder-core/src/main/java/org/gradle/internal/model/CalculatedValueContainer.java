@@ -1,6 +1,6 @@
 package org.gradle.internal.model;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.internal.initialization.RootScriptDomainObjectContext;
 import org.gradle.api.internal.tasks.NodeExecutionContext;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
@@ -117,7 +117,7 @@ public class CalculatedValueContainer<T, S extends ValueCalculator<? extends T>>
     }
 
     @Override
-    public BuildProject getOwningProject() {
+    public Project getOwningProject() {
         CalculationState<T, S> calculationState = this.calculationState;
         if (calculationState != null) {
             return calculationState.supplier.getOwningProject();

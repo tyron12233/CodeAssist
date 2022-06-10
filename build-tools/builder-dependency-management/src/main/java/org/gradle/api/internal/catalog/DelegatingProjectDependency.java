@@ -17,7 +17,7 @@ package org.gradle.api.internal.catalog;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.DependencyArtifact;
@@ -59,7 +59,7 @@ public class DelegatingProjectDependency implements ProjectDependencyInternal {
     }
 
     @Override
-    public BuildProject getDependencyProject() {
+    public Project getDependencyProject() {
         return delegate.getDependencyProject();
     }
 

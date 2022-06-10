@@ -2,13 +2,12 @@ package org.gradle.execution;
 
 import com.google.common.collect.Sets;
 import org.gradle.api.Task;
-import org.gradle.execution.BuildWorkExecutor;
 import org.gradle.api.execution.TaskExecutionGraph;
 import org.gradle.execution.plan.ExecutionPlan;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.execution.taskgraph.TaskExecutionGraphInternal;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.internal.build.ExecutionResult;
 
 import java.util.LinkedList;
@@ -30,7 +29,7 @@ public class SelectedTaskExecutionAction implements BuildWorkExecutor {
     }
 
     private void bindAllReferencesOfProject(TaskExecutionGraph graph) {
-        Set<BuildProject> seen = Sets.newHashSet();
+        Set<Project> seen = Sets.newHashSet();
         for (Task task : graph.getAllTasks()) {
             if (seen.add(task.getProject())) {
                 ProjectInternal projectInternal = (ProjectInternal) task.getProject();

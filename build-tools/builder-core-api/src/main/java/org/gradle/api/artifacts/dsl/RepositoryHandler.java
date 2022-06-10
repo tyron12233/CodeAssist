@@ -2,6 +2,7 @@ package org.gradle.api.artifacts.dsl;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.ArtifactRepositoryContainer;
 import org.gradle.api.artifacts.repositories.ArtifactRepository;
 import org.gradle.api.artifacts.repositories.ExclusiveContentRepository;
@@ -34,7 +35,7 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      * The default is a Hash value of the rootdir paths. The name is used in the console output,
      * to point to information related to a particular repository. A name must be unique amongst a repository group.</td></tr>
      * <tr><td><code>dirs</code></td>
-     *     <td>Specifies a list of rootDirs where to look for dependencies. These are evaluated as per {@link org.gradle.api.BuildProject#files(Object...)}</td></tr>
+     *     <td>Specifies a list of rootDirs where to look for dependencies. These are evaluated as per {@link Project#files(Object...)}</td></tr>
      * </table>
      *
      * <p>Examples:</p>
@@ -148,7 +149,7 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      * <tr><td><code>artifactUrls</code></td>
      *     <td>A single jar repository or a collection of jar repositories containing additional artifacts not found in the Maven central repository.
      * But be aware that the POM must exist in Maven central.
-     * The provided values are evaluated as per {@link org.gradle.api.BuildProject#uri(Object)}.</td></tr>
+     * The provided values are evaluated as per {@link Project#uri(Object)}.</td></tr>
      * </table>
      *
      * <p>Examples:</p>

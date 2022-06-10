@@ -18,7 +18,7 @@ package org.gradle.testing.base.plugins;
 
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.testing.base.TestingExtension;
 import org.gradle.testing.base.internal.DefaultTestingExtension;
 
@@ -28,9 +28,9 @@ import org.gradle.testing.base.internal.DefaultTestingExtension;
  * @since 7.3
  */
 @Incubating
-public class TestSuiteBasePlugin implements Plugin<BuildProject> {
+public class TestSuiteBasePlugin implements Plugin<Project> {
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getExtensions().create(TestingExtension.class, "testing", DefaultTestingExtension.class);
     }
 }

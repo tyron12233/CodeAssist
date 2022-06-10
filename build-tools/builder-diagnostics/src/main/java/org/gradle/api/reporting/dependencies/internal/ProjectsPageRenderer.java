@@ -17,7 +17,7 @@
 package org.gradle.api.reporting.dependencies.internal;
 
 import com.googlecode.jatl.Html;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Transformer;
 import org.gradle.reporting.HtmlPageBuilder;
 import org.gradle.reporting.ReportRenderer;
@@ -27,15 +27,15 @@ import java.io.Writer;
 import java.util.Date;
 import java.util.Set;
 
-public class ProjectsPageRenderer extends ReportRenderer<Set<BuildProject>, HtmlPageBuilder<Writer>> {
-    private final Transformer<String, BuildProject> namingScheme;
+public class ProjectsPageRenderer extends ReportRenderer<Set<Project>, HtmlPageBuilder<Writer>> {
+    private final Transformer<String, Project> namingScheme;
 
-    public ProjectsPageRenderer(Transformer<String, BuildProject> namingScheme) {
+    public ProjectsPageRenderer(Transformer<String, Project> namingScheme) {
         this.namingScheme = namingScheme;
     }
 
     @Override
-    public void render(final Set<BuildProject> projects, final HtmlPageBuilder<Writer> builder) {
+    public void render(final Set<Project> projects, final HtmlPageBuilder<Writer> builder) {
         final String baseCssLink = builder.requireResource(getClass().getResource("/org/gradle/reporting/base-style.css"));
         final String cssLink = builder.requireResource(getClass().getResource("/org/gradle/api/tasks/diagnostics/htmldependencyreport/style.css"));
 
@@ -60,7 +60,7 @@ public class ProjectsPageRenderer extends ReportRenderer<Set<BuildProject>, Html
                                     end();
                                 end();
                                 tbody();
-                                for (BuildProject project : projects) {
+                                for (Project project : projects) {
                                     tr();
                                         td().a().href(namingScheme.transform(project)).text(project.toString()).end().end();
                                         td().text(project.getDescription()).end();

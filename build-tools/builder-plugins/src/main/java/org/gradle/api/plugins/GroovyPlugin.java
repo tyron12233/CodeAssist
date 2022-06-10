@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 
 /**
@@ -25,17 +25,17 @@ import org.gradle.api.Plugin;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/groovy_plugin.html">Groovy plugin reference</a>
  */
-public class GroovyPlugin implements Plugin<BuildProject> {
+public class GroovyPlugin implements Plugin<Project> {
     public static final String GROOVYDOC_TASK_NAME = "groovydoc";
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply(GroovyBasePlugin.class);
         project.getPluginManager().apply(JavaPlugin.class);
         configureGroovydoc(project);
     }
 
-    private void configureGroovydoc(final BuildProject project) {
+    private void configureGroovydoc(final Project project) {
 //        project.getTasks().register(GROOVYDOC_TASK_NAME, Groovydoc.class, groovyDoc -> {
 //            groovyDoc.setDescription("Generates Groovydoc API documentation for the main source
 //            code.");

@@ -17,7 +17,7 @@ package org.gradle.api.tasks.diagnostics;
 
 import org.apache.commons.lang3.StringUtils;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.tasks.diagnostics.internal.TextReportRenderer;
 import org.gradle.initialization.BuildClientMetaData;
@@ -56,7 +56,7 @@ public class ProjectReportTask extends ProjectBasedReportTask {
     }
 
     @Override
-    protected void generate(BuildProject project) {
+    protected void generate(Project project) {
         BuildClientMetaData metaData = getClientMetaData();
 
         StyledTextOutput textOutput = getRenderer().getTextOutput();
@@ -92,7 +92,7 @@ public class ProjectReportTask extends ProjectBasedReportTask {
         textOutput.println();
 
         textOutput.text("For example, try running ");
-        BuildProject exampleProject = project.getChildProjects().isEmpty() ? project : getChildren(project).get(0);
+        Project exampleProject = project.getChildProjects().isEmpty() ? project : getChildren(project).get(0);
         metaData.describeCommand(textOutput.withStyle(UserInput), exampleProject.absoluteProjectPath(
                 ProjectInternal.TASKS_TASK));
         textOutput.println();
@@ -106,7 +106,7 @@ public class ProjectReportTask extends ProjectBasedReportTask {
         }
     }
 
-    private void render(final BuildProject project, GraphRenderer renderer, boolean lastChild,
+    private void render(final Project project, GraphRenderer renderer, boolean lastChild,
                         final StyledTextOutput textOutput) {
         renderer.visit(styledTextOutput -> {
             styledTextOutput.text(StringUtils.capitalize(project.getDisplayName()));
@@ -121,14 +121,14 @@ public class ProjectReportTask extends ProjectBasedReportTask {
             }
         }, lastChild);
         renderer.startChildren();
-        List<BuildProject> children = getChildren(project);
-        for (BuildProject child : children) {
+        List<Project> children = getChildren(project);
+        for (Project child : children) {
             render(child, renderer, child == children.get(children.size() - 1), textOutput);
         }
         renderer.completeChildren();
     }
 
-    private List<BuildProject> getChildren(BuildProject project) {
+    private List<Project> getChildren(Project project) {
         return CollectionUtils.sort(project.getChildProjects().values());
     }
 }

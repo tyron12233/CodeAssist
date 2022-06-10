@@ -1,7 +1,7 @@
 package org.gradle.api.internal.project;
 
 import com.google.common.collect.Maps;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.artifacts.DefaultProjectComponentIdentifier;
@@ -97,7 +97,7 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
 
     // TODO - can kill this method, as the caller can use ProjectInternal.getOwner() instead
     @Override
-    public ProjectStateUnk stateFor(BuildProject project) {
+    public ProjectStateUnk stateFor(Project project) {
         return ((ProjectInternal) project).getOwner();
     }
 

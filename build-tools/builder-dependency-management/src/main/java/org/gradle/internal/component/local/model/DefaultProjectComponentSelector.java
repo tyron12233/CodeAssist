@@ -15,7 +15,7 @@
  */
 package org.gradle.internal.component.local.model;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ComponentSelector;
@@ -139,11 +139,11 @@ public class DefaultProjectComponentSelector implements ProjectComponentSelector
         return getDisplayName();
     }
 
-    public static ProjectComponentSelector newSelector(BuildProject project) {
+    public static ProjectComponentSelector newSelector(Project project) {
         return newSelector(project, ImmutableAttributes.EMPTY, Collections.emptyList());
     }
 
-    public static ProjectComponentSelector newSelector(BuildProject project, ImmutableAttributes attributes, List<Capability> requestedCapabilities) {
+    public static ProjectComponentSelector newSelector(Project project, ImmutableAttributes attributes, List<Capability> requestedCapabilities) {
         ProjectInternal projectInternal = (ProjectInternal) project;
         ProjectComponentIdentifier projectComponentIdentifier = projectInternal.getOwner().getComponentIdentifier();
         return new DefaultProjectComponentSelector(projectComponentIdentifier.getBuild(), projectInternal.getIdentityPath(), projectInternal.getProjectPath(), project.getName(), attributes, requestedCapabilities);

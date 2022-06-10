@@ -7,7 +7,7 @@ import org.gradle.internal.Cast;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.internal.file.PathToFileResolver;
 import org.gradle.api.internal.project.ProjectIdentifier;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.util.internal.GFileUtils;
 import org.gradle.util.Path;
 import org.gradle.util.internal.NameValidator;
@@ -159,7 +159,7 @@ public class DefaultProjectDescriptor implements ProjectDescriptor, ProjectIdent
 //        if (buildScriptFile != null) {
 //            return buildScriptFile;
 //        }
-        return new File(getProjectDir(), BuildProject.DEFAULT_BUILD_FILE);
+        return new File(getProjectDir(), Project.DEFAULT_BUILD_FILE);
     }
 
     public ProjectDescriptorRegistry getProjectDescriptorRegistry() {

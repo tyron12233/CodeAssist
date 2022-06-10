@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins.internal;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.plugins.WarPluginConvention;
 import org.gradle.api.reflect.HasPublicType;
 import org.gradle.api.reflect.TypeOf;
@@ -27,9 +27,9 @@ import static org.gradle.api.reflect.TypeOf.typeOf;
 
 public class DefaultWarPluginConvention extends WarPluginConvention implements HasPublicType {
     private String webAppDirName;
-    private final BuildProject project;
+    private final Project project;
 
-    public DefaultWarPluginConvention(BuildProject project) {
+    public DefaultWarPluginConvention(Project project) {
         this.project = project;
         webAppDirName = "src/main/webapp";
     }
@@ -55,7 +55,7 @@ public class DefaultWarPluginConvention extends WarPluginConvention implements H
     }
 
     @Override
-    public BuildProject getProject() {
+    public Project getProject() {
         return project;
     }
 }

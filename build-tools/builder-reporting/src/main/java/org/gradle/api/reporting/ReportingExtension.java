@@ -15,7 +15,7 @@
  */
 package org.gradle.api.reporting;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.ExtensiblePolymorphicDomainObjectContainer;
 import org.gradle.api.Incubating;
 import org.gradle.api.file.Directory;
@@ -49,7 +49,7 @@ public class ReportingExtension {
 
     /**
      * The default name of the base directory for all reports, relative to
-     * {@link org.gradle.api.BuildProject#getBuildDir()} ({@value}).
+     * {@link Project#getBuildDir()} ({@value}).
      */
     public static final String DEFAULT_REPORTS_DIR_NAME = "reports";
 
@@ -57,7 +57,7 @@ public class ReportingExtension {
     private final DirectoryProperty baseDirectory;
     private final ExtensiblePolymorphicDomainObjectContainer<ReportSpec> reports;
 
-    public ReportingExtension(BuildProject project) {
+    public ReportingExtension(Project project) {
         this.project = (ProjectInternal) project;
         this.baseDirectory = project.getObjects().directoryProperty();
         this.reports = project.getObjects().polymorphicDomainObjectContainer(ReportSpec.class);
@@ -89,7 +89,7 @@ public class ReportingExtension {
      * Sets the base directory to use for all reports
      * <p>
      * The value will be converted to a {@code File} on demand via
-     * {@link BuildProject#file(Object)}.
+     * {@link Project#file(Object)}.
      *
      * @param baseDir The base directory to use for all reports
      */
@@ -130,7 +130,7 @@ public class ReportingExtension {
     // TODO this doesn't belong here, that java plugin should add an extension to this guy with this
     public String getApiDocTitle() {
         Object version = project.getVersion();
-        if (BuildProject.DEFAULT_VERSION.equals(version)) {
+        if (Project.DEFAULT_VERSION.equals(version)) {
             return project.getName() + " API";
         } else {
             return project.getName() + " " + version + " API";

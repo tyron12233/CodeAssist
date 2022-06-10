@@ -1,6 +1,6 @@
 package org.gradle.internal.model;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 /**
  * This listener is notified when a rule based plugin is applied to a project.
@@ -8,5 +8,5 @@ import org.gradle.api.BuildProject;
  */
 public interface RuleBasedPluginListener {
 
-    void prepareForRuleBasedPlugins(BuildProject project);
+    void prepareForRuleBasedPlugins(Project project);
 }

@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.model.ObjectFactory;
@@ -32,14 +32,14 @@ import javax.inject.Inject;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/groovy_plugin.html">Groovy plugin reference</a>
  */
-public class GroovyBasePlugin implements Plugin<BuildProject> {
+public class GroovyBasePlugin implements Plugin<Project> {
     public static final String GROOVY_RUNTIME_EXTENSION_NAME = "groovyRuntime";
 
     private final ObjectFactory objectFactory;
     private final ModuleRegistry moduleRegistry;
     private final JvmPluginServices jvmPluginServices;
 
-    private BuildProject project;
+    private Project project;
     private GroovyRuntime groovyRuntime;
 
     @Inject
@@ -54,7 +54,7 @@ public class GroovyBasePlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         this.project = project;
         project.getPluginManager().apply(JavaBasePlugin.class);
 

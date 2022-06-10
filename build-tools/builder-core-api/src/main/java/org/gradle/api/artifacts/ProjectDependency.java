@@ -1,6 +1,6 @@
 package org.gradle.api.artifacts;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.internal.HasInternalProtocol;
 
 /**
@@ -11,7 +11,7 @@ public interface ProjectDependency extends ModuleDependency, SelfResolvingDepend
     /**
      * Returns the project associated with this project dependency.
      */
-    BuildProject getDependencyProject();
+    Project getDependencyProject();
 
     /**
      * {@inheritDoc}

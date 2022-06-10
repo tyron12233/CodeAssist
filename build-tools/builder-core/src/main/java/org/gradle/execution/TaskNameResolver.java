@@ -4,10 +4,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.gradle.api.ProjectConfigurationException;
 import org.gradle.api.Task;
-import org.gradle.execution.TaskSelectionResult;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.tasks.TaskContainer;
 
 import javax.annotation.Nullable;
@@ -24,7 +23,7 @@ public class TaskNameResolver {
      */
     public boolean tryFindUnqualifiedTaskCheaply(String name, ProjectInternal project) {
         // don't evaluate children, see if we know it's without validating it
-        for (BuildProject project1 : project.getAllprojects()) {
+        for (Project project1 : project.getAllprojects()) {
             for (Task task : project1.getTasks()) {
                 if (name.equals(task.getName())) {
                     return true;
@@ -113,7 +112,7 @@ public class TaskNameResolver {
     private void collectTaskNames(ProjectInternal project, Set<String> result) {
         discoverTasks(project);
         result.addAll(getTaskNames(project));
-        for (BuildProject subProject : project.getChildProjects().values()) {
+        for (Project subProject : project.getChildProjects().values()) {
             collectTaskNames((ProjectInternal) subProject, result);
         }
     }
@@ -178,7 +177,7 @@ public class TaskNameResolver {
                     return;
                 }
             }
-            for (BuildProject subProject : project.getChildProjects().values()) {
+            for (Project subProject : project.getChildProjects().values()) {
                 collect((ProjectInternal) subProject, tasks);
             }
         }

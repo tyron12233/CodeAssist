@@ -15,7 +15,7 @@ public class TestJavaTask extends BaseProjectTestCase {
     }
 
     @Override
-    public void configure(BuildProject project) {
+    public void configure(Project project) {
         project.getTasks().register("compileJava", JavaCompile.class, new Action<JavaCompile>() {
             @Override
             public void execute(JavaCompile javaCompile) {

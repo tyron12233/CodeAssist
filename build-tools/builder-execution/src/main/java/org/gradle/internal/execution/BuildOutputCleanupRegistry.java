@@ -1,7 +1,7 @@
 package org.gradle.internal.execution;
 
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import java.io.File;
 import java.util.Set;
@@ -9,7 +9,7 @@ import java.util.Set;
 public interface BuildOutputCleanupRegistry {
 
     /**
-     * Registers outputs to be cleaned up as {@link BuildProject#files(Object...)}.
+     * Registers outputs to be cleaned up as {@link Project#files(Object...)}.
      */
     void registerOutputs(Object files);
 

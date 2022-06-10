@@ -3,7 +3,7 @@ package org.gradle.api.internal.project;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.internal.DisplayName;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.resources.ResourceLock;
 import org.gradle.util.Path;
@@ -24,13 +24,13 @@ public interface ProjectStateUnk extends ModelContainer<ProjectInternal> {
     BuildState getOwner();
 
     /**
-     * Returns the parent of this project in the project tree. Note that this is not the same as {@link BuildProject#getParent()}, use {@link #getBuildParent()} for that.
+     * Returns the parent of this project in the project tree. Note that this is not the same as {@link Project#getParent()}, use {@link #getBuildParent()} for that.
      */
     @Nullable
     ProjectStateUnk getParent();
 
     /**
-     * Returns the parent of this project, as per {@link BuildProject#getParent()}. This will be null for the root project of a build in the tree, even if the project is not
+     * Returns the parent of this project, as per {@link Project#getParent()}. This will be null for the root project of a build in the tree, even if the project is not
      * at the root of the project tree.
      */
     @Nullable

@@ -1,7 +1,7 @@
 package org.gradle.api.internal.artifacts.dependencies;
 
 import com.google.common.base.Objects;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.Dependency;
@@ -37,7 +37,7 @@ public class DefaultProjectDependency extends AbstractModuleDependency implement
     }
 
     @Override
-    public BuildProject getDependencyProject() {
+    public Project getDependencyProject() {
         return dependencyProject;
     }
 

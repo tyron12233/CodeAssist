@@ -1,6 +1,6 @@
 package org.gradle.api.initialization.dsl;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Script;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
@@ -18,7 +18,7 @@ import groovy.lang.Closure;
  * classpath used to compile and execute a build script. This classpath is also used to load the plugins which the build
  * script uses.</p>
  *
- * <p>You can obtain a {@code ScriptHandler} instance using {@link BuildProject#getBuildscript()} or {@link
+ * <p>You can obtain a {@code ScriptHandler} instance using {@link Project#getBuildscript()} or {@link
  * Script#getBuildscript()}.</p>
  *
  * <p>To declare the script classpath, you use the {@link org.gradle.api.artifacts.dsl.DependencyHandler} provided by

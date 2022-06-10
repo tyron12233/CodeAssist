@@ -9,7 +9,7 @@ import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.CallableBuildOperation;
 import org.gradle.internal.operations.RunnableBuildOperation;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import java.util.Comparator;
 import java.util.Set;
@@ -79,7 +79,7 @@ public class NotifyingBuildLoader implements BuildLoader {
         return new BuildStructureOperationResult(rootProject, buildPath);
     }
 
-    private LoadProjectsBuildOperationType.Result.Project convert(BuildProject project) {
+    private LoadProjectsBuildOperationType.Result.Project convert(Project project) {
         return new BuildStructureOperationProject(
                 project.getName(),
                 project.getPath(),
@@ -89,9 +89,9 @@ public class NotifyingBuildLoader implements BuildLoader {
                 convert(project.getChildProjects().values()));
     }
 
-    private Set<LoadProjectsBuildOperationType.Result.Project> convert(Iterable<BuildProject> children) {
+    private Set<LoadProjectsBuildOperationType.Result.Project> convert(Iterable<Project> children) {
         ImmutableSortedSet.Builder<LoadProjectsBuildOperationType.Result.Project> builder = new ImmutableSortedSet.Builder<>(PROJECT_COMPARATOR);
-        for (BuildProject child : children) {
+        for (Project child : children) {
             builder.add(convert(child));
         }
         return builder.build();

@@ -5,7 +5,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import org.gradle.api.Action;
 import org.gradle.api.BuildException;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.NamedDomainObjectContainer;
@@ -496,20 +496,20 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
         if (Strings.isNullOrEmpty(path)) {
             throw new InvalidUserDataException("A path must be specified!");
         }
-        if (!path.contains(BuildProject.PATH_SEPARATOR)) {
+        if (!path.contains(Project.PATH_SEPARATOR)) {
             return findByName(path);
         }
 
-        String projectPath = StringUtils.substringBeforeLast(path, BuildProject.PATH_SEPARATOR);
+        String projectPath = StringUtils.substringBeforeLast(path, Project.PATH_SEPARATOR);
         ProjectInternal project = this.project.findProject(
-                Strings.isNullOrEmpty(projectPath) ? BuildProject.PATH_SEPARATOR : projectPath);
+                Strings.isNullOrEmpty(projectPath) ? Project.PATH_SEPARATOR : projectPath);
         if (project == null) {
             return null;
         }
         project.getOwner().ensureTasksDiscovered();
 
         return project.getTasks()
-                .findByName(StringUtils.substringAfterLast(path, BuildProject.PATH_SEPARATOR));
+                .findByName(StringUtils.substringAfterLast(path, Project.PATH_SEPARATOR));
     }
 
     @Override

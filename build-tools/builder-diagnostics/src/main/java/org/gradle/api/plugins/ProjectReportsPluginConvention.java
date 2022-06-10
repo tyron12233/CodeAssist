@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import java.io.File;
 import java.util.Set;
@@ -40,5 +40,5 @@ public abstract class ProjectReportsPluginConvention {
      */
     public abstract File getProjectReportDir();
 
-    public abstract Set<BuildProject> getProjects();
+    public abstract Set<Project> getProjects();
 }

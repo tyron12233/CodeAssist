@@ -17,7 +17,7 @@ package org.gradle.plugin.management.internal.autoapply;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ModuleVersionSelector;
@@ -37,8 +37,8 @@ public class DefaultAutoAppliedPluginHandler implements AutoAppliedPluginHandler
 
     @Override
     public PluginRequests mergeWithAutoAppliedPlugins(PluginRequests initialRequests, Object pluginTarget) {
-        if (pluginTarget instanceof BuildProject) {
-            BuildProject project = (BuildProject) pluginTarget;
+        if (pluginTarget instanceof Project) {
+            Project project = (Project) pluginTarget;
 
             PluginRequests autoAppliedPlugins = registry.getAutoAppliedPlugins(project);
             if (autoAppliedPlugins.isEmpty()) {

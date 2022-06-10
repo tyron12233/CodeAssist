@@ -1,7 +1,7 @@
 package org.gradle.execution.plan;
 
 import com.google.common.collect.Maps;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.Task;
 import org.gradle.api.internal.DocumentationRegistry;
@@ -65,7 +65,7 @@ public class TaskNodeFactory {
     }
 
     private static class DefaultTypeOriginInspectorFactory {
-        private final Map<BuildProject, ProjectScopedTypeOriginInspector> projectToInspector = Maps.newConcurrentMap();
+        private final Map<Project, ProjectScopedTypeOriginInspector> projectToInspector = Maps.newConcurrentMap();
         private final Map<Class<?>, File> clazzToFile = Maps.newConcurrentMap();
 
         public ProjectScopedTypeOriginInspector forTask(Task task) {
@@ -100,7 +100,7 @@ public class TaskNodeFactory {
             private final PluginManagerInternal pluginManager;
             private final Map<Class<?>, Optional<PluginId>> classToPlugin = Maps.newConcurrentMap();
 
-            private ProjectScopedTypeOriginInspector(BuildProject project) {
+            private ProjectScopedTypeOriginInspector(Project project) {
                 this.plugins = project.getPlugins();
                 this.pluginManager = (PluginManagerInternal) project.getPluginManager();
             }

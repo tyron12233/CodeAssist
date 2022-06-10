@@ -15,7 +15,7 @@
  */
 package org.gradle.api.tasks.diagnostics;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.internal.ConventionTask;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
@@ -50,7 +50,7 @@ public abstract class AbstractReportTask extends ConventionTask {
     private File outputFile;
 
     // todo annotate as required
-    private Set<BuildProject> projects;
+    private Set<Project> projects;
 
     protected AbstractReportTask() {
         getOutputs().upToDateWhen(element -> false);
@@ -98,7 +98,7 @@ public abstract class AbstractReportTask extends ConventionTask {
     @Internal
     protected abstract ReportRenderer getRenderer();
 
-    protected abstract void generate(BuildProject project) throws IOException;
+    protected abstract void generate(Project project) throws IOException;
 
     /**
      * Returns the file which the report will be written to. When set to {@code null}, the report
@@ -133,7 +133,7 @@ public abstract class AbstractReportTask extends ConventionTask {
      */
     @Internal
     // TODO:LPTR Have the paths of the projects serve as @Input maybe?
-    public Set<BuildProject> getProjects() {
+    public Set<Project> getProjects() {
         return projects;
     }
 
@@ -142,7 +142,7 @@ public abstract class AbstractReportTask extends ConventionTask {
      *
      * @param projects The set of projects. Must not be null.
      */
-    public void setProjects(Set<BuildProject> projects) {
+    public void setProjects(Set<Project> projects) {
         this.projects = projects;
     }
 }

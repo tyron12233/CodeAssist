@@ -16,7 +16,7 @@
 package org.gradle.api.plugins;
 
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.reporting.dependencies.HtmlDependencyReportTask;
 import org.gradle.api.tasks.diagnostics.DependencyReportTask;
 import org.gradle.api.tasks.diagnostics.PropertyReportTask;
@@ -28,7 +28,7 @@ import org.gradle.util.internal.WrapUtil;
  *
  * @see <a href="https://docs.gradle.org/current/userguide/project_report_plugin.html">Project Report plugin reference</a>
  */
-public class ProjectReportsPlugin implements Plugin<BuildProject> {
+public class ProjectReportsPlugin implements Plugin<Project> {
     public static final String TASK_REPORT = "taskReport";
     public static final String PROPERTY_REPORT = "propertyReport";
     public static final String DEPENDENCY_REPORT = "dependencyReport";
@@ -36,7 +36,7 @@ public class ProjectReportsPlugin implements Plugin<BuildProject> {
     public static final String PROJECT_REPORT = "projectReport";
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         project.getPluginManager().apply(ReportingBasePlugin.class);
         @SuppressWarnings("deprecation")
         final ProjectReportsPluginConvention convention = new org.gradle.api.plugins.internal.DefaultProjectReportsPluginConvention(project);

@@ -19,7 +19,7 @@ package org.gradle.api.plugins;
 import org.gradle.api.ExtensiblePolymorphicDomainObjectContainer;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.attributes.Category;
@@ -47,12 +47,12 @@ import java.util.concurrent.Callable;
  * @see <a href="https://docs.gradle.org/current/userguide/test_report_aggregation_plugin.html">Test Report Aggregation Plugin reference</a>
  */
 @Incubating
-public abstract class TestReportAggregationPlugin implements Plugin<BuildProject> {
+public abstract class TestReportAggregationPlugin implements Plugin<Project> {
 
     public static final String TEST_REPORT_AGGREGATION_CONFIGURATION_NAME = "testReportAggregation";
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply("org.gradle.reporting-base");
 
         final Configuration testAggregation = project.getConfigurations().create(TEST_REPORT_AGGREGATION_CONFIGURATION_NAME);

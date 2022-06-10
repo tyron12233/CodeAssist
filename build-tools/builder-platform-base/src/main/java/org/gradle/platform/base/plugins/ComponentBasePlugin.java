@@ -16,7 +16,7 @@
 
 package org.gradle.platform.base.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
 import org.gradle.api.Task;
@@ -51,10 +51,10 @@ import org.gradle.platform.base.internal.ComponentSpecInternal;
  * to this type.
  */
 @Incubating
-public class ComponentBasePlugin implements Plugin<BuildProject> {
+public class ComponentBasePlugin implements Plugin<Project> {
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply(LifecycleBasePlugin.class);
     }
 

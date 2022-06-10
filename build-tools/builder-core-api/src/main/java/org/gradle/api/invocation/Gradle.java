@@ -10,7 +10,7 @@ import org.gradle.api.execution.TaskExecutionGraph;
 import org.gradle.api.execution.TaskExecutionGraphListener;
 import org.gradle.api.execution.TaskExecutionListener;
 import org.gradle.api.initialization.IncludedBuild;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.plugins.PluginAware;
 
@@ -70,7 +70,7 @@ public interface Gradle extends PluginAware {
      * @return The root project. Never returns null.
      * @throws IllegalStateException When called before the root project is available.
      */
-    BuildProject getRootProject() throws IllegalStateException;
+    Project getRootProject() throws IllegalStateException;
 
     /**
      * Adds an action to execute against the root project of this build.
@@ -80,7 +80,7 @@ public interface Gradle extends PluginAware {
      *
      * @param action The action to execute.
      */
-    void rootProject(Action<? super BuildProject> action);
+    void rootProject(Action<? super Project> action);
 
     /**
      * Adds an action to execute against all projects of this build.
@@ -90,7 +90,7 @@ public interface Gradle extends PluginAware {
      *
      * @param action The action to execute.
      */
-    void allprojects(Action<? super BuildProject> action);
+    void allprojects(Action<? super Project> action);
 
     /**
      * Returns the {@link TaskExecutionGraph} for this build.
@@ -127,7 +127,7 @@ public interface Gradle extends PluginAware {
      * @param action The action to execute.
      * @since 3.4
      */
-    void beforeProject(Action<? super BuildProject> action);
+    void beforeProject(Action<? super Project> action);
 
     /**
      * Adds a closure to be called immediately before a project is evaluated. The project is passed to the closure as a
@@ -143,7 +143,7 @@ public interface Gradle extends PluginAware {
      * @param action The action to execute.
      * @since 3.4
      */
-    void afterProject(Action<? super BuildProject> action);
+    void afterProject(Action<? super Project> action);
 
     /**
      * Adds a closure to be called immediately after a project is evaluated.

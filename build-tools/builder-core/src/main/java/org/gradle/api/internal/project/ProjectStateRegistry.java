@@ -1,7 +1,7 @@
 package org.gradle.api.internal.project;
 
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.initialization.DefaultProjectDescriptor;
@@ -31,7 +31,7 @@ public interface ProjectStateRegistry {
      * Locates the state object that owns the given public project model. Can use
      * {@link ProjectInternal#getOwner()} instead.
      */
-    ProjectStateUnk stateFor(BuildProject project) throws IllegalArgumentException;
+    ProjectStateUnk stateFor(Project project) throws IllegalArgumentException;
 
     /**
      * Locates the state object that owns the project with the given identifier.

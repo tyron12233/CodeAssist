@@ -1,6 +1,6 @@
 package org.gradle.api.file;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.provider.Provider;
 
 import org.jetbrains.annotations.Nullable;
@@ -95,7 +95,7 @@ public interface DirectoryProperty extends FileSystemLocationProperty<Directory>
     /**
      * Returns a {@link FileCollection} containing the given files,
      * whose locations are the given paths resolved relative to this directory,
-     * as defined by {@link BuildProject#files(Object...)}.
+     * as defined by {@link Project#files(Object...)}.
      *
      * This method can also be used to create an empty collection, but the collection may not be mutated later.
      *

@@ -1,6 +1,7 @@
 package org.gradle.api.plugins;
 
 import org.gradle.api.Plugin;
+import org.gradle.api.Project;
 
 /**
  * <p>An {@code ObjectConfigurationAction} allows you to apply {@link org.gradle.api.Plugin}s and scripts to an object
@@ -21,7 +22,7 @@ public interface ObjectConfigurationAction {
      * Adds a script to use to configure the target objects. You can call this method multiple times, to use multiple
      * scripts. Scripts and plugins are applied in the order that they are added.
      *
-     * @param script The script. Evaluated as per {@link org.gradle.api.BuildProject#file(Object)}. However, note that
+     * @param script The script. Evaluated as per {@link Project#file(Object)}. However, note that
      * a URL can also be used, allowing the script to be fetched using HTTP, for example.
      * @return this
      */

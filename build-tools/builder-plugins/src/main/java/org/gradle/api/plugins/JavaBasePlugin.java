@@ -18,7 +18,7 @@ package org.gradle.api.plugins;
 
 import com.google.common.collect.ImmutableSet;
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.JavaVersion;
 import org.gradle.api.Plugin;
@@ -71,7 +71,7 @@ import javax.inject.Inject;
  * @see
  * <a href="https://docs.gradle.org/current/userguide/java_plugin.html">Java plugin reference</a>
  */
-public class JavaBasePlugin implements Plugin<BuildProject> {
+public class JavaBasePlugin implements Plugin<Project> {
     public static final String CHECK_TASK_NAME = LifecycleBasePlugin.CHECK_TASK_NAME;
 
     public static final String VERIFICATION_GROUP = LifecycleBasePlugin.VERIFICATION_GROUP;
@@ -115,7 +115,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         ProjectInternal projectInternal = (ProjectInternal) project;
 
         project.getPluginManager().apply(BasePlugin.class);
@@ -149,7 +149,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
         return javaPluginExtension;
     }
 
-    private void configureSourceSetDefaults(BuildProject project,
+    private void configureSourceSetDefaults(Project project,
                                             final JavaPluginExtension javaPluginExtension) {
         javaPluginExtension.getSourceSets().all(sourceSet -> {
             ConventionMapping outputConventionMapping =
@@ -199,7 +199,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
 
     private TaskProvider<JavaCompile> createCompileJavaTask(final SourceSet sourceSet,
                                                             final SourceDirectorySet sourceDirectorySet,
-                                                            final BuildProject target) {
+                                                            final Project target) {
         return target.getTasks()
                 .register(sourceSet.getCompileJavaTaskName(), JavaCompile.class, compileTask -> {
                     compileTask.setDescription("Compiles " + sourceDirectorySet + ".");
@@ -225,7 +225,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
 
     private void createProcessResourcesTask(final SourceSet sourceSet,
                                             final SourceDirectorySet resourceSet,
-                                            final BuildProject target) {
+                                            final Project target) {
         target.getTasks().register(sourceSet.getProcessResourcesTaskName(), ProcessResources.class,
                 resourcesTask -> {
                     resourcesTask.setDescription("Processes " + resourceSet + ".");
@@ -236,7 +236,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
                 });
     }
 
-    private void createClassesTask(final SourceSet sourceSet, BuildProject target) {
+    private void createClassesTask(final SourceSet sourceSet, Project target) {
         sourceSet.compiledBy(
                 target.getTasks().register(sourceSet.getClassesTaskName(), classesTask -> {
                     classesTask.setGroup(LifecycleBasePlugin.BUILD_GROUP);
@@ -249,7 +249,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
 
     private void definePathsForSourceSet(final SourceSet sourceSet,
                                          ConventionMapping outputConventionMapping,
-                                         final BuildProject project) {
+                                         final Project project) {
         outputConventionMapping.map("resourcesDir", () -> {
             String classesDirName = "resources/" + sourceSet.getName();
             return new File(project.getBuildDir(), classesDirName);
@@ -337,7 +337,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
                 compileOnlyConfigurationName, runtimeOnlyConfigurationName);
     }
 
-    private void configureCompileDefaults(final BuildProject project,
+    private void configureCompileDefaults(final Project project,
                                           final DefaultJavaPluginExtension javaExtension) {
         project.getTasks().withType(AbstractCompile.class).configureEach(compile -> {
             ConventionMapping conventionMapping = compile.getConventionMapping();
@@ -394,7 +394,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
         }
     }
 
-    private void configureJavaDoc(final BuildProject project,
+    private void configureJavaDoc(final Project project,
                                   final JavaPluginExtension javaPluginExtension) {
 //        project.getTasks().withType(Javadoc.class).configureEach(javadoc -> {
 //            javadoc.getConventionMapping().map("destinationDir",
@@ -408,7 +408,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
 //        });
     }
 
-    private void configureBuildNeeded(BuildProject project) {
+    private void configureBuildNeeded(Project project) {
         project.getTasks().register(BUILD_NEEDED_TASK_NAME, buildTask -> {
             buildTask.setDescription(
                     "Assembles and tests this project and all projects it depends on.");
@@ -417,7 +417,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
         });
     }
 
-    private void configureBuildDependents(BuildProject project) {
+    private void configureBuildDependents(Project project) {
         project.getTasks().register(BUILD_DEPENDENTS_TASK_NAME, buildTask -> {
             buildTask.setDescription(
                     "Assembles and tests this project and all projects that depend on it.");
@@ -426,14 +426,14 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
         });
     }
 
-    private void configureTest(final BuildProject project,
+    private void configureTest(final Project project,
                                final JavaPluginExtension javaPluginExtension) {
         project.getTasks().withType(Test.class)
                 .configureEach(test -> configureTestDefaults(test, project, javaPluginExtension));
     }
 
     private void configureTestDefaults(final Test test,
-                                       BuildProject project,
+                                       Project project,
                                        final JavaPluginExtension javaPluginExtension) {
         DirectoryReport htmlReport = test.getReports().getHtml();
         JUnitXmlReport xmlReport = test.getReports().getJunitXml();
@@ -449,7 +449,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
                 .convention(getToolchainTool(project, JavaToolchainService::launcherFor));
     }
 
-    private <T> Provider<T> getToolchainTool(BuildProject project,
+    private <T> Provider<T> getToolchainTool(Project project,
                                              BiFunction<JavaToolchainService, JavaToolchainSpec,
                                                      Provider<T>> toolMapper) {
         final JavaPluginExtension extension =

@@ -1,6 +1,6 @@
 package org.gradle.api.internal.tasks;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import javax.annotation.Nullable;
 
@@ -18,7 +18,7 @@ public interface WorkNodeAction {
      * Returning non-null here does not imply any kind of exclusive access to the project, unless {@link #usesMutableProjectState()} returns true.
      */
     @Nullable
-    BuildProject getOwningProject();
+    Project getOwningProject();
 
     void visitDependencies(TaskDependencyResolveContext context);
 

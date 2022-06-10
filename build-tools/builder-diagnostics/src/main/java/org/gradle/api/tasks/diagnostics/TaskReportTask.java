@@ -18,7 +18,7 @@ package org.gradle.api.tasks.diagnostics;
 import static java.util.Collections.emptyList;
 
 import com.google.common.base.Strings;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Incubating;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.project.ProjectStateUnk;
@@ -148,7 +148,7 @@ public class TaskReportTask extends ConventionReportTask {
 
     private List<Try<ProjectReportModel>> computeProjectModels() {
         List<Try<ProjectReportModel>> result = new ArrayList<>();
-        for (BuildProject project : new TreeSet<>(getProjects())) {
+        for (Project project : new TreeSet<>(getProjects())) {
             result.add(Try.ofFailable(() -> projectReportModelFor(project)));
         }
         return result;
@@ -179,7 +179,7 @@ public class TaskReportTask extends ConventionReportTask {
         }
     }
 
-    private ProjectReportModel projectReportModelFor(BuildProject project) {
+    private ProjectReportModel projectReportModelFor(Project project) {
         return new ProjectReportModel(ProjectDetails.of(project), project.getDefaultTasks(),
                 taskReportModelFor(project, isDetail()),
                 Strings.isNullOrEmpty(group) ? ruleDetailsFor(project) : emptyList());
@@ -204,12 +204,12 @@ public class TaskReportTask extends ConventionReportTask {
         }
     }
 
-    private List<RuleDetails> ruleDetailsFor(BuildProject project) {
+    private List<RuleDetails> ruleDetailsFor(Project project) {
         return project.getTasks().getRules().stream()
                 .map(rule -> RuleDetails.of(rule.getDescription())).collect(Collectors.toList());
     }
 
-    private DefaultGroupTaskReportModel taskReportModelFor(BuildProject project, boolean detail) {
+    private DefaultGroupTaskReportModel taskReportModelFor(Project project, boolean detail) {
         final AggregateMultiProjectTaskReportModel aggregateModel =
                 new AggregateMultiProjectTaskReportModel(!detail, detail, getDisplayGroup());
         final TaskDetailsFactory taskDetailsFactory = new TaskDetailsFactory(project);
@@ -218,7 +218,7 @@ public class TaskReportTask extends ConventionReportTask {
                 buildTaskReportModelFor(taskDetailsFactory, project);
         aggregateModel.add(projectTaskModel);
 
-        for (final BuildProject subproject : project.getSubprojects()) {
+        for (final Project subproject : project.getSubprojects()) {
             aggregateModel.add(buildTaskReportModelFor(taskDetailsFactory, subproject));
         }
 
@@ -228,12 +228,12 @@ public class TaskReportTask extends ConventionReportTask {
     }
 
     private SingleProjectTaskReportModel buildTaskReportModelFor(final TaskDetailsFactory taskDetailsFactory,
-                                                                 final BuildProject subproject) {
+                                                                 final Project subproject) {
         return projectStateFor(subproject).fromMutableState(project -> SingleProjectTaskReportModel
                 .forTasks(getProjectTaskLister().listProjectTasks(project), taskDetailsFactory));
     }
 
-    private ProjectStateUnk projectStateFor(BuildProject subproject) {
+    private ProjectStateUnk projectStateFor(Project subproject) {
         return getProjectStateRegistry().stateFor(subproject);
     }
 

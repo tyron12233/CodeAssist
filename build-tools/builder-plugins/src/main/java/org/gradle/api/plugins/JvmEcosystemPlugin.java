@@ -16,7 +16,7 @@
 package org.gradle.api.plugins;
 
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
 import org.gradle.api.attributes.AttributesSchema;
 import org.gradle.api.attributes.LibraryElements;
@@ -39,7 +39,7 @@ import javax.inject.Inject;
  * @since 6.7
  * @see <a href="https://docs.gradle.org/current/userguide/java_plugin.html">Java plugin reference</a>
  */
-public class JvmEcosystemPlugin implements Plugin<BuildProject> {
+public class JvmEcosystemPlugin implements Plugin<Project> {
     private final ObjectFactory objectFactory;
     private final JvmPluginServices jvmPluginServices;
     private final SourceSetContainer sourceSets;
@@ -52,7 +52,7 @@ public class JvmEcosystemPlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         ProjectInternal p = (ProjectInternal) project;
         project.getExtensions().add(SourceSetContainer.class, "sourceSets", sourceSets);
         configureVariantDerivationStrategy(p);

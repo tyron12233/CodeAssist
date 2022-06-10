@@ -18,7 +18,7 @@ package org.gradle.api.plugins;
 
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.internal.component.BuildableJavaComponent;
 import org.gradle.api.internal.component.ComponentRegistry;
 import org.gradle.api.internal.plugins.DslObject;
@@ -38,7 +38,7 @@ import org.gradle.configuration.Help;
  *
  * @see <a href="https://gradle.org/help/">Getting additional help with Gradle</a>
  */
-public class HelpTasksPlugin implements Plugin<BuildProject> {
+public class HelpTasksPlugin implements Plugin<Project> {
 
     public static final String HELP_GROUP = "help";
     public static final String PROPERTIES_TASK = "properties";
@@ -55,7 +55,7 @@ public class HelpTasksPlugin implements Plugin<BuildProject> {
     public static final String DEPENDENT_COMPONENTS_TASK = "dependentComponents";
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         final TaskContainer tasks = project.getTasks();
 
         // static classes are used for the actions to avoid implicitly dragging project/tasks into the model registry

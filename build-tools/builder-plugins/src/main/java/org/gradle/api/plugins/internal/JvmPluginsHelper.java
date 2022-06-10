@@ -18,7 +18,7 @@ package org.gradle.api.plugins.internal;
 import static org.gradle.util.internal.TextUtil.camelToKebabCase;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
@@ -108,7 +108,7 @@ public class JvmPluginsHelper {
                                              final SourceDirectorySet sourceDirectorySet,
                                              AbstractCompile compile,
                                              CompileOptions options,
-                                             final BuildProject target) {
+                                             final Project target) {
         configureForSourceSet(sourceSet, sourceDirectorySet, compile, target);
         configureAnnotationProcessorPath(sourceSet, sourceDirectorySet, options, target);
     }
@@ -116,7 +116,7 @@ public class JvmPluginsHelper {
     private static void configureForSourceSet(final SourceSet sourceSet,
                                               final SourceDirectorySet sourceDirectorySet,
                                               AbstractCompile compile,
-                                              final BuildProject target) {
+                                              final Project target) {
         compile.setDescription("Compiles the " + sourceDirectorySet.getDisplayName() + ".");
         compile.setSource(sourceSet.getJava());
 
@@ -130,7 +130,7 @@ public class JvmPluginsHelper {
     public static void configureAnnotationProcessorPath(final SourceSet sourceSet,
                                                         SourceDirectorySet sourceDirectorySet,
                                                         CompileOptions options,
-                                                        final BuildProject target) {
+                                                        final Project target) {
         final ConventionMapping conventionMapping = new DslObject(options).getConventionMapping();
         conventionMapping.map("annotationProcessorPath", sourceSet::getAnnotationProcessorPath);
         String annotationProcessorGeneratedSourcesChildPath =
@@ -149,7 +149,7 @@ public class JvmPluginsHelper {
     @SuppressWarnings("unused")
     public static void configureOutputDirectoryForSourceSet(final SourceSet sourceSet,
                                                             final SourceDirectorySet sourceDirectorySet,
-                                                            final BuildProject target,
+                                                            final Project target,
                                                             Provider<? extends AbstractCompile> compileTask,
                                                             Provider<CompileOptions> options) {
         TaskProvider<? extends AbstractCompile> taskProvider = Cast.uncheckedCast(compileTask);
@@ -159,7 +159,7 @@ public class JvmPluginsHelper {
 
     public static void configureOutputDirectoryForSourceSet(final SourceSet sourceSet,
                                                             final SourceDirectorySet sourceDirectorySet,
-                                                            final BuildProject target,
+                                                            final Project target,
                                                             TaskProvider<?
                                                                     extends AbstractCompile> compileTask,
                                                             Provider<CompileOptions> options) {
@@ -169,7 +169,7 @@ public class JvmPluginsHelper {
 
     public static <T extends Task> void configureOutputDirectoryForSourceSet(final SourceSet sourceSet,
                                                                              final SourceDirectorySet sourceDirectorySet,
-                                                                             final BuildProject target,
+                                                                             final Project target,
                                                                              TaskProvider<T> compileTask,
                                                                              Provider<CompileOptions> options,
                                                                              Function<T,

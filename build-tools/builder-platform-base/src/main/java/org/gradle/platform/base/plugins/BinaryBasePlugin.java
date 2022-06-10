@@ -15,7 +15,7 @@
  */
 package org.gradle.platform.base.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
@@ -47,10 +47,10 @@ import org.gradle.platform.base.internal.BinarySpecInternal;
  * - Links the tasks for each {@link BinarySpec} across to the tasks container.
  */
 @Incubating
-public class BinaryBasePlugin implements Plugin<BuildProject> {
+public class BinaryBasePlugin implements Plugin<Project> {
 
     @Override
-    public void apply(final BuildProject target) {
+    public void apply(final Project target) {
         target.getPluginManager().apply(ComponentBasePlugin.class);
     }
 

@@ -2,8 +2,8 @@ package org.gradle.api.file;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
+import org.gradle.api.Project;
 import org.gradle.api.Transformer;
-import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.internal.HasInternalProtocol;
 
@@ -68,7 +68,7 @@ import java.util.regex.Pattern;
  * </pre>
  *
  * @see org.gradle.api.tasks.Copy Copy Task
- * @see org.gradle.api.BuildProject#copy(groovy.lang.Closure) Project.copy()
+ * @see Project#copy(groovy.lang.Closure) Project.copy()
  */
 @HasInternalProtocol
 public interface CopySpec extends CopySourceSpec, CopyProcessingSpec, PatternFilterable {
@@ -293,7 +293,7 @@ public interface CopySpec extends CopySourceSpec, CopyProcessingSpec, PatternFil
 
     /**
      * Creates and configures a child {@code CopySpec} with the given destination path.
-     * The destination is evaluated as per {@link org.gradle.api.BuildProject#file(Object)}.
+     * The destination is evaluated as per {@link Project#file(Object)}.
      *
      * @param destPath Path to the destination directory for a Copy
      * @param configureClosure The closure to use to configure the child {@code CopySpec}.
@@ -303,7 +303,7 @@ public interface CopySpec extends CopySourceSpec, CopyProcessingSpec, PatternFil
 
     /**
      * Creates and configures a child {@code CopySpec} with the given destination path.
-     * The destination is evaluated as per {@link org.gradle.api.BuildProject#file(Object)}.
+     * The destination is evaluated as per {@link Project#file(Object)}.
      *
      * @param destPath Path to the destination directory for a Copy
      * @param copySpec The action to use to configure the child {@code CopySpec}.

@@ -16,7 +16,7 @@
 
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import java.io.File;
 
@@ -39,5 +39,5 @@ public abstract class WarPluginConvention {
 
     public abstract void setWebAppDirName(String webAppDirName);
 
-    public abstract BuildProject getProject();
+    public abstract Project getProject();
 }

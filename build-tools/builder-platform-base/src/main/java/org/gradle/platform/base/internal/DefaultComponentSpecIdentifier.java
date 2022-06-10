@@ -16,7 +16,7 @@
 package org.gradle.platform.base.internal;
 
 import com.google.common.base.Objects;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.util.Path;
 
 import org.apache.commons.lang3.StringUtils;
@@ -58,7 +58,7 @@ public class DefaultComponentSpecIdentifier implements ComponentSpecIdentifier {
     }
 
     private String getQualifiedPath() {
-        return parent == null ? name : parent.getQualifiedPath() + BuildProject.PATH_SEPARATOR + name;
+        return parent == null ? name : parent.getQualifiedPath() + Project.PATH_SEPARATOR + name;
     }
 
     @Override

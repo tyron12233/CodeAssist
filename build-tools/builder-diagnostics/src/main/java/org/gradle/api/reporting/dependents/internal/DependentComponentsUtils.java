@@ -17,7 +17,7 @@
 package org.gradle.api.reporting.dependents.internal;
 
 import com.google.common.collect.Sets;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.component.LibraryBinaryIdentifier;
 import org.gradle.model.ModelMap;
 import org.gradle.model.internal.registry.ModelRegistry;
@@ -38,14 +38,14 @@ public class DependentComponentsUtils {
     }
 
     public static String getBuildScopedTerseName(LibraryBinaryIdentifier id) {
-        return getProjectPrefix(id.getProjectPath()) + id.getLibraryName() + BuildProject.PATH_SEPARATOR + id.getVariant();
+        return getProjectPrefix(id.getProjectPath()) + id.getLibraryName() + Project.PATH_SEPARATOR + id.getVariant();
     }
 
     private static String getProjectPrefix(String projectPath) {
-        if (BuildProject.PATH_SEPARATOR.equals(projectPath)) {
+        if (Project.PATH_SEPARATOR.equals(projectPath)) {
             return "";
         }
-        return projectPath + BuildProject.PATH_SEPARATOR;
+        return projectPath + Project.PATH_SEPARATOR;
     }
 
 

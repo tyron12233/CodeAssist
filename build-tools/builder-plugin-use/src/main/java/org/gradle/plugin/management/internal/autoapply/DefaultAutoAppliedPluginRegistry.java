@@ -16,17 +16,10 @@
 
 package org.gradle.plugin.management.internal.autoapply;
 
-import org.gradle.StartParameter;
-import org.gradle.api.BuildProject;
-import org.gradle.api.artifacts.ModuleIdentifier;
-import org.gradle.api.artifacts.ModuleVersionSelector;
+import org.gradle.api.Project;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.internal.BuildDefinition;
 import org.gradle.api.internal.StartParameterInternal;
-import org.gradle.api.internal.artifacts.DefaultModuleIdentifier;
-import org.gradle.api.internal.artifacts.DefaultModuleVersionSelector;
-import org.gradle.api.invocation.Gradle;
-import org.gradle.plugin.management.internal.DefaultPluginRequest;
 import org.gradle.plugin.management.internal.PluginRequestInternal;
 import org.gradle.plugin.management.internal.PluginRequests;
 
@@ -44,7 +37,7 @@ public class DefaultAutoAppliedPluginRegistry implements AutoAppliedPluginRegist
     }
 
     @Override
-    public PluginRequests getAutoAppliedPlugins(BuildProject target) {
+    public PluginRequests getAutoAppliedPlugins(Project target) {
         return PluginRequests.EMPTY;
     }
 

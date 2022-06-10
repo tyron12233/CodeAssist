@@ -17,7 +17,7 @@
 package org.gradle.testing.base.plugins;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.Transformer;
 import org.gradle.api.file.Directory;
@@ -36,7 +36,7 @@ import java.io.File;
  *
  * @since 4.4
  */
-public class TestingBasePlugin implements Plugin<BuildProject> {
+public class TestingBasePlugin implements Plugin<Project> {
     public static final String TEST_RESULTS_DIR_NAME = "test-results";
     public static final String TESTS_DIR_NAME = "tests";
     private static final Transformer<File, Directory> TO_FILE_TRANSFORMER =
@@ -48,7 +48,7 @@ public class TestingBasePlugin implements Plugin<BuildProject> {
             };
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         project.getPluginManager().apply(ReportingBasePlugin.class);
         project.getTasks().withType(AbstractTestTask.class, new Action<AbstractTestTask>() {
             @Override
@@ -68,12 +68,12 @@ public class TestingBasePlugin implements Plugin<BuildProject> {
         });
     }
 
-    private Provider<Directory> getTestResultsDir(BuildProject project, AbstractTestTask test) {
+    private Provider<Directory> getTestResultsDir(Project project, AbstractTestTask test) {
         return project.getLayout().getBuildDirectory()
                 .dir(TEST_RESULTS_DIR_NAME + "/" + test.getName());
     }
 
-    private Provider<Directory> getTestReportsDir(BuildProject project,
+    private Provider<Directory> getTestReportsDir(Project project,
                                                   final AbstractTestTask test) {
         DirectoryProperty baseDirectory =
                 project.getExtensions().getByType(ReportingExtension.class).getBaseDirectory();

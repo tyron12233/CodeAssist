@@ -16,7 +16,7 @@
 package org.gradle.api.plugins;
 
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.reporting.ReportingExtension;
 
 /**
@@ -31,9 +31,9 @@ import org.gradle.api.reporting.ReportingExtension;
  * </ul>
  * @see <a href="https://docs.gradle.org/current/userguide/project_report_plugin.html">Project Report plugin reference</a>
  */
-public class ReportingBasePlugin implements Plugin<BuildProject> {
+public class ReportingBasePlugin implements Plugin<Project> {
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         project.getExtensions().create(ReportingExtension.NAME, ReportingExtension.class, project);
     }
 }

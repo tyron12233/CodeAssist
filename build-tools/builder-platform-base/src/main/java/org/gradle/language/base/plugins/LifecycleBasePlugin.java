@@ -16,7 +16,7 @@
 
 package org.gradle.language.base.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.file.Directory;
 import org.gradle.api.internal.project.ProjectInternal;
@@ -31,7 +31,7 @@ import org.gradle.language.base.internal.plugins.CleanRule;
  * @see
  * <a href="https://docs.gradle.org/current/userguide/base_plugin.html">Base plugin reference</a>
  */
-public class LifecycleBasePlugin implements Plugin<BuildProject> {
+public class LifecycleBasePlugin implements Plugin<Project> {
     public static final String CLEAN_TASK_NAME = "clean";
     public static final String ASSEMBLE_TASK_NAME = "assemble";
     public static final String CHECK_TASK_NAME = "check";
@@ -40,7 +40,7 @@ public class LifecycleBasePlugin implements Plugin<BuildProject> {
     public static final String VERIFICATION_GROUP = "verification";
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         final ProjectInternal projectInternal = (ProjectInternal) project;
         addClean(projectInternal);
         addCleanRule(project);
@@ -66,25 +66,25 @@ public class LifecycleBasePlugin implements Plugin<BuildProject> {
         buildOutputCleanupRegistry.registerOutputs(clean.map(cl -> cl.getTargetFiles()));
     }
 
-    private void addCleanRule(BuildProject project) {
+    private void addCleanRule(Project project) {
         project.getTasks().addRule(new CleanRule(project.getTasks()));
     }
 
-    private void addAssemble(BuildProject project) {
+    private void addAssemble(Project project) {
         project.getTasks().register(ASSEMBLE_TASK_NAME, assembleTask -> {
             assembleTask.setDescription("Assembles the outputs of this project.");
             assembleTask.setGroup(BUILD_GROUP);
         });
     }
 
-    private void addCheck(BuildProject project) {
+    private void addCheck(Project project) {
         project.getTasks().register(CHECK_TASK_NAME, checkTask -> {
             checkTask.setDescription("Runs all checks.");
             checkTask.setGroup(VERIFICATION_GROUP);
         });
     }
 
-    private void addBuild(final BuildProject project) {
+    private void addBuild(final Project project) {
         project.getTasks().register(BUILD_TASK_NAME, buildTask -> {
             buildTask.setDescription("Assembles and tests this project.");
             buildTask.setGroup(BUILD_GROUP);

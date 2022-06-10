@@ -14,7 +14,7 @@ import org.gradle.api.internal.provider.MappingProvider;
 import org.gradle.api.internal.provider.PropertyHost;
 import org.gradle.api.internal.provider.Providers;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.util.PatternSet;
 
@@ -39,7 +39,7 @@ public class DefaultProjectLayout implements ProjectLayout, TaskFileVarFactory {
         this.fileFactory = fileFactory;
         this.projectDir = fileFactory.dir(projectDir);
         this.buildDir = filePropertyFactory.newDirectoryProperty().convention(fileFactory.dir(fileResolver.resolve(
-                BuildProject.DEFAULT_BUILD_DIR_NAME)));
+                Project.DEFAULT_BUILD_DIR_NAME)));
     }
 
     @Override

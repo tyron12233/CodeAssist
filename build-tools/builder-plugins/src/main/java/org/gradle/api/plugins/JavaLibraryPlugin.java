@@ -15,7 +15,7 @@
  */
 package org.gradle.api.plugins;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
@@ -37,7 +37,7 @@ import static org.gradle.api.plugins.JavaPlugin.TEST_COMPILE_ONLY_CONFIGURATION_
  * @since 3.4
  * @see <a href="https://docs.gradle.org/current/userguide/java_library_plugin.html">Java Library plugin reference</a>
  */
-public class JavaLibraryPlugin implements Plugin<BuildProject> {
+public class JavaLibraryPlugin implements Plugin<Project> {
 
     private final JvmEcosystemUtilities jvmEcosystemUtilities;
 
@@ -47,7 +47,7 @@ public class JavaLibraryPlugin implements Plugin<BuildProject> {
     }
 
     @Override
-    public void apply(BuildProject project) {
+    public void apply(Project project) {
         project.getPluginManager().apply(JavaPlugin.class);
 
         SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);

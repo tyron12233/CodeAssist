@@ -20,9 +20,8 @@ import static org.gradle.api.distribution.plugins.DistributionPlugin.TASK_INSTAL
 
 import org.gradle.api.Action;
 import org.gradle.api.BuildException;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Plugin;
-import org.gradle.api.BuildProject;
 import org.gradle.api.Task;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.distribution.Distribution;
@@ -56,7 +55,7 @@ import java.util.function.BiFunction;
  * @see
  * <a href="https://docs.gradle.org/current/userguide/application_plugin.html">Application plugin reference</a>
  */
-public class ApplicationPlugin implements Plugin<BuildProject> {
+public class ApplicationPlugin implements Plugin<Project> {
     public static final String APPLICATION_PLUGIN_NAME = "application";
     public static final String APPLICATION_GROUP = APPLICATION_PLUGIN_NAME;
     public static final String TASK_RUN_NAME = "run";
@@ -65,7 +64,7 @@ public class ApplicationPlugin implements Plugin<BuildProject> {
     public static final String TASK_DIST_TAR_NAME = "distTar";
 
     @Override
-    public void apply(final BuildProject project) {
+    public void apply(final Project project) {
         TaskContainer tasks = project.getTasks();
 
         project.getPluginManager().apply(JavaPlugin.class);
@@ -142,7 +141,7 @@ public class ApplicationPlugin implements Plugin<BuildProject> {
         }
     }
 
-    private ApplicationPluginConvention addConvention(BuildProject project) {
+    private ApplicationPluginConvention addConvention(Project project) {
         ApplicationPluginConvention pluginConvention =
                 new DefaultApplicationPluginConvention(project);
         pluginConvention.setApplicationName(project.getName());
@@ -150,14 +149,14 @@ public class ApplicationPlugin implements Plugin<BuildProject> {
         return pluginConvention;
     }
 
-    private JavaApplication addExtensions(BuildProject project,
+    private JavaApplication addExtensions(Project project,
                                           ApplicationPluginConvention pluginConvention) {
         return project.getExtensions()
                 .create(JavaApplication.class, "application", DefaultJavaApplication.class,
                         pluginConvention);
     }
 
-    private void addRunTask(BuildProject project,
+    private void addRunTask(Project project,
                             JavaApplication pluginExtension,
                             ApplicationPluginConvention pluginConvention) {
         project.getTasks().register(TASK_RUN_NAME, JavaExec.class, run -> {
@@ -187,7 +186,7 @@ public class ApplicationPlugin implements Plugin<BuildProject> {
         });
     }
 
-    private <T> Provider<T> getToolchainTool(BuildProject project,
+    private <T> Provider<T> getToolchainTool(Project project,
                                              BiFunction<JavaToolchainService, JavaToolchainSpec,
                                                      Provider<T>> toolMapper) {
         final JavaPluginExtension extension =
@@ -198,7 +197,7 @@ public class ApplicationPlugin implements Plugin<BuildProject> {
     }
 
     // @Todo: refactor this task configuration to extend a copy task and use replace tokens
-    private void addCreateScriptsTask(BuildProject project,
+    private void addCreateScriptsTask(Project project,
                                       JavaApplication pluginExtension,
                                       ApplicationPluginConvention pluginConvention) {
         project.getTasks()
@@ -229,19 +228,19 @@ public class ApplicationPlugin implements Plugin<BuildProject> {
                 });
     }
 
-    private FileCollection runtimeClasspath(BuildProject project) {
+    private FileCollection runtimeClasspath(Project project) {
 
         return project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets()
                 .getByName(SourceSet.MAIN_SOURCE_SET_NAME).getRuntimeClasspath();
     }
 
-    private FileCollection jarsOnlyRuntimeClasspath(BuildProject project) {
+    private FileCollection jarsOnlyRuntimeClasspath(Project project) {
         return project.getTasks().getAt(JavaPlugin.JAR_TASK_NAME).getOutputs().getFiles()
                 .plus(project.getConfigurations()
                         .getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME));
     }
 
-    private CopySpec configureDistribution(BuildProject project,
+    private CopySpec configureDistribution(Project project,
                                            Distribution mainDistribution,
                                            ApplicationPluginConvention pluginConvention) {
         mainDistribution.getDistributionBaseName()

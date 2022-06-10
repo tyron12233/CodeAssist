@@ -541,7 +541,7 @@ public class DefaultTask extends AbstractTask {
 
     @Internal
     @Override
-    public BuildProject getProject() {
+    public Project getProject() {
         return project;
     }
 

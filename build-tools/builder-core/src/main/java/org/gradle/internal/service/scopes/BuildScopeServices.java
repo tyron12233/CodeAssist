@@ -1,25 +1,15 @@
 package org.gradle.internal.service.scopes;
 
 import org.gradle.StartParameter;
-import org.gradle.api.BuildProject;
-import org.gradle.api.artifacts.ConfigurationContainer;
-import org.gradle.api.artifacts.dsl.DependencyHandler;
-import org.gradle.api.artifacts.dsl.DependencyLockingHandler;
-import org.gradle.api.artifacts.dsl.RepositoryHandler;
-import org.gradle.api.attributes.AttributesSchema;
+import org.gradle.api.Project;
 import org.gradle.api.internal.BuildDefinition;
 import org.gradle.api.internal.DocumentationRegistry;
-import org.gradle.api.internal.DomainObjectContext;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.artifacts.DefaultModule;
 import org.gradle.api.internal.artifacts.DependencyManagementServices;
-import org.gradle.api.internal.artifacts.DependencyResolutionServices;
 import org.gradle.api.internal.artifacts.Module;
 import org.gradle.api.internal.artifacts.configurations.DependencyMetaDataProvider;
-import org.gradle.api.internal.artifacts.dsl.dependencies.ProjectFinder;
-import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
-import org.gradle.api.internal.classpath.DefaultModuleRegistry;
 import org.gradle.api.internal.component.ComponentTypeRegistry;
 import org.gradle.api.internal.component.DefaultComponentTypeRegistry;
 import org.gradle.api.internal.file.DefaultFileOperations;
@@ -51,7 +41,6 @@ import org.gradle.api.internal.provider.ValueSourceProviderFactory;
 import org.gradle.api.internal.resources.ApiTextResourceAdapter;
 import org.gradle.api.internal.resources.DefaultResourceHandler;
 import org.gradle.api.internal.tasks.TaskStatistics;
-import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.cache.CacheRepository;
 import org.gradle.cache.internal.BuildScopeCacheDir;
@@ -88,7 +77,6 @@ import org.gradle.groovy.scripts.internal.DefaultScriptCompilationHandler;
 import org.gradle.groovy.scripts.internal.DefaultScriptRunnerFactory;
 import org.gradle.groovy.scripts.internal.FileCacheBackedScriptClassCompiler;
 import org.gradle.groovy.scripts.internal.ScriptClassCompiler;
-import org.gradle.groovy.scripts.internal.ScriptCompilationHandler;
 import org.gradle.groovy.scripts.internal.ScriptRunnerFactory;
 import org.gradle.initialization.BuildLoader;
 import org.gradle.initialization.ClassLoaderScopeRegistry;
@@ -146,16 +134,12 @@ import org.gradle.internal.nativeintegration.services.FileSystems;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.BuildOperationQueueFactory;
 import org.gradle.internal.operations.DefaultBuildOperationQueueFactory;
-import org.gradle.internal.reflect.DirectInstantiator;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.service.DefaultServiceRegistry;
-import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.resource.StringTextResource;
 import org.gradle.internal.resource.TextFileResourceLoader;
-import org.gradle.internal.resource.TextResource;
 import org.gradle.internal.resource.local.FileResourceListener;
-import org.gradle.internal.resources.ResourceLockCoordinationService;
 import org.gradle.internal.scripts.ScriptExecutionListener;
 import org.gradle.internal.snapshot.CaseSensitivity;
 import org.gradle.internal.work.WorkerLeaseService;
@@ -310,7 +294,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
     private static class DependencyMetaDataProviderImpl implements DependencyMetaDataProvider {
         @Override
         public Module getModule() {
-            return new DefaultModule("unspecified", "unspecified", BuildProject.DEFAULT_VERSION, BuildProject.DEFAULT_STATUS);
+            return new DefaultModule("unspecified", "unspecified", Project.DEFAULT_VERSION, Project.DEFAULT_STATUS);
         }
     }
 

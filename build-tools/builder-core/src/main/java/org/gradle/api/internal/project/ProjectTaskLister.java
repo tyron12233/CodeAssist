@@ -1,6 +1,6 @@
 package org.gradle.api.internal.project;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 
 import java.util.Collection;
@@ -10,5 +10,5 @@ import java.util.Collection;
  * and implicit tasks.
  */
 public interface ProjectTaskLister {
-    Collection<Task> listProjectTasks(BuildProject project);
+    Collection<Task> listProjectTasks(Project project);
 }

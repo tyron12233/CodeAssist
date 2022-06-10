@@ -16,13 +16,13 @@
 
 package org.gradle.api.tasks.diagnostics.internal;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 
 import javax.annotation.Nullable;
 
 public interface ProjectDetails {
 
-    static ProjectDetails of(final BuildProject project) {
+    static ProjectDetails of(final Project project) {
         final String displayName = project.getDisplayName();
         final String description = project.getDescription();
         return new ProjectDetails() {

@@ -1,8 +1,6 @@
 package org.gradle.api.tasks;
 
-import org.gradle.api.BuildProject;
-
-import java.lang.annotation.Annotation;
+import org.gradle.api.Project;
 
 
 import java.lang.annotation.Documented;
@@ -22,10 +20,10 @@ import java.lang.annotation.Target;
  *
  * <p>When the annotated property is a {@link java.util.Map}, the keys of the map must be non-empty strings.
  * The values of the map will be evaluated to individual directories as per
- * {@link BuildProject#file(Object)}.</p>
+ * {@link Project#file(Object)}.</p>
  *
  * <p>
- * Otherwise the given directories will be evaluated as per {@link BuildProject#files(Object...)}.
+ * Otherwise the given directories will be evaluated as per {@link Project#files(Object...)}.
  * Task output caching will be disabled if the outputs contain file trees.
  * </p>
  */

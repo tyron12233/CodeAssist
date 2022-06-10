@@ -15,7 +15,7 @@
  */
 package org.gradle.api.tasks.diagnostics;
 
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.api.Incubating;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.work.DisableCachingByDefault;
@@ -32,7 +32,7 @@ import java.util.TreeSet;
 @DisableCachingByDefault(because = "Abstract super-class, not to be instantiated directly")
 public abstract class ProjectBasedReportTask extends ConventionReportTask {
 
-    protected abstract void generate(BuildProject project) throws IOException;
+    protected abstract void generate(Project project) throws IOException;
 
     @TaskAction
     public void generate() {

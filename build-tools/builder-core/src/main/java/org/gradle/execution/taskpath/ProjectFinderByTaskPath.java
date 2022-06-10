@@ -3,7 +3,7 @@ package org.gradle.execution.taskpath;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.logging.Logging;
-import org.gradle.api.BuildProject;
+import org.gradle.api.Project;
 import org.gradle.util.NameMatcher;
 
 import org.slf4j.Logger;
@@ -18,11 +18,11 @@ public class ProjectFinderByTaskPath {
      * <p>
      * Depending on the path, resolution can be relative, or absolute:
      * <ul>
-     *     <li>If the path start with {@link BuildProject#PATH_SEPARATOR}, the resolution starts from the root project</li>
+     *     <li>If the path start with {@link Project#PATH_SEPARATOR}, the resolution starts from the root project</li>
      *     <li>If there is no start separator, resolution is starting from {@code startProject}</li>
      * </ul>
      *
-     * @param projectPath a project path, optionally started/segmented by {@link BuildProject#PATH_SEPARATOR}
+     * @param projectPath a project path, optionally started/segmented by {@link Project#PATH_SEPARATOR}
      * @param startProject the project, where a relative resolution starts from
      * @return the project addressed by {@code projectPath}
      * @throws ProjectLookupException if any of the intermediate projects cannot be found
@@ -32,7 +32,7 @@ public class ProjectFinderByTaskPath {
         String originalProjectPath = projectPath;
         MatchedProject matchedProject;
 
-        if (projectPath.startsWith(BuildProject.PATH_SEPARATOR)) {
+        if (projectPath.startsWith(Project.PATH_SEPARATOR)) {
             // If a path start with a separator, we handle it as an absolute path,
             // and get the root project instead of the current project
             matchedProject = new MatchedProject(startProject.getRootProject(), false);
@@ -43,7 +43,7 @@ public class ProjectFinderByTaskPath {
             matchedProject = new MatchedProject(startProject, false);
         }
 
-        String[] components = projectPath.split(BuildProject.PATH_SEPARATOR);
+        String[] components = projectPath.split(Project.PATH_SEPARATOR);
         for (final String component : components) {
             // Should be checked, as split above can cause troubles,
             // if the input is only an empty string
@@ -73,14 +73,14 @@ public class ProjectFinderByTaskPath {
      * @throws ProjectLookupException if the project cannot be found in the parent project
      */
     private MatchedProject resolveProject(String projectName, MatchedProject parentProjectMatch) throws ProjectLookupException {
-        BuildProject parentProject = parentProjectMatch.getProject();
-        Map<String, BuildProject> childProjects = parentProject.getChildProjects();
+        Project parentProject = parentProjectMatch.getProject();
+        Map<String, Project> childProjects = parentProject.getChildProjects();
 
         if (childProjects.containsKey(projectName)) {
             return new MatchedProject(childProjects.get(projectName), parentProjectMatch.isPatternMatched());
         } else {
             NameMatcher matcher = new NameMatcher();
-            BuildProject foundProject = matcher.find(projectName, childProjects);
+            Project foundProject = matcher.find(projectName, childProjects);
             if (foundProject != null) {
                 return new MatchedProject(foundProject, true);
             } else {
@@ -99,10 +99,10 @@ public class ProjectFinderByTaskPath {
      * Utility class storing information about a project resolution.
      */
     private static class MatchedProject {
-        private final BuildProject project;
+        private final Project project;
         private final boolean patternMatched;
 
-        public MatchedProject(BuildProject project, boolean patternMatched) {
+        public MatchedProject(Project project, boolean patternMatched) {
             this.project = project;
             this.patternMatched = patternMatched;
         }
@@ -110,7 +110,7 @@ public class ProjectFinderByTaskPath {
         /**
          * The currently resolved project
          */
-        public BuildProject getProject() {
+        public Project getProject() {
             return project;
         }
 
