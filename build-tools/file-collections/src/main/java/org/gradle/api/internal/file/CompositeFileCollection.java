@@ -2,6 +2,7 @@ package org.gradle.api.internal.file;
 
 import com.google.common.collect.ImmutableList;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.Factory;
 import org.gradle.api.internal.tasks.TaskDependencyContainer;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
@@ -10,7 +11,6 @@ import org.gradle.api.tasks.util.PatternSet;
 import java.io.File;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -57,7 +57,7 @@ public abstract class CompositeFileCollection extends AbstractFileCollection imp
 //    }
 
     @Override
-    public FileCollectionInternal filter(final Predicate<? super File> filterSpec) {
+    public FileCollectionInternal filter(final Spec<? super File> filterSpec) {
         return new CompositeFileCollection(patternSetFactory) {
             @Override
             public FileCollectionInternal replace(FileCollectionInternal original, Supplier<FileCollectionInternal> supplier) {

@@ -1,6 +1,7 @@
 package org.gradle.api.internal.file;
 
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.api.internal.tasks.TaskDependencyContainer;
 
@@ -10,7 +11,7 @@ import java.util.function.Supplier;
 
 public interface FileCollectionInternal extends FileCollection, TaskDependencyContainer {
     @Override
-    FileCollectionInternal filter(Predicate<? super File> filterSpec);
+    FileCollectionInternal filter(Spec<? super File> filterSpec);
 
     @Override
     FileTreeInternal getAsFileTree();

@@ -6,11 +6,13 @@ import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.file.FileVisitDetails;
 import org.gradle.api.file.FileVisitor;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.Factory;
 import org.gradle.internal.MutableBoolean;
 import org.gradle.api.internal.file.collections.DirectoryFileTree;
 import org.gradle.api.internal.file.collections.FileBackedDirectoryFileTree;
 import org.gradle.api.internal.file.collections.FileSystemMirroringFileTree;
+import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.api.internal.provider.BuildableBackedSetProvider;
 import org.gradle.api.internal.tasks.AbstractTaskDependency;
@@ -20,6 +22,7 @@ import org.gradle.api.tasks.TaskDependency;
 import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.api.tasks.util.internal.PatternSets;
 import org.gradle.util.internal.CollectionUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -170,17 +173,17 @@ public abstract class AbstractFileCollection implements FileCollectionInternal {
                 .collect(Collectors.toList());
         if (!filesAsPaths.isEmpty()) {
             String displayedFilePaths = filesAsPaths.stream().map(path -> "'" + path + "'").collect(Collectors.joining(","));
-//            LOGGE.deprecateBehaviour(String.format(
-//                    "Converting files to a classpath string when their paths contain the path separator '%s' has been deprecated." +
-//                    " The path separator is not a valid element of a file path. Problematic paths in '%s' are: %s.",
-//                    File.pathSeparator,
-//                    getDisplayName(),
-//                    displayedFilePaths
-//            ))
-//                    .withAdvice("Add the individual files to the file collection instead.")
-//                    .willBecomeAnErrorInGradle8()
-//                    .withUpgradeGuideSection(7, "file_collection_to_classpath")
-//                    .nagUser();
+            DeprecationLogger.deprecateBehaviour(String.format(
+                    "Converting files to a classpath string when their paths contain the path separator '%s' has been deprecated." +
+                    " The path separator is not a valid element of a file path. Problematic paths in '%s' are: %s.",
+                    File.pathSeparator,
+                    getDisplayName(),
+                    displayedFilePaths
+            ))
+                    .withAdvice("Add the individual files to the file collection instead.")
+                    .willBecomeAnErrorInGradle8()
+                    .withUpgradeGuideSection(7, "file_collection_to_classpath")
+                    .nagUser();
         }
     }
 
@@ -340,7 +343,7 @@ public abstract class AbstractFileCollection implements FileCollectionInternal {
     }
 
     @Override
-    public FileCollectionInternal filter(final Predicate<? super File> filterSpec) {
+    public FileCollectionInternal filter(@NotNull final Spec<? super File> filterSpec) {
         return new FilteredFileCollection(this, filterSpec);
     }
 
