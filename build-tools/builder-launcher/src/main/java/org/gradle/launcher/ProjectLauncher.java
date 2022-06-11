@@ -83,7 +83,7 @@ public class ProjectLauncher {
     private BuildActionParameters createBuildActionParameters(StartParameter startParameter) {
         return new DefaultBuildActionParameters(
 //                daemonParameters.getEffectiveSystemProperties(),
-                Collections.emptyMap(),
+                Collections.singletonMap("ANDROID_HOME", startParameter.getGradleUserHomeDir()),
 //                daemonParameters.getEnvironmentVariables(),
                 Collections.emptyMap(),
                 SystemProperties.getInstance().getCurrentDir(),

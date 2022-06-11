@@ -1,5 +1,8 @@
 package org.gradle.tooling.internal.launcher;
 
+import static java.util.Collections.emptyList;
+
+import org.gradle.api.execution.internal.TaskInputsListeners;
 import org.gradle.api.internal.changedetection.state.FileHasherStatistics;
 import org.gradle.execution.WorkValidationWarningReporter;
 import org.gradle.initialization.BuildCancellationToken;
@@ -7,6 +10,8 @@ import org.gradle.initialization.BuildEventConsumer;
 import org.gradle.initialization.BuildRequestMetaData;
 import org.gradle.internal.build.BuildLayoutValidator;
 import org.gradle.internal.build.BuildStateRegistry;
+import org.gradle.internal.build.event.BuildEventListenerFactory;
+import org.gradle.internal.build.event.BuildEventSubscriptions;
 import org.gradle.internal.buildevents.BuildStartedTime;
 import org.gradle.internal.buildtree.BuildActionRunner;
 import org.gradle.internal.buildtree.BuildTreeActionExecutor;
@@ -63,6 +68,15 @@ public class LauncherServices extends AbstractPluginServiceRegistry {
     @Override
     public void registerGlobalServices(ServiceRegistration registration) {
         registration.addProvider(new ToolingGlobalScopeServices());
+
+        // TODO: add tooling launcher services
+        registration.add(BuildEventListenerFactory.class, new BuildEventListenerFactory() {
+            @Override
+            public Iterable<Object> createListeners(BuildEventSubscriptions subscriptions,
+                                                    BuildEventConsumer consumer) {
+                return emptyList();
+            }
+        });
     }
 
     @Override
@@ -119,14 +133,13 @@ public class LauncherServices extends AbstractPluginServiceRegistry {
     }
 
     static class ToolingBuildSessionScopeServices {
-
         BuildSessionActionExecutor createActionExecutor(
-//                BuildEventListenerFactory listenerFactory,
+                BuildEventListenerFactory listenerFactory,
                 ExecutorFactory executorFactory,
                 ListenerManager listenerManager,
                 BuildOperationListenerManager buildOperationListenerManager,
                 BuildOperationExecutor buildOperationExecutor,
-//                TaskInputsListeners inputsListeners,
+                TaskInputsListeners inputsListeners,
                 StyledTextOutputFactory styledTextOutputFactory,
 //                FileSystemChangeWaiterFactory fileSystemChangeWaiterFactory,
                 BuildRequestMetaData requestMetaData,
