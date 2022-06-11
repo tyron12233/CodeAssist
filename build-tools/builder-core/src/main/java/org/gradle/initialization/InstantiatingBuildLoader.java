@@ -4,7 +4,7 @@ import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.SettingsInternal;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.build.BuildState;
 
 public class InstantiatingBuildLoader implements BuildLoader {
@@ -15,7 +15,7 @@ public class InstantiatingBuildLoader implements BuildLoader {
     }
 
     private void attachDefaultProject(GradleInternal gradle, DefaultProjectDescriptor defaultProjectDescriptor) {
-        ProjectStateUnk defaultProject = gradle.getOwner().getProjects().getProject(defaultProjectDescriptor.path());
+        ProjectState defaultProject = gradle.getOwner().getProjects().getProject(defaultProjectDescriptor.path());
         gradle.setDefaultProject(defaultProject.getMutableModel());
     }
 
@@ -23,7 +23,7 @@ public class InstantiatingBuildLoader implements BuildLoader {
         ClassLoaderScope baseProjectClassLoaderScope = gradle.baseProjectClassLoaderScope();
         ClassLoaderScope rootProjectClassLoaderScope = baseProjectClassLoaderScope.createChild("root-project[" + gradle.getIdentityPath() + "]");
 
-        ProjectStateUnk projectState = gradle.getOwner().getProjects().getProject(rootProjectDescriptor.path());
+        ProjectState projectState = gradle.getOwner().getProjects().getProject(rootProjectDescriptor.path());
         projectState.createMutableModel(rootProjectClassLoaderScope, baseProjectClassLoaderScope);
         ProjectInternal rootProject = projectState.getMutableModel();
         gradle.setRootProject(rootProject);
@@ -34,7 +34,7 @@ public class InstantiatingBuildLoader implements BuildLoader {
     private void createChildProjectsRecursively(BuildState owner, DefaultProjectDescriptor parentProjectDescriptor, ClassLoaderScope parentProjectClassLoaderScope, ClassLoaderScope baseProjectClassLoaderScope) {
         for (DefaultProjectDescriptor childProjectDescriptor : parentProjectDescriptor.children()) {
             ClassLoaderScope childProjectClassLoaderScope = parentProjectClassLoaderScope.createChild("project-" + childProjectDescriptor.getName());
-            ProjectStateUnk projectState = owner.getProjects().getProject(childProjectDescriptor.path());
+            ProjectState projectState = owner.getProjects().getProject(childProjectDescriptor.path());
             projectState.createMutableModel(childProjectClassLoaderScope, baseProjectClassLoaderScope);
             createChildProjectsRecursively(owner, childProjectDescriptor, parentProjectClassLoaderScope, baseProjectClassLoaderScope);
         }

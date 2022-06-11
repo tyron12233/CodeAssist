@@ -15,7 +15,7 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.component.local.model.LocalComponentMetadata;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -30,5 +30,5 @@ public interface LocalComponentProvider {
     /**
      * @return The component metadata for the supplied identifier.
      */
-    LocalComponentMetadata getComponent(ProjectStateUnk project);
+    LocalComponentMetadata getComponent(ProjectState project);
 }

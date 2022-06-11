@@ -1,6 +1,8 @@
 package org.gradle.api.provider;
 
+import org.gradle.api.NonExtensible;
 import org.gradle.api.Transformer;
+import org.gradle.internal.HasInternalProtocol;
 
 import javax.annotation.Nullable;
 import java.util.concurrent.Callable;
@@ -57,6 +59,8 @@ import java.util.function.BiFunction;
  * @param <T> Type of value represented by provider
  * @since 4.0
  */
+@HasInternalProtocol
+@NonExtensible
 public interface Provider<T> {
 
     /**

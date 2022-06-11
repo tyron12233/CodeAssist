@@ -146,7 +146,14 @@ public enum JavaVersion {
      */
     public static JavaVersion current() {
         if (TestUtil.isDalvik()) {
-            currentJavaVersion = toVersion("1.8");
+            // the Android Gradle Plugin requires java 11 to run, this method checks if the
+            // method call is from the DslDecorator class which uses this class to determine
+            // which method call to use. By returning 1.8, the decorator class will then
+            // use the legacyDefineClass method
+            if (new Exception().getStackTrace()[2].getClassName().endsWith("DslDecorator")) {
+                return VERSION_1_8;
+            }
+            currentJavaVersion = toVersion("1.11");
         }
         if (currentJavaVersion == null) {
             currentJavaVersion = toVersion(System.getProperty("java.version"));

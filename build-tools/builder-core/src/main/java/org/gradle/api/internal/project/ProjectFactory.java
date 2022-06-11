@@ -26,7 +26,7 @@ public class ProjectFactory implements IProjectFactory {
     @Override
     public ProjectInternal createProject(GradleInternal gradle,
                                          ProjectDescriptor descriptor,
-                                         ProjectStateUnk owner,
+                                         ProjectState owner,
                                          @Nullable ProjectInternal parent,
                                          ClassLoaderScope selfClassLoaderScope,
                                          ClassLoaderScope baseClassLoaderScope

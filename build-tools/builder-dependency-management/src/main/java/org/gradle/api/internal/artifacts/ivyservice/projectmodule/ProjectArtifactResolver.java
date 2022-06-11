@@ -19,7 +19,7 @@ package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.component.ArtifactType;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.tasks.NodeExecutionContext;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
@@ -64,15 +64,15 @@ public class ProjectArtifactResolver implements ArtifactResolver {
     public ValueCalculator<File> resolveArtifactLater(ComponentArtifactMetadata artifact) {
         LocalComponentArtifactMetadata projectArtifact = (LocalComponentArtifactMetadata) artifact;
         ProjectComponentIdentifier projectId = (ProjectComponentIdentifier) artifact.getComponentId();
-        ProjectStateUnk projectState = projectStateRegistry.stateFor(projectId);
+        ProjectState projectState = projectStateRegistry.stateFor(projectId);
         return new ResolvingCalculator(projectState, projectArtifact);
     }
 
     private static class ResolvingCalculator implements ValueCalculator<File> {
-        private final ProjectStateUnk projectState;
+        private final ProjectState projectState;
         private final LocalComponentArtifactMetadata projectArtifact;
 
-        public ResolvingCalculator(ProjectStateUnk projectState, LocalComponentArtifactMetadata projectArtifact) {
+        public ResolvingCalculator(ProjectState projectState, LocalComponentArtifactMetadata projectArtifact) {
             this.projectState = projectState;
             this.projectArtifact = projectArtifact;
         }

@@ -64,20 +64,20 @@ public class InstantiatorBackedObjectFactory implements ObjectFactory {
         throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object containers");
     }
 
-//    @Override
-//    public <T> DomainObjectSet<T> domainObjectSet(Class<T> elementType) {
-//        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing domain object sets");
-//    }
+    @Override
+    public <T> DomainObjectSet<T> domainObjectSet(Class<T> elementType) {
+        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing domain object sets");
+    }
 
-//    @Override
-//    public <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType) {
-//        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object sets");
-//    }
-//
-//    @Override
-//    public <T> NamedDomainObjectList<T> namedDomainObjectList(Class<T> elementType) {
-//        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object lists");
-//    }
+    @Override
+    public <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType) {
+        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object sets");
+    }
+
+    @Override
+    public <T> NamedDomainObjectList<T> namedDomainObjectList(Class<T> elementType) {
+        throw new UnsupportedOperationException("This ObjectFactory implementation does not support constructing named domain object lists");
+    }
 
     @Override
     public <T> Property<T> property(Class<T> valueType) {

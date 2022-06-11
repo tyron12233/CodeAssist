@@ -85,7 +85,7 @@ public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
 
     ManagedFactoryRegistry createManagedFactoryRegistry(InstantiatorFactory instantiatorFactory, PropertyFactory propertyFactory, FileCollectionFactory fileCollectionFactory, FileFactory fileFactory, FilePropertyFactory filePropertyFactory) {
         return new DefaultManagedFactoryRegistry().withFactories(
-//                instantiatorFactory.getManagedFactory(),
+                instantiatorFactory.getManagedFactory(),
 //                new ConfigurableFileCollectionManagedFactory(fileCollectionFactory),
                 new org.gradle.api.internal.file.ManagedFactories.RegularFileManagedFactory(fileFactory),
                 new org.gradle.api.internal.file.ManagedFactories.RegularFilePropertyManagedFactory(filePropertyFactory),

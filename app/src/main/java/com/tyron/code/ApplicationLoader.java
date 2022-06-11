@@ -4,6 +4,7 @@ import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.StrictMode;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;

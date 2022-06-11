@@ -90,10 +90,9 @@ import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.FileCollectionStructureVisitor;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.project.ProjectStateRegistry;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.api.internal.tasks.FailureCollectingTaskDependencyResolveContext;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
-import org.gradle.api.specs.Specs;
 import org.gradle.api.tasks.TaskDependency;
 import org.gradle.configuration.internal.UserCodeApplicationContext;
 import org.gradle.internal.Actions;
@@ -861,11 +860,11 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     private void markReferencedProjectConfigurationsObserved(InternalState requestedState,
                                                              ResolverResults results) {
         ProjectInternal consumingProject = domainObjectContext.getProject();
-        ProjectStateUnk consumingProjectState =
+        ProjectState consumingProjectState =
                 consumingProject == null ? null : consumingProject.getOwner();
         for (ResolvedProjectConfiguration projectResult : results.getResolvedLocalComponents()
                 .getResolvedProjectConfigurations()) {
-            ProjectStateUnk targetProjectState =
+            ProjectState targetProjectState =
                     projectStateRegistry.stateFor(projectResult.getId());
             dependencyObservedBroadcast
                     .dependencyObserved(consumingProjectState, targetProjectState, requestedState,

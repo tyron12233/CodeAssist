@@ -25,18 +25,18 @@ public interface ProjectStateRegistry {
     /**
      * Returns all projects in the build tree.
      */
-    Collection<? extends ProjectStateUnk> getAllProjects();
+    Collection<? extends ProjectState> getAllProjects();
 
     /**
      * Locates the state object that owns the given public project model. Can use
      * {@link ProjectInternal#getOwner()} instead.
      */
-    ProjectStateUnk stateFor(Project project) throws IllegalArgumentException;
+    ProjectState stateFor(Project project) throws IllegalArgumentException;
 
     /**
      * Locates the state object that owns the project with the given identifier.
      */
-    ProjectStateUnk stateFor(ProjectComponentIdentifier identifier) throws IllegalArgumentException;
+    ProjectState stateFor(ProjectComponentIdentifier identifier) throws IllegalArgumentException;
 
     /**
      * Locates the state objects for all projects of the given build.
@@ -52,14 +52,14 @@ public interface ProjectStateRegistry {
     /**
      * Registers a single project.
      */
-    ProjectStateUnk registerProject(BuildState owner, DefaultProjectDescriptor projectDescriptor);
+    ProjectState registerProject(BuildState owner, DefaultProjectDescriptor projectDescriptor);
 
     /**
      * Allows a section of code to run against the mutable state of all projects. No other thread
      * will be able to access the state of any project while the given action is running.
      *
      * <p>Any attempt to lock a project by some other thread will block while the given action is
-     * running. This includes calls to {@link ProjectStateUnk#applyToMutableState(Consumer)}.
+     * running. This includes calls to {@link ProjectState#applyToMutableState(Consumer)}.
      */
     void withMutableStateOfAllProjects(Runnable runnable);
 
@@ -68,7 +68,7 @@ public interface ProjectStateRegistry {
      * will be able to access the state of any project while the given action is running.
      *
      * <p>Any attempt to lock a project by some other thread will block while the given action is
-     * running. This includes calls to {@link ProjectStateUnk#applyToMutableState(Consumer)}.
+     * running. This includes calls to {@link ProjectState#applyToMutableState(Consumer)}.
      */
     <T> T withMutableStateOfAllProjects(Factory<T> factory);
 

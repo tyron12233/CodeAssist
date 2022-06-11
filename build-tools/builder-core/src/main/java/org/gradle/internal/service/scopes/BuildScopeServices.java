@@ -29,6 +29,7 @@ import org.gradle.api.internal.project.DefaultProjectRegistry;
 import org.gradle.api.internal.project.DefaultProjectTaskLister;
 import org.gradle.api.internal.project.ProjectFactory;
 import org.gradle.api.internal.project.ProjectInternal;
+import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.project.ProjectTaskLister;
 import org.gradle.api.internal.project.taskfactory.AnnotationProcessingTaskFactory;
 import org.gradle.api.internal.project.taskfactory.ITaskFactory;
@@ -146,6 +147,8 @@ import org.gradle.internal.work.WorkerLeaseService;
 import org.gradle.model.internal.inspect.ModelRuleSourceDetector;
 import org.gradle.plugin.management.internal.autoapply.AutoAppliedPluginHandler;
 import org.gradle.plugin.use.internal.PluginRequestApplicator;
+import org.gradle.tooling.provider.model.internal.BuildScopeToolingModelBuilderRegistryAction;
+import org.gradle.tooling.provider.model.internal.DefaultToolingModelBuilderRegistry;
 import org.gradle.util.GUtil;
 import org.gradle.util.internal.GFileUtils;
 
@@ -503,6 +506,22 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     AuthenticationSchemeRegistry createAuthenticationSchemeRegistry() {
         return new DefaultAuthenticationSchemeRegistry();
+    }
+
+    protected DefaultToolingModelBuilderRegistry createBuildScopedToolingModelBuilders(
+            List<BuildScopeToolingModelBuilderRegistryAction> registryActions,
+            BuildOperationExecutor buildOperationExecutor,
+            ProjectStateRegistry projectStateRegistry,
+            UserCodeApplicationContext userCodeApplicationContext
+    ) {
+        DefaultToolingModelBuilderRegistry registry = new DefaultToolingModelBuilderRegistry(buildOperationExecutor, projectStateRegistry, userCodeApplicationContext);
+        // Services are created on demand, and this may happen while applying a plugin
+        userCodeApplicationContext.gradleRuntime(() -> {
+            for (BuildScopeToolingModelBuilderRegistryAction registryAction : registryActions) {
+                registryAction.execute(registry);
+            }
+        });
+        return registry;
     }
 
 //    BuildOperationExecutor createBuildOperationExecutor(

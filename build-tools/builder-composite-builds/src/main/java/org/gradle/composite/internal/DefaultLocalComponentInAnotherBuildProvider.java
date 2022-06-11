@@ -1,7 +1,7 @@
 package org.gradle.composite.internal;
 
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentInAnotherBuildProvider;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.build.CompositeBuildParticipantBuildState;
 import org.gradle.internal.build.IncludedBuildState;
 import org.gradle.internal.component.local.model.LocalComponentMetadata;
@@ -18,7 +18,7 @@ public class DefaultLocalComponentInAnotherBuildProvider implements LocalCompone
         this.dependencyMetadataBuilder = dependencyMetadataBuilder;
     }
 
-    public LocalComponentMetadata getComponent(ProjectStateUnk projectState) {
+    public LocalComponentMetadata getComponent(ProjectState projectState) {
         // TODO - this should work for any build, rather than just an included build
         CompositeBuildParticipantBuildState buildState = (CompositeBuildParticipantBuildState) projectState.getOwner();
         if (buildState instanceof IncludedBuildState) {

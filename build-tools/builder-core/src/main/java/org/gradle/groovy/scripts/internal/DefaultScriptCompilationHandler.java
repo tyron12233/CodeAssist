@@ -4,8 +4,6 @@ import com.google.common.hash.HashCode;
 import org.gradle.api.Action;
 import org.gradle.api.BuildException;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
-import org.gradle.api.internal.initialization.ClassLoaderScopeIdentifier;
-import org.gradle.api.internal.initialization.ImmutableClassLoaderScope;
 import org.gradle.configuration.ImportsReader;
 import org.gradle.groovy.scripts.ScriptCompilationException;
 import org.gradle.groovy.scripts.ScriptSource;
@@ -15,14 +13,12 @@ import org.gradle.internal.classloader.ClassLoaderUtils;
 import org.gradle.internal.classloader.ImplementationHashAware;
 import org.gradle.internal.classloader.VisitableURLClassLoader;
 import org.gradle.internal.classpath.ClassPath;
-import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.file.Deleter;
 import org.gradle.internal.serialize.Serializer;
 import org.gradle.internal.serialize.kryo.KryoBackedDecoder;
 import org.gradle.internal.serialize.kryo.KryoBackedEncoder;
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
-import org.gradle.util.GUtil;
 import org.gradle.util.internal.GFileUtils;
 import com.tyron.common.TestUtil;
 import com.tyron.groovy.DexBackedURLClassLoader;
@@ -34,8 +30,6 @@ import groovy.lang.GroovyCodeSource;
 import groovy.lang.GroovyResourceLoader;
 import groovy.lang.Script;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
 import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.ast.stmt.Statement;
 import org.codehaus.groovy.control.CompilationFailedException;
@@ -58,7 +52,6 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.net.URL;
 import java.security.CodeSource;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -380,7 +373,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
 
         AndroidScriptClassLoader(ScriptSource scriptSource, ClassLoader parent, ClassPath classPath, HashCode implementationHash) {
             super("groovy-script-" + scriptSource.getFileName() + "-loader", parent, classPath);
-            classPath.getAsURLs().forEach(this::addURL);
+            classPath.getAsFiles().forEach(file -> compileJar(file.getAbsolutePath()));
             this.classPath = classPath;
             this.scriptSource = scriptSource;
             this.implementationHash = implementationHash;
@@ -392,14 +385,11 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
         }
 
         @Override
-        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
             // Generated script class name must be unique - take advantage of this to avoid delegation
             if (name.startsWith(scriptSource.getClassName())) {
                 // Synchronized to avoid multiple threads attempting to define the same class on a lookup miss
                 synchronized (this) {
-                    if (TestUtil.isDalvik()) {
-                        return ScriptFactory.loadClass(classPath.getAsFiles(), getParent(), name);
-                    }
                     Class<?> cl = findLoadedClass(name);
                     if (cl == null) {
                         cl = findClass(name);
@@ -409,6 +399,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
                     }
                     return cl;
                 }
+
             }
             return super.loadClass(name, resolve);
         }

@@ -19,7 +19,7 @@ package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.tasks.NodeExecutionContext;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
@@ -57,7 +57,7 @@ public class DefaultLocalComponentRegistry implements LocalComponentRegistry {
     @Override
     public LocalComponentMetadata getComponent(ProjectComponentIdentifier projectIdentifier) {
         CalculatedValueContainer<LocalComponentMetadata, ?> valueContainer = projects.computeIfAbsent(projectIdentifier, projectComponentIdentifier -> {
-            ProjectStateUnk projectState = projectStateRegistry.stateFor(projectIdentifier);
+            ProjectState projectState = projectStateRegistry.stateFor(projectIdentifier);
             return calculatedValueContainerFactory.create(Describables.of("metadata of", projectIdentifier), new MetadataSupplier(projectState));
         });
         // Calculate the value after adding the entry to the map, so that the value container can take care of thread synchronization
@@ -66,9 +66,9 @@ public class DefaultLocalComponentRegistry implements LocalComponentRegistry {
     }
 
     private class MetadataSupplier implements ValueCalculator<LocalComponentMetadata> {
-        private final ProjectStateUnk projectState;
+        private final ProjectState projectState;
 
-        public MetadataSupplier(ProjectStateUnk projectState) {
+        public MetadataSupplier(ProjectState projectState) {
             this.projectState = projectState;
         }
 

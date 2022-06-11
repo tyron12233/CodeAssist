@@ -83,6 +83,23 @@ public class GUtil {
         return null;
     }
 
+    /**
+     * Converts an arbitrary string to upper case identifier with words separated by _. Eg, camelCase -&gt; CAMEL_CASE
+     */
+    public static String toConstant(CharSequence string) {
+        if (string == null) {
+            return null;
+        }
+        return toWords(string, '_').toUpperCase();
+    }
+
+    /**
+     * Converts an arbitrary string to space-separated words. Eg, camelCase -&gt; camel case, with_underscores -&gt; with underscores
+     */
+    public static String toWords(CharSequence string) {
+        return toWords(string, ' ');
+    }
+
     public static String toWords(CharSequence string, char separator) {
         if (string == null) {
             return null;

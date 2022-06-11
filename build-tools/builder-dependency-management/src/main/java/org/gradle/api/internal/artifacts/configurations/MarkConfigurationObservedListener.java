@@ -18,7 +18,7 @@ package org.gradle.api.internal.artifacts.configurations;
 
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedProjectConfiguration;
 
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.service.scopes.Scope;
 import org.gradle.internal.service.scopes.ServiceScope;
 
@@ -27,7 +27,7 @@ import javax.annotation.Nullable;
 @ServiceScope(Scope.Global.class)
 public class MarkConfigurationObservedListener implements ProjectDependencyObservedListener {
     @Override
-    public void dependencyObserved(@Nullable ProjectStateUnk consumingProject, ProjectStateUnk targetProject, ConfigurationInternal.InternalState requestedState, ResolvedProjectConfiguration target) {
+    public void dependencyObserved(@Nullable ProjectState consumingProject, ProjectState targetProject, ConfigurationInternal.InternalState requestedState, ResolvedProjectConfiguration target) {
         ConfigurationInternal targetConfig = (ConfigurationInternal) targetProject.getMutableModel().getConfigurations().findByName(target.getTargetConfiguration());
         if (targetConfig != null) {
             // Can be null when dependency metadata for target project has been loaded from cache

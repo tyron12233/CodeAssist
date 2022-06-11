@@ -943,6 +943,42 @@ public interface Project extends Comparable<Project>, ExtensionAware, PluginAwar
      */
     CopySpec copySpec();
 
+    /**
+     * <p>Creates a container for managing named objects of the specified type. The specified type must have a public constructor which takes the name as a String parameter.</p>
+     *
+     * <p>All objects <b>MUST</b> expose their name as a bean property named "name". The name must be constant for the life of the object.</p>
+     *
+     * @param type The type of objects for the container to contain.
+     * @param <T> The type of objects for the container to contain.
+     * @return The container.
+     */
+    <T> NamedDomainObjectContainer<T> container(Class<T> type);
+
+    /**
+     * <p>Creates a container for managing named objects of the specified type. The given factory is used to create object instances.</p>
+     *
+     * <p>All objects <b>MUST</b> expose their name as a bean property named "name". The name must be constant for the life of the object.</p>
+     *
+     * @param type The type of objects for the container to contain.
+     * @param factory The factory to use to create object instances.
+     * @param <T> The type of objects for the container to contain.
+     * @return The container.
+     */
+    <T> NamedDomainObjectContainer<T> container(Class<T> type, NamedDomainObjectFactory<T> factory);
+
+    /**
+     * <p>Creates a container for managing named objects of the specified type. The given closure is used to create object instances. The name of the instance to be created is passed as a parameter to
+     * the closure.</p>
+     *
+     * <p>All objects <b>MUST</b> expose their name as a bean property named "name". The name must be constant for the life of the object.</p>
+     *
+     * @param type The type of objects for the container to contain.
+     * @param factoryClosure The closure to use to create object instances.
+     * @param <T> The type of objects for the container to contain.
+     * @return The container.
+     */
+    <T> NamedDomainObjectContainer<T> container(Class<T> type, Closure factoryClosure);
+
 
     /**
      * Creates a directory and returns a file pointing to it.
@@ -1038,6 +1074,14 @@ public interface Project extends Comparable<Project>, ExtensionAware, PluginAwar
      */
     void allprojects(Action<? super Project> action);
 
+    /**
+     * <p>Adds a closure to be called immediately before this project is evaluated. The project is passed to the closure
+     * as a parameter.</p>
+     *
+     * @param closure The closure to call.
+     */
+    void beforeEvaluate(Closure closure);
+
 
     /**
      * Adds an action to execute immediately before this project is evaluated.
@@ -1045,6 +1089,17 @@ public interface Project extends Comparable<Project>, ExtensionAware, PluginAwar
      * @param action the action to execute.
      */
     void beforeEvaluate(Action<? super Project> action);
+
+    /**
+     * <p>Adds a closure to be called immediately after this project has been evaluated. The project is passed to the
+     * closure as a parameter. Such a listener gets notified when the build file belonging to this project has been
+     * executed. A parent project may for example add such a listener to its child project. Such a listener can further
+     * configure those child projects based on the state of the child projects after their build files have been
+     * run.</p>
+     *
+     * @param closure The closure to call.
+     */
+    void afterEvaluate(Closure closure);
 
     /**
      * Adds an action to execute immediately after this project is evaluated.

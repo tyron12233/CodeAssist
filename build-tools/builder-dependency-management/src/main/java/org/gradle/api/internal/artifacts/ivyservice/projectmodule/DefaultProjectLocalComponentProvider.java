@@ -23,7 +23,7 @@ import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.LocalComponentMetadataBuilder;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata;
 import org.gradle.internal.component.local.model.LocalComponentMetadata;
 import org.gradle.internal.model.CalculatedValueContainer;
@@ -54,12 +54,12 @@ public class DefaultProjectLocalComponentProvider implements LocalComponentProvi
 
     @Nullable
     @Override
-    public LocalComponentMetadata getComponent(ProjectStateUnk projectState) {
+    public LocalComponentMetadata getComponent(ProjectState projectState) {
         projectState.ensureConfigured();
         return projectState.fromMutableState(p -> getLocalComponentMetadata(projectState, p));
     }
 
-    private LocalComponentMetadata getLocalComponentMetadata(ProjectStateUnk projectState,
+    private LocalComponentMetadata getLocalComponentMetadata(ProjectState projectState,
                                                              ProjectInternal project) {
         Module module = project.getDependencyMetaDataProvider().getModule();
         ModuleVersionIdentifier moduleVersionIdentifier = moduleIdentifierFactory

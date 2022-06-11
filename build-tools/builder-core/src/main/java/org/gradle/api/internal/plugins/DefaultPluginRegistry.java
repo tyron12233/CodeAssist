@@ -56,7 +56,7 @@ public class DefaultPluginRegistry implements PluginRegistry {
 
                 final Class<?> implClass;
                 try {
-                    implClass = classLoader.loadClass(implClassName);
+                    implClass = Class.forName(implClassName, true, classLoader);
                 } catch (ClassNotFoundException e) {
                     throw new InvalidPluginException(String.format(
                         "Could not find implementation class '%s' for plugin '%s' specified in %s.", implClassName, pluginId,

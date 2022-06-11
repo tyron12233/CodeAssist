@@ -13,6 +13,7 @@ import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.Project;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.plugins.PluginAware;
+import org.gradle.api.services.BuildServiceRegistry;
 
 import java.io.File;
 import java.util.Collection;
@@ -340,7 +341,7 @@ public interface Gradle extends PluginAware {
      *
      * @since 6.1
      */
-//    BuildServiceRegistry getSharedServices();
+    BuildServiceRegistry getSharedServices();
 
     /**
      * Returns the included builds for this build.

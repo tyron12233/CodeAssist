@@ -21,7 +21,7 @@ import com.google.common.base.Strings;
 import org.gradle.api.Project;
 import org.gradle.api.Incubating;
 import org.gradle.api.internal.project.ProjectStateRegistry;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.api.internal.project.ProjectTaskLister;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Console;
@@ -233,7 +233,7 @@ public class TaskReportTask extends ConventionReportTask {
                 .forTasks(getProjectTaskLister().listProjectTasks(project), taskDetailsFactory));
     }
 
-    private ProjectStateUnk projectStateFor(Project subproject) {
+    private ProjectState projectStateFor(Project subproject) {
         return getProjectStateRegistry().stateFor(subproject);
     }
 

@@ -26,13 +26,13 @@ public class ProjectLifecycleController {
     public void createMutableModel(
             DefaultProjectDescriptor descriptor,
             BuildState build,
-            ProjectStateUnk owner,
+            ProjectState owner,
             ClassLoaderScope selfClassLoaderScope,
             ClassLoaderScope baseClassLoaderScope,
             IProjectFactory projectFactory
     ) {
         controller.transition(State.NotCreated, State.Created, () -> {
-            ProjectStateUnk parent = owner.getBuildParent();
+            ProjectState parent = owner.getBuildParent();
             ProjectInternal parentModel = parent == null ? null : parent.getMutableModel();
             project = projectFactory.createProject(build.getMutableModel(), descriptor, owner, parentModel, selfClassLoaderScope, baseClassLoaderScope);
         });

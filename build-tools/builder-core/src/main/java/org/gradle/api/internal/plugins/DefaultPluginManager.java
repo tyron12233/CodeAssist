@@ -2,6 +2,8 @@ package org.gradle.api.internal.plugins;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+
+import org.codehaus.groovy.reflection.android.AndroidSupport;
 import org.gradle.api.Action;
 import org.gradle.api.DomainObjectSet;
 import org.gradle.api.Plugin;
@@ -25,6 +27,7 @@ import org.gradle.internal.operations.trace.CustomOperationTraceSerialization;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.plugin.use.PluginId;
 import org.gradle.plugin.use.internal.DefaultPluginId;
+import org.gradle.util.GUtil;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;

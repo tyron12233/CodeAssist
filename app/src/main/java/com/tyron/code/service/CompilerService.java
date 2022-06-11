@@ -10,6 +10,8 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.system.ErrnoException;
+import android.system.Os;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.CharacterStyle;
@@ -42,6 +44,7 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
+import org.gradle.api.BuildException;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.configuration.ConsoleOutput;
@@ -259,7 +262,14 @@ public class CompilerService extends Service {
         startParameter.setLogLevel(getLogLevel());
         startParameter.setConsoleOutput(ConsoleOutput.Rich);
         startParameter.setGradleUserHomeDir(new File(getCacheDir(), ".gradle"));
-        startParameter.setTaskNames(Collections.singletonList(":app:assemble"));
+        startParameter.setTaskNames(Collections.singletonList(":app:assembleDebug"));
+
+        try {
+            Os.setenv("ANDROID_HOME", getExternalFilesDir("android_home").getAbsolutePath(), true);
+        } catch (ErrnoException e) {
+            throw new BuildException(e.getMessage());
+        }
+        System.setProperty("user.home", startParameter.getGradleUserHomeDir().getAbsolutePath());
 
         ProjectLauncher projectLauncher = new ProjectLauncher(startParameter, null);
 

@@ -20,7 +20,7 @@ import java.util.function.Function;
 /**
  * For debugging
  */
-public class DefaultProjectOwner implements ProjectStateUnk {
+public class DefaultProjectOwner implements ProjectState {
 
     public static Builder builder() {
         return new Builder();
@@ -49,18 +49,18 @@ public class DefaultProjectOwner implements ProjectStateUnk {
 
     @Nullable
     @Override
-    public ProjectStateUnk getParent() {
+    public ProjectState getParent() {
         return null;
     }
 
     @Nullable
     @Override
-    public ProjectStateUnk getBuildParent() {
+    public ProjectState getBuildParent() {
         return null;
     }
 
     @Override
-    public Set<ProjectStateUnk> getChildProjects() {
+    public Set<ProjectState> getChildProjects() {
         return null;
     }
 

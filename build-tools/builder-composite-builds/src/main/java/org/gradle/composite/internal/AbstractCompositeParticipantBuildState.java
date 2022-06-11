@@ -7,7 +7,7 @@ import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
 import org.gradle.api.internal.artifacts.DefaultProjectComponentIdentifier;
 import org.gradle.api.internal.artifacts.ForeignBuildIdentifier;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.Pair;
 import org.gradle.internal.build.AbstractBuildState;
 import org.gradle.internal.build.BuildState;
@@ -35,7 +35,7 @@ public abstract class AbstractCompositeParticipantBuildState extends AbstractBui
         if (availableModules == null) {
             ensureChildBuildConfigured();
             availableModules = new LinkedHashSet<>();
-            for (ProjectStateUnk project : getProjects().getAllProjects()) {
+            for (ProjectState project : getProjects().getAllProjects()) {
                 registerProject(availableModules, project.getMutableModel());
             }
         }

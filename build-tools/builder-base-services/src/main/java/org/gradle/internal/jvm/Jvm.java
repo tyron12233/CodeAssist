@@ -392,7 +392,7 @@ public class Jvm implements JavaInfo {
     static class DalvikVm extends JvmImplementation {
 
         DalvikVm(OperatingSystem os) {
-            super(os, new File("java.home"), "1.8", JavaVersion.current(), false);
+            super(os, new File("java.home"), "1.11", JavaVersion.current(), false);
         }
     }
 

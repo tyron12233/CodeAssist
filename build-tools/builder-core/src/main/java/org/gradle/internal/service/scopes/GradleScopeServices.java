@@ -10,6 +10,8 @@ import org.gradle.api.internal.plugins.PluginManagerInternal;
 import org.gradle.api.internal.plugins.PluginRegistry;
 import org.gradle.api.internal.plugins.PluginTarget;
 import org.gradle.api.internal.project.ProjectStateRegistry;
+import org.gradle.api.services.internal.BuildServiceRegistryInternal;
+import org.gradle.api.services.internal.DefaultBuildServicesRegistry;
 import org.gradle.cache.GlobalCacheLocations;
 import org.gradle.cache.internal.DefaultFileContentCacheFactory;
 import org.gradle.cache.internal.FileContentCacheFactory;
@@ -30,6 +32,7 @@ import org.gradle.execution.plan.NodeExecutor;
 import org.gradle.execution.plan.PlanExecutor;
 import org.gradle.internal.Factory;
 import org.gradle.api.internal.GradleInternal;
+import org.gradle.internal.build.BuildState;
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.internal.event.ListenerBroadcast;
 import org.gradle.internal.event.ListenerManager;
@@ -39,10 +42,12 @@ import org.gradle.execution.taskgraph.TaskExecutionGraphInternal;
 import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.internal.id.UniqueId;
 import org.gradle.internal.instantiation.InstantiatorFactory;
+import org.gradle.internal.isolation.IsolatableFactory;
 import org.gradle.internal.logging.text.StyledTextOutputFactory;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.internal.resources.SharedResourceLeaseRegistry;
 import org.gradle.internal.service.DefaultServiceRegistry;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.api.internal.tasks.options.OptionReader;
@@ -82,6 +87,28 @@ public class GradleScopeServices extends DefaultServiceRegistry {
                 pluginServiceRegistry.registerGradleServices(registration);
             }
         });
+    }
+
+    BuildServiceRegistryInternal createSharedServiceRegistry(
+            BuildState buildState,
+            Instantiator instantiator,
+            DomainObjectCollectionFactory factory,
+            InstantiatorFactory instantiatorFactory,
+            ServiceRegistry services,
+            ListenerManager listenerManager,
+            IsolatableFactory isolatableFactory,
+            SharedResourceLeaseRegistry sharedResourceLeaseRegistry
+    ) {
+        return instantiator.newInstance(
+                DefaultBuildServicesRegistry.class,
+                buildState.getBuildIdentifier(),
+                factory,
+                instantiatorFactory,
+                services,
+                listenerManager,
+                isolatableFactory,
+                sharedResourceLeaseRegistry
+        );
     }
 
     BuildOutputCleanupRegistry createBuildOutputCleanupRegistry(

@@ -27,7 +27,7 @@ import org.gradle.api.internal.artifacts.configurations.DependencyMetaDataProvid
 import org.gradle.api.internal.artifacts.configurations.MutationValidator;
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.internal.component.local.model.BuildableLocalConfigurationMetadata;
 import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata;
@@ -87,7 +87,7 @@ public class DefaultRootComponentMetadataBuilder implements RootComponentMetadat
         final ModuleVersionIdentifier moduleVersionIdentifier = moduleIdentifierFactory.moduleWithVersion(module.getGroup(), module.getName(), module.getVersion());
         ProjectComponentIdentifier projectId = module.getProjectId();
         if (projectId != null) {
-            ProjectStateUnk projectState = projectStateRegistry.stateFor(projectId);
+            ProjectState projectState = projectStateRegistry.stateFor(projectId);
             if (!projectState.hasMutableState()) {
                 throw new IllegalStateException("Thread should hold project lock for " + projectId);
             }

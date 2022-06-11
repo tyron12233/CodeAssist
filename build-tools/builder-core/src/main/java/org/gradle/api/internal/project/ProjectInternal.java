@@ -2,7 +2,6 @@ package org.gradle.api.internal.project;
 
 import org.gradle.api.Action;
 import org.gradle.api.ProjectEvaluationListener;
-import org.gradle.api.ProjectState;
 import org.gradle.api.UnknownProjectException;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.attributes.Attribute;
@@ -91,9 +90,9 @@ public interface ProjectInternal extends Project, ProjectIdentifier, HasScriptSe
 
 
     /**
-     * Returns the {@link ProjectState} that manages the state of this instance.
+     * Returns the {@link org.gradle.api.ProjectState} that manages the state of this instance.
      */
-    ProjectStateUnk getOwner();
+    ProjectState getOwner();
 
     ServiceRegistry getServices();
 

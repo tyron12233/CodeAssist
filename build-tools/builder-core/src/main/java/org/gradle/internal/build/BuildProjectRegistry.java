@@ -1,6 +1,6 @@
 package org.gradle.internal.build;
 
-import org.gradle.api.internal.project.ProjectStateUnk;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.util.Path;
 
 import javax.annotation.Nullable;
@@ -10,19 +10,19 @@ public interface BuildProjectRegistry {
     /**
      * Returns the root project of this build.
      */
-    ProjectStateUnk getRootProject();
+    ProjectState getRootProject();
 
     /**
      * Returns all projects in this build, in public iteration order.
      */
-    Set<? extends ProjectStateUnk> getAllProjects();
+    Set<? extends ProjectState> getAllProjects();
 
     /**
      * Locates a project of this build, failing if the project is not present.
      *
      * @param projectPath The path relative to the root project of this build.
      */
-    ProjectStateUnk getProject(Path projectPath);
+    ProjectState getProject(Path projectPath);
 
     /**
      * Locates a project of this build, returning null if the project is not present.
@@ -30,5 +30,5 @@ public interface BuildProjectRegistry {
      * @param projectPath The path relative to the root project of this build.
      */
     @Nullable
-    ProjectStateUnk findProject(Path projectPath);
+    ProjectState findProject(Path projectPath);
 }

@@ -110,20 +110,20 @@ public class DefaultObjectFactory implements ObjectFactory {
         return domainObjectCollectionFactory.newPolymorphicDomainObjectContainer(elementType);
     }
 
-//    @Override
-//    public <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType) {
-//        return domainObjectCollectionFactory.newNamedDomainObjectSet(elementType);
-//    }
-//
-//    @Override
-//    public <T> NamedDomainObjectList<T> namedDomainObjectList(Class<T> elementType) {
-//        return domainObjectCollectionFactory.newNamedDomainObjectList(elementType);
-//    }
-//
-//    @Override
-//    public <T> DomainObjectSet<T> domainObjectSet(Class<T> elementType) {
-//        return domainObjectCollectionFactory.newDomainObjectSet(elementType);
-//    }
+    @Override
+    public <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType) {
+        return domainObjectCollectionFactory.newNamedDomainObjectSet(elementType);
+    }
+
+    @Override
+    public <T> NamedDomainObjectList<T> namedDomainObjectList(Class<T> elementType) {
+        return domainObjectCollectionFactory.newNamedDomainObjectList(elementType);
+    }
+
+    @Override
+    public <T> DomainObjectSet<T> domainObjectSet(Class<T> elementType) {
+        return domainObjectCollectionFactory.newDomainObjectSet(elementType);
+    }
 
     @Override
     public <T> Property<T> property(Class<T> valueType) {

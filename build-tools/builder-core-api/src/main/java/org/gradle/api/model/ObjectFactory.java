@@ -1,9 +1,12 @@
 package org.gradle.api.model;
 
+import org.gradle.api.DomainObjectSet;
 import org.gradle.api.ExtensiblePolymorphicDomainObjectContainer;
 import org.gradle.api.Named;
 import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.NamedDomainObjectFactory;
+import org.gradle.api.NamedDomainObjectList;
+import org.gradle.api.NamedDomainObjectSet;
 import org.gradle.api.file.ConfigurableFileTree;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.DirectoryProperty;
@@ -149,7 +152,7 @@ public interface ObjectFactory {
      * @return The domain object set. Never returns null.
      * @since 5.5
      */
-//    <T> DomainObjectSet<T> domainObjectSet(Class<T> elementType);
+    <T> DomainObjectSet<T> domainObjectSet(Class<T> elementType);
 
     /**
      * Creates a new {@link NamedDomainObjectSet} for managing named objects of the specified type.
@@ -161,7 +164,7 @@ public interface ObjectFactory {
      * @return The domain object set.
      * @since 6.1
      */
-//    <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType);
+    <T> NamedDomainObjectSet<T> namedDomainObjectSet(Class<T> elementType);
 
     /**
      * Creates a new {@link NamedDomainObjectList} for managing named objects of the specified type.
@@ -173,7 +176,7 @@ public interface ObjectFactory {
      * @return The domain object list.
      * @since 6.1
      */
-//    <T> NamedDomainObjectList<T> namedDomainObjectList(Class<T> elementType);
+    <T> NamedDomainObjectList<T> namedDomainObjectList(Class<T> elementType);
 
     /**
      * Creates a {@link Property} implementation to hold values of the given type. The property has no initial value.

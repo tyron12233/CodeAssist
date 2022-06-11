@@ -68,14 +68,14 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
     }
 
     @Override
-    public ProjectStateUnk registerProject(BuildState owner, DefaultProjectDescriptor projectDescriptor) {
+    public ProjectState registerProject(BuildState owner, DefaultProjectDescriptor projectDescriptor) {
         synchronized (lock) {
             DefaultBuildProjectRegistry buildProjectRegistry = getBuildProjectRegistry(owner);
             return addProject(owner, buildProjectRegistry, projectDescriptor);
         }
     }
 
-    private ProjectStateUnk addProject(BuildState owner, DefaultBuildProjectRegistry projectRegistry, DefaultProjectDescriptor descriptor) {
+    private ProjectState addProject(BuildState owner, DefaultBuildProjectRegistry projectRegistry, DefaultProjectDescriptor descriptor) {
         Path projectPath = descriptor.path();
         Path identityPath = owner.calculateIdentityPathForProject(projectPath);
         String name = descriptor.getName();
@@ -97,12 +97,12 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
 
     // TODO - can kill this method, as the caller can use ProjectInternal.getOwner() instead
     @Override
-    public ProjectStateUnk stateFor(Project project) {
+    public ProjectState stateFor(Project project) {
         return ((ProjectInternal) project).getOwner();
     }
 
     @Override
-    public ProjectStateUnk stateFor(ProjectComponentIdentifier identifier) {
+    public ProjectState stateFor(ProjectComponentIdentifier identifier) {
         synchronized (lock) {
             ProjectStateImpl projectState = projectsById.get(identifier);
             if (projectState == null) {
@@ -157,12 +157,12 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         }
 
         @Override
-        public ProjectStateUnk getRootProject() {
+        public ProjectState getRootProject() {
             return getProject(Path.ROOT);
         }
 
         @Override
-        public ProjectStateUnk getProject(Path projectPath) {
+        public ProjectState getProject(Path projectPath) {
             ProjectStateImpl projectState = projectsByPath.get(projectPath);
             if (projectState == null) {
                 throw new IllegalArgumentException("Project with path '" + projectPath + "' not found in " + owner.getDisplayName() + ".");
@@ -172,19 +172,19 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
 
         @Nullable
         @Override
-        public ProjectStateUnk findProject(Path projectPath) {
+        public ProjectState findProject(Path projectPath) {
             return projectsByPath.get(projectPath);
         }
 
         @Override
-        public Set<? extends ProjectStateUnk> getAllProjects() {
-            TreeSet<ProjectStateUnk> projects = new TreeSet<>(Comparator.comparing(ProjectStateUnk::getIdentityPath));
+        public Set<? extends ProjectState> getAllProjects() {
+            TreeSet<ProjectState> projects = new TreeSet<>(Comparator.comparing(ProjectState::getIdentityPath));
             projects.addAll(projectsByPath.values());
             return projects;
         }
     }
 
-    private class ProjectStateImpl implements ProjectStateUnk {
+    private class ProjectStateImpl implements ProjectState {
         private final Path projectPath;
         private final String projectName;
         private final ProjectComponentIdentifier identifier;
@@ -229,13 +229,13 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
 
         @Nullable
         @Override
-        public ProjectStateUnk getParent() {
+        public ProjectState getParent() {
             return identityPath.getParent() == null ? null : projectsByPath.get(identityPath.getParent());
         }
 
         @Nullable
         @Override
-        public ProjectStateUnk getBuildParent() {
+        public ProjectState getBuildParent() {
             if (descriptor.getParent() != null) {
                 // Identity path of parent can be different to identity path parent, if the names are tweaked in the settings file
                 // Ideally they would be exactly the same, always
@@ -251,8 +251,8 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         }
 
         @Override
-        public Set<ProjectStateUnk> getChildProjects() {
-            Set<ProjectStateUnk> children = new TreeSet<>(Comparator.comparing(ProjectStateUnk::getIdentityPath));
+        public Set<ProjectState> getChildProjects() {
+            Set<ProjectState> children = new TreeSet<>(Comparator.comparing(ProjectState::getIdentityPath));
             for (DefaultProjectDescriptor child : descriptor.children()) {
                 children.add(projectsByPath.get(owner.calculateIdentityPathForProject(child.path())));
             }
@@ -286,7 +286,7 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
                     throw new IllegalStateException(String.format("The project object for project %s has already been attached.", getIdentityPath()));
                 }
 
-                ProjectStateUnk parent = getBuildParent();
+                ProjectState parent = getBuildParent();
                 ProjectInternal parentModel = parent == null ? null : parent.getMutableModel();
                 this.project = projectFactory.createProject(owner.getMutableModel(), descriptor, this, parentModel, selfClassLoaderScope, baseClassLoaderScope);
             }
@@ -305,7 +305,7 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         @Override
         public void ensureConfigured() {
             // Need to configure intermediate parent projects for configure-on-demand
-            ProjectStateUnk parent = getBuildParent();
+            ProjectState parent = getBuildParent();
             if (parent != null) {
                 parent.ensureConfigured();
             }

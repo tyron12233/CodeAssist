@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.util.Set;
 
-public interface ProjectStateUnk extends ModelContainer<ProjectInternal> {
+public interface ProjectState extends ModelContainer<ProjectInternal> {
 
     DisplayName getDisplayName();
 
@@ -27,19 +27,19 @@ public interface ProjectStateUnk extends ModelContainer<ProjectInternal> {
      * Returns the parent of this project in the project tree. Note that this is not the same as {@link Project#getParent()}, use {@link #getBuildParent()} for that.
      */
     @Nullable
-    ProjectStateUnk getParent();
+    ProjectState getParent();
 
     /**
      * Returns the parent of this project, as per {@link Project#getParent()}. This will be null for the root project of a build in the tree, even if the project is not
      * at the root of the project tree.
      */
     @Nullable
-    ProjectStateUnk getBuildParent();
+    ProjectState getBuildParent();
 
     /**
      * Returns the direct children of this project, in public iteration order.
      */
-    Set<ProjectStateUnk> getChildProjects();
+    Set<ProjectState> getChildProjects();
 
     /**
      * Returns the name of this project (which may not necessarily be unique).
