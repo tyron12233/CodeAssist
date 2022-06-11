@@ -11,6 +11,7 @@ dependencies {
     implementation projects.buildTools.builderEnterpriseOperations
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderBuildEvents
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderFiles
     implementation projects.buildTools.fileCollections
