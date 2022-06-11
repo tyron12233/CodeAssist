@@ -16,11 +16,11 @@
 
 package org.gradle.api.internal.artifacts.transform;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 
 @Contextual
-public class TransformException extends BuildException {
+public class TransformException extends GradleException {
 
     public TransformException(String message, Throwable cause) {
         super(message, cause);

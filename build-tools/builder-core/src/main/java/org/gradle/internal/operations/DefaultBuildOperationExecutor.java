@@ -2,7 +2,7 @@ package org.gradle.internal.operations;
 
 import com.google.common.collect.Lists;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.internal.concurrent.ManagedExecutor;
 import org.gradle.internal.concurrent.Stoppable;
@@ -123,7 +123,7 @@ public class DefaultBuildOperationExecutor implements BuildOperationExecutor, St
         ManagedExecutor executor = managedExecutors.get(buildOperationConstraint);
         BuildOperationQueue<O> queue = buildOperationQueueFactory.create(executor, allowAccessToProjectState, worker);
 
-        List<BuildException> failures = Lists.newArrayList();
+        List<GradleException> failures = Lists.newArrayList();
         try {
             queueAction.execute(queue);
         } catch (Exception e) {
@@ -145,7 +145,7 @@ public class DefaultBuildOperationExecutor implements BuildOperationExecutor, St
         }
     }
 
-    private static String formatMultipleFailureMessage(List<BuildException> failures) {
+    private static String formatMultipleFailureMessage(List<GradleException> failures) {
         return failures.stream().map(Throwable::getMessage)
                 .collect(Collectors.joining(LINE_SEPARATOR + "AND" + LINE_SEPARATOR));
     }

@@ -1,6 +1,6 @@
 package org.gradle.model;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Incubating;
 
 /**
@@ -9,7 +9,7 @@ import org.gradle.api.Incubating;
  * Should always be thrown as the cause of a {@link org.gradle.model.InvalidModelRuleException}.
  */
 @Incubating
-public class ModelRuleBindingException extends BuildException {
+public class ModelRuleBindingException extends GradleException {
 
     public ModelRuleBindingException(String message) {
         super(message);

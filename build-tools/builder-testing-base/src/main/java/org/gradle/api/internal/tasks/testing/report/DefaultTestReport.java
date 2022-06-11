@@ -16,7 +16,7 @@
 package org.gradle.api.internal.tasks.testing.report;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.tasks.testing.junit.result.TestClassResult;
 import org.gradle.api.internal.tasks.testing.junit.result.TestFailure;
 import org.gradle.api.internal.tasks.testing.junit.result.TestMethodResult;
@@ -117,7 +117,7 @@ public class DefaultTestReport implements TestReporter {
                 }
             }, reportDir);
         } catch (Exception e) {
-            throw new BuildException(String.format("Could not generate test report to '%s'.", reportDir), e);
+            throw new GradleException(String.format("Could not generate test report to '%s'.", reportDir), e);
         }
     }
 

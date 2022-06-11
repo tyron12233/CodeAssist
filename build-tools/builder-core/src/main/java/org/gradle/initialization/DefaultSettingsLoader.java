@@ -1,6 +1,6 @@
 package org.gradle.initialization;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.StartParameter;
 import org.gradle.api.initialization.ProjectDescriptor;
 import org.gradle.api.internal.GradleInternal;
@@ -130,7 +130,7 @@ public class DefaultSettingsLoader implements SettingsLoader {
             if (project.getPath().equals(BUILD_SRC_PROJECT_PATH)) {
                 Path buildPath = settings.getGradle().getIdentityPath();
                 String suffix = buildPath == Path.ROOT ? "" : " (in build " + buildPath + ")";
-                throw new BuildException("'" + SettingsInternal.BUILD_SRC + "' cannot be used as a project name as it is a reserved name" + suffix);
+                throw new GradleException("'" + SettingsInternal.BUILD_SRC + "' cannot be used as a project name as it is a reserved name" + suffix);
             }
         });
     }

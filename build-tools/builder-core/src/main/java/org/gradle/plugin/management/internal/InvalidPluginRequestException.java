@@ -1,8 +1,8 @@
 package org.gradle.plugin.management.internal;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
-public class InvalidPluginRequestException extends BuildException {
+public class InvalidPluginRequestException extends GradleException {
     private final PluginRequestInternal pluginRequest;
 
     public InvalidPluginRequestException(PluginRequestInternal pluginRequest, String message) {

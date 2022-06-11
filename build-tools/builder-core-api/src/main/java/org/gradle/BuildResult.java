@@ -1,7 +1,7 @@
 package org.gradle;
 
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.invocation.Gradle;
 
 import org.jetbrains.annotations.Nullable;
@@ -45,11 +45,11 @@ public class BuildResult {
      * <p>Rethrows the build failure. Does nothing if there was no build failure.</p>
      */
     public BuildResult rethrowFailure() {
-        if (failure instanceof BuildException) {
-            throw (BuildException) failure;
+        if (failure instanceof GradleException) {
+            throw (GradleException) failure;
         }
         if (failure != null) {
-            throw new BuildException(action + " aborted because of an internal error.", failure);
+            throw new GradleException(action + " aborted because of an internal error.", failure);
         }
         return this;
     }

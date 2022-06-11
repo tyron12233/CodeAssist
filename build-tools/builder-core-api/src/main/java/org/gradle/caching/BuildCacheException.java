@@ -1,13 +1,13 @@
 package org.gradle.caching;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 /**
  * <p><code>BuildCacheException</code> is the base class of all exceptions thrown by a {@link BuildCacheService}.</p>
  *
  * @since 3.3
  */
-public class BuildCacheException extends BuildException {
+public class BuildCacheException extends GradleException {
     public BuildCacheException() {
         super();
     }

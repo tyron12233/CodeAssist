@@ -1,14 +1,13 @@
 package org.gradle.execution.commandline;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 import org.gradle.api.internal.exceptions.FailureResolutionAware;
 import org.gradle.internal.logging.text.StyledTextOutput;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.cli.CommandLineArgumentException;
 
 @Contextual
-public class TaskConfigurationException extends BuildException implements FailureResolutionAware {
+public class TaskConfigurationException extends GradleException implements FailureResolutionAware {
 
     private final String taskPath;
 

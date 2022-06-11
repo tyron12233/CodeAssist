@@ -1,6 +1,6 @@
 package org.gradle.api.internal.classloading;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,7 +74,7 @@ public class ClassInfoCleaningGroovySystemLoader implements GroovySystemLoader {
                 }
             }
         } catch (Exception e) {
-            throw new BuildException("Could not shut down the Groovy system for " + leakingLoader,
+            throw new GradleException("Could not shut down the Groovy system for " + leakingLoader,
                     e);
         }
     }
@@ -100,10 +100,10 @@ public class ClassInfoCleaningGroovySystemLoader implements GroovySystemLoader {
                 }
             }
         } catch (Exception e) {
-            throw new BuildException("Could not remove types for ClassLoader " +
-                                     classLoader +
-                                     " from the Groovy system " +
-                                     leakingLoader, e);
+            throw new GradleException("Could not remove types for ClassLoader " +
+                                      classLoader +
+                                      " from the Groovy system " +
+                                      leakingLoader, e);
         }
     }
 

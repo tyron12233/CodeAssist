@@ -16,11 +16,11 @@
 
 package org.gradle.api.internal.artifacts.verification;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 
 @Contextual
-public class DependencyVerificationException extends BuildException {
+public class DependencyVerificationException extends GradleException {
 
     public DependencyVerificationException(String message) {
         super(message);

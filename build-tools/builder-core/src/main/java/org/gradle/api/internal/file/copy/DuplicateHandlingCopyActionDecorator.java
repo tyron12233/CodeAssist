@@ -1,6 +1,6 @@
 package org.gradle.api.internal.file.copy;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.file.DuplicatesStrategy;
 import org.gradle.api.file.RelativePath;
@@ -39,7 +39,7 @@ public class DuplicateHandlingCopyActionDecorator implements CopyAction {
                     if (strategy == DuplicatesStrategy.EXCLUDE) {
                         return;
                     } else if (strategy == DuplicatesStrategy.FAIL) {
-                        throw new BuildException(String.format("Encountered duplicate path \"%s\" during copy operation configured with DuplicatesStrategy.FAIL", details.getRelativePath()));
+                        throw new GradleException(String.format("Encountered duplicate path \"%s\" during copy operation configured with DuplicatesStrategy.FAIL", details.getRelativePath()));
                     } else if (strategy == DuplicatesStrategy.WARN) {
                         LOGGER.warn("Encountered duplicate path \"" +  details.getRelativePath() + "\" during copy operation configured with DuplicatesStrategy.WARN");
                     }

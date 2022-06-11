@@ -17,7 +17,7 @@
 package org.gradle.api.internal.tasks.testing.testng;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.plugins.DslObject;
@@ -127,7 +127,7 @@ public class TestNGTestFramework implements TestFramework {
         try {
             return testClassLoader.loadClass("org.testng.TestNG");
         } catch (ClassNotFoundException e) {
-            throw new BuildException("Could not load TestNG.", e);
+            throw new GradleException("Could not load TestNG.", e);
         }
     }
 

@@ -28,7 +28,7 @@ import org.gradle.internal.component.IncompatibleVariantsSelectionException;
 import org.gradle.internal.resolve.ModuleVersionResolveException;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
@@ -387,7 +387,7 @@ public class DependencyGraphBuilder {
             ComponentState selected = module.getSelected();
             if (selected != null) {
                 if (selected.isRejected()) {
-                    BuildException error = new BuildException(selected.getRejectedErrorMessage());
+                    GradleException error = new GradleException(selected.getRejectedErrorMessage());
                     attachFailureToEdges(error, module.getIncomingEdges());
                     // We need to attach failures on unattached dependencies too, in case a node wasn't selected
                     // at all, but we still want to see an error message for it.
@@ -568,7 +568,7 @@ public class DependencyGraphBuilder {
             }
         }
         if (hasMultipleVersions) {
-            attachFailureToEdges(new BuildException("Multiple forces on different versions for virtual platform " + module.getId()), forcedEdges);
+            attachFailureToEdges(new GradleException("Multiple forces on different versions for virtual platform " + module.getId()), forcedEdges);
         }
     }
 
@@ -582,7 +582,7 @@ public class DependencyGraphBuilder {
      * we handle it: do we use failOnVersionConflict?). This method therefore needs to be called
      * before the graph is handed over, so that we can properly fail resolution.
      */
-    private void attachFailureToEdges(BuildException error, Collection<EdgeState> incomingEdges) {
+    private void attachFailureToEdges(GradleException error, Collection<EdgeState> incomingEdges) {
         for (EdgeState edge : incomingEdges) {
             edge.failWith(error);
         }

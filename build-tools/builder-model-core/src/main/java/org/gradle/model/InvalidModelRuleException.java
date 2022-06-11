@@ -1,6 +1,6 @@
 package org.gradle.model;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Incubating;
 import org.gradle.internal.exceptions.Contextual;
 import org.gradle.model.internal.core.rule.describe.ModelRuleDescriptor;
@@ -16,7 +16,7 @@ import org.gradle.model.internal.core.rule.describe.ModelRuleDescriptor;
  */
 @Incubating
 @Contextual
-public class InvalidModelRuleException extends BuildException {
+public class InvalidModelRuleException extends GradleException {
 
     // The usage pattern of this exception providing the rule identity and the cause providing the detail is the
     // way it is due to how we render chained exceptions on build failures.

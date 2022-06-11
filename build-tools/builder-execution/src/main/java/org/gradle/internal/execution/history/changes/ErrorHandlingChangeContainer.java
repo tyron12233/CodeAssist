@@ -1,6 +1,6 @@
 package org.gradle.internal.execution.history.changes;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Describable;
 
 public class ErrorHandlingChangeContainer implements ChangeContainer {
@@ -17,7 +17,7 @@ public class ErrorHandlingChangeContainer implements ChangeContainer {
         try {
             return delegate.accept(visitor);
         } catch (Exception ex) {
-            throw new BuildException(String.format("Cannot determine changes for %s", executable.getDisplayName()), ex);
+            throw new GradleException(String.format("Cannot determine changes for %s", executable.getDisplayName()), ex);
         }
     }
 }

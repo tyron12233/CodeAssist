@@ -2,7 +2,6 @@ package org.gradle.api.internal.tasks.compile;
 
 import static org.gradle.api.internal.tasks.compile.filter.AnnotationProcessorFilter.getFilteredClassLoader;
 
-import org.gradle.api.BuildException;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.api.internal.tasks.compile.incremental.processing.AnnotationProcessingResult;
@@ -16,7 +15,6 @@ import org.gradle.api.internal.tasks.compile.processing.NonIncrementalProcessor;
 import org.gradle.api.internal.tasks.compile.processing.SupportedOptionsCollectingProcessor;
 import org.gradle.api.internal.tasks.compile.processing.TimeTrackingProcessor;
 import org.gradle.util.internal.GUtil;
-import com.tyron.common.TestUtil;
 
 import org.codehaus.groovy.reflection.android.AndroidSupport;
 

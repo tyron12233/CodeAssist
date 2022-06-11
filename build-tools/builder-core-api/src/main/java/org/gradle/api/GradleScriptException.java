@@ -7,7 +7,7 @@ import org.gradle.internal.exceptions.Contextual;
  * script.</p>
  */
 @Contextual
-public class GradleScriptException extends BuildException {
+public class GradleScriptException extends GradleException {
     public GradleScriptException(String message, Throwable cause) {
         super(message, cause);
     }

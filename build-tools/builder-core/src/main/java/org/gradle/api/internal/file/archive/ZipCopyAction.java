@@ -4,8 +4,7 @@ import org.apache.tools.zip.UnixStat;
 import org.apache.tools.zip.Zip64RequiredException;
 import org.apache.tools.zip.ZipEntry;
 import org.apache.tools.zip.ZipOutputStream;
-import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.file.FileCopyDetails;
 import org.gradle.api.internal.DocumentationRegistry;
@@ -62,7 +61,7 @@ public class ZipCopyAction implements CopyAction {
         try {
             zipOutStr = compressor.createArchiveOutputStream(zipFile);
         } catch (Exception e) {
-            throw new BuildException(String.format("Could not create ZIP '%s'.", zipFile), e);
+            throw new GradleException(String.format("Could not create ZIP '%s'.", zipFile), e);
         }
 
         try {
@@ -108,7 +107,7 @@ public class ZipCopyAction implements CopyAction {
                 fileDetails.copyTo(zipOutStr);
                 zipOutStr.closeEntry();
             } catch (Exception e) {
-                throw new BuildException(String.format("Could not add %s to ZIP '%s'.", fileDetails, zipFile), e);
+                throw new GradleException(String.format("Could not add %s to ZIP '%s'.", fileDetails, zipFile), e);
             }
         }
 
@@ -121,7 +120,7 @@ public class ZipCopyAction implements CopyAction {
                 zipOutStr.putNextEntry(archiveEntry);
                 zipOutStr.closeEntry();
             } catch (Exception e) {
-                throw new BuildException(String.format("Could not add %s to ZIP '%s'.", dirDetails, zipFile), e);
+                throw new GradleException(String.format("Could not add %s to ZIP '%s'.", dirDetails, zipFile), e);
             }
         }
     }

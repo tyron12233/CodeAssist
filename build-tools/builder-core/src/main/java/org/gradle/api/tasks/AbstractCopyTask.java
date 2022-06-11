@@ -2,7 +2,7 @@ package org.gradle.api.tasks;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.NonNullApi;
 import org.gradle.api.Transformer;
 import org.gradle.api.file.CopySpec;
@@ -55,7 +55,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
         this.rootSpec = createRootSpec();
         rootSpec.addChildSpecListener((path, spec) -> {
             if (getState().getExecuting()) {
-                throw new BuildException("You cannot add child specs at execution time. Consider configuring this task during configuration time or using a separate task to do the configuration.");
+                throw new GradleException("You cannot add child specs at execution time. Consider configuring this task during configuration time or using a separate task to do the configuration.");
             }
 
             StringBuilder specPropertyNameBuilder = new StringBuilder("rootSpec");

@@ -16,7 +16,7 @@
 
 package org.gradle.api.internal.tasks.testing.detection;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.util.internal.GFileUtils;
 
 import java.io.File;
@@ -63,7 +63,7 @@ public class JarFilePackageLister {
                 zipFile.close();
             }
         } catch (IOException e) {
-            throw new BuildException("failed to scan jar file for packages (" + jarFileAbsolutePath + ")", e);
+            throw new GradleException("failed to scan jar file for packages (" + jarFileAbsolutePath + ")", e);
         }
     }
 }

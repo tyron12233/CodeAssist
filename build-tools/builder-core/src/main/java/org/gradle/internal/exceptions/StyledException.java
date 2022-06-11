@@ -1,7 +1,7 @@
 package org.gradle.internal.exceptions;
 
 import com.google.common.base.Strings;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.logging.text.StyledTextOutput;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  * so that tooling using the exception messages are not concerned with rendering issues.
  * </p>
  */
-public class StyledException extends BuildException {
+public class StyledException extends GradleException {
     private final static Logger LOGGER = Logging.getLogger(StyledException.class);
 
     // Keep only the outermost style

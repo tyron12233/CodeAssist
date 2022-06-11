@@ -15,11 +15,11 @@
  */
 package org.gradle.api.internal.catalog;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 import javax.annotation.Nullable;
 
-class GeneratedClassCompilationException extends BuildException {
+class GeneratedClassCompilationException extends GradleException {
     public GeneratedClassCompilationException(String message) {
         super(message);
     }

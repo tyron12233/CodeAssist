@@ -1,7 +1,7 @@
 package org.gradle.internal.remote.internal.hub;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.classloader.CachingClassLoader;
 import org.gradle.internal.classloader.MultiParentClassLoader;
 import org.gradle.internal.concurrent.CompositeStoppable;
@@ -74,7 +74,7 @@ public class MessageHubBackedObjectConnection implements ObjectConnection {
     @Override
     public <T> void addIncoming(Class<T> type, final T instance) {
         if (connection != null) {
-            throw new BuildException("Cannot add incoming message handler after connection established.");
+            throw new GradleException("Cannot add incoming message handler after connection established.");
         }
         // we don't want to add core classloader explicitly here.
         if (type.getClassLoader() != getClass().getClassLoader()) {
@@ -87,7 +87,7 @@ public class MessageHubBackedObjectConnection implements ObjectConnection {
     @Override
     public <T> T addOutgoing(Class<T> type) {
         if (connection != null) {
-            throw new BuildException("Cannot add outgoing message transmitter after connection established.");
+            throw new GradleException("Cannot add outgoing message transmitter after connection established.");
         }
         methodParamClassLoaders.add(type.getClassLoader());
         ProxyDispatchAdapter<T> adapter = new ProxyDispatchAdapter<T>(hub.getOutgoing(type.getName(), MethodInvocation.class), type, ThreadSafe.class);

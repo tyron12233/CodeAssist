@@ -16,9 +16,9 @@
 
 package org.gradle.process.internal;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
-public class ExecException extends BuildException {
+public class ExecException extends GradleException {
     public ExecException(String message) {
         super(message);
     }

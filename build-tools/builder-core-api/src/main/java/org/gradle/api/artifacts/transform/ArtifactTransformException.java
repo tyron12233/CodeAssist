@@ -1,6 +1,6 @@
 package org.gradle.api.artifacts.transform;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.artifacts.component.ComponentArtifactIdentifier;
 import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.internal.exceptions.Contextual;
@@ -14,7 +14,7 @@ import java.io.File;
  */
 @Deprecated
 @Contextual
-public class ArtifactTransformException extends BuildException {
+public class ArtifactTransformException extends GradleException {
 
     public ArtifactTransformException(File input, AttributeContainer expectedAttributes, @SuppressWarnings("unused") Class<? extends ArtifactTransform> transform, Throwable cause) {
         this(input, expectedAttributes, cause);

@@ -5,7 +5,7 @@ import com.google.common.base.CharMatcher;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -217,14 +217,14 @@ public class ModelPath implements Iterable<String>, Comparable<ModelPath> {
         return path(this.path + "." + path.getPath(), descendantComponents);
     }
 
-    public static class InvalidNameException extends BuildException {
+    public static class InvalidNameException extends GradleException {
         public InvalidNameException(String message) {
             super(message);
         }
     }
 
     @Contextual
-    public static class InvalidPathException extends BuildException {
+    public static class InvalidPathException extends GradleException {
         public InvalidPathException(String message, InvalidNameException e) {
             super(message, e);
         }

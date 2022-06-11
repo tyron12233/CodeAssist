@@ -16,12 +16,12 @@
 
 package org.gradle.api.internal.tasks.testing;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 /**
  * Thrown when some internal exception occurs executing a test suite.
  */
-public class TestSuiteExecutionException extends BuildException {
+public class TestSuiteExecutionException extends GradleException {
     public TestSuiteExecutionException(String message, Throwable cause) {
         super(message, cause);
     }

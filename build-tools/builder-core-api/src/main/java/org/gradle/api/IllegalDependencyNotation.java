@@ -3,7 +3,7 @@ package org.gradle.api;
 /**
  * This exceptions is thrown, if a dependency is declared with a illegal notation.
  */
-public class IllegalDependencyNotation extends BuildException {
+public class IllegalDependencyNotation extends GradleException {
     public IllegalDependencyNotation() {
     }
 

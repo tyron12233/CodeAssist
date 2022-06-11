@@ -1,6 +1,6 @@
 package org.gradle.api.artifacts.transform;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 
 /**
@@ -9,7 +9,7 @@ import org.gradle.internal.exceptions.Contextual;
  * @since 3.5
  */
 @Contextual
-public class VariantTransformConfigurationException extends BuildException {
+public class VariantTransformConfigurationException extends GradleException {
     public VariantTransformConfigurationException(String message, Throwable cause) {
         super(message, cause);
     }

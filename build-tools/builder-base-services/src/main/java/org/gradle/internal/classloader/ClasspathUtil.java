@@ -1,6 +1,6 @@
 package org.gradle.internal.classloader;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.classpath.DefaultClassPath;
@@ -100,7 +100,7 @@ public class ClasspathUtil {
             if (TestUtil.isDalvik()) {
                 return new File(System.getProperty("java.class.path"));
             }
-            throw new BuildException(String.format("Cannot determine classpath for class %s.", targetClass.getName()));
+            throw new GradleException(String.format("Cannot determine classpath for class %s.", targetClass.getName()));
         } catch (URISyntaxException e) {
             throw UncheckedException.throwAsUncheckedException(e);
         }
@@ -136,7 +136,7 @@ public class ClasspathUtil {
         } catch (URISyntaxException e) {
             throw UncheckedException.throwAsUncheckedException(e);
         }
-        throw new BuildException(String.format("Cannot determine classpath for resource '%s' from location '%s'.", name, location));
+        throw new GradleException(String.format("Cannot determine classpath for resource '%s' from location '%s'.", name, location));
     }
 
     private static URI toURI(URL url) throws URISyntaxException {

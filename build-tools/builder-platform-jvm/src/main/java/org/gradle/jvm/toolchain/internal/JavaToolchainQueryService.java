@@ -1,6 +1,6 @@
 package org.gradle.jvm.toolchain.internal;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Transformer;
 import org.gradle.api.internal.provider.DefaultProvider;
 import org.gradle.api.provider.Provider;
@@ -76,12 +76,12 @@ public class JavaToolchainQueryService {
         return toolchain.orElseThrow(provisionedToolchainIsInvalid(installation::get));
     }
 
-    private Supplier<BuildException> noToolchainAvailable(JavaToolchainSpec spec) {
+    private Supplier<GradleException> noToolchainAvailable(JavaToolchainSpec spec) {
         return () -> new NoToolchainAvailableException(spec, detectEnabled.getOrElse(true), downloadEnabled.getOrElse(true));
     }
 
-    private Supplier<BuildException> provisionedToolchainIsInvalid(Supplier<File> javaHome) {
-        return () -> new BuildException("Provisioned toolchain '" + javaHome.get() + "' could not be probed.");
+    private Supplier<GradleException> provisionedToolchainIsInvalid(Supplier<File> javaHome) {
+        return () -> new GradleException("Provisioned toolchain '" + javaHome.get() + "' could not be probed.");
     }
 
     private Optional<JavaToolchain> asToolchain(File javaHome, JavaToolchainSpec spec) {

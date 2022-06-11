@@ -1,6 +1,6 @@
 package org.gradle.api;
 
-public class InvalidUserCodeException extends BuildException {
+public class InvalidUserCodeException extends GradleException {
     public InvalidUserCodeException() {
     }
 

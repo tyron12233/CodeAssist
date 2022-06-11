@@ -1,6 +1,6 @@
 package org.gradle.initialization;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.classloader.ClassLoaderUtils;
 
 import org.objectweb.asm.ClassWriter;
@@ -49,7 +49,7 @@ public class DefaultLegacyTypesSupport implements LegacyTypesSupport {
                 }
             }
         } catch (IOException e) {
-            throw new BuildException("Could not load class names from '" + resource + "'.", e);
+            throw new GradleException("Could not load class names from '" + resource + "'.", e);
         }
         return classNames;
     }
@@ -74,7 +74,7 @@ public class DefaultLegacyTypesSupport implements LegacyTypesSupport {
                 ClassLoaderUtils.define(classLoader, name, bytes);
             }
         } catch (Exception e) {
-            throw new BuildException("Could not inject synthetic classes.", e);
+            throw new GradleException("Could not inject synthetic classes.", e);
         }
     }
 }

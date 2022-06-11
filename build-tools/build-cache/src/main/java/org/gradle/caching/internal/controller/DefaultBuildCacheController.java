@@ -3,7 +3,7 @@ package org.gradle.caching.internal.controller;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closer;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.caching.BuildCacheKey;
 import org.gradle.caching.BuildCacheService;
@@ -83,7 +83,7 @@ import javax.annotation.Nullable;
             try {
                 local.load(command.getKey(), unpack);
             } catch (Exception e) {
-                throw new BuildException("Build cache entry " + command.getKey().getHashCode() + " from local build cache is invalid", e);
+                throw new GradleException("Build cache entry " + command.getKey().getHashCode() + " from local build cache is invalid", e);
             }
 
             if (unpack.result != null) {
@@ -100,7 +100,7 @@ import javax.annotation.Nullable;
                     try {
                         unpack.execute(file);
                     } catch (Exception e) {
-                        throw new BuildException("Build cache entry " + command.getKey().getHashCode() + " from remote build cache is invalid", e);
+                        throw new GradleException("Build cache entry " + command.getKey().getHashCode() + " from remote build cache is invalid", e);
                     }
                     if (local.canStore()) {
                         local.store(command.getKey(), file);

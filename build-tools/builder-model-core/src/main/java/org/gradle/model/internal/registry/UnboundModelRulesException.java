@@ -16,7 +16,7 @@
 
 package org.gradle.model.internal.registry;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.model.internal.report.unbound.UnboundRule;
 import org.gradle.model.internal.report.unbound.UnboundRulesReporter;
 
@@ -24,7 +24,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
 
-public class UnboundModelRulesException extends BuildException {
+public class UnboundModelRulesException extends GradleException {
 
     private static final String MESSAGE =
             "The following model rules could not be applied due to unbound inputs and/or subjects:";

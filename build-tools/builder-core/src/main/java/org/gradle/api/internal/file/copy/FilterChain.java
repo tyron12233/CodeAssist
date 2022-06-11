@@ -5,7 +5,7 @@ import groovy.lang.MissingPropertyException;
 import groovy.text.SimpleTemplateEngine;
 import groovy.text.Template;
 import org.apache.commons.io.input.ReaderInputStream;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.Transformer;
 import org.gradle.api.UncheckedIOException;
@@ -114,7 +114,7 @@ public class FilterChain implements Transformer<InputStream, InputStream> {
                     template.make(new LinkedHashMap<>(properties)).writeTo(writer);
                     return new StringReader(writer.toString());
                 } catch (MissingPropertyException e) {
-                    throw new BuildException(String.format("Missing property (%s) for Groovy template expansion. Defined keys %s.", e.getProperty(), properties.keySet()), e);
+                    throw new GradleException(String.format("Missing property (%s) for Groovy template expansion. Defined keys %s.", e.getProperty(), properties.keySet()), e);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }

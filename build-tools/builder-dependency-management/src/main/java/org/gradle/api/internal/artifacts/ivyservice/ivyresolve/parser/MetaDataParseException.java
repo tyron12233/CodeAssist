@@ -16,12 +16,12 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 import org.gradle.internal.resource.ExternalResource;
 
 @Contextual
-public class MetaDataParseException extends BuildException {
+public class MetaDataParseException extends GradleException {
     public MetaDataParseException(String message) {
         super(message);
     }

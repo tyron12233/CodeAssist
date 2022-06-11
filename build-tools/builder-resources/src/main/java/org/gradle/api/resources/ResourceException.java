@@ -1,6 +1,6 @@
 package org.gradle.api.resources;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 
 import javax.annotation.Nullable;
@@ -10,7 +10,7 @@ import java.net.URI;
  * Generic resource exception that all other resource-related exceptions inherit from.
  */
 @Contextual
-public class ResourceException extends BuildException {
+public class ResourceException extends GradleException {
     private final URI location;
 
     public ResourceException() {

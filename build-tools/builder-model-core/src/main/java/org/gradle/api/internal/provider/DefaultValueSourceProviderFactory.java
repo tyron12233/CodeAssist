@@ -1,7 +1,7 @@
 package org.gradle.api.internal.provider;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.NonExtensible;
 import org.gradle.api.internal.properties.GradleProperties;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
@@ -62,10 +62,10 @@ public class DefaultValueSourceProviderFactory implements ValueSourceProviderFac
             configureParameters(parameters, configureAction);
 
             return instantiateValueSourceProvider(valueSourceType, parametersType, parameters);
-        } catch (BuildException e) {
+        } catch (GradleException e) {
             throw e;
         } catch (Exception e) {
-            throw new BuildException(couldNotCreateProviderOf(valueSourceType), e);
+            throw new GradleException(couldNotCreateProviderOf(valueSourceType), e);
         }
     }
 

@@ -2,11 +2,10 @@ package org.gradle.internal.build;
 
 import static org.gradle.internal.logging.text.StyledTextOutput.Style.UserInput;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.exceptions.FailureResolutionAware;
-import org.gradle.internal.logging.text.StyledTextOutput;
 import org.gradle.internal.service.scopes.Scopes;
 import org.gradle.internal.service.scopes.ServiceScope;
 import org.gradle.configuration.project.BuiltInCommand;
@@ -67,7 +66,7 @@ public class BuildLayoutValidator {
         throw new BuildLayoutException(message.toString());
     }
 
-    private static class BuildLayoutException extends BuildException implements FailureResolutionAware {
+    private static class BuildLayoutException extends GradleException implements FailureResolutionAware {
         public BuildLayoutException(String message) {
             super(message);
         }

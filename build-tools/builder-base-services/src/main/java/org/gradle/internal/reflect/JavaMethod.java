@@ -1,7 +1,7 @@
 package org.gradle.internal.reflect;
 
 import com.google.common.base.Joiner;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.UncheckedException;
 
 import javax.annotation.Nullable;
@@ -113,7 +113,7 @@ public class JavaMethod<T, R> {
         } catch (InvocationTargetException e) {
             throw UncheckedException.throwAsUncheckedException(e.getCause());
         } catch (Exception e) {
-            throw new BuildException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), target), e);
+            throw new GradleException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), target), e);
         }
     }
 

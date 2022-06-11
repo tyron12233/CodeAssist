@@ -7,7 +7,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import groovy.lang.GroovyObject;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Named;
 import org.gradle.api.reflect.ObjectInstantiationException;
 import org.gradle.cache.internal.CrossBuildInMemoryCache;
@@ -21,8 +21,6 @@ import org.gradle.model.internal.asm.ClassGeneratorSuffixRegistry;
 import org.gradle.model.internal.inspect.FormattingValidationProblemCollector;
 import org.gradle.model.internal.inspect.ValidationProblemCollector;
 import org.gradle.model.internal.type.ModelType;
-import com.tyron.groovy.ScriptCompilationException;
-import com.tyron.groovy.ScriptFactory;
 
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
@@ -110,7 +108,7 @@ public class NamedObjectInstantiator implements ManagedFactory {
         FormattingValidationProblemCollector problemCollector = new FormattingValidationProblemCollector("Named implementation class", ModelType.of(publicClass));
         visitFields(publicClass, problemCollector);
         if (problemCollector.hasProblems()) {
-            throw new BuildException(problemCollector.format());
+            throw new GradleException(problemCollector.format());
         }
 
         AsmClassGenerator generator = new AsmClassGenerator(publicClass, implSuffix);

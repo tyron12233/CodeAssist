@@ -1,7 +1,7 @@
 package org.gradle.api.internal.tasks.execution;
 
 import org.gradle.api.Describable;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.specs.Spec;
 
 public class SelfDescribingSpec<T> implements Describable, Spec<T> {
@@ -23,7 +23,7 @@ public class SelfDescribingSpec<T> implements Describable, Spec<T> {
         try {
             return spec.isSatisfiedBy(element);
         } catch (RuntimeException e) {
-            throw new BuildException("Could not evaluate spec for '" + getDisplayName() + "'.", e);
+            throw new GradleException("Could not evaluate spec for '" + getDisplayName() + "'.", e);
         }
     }
 

@@ -1,6 +1,6 @@
 package org.gradle.internal.classpath;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.internal.service.scopes.Scopes;
 import org.gradle.internal.service.scopes.ServiceScope;
@@ -35,7 +35,7 @@ public class ClasspathBuilder {
         try {
             buildJar(jarFile, action);
         } catch (Exception e) {
-            throw new BuildException(String.format("Failed to create Jar file %s.", jarFile), e);
+            throw new GradleException(String.format("Failed to create Jar file %s.", jarFile), e);
         }
     }
 

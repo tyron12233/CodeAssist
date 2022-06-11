@@ -1,6 +1,6 @@
 package org.gradle.internal.execution.steps;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.internal.execution.UnitOfWork;
 import org.gradle.internal.execution.timeout.Timeout;
@@ -49,7 +49,7 @@ public class TimeoutStep<C extends Context, R extends Result> implements Step<C,
                 //noinspection ResultOfMethodCallIgnored
                 Thread.interrupted();
                 //noinspection ThrowFromFinallyBlock
-                throw new BuildException("Timeout has been exceeded");
+                throw new GradleException("Timeout has been exceeded");
             }
         }
     }

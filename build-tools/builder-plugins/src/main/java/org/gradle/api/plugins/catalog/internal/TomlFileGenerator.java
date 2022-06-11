@@ -16,7 +16,7 @@
 package org.gradle.api.plugins.catalog.internal;
 
 import org.gradle.api.DefaultTask;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.internal.catalog.DefaultVersionCatalog;
 import org.gradle.api.provider.Property;
@@ -47,7 +47,7 @@ public abstract class TomlFileGenerator extends DefaultTask {
         if (outputDir.exists() || outputFile.mkdirs()) {
             doGenerate(model, outputFile);
         } else {
-            throw new BuildException("Unable to generate TOML dependencies file into " + outputDir);
+            throw new GradleException("Unable to generate TOML dependencies file into " + outputDir);
         }
     }
 

@@ -1,9 +1,9 @@
 package org.gradle.internal.operations;
 
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
-public class BuildOperationQueueFailure extends BuildException {
+public class BuildOperationQueueFailure extends GradleException {
     public BuildOperationQueueFailure(String message) {
         super(message);
     }

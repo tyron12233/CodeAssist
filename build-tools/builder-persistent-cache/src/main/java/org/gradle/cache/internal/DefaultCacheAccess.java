@@ -5,7 +5,7 @@ import static org.gradle.cache.FileLockManager.LockMode.Exclusive;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.Cast;
 import org.gradle.internal.Factories;
 import org.gradle.internal.Factory;
@@ -514,7 +514,7 @@ public class DefaultCacheAccess implements CacheCoordinator {
     }
 
     @VisibleForTesting
-    static class InvalidCacheReuseException extends BuildException {
+    static class InvalidCacheReuseException extends GradleException {
         InvalidCacheReuseException(String message) {
             super(message);
         }

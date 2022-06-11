@@ -1,6 +1,6 @@
 package org.gradle.api.internal.file.archive;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.file.FileCopyDetails;
 import org.gradle.api.internal.file.CopyActionProcessingStreamAction;
 import org.gradle.api.internal.file.archive.compression.ArchiveOutputStreamFactory;
@@ -47,7 +47,7 @@ public class TarCopyAction implements CopyAction {
         try {
             outStr = compressor.createArchiveOutputStream(tarFile);
         } catch (Exception e) {
-            throw new BuildException(String.format("Could not create TAR '%s'.", tarFile), e);
+            throw new GradleException(String.format("Could not create TAR '%s'.", tarFile), e);
         }
 
         IoActions.withResource(outStr, new ErroringAction<OutputStream>() {
@@ -57,7 +57,7 @@ public class TarCopyAction implements CopyAction {
                 try {
                     tarOutStr = new TarOutputStream(outStr);
                 } catch (Exception e) {
-                    throw new BuildException(String.format("Could not create TAR '%s'.", tarFile), e);
+                    throw new GradleException(String.format("Could not create TAR '%s'.", tarFile), e);
                 }
                 tarOutStr.setLongFileMode(TarOutputStream.LONGFILE_GNU);
                 tarOutStr.setBigNumberMode(TarOutputStream.BIGNUMBER_STAR);
@@ -95,7 +95,7 @@ public class TarCopyAction implements CopyAction {
                 fileDetails.copyTo(tarOutStr);
                 tarOutStr.closeEntry();
             } catch (Exception e) {
-                throw new BuildException(String.format("Could not add %s to TAR '%s'.", fileDetails, tarFile), e);
+                throw new GradleException(String.format("Could not add %s to TAR '%s'.", fileDetails, tarFile), e);
             }
         }
 
@@ -108,7 +108,7 @@ public class TarCopyAction implements CopyAction {
                 tarOutStr.putNextEntry(archiveEntry);
                 tarOutStr.closeEntry();
             } catch (Exception e) {
-                throw new BuildException(String.format("Could not add %s to TAR '%s'.", dirDetails, tarFile), e);
+                throw new GradleException(String.format("Could not add %s to TAR '%s'.", dirDetails, tarFile), e);
             }
         }
     }

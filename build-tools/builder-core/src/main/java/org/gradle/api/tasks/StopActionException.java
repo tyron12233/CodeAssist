@@ -1,6 +1,6 @@
 package org.gradle.api.tasks;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 /**
  * <p>A <code>StopActionException</code> is be thrown by a task {@link org.gradle.api.Action} or task action closure to
@@ -17,7 +17,7 @@ import org.gradle.api.BuildException;
  *
  * <p>Note that throwing this exception does not fail the execution of the task or the build.</p>
  */
-public class StopActionException extends BuildException {
+public class StopActionException extends GradleException {
     public StopActionException() {
         super();
     }

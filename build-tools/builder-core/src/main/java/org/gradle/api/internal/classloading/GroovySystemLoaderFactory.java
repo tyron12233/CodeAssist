@@ -1,6 +1,6 @@
 package org.gradle.api.internal.classloading;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.util.internal.VersionNumber;
 
 import java.lang.reflect.InvocationTargetException;
@@ -19,7 +19,7 @@ public class GroovySystemLoaderFactory {
             GroovySystemLoader preferenceCleaningLoader = new PreferenceCleaningGroovySystemLoader(classLoader);
             return new CompositeGroovySystemLoader(classInfoCleaningLoader, preferenceCleaningLoader);
         } catch (Exception e) {
-            throw new BuildException("Could not inspect the Groovy system for ClassLoader " + classLoader, e);
+            throw new GradleException("Could not inspect the Groovy system for ClassLoader " + classLoader, e);
         }
     }
 

@@ -1,7 +1,7 @@
 package org.gradle.internal.classloader;
 
 import com.google.common.io.ByteStreams;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.classpath.ClassPath;
 
 import org.apache.commons.lang3.StringUtils;
@@ -53,7 +53,7 @@ public abstract class TransformingClassLoader extends VisitableURLClassLoader {
                 codeSource = null;
             }
         } catch (Exception e) {
-            throw new BuildException(String.format("Could not load class '%s' from %s.", name, resource), e);
+            throw new GradleException(String.format("Could not load class '%s' from %s.", name, resource), e);
         }
 
         if (bytes == null) {

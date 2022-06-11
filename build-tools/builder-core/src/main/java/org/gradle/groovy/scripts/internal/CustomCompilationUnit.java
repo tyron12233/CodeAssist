@@ -1,7 +1,7 @@
 package org.gradle.groovy.scripts.internal;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 import groovy.lang.GroovyClassLoader;
 import org.codehaus.groovy.ast.ClassNode;
@@ -48,7 +48,7 @@ class CustomCompilationUnit extends CompilationUnit {
             classgen.set(this, decoratedClassgen);
             return decoratedClassgen;
         } catch (ReflectiveOperationException e) {
-            throw new BuildException("Unable to install custom rules code generation", e);
+            throw new GradleException("Unable to install custom rules code generation", e);
         }
     }
 
@@ -58,7 +58,7 @@ class CustomCompilationUnit extends CompilationUnit {
             classgen.setAccessible(true);
             return classgen;
         } catch (NoSuchFieldException e) {
-            throw new BuildException("Unable to detect class generation in Groovy CompilationUnit", e);
+            throw new GradleException("Unable to detect class generation in Groovy CompilationUnit", e);
         }
     }
 

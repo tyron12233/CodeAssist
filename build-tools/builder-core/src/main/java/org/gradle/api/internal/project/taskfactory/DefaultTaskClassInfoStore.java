@@ -4,7 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.NonNullApi;
 import org.gradle.api.Task;
 import org.gradle.api.tasks.CacheableTask;
@@ -73,7 +73,7 @@ public class DefaultTaskClassInfoStore implements TaskClassInfoStore {
                     }
                 }
                 if (previousDeclaringClass == declaringClass) {
-                    throw new BuildException(String.format(
+                    throw new GradleException(String.format(
                             "Cannot use @TaskAction annotation on multiple overloads of method %s" +
                             ".%s()",
                             declaringClass.getSimpleName(), method.getName()));
@@ -84,7 +84,7 @@ public class DefaultTaskClassInfoStore implements TaskClassInfoStore {
                     if (foundIncrementalTaskActionFactory != null) {
                         @SuppressWarnings("deprecation") Class<?> incrementalTaskInputsClass =
                                 org.gradle.api.tasks.incremental.IncrementalTaskInputs.class;
-                        throw new BuildException(String.format(
+                        throw new GradleException(String.format(
                                 "Cannot have multiple @TaskAction methods accepting an %s or %s " +
                                 "parameter.",
                                 InputChanges.class.getSimpleName(),
@@ -202,13 +202,13 @@ public class DefaultTaskClassInfoStore implements TaskClassInfoStore {
         }
         Class<?> declaringClass = method.getDeclaringClass();
         if (Modifier.isStatic(method.getModifiers())) {
-            throw new BuildException(
+            throw new GradleException(
                     String.format("Cannot use @TaskAction annotation on static method %s.%s().",
                             declaringClass.getSimpleName(), method.getName()));
         }
         final Class<?>[] parameterTypes = method.getParameterTypes();
         if (parameterTypes.length > 1) {
-            throw new BuildException(String.format(
+            throw new GradleException(String.format(
                     "Cannot use @TaskAction annotation on method %s.%s() as this method takes " +
                     "multiple parameters.",
                     declaringClass.getSimpleName(), method.getName()));
@@ -224,7 +224,7 @@ public class DefaultTaskClassInfoStore implements TaskClassInfoStore {
             } else if (parameterType.equals(InputChanges.class)) {
                 taskActionFactory = new IncrementalInputsTaskActionFactory(taskType, method);
             } else {
-                throw new BuildException(String.format(
+                throw new GradleException(String.format(
                         "Cannot use @TaskAction annotation on method %s.%s() because %s is not a " +
                         "valid parameter to an action method.",
                         declaringClass.getSimpleName(), method.getName(), parameterType));

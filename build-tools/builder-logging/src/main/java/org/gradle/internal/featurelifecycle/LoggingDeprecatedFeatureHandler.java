@@ -1,6 +1,6 @@
 package org.gradle.internal.featurelifecycle;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.logging.configuration.WarningMode;
 import org.gradle.internal.SystemProperties;
@@ -32,7 +32,7 @@ public class LoggingDeprecatedFeatureHandler implements FeatureHandler<Deprecate
 
     private WarningMode warningMode = WarningMode.Summary;
     private BuildOperationProgressEventEmitter progressEventEmitter;
-    private BuildException error;
+    private GradleException error;
 
     public LoggingDeprecatedFeatureHandler() {
         this.locationReporter = DoNothingReporter.INSTANCE;
@@ -60,7 +60,7 @@ public class LoggingDeprecatedFeatureHandler implements FeatureHandler<Deprecate
             }
             if (warningMode == WarningMode.Fail) {
                 if (error == null) {
-                    error = new BuildException(WARNING_SUMMARY + " ");// DefaultGradleVersion.current().getNextMajorVersion().getVersion());
+                    error = new GradleException(WARNING_SUMMARY + " ");// DefaultGradleVersion.current().getNextMajorVersion().getVersion());
                 }
             }
         }
@@ -154,7 +154,7 @@ public class LoggingDeprecatedFeatureHandler implements FeatureHandler<Deprecate
         return Boolean.parseBoolean(value);
     }
 
-    public BuildException getDeprecationFailure() {
+    public GradleException getDeprecationFailure() {
         return error;
     }
 

@@ -19,7 +19,7 @@ package org.gradle.api.plugins;
 import static org.gradle.api.distribution.plugins.DistributionPlugin.TASK_INSTALL_NAME;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.Plugin;
 import org.gradle.api.Task;
@@ -124,17 +124,17 @@ public class ApplicationPlugin implements Plugin<Project> {
                 if (children.length > 0) {
                     if (!new File(destinationDir, "lib").isDirectory() ||
                         !new File(destinationDir, executableDir.get()).isDirectory()) {
-                        throw new BuildException("The specified installation directory \'" +
-                                                 destinationDir +
-                                                 "\' is neither empty nor does it contain an " +
-                                                 "installation for \'" +
-                                                 applicationName.get() +
-                                                 "\'.\n" +
-                                                 "If you really want to install to this " +
-                                                 "directory, delete it and run the install task " +
-                                                 "again.\n" +
-                                                 "Alternatively, choose a different installation" +
-                                                 " directory.");
+                        throw new GradleException("The specified installation directory \'" +
+                                                  destinationDir +
+                                                  "\' is neither empty nor does it contain an " +
+                                                  "installation for \'" +
+                                                  applicationName.get() +
+                                                  "\'.\n" +
+                                                  "If you really want to install to this " +
+                                                  "directory, delete it and run the install task " +
+                                                  "again.\n" +
+                                                  "Alternatively, choose a different installation" +
+                                                  " directory.");
                     }
                 }
             }

@@ -20,7 +20,7 @@ import static com.google.common.base.Strings.emptyToNull;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.Incubating;
@@ -228,7 +228,7 @@ public class ComponentModelBasePlugin implements Plugin<Project> {
                         formatter.endChildren();
                     }
                     formatter.endChildren();
-                    throw new BuildException(formatter.toString());
+                    throw new GradleException(formatter.toString());
                 }
             }
         }

@@ -1,8 +1,8 @@
 package org.gradle.plugin.internal;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
-public class InvalidPluginIdException extends BuildException {
+public class InvalidPluginIdException extends GradleException {
 
     private final String reason;
 

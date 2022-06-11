@@ -4,7 +4,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.NamedDomainObjectFactory;
 
@@ -51,7 +51,7 @@ public class DefaultPolymorphicNamedEntityInstantiator<T> implements Polymorphic
             throw new IllegalArgumentException(message);
         }
         if (factories.containsKey(type)) {
-            throw new BuildException(String.format("Cannot register a factory for type %s because a factory for this type is already registered.", type.getSimpleName()));
+            throw new GradleException(String.format("Cannot register a factory for type %s because a factory for this type is already registered.", type.getSimpleName()));
         }
         factories.put(type, factory);
     }

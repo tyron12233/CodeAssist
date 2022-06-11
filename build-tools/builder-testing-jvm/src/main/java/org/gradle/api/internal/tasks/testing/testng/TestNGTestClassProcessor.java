@@ -16,7 +16,7 @@
 
 package org.gradle.api.internal.tasks.testing.testng;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.tasks.testing.TestClassProcessor;
 import org.gradle.api.internal.tasks.testing.TestClassRunInfo;
 import org.gradle.api.internal.tasks.testing.TestResultProcessor;
@@ -80,7 +80,7 @@ public class TestNGTestClassProcessor implements TestClassProcessor {
         try {
             testClasses.add(applicationClassLoader.loadClass(testClass.getTestClassName()));
         } catch (Throwable e) {
-            throw new BuildException(String.format("Could not load test class '%s'.", testClass.getTestClassName()), e);
+            throw new GradleException(String.format("Could not load test class '%s'.", testClass.getTestClassName()), e);
         }
     }
 
@@ -123,7 +123,7 @@ public class TestNGTestClassProcessor implements TestClassProcessor {
             try {
                 testNg.addListener(JavaReflectionUtil.newInstance(applicationClassLoader.loadClass(listenerClass)));
             } catch (Throwable e) {
-                throw new BuildException(String.format("Could not add a test listener with class '%s'.", listenerClass), e);
+                throw new GradleException(String.format("Could not add a test listener with class '%s'.", listenerClass), e);
             }
         }
 

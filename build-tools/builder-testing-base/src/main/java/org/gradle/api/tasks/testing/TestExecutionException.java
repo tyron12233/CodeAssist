@@ -16,7 +16,7 @@
 
 package org.gradle.api.tasks.testing;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 /**
  * <p>A <code>TestExecutionException</code> is thrown when no tests can be found that match the
@@ -24,7 +24,7 @@ import org.gradle.api.BuildException;
  *
  * @since 2.6
  */
-public class TestExecutionException extends BuildException {
+public class TestExecutionException extends GradleException {
     public TestExecutionException(String message) {
         super(message);
     }

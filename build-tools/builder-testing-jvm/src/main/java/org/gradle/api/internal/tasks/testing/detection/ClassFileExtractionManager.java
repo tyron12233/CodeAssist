@@ -16,7 +16,7 @@
 package org.gradle.api.internal.tasks.testing.detection;
 
 import org.apache.commons.lang3.text.StrBuilder;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.file.temp.DefaultTemporaryFileProvider;
 import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.internal.Factory;
@@ -115,7 +115,7 @@ public class ClassFileExtractionManager {
                         classFileSourceJar = jarFile;
                     }
                 } catch (IOException e) {
-                    throw new BuildException("failed to extract class file from jar (" + jarFile + ")", e);
+                    throw new GradleException("failed to extract class file from jar (" + jarFile + ")", e);
                 }
             }
 

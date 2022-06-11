@@ -1,7 +1,7 @@
 package org.gradle.composite.internal;
 
 import com.google.common.base.MoreObjects;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.internal.BuildDefinition;
 import org.gradle.api.internal.GradleInternal;
@@ -221,7 +221,7 @@ public class DefaultIncludedBuildRegistry implements BuildStateRegistry, Stoppab
 
     private void validateNameIsNotBuildSrc(String name, File dir) {
         if (SettingsInternal.BUILD_SRC.equals(name)) {
-            throw new BuildException("Included build " + dir + " has build name 'buildSrc' which cannot be used as it is a reserved name.");
+            throw new GradleException("Included build " + dir + " has build name 'buildSrc' which cannot be used as it is a reserved name.");
         }
     }
 
@@ -272,7 +272,7 @@ public class DefaultIncludedBuildRegistry implements BuildStateRegistry, Stoppab
         Path requestedPath = owner.getIdentityPath().append(Path.path(name));
         File existingForPath = includedBuildDirectoriesByPath.putIfAbsent(requestedPath, dir);
         if (existingForPath != null) {
-            throw new BuildException("Included build " + dir + " has build path " + requestedPath + " which is the same as included build " + existingForPath);
+            throw new GradleException("Included build " + dir + " has build path " + requestedPath + " which is the same as included build " + existingForPath);
         }
 
         return requestedPath;
@@ -285,7 +285,7 @@ public class DefaultIncludedBuildRegistry implements BuildStateRegistry, Stoppab
 
     private void assertNameDoesNotClashWithRootSubproject(IncludedBuildState includedBuild) {
         if (rootBuild.getProjects().findProject(includedBuild.getIdentityPath()) != null) {
-            throw new BuildException("Included build in " + includedBuild.getBuildRootDir() + " has name '" + includedBuild.getName() + "' which is the same as a project of the main build.");
+            throw new GradleException("Included build in " + includedBuild.getBuildRootDir() + " has name '" + includedBuild.getName() + "' which is the same as a project of the main build.");
         }
     }
 }

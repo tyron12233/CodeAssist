@@ -3,7 +3,7 @@ package org.gradle.jvm.toolchain.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.internal.operations.BuildOperationContext;
@@ -85,7 +85,7 @@ public class JavaInstallationRegistry {
             final File javaHome = findJavaHome(canonicalFile);
             return new InstallationLocation(javaHome, location.getSource());
         } catch (IOException e) {
-            throw new BuildException(String.format("Could not canonicalize path to java installation: %s.", file), e);
+            throw new GradleException(String.format("Could not canonicalize path to java installation: %s.", file), e);
         }
     }
 

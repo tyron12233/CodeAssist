@@ -1,6 +1,6 @@
 package org.gradle.configurationcache;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.BuildType;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.configurationcache.initialization.VintageInjectedClasspathInstrumentationStrategy;
@@ -18,7 +18,7 @@ public class DefaultBuildTreeControllerServices implements BuildTreeModelControl
         // Isolated projects also implies configuration cache
         if (startParameter.getIsolatedProjects().get() && !startParameter.getConfigurationCache().get()) {
             if (startParameter.getConfigurationCache().isExplicit()) {
-                throw new BuildException("The configuration cache cannot be disabled when isolated projects is enabled.");
+                throw new GradleException("The configuration cache cannot be disabled when isolated projects is enabled.");
             }
         }
 

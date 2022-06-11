@@ -1,6 +1,6 @@
 package org.gradle.model;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Incubating;
 import org.gradle.internal.exceptions.Contextual;
 import org.gradle.model.internal.core.rule.describe.ModelRuleDescriptor;
@@ -10,7 +10,7 @@ import org.gradle.model.internal.core.rule.describe.ModelRuleDescriptor;
  */
 @Incubating
 @Contextual
-public class InvalidModelRuleDeclarationException extends BuildException {
+public class InvalidModelRuleDeclarationException extends GradleException {
 
     public InvalidModelRuleDeclarationException(String message) {
         super(message);

@@ -16,11 +16,11 @@
 
 package org.gradle.api.internal.tasks.testing.testng;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 import org.testng.ITestResult;
 
-public class UnrepresentableParameterException extends BuildException {
+public class UnrepresentableParameterException extends GradleException {
 
     public UnrepresentableParameterException(ITestResult iTestResult,
                                              int paramIndex,

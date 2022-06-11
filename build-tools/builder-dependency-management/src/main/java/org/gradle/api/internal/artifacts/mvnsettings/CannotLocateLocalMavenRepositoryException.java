@@ -16,11 +16,11 @@
 
 package org.gradle.api.internal.artifacts.mvnsettings;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 
 @Contextual
-public class CannotLocateLocalMavenRepositoryException extends BuildException {
+public class CannotLocateLocalMavenRepositoryException extends GradleException {
     public CannotLocateLocalMavenRepositoryException(String message, Throwable cause) {
         super(message, cause);
     }

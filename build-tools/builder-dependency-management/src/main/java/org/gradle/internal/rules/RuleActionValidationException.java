@@ -16,9 +16,9 @@
 
 package org.gradle.internal.rules;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
-public class RuleActionValidationException extends BuildException {
+public class RuleActionValidationException extends GradleException {
     public RuleActionValidationException(String message) {
         super(message);
     }

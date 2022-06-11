@@ -3,7 +3,7 @@ package org.gradle.api.internal.tasks.compile.incremental;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.tasks.compile.ApiCompilerResult;
 import org.gradle.api.internal.tasks.compile.JavaCompileSpec;
 import org.gradle.api.internal.tasks.compile.incremental.compilerapi.CompilerApiData;
@@ -84,7 +84,7 @@ class IncrementalResultStoringCompiler<T extends JavaCompileSpec> implements Com
                 ApiCompilerResult jdkJavaResult = (ApiCompilerResult) result;
                 ConstantToDependentsMapping newConstantsToDependentsMapping = jdkJavaResult.getConstantsAnalysisResult()
                         .getConstantToDependentsMapping()
-                        .orElseThrow(() -> new BuildException("Constants to dependents mapping not present, but it should be"));
+                        .orElseThrow(() -> new GradleException("Constants to dependents mapping not present, but it should be"));
                 Map<String, Set<String>> newSourceClassesMapping = jdkJavaResult.getSourceClassesMapping();
                 Map<String, Set<String>> mergedSourceClassesMapping;
                 if (previousSourceClassesMapping == null) {

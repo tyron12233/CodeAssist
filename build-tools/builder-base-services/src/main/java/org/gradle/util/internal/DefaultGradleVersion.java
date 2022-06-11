@@ -1,7 +1,7 @@
 package org.gradle.util.internal;
 
 import com.google.common.io.Closeables;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.UncheckedException;
 import org.gradle.util.GradleVersion;
 
@@ -40,7 +40,7 @@ public final class DefaultGradleVersion extends GradleVersion {
     static {
         URL resource = DefaultGradleVersion.class.getResource(RESOURCE_NAME);
         if (resource == null) {
-            throw new BuildException(format("Resource '%s' not found.", RESOURCE_NAME));
+            throw new GradleException(format("Resource '%s' not found.", RESOURCE_NAME));
         }
 
         InputStream inputStream = null;
@@ -67,7 +67,7 @@ public final class DefaultGradleVersion extends GradleVersion {
 
             CURRENT = new DefaultGradleVersion(version, "unknown".equals(buildTimestamp) ? null : buildTimestamp, commitId);
         } catch (Exception e) {
-            throw new BuildException(format("Could not load version details from resource '%s'.", resource), e);
+            throw new GradleException(format("Could not load version details from resource '%s'.", resource), e);
         } finally {
             if (inputStream != null) {
                 Closeables.closeQuietly(inputStream);

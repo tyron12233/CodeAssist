@@ -1,7 +1,7 @@
 package org.gradle.api.internal.tasks.properties.bean;
 
 import com.google.common.base.Suppliers;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.UncheckedException;
 import org.gradle.api.internal.provider.HasConfigurableValueInternal;
 import org.gradle.internal.reflect.PropertyMetadata;
@@ -56,7 +56,7 @@ public abstract class AbstractNestedRuntimeBeanNode extends RuntimeBeanNode<Obje
                     } catch (InvocationTargetException e) {
                         throw UncheckedException.throwAsUncheckedException(e.getCause());
                     } catch (Exception e) {
-                        throw new BuildException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), bean), e);
+                        throw new GradleException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), bean), e);
                     }
 //                });
 //            return null;

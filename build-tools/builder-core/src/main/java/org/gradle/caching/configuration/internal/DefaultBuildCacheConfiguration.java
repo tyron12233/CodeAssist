@@ -3,7 +3,7 @@ package org.gradle.caching.configuration.internal;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.caching.BuildCacheServiceFactory;
 import org.gradle.caching.configuration.BuildCache;
 import org.gradle.caching.internal.BuildCacheConfigurationInternal;
@@ -137,6 +137,6 @@ public class DefaultBuildCacheConfiguration implements BuildCacheConfigurationIn
             }
         }
         // Couldn't find a registration for the given type
-        throw new BuildException("Build cache type '" + configurationType.getName() + "' has not been registered.");
+        throw new GradleException("Build cache type '" + configurationType.getName() + "' has not been registered.");
     }
 }

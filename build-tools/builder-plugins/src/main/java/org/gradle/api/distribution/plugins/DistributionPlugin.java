@@ -16,7 +16,7 @@
 
 package org.gradle.api.distribution.plugins;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.Plugin;
@@ -110,7 +110,7 @@ public class DistributionPlugin implements Plugin<Project> {
         project.afterEvaluate(p -> {
             distributions.forEach(distribution -> {
                 if (distribution.getDistributionBaseName().get().equals("")) {
-                    throw new BuildException(String.format("Distribution '%s' must not have an empty distributionBaseName.", distribution.getName()));
+                    throw new GradleException(String.format("Distribution '%s' must not have an empty distributionBaseName.", distribution.getName()));
                 }
             });
         });

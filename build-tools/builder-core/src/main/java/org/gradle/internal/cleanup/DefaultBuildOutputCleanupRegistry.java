@@ -1,7 +1,7 @@
 package org.gradle.internal.cleanup;
 
 import com.google.common.collect.Sets;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.file.FileCollection;
 import org.gradle.internal.execution.BuildOutputCleanupRegistry;
 import org.gradle.api.internal.file.FileCollectionFactory;
@@ -74,7 +74,7 @@ public class DefaultBuildOutputCleanupRegistry implements BuildOutputCleanupRegi
 
     private Set<String> getResolvedPaths() {
         if (resolvedPaths == null) {
-            throw new BuildException("Build outputs have not been resolved yet");
+            throw new GradleException("Build outputs have not been resolved yet");
         }
         return resolvedPaths;
     }

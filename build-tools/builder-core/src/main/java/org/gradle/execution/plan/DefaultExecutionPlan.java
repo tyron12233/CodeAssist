@@ -11,7 +11,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.gradle.api.BuildCancelledException;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.CircularDependencyException;
 import org.gradle.api.NonNullApi;
 import org.gradle.api.Task;
@@ -470,12 +470,12 @@ public class DefaultExecutionPlan implements ExecutionPlan {
             // TODO: This isn't correct. This means that we've detected a cycle while determining
             //  the execution plan, but the graph walker did not find one.
             // https://github.com/gradle/gradle/issues/2293
-            throw new BuildException("Misdetected cycle between " +
-                                     currentNode +
-                                     " and " +
-                                     successor +
-                                     ". Help us by reporting this to https://github" +
-                                     ".com/gradle/gradle/issues/2293");
+            throw new GradleException("Misdetected cycle between " +
+                                      currentNode +
+                                      " and " +
+                                      successor +
+                                      ". Help us by reporting this to https://github" +
+                                      ".com/gradle/gradle/issues/2293");
         }
         List<Node> firstCycle = new ArrayList<>(cycles.get(0));
         Collections.sort(firstCycle);

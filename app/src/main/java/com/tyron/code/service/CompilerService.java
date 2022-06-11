@@ -44,7 +44,7 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.configuration.ConsoleOutput;
@@ -267,7 +267,7 @@ public class CompilerService extends Service {
         try {
             Os.setenv("ANDROID_HOME", getExternalFilesDir("android_home").getAbsolutePath(), true);
         } catch (ErrnoException e) {
-            throw new BuildException(e.getMessage());
+            throw new GradleException(e.getMessage());
         }
         System.setProperty("user.home", startParameter.getGradleUserHomeDir().getAbsolutePath());
 

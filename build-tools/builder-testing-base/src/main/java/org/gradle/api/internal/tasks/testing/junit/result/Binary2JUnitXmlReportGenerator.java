@@ -18,7 +18,7 @@ package org.gradle.api.internal.tasks.testing.junit.result;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.internal.IoActions;
@@ -132,7 +132,7 @@ public class Binary2JUnitXmlReportGenerator {
                 xmlWriter.write(result, output);
                 output.close();
             } catch (Exception e) {
-                throw new BuildException(
+                throw new GradleException(
                         String.format("Could not write XML test results for %s to file %s.",
                                 result.getClassName(), reportFile), e);
             } finally {

@@ -16,9 +16,9 @@
 
 package org.gradle.model.internal.inspect;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
-public class UnmanagedPropertyMissingSetterException extends BuildException {
+public class UnmanagedPropertyMissingSetterException extends GradleException {
     public UnmanagedPropertyMissingSetterException(String propertyName) {
         super(getMessage(propertyName));
     }

@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Thrown when a {@link Closure} is given as an {@link Action} implementation, but has the wrong signature.
  */
-public class InvalidActionClosureException extends BuildException {
+public class InvalidActionClosureException extends GradleException {
 
     private final Closure<?> closure;
     private final Object argument;

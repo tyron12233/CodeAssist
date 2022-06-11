@@ -2,7 +2,7 @@ package org.gradle.api.internal.file.archive;
 
 import org.apache.tools.zip.ZipEntry;
 import org.apache.tools.zip.ZipFile;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.file.FileVisitDetails;
@@ -96,7 +96,7 @@ public class ZipFileTree extends AbstractArchiveFileTree {
                 zip.close();
             }
         } catch (Exception e) {
-            throw new BuildException(String.format("Could not expand %s.", getDisplayName()), e);
+            throw new GradleException(String.format("Could not expand %s.", getDisplayName()), e);
         }
     }
 

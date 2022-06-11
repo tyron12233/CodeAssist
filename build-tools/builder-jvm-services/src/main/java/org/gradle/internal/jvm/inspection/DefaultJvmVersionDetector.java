@@ -1,6 +1,6 @@
 package org.gradle.internal.jvm.inspection;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.JavaVersion;
 import org.gradle.internal.jvm.JavaInfo;
 import org.gradle.process.internal.ExecException;
@@ -40,6 +40,6 @@ public class DefaultJvmVersionDetector implements JvmVersionDetector {
         if(metadata.isValidInstallation()) {
             return metadata;
         }
-        throw new BuildException("Unable to determine version for JDK located at " + metadata.getJavaHome() + ". Reason: " + metadata.getErrorMessage(), metadata.getErrorCause());
+        throw new GradleException("Unable to determine version for JDK located at " + metadata.getJavaHome() + ". Reason: " + metadata.getErrorMessage(), metadata.getErrorCause());
     }
 }

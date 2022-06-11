@@ -7,7 +7,7 @@ import com.google.common.collect.Iterables;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.Cast;
 import org.gradle.internal.UncheckedException;
 import org.gradle.model.internal.type.ModelType;
@@ -88,7 +88,7 @@ public class WeaklyTypeReferencingMethod<T, R> {
         } catch (InvocationTargetException e) {
             throw UncheckedException.throwAsUncheckedException(e.getCause());
         } catch (Exception e) {
-            throw new BuildException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), target), e);
+            throw new GradleException(String.format("Could not call %s.%s() on %s", method.getDeclaringClass().getSimpleName(), method.getName(), target), e);
         }
     }
 

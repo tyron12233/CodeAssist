@@ -2,7 +2,7 @@ package org.gradle.groovy.scripts.internal;
 
 import com.google.common.hash.HashCode;
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.configuration.ImportsReader;
 import org.gradle.groovy.scripts.ScriptCompilationException;
@@ -140,7 +140,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
             } catch (MultipleCompilationErrorsException e) {
                 wrapCompilationFailure(source, e);
             } catch (CompilationFailedException e) {
-                throw new BuildException(String.format("Could not compile %s.", source.getDisplayName()), e);
+                throw new GradleException(String.format("Could not compile %s.", source.getDisplayName()), e);
             }
 
             if (packageDetector.hasPackageStatement) {
@@ -165,7 +165,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
                 }
             }
         } catch (Exception e) {
-            throw new BuildException(String.format("Failed to serialize script metadata extracted for %s", scriptSource.getDisplayName()), e);
+            throw new GradleException(String.format("Failed to serialize script metadata extracted for %s", scriptSource.getDisplayName()), e);
         }
     }
 
@@ -330,7 +330,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
                     if (scriptClassPath.isEmpty()) {
                         throw new IllegalStateException(String.format("The cache entry for %s appears to be corrupted.", source.getDisplayName()));
                     }
-                    throw new BuildException(String.format("Could not load compiled classes for %s from cache.", source.getDisplayName()), e);
+                    throw new GradleException(String.format("Could not load compiled classes for %s from cache.", source.getDisplayName()), e);
                 }
             }
             return scriptClass;

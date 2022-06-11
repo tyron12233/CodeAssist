@@ -16,7 +16,7 @@
 
 package org.gradle.api.reporting;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.NamedDomainObjectSet;
 import org.gradle.api.Namer;
 import org.gradle.api.Rule;
@@ -56,7 +56,7 @@ public interface ReportContainer<T extends Report> extends NamedDomainObjectSet<
      * {@code remove()}
      * and {@code clear()}.
      */
-    class ImmutableViolationException extends BuildException {
+    class ImmutableViolationException extends GradleException {
         public ImmutableViolationException() {
             super("ReportContainer objects are immutable");
         }

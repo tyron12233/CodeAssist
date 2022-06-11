@@ -16,9 +16,9 @@
 
 package org.gradle.model.internal.manage.binding;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
-public class InvalidManagedTypeException extends BuildException {
+public class InvalidManagedTypeException extends GradleException {
     public InvalidManagedTypeException(String message, Throwable cause) {
         super(message, cause);
     }

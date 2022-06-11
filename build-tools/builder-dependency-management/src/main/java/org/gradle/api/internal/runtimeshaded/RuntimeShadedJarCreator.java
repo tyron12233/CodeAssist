@@ -20,7 +20,7 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.classanalysis.AsmConstants;
 import org.gradle.internal.classpath.ClasspathBuilder;
 import org.gradle.internal.classpath.ClasspathEntryVisitor;
@@ -227,7 +227,7 @@ class RuntimeShadedJarCreator {
         try {
             classReader.accept(remappingVisitor, ClassReader.EXPAND_FRAMES);
         } catch (Exception e) {
-            throw new BuildException("Error in ASM processing class: " + className, e);
+            throw new GradleException("Error in ASM processing class: " + className, e);
         }
 
         return classWriter.toByteArray();

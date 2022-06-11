@@ -1,6 +1,6 @@
 package org.gradle.jvm.toolchain.install.internal;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.cache.FileLock;
@@ -22,7 +22,7 @@ public class DefaultJavaToolchainProvisioningService implements JavaToolchainPro
     public static final String AUTO_DOWNLOAD = "org.gradle.java.installations.auto-download";
 
     @Contextual
-    private static class MissingToolchainException extends BuildException {
+    private static class MissingToolchainException extends GradleException {
 
         public MissingToolchainException(JavaToolchainSpec spec, @Nullable Throwable cause) {
             super("Unable to download toolchain matching these requirements: " + spec.getDisplayName(), cause);

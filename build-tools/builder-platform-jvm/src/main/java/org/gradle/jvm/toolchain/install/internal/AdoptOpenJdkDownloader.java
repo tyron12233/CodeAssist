@@ -2,7 +2,7 @@ package org.gradle.jvm.toolchain.install.internal;
 
 import org.apache.commons.io.IOUtils;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransport;
 import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransportFactory;
@@ -68,7 +68,7 @@ public class AdoptOpenJdkDownloader {
             try {
                 moveFile(targetFile, downloadFile);
             } catch (IOException e) {
-                throw new BuildException("Unable to move downloaded toolchain to target destination", e);
+                throw new GradleException("Unable to move downloaded toolchain to target destination", e);
             }
         } finally {
             downloadFile.delete();

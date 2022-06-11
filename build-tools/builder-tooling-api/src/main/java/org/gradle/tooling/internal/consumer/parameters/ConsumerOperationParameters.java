@@ -16,7 +16,7 @@
 package org.gradle.tooling.internal.consumer.parameters;
 
 import com.google.common.collect.Lists;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.tooling.CancellationToken;
@@ -167,8 +167,8 @@ public class ConsumerOperationParameters implements org.gradle.tooling.internal.
                     // A task created by a provider that does not understand launchables
                     taskPaths.add(((Task) launchable).getPath());
                 } else {
-                    throw new BuildException("Only Task or TaskSelector instances are supported: "
-                                             + launchable.getClass());
+                    throw new GradleException("Only Task or TaskSelector instances are supported: "
+                                              + launchable.getClass());
                 }
             }
             // Tasks are ignored by providers if launchables is not null

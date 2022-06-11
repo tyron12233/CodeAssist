@@ -21,7 +21,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 import org.gradle.api.Action;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.tasks.testing.filter.TestSelectionMatcher;
 import org.gradle.internal.concurrent.ThreadSafe;
 import org.junit.experimental.runners.Enclosed;
@@ -129,7 +129,7 @@ public class JUnitTestClassExecutor implements Action<String> {
         try {
             applicationClassLoader.loadClass("org.junit.experimental.categories.Category");
         } catch (ClassNotFoundException e) {
-            throw new BuildException("JUnit Categories defined but declared JUnit version does not support Categories.");
+            throw new GradleException("JUnit Categories defined but declared JUnit version does not support Categories.");
         }
     }
 

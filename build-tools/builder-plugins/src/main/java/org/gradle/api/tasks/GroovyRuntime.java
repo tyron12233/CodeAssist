@@ -16,7 +16,7 @@
 package org.gradle.api.tasks;
 
 import com.google.common.collect.Iterables;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.Buildable;
 import org.gradle.api.artifacts.Configuration;
@@ -113,7 +113,7 @@ public class GroovyRuntime {
             private FileCollection inferGroovyClasspath() {
                 GroovyJarFile groovyJar = findGroovyJarFile(classpath);
                 if (groovyJar == null) {
-                    throw new BuildException(
+                    throw new GradleException(
                         String.format(
                             "Cannot infer Groovy class path because no Groovy Jar was found on class path: %s",
                             Iterables.toString(classpath)

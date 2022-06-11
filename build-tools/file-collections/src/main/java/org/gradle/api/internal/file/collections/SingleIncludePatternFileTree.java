@@ -1,6 +1,6 @@
 package org.gradle.api.internal.file.collections;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryTree;
 import org.gradle.api.file.FileTreeElement;
 import org.gradle.api.file.FileVisitDetails;
@@ -89,10 +89,10 @@ public class SingleIncludePatternFileTree implements MinimalFileTree, LocalFileT
             File[] children = file.listFiles();
             if (children == null) {
                 if (!file.canRead()) {
-                    throw new BuildException(String.format("Could not list contents of directory '%s' as it is not readable.", file));
+                    throw new GradleException(String.format("Could not list contents of directory '%s' as it is not readable.", file));
                 }
                 // else, might be a link which points to nothing, or has been removed while we're visiting, or ...
-                throw new BuildException(String.format("Could not list contents of '%s'.", file));
+                throw new GradleException(String.format("Could not list contents of '%s'.", file));
             }
             for (File child : children) {
                 if (stopFlag.get()) {

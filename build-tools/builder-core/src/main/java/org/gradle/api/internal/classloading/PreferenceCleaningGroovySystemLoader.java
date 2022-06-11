@@ -1,6 +1,6 @@
 package org.gradle.api.internal.classloading;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 
 import java.lang.reflect.Field;
 import java.util.prefs.AbstractPreferences;
@@ -35,7 +35,7 @@ public class PreferenceCleaningGroovySystemLoader implements GroovySystemLoader 
                 }
             }
         } catch (Exception e) {
-            throw new BuildException("Could not shut down the Groovy system for " + leakingLoader,
+            throw new GradleException("Could not shut down the Groovy system for " + leakingLoader,
                     e);
         }
     }

@@ -1,7 +1,7 @@
 package org.gradle.internal.execution;
 
 import com.google.common.collect.ImmutableList;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.exceptions.Contextual;
 import org.gradle.internal.logging.text.TreeFormatter;
 
@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
  * A {@code WorkValidationException} is thrown when there is some validation problem with a work item.
  */
 @Contextual
-public class WorkValidationException extends BuildException {
+public class WorkValidationException extends GradleException {
     private final List<String> problems;
 
     private WorkValidationException(String message, Collection<String> problems) {

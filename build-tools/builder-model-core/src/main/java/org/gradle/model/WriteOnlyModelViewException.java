@@ -1,6 +1,6 @@
 package org.gradle.model;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.Incubating;
 import org.gradle.model.internal.core.ModelPath;
 import org.gradle.model.internal.core.rule.describe.ModelRuleDescriptor;
@@ -11,7 +11,7 @@ import org.gradle.model.internal.type.ModelType;
  * the time.
  */
 @Incubating
-public class WriteOnlyModelViewException extends BuildException {
+public class WriteOnlyModelViewException extends GradleException {
 
     public WriteOnlyModelViewException(String property,
                                        ModelPath path,

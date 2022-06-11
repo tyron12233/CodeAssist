@@ -1,6 +1,6 @@
 package org.gradle.api.internal.tasks.execution;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.tasks.TaskExecuter;
 import org.gradle.api.internal.tasks.TaskExecuterResult;
@@ -36,7 +36,7 @@ public class SkipOnlyIfTaskExecuter implements TaskExecuter {
         try {
             skip = !task.getOnlyIf().test(task);
         } catch (Throwable t) {
-            state.setOutcome(new BuildException(String.format("Could not evaluate onlyIf predicate for %s.", task), t));
+            state.setOutcome(new GradleException(String.format("Could not evaluate onlyIf predicate for %s.", task), t));
             return TaskExecuterResult.WITHOUT_OUTPUTS;
         }
 

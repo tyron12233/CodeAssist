@@ -12,7 +12,7 @@ import static org.objectweb.asm.Opcodes.RETURN;
 import static org.objectweb.asm.Opcodes.V1_1;
 
 import com.google.common.base.Suppliers;
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.ErroringAction;
 import org.gradle.internal.IoActions;
 
@@ -39,7 +39,7 @@ class MetadataProbe {
                 }
             });
         } catch (FileNotFoundException e) {
-            throw new BuildException("Unable to write Java probe file", e);
+            throw new GradleException("Unable to write Java probe file", e);
         }
         return probeFile;
     }

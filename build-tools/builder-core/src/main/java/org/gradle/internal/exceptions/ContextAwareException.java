@@ -1,13 +1,13 @@
 package org.gradle.internal.exceptions;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.util.internal.TreeVisitor;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ContextAwareException extends BuildException {
+public class ContextAwareException extends GradleException {
 
     public ContextAwareException(Throwable t) {
         initCause(t);

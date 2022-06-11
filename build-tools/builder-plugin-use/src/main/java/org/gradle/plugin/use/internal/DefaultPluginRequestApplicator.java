@@ -1,6 +1,6 @@
 package org.gradle.plugin.use.internal;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.artifacts.dsl.RepositoryHandler;
 import org.gradle.api.internal.DocumentationRegistry;
@@ -200,7 +200,7 @@ public class DefaultPluginRequestApplicator implements PluginRequestApplicator {
             effectivePluginResolver.resolve(request, result);
         } catch (Exception e) {
             throw new LocationAwareException(
-                new BuildException(String.format("Error resolving plugin %s", request.getDisplayName()), e),
+                new GradleException(String.format("Error resolving plugin %s", request.getDisplayName()), e),
                 request.getScriptDisplayName(), request.getLineNumber());
         }
 

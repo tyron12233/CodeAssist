@@ -1,6 +1,6 @@
 package org.gradle.internal.exceptions;
 
-import org.gradle.api.BuildException;
+import org.gradle.api.GradleException;
 import org.gradle.internal.Factory;
 
 import java.io.IOException;
@@ -11,7 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class DefaultMultiCauseException extends BuildException implements MultiCauseException {
+public class DefaultMultiCauseException extends GradleException implements MultiCauseException {
     private final List<Throwable> causes = new CopyOnWriteArrayList<Throwable>();
     private transient ThreadLocal<Boolean> hideCause = threadLocal();
     private transient Factory<String> messageFactory;
