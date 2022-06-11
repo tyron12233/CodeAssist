@@ -1,6 +1,7 @@
 package com.tyron.builder.internal.logging.text;
 
 import com.tyron.builder.api.Action;
+import com.tyron.builder.internal.SystemProperties;
 
 import java.util.Arrays;
 
@@ -14,7 +15,7 @@ public abstract class AbstractLineChoppingStyledTextOutput extends AbstractStyle
     private State currentState = INITIAL_STATE;
 
     protected AbstractLineChoppingStyledTextOutput() {
-        eol = "\n";
+        eol = SystemProperties.getInstance().getLineSeparator();
         eolChars = eol.toCharArray();
         seenFromEol = new SeenFromEol(eolChars);
     }

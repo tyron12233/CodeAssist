@@ -1,8 +1,5 @@
 package com.tyron.builder.internal.logging.text;
 
-import com.tyron.builder.internal.logging.StreamBackedStandardOutputListener;
-import com.tyron.builder.internal.logging.text.StyledTextOutput;
-import com.tyron.builder.internal.logging.text.AbstractStyledTextOutput;
 import com.tyron.builder.api.logging.StandardOutputListener;
 
 import java.io.Closeable;

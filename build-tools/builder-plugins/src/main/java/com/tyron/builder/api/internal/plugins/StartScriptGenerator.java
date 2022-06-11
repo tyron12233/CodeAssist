@@ -128,7 +128,8 @@ public class StartScriptGenerator {
 //            chmod.setPerm("ugo+rx");
 //            chmod.setProject(AntUtil.createProject());
 //            chmod.execute();
-            throw new UnsupportedOperationException("Not yet implemented.");
+//
+            file.setExecutable(true);
         }
     }
 

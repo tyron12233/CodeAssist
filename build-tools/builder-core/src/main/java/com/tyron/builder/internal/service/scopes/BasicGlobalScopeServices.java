@@ -1,5 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
+import com.tyron.builder.api.execution.internal.DefaultTaskInputsListeners;
+import com.tyron.builder.api.execution.internal.TaskInputsListeners;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.internal.Factory;
@@ -11,6 +13,7 @@ import com.tyron.builder.api.internal.file.DefaultFileLookup;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileLookup;
 import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.file.PathToFileResolver;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTree;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
@@ -117,6 +120,10 @@ public class BasicGlobalScopeServices {
 
     PatternSpecFactory createPatternSpecFactory() {
         return PatternSpecFactory.INSTANCE;
+    }
+
+    TaskInputsListeners createTaskInputsListener(ListenerManager listenerManager) {
+        return new DefaultTaskInputsListeners(listenerManager);
     }
 
     protected Factory<PatternSet> createPatternSetFactory(final PatternSpecFactory patternSpecFactory) {

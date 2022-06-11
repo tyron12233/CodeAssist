@@ -2,6 +2,10 @@ plugins {
     id 'java-library'
 }
 
+repositories {
+    mavenCentral()
+}
+
 dependencies {
     api projects.buildTools.builderResources
 

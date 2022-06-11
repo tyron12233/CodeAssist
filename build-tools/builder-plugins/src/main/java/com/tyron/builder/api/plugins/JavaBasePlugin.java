@@ -38,11 +38,14 @@ import com.tyron.builder.api.plugins.internal.JvmPluginsHelper;
 import com.tyron.builder.api.plugins.jvm.internal.JvmEcosystemUtilities;
 import com.tyron.builder.api.plugins.jvm.internal.JvmPluginServices;
 import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.api.reporting.DirectoryReport;
 import com.tyron.builder.api.tasks.SourceSet;
 import com.tyron.builder.api.tasks.SourceSetContainer;
 import com.tyron.builder.api.tasks.TaskProvider;
 import com.tyron.builder.api.tasks.compile.AbstractCompile;
 import com.tyron.builder.api.tasks.compile.JavaCompile;
+import com.tyron.builder.api.tasks.testing.JUnitXmlReport;
+import com.tyron.builder.api.tasks.testing.Test;
 import com.tyron.builder.internal.deprecation.DeprecatableConfiguration;
 import com.tyron.builder.jvm.toolchain.JavaToolchainService;
 import com.tyron.builder.jvm.toolchain.JavaToolchainSpec;
@@ -117,7 +120,7 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
 
         project.getPluginManager().apply(BasePlugin.class);
         project.getPluginManager().apply(JvmEcosystemPlugin.class);
-//        project.getPluginManager().apply(ReportingBasePlugin.class);
+        project.getPluginManager().apply(ReportingBasePlugin.class);
 
         DefaultJavaPluginExtension javaPluginExtension = addExtensions(projectInternal);
 
@@ -425,26 +428,26 @@ public class JavaBasePlugin implements Plugin<BuildProject> {
 
     private void configureTest(final BuildProject project,
                                final JavaPluginExtension javaPluginExtension) {
-//        project.getTasks().withType(Test.class)
-//                .configureEach(test -> configureTestDefaults(test, project, javaPluginExtension));
+        project.getTasks().withType(Test.class)
+                .configureEach(test -> configureTestDefaults(test, project, javaPluginExtension));
     }
 
-//    private void configureTestDefaults(final Test test,
-//                                       BuildProject project,
-//                                       final JavaPluginExtension javaPluginExtension) {
-//        DirectoryReport htmlReport = test.getReports().getHtml();
-//        JUnitXmlReport xmlReport = test.getReports().getJunitXml();
-//
-//        xmlReport.getOutputLocation()
-//                .convention(javaPluginExtension.getTestResultsDir().dir(test.getName()));
-//        htmlReport.getOutputLocation()
-//                .convention(javaPluginExtension.getTestReportDir().dir(test.getName()));
-//        test.getBinaryResultsDirectory().convention(
-//                javaPluginExtension.getTestResultsDir().dir(test.getName() + "/binary"));
-//        test.workingDir(project.getProjectDir());
-//        test.getJavaLauncher()
-//                .convention(getToolchainTool(project, JavaToolchainService::launcherFor));
-//    }
+    private void configureTestDefaults(final Test test,
+                                       BuildProject project,
+                                       final JavaPluginExtension javaPluginExtension) {
+        DirectoryReport htmlReport = test.getReports().getHtml();
+        JUnitXmlReport xmlReport = test.getReports().getJunitXml();
+
+        xmlReport.getOutputLocation()
+                .convention(javaPluginExtension.getTestResultsDir().dir(test.getName()));
+        htmlReport.getOutputLocation()
+                .convention(javaPluginExtension.getTestReportDir().dir(test.getName()));
+        test.getBinaryResultsDirectory().convention(
+                javaPluginExtension.getTestResultsDir().dir(test.getName() + "/binary"));
+        test.workingDir(project.getProjectDir());
+        test.getJavaLauncher()
+                .convention(getToolchainTool(project, JavaToolchainService::launcherFor));
+    }
 
     private <T> Provider<T> getToolchainTool(BuildProject project,
                                              BiFunction<JavaToolchainService, JavaToolchainSpec,

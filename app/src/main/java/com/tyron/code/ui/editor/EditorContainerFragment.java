@@ -279,6 +279,9 @@ public class EditorContainerFragment extends Fragment implements
         );
 
         mMainViewModel.getBottomSheetState().observe(getViewLifecycleOwner(), state -> {
+            if (state == BottomSheetBehavior.STATE_DRAGGING || state == BottomSheetBehavior.STATE_SETTLING) {
+                return;
+            }
             mBehavior.setState(state);
             mOnBackPressedCallback.setEnabled(state == BottomSheetBehavior.STATE_EXPANDED);
         });

@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.logging.text;
 
-import com.tyron.builder.internal.logging.text.StyledTextOutput;
 import com.tyron.builder.api.logging.StandardOutputListener;
+import com.tyron.builder.internal.SystemProperties;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -57,7 +57,7 @@ public abstract class AbstractStyledTextOutput implements StyledTextOutput, Stan
 
     @Override
     public StyledTextOutput println() {
-        text("\n");
+        text(SystemProperties.getInstance().getLineSeparator());
         return this;
     }
 

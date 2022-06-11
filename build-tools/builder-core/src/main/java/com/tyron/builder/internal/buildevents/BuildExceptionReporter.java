@@ -1,28 +1,30 @@
 package com.tyron.builder.internal.buildevents;
 
-import static com.tyron.builder.internal.logging.text.StyledTextOutput.*;
-import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.UserInput;
 
-import com.tyron.builder.api.Action;
 import com.tyron.builder.BuildResult;
-import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
-import com.tyron.builder.execution.MultipleBuildFailures;
-import com.tyron.builder.internal.exceptions.ContextAwareException;
-import com.tyron.builder.util.GUtil;
-import com.tyron.builder.internal.exceptions.ExceptionContextVisitor;
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.internal.exceptions.FailureResolutionAware;
-import com.tyron.builder.internal.exceptions.StyledException;
-import com.tyron.builder.internal.logging.text.StyledTextOutput;
-import com.tyron.builder.internal.logging.text.LinePrefixingStyledTextOutput;
-import com.tyron.builder.internal.logging.text.BufferingStyledTextOutput;
-import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.configuration.LoggingConfiguration;
 import com.tyron.builder.api.logging.configuration.ShowStacktrace;
+import com.tyron.builder.execution.MultipleBuildFailures;
 import com.tyron.builder.initialization.BuildClientMetaData;
+import com.tyron.builder.internal.exceptions.ContextAwareException;
+import com.tyron.builder.internal.exceptions.ExceptionContextVisitor;
+import com.tyron.builder.internal.exceptions.StyledException;
+import com.tyron.builder.internal.logging.text.BufferingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.LinePrefixingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
+import com.tyron.builder.util.internal.GUtil;
 
 import java.util.List;
 import java.util.function.Consumer;
+
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Failure;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Info;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Normal;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.UserInput;
 
 /**
  * Reports the build exception, if any.
@@ -35,17 +37,11 @@ public class BuildExceptionReporter implements Action<Throwable> {
     private final StyledTextOutputFactory textOutputFactory;
     private final LoggingConfiguration loggingConfiguration;
     private final BuildClientMetaData clientMetaData;
-    private final GradleEnterprisePluginManager gradleEnterprisePluginManager;
 
-    public BuildExceptionReporter(StyledTextOutputFactory textOutputFactory, LoggingConfiguration loggingConfiguration, BuildClientMetaData clientMetaData, GradleEnterprisePluginManager gradleEnterprisePluginManager) {
+    public BuildExceptionReporter(StyledTextOutputFactory textOutputFactory, LoggingConfiguration loggingConfiguration, BuildClientMetaData clientMetaData) {
         this.textOutputFactory = textOutputFactory;
         this.loggingConfiguration = loggingConfiguration;
         this.clientMetaData = clientMetaData;
-        this.gradleEnterprisePluginManager = gradleEnterprisePluginManager;
-    }
-
-    public BuildExceptionReporter(StyledTextOutputFactory textOutputFactory, LoggingConfiguration loggingConfiguration, BuildClientMetaData clientMetaData) {
-        this(textOutputFactory, loggingConfiguration, clientMetaData, null);
     }
 
     public void buildFinished(BuildResult result) {
@@ -60,18 +56,18 @@ public class BuildExceptionReporter implements Action<Throwable> {
     @Override
     public void execute(Throwable failure) {
         if (failure instanceof MultipleBuildFailures) {
-            renderMultipleBuildExceptions((MultipleBuildFailures) failure);
-        } else {
-            renderSingleBuildException(failure);
+            List<? extends Throwable> flattenedFailures = ((MultipleBuildFailures) failure).getCauses();
+            renderMultipleBuildExceptions(failure.getMessage(), flattenedFailures);
+            return;
         }
+
+        renderSingleBuildException(failure);
     }
 
-    private void renderMultipleBuildExceptions(MultipleBuildFailures failure) {
-        String message = failure.getMessage();
-        List<? extends Throwable> flattenedFailures = failure.getCauses();
+    private void renderMultipleBuildExceptions(String message, List<? extends Throwable> flattenedFailures) {
         StyledTextOutput output = textOutputFactory.create(BuildExceptionReporter.class, LogLevel.ERROR);
         output.println();
-        output.withStyle(Style.Failure).format("FAILURE: %s", message);
+        output.withStyle(Failure).format("FAILURE: %s", message);
         output.println();
 
         for (int i = 0; i < flattenedFailures.size(); i++) {
@@ -79,8 +75,8 @@ public class BuildExceptionReporter implements Action<Throwable> {
             FailureDetails details = constructFailureDetails("Task", cause);
 
             output.println();
-            output.withStyle(Style.Failure).format("%s: ", i + 1);
-            details.summary.writeTo(output.withStyle(Style.Failure));
+            output.withStyle(Failure).format("%s: ", i + 1);
+            details.summary.writeTo(output.withStyle(Failure));
             output.println();
             output.text("-----------");
 
@@ -96,8 +92,8 @@ public class BuildExceptionReporter implements Action<Throwable> {
         FailureDetails details = constructFailureDetails("Build", failure);
 
         output.println();
-        output.withStyle(Style.Failure).text("FAILURE: ");
-        details.summary.writeTo(output.withStyle(Style.Failure));
+        output.withStyle(Failure).text("FAILURE: ");
+        details.summary.writeTo(output.withStyle(Failure));
         output.println();
 
         writeFailureDetails(output, details);
@@ -138,13 +134,13 @@ public class BuildExceptionReporter implements Action<Throwable> {
         }
 
         @Override
-        public void visitCause(Throwable cause) {
+        protected void visitCause(Throwable cause) {
             failureDetails.failure = cause;
             failureDetails.appendDetails();
         }
 
         @Override
-        public void visitLocation(String location) {
+        protected void visitLocation(String location) {
             failureDetails.location.text(location);
         }
 
@@ -172,7 +168,7 @@ public class BuildExceptionReporter implements Action<Throwable> {
             }
             details.details.text(prefix);
             prefix.append("  ");
-            details.details.style(Style.Info).text("> ").style(Style.Normal);
+            details.details.style(Info).text("> ").style(Normal);
 
             return new LinePrefixingStyledTextOutput(details.details, prefix, false);
         }
@@ -203,23 +199,17 @@ public class BuildExceptionReporter implements Action<Throwable> {
             });
         }
 
-        if (!context.missingBuild && !isGradleEnterprisePluginApplied()) {
+        if (!context.missingBuild) {
             addBuildScanMessage(context);
         }
     }
 
-    // TODO: implement build scan
     private void addBuildScanMessage(ContextImpl context) {
-        context.appendResolution(output -> output.text("Build scan is not yet supported"));
-//        context.appendResolution(output -> {
-//            output.text("Run with ");
-////            output.withStyle(UserInput).format("--%s", StartParameterBuildOptions.BuildScanOption.LONG_OPTION);
-//            output.text(" to get full insights.");
-//        });
-    }
-
-    private boolean isGradleEnterprisePluginApplied() {
-        return gradleEnterprisePluginManager != null && gradleEnterprisePluginManager.isPresent();
+        context.appendResolution(output -> {
+            output.text("Run with ");
+            output.withStyle(UserInput).format("--%s", "BUILDSCAN");
+            output.text(" to get full insights.");
+        });
     }
 
     private void writeGeneralTips(StyledTextOutput resolution) {
@@ -331,7 +321,7 @@ public class BuildExceptionReporter implements Action<Throwable> {
             if (resolution.getHasContent()) {
                 resolution.println();
             }
-            resolution.style(Style.Info).text("> ").style(Style.Normal);
+            resolution.style(Info).text("> ").style(Normal);
             resolutionProducer.accept(resolution);
         }
     }

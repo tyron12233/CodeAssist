@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import dalvik.system.DexClassLoader;
 import dalvik.system.DexFile;
 import dalvik.system.InMemoryDexClassLoader;
 import dalvik.system.PathClassLoader;

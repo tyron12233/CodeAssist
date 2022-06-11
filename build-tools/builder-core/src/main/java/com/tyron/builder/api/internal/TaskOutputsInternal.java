@@ -1,20 +1,25 @@
 package com.tyron.builder.api.internal;
 
+import com.tyron.builder.api.NonNullApi;
 import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.api.internal.tasks.execution.SelfDescribingSpec;
 import com.tyron.builder.api.internal.tasks.properties.PropertyVisitor;
+import com.tyron.builder.api.specs.AndSpec;
 import com.tyron.builder.api.tasks.TaskOutputs;
 
 import java.io.File;
+import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 
+@NonNullApi
 public interface TaskOutputsInternal extends TaskOutputs {
 
     /**
      * Calls the corresponding visitor methods for all outputs added via the runtime API.
      */
     void visitRegisteredProperties(PropertyVisitor visitor);
+
+    AndSpec<? super TaskInternal> getUpToDateSpec();
 
     void setPreviousOutputFiles(FileCollection previousOutputFiles);
 
@@ -23,5 +28,8 @@ public interface TaskOutputsInternal extends TaskOutputs {
      */
     Set<File> getPreviousOutputFiles();
 
-    Predicate<? super TaskInternal> getUpToDateSpec();
+    List<SelfDescribingSpec<TaskInternal>> getCacheIfSpecs();
+
+    List<SelfDescribingSpec<TaskInternal>> getDoNotCacheIfSpecs();
+
 }

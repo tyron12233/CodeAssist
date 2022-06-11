@@ -34,7 +34,7 @@ public abstract class JavaEcosystemSupport {
     private static final String DEPRECATED_JAVA_RUNTIME_JARS = Usage.JAVA_RUNTIME_JARS;
 
     public static void configureSchema(AttributesSchema attributesSchema, final ObjectFactory objectFactory) {
-        configureUsage(attributesSchema, objectFactory);
+            configureUsage(attributesSchema, objectFactory);
         configureLibraryElements(attributesSchema, objectFactory);
         configureBundling(attributesSchema);
         configureTargetPlatform(attributesSchema);
@@ -44,6 +44,14 @@ public abstract class JavaEcosystemSupport {
 
     private static void configureConsumerDescriptors(DescribableAttributesSchema attributesSchema) {
         attributesSchema.addConsumerDescriber(new JavaEcosystemAttributesDescriber());
+    }
+
+    public static void configureDefaultTargetEnvironment(HasAttributes configuration, TargetJvmEnvironment defaultTargetnEnvironment) {
+        AttributeContainerInternal attributes = (AttributeContainerInternal) configuration.getAttributes();
+        // If nobody said anything about this variant's target platform, use whatever the convention says
+        if (!attributes.contains(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE)) {
+            attributes.attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, defaultTargetnEnvironment);
+        }
     }
 
     public static void configureDefaultTargetPlatform(HasAttributes configuration, int majorVersion) {

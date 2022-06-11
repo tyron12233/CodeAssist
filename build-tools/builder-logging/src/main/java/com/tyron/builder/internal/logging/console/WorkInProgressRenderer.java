@@ -22,6 +22,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+
 public class WorkInProgressRenderer implements OutputEventListener {
     private final OutputEventListener listener;
     private final ProgressOperations operations = new ProgressOperations();
@@ -63,13 +66,8 @@ public class WorkInProgressRenderer implements OutputEventListener {
 
     // Transform ProgressCompleteEvent into their corresponding progress OperationIdentifier.
     private Set<OperationIdentifier> toOperationIdSet(Iterable<ProgressCompleteEvent> events) {
-        return Sets.newHashSet(Iterables.transform(events, new Function<ProgressCompleteEvent,
-                OperationIdentifier>() {
-            @Override
-            public @Nullable OperationIdentifier apply(@Nullable ProgressCompleteEvent input) {
-                return input.getProgressOperationId();
-            }
-        }));
+        return StreamSupport.stream(events.spliterator(), false)
+                .map(ProgressCompleteEvent::getProgressOperationId).collect(Collectors.toSet());
     }
 
     private void resizeTo(int newBuildProgressLabelCount) {

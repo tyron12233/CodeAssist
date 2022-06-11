@@ -14,15 +14,6 @@ import javax.annotation.Nullable;
 
 public class IncludedBuildDependencyMetadataBuilder {
 
-//    public LocalComponentMetadata build(CompositeBuildParticipantBuildState build, ProjectComponentIdentifier projectComponentIdentifier) {
-//        return new LocalComponentMetadata() {
-//            @Nullable
-//            @Override
-//            public LocalConfigurationMetadata getConfiguration(String name) {
-//                throw new UnsupportedOperationException();
-//            }
-//        };
-//    }
     public LocalComponentMetadata build(CompositeBuildParticipantBuildState build, ProjectComponentIdentifier projectIdentifier) {
         GradleInternal gradle = build.getMutableModel();
         LocalComponentRegistry localComponentRegistry = gradle.getServices().get(LocalComponentRegistry.class);

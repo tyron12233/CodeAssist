@@ -620,6 +620,7 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     @Override
     public void dependencies(Closure configureClosure) {
         ConfigureUtil.configure(configureClosure, getDependencies());
+        System.out.println("");
     }
 
     @Override

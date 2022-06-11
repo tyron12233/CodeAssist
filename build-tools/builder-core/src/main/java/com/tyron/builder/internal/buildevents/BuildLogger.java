@@ -45,7 +45,7 @@ public class BuildLogger implements InternalBuildListener, TaskExecutionGraphLis
             GradleEnterprisePluginManager gradleEnterprisePluginManager
     ) {
         this.logger = logger;
-        exceptionReporter = new BuildExceptionReporter(textOutputFactory, loggingConfiguration, requestMetaData.getClient(), gradleEnterprisePluginManager);
+        exceptionReporter = new BuildExceptionReporter(textOutputFactory, loggingConfiguration, requestMetaData.getClient());
         resultLogger = new BuildResultLogger(textOutputFactory, buildStartedTime, clock, new TersePrettyDurationFormatter(), workValidationWarningReporter);
     }
 

@@ -65,6 +65,8 @@ import java.util.concurrent.Callable;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import org.codehaus.groovy.reflection.android.AndroidSupport;
+
 /**
  * Compiles Java source files.
  *
@@ -128,7 +130,7 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
         DefaultJavaCompileSpec spec = createSpec();
 
         // temporary fix
-        if (TestUtil.isDalvik()) {
+        if (AndroidSupport.isRunningAndroid()) {
             spec.getCompileOptions().setBootClasspath("/data/data/com.tyron.code/files/rt.jar");
         }
 

@@ -1,21 +1,22 @@
 package com.tyron.builder.internal.execution;
 
-import static com.tyron.builder.internal.execution.fingerprint.InputFingerprinter.*;
-
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.internal.execution.OutputSnapshotter.OutputFileSnapshottingException;
 import com.tyron.builder.internal.execution.caching.CachingDisabledReason;
 import com.tyron.builder.internal.execution.caching.CachingState;
 import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter.InputFileFingerprintingException;
+import com.tyron.builder.internal.execution.fingerprint.InputFingerprinter.InputVisitor;
 import com.tyron.builder.internal.execution.history.OverlappingOutputs;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.internal.execution.workspace.WorkspaceProvider;
+import com.tyron.builder.internal.file.TreeType;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
-import com.tyron.builder.internal.file.TreeType;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -24,7 +25,6 @@ import java.util.Map;
 import java.util.Optional;
 
 public interface UnitOfWork extends Describable {
-
     /**
      * Determine the identity of the work unit that uniquely identifies it
      * among the other work units of the same type in the current build.
@@ -143,7 +143,7 @@ public interface UnitOfWork extends Describable {
     /**
      * Handles when an output cannot be read while snapshotting.
      */
-    default void handleUnreadableOutputs(OutputSnapshotter.OutputFileSnapshottingException ex) {
+    default void handleUnreadableOutputs(OutputFileSnapshottingException ex) {
         throw ex;
     }
 
@@ -159,6 +159,15 @@ public interface UnitOfWork extends Describable {
     default Optional<CachingDisabledReason> shouldDisableCaching(@Nullable OverlappingOutputs detectedOverlappingOutputs) {
         return Optional.empty();
     }
+
+    /**
+     * Tell consumers about inputs to watch during the next build.
+     *
+     * @param hasEmptySources {@code true} if the work has source properties and those properties are empty fingerprints.
+     *
+     * @see com.tyron.builder.internal.execution.steps.SkipEmptyWorkStep
+     */
+    default void broadcastRelevantFileSystemInputs(boolean hasEmptySources) {}
 
     /**
      * Is this work item allowed to load from the cache, or if we only allow it to be stored.

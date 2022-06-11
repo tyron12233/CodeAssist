@@ -98,12 +98,7 @@ public class DefaultRedrawableLabel implements RedrawableLabel {
     }
 
     private static Action<AnsiContext> writeText(final String text) {
-        return new Action<AnsiContext>() {
-            @Override
-            public void execute(AnsiContext ansi) {
-                ansi.a(text);
-            }
-        };
+        return ansi -> ansi.a(text);
     }
 
     // Only for relative positioning

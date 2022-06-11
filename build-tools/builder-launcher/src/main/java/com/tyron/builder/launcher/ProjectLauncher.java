@@ -39,7 +39,7 @@ public class ProjectLauncher {
     public ProjectLauncher(StartParameterInternal startParameter, OutputEventListener outputEventListener) {
         this.startParameter = startParameter;
         this.outputEventListener = outputEventListener;
-        globalServices = ProjectBuilderImpl.getGlobalServices(startParameter);
+        globalServices = ProjectBuilderImpl.createGlobalServices(startParameter);
     }
 
     public ServiceRegistry getGlobalServices() {
@@ -47,16 +47,7 @@ public class ProjectLauncher {
     }
 
     private void prepare() {
-        GradleUserHomeScopeServiceRegistry gradleUserHomeScopeServiceRegistry =
-                globalServices.get(GradleUserHomeScopeServiceRegistry.class);
-        ServiceRegistry gradleUserHomeScopeServices = gradleUserHomeScopeServiceRegistry
-                .getServicesFor(startParameter.getGradleUserHomeDir());
-        VirtualFileSystem virtualFileSystem =
-                gradleUserHomeScopeServices.get(VirtualFileSystem.class);
-        FileSystemAccess fileSystemAccess = gradleUserHomeScopeServices.get(FileSystemAccess.class);
 
-        ListenerManager listenerManager = gradleUserHomeScopeServices.get(ListenerManager.class);
-        System.out.println(listenerManager);
     }
 
     public void execute() {
@@ -69,9 +60,7 @@ public class ProjectLauncher {
         Action<Throwable> reporter = throwable -> {
 
         };
-        Factory<LoggingManagerInternal> factory =
-                globalServices.getFactory(LoggingManagerInternal.class);
-        LoggingManagerInternal loggingManagerInternal = factory.create();
+        LoggingManagerInternal loggingManagerInternal = globalServices.get(LoggingManagerInternal.class);
 
         ExceptionReportingAction action = new ExceptionReportingAction(reporter,
                 loggingManagerInternal, executionListener -> {
@@ -87,7 +76,7 @@ public class ProjectLauncher {
     private Runnable runBuildAndCloseServices(StartParameterInternal startParameter, BuildActionExecuter<BuildActionParameters, BuildRequestContext> executer, ServiceRegistry sharedServices, Object... stopBeforeSharedServices) {
         BuildActionParameters
                 parameters = createBuildActionParameters(startParameter);
-        Stoppable stoppable = new CompositeStoppable(); //.add(stopBeforeSharedServices).add(sharedServices);
+        Stoppable stoppable = new CompositeStoppable().add(stopBeforeSharedServices).add(sharedServices);
         return new RunBuildAction(executer, startParameter, clientMetaData(), getBuildStartTime(), parameters, sharedServices, stoppable);
     }
 
@@ -101,8 +90,7 @@ public class ProjectLauncher {
                 startParameter.getLogLevel(),
 //                daemonParameters.isEnabled(),
                 false,
-                ClassPath.EMPTY,
-                outputEventListener);
+                ClassPath.EMPTY);
     }
 
     private long getBuildStartTime() {
