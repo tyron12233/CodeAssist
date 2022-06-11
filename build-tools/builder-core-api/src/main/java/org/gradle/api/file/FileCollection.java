@@ -2,6 +2,7 @@ package org.gradle.api.file;
 
 import org.gradle.api.provider.Provider;
 import org.gradle.api.Buildable;
+import org.gradle.api.specs.Spec;
 
 import java.io.File;
 import java.util.Set;
@@ -98,7 +99,7 @@ public interface FileCollection extends Iterable<File>, Buildable {
      * @param filterSpec The criteria to use to select the contents of the filtered collection.
      * @return The filtered collection.
      */
-    FileCollection filter(Predicate<? super File> filterSpec);
+    FileCollection filter(Spec<? super File> filterSpec);
 
     /**
      * Returns true if this collection is empty. Generally, calling this method is more efficient than calling {@code

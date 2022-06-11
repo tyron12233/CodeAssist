@@ -25,6 +25,7 @@ import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.PluginAware;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
+import org.gradle.api.resources.ResourceHandler;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskOutputs;
 import org.gradle.api.tasks.WorkResult;
@@ -944,6 +945,14 @@ public interface Project extends Comparable<Project>, ExtensionAware, PluginAwar
     CopySpec copySpec();
 
     /**
+     * Returns the evaluation state of this project. You can use this to access information about the evaluation of this
+     * project, such as whether it has failed.
+     *
+     * @return the project state. Never returns null.
+     */
+    ProjectState getState();
+
+    /**
      * <p>Creates a container for managing named objects of the specified type. The specified type must have a public constructor which takes the name as a String parameter.</p>
      *
      * <p>All objects <b>MUST</b> expose their name as a bean property named "name". The name must be constant for the life of the object.</p>
@@ -979,6 +988,12 @@ public interface Project extends Comparable<Project>, ExtensionAware, PluginAwar
      */
     <T> NamedDomainObjectContainer<T> container(Class<T> type, Closure factoryClosure);
 
+    /**
+     * Provides access to resource-specific utility methods, for example factory methods that create various resources.
+     *
+     * @return Returned instance contains various resource-specific utility methods.
+     */
+    ResourceHandler getResources();
 
     /**
      * Creates a directory and returns a file pointing to it.

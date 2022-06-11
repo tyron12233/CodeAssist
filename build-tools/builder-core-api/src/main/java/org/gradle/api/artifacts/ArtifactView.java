@@ -4,6 +4,7 @@ import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.attributes.HasAttributes;
 import org.gradle.api.attributes.HasConfigurableAttributes;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.specs.Spec;
 
 import java.util.function.Predicate;
 
@@ -38,7 +39,7 @@ public interface ArtifactView extends HasAttributes {
          *
          * This method cannot be called a multiple times for a view.
          */
-        ViewConfiguration componentFilter(Predicate<? super ComponentIdentifier> componentFilter);
+        ViewConfiguration componentFilter(Spec<? super ComponentIdentifier> componentFilter);
 
         /**
          * Determines whether the view should be resolved in a 'lenient' fashion.

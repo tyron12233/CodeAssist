@@ -35,6 +35,7 @@ import org.gradle.api.internal.plugins.PluginManagerInternal;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.api.provider.ProviderFactory;
+import org.gradle.api.resources.ResourceHandler;
 import org.gradle.configuration.ConfigurationTargetIdentifier;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.configuration.internal.ListenerBuildOperationDecorator;
@@ -497,6 +498,11 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
     @Override
     public FileTree tarTree(Object tarPath) {
         return getFileOperations().tarTree(tarPath);
+    }
+
+    @Override
+    public ResourceHandler getResources() {
+        return getFileOperations().getResources();
     }
 
     @Override
@@ -1004,6 +1010,8 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
         extensibleDynamicObject.addObject(new BeanDynamicObject(buildScript).withNoProperties().withNotImplementsMissing(),
                 ExtensibleDynamicObject.Location.BeforeConvention);
     }
+
+
 
     @Override
     public <T> NamedDomainObjectContainer<T> container(Class<T> type) {

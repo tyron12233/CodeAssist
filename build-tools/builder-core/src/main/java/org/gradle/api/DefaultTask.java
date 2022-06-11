@@ -26,7 +26,7 @@ import org.gradle.api.internal.tasks.DefaultTaskOutputs;
 import org.gradle.api.internal.tasks.InputChangesAwareTaskAction;
 import org.gradle.api.internal.tasks.TaskContainerInternal;
 import org.gradle.api.internal.tasks.TaskDestroyablesInternal;
-import org.gradle.api.internal.tasks.TaskInputsInternal;
+import org.gradle.api.internal.TaskInputsInternal;
 import org.gradle.api.internal.tasks.TaskMutator;
 import org.gradle.api.internal.tasks.TaskStateInternal;
 import org.gradle.api.internal.tasks.properties.PropertyWalker;

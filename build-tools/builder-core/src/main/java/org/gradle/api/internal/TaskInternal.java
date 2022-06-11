@@ -7,12 +7,9 @@ import org.gradle.internal.logging.StandardOutputCapture;
 import org.gradle.api.internal.project.taskfactory.TaskIdentity;
 import org.gradle.internal.resources.ResourceLock;
 import org.gradle.api.internal.tasks.InputChangesAwareTaskAction;
-import org.gradle.api.internal.tasks.TaskInputsInternal;
 import org.gradle.api.internal.tasks.TaskStateInternal;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.TaskDependency;
-import org.gradle.api.internal.TaskOutputsInternal;
-import org.gradle.api.tasks.TaskState;
 import org.gradle.util.Path;
 
 import java.io.File;

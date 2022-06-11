@@ -96,6 +96,7 @@ public interface ProjectInternal extends Project, ProjectIdentifier, HasScriptSe
 
     ServiceRegistry getServices();
 
+    @Override
     ProjectStateInternal getState();
 
     @Override
