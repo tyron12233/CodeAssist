@@ -57,7 +57,12 @@ import com.tyron.code.service.IndexService;
 import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.EditorContainerFragment;
 import com.tyron.code.ui.file.FileViewModel;
+import com.tyron.code.ui.git.*;
+import com.tyron.code.ui.git.GitFragmentUtils;
+import com.tyron.code.ui.git.GitViewModel;
 import com.tyron.completion.java.provider.CompletionEngine;
+
+import com.tyron.builder.project.api.FileManager;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import javax.tools.Diagnostic;
@@ -73,6 +78,8 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+
+import kotlin.Unit;
 
 public class MainFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
@@ -90,13 +97,14 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 
         MainFragment fragment = new MainFragment();
         fragment.setArguments(bundle);
-
+		
         return fragment;
     }
 
     private LogViewModel mLogViewModel;
     private MainViewModel mMainViewModel;
     private FileViewModel mFileViewModel;
+    private GitViewModel mGitViewModel;
 
     private ProjectManager mProjectManager;
     private View mRoot;
@@ -112,6 +120,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                 if (mMainViewModel.getDrawerState()
                         .getValue()) {
                     mMainViewModel.setDrawerState(false);
+                }
+                if (mMainViewModel.getGitDrawerState()
+                        .getValue()) {
+                    mMainViewModel.setGitDrawerState(false);
                 }
             }
         }
@@ -144,8 +156,35 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mLogViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
+        mGitViewModel = new ViewModelProvider(requireActivity()).get(GitViewModel.class);
         mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
         mServiceConnection = new CompilerServiceConnection(mMainViewModel, mLogViewModel);
+        
+        mHandler = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                Level level = record.getLevel();
+                if (Level.WARNING.equals(level)) {
+                    mLogViewModel.w(LogViewModel.IDE, record.getMessage());
+                } else if (Level.SEVERE.equals(level)) {
+                    mLogViewModel.e(LogViewModel.IDE, record.getMessage());
+                } else {
+                    mLogViewModel.d(LogViewModel.IDE, record.getMessage());
+                }
+            }
+
+            @Override
+            public void flush() {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+
+            @Override
+            public void close() throws SecurityException {
+                mLogViewModel.clear(LogViewModel.IDE);
+            }
+        };
+        IdeLog.getLogger().addHandler(mHandler);
+        
     }
 
     @Override
@@ -177,7 +216,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
+        
         if (mRoot instanceof DrawerLayout) {
             DrawerLayout drawerLayout = (DrawerLayout) mRoot;
             mToolbar.setNavigationOnClickListener(v -> {
@@ -190,15 +229,24 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                 }
             });
             drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            	View view = mRoot.findViewById(R.id.nav_root);
                 @Override
                 public void onDrawerOpened(@NonNull View p1) {
-                    mMainViewModel.setDrawerState(true);
-                    onBackPressedCallback.setEnabled(true);
+                	if(p1 == view) {
+                    	mMainViewModel.setDrawerState(true);
+                    } else {
+                    	mMainViewModel.setGitDrawerState(true);
+                    }
+                    onBackPressedCallback.setEnabled(true); 
                 }
 
                 @Override
                 public void onDrawerClosed(@NonNull View p1) {
-                    mMainViewModel.setDrawerState(false);
+                	if(p1 == view) {
+                    	mMainViewModel.setDrawerState(false);
+                    } else {
+                    	mMainViewModel.setGitDrawerState(false);
+                    }
                     onBackPressedCallback.setEnabled(false);
                 }
             });
@@ -227,6 +275,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mMainViewModel.setFiles(new ArrayList<>());
             mLogViewModel.clear(LogViewModel.BUILD_LOG);
         }
+
         mMainViewModel.isIndexing()
                 .observe(getViewLifecycleOwner(), indexing -> {
                     mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
@@ -241,56 +290,27 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mMainViewModel.getDrawerState()
                     .observe(getViewLifecycleOwner(), isOpen -> {
                         if (isOpen) {
-                            ((DrawerLayout) mRoot).open();
+                            ((DrawerLayout) mRoot).openDrawer(GravityCompat.START);
                         } else {
-                            ((DrawerLayout) mRoot).close();
+                            ((DrawerLayout) mRoot).closeDrawer(GravityCompat.START);
+                        }
+                    });
+        	mMainViewModel.getGitDrawerState()
+                    .observe(getViewLifecycleOwner(), isOpen -> {
+                        if (isOpen) {
+                            ((DrawerLayout) mRoot).openDrawer(GravityCompat.END);
+                        } else {
+                            ((DrawerLayout) mRoot).closeDrawer(GravityCompat.END);
                         }
                     });
         }
-
-        mHandler = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                Level level = record.getLevel();
-                if (Level.WARNING.equals(level)) {
-                    mLogViewModel.w(LogViewModel.IDE, record.getMessage());
-                } else if (Level.SEVERE.equals(level)) {
-                    mLogViewModel.e(LogViewModel.IDE, record.getMessage());
-                } else {
-                    mLogViewModel.d(LogViewModel.IDE, record.getMessage());
-                }
-            }
-
-            @Override
-            public void flush() {
-                mLogViewModel.clear(LogViewModel.IDE);
-            }
-
-            @Override
-            public void close() throws SecurityException {
-                mLogViewModel.clear(LogViewModel.IDE);
-            }
-        };
-        IdeLog.getLogger().addHandler(mHandler);
-
+		
         // can be null on tablets
         View navRoot = view.findViewById(R.id.nav_root);
-
-        ViewCompat.setOnApplyWindowInsetsListener(mRoot, (v, insets) -> {
-            if (navRoot != null) {
-                ViewCompat.dispatchApplyWindowInsets(navRoot, insets);
-            }
-            ViewGroup viewGroup = (ViewGroup) mRoot;
-            for (int i = 0; i < viewGroup.getChildCount(); i++) {
-                View child = viewGroup.getChildAt(i);
-                if (child == navRoot) {
-                    continue;
-                }
-
-                ViewCompat.dispatchApplyWindowInsets(child, insets);
-            }
-            return ViewCompat.onApplyWindowInsets(v, insets);
-        });
+		applyWindowInsets(navRoot);
+   
+        View gitNav = view.findViewById(R.id.git_nav);
+        applyWindowInsets(gitNav);
     }
 
     @Override
@@ -308,7 +328,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-
+		
         if (mHandler != null) {
             IdeLog.getLogger().removeHandler(mHandler);
         }
@@ -344,6 +364,24 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         }
     }
 
+	private void applyWindowInsets(View navView) {
+		ViewCompat.setOnApplyWindowInsetsListener(mRoot, (v, insets) -> {
+            if (navView != null) {
+                ViewCompat.dispatchApplyWindowInsets(navView, insets);
+            }
+            ViewGroup viewGroup = (ViewGroup) mRoot;
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                View child = viewGroup.getChildAt(i);
+                if (child == navView) {
+                    continue;
+                }
+
+                ViewCompat.dispatchApplyWindowInsets(child, insets);
+            }
+            return ViewCompat.onApplyWindowInsets(v, insets);
+        });
+     }
+     
     /**
      * Tries to open a file into the editor
      *
@@ -361,6 +399,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             return;
         }
 
+		
+		
         if (project.equals(ProjectManager.getInstance().getCurrentProject())) {
             project.getSettings().refresh();
         }
@@ -368,6 +408,17 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 //        IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
+		mGitViewModel.setPostCheckout( () -> {
+			mFileViewModel.refreshNode(mProject.getRootFile());
+			return Unit.INSTANCE;
+		});
+		
+		mGitViewModel.setOnSave( () -> {
+			mMainViewModel.clear();
+			return Unit.INSTANCE;
+		});
+		mGitViewModel.setPath(mProject.getRootFile().getAbsolutePath());
+        
         mIndexServiceConnection.setProject(project);
 
         mMainViewModel.setToolbarTitle(project.getRootFile()
@@ -381,7 +432,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         Intent intent = new Intent(requireContext(), IndexService.class);
         requireActivity().startService(intent);
         requireActivity().bindService(intent, mIndexServiceConnection, Context.BIND_IMPORTANT);
+        
     }
+
+
 
     private void compile(BuildType type) {
         if (mServiceConnection.isCompiling() || CompletionEngine.isIndexing()) {
