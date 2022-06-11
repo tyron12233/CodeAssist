@@ -23,6 +23,8 @@ import org.gradle.api.artifacts.result.ResolutionResult;
 import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.artifacts.result.ResolvedDependencyResult;
 import org.gradle.api.attributes.AttributeContainer;
+import org.gradle.api.internal.provider.DefaultProvider;
+import org.gradle.api.provider.Provider;
 import org.gradle.internal.Actions;
 import org.gradle.internal.Factory;
 import org.gradle.util.internal.ConfigureUtil;
@@ -46,6 +48,11 @@ public class DefaultResolutionResult implements ResolutionResult {
     @Override
     public ResolvedComponentResult getRoot() {
         return rootSource.create();
+    }
+
+    @Override
+    public Provider<ResolvedComponentResult> getRootComponent() {
+        return new DefaultProvider<>(this::getRoot);
     }
 
     @Override

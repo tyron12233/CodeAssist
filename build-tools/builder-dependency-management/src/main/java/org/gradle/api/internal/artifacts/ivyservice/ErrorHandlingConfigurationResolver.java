@@ -41,7 +41,9 @@ import org.gradle.api.internal.artifacts.ResolveContext;
 import org.gradle.api.internal.artifacts.ResolverResults;
 
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
+import org.gradle.api.internal.provider.DefaultProvider;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.specs.Spec;
 
 import java.io.File;
@@ -215,6 +217,11 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
             } catch (Exception e) {
                 throw wrapException(e, resolveContext);
             }
+        }
+
+        @Override
+        public Provider<ResolvedComponentResult> getRootComponent() {
+            return new DefaultProvider<>(this::getRoot);
         }
 
         @Override

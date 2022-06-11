@@ -91,8 +91,12 @@ import org.gradle.api.internal.file.FileCollectionStructureVisitor;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.project.ProjectState;
+import org.gradle.api.internal.provider.DefaultProvider;
 import org.gradle.api.internal.tasks.FailureCollectingTaskDependencyResolveContext;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
+import org.gradle.api.provider.Provider;
+import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
 import org.gradle.api.tasks.TaskDependency;
 import org.gradle.configuration.internal.UserCodeApplicationContext;
 import org.gradle.internal.Actions;
@@ -1975,6 +1979,11 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
             }
 
             @Override
+            public Provider<ResolvedComponentResult> getRootComponent() {
+                return new DefaultProvider<>(this::getRoot);
+            }
+
+            @Override
             public Set<? extends DependencyResult> getAllDependencies() {
                 resolve();
                 return delegate.getAllDependencies();
@@ -2041,7 +2050,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         private final ImmutableAttributesFactory attributesFactory;
         private final AttributeContainerInternal configurationAttributes;
         private AttributeContainerInternal viewAttributes;
-        private Predicate<? super ComponentIdentifier> componentFilter;
+        private Spec<? super ComponentIdentifier> componentFilter;
         private boolean lenient;
         private boolean attributesUsed;
 
@@ -2067,7 +2076,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         }
 
         @Override
-        public ArtifactViewConfiguration componentFilter(Predicate<? super ComponentIdentifier> componentFilter) {
+        public ArtifactViewConfiguration componentFilter(Spec<? super ComponentIdentifier> componentFilter) {
             assertComponentFilterUnset();
             this.componentFilter = componentFilter;
             return this;
@@ -2098,7 +2107,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
 
         private Predicate<? super ComponentIdentifier> lockComponentFilter() {
             if (componentFilter == null) {
-                componentFilter = Predicates.satisfyAll();
+                componentFilter = Specs.satisfyAll();
             }
             return componentFilter;
         }
