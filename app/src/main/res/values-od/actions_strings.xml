@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Text Actions -->
+    <string name="text_actions">Text Actions</string>
+    <string name="expand_selection">ଚୟନ ବିସ୍ତାର କରନ୍ତୁ</string>
+    <string name="copied_to_clipoard">କ୍ଲିପବୋର୍ଡକୁ ଟେକ୍ସଟ୍ କପି କରାଯାଇଛି |</string>
+
+    <!-- File Actions -->
+    <string name="menu_action_new_java_class">Java class </string>
+    <string name="menu_action_new_kotlin_class">Kotlin class</string>
+    <string name="menu_action_new_directory">Directory</string>
+    <string name="menu_action_new_file">File</string>
+    <string name="directory_name">Directory name</string>
+    <string name="file_name">File name</string>
+    <string name="menu_new">ନୂତନ</string>
+    <string name="menu_import">Import</string>
+    <string name="menu_refactor">ରିଫାକ୍ଟର</string>
+    <string name="menu_new_layout">ନୂତନ ଲେଆଉଟ୍</string>
+
+    <string name="error_file_creation">ଫାଇଲ୍ ସୃଷ୍ଟି କରିବାରେ ଅସମର୍ଥ |</string>
+</resources>
