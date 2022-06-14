@@ -82,7 +82,7 @@ Clone this repository to your local device and then open it on Android Studio.
 
 # Special thanks
 
-- Rosemoe/CodeEditor 
+- Rosemoe/sora-editor
 
 - JavaNIDE
 
@@ -91,5 +91,3 @@ Clone this repository to your local device and then open it on Android Studio.
 - Java Language Server
 
 - Ilyasse Salama
-
-<img style="border-radius: 30px; width: 100%; height: 100%" src="https://krishnavyshak.github.io/info_codeassist_1.png">
