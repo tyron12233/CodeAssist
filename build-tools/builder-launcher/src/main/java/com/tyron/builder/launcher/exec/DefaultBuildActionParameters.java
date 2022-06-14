@@ -2,6 +2,7 @@ package com.tyron.builder.launcher.exec;
 
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.util.GUtil;
 
 import java.io.File;
@@ -9,6 +10,7 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
+// CodeAssist changed: added output event  listener field
 public class DefaultBuildActionParameters implements BuildActionParameters, Serializable {
     private final File currentDir;
     private final LogLevel logLevel;
@@ -17,17 +19,23 @@ public class DefaultBuildActionParameters implements BuildActionParameters, Seri
 
     private final boolean useDaemon;
     private final ClassPath injectedPluginClasspath;
+    private final OutputEventListener outputEventListener;
 
     public DefaultBuildActionParameters(Map<?, ?> systemProperties, Map<String, String> envVariables, File currentDir, LogLevel logLevel, boolean useDaemon, ClassPath injectedPluginClasspath) {
+        this(systemProperties, envVariables, currentDir, logLevel, useDaemon, injectedPluginClasspath, null);
+    }
+
+    public DefaultBuildActionParameters(Map<?, ?> systemProperties, Map<String, String> envVariables, File currentDir, LogLevel logLevel, boolean useDaemon, ClassPath injectedPluginClasspath, OutputEventListener outputEventListener) {
         this.currentDir = currentDir;
         this.logLevel = logLevel;
         this.useDaemon = useDaemon;
         assert systemProperties != null;
         assert envVariables != null;
-        this.systemProperties = new HashMap<String, String>();
+        this.systemProperties = new HashMap<>();
         GUtil.addToMap(this.systemProperties, systemProperties);
-        this.envVariables = new HashMap<String, String>(envVariables);
+        this.envVariables = new HashMap<>(envVariables);
         this.injectedPluginClasspath = injectedPluginClasspath;
+        this.outputEventListener = outputEventListener;
     }
 
     @Override
@@ -70,5 +78,10 @@ public class DefaultBuildActionParameters implements BuildActionParameters, Seri
     @Override
     public ClassPath getInjectedPluginClasspath() {
         return injectedPluginClasspath;
+    }
+
+    @Override
+    public OutputEventListener getOutputEventListener() {
+        return outputEventListener;
     }
 }

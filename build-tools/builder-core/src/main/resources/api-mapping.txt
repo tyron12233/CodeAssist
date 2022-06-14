@@ -1,0 +1,6 @@
+JavaVersion:com.tyron.builder.api.JavaVersion
+RepositoriesMode:com.tyron.builder.api.initialization.resolve.RepositoriesMode
+DependencyResolutionManagement:com.tyron.builder.api.initialization.resolve.DependencyResolutionManagement
+RulesMode:com.tyron.builder.api.initialization.resolve.RulesMode
+ProjectDescriptor:com.tyron.builder.api.initialization.ProjectDescriptor
+Settings:com.tyron.builder.api.initialization.Settings

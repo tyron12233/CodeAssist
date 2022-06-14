@@ -1,8 +1,11 @@
 package com.tyron.builder.composite.internal;
 
+
+import com.tyron.builder.api.artifacts.component.BuildIdentifier;
+import com.tyron.builder.api.internal.TaskInternal;
+import com.tyron.builder.internal.buildtree.BuildTreeWorkGraph;
 import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
-import com.tyron.builder.internal.buildtree.BuildTreeWorkGraph;
 
 import java.util.function.Function;
 
@@ -14,7 +17,12 @@ public interface BuildTreeWorkGraphController {
     /**
      * Locates a task node in another build's work graph. Does not schedule the task for execution, use {@link IncludedBuildTaskResource#queueForExecution()} to queue the task for execution.
      */
-    IncludedBuildTaskResource locateTask(TaskIdentifier taskIdentifier);
+    IncludedBuildTaskResource locateTask(BuildIdentifier targetBuild, TaskInternal task);
+
+    /**
+     * Locates a task node in another build's work graph. Does not schedule the task for execution, use {@link IncludedBuildTaskResource#queueForExecution()} to queue the task for execution.
+     */
+    IncludedBuildTaskResource locateTask(BuildIdentifier targetBuild, String taskPath);
 
     /**
      * Runs the given action against a new, empty work graph. This allows tasks to be run while calculating the task graph of the build tree, for example to run `buildSrc` tasks or

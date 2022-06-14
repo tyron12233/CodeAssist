@@ -66,7 +66,7 @@ public abstract class AbstractFileTreeElement implements FileTreeElement {
                 }
             } else {
                 boolean mkdirs = target.getParentFile().mkdirs();
-                if (!mkdirs) {
+                if (!target.getParentFile().exists() && !mkdirs) {
                     throw new IOException("Failed to create parent directories for: " + target.getParentFile());
                 }
                 copyFile(target);

@@ -1,0 +1,19 @@
+import com.tyron.builder.api.tasks.*
+import com.tyron.builder.api.attributes.*
+
+plugins {
+    id "java-library"
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation it.project(path: ':producer')
+}
+
+java {
+    sourceCompatibility = "1.8"
+    targetCompatibility = "1.8"
+}

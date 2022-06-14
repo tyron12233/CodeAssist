@@ -24,7 +24,7 @@ public class DiagnosticWrapper implements Diagnostic<File> {
     private long lineNumber;
     private long columnNumber;
     private View.OnClickListener onClickListener;
-    private String message;
+    private CharSequence message;
 
     /** Extra information for this diagnostic */
     private Object mExtra;
@@ -110,6 +110,10 @@ public class DiagnosticWrapper implements Diagnostic<File> {
 
     @Override
     public String getMessage(Locale locale) {
+        return message.toString();
+    }
+
+    public CharSequence getMessageCharSequence() {
         return message;
     }
 
@@ -137,7 +141,7 @@ public class DiagnosticWrapper implements Diagnostic<File> {
         this.endPosition = endPosition;
     }
 
-    public void setMessage(String message) {
+    public void setMessage(CharSequence message) {
         this.message = message;
     }
 

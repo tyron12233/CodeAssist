@@ -1,7 +1,24 @@
 package com.tyron.builder.internal.service.scopes;
 
+import com.tyron.builder.api.internal.BuildScopeListenerRegistrationListener;
+import com.tyron.builder.api.internal.CollectionCallbackActionDecorator;
+import com.tyron.builder.api.internal.artifacts.dsl.dependencies.ProjectFinder;
+import com.tyron.builder.api.internal.collections.DomainObjectCollectionFactory;
+import com.tyron.builder.api.internal.plugins.DefaultPluginManager;
+import com.tyron.builder.api.internal.plugins.ImperativeOnlyPluginTarget;
+import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
+import com.tyron.builder.api.internal.plugins.PluginTarget;
+import com.tyron.builder.api.internal.project.ProjectStateRegistry;
+import com.tyron.builder.cache.GlobalCacheLocations;
+import com.tyron.builder.cache.internal.DefaultFileContentCacheFactory;
+import com.tyron.builder.cache.internal.FileContentCacheFactory;
+import com.tyron.builder.cache.internal.InMemoryCacheDecoratorFactory;
+import com.tyron.builder.cache.internal.SplitFileContentCacheFactory;
+import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.configuration.ConfigurationTargetIdentifier;
+import com.tyron.builder.configuration.internal.ListenerBuildOperationDecorator;
+import com.tyron.builder.configuration.internal.UserCodeApplicationContext;
 import com.tyron.builder.execution.BuildWorkExecutor;
 import com.tyron.builder.execution.ProjectConfigurer;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
@@ -21,13 +38,16 @@ import com.tyron.builder.execution.taskgraph.DefaultTaskExecutionGraph;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.internal.id.UniqueId;
+import com.tyron.builder.internal.instantiation.InstantiatorFactory;
 import com.tyron.builder.internal.logging.text.StyledTextOutputFactory;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.reflect.Instantiator;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.options.OptionReader;
 import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
+import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.work.WorkerLeaseService;
 import com.tyron.builder.internal.work.AsyncWorkTracker;
 import com.tyron.builder.internal.work.DefaultAsyncWorkTracker;
@@ -102,18 +122,24 @@ public class GradleScopeServices extends DefaultServiceRegistry {
             PlanExecutor planExecutor,
             List<NodeExecutor> nodeExecutors,
             BuildOperationExecutor buildOperationExecutor,
-            GradleInternal gradle,
-            ListenerBroadcast<TaskExecutionGraphListener> taskExecutionGraphListenerListeners,
-            ListenerBroadcast<TaskExecutionListener> taskExecutionListeners,
+            ListenerBuildOperationDecorator listenerBuildOperationDecorator,
+            GradleInternal gradleInternal,
+            ListenerBroadcast<TaskExecutionListener> taskListeners,
+            ListenerBroadcast<TaskExecutionGraphListener> graphListeners,
+            ListenerManager listenerManager,
+            ProjectStateRegistry projectStateRegistry,
             ServiceRegistry gradleScopedServices
     ) {
         return new DefaultTaskExecutionGraph(
                 planExecutor,
                 nodeExecutors,
                 buildOperationExecutor,
-                gradle,
-                taskExecutionGraphListenerListeners,
-                taskExecutionListeners,
+                listenerBuildOperationDecorator,
+                gradleInternal,
+                graphListeners,
+                taskListeners,
+                listenerManager.getBroadcaster(BuildScopeListenerRegistrationListener.class),
+                projectStateRegistry,
                 gradleScopedServices
         );
     }
@@ -122,10 +148,31 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         return parentRegistry.createChild(get(GradleInternal.class).getClassLoaderScope());
     }
 
-//    PluginManagerInternal createPluginManager(Instantiator instantiator, GradleInternal gradleInternal, PluginRegistry pluginRegistry, InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator decorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
-//        PluginTarget target = new ImperativeOnlyPluginTarget<>(gradleInternal);
-//        return instantiator.newInstance(DefaultPluginManager.class, pluginRegistry, instantiatorFactory.inject(this), target, buildOperationExecutor, userCodeApplicationContext, decorator, domainObjectCollectionFactory);
-//    }
+    PluginManagerInternal createPluginManager(Instantiator instantiator, GradleInternal gradleInternal, PluginRegistry pluginRegistry, InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, CollectionCallbackActionDecorator decorator, DomainObjectCollectionFactory domainObjectCollectionFactory) {
+        PluginTarget target = new ImperativeOnlyPluginTarget<GradleInternal>(gradleInternal);
+        return instantiator.newInstance(DefaultPluginManager.class, pluginRegistry, instantiatorFactory.inject(this), target, buildOperationExecutor, userCodeApplicationContext, decorator, domainObjectCollectionFactory);
+    }
+
+    FileContentCacheFactory createFileContentCacheFactory(
+            GlobalCacheLocations globalCacheLocations,
+            BuildScopedCache cacheRepository,
+            FileContentCacheFactory globalCacheFactory,
+            InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
+            ListenerManager listenerManager,
+            FileSystemAccess fileSystemAccess
+    ) {
+        DefaultFileContentCacheFactory localCacheFactory = new DefaultFileContentCacheFactory(
+                listenerManager,
+                fileSystemAccess,
+                cacheRepository,
+                inMemoryCacheDecoratorFactory
+        );
+        return new SplitFileContentCacheFactory(
+                globalCacheFactory,
+                localCacheFactory,
+                globalCacheLocations
+        );
+    }
 
     ServiceRegistryFactory createServiceRegistryFactory(final ServiceRegistry services) {
         final Factory<LoggingManagerInternal> loggingManagerInternalFactory = getFactory(LoggingManagerInternal.class);
@@ -133,7 +180,7 @@ public class GradleScopeServices extends DefaultServiceRegistry {
             @Override
             public ServiceRegistry createFor(Object domainObject) {
                 if (domainObject instanceof ProjectInternal) {
-                    ProjectScopeServices projectScopeServices = new ProjectScopeServices(services, (ProjectInternal) domainObject);
+                    ProjectScopeServices projectScopeServices = new ProjectScopeServices(services, (ProjectInternal) domainObject, loggingManagerInternalFactory);
                     registries.add(projectScopeServices);
                     return projectScopeServices;
                 }
@@ -142,16 +189,21 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         };
     }
 
-    BuildConfigurationActionExecuter createBuildConfigurationActionExecuter(CommandLineTaskParser commandLineTaskParser, ProjectConfigurer projectConfigurer, List<BuiltInCommand> builtInCommands) {
+    BuildConfigurationActionExecuter createBuildConfigurationActionExecuter(CommandLineTaskParser commandLineTaskParser, ProjectConfigurer projectConfigurer, ProjectStateRegistry projectStateRegistry, List<BuiltInCommand> builtInCommands) {
         List<BuildConfigurationAction> taskSelectionActions = new LinkedList<>();
         taskSelectionActions.add(new DefaultTasksBuildExecutionAction(projectConfigurer, builtInCommands));
         taskSelectionActions.add(new TaskNameResolvingBuildConfigurationAction(commandLineTaskParser));
-        return new DefaultBuildConfigurationActionExecuter(taskSelectionActions);
+        return new DefaultBuildConfigurationActionExecuter(taskSelectionActions, projectStateRegistry);
     }
 
     TaskExecutionPreparer createTaskExecutionPreparer(BuildConfigurationActionExecuter buildConfigurationActionExecuter, BuildOperationExecutor buildOperationExecutor, BuildModelParameters buildModelParameters) {
         return new DefaultTaskExecutionPreparer(buildConfigurationActionExecuter, buildOperationExecutor, buildModelParameters);
     }
+
+    ProjectFinder createProjectFinder(final GradleInternal gradle) {
+        return new DefaultProjectFinder(gradle::getRootProject);
+    }
+
 
     OptionReader createOptionReader() {
         return new OptionReader();

@@ -1,13 +1,16 @@
 package com.tyron.builder.api.internal;
 
 import com.tyron.builder.BuildListener;
+import com.tyron.builder.api.ProjectEvaluationListener;
+import com.tyron.builder.api.internal.plugins.PluginAwareInternal;
 import com.tyron.builder.api.invocation.Gradle;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.project.ProjectRegistry;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.build.PublicBuildPath;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
 import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.composite.IncludedBuildInternal;
@@ -17,8 +20,9 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Supplier;
 
-public interface GradleInternal extends Gradle {
+public interface GradleInternal extends Gradle, PluginAwareInternal {
 
     @Override
     ProjectInternal getRootProject() throws IllegalStateException;
@@ -55,6 +59,13 @@ public interface GradleInternal extends Gradle {
      * @return
      */
     ProjectInternal getDefaultProject();
+
+    /**
+     * Returns the broadcaster for {@link ProjectEvaluationListener} events for this build
+     */
+    ProjectEvaluationListener getProjectEvaluationBroadcaster();
+
+    void setClassLoaderScope(Supplier<? extends ClassLoaderScope> classLoaderScope);
 
     /**
      * Called by the BuildLoader after the default project is determined.  Until the BuildLoader
@@ -114,6 +125,8 @@ public interface GradleInternal extends Gradle {
 
     String contextualize(String description);
 
+    PublicBuildPath getPublicBuildPath();
+
     // A separate property, as the public getter does not use a wildcard type and cannot be overridden
     List<? extends IncludedBuildInternal> includedBuilds();
 
@@ -123,5 +136,5 @@ public interface GradleInternal extends Gradle {
 
     void setSettings(SettingsInternal settings);
 
-    void setIncludedBuilds(Collection<IncludedBuildInternal> children);
+    void setIncludedBuilds(Collection<? extends IncludedBuildInternal> includedBuilds);
 }

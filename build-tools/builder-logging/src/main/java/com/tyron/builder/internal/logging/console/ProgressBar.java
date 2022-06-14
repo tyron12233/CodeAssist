@@ -6,6 +6,7 @@ import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
 import com.tyron.builder.internal.logging.format.TersePrettyDurationFormatter;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class ProgressBar {
@@ -72,9 +73,7 @@ public class ProgressBar {
 
     private String fill(char ch, int count) {
         char[] chars = new char[count];
-        for (int i = 0; i < chars.length; i++) {
-            chars[i] = ch;
-        }
+        Arrays.fill(chars, ch);
         return new String(chars);
     }
 

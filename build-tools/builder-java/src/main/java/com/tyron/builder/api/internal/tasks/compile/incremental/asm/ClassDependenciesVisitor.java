@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.tasks.compile.incremental.asm;
 
 
 import com.tyron.builder.api.internal.tasks.compile.incremental.deps.ClassAnalysis;
-import com.tyron.builder.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.cache.StringInterner;
 import com.tyron.builder.internal.classanalysis.AsmConstants;
 
 import org.objectweb.asm.ClassReader;

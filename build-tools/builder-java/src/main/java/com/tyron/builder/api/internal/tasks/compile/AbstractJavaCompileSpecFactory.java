@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal.tasks.compile;
 
+import com.tyron.builder.api.tasks.compile.CompileOptions;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.jvm.toolchain.JavaInstallationMetadata;
 

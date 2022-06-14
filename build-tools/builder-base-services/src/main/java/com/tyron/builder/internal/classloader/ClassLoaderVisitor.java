@@ -9,6 +9,8 @@ import java.net.URLClassLoader;
 
 import static java.lang.ClassLoader.getSystemClassLoader;
 
+import com.tyron.common.TestUtil;
+
 public class ClassLoaderVisitor {
     private static final String JAVA_CLASS_PATH = "java.class.path";
     private final ClassLoader stopAt;
@@ -30,7 +32,9 @@ public class ClassLoaderVisitor {
         if (classLoader instanceof ClassLoaderHierarchy) {
             ((ClassLoaderHierarchy) classLoader).visit(this);
         } else {
-            if (isPreJava9LauncherAppClassloader(classLoader)) {
+            if (TestUtil.isDalvik()) {
+                visitClassPath(extractJava9Classpath());
+            } else if (isPreJava9LauncherAppClassloader(classLoader)) {
                 visitClassPath(extractPreJava9Classpath(classLoader));
             } else {
                 visitClassPath(extractJava9Classpath());

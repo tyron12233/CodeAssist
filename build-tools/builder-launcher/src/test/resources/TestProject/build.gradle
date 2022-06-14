@@ -1,7 +1,1 @@
-defaultTasks("test")
-
-tasks.register("test") {
-    it.doLast {
-        println("Executing!")
-    }
-}
+defaultTasks("taskA")

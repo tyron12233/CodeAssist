@@ -1,0 +1,3 @@
+com.tyron.code.ui.settings.dynamic.MainSettingsProvider
+com.tyron.code.ui.settings.dynamic.EditorSettingsProvider
+com.tyron.code.ui.settings.dynamic.BuildSettingsProvider

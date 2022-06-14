@@ -1,7 +1,7 @@
 package com.tyron.builder.api.internal.project.taskfactory;
 
 import com.tyron.builder.api.Task;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 
 import java.lang.reflect.Method;

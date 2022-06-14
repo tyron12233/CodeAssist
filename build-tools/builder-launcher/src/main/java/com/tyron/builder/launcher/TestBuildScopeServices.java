@@ -1,7 +1,7 @@
 package com.tyron.builder.launcher;
 
 import com.tyron.builder.initialization.BuildCancellationToken;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 import com.tyron.builder.configuration.GradleLauncherMetaData;
 import com.tyron.builder.initialization.BuildClientMetaData;

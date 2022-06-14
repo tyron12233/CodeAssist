@@ -4,7 +4,7 @@ import com.tyron.builder.api.Action;
 import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.file.FileCopyDetails;
 
-import org.jetbrains.annotations.Nullable;
+import javax.annotation.Nullable;
 
 public interface CopySpecInternal extends CopySpec {
 

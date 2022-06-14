@@ -8,12 +8,15 @@ import com.tyron.builder.initialization.DefaultBuildRequestContext;
 import com.tyron.builder.initialization.DefaultBuildRequestMetaData;
 import com.tyron.builder.initialization.NoOpBuildEventConsumer;
 import com.tyron.builder.initialization.ReportedException;
+import com.tyron.builder.internal.UncheckedException;
 import com.tyron.builder.internal.concurrent.Stoppable;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.launcher.exec.BuildActionExecuter;
 import com.tyron.builder.launcher.exec.BuildActionParameters;
 import com.tyron.builder.launcher.exec.BuildActionResult;
 import com.tyron.builder.tooling.internal.provider.action.ExecuteBuildAction;
+import com.tyron.builder.tooling.internal.provider.serialization.PayloadSerializer;
+import com.tyron.builder.tooling.internal.provider.serialization.SerializedPayload;
 
 public class RunBuildAction implements Runnable {
     private final BuildActionExecuter<BuildActionParameters, BuildRequestContext> executer;
@@ -39,6 +42,7 @@ public class RunBuildAction implements Runnable {
     public void run() {
         try {
             boolean isConsoleOutput = true; //sharedServices.get(ConsoleDetector.class).isConsoleInput())
+
             BuildActionResult result = executer.execute(
                 new ExecuteBuildAction(startParameter),
                 buildActionParameters,

@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.service.scopes;
 
 
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 /**
  * A hierarchical service registry.

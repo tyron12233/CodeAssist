@@ -6,23 +6,30 @@ import com.tyron.builder.api.ProjectState;
 import com.tyron.builder.api.UnknownProjectException;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.attributes.Attribute;
+import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
+import com.tyron.builder.api.internal.file.FileResolver;
+import com.tyron.builder.api.internal.file.HasScriptServices;
 import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.plugins.ExtensionContainerInternal;
+import com.tyron.builder.api.internal.plugins.PluginAwareInternal;
 import com.tyron.builder.api.internal.plugins.PluginManagerInternal;
-import com.tyron.builder.api.plugins.PluginManager;
 import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.groovy.scripts.ScriptSource;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.metaobject.DynamicObject;
+import com.tyron.builder.internal.model.RuleBasedPluginListener;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.api.internal.tasks.TaskContainerInternal;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.model.internal.registry.ModelRegistry;
+import com.tyron.builder.model.internal.registry.ModelRegistryScope;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
 
-public interface ProjectInternal extends BuildProject, ProjectIdentifier {
+public interface ProjectInternal extends BuildProject, ProjectIdentifier, HasScriptServices, DomainObjectContext, ModelRegistryScope, PluginAwareInternal {
 
     // These constants are defined here and not with the rest of their kind in HelpTasksPlugin because they are referenced
     // in the ‘core’ modules, which don't depend on ‘plugins’ where HelpTasksPlugin is defined.
@@ -54,6 +61,8 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
     ScriptSource getBuildScriptSource();
 
     ProjectEvaluationListener getProjectEvaluationBroadcaster();
+
+    void addRuleBasedPluginListener(RuleBasedPluginListener listener);
 
     @Override
     ProjectInternal project(String path) throws UnknownProjectException;
@@ -90,7 +99,14 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
 
     ProjectStateInternal getState();
 
+    @Override
+    ModelRegistry getModelRegistry();
+
     GradleInternal getGradle();
+
+    void prepareForRuleBasedPlugins();
+
+    FileResolver getFileResolver();
 
     ClassLoaderScope getClassLoaderScope();
 
@@ -101,10 +117,14 @@ public interface ProjectInternal extends BuildProject, ProjectIdentifier {
     @Override
     PluginManagerInternal getPluginManager();
 
+    void fireDeferredConfiguration();
+
     void addDeferredConfiguration(Runnable configuration);
 
     @Override
     ExtensionContainerInternal getExtensions();
+
+    DynamicObject getInheritedScope();
 
     /**
      * Returns the property that stored {@link BuildProject#getStatus()}.

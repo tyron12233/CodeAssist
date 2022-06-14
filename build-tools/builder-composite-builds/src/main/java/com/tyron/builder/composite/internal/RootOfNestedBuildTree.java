@@ -11,7 +11,7 @@ import com.tyron.builder.internal.operations.BuildOperationContext;
 import com.tyron.builder.internal.operations.BuildOperationDescriptor;
 import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.CallableBuildOperation;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.service.scopes.BuildScopeServices;
 import com.tyron.builder.util.Path;
 import com.tyron.builder.initialization.RunNestedBuildBuildOperationType;
@@ -144,12 +144,7 @@ public class RootOfNestedBuildTree extends AbstractBuildState implements NestedR
             @Override
             public BuildOperationDescriptor.Builder description() {
                 return BuildOperationDescriptor.displayName("Run nested build")
-                        .details(new RunNestedBuildBuildOperationType.Details() {
-                            @Override
-                            public String getBuildPath() {
-                                return gradle.getIdentityPath().getPath();
-                            }
-                        });
+                        .details((RunNestedBuildBuildOperationType.Details) () -> gradle.getIdentityPath().getPath());
             }
         });
     }

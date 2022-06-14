@@ -13,6 +13,7 @@ import com.google.common.reflect.TypeToken;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.DomainObjectSet;
+import com.tyron.builder.api.NamedDomainObjectContainer;
 import com.tyron.builder.api.NonExtensible;
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.DirectoryProperty;
@@ -43,8 +44,8 @@ import com.tyron.builder.internal.reflect.JavaPropertyReflectionUtil;
 import com.tyron.builder.internal.reflect.MethodSet;
 import com.tyron.builder.internal.reflect.PropertyAccessorType;
 import com.tyron.builder.internal.reflect.PropertyDetails;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceRegistry;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -93,7 +94,7 @@ abstract class AbstractClassGenerator implements ClassGenerator {
             RegularFileProperty.class,
             DirectoryProperty.class,
             Property.class,
-//            NamedDomainObjectContainer.class,
+            NamedDomainObjectContainer.class,
             DomainObjectSet.class
     );
     private static final Object[] NO_PARAMS = new Object[0];

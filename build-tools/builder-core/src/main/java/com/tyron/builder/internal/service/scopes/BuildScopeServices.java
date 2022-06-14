@@ -1,21 +1,27 @@
 package com.tyron.builder.internal.service.scopes;
 
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.BuildProject;
 import com.tyron.builder.api.artifacts.ConfigurationContainer;
 import com.tyron.builder.api.artifacts.dsl.DependencyHandler;
 import com.tyron.builder.api.artifacts.dsl.DependencyLockingHandler;
 import com.tyron.builder.api.artifacts.dsl.RepositoryHandler;
 import com.tyron.builder.api.attributes.AttributesSchema;
+import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.DomainObjectContext;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.api.internal.artifacts.DefaultModule;
 import com.tyron.builder.api.internal.artifacts.DependencyManagementServices;
 import com.tyron.builder.api.internal.artifacts.DependencyResolutionServices;
 import com.tyron.builder.api.internal.artifacts.Module;
 import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import com.tyron.builder.api.internal.artifacts.dsl.dependencies.ProjectFinder;
 import com.tyron.builder.api.internal.attributes.ImmutableAttributesFactory;
+import com.tyron.builder.api.internal.classpath.DefaultModuleRegistry;
+import com.tyron.builder.api.internal.component.ComponentTypeRegistry;
+import com.tyron.builder.api.internal.component.DefaultComponentTypeRegistry;
 import com.tyron.builder.api.internal.file.DefaultFileOperations;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
@@ -30,24 +36,29 @@ import com.tyron.builder.api.internal.plugins.DefaultPluginRegistry;
 import com.tyron.builder.api.internal.plugins.PluginInspector;
 import com.tyron.builder.api.internal.plugins.PluginRegistry;
 import com.tyron.builder.api.internal.project.DefaultProjectRegistry;
+import com.tyron.builder.api.internal.project.DefaultProjectTaskLister;
 import com.tyron.builder.api.internal.project.ProjectFactory;
 import com.tyron.builder.api.internal.project.ProjectInternal;
+import com.tyron.builder.api.internal.project.ProjectTaskLister;
+import com.tyron.builder.api.internal.project.taskfactory.AnnotationProcessingTaskFactory;
+import com.tyron.builder.api.internal.project.taskfactory.ITaskFactory;
+import com.tyron.builder.api.internal.project.taskfactory.TaskClassInfoStore;
+import com.tyron.builder.api.internal.project.taskfactory.TaskFactory;
 import com.tyron.builder.api.internal.properties.GradleProperties;
+import com.tyron.builder.api.internal.provider.DefaultProviderFactory;
+import com.tyron.builder.api.internal.provider.DefaultValueSourceProviderFactory;
+import com.tyron.builder.api.internal.provider.ValueSourceProviderFactory;
 import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
+import com.tyron.builder.api.internal.tasks.TaskStatistics;
 import com.tyron.builder.api.model.ObjectFactory;
+import com.tyron.builder.api.provider.ProviderFactory;
+import com.tyron.builder.cache.CacheRepository;
+import com.tyron.builder.cache.internal.BuildScopeCacheDir;
+import com.tyron.builder.cache.internal.scopes.DefaultBuildScopedCache;
+import com.tyron.builder.cache.scopes.BuildScopedCache;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
-import com.tyron.builder.caching.internal.BuildCacheConfigurationInternal;
-import com.tyron.builder.caching.internal.controller.BuildCacheController;
-import com.tyron.builder.caching.internal.controller.RootBuildCacheControllerRef;
-import com.tyron.builder.caching.internal.origin.OriginMetadataFactory;
-import com.tyron.builder.caching.internal.origin.OriginMetadataFactory.HostnameLookup;
-import com.tyron.builder.caching.internal.packaging.BuildCacheEntryPacker;
-import com.tyron.builder.caching.internal.packaging.impl.DefaultTarPackerFileSystemSupport;
 import com.tyron.builder.caching.internal.packaging.impl.FilePermissionAccess;
-import com.tyron.builder.caching.internal.packaging.impl.GZipBuildCacheEntryPacker;
-import com.tyron.builder.caching.internal.packaging.impl.TarBuildCacheEntryPacker;
-import com.tyron.builder.caching.internal.packaging.impl.TarPackerFileSystemSupport;
 import com.tyron.builder.configuration.BuildOperationFiringProjectsPreparer;
 import com.tyron.builder.configuration.BuildTreePreparingProjectsPreparer;
 import com.tyron.builder.configuration.CompileOperationFactory;
@@ -88,6 +99,7 @@ import com.tyron.builder.initialization.DefaultSettingsLoaderFactory;
 import com.tyron.builder.initialization.DefaultSettingsPreparer;
 import com.tyron.builder.initialization.Environment;
 import com.tyron.builder.initialization.GradlePropertiesController;
+import com.tyron.builder.initialization.GradleUserHomeDirProvider;
 import com.tyron.builder.initialization.IGradlePropertiesLoader;
 import com.tyron.builder.initialization.InitScriptHandler;
 import com.tyron.builder.initialization.InstantiatingBuildLoader;
@@ -100,8 +112,13 @@ import com.tyron.builder.initialization.SettingsFactory;
 import com.tyron.builder.initialization.SettingsLoaderFactory;
 import com.tyron.builder.initialization.SettingsPreparer;
 import com.tyron.builder.initialization.SettingsProcessor;
+import com.tyron.builder.initialization.layout.BuildLayout;
+import com.tyron.builder.initialization.layout.BuildLayoutConfiguration;
+import com.tyron.builder.initialization.layout.BuildLayoutFactory;
 import com.tyron.builder.initialization.layout.ResolvedBuildLayout;
 import com.tyron.builder.internal.Cast;
+import com.tyron.builder.internal.authentication.AuthenticationSchemeRegistry;
+import com.tyron.builder.internal.authentication.DefaultAuthenticationSchemeRegistry;
 import com.tyron.builder.internal.build.BuildModelControllerServices;
 import com.tyron.builder.internal.build.BuildOperationFiringBuildWorkPreparer;
 import com.tyron.builder.internal.build.BuildState;
@@ -113,7 +130,6 @@ import com.tyron.builder.internal.build.DefaultPublicBuildPath;
 import com.tyron.builder.internal.build.PublicBuildPath;
 import com.tyron.builder.internal.buildtree.BuildInclusionCoordinator;
 import com.tyron.builder.internal.buildtree.BuildModelParameters;
-import com.tyron.builder.internal.cache.StringInterner;
 import com.tyron.builder.internal.classpath.CachedClasspathTransformer;
 import com.tyron.builder.internal.composite.DefaultBuildIncluder;
 import com.tyron.builder.internal.event.DefaultListenerManager;
@@ -121,9 +137,8 @@ import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.file.FileException;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
-import com.tyron.builder.internal.hash.StreamHasher;
-import com.tyron.builder.internal.id.UniqueId;
 import com.tyron.builder.internal.instantiation.InstantiatorFactory;
+import com.tyron.builder.internal.isolation.IsolatableFactory;
 import com.tyron.builder.internal.logging.LoggingManagerInternal;
 import com.tyron.builder.internal.logging.progress.ProgressLoggerFactory;
 import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
@@ -132,18 +147,17 @@ import com.tyron.builder.internal.operations.BuildOperationExecutor;
 import com.tyron.builder.internal.operations.BuildOperationQueueFactory;
 import com.tyron.builder.internal.operations.DefaultBuildOperationQueueFactory;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.reflect.Instantiator;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.StringTextResource;
 import com.tyron.builder.internal.resource.TextFileResourceLoader;
 import com.tyron.builder.internal.resource.TextResource;
 import com.tyron.builder.internal.resource.local.FileResourceListener;
 import com.tyron.builder.internal.resources.ResourceLockCoordinationService;
-import com.tyron.builder.internal.scopeids.id.BuildInvocationScopeId;
 import com.tyron.builder.internal.scripts.ScriptExecutionListener;
 import com.tyron.builder.internal.snapshot.CaseSensitivity;
-import com.tyron.builder.internal.vfs.FileSystemAccess;
 import com.tyron.builder.internal.work.WorkerLeaseService;
 import com.tyron.builder.model.internal.inspect.ModelRuleSourceDetector;
 import com.tyron.builder.plugin.management.internal.autoapply.AutoAppliedPluginHandler;
@@ -190,12 +204,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
 
     TextFileResourceLoader createTextFileResourceLoader() {
-        return new TextFileResourceLoader() {
-            @Override
-            public TextResource loadFile(String description, @Nullable File sourceFile) {
-                return new StringTextResource(description, GFileUtils.readFileToString(sourceFile));
-            }
-        };
+        return (description, sourceFile) -> new StringTextResource(description, GFileUtils.readFileToString(sourceFile));
     }
 
     protected DefaultResourceHandler.Factory createResourceHandlerFactory(FileResolver fileResolver, FileSystem fileSystem, TemporaryFileProvider temporaryFileProvider, ApiTextResourceAdapter.Factory textResourceAdapterFactory) {
@@ -217,6 +226,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
     }
 
     SettingsProcessor createSettingsProcessor(
+            Instantiator instantiator,
             ScriptPluginFactory scriptPluginFactory,
             ScriptHandlerFactory scriptHandlerFactory,
             ServiceRegistryFactory serviceRegistryFactory,
@@ -227,7 +237,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new ScriptEvaluatingSettingsProcessor(
                 scriptPluginFactory,
                 new SettingsFactory(
-                        DirectInstantiator.INSTANCE,
+                        instantiator,
                         serviceRegistryFactory,
                         scriptHandlerFactory
                 ),
@@ -278,61 +288,6 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new DefaultScriptClassPathResolver(initializers);
     }
 
-    protected DependencyManagementServices createDependencyManagementServices() {
-        System.out.println("Warning: Stub implementation craeteDependencyManagementServices()");
-        return new DependencyManagementServices() {
-            @Override
-            public void addDslServices(ServiceRegistration registration,
-                                       DomainObjectContext domainObjectContext) {
-
-            }
-
-            @Override
-            public DependencyResolutionServices create(FileResolver resolver,
-                                                       FileCollectionFactory fileCollectionFactory,
-                                                       DependencyMetaDataProvider dependencyMetaDataProvider,
-                                                       ProjectFinder projectFinder,
-                                                       DomainObjectContext domainObjectContext) {
-                return new DependencyResolutionServices() {
-                    @Override
-                    public RepositoryHandler getResolveRepositoryHandler() {
-                        return null;
-                    }
-
-                    @Override
-                    public ConfigurationContainer getConfigurationContainer() {
-                        return null;
-                    }
-
-                    @Override
-                    public DependencyHandler getDependencyHandler() {
-                        return null;
-                    }
-
-                    @Override
-                    public DependencyLockingHandler getDependencyLockingHandler() {
-                        return null;
-                    }
-
-                    @Override
-                    public ImmutableAttributesFactory getAttributesFactory() {
-                        return null;
-                    }
-
-                    @Override
-                    public AttributesSchema getAttributesSchema() {
-                        return null;
-                    }
-
-                    @Override
-                    public ObjectFactory getObjectFactory() {
-                        return null;
-                    }
-                };
-            }
-        };
-    }
-
     protected ScriptHandlerFactory createScriptHandlerFactory(DependencyManagementServices dependencyManagementServices, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, DependencyMetaDataProvider dependencyMetaDataProvider, ScriptClassPathResolver classPathResolver, NamedObjectInstantiator instantiator) {
         return new DefaultScriptHandlerFactory(
                 dependencyManagementServices,
@@ -343,15 +298,27 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 instantiator);
     }
 
-    protected DependencyMetaDataProvider createDependencyMetaDataProvider() {
-        System.out.println("Warning: Stub implementation in createDependencyMetaDataProvider");
-        return new DependencyMetaDataProvider() {
-            @Override
-            public Module getModule() {
-                return null;
-            }
-        };
+    protected ProjectTaskLister createProjectTaskLister() {
+        return new DefaultProjectTaskLister();
     }
+
+
+    protected ComponentTypeRegistry createComponentTypeRegistry() {
+        return new DefaultComponentTypeRegistry();
+    }
+
+    private static class DependencyMetaDataProviderImpl implements DependencyMetaDataProvider {
+        @Override
+        public Module getModule() {
+            return new DefaultModule("unspecified", "unspecified", BuildProject.DEFAULT_VERSION, BuildProject.DEFAULT_STATUS);
+        }
+    }
+
+
+    protected DependencyMetaDataProvider createDependencyMetaDataProvider() {
+        return new DependencyMetaDataProviderImpl();
+    }
+
 
     protected PluginInspector createPluginInspector(ModelRuleSourceDetector modelRuleSourceDetector) {
         return new PluginInspector(modelRuleSourceDetector);
@@ -402,21 +369,31 @@ public class BuildScopeServices extends DefaultServiceRegistry {
     }
 
 
-    protected ScriptClassCompiler createScriptClassCompiler(
-            GlobalScopedCache cache,
-            ScriptCompilationHandler handler,
-            ProgressLoggerFactory progressLoggerFactory,
-            ClassLoaderHierarchyHasher hasher,
-            CachedClasspathTransformer transformer
+    protected FileCacheBackedScriptClassCompiler createFileCacheBackedScriptClassCompiler(
+            BuildOperationExecutor buildOperationExecutor,
+            GlobalScopedCache cacheRepository,
+            ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
+            DefaultScriptCompilationHandler scriptCompilationHandler,
+            CachedClasspathTransformer classpathTransformer,
+            ProgressLoggerFactory progressLoggerFactory
     ) {
         return new FileCacheBackedScriptClassCompiler(
-                cache,
-                handler,
+                cacheRepository,
+//                new BuildOperationBackedScriptCompilationHandler(scriptCompilationHandler, buildOperationExecutor),
+                scriptCompilationHandler,
                 progressLoggerFactory,
-                hasher,
-                transformer
-        );
+                classLoaderHierarchyHasher,
+                classpathTransformer);
     }
+
+    protected ITaskFactory createITaskFactory(Instantiator instantiator, TaskClassInfoStore taskClassInfoStore) {
+        return new AnnotationProcessingTaskFactory(
+                instantiator,
+                taskClassInfoStore,
+                new TaskFactory());
+    }
+
+
 
     protected ScriptCompilerFactory createScriptCompileFactory(
             ScriptClassCompiler scriptClassCompiler,
@@ -436,11 +413,11 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return scriptPluginFactorySelector;
     }
 
-    protected ScriptRunnerFactory createScriptRunnerFactory(ListenerManager listenerManager) {
+    protected ScriptRunnerFactory createScriptRunnerFactory(ListenerManager listenerManager, InstantiatorFactory instantiatorFactory) {
         ScriptExecutionListener scriptExecutionListener = listenerManager.getBroadcaster(ScriptExecutionListener.class);
         return new DefaultScriptRunnerFactory(
                 scriptExecutionListener,
-                DirectInstantiator.INSTANCE
+                instantiatorFactory.inject()
         );
     }
 
@@ -452,16 +429,6 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                 get(AutoAppliedPluginHandler.class),
                 get(PluginRequestApplicator.class),
                 get(CompileOperationFactory.class));
-    }
-
-    public AutoAppliedPluginHandler createAutoAppliedPluginHandler() {
-        return (initialRequests, pluginTarget) -> initialRequests;
-    }
-
-    public PluginRequestApplicator createPluginRequestsApplicator() {
-        return (requests, scriptHandler, target, classLoaderScope) -> {
-
-        };
     }
 
     public CompileOperationFactory createCompileOperationFactory(DocumentationRegistry documentationRegistry) {
@@ -526,6 +493,34 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return gradlePropertiesController.getGradleProperties();
     }
 
+    protected ValueSourceProviderFactory createValueSourceProviderFactory(
+            InstantiatorFactory instantiatorFactory,
+            IsolatableFactory isolatableFactory,
+            ServiceRegistry services,
+            GradleProperties gradleProperties,
+            ListenerManager listenerManager
+    ) {
+        return new DefaultValueSourceProviderFactory(
+                listenerManager,
+                instantiatorFactory,
+                isolatableFactory,
+                gradleProperties,
+                services
+        );
+    }
+
+    protected ProviderFactory createProviderFactory(
+            Instantiator instantiator,
+            ValueSourceProviderFactory valueSourceProviderFactory,
+            ListenerManager listenerManager
+    ) {
+        return instantiator.newInstance(DefaultProviderFactory.class, valueSourceProviderFactory, listenerManager);
+    }
+
+    AuthenticationSchemeRegistry createAuthenticationSchemeRegistry() {
+        return new DefaultAuthenticationSchemeRegistry();
+    }
+
 //    BuildOperationExecutor createBuildOperationExecutor(
 //            BuildOperationListener buildOperationListener,
 //            ProgressLoggerFactory progressLoggerFactory,
@@ -561,16 +556,15 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             GradleInternal gradleInternal,
             TaskNodeFactory taskNodeFactory,
             TaskDependencyResolver dependencyResolver,
-            ExecutionNodeAccessHierarchies executionNodeAccessHierarchies,
-            ResourceLockCoordinationService lockCoordinationService
+            ExecutionNodeAccessHierarchies executionNodeAccessHierarchies
     ) {
         return new ExecutionPlanFactory(
                 gradleInternal.getIdentityPath().toString(),
                 taskNodeFactory,
                 dependencyResolver,
+                new DefaultNodeValidator(),
                 executionNodeAccessHierarchies.getOutputHierarchy(),
-                executionNodeAccessHierarchies.getDestroyableHierarchy(),
-                lockCoordinationService
+                executionNodeAccessHierarchies.getDestroyableHierarchy()
         );
     }
 
@@ -578,13 +572,28 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new ExecutionNodeAccessHierarchies(CaseSensitivity.CASE_INSENSITIVE, FileSystems.getDefault());
     }
 
+    protected BuildScopedCache createBuildScopedCache(
+            GradleUserHomeDirProvider userHomeDirProvider,
+            BuildLayout buildLayout,
+            StartParameter startParameter,
+            CacheRepository cacheRepository
+    ) {
+        BuildScopeCacheDir cacheDir = new BuildScopeCacheDir(userHomeDirProvider, buildLayout, startParameter);
+        return new DefaultBuildScopedCache(cacheDir.getDir(), cacheRepository);
+    }
+
+
+    protected BuildLayout createBuildLayout(BuildLayoutFactory buildLayoutFactory, BuildDefinition buildDefinition) {
+        return buildLayoutFactory.getLayoutFor(new BuildLayoutConfiguration(buildDefinition.getStartParameter()));
+    }
+
     protected PublicBuildPath createPublicBuildPath(BuildState buildState) {
         return new DefaultPublicBuildPath(buildState.getIdentityPath());
     }
 
-//    protected TaskStatistics createTaskStatistics() {
-//        return new TaskStatistics();
-//    }
+    protected TaskStatistics createTaskStatistics() {
+        return new TaskStatistics();
+    }
 
     protected BuildScopeServiceRegistryFactory createServiceRegistryFactory(final ServiceRegistry services) {
         return new BuildScopeServiceRegistryFactory(services);

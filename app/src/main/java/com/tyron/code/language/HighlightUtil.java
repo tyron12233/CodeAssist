@@ -158,6 +158,13 @@ public class HighlightUtil {
                     if (it.getEndPosition() == -1) {
                         it.setEndPosition(it.getPosition());
                     }
+
+                    if (it.getStartPosition() > editor.getContent().length()) {
+                        return;
+                    }
+                    if (it.getEndPosition() > editor.getContent().length()) {
+                        return;
+                    }
                     CharPosition start = editor.getCharPosition((int) it.getStartPosition());
                     CharPosition end = editor.getCharPosition((int) it.getEndPosition());
 

@@ -3,9 +3,9 @@ package com.tyron.builder.internal.execution.history.impl;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
+import com.tyron.builder.caching.internal.origin.OriginMetadata;
 import com.tyron.builder.internal.execution.history.PreviousExecutionState;
 import com.tyron.builder.internal.fingerprint.FileCollectionFingerprint;
-import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.serialize.AbstractSerializer;
 import com.tyron.builder.internal.serialize.Decoder;
 import com.tyron.builder.internal.serialize.Encoder;
@@ -15,7 +15,6 @@ import com.tyron.builder.internal.snapshot.ValueSnapshot;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshotSerializer;
 import com.tyron.builder.internal.snapshot.impl.SnapshotSerializer;
-import com.tyron.builder.caching.internal.origin.OriginMetadata;
 
 import java.time.Duration;
 import java.util.Map;
@@ -24,17 +23,15 @@ public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<
     private final Serializer<FileCollectionFingerprint> fileCollectionFingerprintSerializer;
     private final Serializer<FileSystemSnapshot> fileSystemSnapshotSerializer;
     private final Serializer<ImplementationSnapshot> implementationSnapshotSerializer;
-    private final Serializer<ValueSnapshot> valueSnapshotSerializer;
+    private final Serializer<ValueSnapshot> valueSnapshotSerializer = new SnapshotSerializer();
 
     public DefaultPreviousExecutionStateSerializer(
             Serializer<FileCollectionFingerprint> fileCollectionFingerprintSerializer,
-            Serializer<FileSystemSnapshot> fileSystemSnapshotSerializer,
-            ClassLoaderHierarchyHasher classLoaderHasher
+            Serializer<FileSystemSnapshot> fileSystemSnapshotSerializer
     ) {
         this.fileCollectionFingerprintSerializer = fileCollectionFingerprintSerializer;
         this.fileSystemSnapshotSerializer = fileSystemSnapshotSerializer;
         this.implementationSnapshotSerializer = new ImplementationSnapshotSerializer();
-        this.valueSnapshotSerializer = new SnapshotSerializer(classLoaderHasher);
     }
 
     @Override

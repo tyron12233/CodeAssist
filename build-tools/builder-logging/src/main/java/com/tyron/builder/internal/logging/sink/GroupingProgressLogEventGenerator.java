@@ -1,22 +1,21 @@
 package com.tyron.builder.internal.logging.sink;
 
 import com.google.common.base.Objects;
-import com.tyron.builder.util.GUtil;
-import com.tyron.builder.internal.logging.events.OutputEvent;
-import com.tyron.builder.internal.logging.events.OutputEventListener;
-import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
-import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
-import com.tyron.builder.internal.operations.BuildOperationCategory;
-import com.tyron.builder.internal.operations.OperationIdentifier;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.internal.logging.events.EndOutputEvent;
 import com.tyron.builder.internal.logging.events.LogEvent;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.ProgressCompleteEvent;
 import com.tyron.builder.internal.logging.events.ProgressEvent;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;
+import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
+import com.tyron.builder.internal.logging.events.StyledTextOutputEvent;
 import com.tyron.builder.internal.logging.events.UpdateNowEvent;
 import com.tyron.builder.internal.logging.format.LogHeaderFormatter;
-
+import com.tyron.builder.internal.operations.BuildOperationCategory;
+import com.tyron.builder.internal.operations.OperationIdentifier;
+import com.tyron.builder.util.GUtil;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -26,7 +25,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * An {@code org.gradle.logging.internal.OutputEventListener} implementation which generates output events to log the
+ * An {@code com.tyron.builder.logging.internal.OutputEventListener} implementation which generates output events to log the
  * progress of operations.
  *
  * <p>This listener forwards nothing unless it receives periodic {@link UpdateNowEvent} clock events.</p>

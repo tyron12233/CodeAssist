@@ -1,5 +1,7 @@
 package com.tyron.builder.api.internal.file;
 
+import static com.tyron.builder.api.internal.lambdas.SerializableLambdas.transformer;
+
 import com.tyron.builder.api.Action;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.PathValidation;
@@ -8,12 +10,21 @@ import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.file.CopySpec;
 import com.tyron.builder.api.file.DeleteSpec;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.file.RegularFile;
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.api.internal.file.archive.ZipFileTree;
 import com.tyron.builder.api.internal.file.collections.FileTreeAdapter;
+import com.tyron.builder.api.internal.file.copy.DefaultCopySpec;
+import com.tyron.builder.api.internal.file.delete.DefaultDeleteSpec;
+import com.tyron.builder.api.internal.file.delete.DeleteSpecInternal;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
+import com.tyron.builder.api.internal.provider.ProviderInternal;
 import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
+import com.tyron.builder.api.resources.ReadableResource;
 import com.tyron.builder.api.resources.ResourceHandler;
+import com.tyron.builder.api.tasks.WorkResults;
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
 import com.tyron.builder.api.internal.file.copy.FileCopier;
@@ -27,7 +38,7 @@ import com.tyron.builder.api.provider.Provider;
 import com.tyron.builder.api.provider.ProviderFactory;
 import com.tyron.builder.api.tasks.WorkResult;
 import com.tyron.builder.api.tasks.util.PatternSet;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.resource.TextUriResourceLoader;
 import com.tyron.builder.internal.verifier.HttpRedirectVerifier;
 import com.tyron.builder.util.ConfigureUtil;
@@ -35,6 +46,8 @@ import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.internal.file.Deleter;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.Map;
 
@@ -164,13 +177,11 @@ public class DefaultFileOperations implements FileOperations {
     @Override
     public FileTreeInternal zipTree(Object zipPath) {
         Provider<File> fileProvider = asFileProvider(zipPath);
-        throw new UnsupportedOperationException();
-//        return new FileTreeAdapter(new ZipFileTree(fileProvider, getExpandDir(), fileSystem, directoryFileTreeFactory, fileHasher), patternSetFactory);
+        return new FileTreeAdapter(new ZipFileTree(fileProvider, getExpandDir(), fileSystem, directoryFileTreeFactory, fileHasher), patternSetFactory);
     }
 
     @Override
     public FileTreeInternal tarTree(Object tarPath) {
-        Provider<File> fileProvider = asFileProvider(tarPath);
 //        Provider<ReadableResourceInternal> resource = providers.provider(() -> {
 //            if (tarPath instanceof ReadableResourceInternal) {
 //                return (ReadableResourceInternal) tarPath;
@@ -201,30 +212,29 @@ public class DefaultFileOperations implements FileOperations {
     }
 
     private Provider<File> asFileProvider(Object path) {
-        throw new UnsupportedOperationException();
-//        if (path instanceof ReadableResource) {
-//            return providers.provider(() -> null);
-//        }
-//        if (path instanceof Provider) {
-//            ProviderInternal<?> provider = (ProviderInternal<?>) path;
-//            Class<?> type = provider.getType();
-//            if (type != null) {
-//                if (File.class.isAssignableFrom(type)) {
-//                    return Cast.uncheckedCast(path);
-//                }
-//                if (RegularFile.class.isAssignableFrom(type)) {
-//                    Provider<RegularFile> regularFileProvider = Cast.uncheckedCast(provider);
-//                    return regularFileProvider.map(transformer(RegularFile::getAsFile));
-//                }
-//            }
-//            return provider.map(transformer(this::file));
-//        }
-//        return providers.provider(() -> file(path));
+        if (path instanceof ReadableResource) {
+            return providers.provider(() -> null);
+        }
+        if (path instanceof Provider) {
+            ProviderInternal<?> provider = (ProviderInternal<?>) path;
+            Class<?> type = provider.getType();
+            if (type != null) {
+                if (File.class.isAssignableFrom(type)) {
+                    return Cast.uncheckedCast(path);
+                }
+                if (RegularFile.class.isAssignableFrom(type)) {
+                    Provider<RegularFile> regularFileProvider = Cast.uncheckedCast(provider);
+                    return regularFileProvider.map(transformer(RegularFile::getAsFile));
+                }
+            }
+            return provider.map(transformer(this::file));
+        }
+        return providers.provider(() -> file(path));
     }
 
-//    private File getExpandDir() {
-//        return temporaryFileProvider.newTemporaryFile("expandedArchives");
-//    }
+    private File getExpandDir() {
+        return temporaryFileProvider.newTemporaryFile("expandedArchives");
+    }
 
     @Override
     public String relativePath(Object path) {
@@ -248,31 +258,28 @@ public class DefaultFileOperations implements FileOperations {
 
     @Override
     public WorkResult delete(Action<? super DeleteSpec> action) {
-//        DeleteSpecInternal deleteSpec = new DefaultDeleteSpec();
-//        action.execute(deleteSpec);
-//        FileCollectionInternal roots = fileCollectionFactory.resolving(deleteSpec.getPaths());
-//        boolean didWork = false;
-//        for (File root : roots) {
-//            try {
-//                didWork |= deleter.deleteRecursively(root, deleteSpec.isFollowSymlinks());
-//            } catch (IOException ex) {
-//                throw new UncheckedIOException(ex);
-//            }
-//        }
-//        return WorkResults.didWork(didWork);
-        throw new UnsupportedOperationException();
+        DeleteSpecInternal deleteSpec = new DefaultDeleteSpec();
+        action.execute(deleteSpec);
+        FileCollectionInternal roots = fileCollectionFactory.resolving(deleteSpec.getPaths());
+        boolean didWork = false;
+        for (File root : roots) {
+            try {
+                didWork |= deleter.deleteRecursively(root, deleteSpec.isFollowSymlinks());
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+        }
+        return WorkResults.didWork(didWork);
     }
 
     @Override
     public WorkResult copy(Action<? super CopySpec> action) {
-//        return fileCopier.copy(action);
-        throw new UnsupportedOperationException();
+        return fileCopier.copy(action);
     }
 
     @Override
     public WorkResult sync(Action<? super CopySpec> action) {
-//        return fileCopier.sync(action);
-        throw new UnsupportedOperationException();
+        return fileCopier.sync(action);
     }
 
     public CopySpec copySpec(Action<? super CopySpec> action) {
@@ -283,8 +290,7 @@ public class DefaultFileOperations implements FileOperations {
 
     @Override
     public CopySpec copySpec() {
-        throw new UnsupportedOperationException();
-//        return instantiator.newInstance(DefaultCopySpec.class, fileCollectionFactory, instantiator, patternSetFactory);
+        return instantiator.newInstance(DefaultCopySpec.class, fileCollectionFactory, instantiator, patternSetFactory);
     }
 
     @Override

@@ -7,7 +7,7 @@ import com.tyron.builder.internal.metaobject.BeanDynamicObject;
 import com.tyron.builder.internal.metaobject.DynamicInvokeResult;
 import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.metaobject.DynamicObjectUtil;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.scripts.GradleScript;
 
 import groovy.lang.Binding;

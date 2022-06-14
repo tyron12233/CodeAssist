@@ -1,5 +1,6 @@
 package com.tyron.builder.composite.internal;
 
+import com.tyron.builder.BuildResult;
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;

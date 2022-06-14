@@ -1,6 +1,8 @@
 package com.tyron.builder.internal.typeconversion;
 
+import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.exceptions.DiagnosticsVisitor;
+import com.tyron.builder.util.GUtil;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -27,12 +29,7 @@ public class FlatteningNotationParser<N, T> implements NotationParser<N, Set<T>>
 
     @Override
     public Set<T> parseNotation(N notation) {
-        Collection<N> notations;
-        if (notation == null) {
-            notations = Collections.emptyList();
-        } else {
-            notations = Collections.singletonList(notation);
-        }
+        Collection<N> notations = Cast.uncheckedNonnullCast(GUtil.collectionize(notation));
         if (notations.isEmpty()) {
             return Collections.emptySet();
         }

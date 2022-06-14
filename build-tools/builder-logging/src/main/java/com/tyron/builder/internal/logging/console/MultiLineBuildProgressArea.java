@@ -97,7 +97,7 @@ public class MultiLineBuildProgressArea implements BuildProgressArea {
     }
 
     public void redraw(AnsiContext ansi) {
-        int newLines = 0 - statusAreaPos.row + getHeight() - 1;
+        int newLines = -statusAreaPos.row + getHeight() - 1;
         if (isVisible && newLines > 0) {
             ansi.cursorAt(Cursor.newBottomLeft()).newLines(newLines);
         }

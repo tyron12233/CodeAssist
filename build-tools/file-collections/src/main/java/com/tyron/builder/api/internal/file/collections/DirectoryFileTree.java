@@ -8,11 +8,12 @@ import com.tyron.builder.api.file.FileVisitor;
 import com.tyron.builder.api.file.RelativePath;
 import com.tyron.builder.api.file.ReproducibleFileVisitor;
 import com.tyron.builder.api.internal.file.DefaultFileVisitDetails;
+import com.tyron.builder.api.internal.file.FileCollectionStructureVisitor;
 import com.tyron.builder.api.internal.file.FileTreeInternal;
-import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
-import com.tyron.builder.internal.nativeintegration.services.FileSystems;
 import com.tyron.builder.api.tasks.util.PatternFilterable;
 import com.tyron.builder.api.tasks.util.PatternSet;
+import com.tyron.builder.internal.nativeintegration.filesystem.FileSystem;
+import com.tyron.builder.internal.nativeintegration.services.FileSystems;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,15 +26,17 @@ import java.util.function.Predicate;
  * Directory walker supporting {@link Spec}s for includes and excludes.
  * The file system is traversed in depth-first prefix order - all files in a directory will be
  * visited before any child directory is visited.
- *
+ * <p>
  * A file or directory will only be visited if it matches all includes and no
  * excludes.
  */
-public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFileTree, RandomAccessFileCollection, LocalFileTree, DirectoryTree {
+public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFileTree,
+        RandomAccessFileCollection, LocalFileTree, DirectoryTree {
     private static final Logger LOGGER = LoggerFactory.getLogger(DirectoryFileTree.class);
-    private static final DirectoryWalker DEFAULT_DIRECTORY_WALKER = new DefaultDirectoryWalker(
-            FileSystems.getDefault());
-    private static final DirectoryWalker REPRODUCIBLE_DIRECTORY_WALKER = new ReproducibleDirectoryWalker(FileSystems.getDefault());
+    private static final DirectoryWalker DEFAULT_DIRECTORY_WALKER =
+            new DefaultDirectoryWalker(FileSystems.getDefault());
+    private static final DirectoryWalker REPRODUCIBLE_DIRECTORY_WALKER =
+            new ReproducibleDirectoryWalker(FileSystems.getDefault());
 
     private final File dir;
     private final PatternSet patternSet;
@@ -45,7 +48,10 @@ public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFile
     }
 
     @VisibleForTesting
-    public DirectoryFileTree(File dir, PatternSet patternSet, FileSystem fileSystem, boolean postfix) {
+    public DirectoryFileTree(File dir,
+                             PatternSet patternSet,
+                             FileSystem fileSystem,
+                             boolean postfix) {
         this.patternSet = patternSet;
         this.dir = dir;
         this.fileSystem = fileSystem;
@@ -54,8 +60,10 @@ public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFile
 
     @Override
     public String getDisplayName() {
-        String includes = patternSet.getIncludes().isEmpty() ? "" : String.format(" include %s", patternSet.getIncludes().toString());
-        String excludes = patternSet.getExcludes().isEmpty() ? "" : String.format(" exclude %s", patternSet.getExcludes().toString());
+        String includes = patternSet.getIncludes().isEmpty() ? "" : String
+                .format(" include %s", patternSet.getIncludes().toString());
+        String excludes = patternSet.getExcludes().isEmpty() ? "" : String
+                .format(" exclude %s", patternSet.getExcludes().toString());
         return String.format("directory '%s'%s%s", dir, includes, excludes);
     }
 
@@ -86,8 +94,9 @@ public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFile
         return DirectoryTrees.contains(fileSystem, this, file) && file.isFile();
     }
 
+
     @Override
-    public void visitStructure(MinimalFileTreeStructureVisitor visitor, FileTreeInternal owner) {
+    public void visitStructure(FileCollectionStructureVisitor visitor, FileTreeInternal owner) {
         visitor.visitFileTree(dir, patternSet, owner);
     }
 
@@ -98,7 +107,8 @@ public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFile
 
     /**
      * Process the specified file or directory.  If it is a directory, then its contents
-     * (but not the directory itself) will be checked with {@link #isAllowed(FileTreeElement, Spec)} and notified to
+     * (but not the directory itself) will be checked with
+     * {@link #isAllowed(FileTreeElement, Spec)} and notified to
      * the listener.  If it is a file, the file will be checked and notified.
      */
     public void visitFrom(FileVisitor visitor, File fileOrDirectory, RelativePath path) {
@@ -115,18 +125,26 @@ public class DirectoryFileTree implements MinimalFileTree, PatternFilterableFile
         }
     }
 
-    private void processSingleFile(File file, FileVisitor visitor, Predicate<FileTreeElement> spec, AtomicBoolean stopFlag) {
+    private void processSingleFile(File file,
+                                   FileVisitor visitor,
+                                   Predicate<FileTreeElement> spec,
+                                   AtomicBoolean stopFlag) {
         RelativePath path = new RelativePath(true, file.getName());
-        FileVisitDetails
-                details = new DefaultFileVisitDetails(file, path, stopFlag, fileSystem, fileSystem);
+        FileVisitDetails details =
+                new DefaultFileVisitDetails(file, path, stopFlag, fileSystem, fileSystem);
         if (isAllowed(details, spec)) {
             visitor.visitFile(details);
         }
     }
 
-    private void walkDir(File file, RelativePath path, FileVisitor visitor, Predicate<FileTreeElement> spec, AtomicBoolean stopFlag) {
+    private void walkDir(File file,
+                         RelativePath path,
+                         FileVisitor visitor,
+                         Predicate<FileTreeElement> spec,
+                         AtomicBoolean stopFlag) {
         DirectoryWalker directoryWalker;
-        if (visitor instanceof ReproducibleFileVisitor && ((ReproducibleFileVisitor) visitor).isReproducibleFileOrder()) {
+        if (visitor instanceof ReproducibleFileVisitor &&
+            ((ReproducibleFileVisitor) visitor).isReproducibleFileOrder()) {
             directoryWalker = REPRODUCIBLE_DIRECTORY_WALKER;
         } else {
             directoryWalker = DEFAULT_DIRECTORY_WALKER;

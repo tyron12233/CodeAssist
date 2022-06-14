@@ -7,6 +7,7 @@ import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.GradleInternal;
 import com.tyron.builder.api.internal.SettingsInternal;
 import com.tyron.builder.api.internal.artifacts.DefaultBuildIdentifier;
+import com.tyron.builder.initialization.buildsrc.BuildSrcDetector;
 import com.tyron.builder.internal.concurrent.CompositeStoppable;
 import com.tyron.builder.internal.concurrent.Stoppable;
 import com.tyron.builder.internal.event.ListenerManager;
@@ -161,17 +162,17 @@ public class DefaultIncludedBuildRegistry implements BuildStateRegistry, Stoppab
     }
 
     private void maybeAddBuildSrcBuild(BuildState owner) {
-//        File buildSrcDir = new File(owner.getBuildRootDir(), SettingsInternal.BUILD_SRC);
-//        if (!BuildSrcDetector.isValidBuildSrcBuild(buildSrcDir)) {
-//            return;
-//        }
-//
-//        BuildDefinition buildDefinition = buildStateFactory.buildDefinitionFor(buildSrcDir, owner);
-//        Path identityPath = assignPath(owner, buildDefinition.getName(), buildDefinition.getBuildRootDir());
-//        BuildIdentifier buildIdentifier = idFor(buildDefinition.getName());
-//        StandAloneNestedBuild build = buildStateFactory.createNestedBuild(buildIdentifier, identityPath, buildDefinition, owner);
-//        buildSrcBuildsByOwner.put(owner, build);
-//        addBuild(build);
+        File buildSrcDir = new File(owner.getBuildRootDir(), SettingsInternal.BUILD_SRC);
+        if (!BuildSrcDetector.isValidBuildSrcBuild(buildSrcDir)) {
+            return;
+        }
+
+        BuildDefinition buildDefinition = buildStateFactory.buildDefinitionFor(buildSrcDir, owner);
+        Path identityPath = assignPath(owner, buildDefinition.getName(), buildDefinition.getBuildRootDir());
+        BuildIdentifier buildIdentifier = idFor(buildDefinition.getName());
+        StandAloneNestedBuild build = buildStateFactory.createNestedBuild(buildIdentifier, identityPath, buildDefinition, owner);
+        buildSrcBuildsByOwner.put(owner, build);
+        addBuild(build);
     }
 
     @Override

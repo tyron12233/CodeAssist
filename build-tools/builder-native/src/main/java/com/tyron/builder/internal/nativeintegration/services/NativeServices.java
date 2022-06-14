@@ -1,11 +1,14 @@
 package com.tyron.builder.internal.nativeintegration.services;
 
+import com.tyron.builder.api.Action;
+import com.tyron.builder.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.os.OperatingSystem;
 import com.tyron.builder.internal.nativeintegration.network.HostnameLookup;
-import com.tyron.builder.internal.reflect.service.DefaultServiceRegistry;
-import com.tyron.builder.internal.reflect.service.ServiceCreationException;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.DefaultServiceRegistry;
+import com.tyron.builder.internal.service.ServiceCreationException;
+import com.tyron.builder.internal.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.initialization.GradleUserHomeDirProvider;
 import com.tyron.builder.internal.SystemProperties;
 
@@ -191,12 +194,7 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
 
     private NativeServices() {
 //        addProvider(new FileSystemServices());
-//        register(new Action<ServiceRegistration>() {
-//            @Override
-//            public void execute(ServiceRegistration registration) {
-//                registration.add(GradleUserHomeTemporaryFileProvider.class);
-//            }
-//        });
+        register(registration -> registration.add(GradleUserHomeTemporaryFileProvider.class));
     }
 
     @Override

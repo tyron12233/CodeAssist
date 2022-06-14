@@ -1,6 +1,8 @@
 package com.tyron.builder.api.internal;
 
+import com.tyron.builder.api.Action;
 import com.tyron.builder.api.Task;
+import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.logging.StandardOutputCapture;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.internal.resources.ResourceLock;
@@ -13,6 +15,7 @@ import com.tyron.builder.api.internal.TaskOutputsInternal;
 import com.tyron.builder.api.tasks.TaskState;
 import com.tyron.builder.util.Path;
 
+import java.io.File;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -25,6 +28,9 @@ public interface TaskInternal extends Task {
      * once they start executing.
      */
     List<InputChangesAwareTaskAction> getTaskActions();
+
+    @Internal
+    boolean hasTaskActions();
 
     /**
      * "Lifecycle dependencies" are dependencies of this task declared via an explicit {@link Task#dependsOn(Object...)} call,
@@ -42,13 +48,27 @@ public interface TaskInternal extends Task {
     @Internal
     List<? extends ResourceLock> getSharedResources();
 
+    @Override
     TaskOutputsInternal getOutputs();
 
+    @Override
     TaskInputsInternal getInputs();
 
+    @Override
     TaskStateInternal getState();
 
+    @Internal
     boolean getImpliesSubProjects();
+
+    void setImpliesSubProjects(boolean impliesSubProjects);
+
+    /**
+     * The returned factory is expected to return the same file each time.
+     * <p>
+     * The getTemporaryDir() method creates the directory which can be problematic. Use this to delay that creation.
+     */
+    @Internal
+    Factory<File> getTemporaryDirFactory();
 
     @Internal
     StandardOutputCapture getStandardOutputCapture();
@@ -59,7 +79,7 @@ public interface TaskInternal extends Task {
      * Gradle considers the task as untracked if the reason is present.
      * When not tracking state, a reason must be present. Hence the {@code Optional} represents the state of enablement, too.
      *
-     * @see org.gradle.api.tasks.UntrackedTask
+     * @see com.tyron.builder.api.tasks.UntrackedTask
      */
     @Internal
     default Optional<String> getReasonNotToTrackState() {
@@ -68,6 +88,13 @@ public interface TaskInternal extends Task {
 
     @Internal
     TaskIdentity<?> getTaskIdentity();
+
+    void prependParallelSafeAction(Action<? super Task> action);
+
+    void appendParallelSafeAction(Action<? super Task> action);
+
+    @Internal
+    boolean isHasCustomActions();
 
     @Internal
     Path getIdentityPath();

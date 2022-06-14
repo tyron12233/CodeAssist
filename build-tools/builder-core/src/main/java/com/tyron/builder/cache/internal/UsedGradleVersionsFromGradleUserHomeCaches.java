@@ -1,8 +1,8 @@
 package com.tyron.builder.cache.internal;
 
 import com.google.common.collect.Sets;
-import com.tyron.builder.api.internal.DocumentationRegistry.GradleVersion;
 import com.tyron.builder.cache.scopes.GlobalScopedCache;
+import com.tyron.builder.util.GradleVersion;
 
 import java.util.SortedSet;
 

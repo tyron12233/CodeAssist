@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.instantiation.generator;
 
-import static com.tyron.builder.internal.asm.AsmClassGeneratorUtils.getterSignature;
-import static com.tyron.builder.internal.asm.AsmClassGeneratorUtils.signature;
-import static com.tyron.builder.internal.asm.AsmClassGeneratorUtils.unboxOrCast;
+import static com.tyron.builder.model.internal.asm.AsmClassGeneratorUtils.getterSignature;
+import static com.tyron.builder.model.internal.asm.AsmClassGeneratorUtils.signature;
+import static com.tyron.builder.model.internal.asm.AsmClassGeneratorUtils.unboxOrCast;
 
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 
 import static org.objectweb.asm.Opcodes.AALOAD;
 import static org.objectweb.asm.Opcodes.AASTORE;
@@ -106,8 +107,8 @@ import com.tyron.builder.internal.metaobject.AbstractDynamicObject;
 import com.tyron.builder.internal.metaobject.BeanDynamicObject;
 import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.reflect.JavaReflectionUtil;
-import com.tyron.builder.internal.reflect.service.ServiceLookup;
-import com.tyron.builder.internal.reflect.service.ServiceRegistry;
+import com.tyron.builder.internal.service.ServiceLookup;
+import com.tyron.builder.internal.service.ServiceRegistry;
 import com.tyron.builder.internal.state.Managed;
 import com.tyron.builder.internal.state.ModelObject;
 import com.tyron.builder.internal.state.OwnerAware;
@@ -230,7 +231,12 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
             throw UncheckedException.throwAsUncheckedException(e);
         }
 
-        Method method = CollectionUtils.findFirst(generatedType.getDeclaredMethods(), m -> m.getName().equals(ClassBuilderImpl.INIT_METHOD));
+        Method method = CollectionUtils.findFirst(generatedType.getDeclaredMethods(), new Predicate<Method>() {
+            @Override
+            public boolean test(Method m) {
+                return m.getName().equals(ClassBuilderImpl.INIT_METHOD);
+            }
+        });
         method.setAccessible(true);
 
         return new InvokeSerializationConstructorAndInitializeFieldsStrategy(constructor, method, getRoleHandler());

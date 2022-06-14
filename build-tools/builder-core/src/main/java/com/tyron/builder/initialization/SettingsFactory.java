@@ -13,6 +13,7 @@ import com.tyron.builder.api.internal.initialization.ClassLoaderScope;
 import com.tyron.builder.api.internal.initialization.ScriptHandlerFactory;
 import com.tyron.builder.api.internal.properties.GradleProperties;
 import com.tyron.builder.groovy.scripts.ScriptSource;
+import com.tyron.builder.internal.extensibility.ExtensibleDynamicObject;
 import com.tyron.builder.internal.metaobject.DynamicObject;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.service.scopes.ServiceRegistryFactory;
@@ -49,8 +50,8 @@ public class SettingsFactory {
             startParameter
         );
         Map<String, Object> properties = gradleProperties.mergeProperties(emptyMap());
-//        DynamicObject dynamicObject = ((DynamicObjectAware) settings).getAsDynamicObject();
-//        ((ExtensibleDynamicObject) dynamicObject).addProperties(properties);
+        DynamicObject dynamicObject = ((DynamicObjectAware) settings).getAsDynamicObject();
+        ((ExtensibleDynamicObject) dynamicObject).addProperties(properties);
         return settings;
     }
 }

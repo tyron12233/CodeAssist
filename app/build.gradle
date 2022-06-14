@@ -48,6 +48,9 @@ android {
         exclude "about_files/*"
         exclude "META-INF/eclipse.inf"
         exclude "META-INF/INDEX.LIST"
+        exclude "META-INF/DEPENDENCIES"
+        exclude "META-INF/groovy-release-info.properties"
+        pickFirst "META-INF/sisu/*"
     }
 }
 
@@ -56,6 +59,8 @@ configurations.implementation {
 }
 
 dependencies {
+    implementation projects.terminalview
+
     // TODO: Removed these modules, the features that are using these modules
     // should be moved into its own module.
 
@@ -85,7 +90,16 @@ dependencies {
     implementation projects.buildTools.builderCoreApi
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderLauncher
+    implementation projects.buildTools.builderBuildOperations
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderEnterpriseWorkers
     implementation projects.buildTools.builderConfigurationCache
+    implementation projects.buildTools.builderPlugins
+    implementation projects.buildTools.builderJava
+    implementation projects.buildTools.builderNative
+    // emulating console
+    implementation 'org.fusesource.jansi:jansi:2.4.0'
+
     implementation project(path: ':build-tools:builder-api')
     implementation project(path: ':build-tools:builder-java')
     implementation project(path: ':build-tools:build-logic')

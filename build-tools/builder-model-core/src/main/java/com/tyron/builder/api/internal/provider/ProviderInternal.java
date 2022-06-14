@@ -27,7 +27,7 @@ public interface ProviderInternal<T> extends Provider<T>, ValueSupplier, TaskDep
     ValueSupplier.Value<? extends T> calculateValue(ValueConsumer consumer);
 
     /**
-     * Returns a view of this provider that can be used to supply a value to a {@link org.gradle.api.provider.Property} instance.
+     * Returns a view of this provider that can be used to supply a value to a {@link com.tyron.builder.api.provider.Property} instance.
      */
     ProviderInternal<T> asSupplier(DisplayName owner, Class<? super T> targetType, ValueSanitizer<? super T> sanitizer);
 

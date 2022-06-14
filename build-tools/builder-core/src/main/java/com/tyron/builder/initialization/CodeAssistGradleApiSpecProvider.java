@@ -19,48 +19,44 @@ import java.util.Set;
 import groovy.lang.GroovyObject;
 import groovy.lang.MetaClass;
 
-public class CodeAssistGradleApiSpecProvider implements GradleApiSpecProvider {
+public class CodeAssistGradleApiSpecProvider extends GradleApiSpecProvider.SpecAdapter implements GradleApiSpecProvider {
+    @Override
+    public Set<Class<?>> getExportedClasses() {
+        return ImmutableSet.of();
+    }
+
+    @Override
+    public Set<String> getExportedPackages() {
+        return ImmutableSet.of(
+                "com.tyron.builder",
+                "org.apache.tools.ant",
+                "groovy",
+                "org.codehaus.groovy",
+                "groovyjarjarantlr",
+                "org.slf4j",
+                "org.apache.commons.logging",
+                "org.apache.log4j",
+                "javax.annotation",
+                "javax.inject");
+    }
+
+    @Override
+    public Set<String> getExportedResourcePrefixes() {
+        return ImmutableSet.of(
+                "META-INF/gradle-plugins"
+        );
+    }
+
+    @Override
+    public Set<String> getExportedResources() {
+        return ImmutableSet.of(
+                "META-INF/groovy/org.codehaus.groovy.runtime.ExtensionModule",
+                "META-INF/services/org.apache.groovy.json.FastStringServiceFactory"
+        );
+    }
+
     @Override
     public Spec get() {
-        return new GradleApiSpecAggregator.DefaultSpec(
-                merge(getScriptExportedClasses(), getGroovyExportedClasses()),
-                ImmutableSet.of(
-                        "com.tyron.builder.api",
-                        "groovy.lang",
-                        "org.codehaus.groovy.reflection",
-                        "org.codehaus.groovy.runtime"
-                ),
-                ImmutableSet.of(),
-                ImmutableSet.of()
-        );
-    }
-
-    private Set<Class<?>> getGroovyExportedClasses() {
-        return ImmutableSet.of(
-                CallSite.class,
-                CallSiteArray.class
-        );
-    }
-
-    private Set<Class<?>> getScriptExportedClasses() {
-        return ImmutableSet.of(
-                DefaultScript.class,
-                Script.class,
-                ScriptSource.class,
-                ScriptOrigin.class,
-                Instrumented.class,
-                ProjectScript.class,
-                SettingsScript.class,
-                InitScript.class
-        );
-    }
-
-    @SafeVarargs
-    private static <T> ImmutableSet<T> merge(Collection<T>... items) {
-        ImmutableSet.Builder<T> builder = ImmutableSet.builder();
-        for (Collection<T> item : items) {
-            builder.addAll(item);
-        }
-        return builder.build();
+        return this;
     }
 }

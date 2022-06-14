@@ -1,12 +1,18 @@
 package com.tyron.builder.composite.internal;
 
+import com.tyron.builder.api.artifacts.component.ComponentSelector;
 import com.tyron.builder.api.capabilities.Capability;
+import com.tyron.builder.api.internal.artifacts.dsl.CapabilityNotationParserFactory;
+import com.tyron.builder.api.internal.attributes.ImmutableAttributesFactory;
 import com.tyron.builder.api.internal.composite.CompositeBuildContext;
+import com.tyron.builder.api.model.ObjectFactory;
 import com.tyron.builder.internal.event.ListenerManager;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.reflect.Instantiator;
+import com.tyron.builder.internal.service.ServiceRegistration;
 import com.tyron.builder.internal.build.BuildStateRegistry;
 import com.tyron.builder.internal.build.IncludedBuildFactory;
 import com.tyron.builder.internal.service.scopes.AbstractPluginServiceRegistry;
+import com.tyron.builder.internal.typeconversion.NotationParser;
 
 public class CompositeBuildServices extends AbstractPluginServiceRegistry {
 
@@ -33,11 +39,16 @@ public class CompositeBuildServices extends AbstractPluginServiceRegistry {
             serviceRegistration.add(DefaultIncludedBuildTaskGraph.class);
         }
 
-        public BuildStateRegistry createIncludedBuildRegistry(ListenerManager listenerManager,
+        public BuildStateRegistry createIncludedBuildRegistry(CompositeBuildContext context,
+                                                              Instantiator instantiator,
+                                                              ListenerManager listenerManager,
+                                                              ObjectFactory objectFactory,
+                                                              NotationParser<Object, ComponentSelector> moduleSelectorNotationParser,
+                                                              ImmutableAttributesFactory attributesFactory,
                                                               BuildStateFactory buildStateFactory,
                                                               IncludedBuildFactory includedBuildFactory) {
-//            NotationParser<Object, Capability> capabilityNotationParser = new CapabilityNotationParserFactory(false).create();
-            IncludedBuildDependencySubstitutionsBuilder dependencySubstitutionsBuilder = new  IncludedBuildDependencySubstitutionsBuilder();// IncludedBuildDependencySubstitutionsBuilder(context, instantiator, objectFactory, attributesFactory, moduleSelectorNotationParser, capabilityNotationParser);
+            NotationParser<Object, Capability> capabilityNotationParser = new CapabilityNotationParserFactory(false).create();
+            IncludedBuildDependencySubstitutionsBuilder dependencySubstitutionsBuilder = new IncludedBuildDependencySubstitutionsBuilder(context, instantiator, objectFactory, attributesFactory, moduleSelectorNotationParser, capabilityNotationParser);
             return new DefaultIncludedBuildRegistry(includedBuildFactory, dependencySubstitutionsBuilder, listenerManager, buildStateFactory);
         }
 

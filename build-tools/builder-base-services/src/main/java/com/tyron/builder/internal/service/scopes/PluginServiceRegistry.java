@@ -1,8 +1,6 @@
 package com.tyron.builder.internal.service.scopes;
 
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
-import com.tyron.builder.internal.service.scopes.Scope;
-import com.tyron.builder.internal.service.scopes.Scopes;
+import com.tyron.builder.internal.service.ServiceRegistration;
 
 /**
  * Can be implemented by plugins to provide services in various scopes.

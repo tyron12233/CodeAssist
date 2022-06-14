@@ -7,6 +7,14 @@ import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
 import java.io.Flushable;
 import java.io.IOException;
 
+
+import com.tyron.builder.api.Action;
+import com.tyron.builder.api.UncheckedIOException;
+import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
+
+import java.io.Flushable;
+import java.io.IOException;
+
 public class AnsiConsole implements Console {
     private final Action<AnsiContext> redrawAction = new Action<AnsiContext>() {
         @Override

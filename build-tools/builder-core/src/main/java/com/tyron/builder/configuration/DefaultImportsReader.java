@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.google.common.io.LineProcessor;
 import com.google.common.io.Resources;
 import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -53,14 +54,14 @@ public class DefaultImportsReader implements ImportsReader {
             private final List<String> packages = Lists.newLinkedList();
 
             @Override
-            public boolean processLine(@SuppressWarnings("NullableProblems") String line) throws IOException {
+            public boolean processLine(@SuppressWarnings("NullableProblems") String line) {
                 packages.add(line.substring(7, line.length() - 2));
                 return true;
             }
 
             @Override
             public String[] getResult() {
-                return packages.toArray(new String[packages.size()]);
+                return packages.toArray(new String[0]);
             }
         });
     }
@@ -74,7 +75,7 @@ public class DefaultImportsReader implements ImportsReader {
             private final ImmutableMap.Builder<String, List<String>> builder = ImmutableMap.builder();
 
             @Override
-            public boolean processLine(String line) throws IOException {
+            public boolean processLine(@NotNull String line) {
                 boolean process = !StringUtils.isEmpty(line);
                 if (process) {
                     String[] split = line.split(":");

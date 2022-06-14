@@ -108,6 +108,9 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.ViewHolder>{
         }
 
         public void bind(DiagnosticWrapper diagnostic) {
+            if (diagnostic.getMessage(Locale.getDefault()) == null) {
+                return;
+            }
             SpannableStringBuilder builder = new SpannableStringBuilder();
 //            if (diagnostic.getKind() != null) {
 //                builder.append(new ForegroundColorSpan(getColor(diagnostic.getKind())),
@@ -118,7 +121,7 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.ViewHolder>{
                         new ForegroundColorSpan(getColor(diagnostic.getKind())),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             } else {
-                builder.append(diagnostic.getMessage(Locale.getDefault()));
+                builder.append(diagnostic.getMessageCharSequence());
             }
             if (diagnostic.getSource() != null) {
                 builder.append(' ');

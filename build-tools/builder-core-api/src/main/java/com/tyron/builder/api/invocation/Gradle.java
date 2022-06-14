@@ -1,17 +1,69 @@
 package com.tyron.builder.api.invocation;
 
+import com.tyron.builder.BuildResult;
 import com.tyron.builder.api.Action;
 import com.tyron.builder.BuildListener;
 import com.tyron.builder.api.ProjectEvaluationListener;
 import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.UnknownDomainObjectException;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionGraphListener;
+import com.tyron.builder.api.execution.TaskExecutionListener;
 import com.tyron.builder.api.initialization.IncludedBuild;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.initialization.Settings;
+import com.tyron.builder.api.plugins.PluginAware;
 
+import java.io.File;
 import java.util.Collection;
 
-public interface Gradle {
+import javax.annotation.Nullable;
+
+import groovy.lang.Closure;
+
+public interface Gradle extends PluginAware {
+
+    /**
+     * Returns the current Gradle version.
+     *
+     * @return The Gradle version. Never returns null.
+     */
+    String getGradleVersion();
+
+    /**
+     * Returns the Gradle user home directory.
+     *
+     * This directory is used to cache downloaded resources, compiled build scripts and so on.
+     *
+     * @return The user home directory. Never returns null.
+     */
+    File getGradleUserHomeDir();
+
+    /**
+     * Returns the Gradle home directory, if any.
+     *
+     * This directory is the directory containing the Gradle distribution executing this build.
+     * <p>
+     * When using the “Gradle Daemon”, this may not be the same Gradle distribution that the build was started with.
+     * If an existing daemon process is running that is deemed compatible (e.g. has the desired JVM characteristics)
+     * then this daemon may be used instead of starting a new process and it may have been started from a different “gradle home”.
+     * However, it is guaranteed to be the same version of Gradle. For more information on the Gradle Daemon, please consult the
+     * <a href="https://docs.gradle.org/current/userguide/gradle_daemon.html" target="_top">User Manual</a>.
+     *
+     * @return The home directory. May return null.
+     */
+    @Nullable
+    File getGradleHomeDir();
+
+    /**
+     * Returns the parent build of this build, if any.
+     *
+     * @return The parent build. May return null.
+     */
+    @Nullable
+    Gradle getParent();
+
+
     /**
      * Returns the root project of this build.
      *
@@ -55,6 +107,21 @@ public interface Gradle {
     StartParameter getStartParameter();
 
     /**
+     * Adds a listener to this build, to receive notifications as projects are evaluated.
+     *
+     * @param listener The listener to add. Does nothing if this listener has already been added.
+     * @return The added listener.
+     */
+    ProjectEvaluationListener addProjectEvaluationListener(ProjectEvaluationListener listener);
+
+    /**
+     * Removes the given listener from this build.
+     *
+     * @param listener The listener to remove. Does nothing if this listener has not been added.
+     */
+    void removeProjectEvaluationListener(ProjectEvaluationListener listener);
+
+    /**
      * Adds an action to be called immediately before a project is evaluated.
      *
      * @param action The action to execute.
@@ -62,6 +129,13 @@ public interface Gradle {
      */
     void beforeProject(Action<? super BuildProject> action);
 
+    /**
+     * Adds a closure to be called immediately before a project is evaluated. The project is passed to the closure as a
+     * parameter.
+     *
+     * @param closure The closure to execute.
+     */
+    void beforeProject(Closure closure);
 
     /**
      * Adds an action to be called immediately after a project is evaluated.
@@ -70,6 +144,53 @@ public interface Gradle {
      * @since 3.4
      */
     void afterProject(Action<? super BuildProject> action);
+
+    /**
+     * Adds a closure to be called immediately after a project is evaluated.
+     *
+     * The project is passed to the closure as the first parameter. The project evaluation failure, if any,
+     * is passed as the second parameter. Both parameters are optional.
+     *
+     * @param closure The closure to execute.
+     */
+    void afterProject(Closure closure);
+
+    /**
+     * Adds an action to be called before the build settings have been loaded and evaluated.
+     *
+     * @param closure The action to execute.
+     * @since 6.0
+     */
+    void beforeSettings(Closure<?> closure);
+
+    /**
+     * Adds an action to be called before the build settings have been loaded and evaluated.
+     *
+     * @param action The action to execute.
+     * @since 6.0
+     */
+    void beforeSettings(Action<? super Settings> action);
+
+    /**
+     * Adds a closure to be called when the build settings have been loaded and evaluated.
+     *
+     * The settings object is fully configured and is ready to use to load the build projects. The
+     * {@link org.gradle.api.initialization.Settings} object is passed to the closure as a parameter.
+     *
+     * @param closure The closure to execute.
+     */
+    void settingsEvaluated(Closure closure);
+
+    /**
+     * Adds an action to be called when the build settings have been loaded and evaluated.
+     *
+     * The settings object is fully configured and is ready to use to load the build projects.
+     *
+     * @param action The action to execute.
+     * @since 3.4
+     */
+    void settingsEvaluated(Action<? super Settings> action);
+
 
     /**
      * Adds an action to be called when the projects for the build have been created from the settings.
@@ -82,6 +203,30 @@ public interface Gradle {
     void projectsLoaded(Action<? super Gradle> action);
 
     /**
+     * Adds a closure to be called when the projects for the build have been created from the settings.
+     *
+     * None of the projects have been evaluated. This {@code Gradle} instance is passed to the closure as a parameter.
+     * <p>
+     * An example of hooking into the projectsLoaded to configure buildscript classpath from the init script.
+     * <pre class='autoTested'>
+     * //init.gradle
+     * gradle.projectsLoaded {
+     *   rootProject.buildscript {
+     *     repositories {
+     *       //...
+     *     }
+     *     dependencies {
+     *       //...
+     *     }
+     *   }
+     * }
+     * </pre>
+     *
+     * @param closure The closure to execute.
+     */
+    void projectsLoaded(Closure closure);
+
+    /**
      * Adds an action to be called when all projects for the build have been evaluated.
      *
      * The project objects are fully configured and are ready to use to populate the task graph.
@@ -90,6 +235,36 @@ public interface Gradle {
      * @since 3.4
      */
     void projectsEvaluated(Action<? super Gradle> action);
+
+    /**
+     * Adds a closure to be called when all projects for the build have been evaluated.
+     *
+     * The project objects are fully configured and are ready to use to populate the task graph.
+     * This {@code Gradle} instance is passed to the closure as a parameter.
+     *
+     * @param closure The closure to execute.
+     */
+    void projectsEvaluated(Closure closure);
+
+    /**
+     * Adds a closure to be called when the build is completed.
+     *
+     * All selected tasks have been executed.
+     * A {@link BuildResult} instance is passed to the closure as a parameter.
+     *
+     * @param closure The closure to execute.
+     */
+    void buildFinished(Closure closure);
+
+    /**
+     * Adds an action to be called when the build is completed.
+     *
+     * All selected tasks have been executed.
+     *
+     * @param action The action to execute.
+     * @since 3.4
+     */
+    void buildFinished(Action<? super BuildResult> action);
 
     /**
      * Returns this {@code Gradle} instance.
@@ -144,6 +319,21 @@ public interface Gradle {
      * @param listener The listener to remove. Does nothing if this listener has not been added.
      */
     void removeListener(Object listener);
+
+    /**
+     * Uses the given object as a logger.
+     *
+     * The logger object may implement any of the listener interfaces supported by
+     * {@link #addListener(Object)}.
+     * <p>
+     * Each listener interface has exactly one associated logger. When you call this
+     * method with a logger of a given listener type, the new logger will replace whichever logger is currently
+     * associated with the listener type. This allows you to selectively replace the standard logging which Gradle
+     * provides with your own implementation, for certain types of events.
+     *
+     * @param logger The logger to use.
+     */
+    void useLogger(Object logger);
 
     /**
      * Returns the build services that are shared by all projects of this build.

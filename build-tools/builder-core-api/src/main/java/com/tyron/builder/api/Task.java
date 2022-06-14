@@ -3,7 +3,11 @@ package com.tyron.builder.api;
 import com.tyron.builder.api.logging.Logger;
 import com.tyron.builder.api.logging.LoggingManager;
 import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.plugins.Convention;
+import com.tyron.builder.api.plugins.ExtensionAware;
+import com.tyron.builder.api.provider.Property;
 import com.tyron.builder.api.tasks.Internal;
+import com.tyron.builder.api.tasks.Optional;
 import com.tyron.builder.api.tasks.TaskDependency;
 import com.tyron.builder.api.tasks.TaskDestroyables;
 import com.tyron.builder.api.tasks.TaskInputs;
@@ -11,12 +15,17 @@ import com.tyron.builder.api.tasks.TaskLocalState;
 import com.tyron.builder.api.tasks.TaskOutputs;
 import com.tyron.builder.api.tasks.TaskState;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.io.File;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
-public interface Task extends Comparable<Task> {
+import groovy.lang.Closure;
+
+public interface Task extends Comparable<Task>, ExtensionAware {
 
     String TASK_NAME = "name";
 
@@ -38,6 +47,20 @@ public interface Task extends Comparable<Task> {
      * @since 4.7
      */
     String TASK_CONSTRUCTOR_ARGS = "constructorArgs";
+
+    /**
+     * A {@link com.tyron.builder.api.Namer} namer for tasks that returns {@link #getName()}.
+     */
+    class Namer implements com.tyron.builder.api.Namer<Task> {
+        @Override
+        public String determineName(Task c) {
+            return c.getName();
+        }
+    }
+
+    @Incubating
+    @Internal
+    void doNotTrackState(String reasonNotToTrackState);
 
     /**
      * Returns the name of this task. This name uniquely identifies the task within its Project
@@ -66,6 +89,7 @@ public interface Task extends Comparable<Task> {
      *
      * @return The dependencies of this task. Never returns null.
      */
+    @Internal
     TaskDependency getTaskDependencies();
 
     Task dependsOn(Object... paths);
@@ -79,6 +103,7 @@ public interface Task extends Comparable<Task> {
      *
      * @return The dependencies of this task. Returns an empty set if this task has no dependencies.
      */
+    @Internal
     Set<Object> getDependsOn();
 
     /**
@@ -138,11 +163,12 @@ public interface Task extends Comparable<Task> {
      *
      * @return true if this task did any work
      */
+    @Internal
     boolean getDidWork();
 
     /**
      * <p>Returns the path of the task, which is a fully qualified name for the task. The path of a task is the path of
-     * its {@link Project} plus the name of the task, separated by <code>:</code>.</p>
+     * its {@link BuildProject} plus the name of the task, separated by <code>:</code>.</p>
      *
      * @return the path of the task, which is equal to the path of the project plus the name of the task.
      */
@@ -155,6 +181,15 @@ public interface Task extends Comparable<Task> {
      * @return the task object this method is applied to
      */
     Task doFirst(Action<? super Task> action);
+
+    /**
+     * <p>Adds the given closure to the beginning of this task's action list. The closure is passed this task as a
+     * parameter when executed.</p>
+     *
+     * @param action The action closure to execute.
+     * @return This task.
+     */
+    Task doFirst(Closure action);
 
     /**
      * <p>Adds the given {@link Action} to the beginning of this task's action list.</p>
@@ -174,6 +209,15 @@ public interface Task extends Comparable<Task> {
      * @return the task object this method is applied to
      */
     Task doLast(Action<? super Task> action);
+
+    /**
+     * <p>Adds the given closure to the end of this task's action list.  The closure is passed this task as a parameter
+     * when executed.</p>
+     *
+     * @param action The action closure to execute.
+     * @return This task.
+     */
+    Task doLast(Closure action);
 
     /**
      * <p>Adds the given {@link Action} to the end of this task's action list.</p>
@@ -202,10 +246,23 @@ public interface Task extends Comparable<Task> {
     void setEnabled(boolean enabled);
 
     /**
+     * <p>Returns the {@link Convention} object for this task. A {@link Plugin} can use the convention object to
+     * contribute properties and methods to this task.</p>
+     *
+     * @return The convention object. Never returns null.
+     * @deprecated The concept of conventions is deprecated. Use extensions if possible.
+     * @see ExtensionAware#getExtensions()
+     */
+    @Internal
+    @Deprecated
+    Convention getConvention();
+
+    /**
      * Returns the description of this task.
      *
      * @return the description. May return null.
      */
+    @Internal
     String getDescription();
 
     /**
@@ -222,6 +279,8 @@ public interface Task extends Comparable<Task> {
      *
      * @return The task group for this task. Might be null.
      */
+    @Internal
+    @Nullable
     String getGroup();
 
     /**
@@ -238,6 +297,7 @@ public interface Task extends Comparable<Task> {
      *
      * @return The inputs. Never returns null.
      */
+    @Internal
     TaskInputs getInputs();
 
     /**
@@ -245,6 +305,7 @@ public interface Task extends Comparable<Task> {
      *
      * @return The outputs. Never returns null.
      */
+    @Internal
     TaskOutputs getOutputs();
 
     /**
@@ -253,6 +314,7 @@ public interface Task extends Comparable<Task> {
      *
      * @since 4.0
      */
+    @Internal
     TaskDestroyables getDestroyables();
 
     /**
@@ -260,6 +322,7 @@ public interface Task extends Comparable<Task> {
      *
      * @since 4.3
      */
+    @Internal
     TaskLocalState getLocalState();
 
     /**
@@ -269,6 +332,7 @@ public interface Task extends Comparable<Task> {
      *
      * @return The directory. Never returns null. The directory will already exist.
      */
+    @Internal
     File getTemporaryDir();
 
 
@@ -415,6 +479,28 @@ public interface Task extends Comparable<Task> {
      * @return The tasks that this task should run after. Returns an empty set if this task has no tasks it must run after.
      */
     TaskDependency getShouldRunAfter();
+
+    /**
+     * <p>The timeout of this task.</p>
+     *
+     * <pre class='autoTested'>
+     *   task myTask {
+     *       timeout = Duration.ofMinutes(10)
+     *   }
+     * </pre>
+     *
+     * <p>
+     * The Thread executing this task will be interrupted if the task takes longer than the specified amount of time to run.
+     * In order for a task to work properly with this feature, it needs to react to interrupts and must clean up any resources it opened.
+     * </p>
+     * <p>By default, tasks never time out.</p>
+     *
+     * @since 5.0
+     */
+    @Internal
+    @Optional
+    Property<Duration> getTimeout();
+
 
     BuildProject getProject();
 

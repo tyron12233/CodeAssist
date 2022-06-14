@@ -1,11 +1,9 @@
 package com.tyron.builder.internal.logging.text;
 
 import com.tyron.builder.api.internal.GeneratedSubclasses;
-import com.tyron.builder.internal.logging.text.StyledTextOutput;
+import com.tyron.builder.util.internal.TextUtil;
 
 import javax.annotation.Nullable;
-
-import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
@@ -52,7 +50,7 @@ public class TreeFormatter implements DiagnosticsVisitor {
             // A new top level node, implicitly finish the previous node
             if (current != current.parent.firstChild) {
                 // Not the first top level node
-                original.append("\n");
+                original.append(TextUtil.getPlatformLineSeparator());
             }
             original.append(text);
             current.valueWritten = true;
@@ -269,7 +267,7 @@ public class TreeFormatter implements DiagnosticsVisitor {
             writeNode(node.firstChild);
         }
         if (node.nextSibling != null) {
-            original.append(File.separator);
+            original.append(TextUtil.getPlatformLineSeparator());
             writeNode(node.nextSibling);
         }
     }
@@ -279,10 +277,10 @@ public class TreeFormatter implements DiagnosticsVisitor {
     }
 
     private enum Separator {
-        NewLine(true, "\n"),
+        NewLine(true, TextUtil.getPlatformLineSeparator()),
         Empty(false, " "),
         Colon(false, ": "),
-        ColonNewLine(true, ":" + "\n");
+        ColonNewLine(true, ":" + TextUtil.getPlatformLineSeparator());
 
         Separator(boolean newLine, String text) {
             this.newLine = newLine;

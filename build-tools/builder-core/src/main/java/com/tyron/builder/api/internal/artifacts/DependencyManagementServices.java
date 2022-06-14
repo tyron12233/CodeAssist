@@ -5,7 +5,7 @@ import com.tyron.builder.api.internal.artifacts.configurations.DependencyMetaDat
 import com.tyron.builder.api.internal.artifacts.dsl.dependencies.ProjectFinder;
 import com.tyron.builder.api.internal.file.FileCollectionFactory;
 import com.tyron.builder.api.internal.file.FileResolver;
-import com.tyron.builder.internal.reflect.service.ServiceRegistration;
+import com.tyron.builder.internal.service.ServiceRegistration;
 
 /**
  * Factory for various types related to dependency management.

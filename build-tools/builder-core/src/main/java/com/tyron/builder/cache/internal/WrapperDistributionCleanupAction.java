@@ -1,6 +1,7 @@
 package com.tyron.builder.cache.internal;
 
 import static com.tyron.builder.util.internal.CollectionUtils.single;
+import static org.apache.commons.io.filefilter.FileFilterUtils.directoryFileFilter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -9,9 +10,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.tyron.builder.api.internal.DocumentationRegistry;
-import com.tyron.builder.api.internal.DocumentationRegistry.GradleVersion;
 import com.tyron.builder.cache.CleanupProgressMonitor;
+import com.tyron.builder.util.GradleVersion;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -20,8 +20,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.InputStream;
@@ -38,21 +36,24 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import static org.apache.commons.io.filefilter.FileFilterUtils.directoryFileFilter;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 public class WrapperDistributionCleanupAction implements DirectoryCleanupAction {
 
-    @VisibleForTesting static final String WRAPPER_DISTRIBUTION_FILE_PATH = "wrapper/dists";
-    private static final Logger LOGGER = LoggerFactory.getLogger(WrapperDistributionCleanupAction.class);
+    @VisibleForTesting
+    static final String WRAPPER_DISTRIBUTION_FILE_PATH = "wrapper/dists";
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(WrapperDistributionCleanupAction.class);
 
     private static final ImmutableMap<String, Pattern> JAR_FILE_PATTERNS_BY_PREFIX;
-    private static final String BUILD_RECEIPT_ZIP_ENTRY_PATH = StringUtils.removeStart("/org/gradle/build-receipt.properties", "/");
+    private static final String BUILD_RECEIPT_ZIP_ENTRY_PATH =
+            StringUtils.removeStart("/org/gradle/build-receipt.properties", "/");
 
     static {
-        Set<String> prefixes = ImmutableSet.of(
-            "gradle-base-services", // 4.x
-            "gradle-version-info", // 2.x - 3.x
-            "gradle-core" // 1.x
+        Set<String> prefixes = ImmutableSet.of("gradle-base-services", // 4.x
+                "gradle-version-info", // 2.x - 3.x
+                "gradle-core" // 1.x
         );
         ImmutableMap.Builder<String, Pattern> builder = ImmutableMap.builder();
         for (String prefix : prefixes) {
@@ -64,7 +65,8 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
     private final File distsDir;
     private final UsedGradleVersions usedGradleVersions;
 
-    public WrapperDistributionCleanupAction(File gradleUserHomeDirectory, UsedGradleVersions usedGradleVersions) {
+    public WrapperDistributionCleanupAction(File gradleUserHomeDirectory,
+                                            UsedGradleVersions usedGradleVersions) {
         this.distsDir = new File(gradleUserHomeDirectory, WRAPPER_DISTRIBUTION_FILE_PATH);
         this.usedGradleVersions = usedGradleVersions;
     }
@@ -82,7 +84,8 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
         Multimap<GradleVersion, File> checksumDirsByVersion = determineChecksumDirsByVersion();
         for (GradleVersion version : checksumDirsByVersion.keySet()) {
             if (!usedVersions.contains(version) && version.compareTo(GradleVersion.current()) < 0) {
-                deleteDistributions(version, checksumDirsByVersion.get(version), maximumTimestamp, progressMonitor);
+                deleteDistributions(version, checksumDirsByVersion.get(version), maximumTimestamp,
+                        progressMonitor);
             } else {
                 progressMonitor.incrementSkipped(checksumDirsByVersion.get(version).size());
             }
@@ -90,12 +93,16 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
         return true;
     }
 
-    private void deleteDistributions(GradleVersion version, Collection<File> dirs, long maximumTimestamp, CleanupProgressMonitor progressMonitor) {
+    private void deleteDistributions(GradleVersion version,
+                                     Collection<File> dirs,
+                                     long maximumTimestamp,
+                                     CleanupProgressMonitor progressMonitor) {
         Set<File> parentsOfDeletedDistributions = Sets.newLinkedHashSet();
         for (File checksumDir : dirs) {
             if (checksumDir.lastModified() > maximumTimestamp) {
                 progressMonitor.incrementSkipped();
-                LOGGER.debug("Skipping distribution for {} at {} because it was recently added", version, checksumDir);
+                LOGGER.debug("Skipping distribution for {} at {} because it was recently added",
+                        version, checksumDir);
             } else {
                 /*
                  * An extracted distribution usually looks like:
@@ -110,11 +117,12 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
 
                 // The wrapper uses the .ok file to identify distributions that are safe to use.
                 // If we delete anything from the distribution before deleting the OK file, the
-                // wrapper will attempt to use the distribution as-is and fail in strange and unrecoverable
+                // wrapper will attempt to use the distribution as-is and fail in strange and
+                // unrecoverable
                 // ways.
                 File[] markerFiles = checksumDir.listFiles((dir, name) -> name.endsWith(".ok"));
                 boolean canBeDeleted = true;
-                if (markerFiles!=null) {
+                if (markerFiles != null) {
                     for (File markerFile : markerFiles) {
                         canBeDeleted &= markerFile.delete();
                     }
@@ -123,10 +131,14 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
                     if (FileUtils.deleteQuietly(checksumDir)) {
                         parentsOfDeletedDistributions.add(checksumDir.getParentFile());
                     } else {
-                        LOGGER.info("Distribution for {} at {} was not completely deleted.", version, checksumDir);
+                        LOGGER.info("Distribution for {} at {} was not completely deleted.",
+                                version, checksumDir);
                     }
                 } else {
-                    LOGGER.info("Distribution for {} at {} cannot be deleted because Gradle is unable to mark it as unusable.", version, checksumDir);
+                    LOGGER.info(
+                            "Distribution for {} at {} cannot be deleted because Gradle is unable" +
+                            " to mark it as unusable.",
+                            version, checksumDir);
                 }
             }
         }
@@ -142,10 +154,12 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
         for (File dir : listDirs(distsDir)) {
             for (File checksumDir : listDirs(dir)) {
                 try {
-                    GradleVersion gradleVersion = determineGradleVersionFromBuildReceipt(checksumDir);
+                    GradleVersion gradleVersion =
+                            determineGradleVersionFromBuildReceipt(checksumDir);
                     result.put(gradleVersion, checksumDir);
                 } catch (Exception e) {
-                    LOGGER.debug("Could not determine Gradle version for {}: {} ({})", checksumDir, e.getMessage(), e.getClass().getName());
+                    LOGGER.debug("Could not determine Gradle version for {}: {} ({})", checksumDir,
+                            e.getMessage(), e.getClass().getName());
                 }
             }
         }
@@ -154,7 +168,8 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
 
     private GradleVersion determineGradleVersionFromBuildReceipt(File checksumDir) throws Exception {
         List<File> subDirs = listDirs(checksumDir);
-        Preconditions.checkArgument(subDirs.size() == 1, "A Gradle distribution must contain exactly one subdirectory: %s", subDirs);
+        Preconditions.checkArgument(subDirs.size() == 1,
+                "A Gradle distribution must contain exactly one subdirectory: %s", subDirs);
         return determineGradleVersionFromDistribution(single(subDirs));
     }
 
@@ -162,9 +177,12 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
     protected GradleVersion determineGradleVersionFromDistribution(File distributionHomeDir) throws Exception {
         List<File> checkedJarFiles = new ArrayList<File>();
         for (Map.Entry<String, Pattern> entry : JAR_FILE_PATTERNS_BY_PREFIX.entrySet()) {
-            List<File> jarFiles = listFiles(new File(distributionHomeDir, "lib"), new RegexFileFilter(entry.getValue()));
+            List<File> jarFiles = listFiles(new File(distributionHomeDir, "lib"),
+                    new RegexFileFilter(entry.getValue()));
             if (!jarFiles.isEmpty()) {
-                Preconditions.checkArgument(jarFiles.size() == 1, "A Gradle distribution must contain at most one %s-*.jar: %s", entry.getKey(), jarFiles);
+                Preconditions.checkArgument(jarFiles.size() == 1,
+                        "A Gradle distribution must contain at most one %s-*.jar: %s",
+                        entry.getKey(), jarFiles);
                 File jarFile = single(jarFiles);
                 GradleVersion gradleVersion = readGradleVersionFromJarFile(jarFile);
                 if (gradleVersion != null) {
@@ -173,7 +191,8 @@ public class WrapperDistributionCleanupAction implements DirectoryCleanupAction 
                 checkedJarFiles.add(jarFile);
             }
         }
-        throw new IllegalArgumentException("No checked JAR file contained a build receipt: " + checkedJarFiles);
+        throw new IllegalArgumentException(
+                "No checked JAR file contained a build receipt: " + checkedJarFiles);
     }
 
     @Nullable

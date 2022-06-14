@@ -3,7 +3,7 @@ package com.tyron.builder.api.internal.project.taskfactory;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.changedetection.changes.ChangesOnlyIncrementalTaskInputs;
 import com.tyron.builder.api.internal.changedetection.changes.RebuildIncrementalTaskInputs;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.internal.reflect.Instantiator;
 import com.tyron.builder.internal.reflect.JavaMethod;
 import com.tyron.builder.api.tasks.incremental.IncrementalTaskInputs;

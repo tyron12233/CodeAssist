@@ -5,6 +5,7 @@ import com.tyron.builder.api.artifacts.DependencySubstitution;
 import com.tyron.builder.api.artifacts.ModuleVersionIdentifier;
 import com.tyron.builder.api.artifacts.component.ProjectComponentIdentifier;
 import com.tyron.builder.api.internal.composite.CompositeBuildContext;
+import com.tyron.builder.internal.Actions;
 import com.tyron.builder.internal.Pair;
 
 import java.util.ArrayList;
@@ -30,19 +31,19 @@ public class DefaultBuildableCompositeBuildContext implements CompositeBuildCont
         substitutionRules.add(substitutions);
     }
 
-//    @Override
-//    public Action<DependencySubstitution> getRuleAction() {
-//        List<Action<DependencySubstitution>> allActions = new ArrayList<>();
-//        if (!availableModules.isEmpty()) {
-//            // Automatically substitute all available modules
-//            allActions.add(new CompositeBuildDependencySubstitutions(availableModules));
-//        }
-//        allActions.addAll(substitutionRules);
-//        return Actions.composite(allActions);
-//    }
-//
-//    @Override
-//    public boolean rulesMayAddProjectDependency() {
-//        return !(availableModules.isEmpty() && substitutionRules.isEmpty());
-//    }
+    @Override
+    public Action<DependencySubstitution> getRuleAction() {
+        List<Action<DependencySubstitution>> allActions = new ArrayList<>();
+        if (!availableModules.isEmpty()) {
+            // Automatically substitute all available modules
+            allActions.add(new CompositeBuildDependencySubstitutions(availableModules));
+        }
+        allActions.addAll(substitutionRules);
+        return Actions.composite(allActions);
+    }
+
+    @Override
+    public boolean rulesMayAddProjectDependency() {
+        return !(availableModules.isEmpty() && substitutionRules.isEmpty());
+    }
 }

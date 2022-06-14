@@ -1,18 +1,18 @@
 package com.tyron.builder.api.tasks;
 
-import com.tyron.builder.api.DefaultTask;
+import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.file.ConfigurableFileCollection;
 import com.tyron.builder.api.file.FileTree;
 import com.tyron.builder.api.file.FileTreeElement;
-import com.tyron.builder.internal.Factory;
-import com.tyron.builder.api.file.ConfigurableFileCollection;
-import com.tyron.builder.api.BuildProject;
+import com.tyron.builder.api.internal.tasks.ConventionTask;
 import com.tyron.builder.api.tasks.util.PatternFilterable;
 import com.tyron.builder.api.tasks.util.PatternSet;
+import com.tyron.builder.internal.Factory;
 
 import java.util.Set;
 import java.util.function.Predicate;
 
-public class SourceTask extends DefaultTask implements PatternFilterable {
+public class SourceTask extends ConventionTask implements PatternFilterable {
 
     private ConfigurableFileCollection sourceFiles = getProject().getObjects().fileCollection();
     private final PatternFilterable patternSet;
@@ -45,7 +45,8 @@ public class SourceTask extends DefaultTask implements PatternFilterable {
     }
 
     /**
-     * Sets the source for this task. The given source object is evaluated as per {@link BuildProject#files(Object...)}.
+     * Sets the source for this task. The given source object is evaluated as per
+     * {@link BuildProject#files(Object...)}.
      *
      * @param source The source.
      */
@@ -54,7 +55,8 @@ public class SourceTask extends DefaultTask implements PatternFilterable {
     }
 
     /**
-     * Adds some source to this task. The given source objects will be evaluated as per {@link BuildProject#files(Object...)}.
+     * Adds some source to this task. The given source objects will be evaluated as per
+     * {@link BuildProject#files(Object...)}.
      *
      * @param sources The source to add
      * @return this

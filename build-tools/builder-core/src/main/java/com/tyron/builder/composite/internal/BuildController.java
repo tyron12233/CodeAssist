@@ -1,6 +1,5 @@
 package com.tyron.builder.composite.internal;
 
-import com.tyron.builder.internal.concurrent.Stoppable;
 import com.tyron.builder.internal.build.BuildLifecycleController;
 import com.tyron.builder.internal.build.ExecutionResult;
 import com.tyron.builder.internal.build.ExportedTaskNode;
@@ -8,7 +7,7 @@ import com.tyron.builder.internal.build.ExportedTaskNode;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
-public interface BuildController extends Stoppable {
+public interface BuildController {
     /**
      * Adds tasks and nodes to the work graph of this build.
      */
@@ -33,7 +32,12 @@ public interface BuildController extends Stoppable {
     void finalizeWorkGraph();
 
     /**
-     * Must call {@link #scheduleQueuedTasks()} and {@link #finalizeWorkGraph()} prior to calling this method.
+     * Must call {@link #scheduleQueuedTasks()} prior to calling this method.
      */
-    void startExecution(ExecutorService executorService, Consumer<ExecutionResult<Void>> completionHandler);
+    void startExecution(ExecutorService executorService);
+
+    /**
+     * Awaits completion of work execution, returning any failures in the result.
+     */
+    ExecutionResult<Void> awaitCompletion();
 }

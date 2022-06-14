@@ -3,6 +3,7 @@ package com.tyron.builder.api.internal.tasks.compile;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.tasks.compile.CompileOptions;
 
 import javax.annotation.Nullable;
 import java.io.File;

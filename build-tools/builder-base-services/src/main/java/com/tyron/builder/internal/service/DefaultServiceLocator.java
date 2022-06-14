@@ -2,8 +2,6 @@ package com.tyron.builder.internal.service;
 
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
-import com.tyron.builder.internal.reflect.service.ServiceLookupException;
-import com.tyron.builder.internal.reflect.service.UnknownServiceException;
 import com.tyron.builder.api.reflect.ObjectInstantiationException;
 
 import javax.annotation.Nonnull;
@@ -45,7 +43,7 @@ public class DefaultServiceLocator implements ServiceLocator {
     @Override
     public <T> List<T> getAll(Class<T> serviceType) throws UnknownServiceException {
         List<ServiceFactory<T>> factories = findFactoriesForServiceType(serviceType);
-        ArrayList<T> services = new ArrayList<T>();
+        ArrayList<T> services = new ArrayList<>();
         for (ServiceFactory<T> factory : factories) {
             services.add(factory.create());
         }

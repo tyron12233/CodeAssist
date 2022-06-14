@@ -1,11 +1,35 @@
 package com.tyron.builder.api.tasks;
 
+import groovy.lang.Closure;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.file.FileCollection;
+import com.tyron.builder.api.specs.Spec;
+import com.tyron.builder.internal.HasInternalProtocol;
 
-import java.util.function.Predicate;
-
+/**
+ * <p>A {@code TaskOutputs} represents the outputs of a task.</p>
+ *
+ * <p>You can obtain a {@code TaskOutputs} instance using {@link com.tyron.builder.api.Task#getOutputs()}.</p>
+ */
+@HasInternalProtocol
 public interface TaskOutputs {
+    /**
+     * <p>
+     *     Adds a predicate to determine whether previous outputs of this task can be reused.
+     *     The given closure is executed at task execution time.
+     *     The closure is passed the task as a parameter.
+     *     If the closure returns false, previous outputs of this task cannot be reused and the task will be executed.
+     *     That means the task is out-of-date and no outputs will be loaded from the build cache.
+     * </p>
+     *
+     * <p>
+     *     You can add multiple such predicates.
+     *     The task outputs cannot be reused when any predicate returns false.
+     * </p>
+     *
+     * @param upToDateClosure The closure to use to determine whether the task outputs are up-to-date.
+     */
+    void upToDateWhen(Closure upToDateClosure);
 
     /**
      * <p>
@@ -22,7 +46,7 @@ public interface TaskOutputs {
      *
      * @param upToDateSpec The spec to use to determine whether the task outputs are up-to-date.
      */
-    void upToDateWhen(Predicate<? super Task> upToDateSpec);
+    void upToDateWhen(Spec<? super Task> upToDateSpec);
 
     /**
      * <p>Cache the results of the task only if the given spec is satisfied. If the spec is not satisfied,
@@ -38,7 +62,7 @@ public interface TaskOutputs {
      *
      * @since 3.0
      */
-    void cacheIf(Predicate<? super Task> spec);
+    void cacheIf(Spec<? super Task> spec);
 
     /**
      * <p>Cache the results of the task only if the given spec is satisfied. If the spec is not satisfied,
@@ -53,7 +77,23 @@ public interface TaskOutputs {
      *
      * @since 3.4
      */
-    void cacheIf(String cachingEnabledReason, final Predicate<? super Task> spec);
+    void cacheIf(String cachingEnabledReason, final Spec<? super Task> spec);
+
+    /**
+     * <p>Disable caching the results of the task if the given spec is satisfied. The spec will be evaluated at task execution time, not
+     * during configuration.</p>
+     *
+     * <p>As opposed to {@link #cacheIf(String, Spec)}, this method never enables caching for a task, it can only be used to disable caching.</p>
+     *
+     * <p>You may add multiple such predicates. The results of the task are not cached if any of the predicates return {@code true},
+     * or if any of the predicates passed to {@link #cacheIf(String, Spec)} returns {@code false}.</p>
+     *
+     * @param cachingDisabledReason the reason why caching would be disabled by the spec.
+     * @param spec specifies if the results of the task should not be cached.
+     *
+     * @since 3.4
+     */
+    void doNotCacheIf(String cachingDisabledReason, Spec<? super Task> spec);
 
     /**
      * Returns true if this task has declared any outputs. Note that a task may be able to produce output files and
@@ -77,10 +117,10 @@ public interface TaskOutputs {
      * will be associated with an identity.
      * The keys of the map must be non-empty strings.
      * The values of the map will be evaluated to individual files as per
-     * {@link org.gradle.api.Project#file(Object)}.</p>
+     * {@link com.tyron.builder.api.BuildProject#file(Object)}.</p>
      *
      * <p>Otherwise the given files will be evaluated as per
-     * {@link org.gradle.api.Project#files(Object...)}.</p>
+     * {@link com.tyron.builder.api.BuildProject#files(Object...)}.</p>
      *
      * @param paths The output files.
      *
@@ -95,10 +135,10 @@ public interface TaskOutputs {
      * will be associated with an identity.
      * The keys of the map must be non-empty strings.
      * The values of the map will be evaluated to individual directories as per
-     * {@link org.gradle.api.Project#file(Object)}.</p>
+     * {@link com.tyron.builder.api.BuildProject#file(Object)}.</p>
      *
      * <p>Otherwise the given directories will be evaluated as per
-     * {@link org.gradle.api.Project#files(Object...)}.</p>
+     * {@link com.tyron.builder.api.BuildProject#files(Object...)}.</p>
      *
      * @param paths The output files.
      *
@@ -111,7 +151,7 @@ public interface TaskOutputs {
     /**
      * Registers some output file for this task.
      *
-     * @param path The output file. The given path is evaluated as per {@link com.tyron.builder.api.project.BuildProject#file(Object)}.
+     * @param path The output file. The given path is evaluated as per {@link com.tyron.builder.api.BuildProject#file(Object)}.
      * @return a property builder to further configure this property.
      */
     TaskOutputFilePropertyBuilder file(Object path);
@@ -119,9 +159,8 @@ public interface TaskOutputs {
     /**
      * Registers an output directory for this task.
      *
-     * @param path The output directory. The given path is evaluated as per {@link org.gradle.api.Project#file(Object)}.
+     * @param path The output directory. The given path is evaluated as per {@link com.tyron.builder.api.BuildProject#file(Object)}.
      * @return a property builder to further configure this property.
      */
     TaskOutputFilePropertyBuilder dir(Object path);
-
 }

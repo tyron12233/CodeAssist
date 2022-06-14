@@ -1,20 +1,29 @@
 package com.tyron.builder.internal.logging.console;
 
-import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.*;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Description;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Error;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Failure;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.FailureHeader;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Header;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Identifier;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Info;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.ProgressStatus;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Success;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.SuccessHeader;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.UserInput;
+import static org.fusesource.jansi.Ansi.Attribute;
+import static org.fusesource.jansi.Ansi.Color.DEFAULT;
+
+import com.google.common.collect.Lists;
+import com.tyron.builder.internal.logging.text.Style;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
+
+import org.fusesource.jansi.Ansi;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.fusesource.jansi.Ansi.Attribute;
-import static org.fusesource.jansi.Ansi.Color.DEFAULT;
-
-import com.google.common.collect.Lists;
-import com.tyron.builder.internal.logging.text.StyledTextOutput;
-import com.tyron.builder.internal.logging.text.Style;
-
-import org.fusesource.jansi.Ansi;
 
 public class DefaultColorMap implements ColorMap {
     private static final String STATUS_BAR = "statusbar";
@@ -22,19 +31,23 @@ public class DefaultColorMap implements ColorMap {
     private static final String COLOR_DIVIDER = "-";
 
     /**
-     * Maps a {@link StyledTextOutput.Style} to the default color spec (that can be overridden by system properties)
+     * Maps a {@link StyledTextOutput.Style} to the default color spec (that can be overridden by
+     * system properties)
      */
-    private final Map<String, String> defaults = new HashMap<String, String>();
+    private final Map<String, String> defaults = new HashMap<>();
 
     /**
-     * Maps a {@link StyledTextOutput.Style} to the {@link org.gradle.internal.logging.console.ColorMap.Color} that has been created for it
+     * Maps a {@link StyledTextOutput.Style} to the
+     * {@link com.tyron.builder.internal.logging.console.ColorMap.Color} that has been created
+     * for it
      */
-    private final Map<String, Color> colorByStyle = new HashMap<String, Color>();
+    private final Map<String, Color> colorByStyle = new HashMap<>();
 
     /**
-     * Maps a color spec to the {@link org.gradle.internal.logging.console.ColorMap.Color} that has been created for it
+     * Maps a color spec to the {@link com.tyron.builder.internal.logging.console.ColorMap.Color}
+     * that has been created for it
      */
-    private final Map<String, Color> colorBySpec = new HashMap<String, Color>();
+    private final Map<String, Color> colorBySpec = new HashMap<>();
 
     private final Color noDecoration = new Color() {
         @Override
@@ -71,11 +84,11 @@ public class DefaultColorMap implements ColorMap {
     }
 
     private void addDefault(StyledTextOutput.Style style, StyledTextOutput.Style... styles) {
-        String colorSpec = getColorSpecForStyle(styles[0]);
+        StringBuilder colorSpec = new StringBuilder(getColorSpecForStyle(styles[0]));
         for (int i = 1; i < styles.length; i++) {
-            colorSpec += COLOR_DIVIDER + getColorSpecForStyle(styles[i]);
+            colorSpec.append(COLOR_DIVIDER).append(getColorSpecForStyle(styles[i]));
         }
-        addDefault(style.name().toLowerCase(), colorSpec);
+        addDefault(style.name().toLowerCase(), colorSpec.toString());
     }
 
     @Override
@@ -128,7 +141,7 @@ public class DefaultColorMap implements ColorMap {
     }
 
     private String getColorSpecForStyle(String style) {
-        return System.getProperty("org.gradle.color." + style, defaults.get(style));
+        return System.getProperty("com.tyron.builder.color." + style, defaults.get(style));
     }
 
     private Color createColor(String style) {
@@ -161,7 +174,7 @@ public class DefaultColorMap implements ColorMap {
 
         if (colorSpec.contains("-")) {
             String[] colors = colorSpec.split("-");
-            ArrayList<Color> colorList = new ArrayList<Color>(colors.length);
+            ArrayList<Color> colorList = new ArrayList<>(colors.length);
             for (String color : colors) {
                 colorList.add(createColorFromSpec(color));
             }

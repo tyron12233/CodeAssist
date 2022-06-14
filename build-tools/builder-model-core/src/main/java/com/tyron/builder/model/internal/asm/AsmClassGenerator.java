@@ -1,6 +1,8 @@
 package com.tyron.builder.model.internal.asm;
 
 import com.tyron.builder.internal.classloader.ClassLoaderUtils;
+import com.tyron.common.TestUtil;
+import com.tyron.groovy.ScriptFactory;
 
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Type;
@@ -40,6 +42,10 @@ public class AsmClassGenerator {
     }
 
     public <T> Class<T> define(ClassLoader targetClassLoader) {
+//        if (TestUtil.isDalvik()) {
+//            //noinspection unchecked
+//            return (Class<T>) new ScriptFactory(targetClassLoader).defineClass(visitor.toByteArray());
+//        }
         return ClassLoaderUtils.defineDecorator(targetType, targetClassLoader, generatedTypeName, visitor.toByteArray());
     }
 }

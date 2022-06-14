@@ -1,14 +1,11 @@
 package com.tyron.builder.internal.logging.sink;
 
-import com.tyron.builder.internal.Factory;
-import com.tyron.builder.internal.event.ListenerBroadcast;
-import com.tyron.builder.internal.logging.events.OutputEvent;
-import com.tyron.builder.internal.logging.events.OutputEventListener;
-import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
-import com.tyron.builder.internal.time.Clock;
+import javax.annotation.concurrent.ThreadSafe;
 import com.tyron.builder.api.logging.LogLevel;
 import com.tyron.builder.api.logging.StandardOutputListener;
 import com.tyron.builder.api.logging.configuration.ConsoleOutput;
+import com.tyron.builder.internal.Factory;
+import com.tyron.builder.internal.event.ListenerBroadcast;
 import com.tyron.builder.internal.logging.config.LoggingRouter;
 import com.tyron.builder.internal.logging.console.BuildLogLevelFilterRenderer;
 import com.tyron.builder.internal.logging.console.BuildStatusRenderer;
@@ -26,18 +23,20 @@ import com.tyron.builder.internal.logging.console.WorkInProgressRenderer;
 import com.tyron.builder.internal.logging.events.EndOutputEvent;
 import com.tyron.builder.internal.logging.events.FlushOutputEvent;
 import com.tyron.builder.internal.logging.events.LogLevelChangeEvent;
+import com.tyron.builder.internal.logging.events.OutputEvent;
+import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.ProgressCompleteEvent;
 import com.tyron.builder.internal.logging.events.ProgressEvent;
 import com.tyron.builder.internal.logging.events.ProgressStartEvent;
+import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
 import com.tyron.builder.internal.logging.format.PrettyPrefixedLogHeaderFormatter;
-import com.tyron.builder.internal.logging.StreamBackedStandardOutputListener;
-import com.tyron.builder.internal.logging.StreamingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StreamBackedStandardOutputListener;
+import com.tyron.builder.internal.logging.text.StreamingStyledTextOutput;
 import com.tyron.builder.internal.nativeintegration.console.ConsoleMetaData;
 import com.tyron.builder.internal.nativeintegration.console.FallbackConsoleMetaData;
+import com.tyron.builder.internal.time.Clock;
 
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
-
 import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicReference;
 
