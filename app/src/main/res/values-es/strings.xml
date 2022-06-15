@@ -42,13 +42,13 @@
     <string name="wizard_desc">Seleccionar plantillas desde Activity</string>
     <string name="wizard_empty_templates">Las plantillas están vacías :(</string>
     <string name="wizard_loading">Cargando plantillas</string>
-    <string name="wizard_app_name">App name</string>
+    <string name="wizard_app_name">Nombre de aplicación</string>
     <string name="wizard_package_name">com.my.myapplication</string>
     <string name="wizard_save_location">Guardar dirección</string>
     <string name="wizard_language">Lenguaje</string>
     <string name="wizard_minimum_sdk">SDK Mínimo</string>
     <string name="wizard_create">Crear</string>
-    <string name="wizard_previous">Anterior</string>
+    <string name="wizard_previous">Volver</string>
     <string name="wizard_scoped_storage_info">Debido a las restricciones de almacenamiento en Android 11, solo puedes guardar archivos de la aplicación en el almacenamiento interno.</string>
     <string name="wizard_file_not_writable">No se puede escribir en este directorio, seleccione otra ubicación</string>
     <string name="wizard_path_exceeds">La dirección de ubicación supera los 240 caracteres.</string>
@@ -65,7 +65,7 @@
     <string name="menu_create_project">Crear módulo</string>
     <string name="menu_run">Compilar</string>
     <string name="menu_refresh">Actualizar módulo</string>
-    <string name="menu_library_manager">administrador de la bibliotecas</string>
+    <string name="menu_library_manager">Administrador de bibliotecas</string>
     <string name="menu_format">Formato</string>
     <string name="menu_settings">Ajustes</string>
 
@@ -106,7 +106,7 @@
 
     <string name="editor_settings_title">Configuración del editor de código</string>
     <string name="editor_settings_wordwrap">Modo de ajuste de línea</string>
-	<string name="editor_delete_whitespaces">Eliminación automática de espacios en blanco</string>
+    <string name="editor_delete_whitespaces">Eliminación automática de espacios en blanco</string>
     <string name="save">Guardar</string>
     <string name="defaultString">Por defecto</string>
     <string name="editor_scheme_title">Esquema de colores del editor</string>
@@ -137,8 +137,11 @@
     </string-array>
     <string name="completion_settings_kotlin_title">Kotlin</string>
     <string name="completion_settings_java_title">Java</string>
-    <string name="completion_java_target_version_title">Version destina</string>
+    <string name="completion_java_target_version_title">Versión destina</string>
     <string name="completion_java_source_version_title">Versión de origen</string>
+    <string name="editor_tabs_settings_title">Pestañas Del Editor</string>
+    <string name="editor_tab_unique_file_name">Mostrar directorio para nombres de archivo identicos</string>
+    <string name="editor_tab_unique_file_name_summary">Mostrar el directorio de origen en las pestañas, en caso de tener abierto diferentes archivos con el mismo nombre.</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">Acerca de nosotros</string>
@@ -170,7 +173,7 @@
     <string name="action_menu_build_debug">Construir APK de depuración</string>
     <string name="action_menu_build_aab">Construir AAB</string>
 
-    <string name="project_manager_alpha_notice_title">Aviso alfa</string>
+    <string name="project_manager_alpha_notice_title">Aviso alpha</string>
     <string name="project_manager_alpha_notice">CodeAssist todavía está en alpha,
         Posiblemente encuentres errores, crasheos o características incompletas.\nPuedes
         reportar estos problemas en https://github.com/tyron12233/CodeAssist/issues</string>
@@ -210,8 +213,13 @@
     <string name="attribute_value">Valor de atributo</string>
     <string name="menu_add_libs_gradle">Agregar librerías desde build.gradle</string>
 
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">No hay proyectos abiertos.</string>
+    <string name="dialog_confirm_save_title">Guardar a XML</string>
+    <string name="dialog_confirm_save_msg">¿Quieres guardar el layout?</string>
+
     <!-- File Editor Manager -->
-    <string name="file_editor_selection_title">¿Qué editor te gustaría usar?</string>
+    <string name="file_editor_selection_title">¿Qué editor le gustaría usar?</string>
 
     <!-- Editor tabs -->
     <string name="menu_close_file">Cerrar</string>
@@ -220,4 +228,10 @@
 
     <!-- Editor -->
     <string name="editor_error_file">Ha ocurrido un error al leer el archivo. Los cambios no se guardarán.</string>
+
+    <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">Registros De Construcción</string>
+    <string name="tab_app_logs_title">Registros De Aplicación</string>
+    <string name="tab_ide_logs_title">Registros Del IDE</string>
+    <string name="tab_diagnostics_title">Diagnósticos</string>
 </resources>
