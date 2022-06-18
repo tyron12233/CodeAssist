@@ -19,4 +19,8 @@ public class SharedPreferenceKeys {
     public static final String SCHEME = "scheme";
     public static final String THEME = "theme";
     public static final String EDITOR_TAB_UNIQUE_FILE_NAME = "editor_tab_unique_file_name";
+
+    public static final String GRADLE_LOG_LEVEL = "gradle_log_level";
+    public static final String GRADLE_STACKTRACE_MODE = "gradle_stacktrace_mode";
+    public static final String GRADLE_VERBOSE_VFS_LOGGING = "gradle_verbose_vfs_logging";
 }

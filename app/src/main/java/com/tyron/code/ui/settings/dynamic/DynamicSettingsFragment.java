@@ -6,6 +6,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.activity.OnBackPressedDispatcher;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.lifecycle.LifecycleOwner;
 import androidx.preference.EditTextPreference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
@@ -46,7 +47,7 @@ public class DynamicSettingsFragment extends PreferenceFragmentCompat {
         super.onCreate(savedInstanceState);
 
         OnBackPressedDispatcher dispatcher = requireActivity().getOnBackPressedDispatcher();
-        dispatcher.addCallback(this, onBackPressedCallback);
+        dispatcher.addCallback((LifecycleOwner) this, onBackPressedCallback);
     }
 
     @Override

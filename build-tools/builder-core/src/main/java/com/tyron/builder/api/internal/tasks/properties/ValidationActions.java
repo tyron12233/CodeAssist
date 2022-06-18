@@ -9,6 +9,7 @@ import java.util.Locale;
 
 import com.tyron.builder.api.file.ConfigurableFileTree;
 import com.tyron.builder.api.internal.GeneratedSubclass;
+import com.tyron.builder.api.internal.tasks.TaskValidationContext;
 import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
 import com.tyron.builder.internal.reflect.validation.PropertyProblemBuilder;
 import com.tyron.builder.internal.typeconversion.UnsupportedNotationException;

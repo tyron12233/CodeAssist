@@ -8,25 +8,25 @@ import com.tyron.builder.api.internal.tasks.TaskExecuterResult;
 import com.tyron.builder.api.internal.tasks.TaskExecutionContext;
 import com.tyron.builder.api.internal.tasks.TaskExecutionOutcome;
 import com.tyron.builder.api.internal.tasks.TaskStateInternal;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * A {@link com.tyron.builder.api.internal.tasks.TaskExecuter} which skips tasks that have no actions.
+ */
 public class SkipTaskWithNoActionsExecuter implements TaskExecuter {
     private static final Logger LOGGER = LoggerFactory.getLogger(SkipTaskWithNoActionsExecuter.class);
-    private final TaskExecuter executer;
     private final TaskExecutionGraph taskExecutionGraph;
+    private final TaskExecuter executer;
 
-    public SkipTaskWithNoActionsExecuter(TaskExecuter executer, TaskExecutionGraph taskExecutionGraph) {
-        this.executer = executer;
+    public SkipTaskWithNoActionsExecuter(TaskExecutionGraph taskExecutionGraph, TaskExecuter executer) {
         this.taskExecutionGraph = taskExecutionGraph;
+        this.executer = executer;
     }
 
     @Override
-    public TaskExecuterResult execute(TaskInternal task,
-                                      TaskStateInternal state,
-                                      TaskExecutionContext context) {
-        if (task.getActions().isEmpty()) {
+    public TaskExecuterResult execute(TaskInternal task, TaskStateInternal state, TaskExecutionContext context) {
+        if (!task.hasTaskActions()) {
             LOGGER.info("Skipping {} as it has no actions.", task);
             boolean upToDate = true;
             for (Task dependency : taskExecutionGraph.getDependencies(task)) {

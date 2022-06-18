@@ -5,7 +5,7 @@ import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.WorkValidationContext;
 import com.tyron.builder.internal.execution.history.BeforeExecutionState;
 import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.internal.execution.history.PreviousExecutionState;
 import com.tyron.builder.internal.execution.history.changes.ExecutionStateChanges;
 import com.tyron.builder.internal.fingerprint.CurrentFileCollectionFingerprint;

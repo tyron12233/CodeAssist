@@ -3,6 +3,13 @@ package com.tyron.builder.initialization;
 import com.tyron.builder.api.internal.ClassPathRegistry;
 import com.tyron.builder.internal.classloader.FilteringClassLoader;
 import com.tyron.builder.internal.reflect.Instantiator;
+import com.tyron.groovy.DexBackedURLClassLoader;
+import com.tyron.groovy.ScriptFactory;
+
+import org.codehaus.groovy.reflection.android.AndroidSupport;
+
+import java.net.URL;
+import java.net.URLClassLoader;
 
 public class DefaultClassLoaderRegistry implements ClassLoaderRegistry {
     private final ClassLoader apiOnlyClassLoader;
@@ -15,6 +22,9 @@ public class DefaultClassLoaderRegistry implements ClassLoaderRegistry {
     public DefaultClassLoaderRegistry(ClassPathRegistry classPathRegistry, LegacyTypesSupport legacyTypesSupport, Instantiator instantiator) {
         this.instantiator = instantiator;
         ClassLoader runtimeClassLoader = getClass().getClassLoader();
+        if (AndroidSupport.isRunningAndroid()) {
+            runtimeClassLoader = new DexBackedURLClassLoader(runtimeClassLoader);
+        }
         this.apiOnlyClassLoader = restrictToGradleApi(runtimeClassLoader);
         this.pluginsClassLoader = new MixInLegacyTypesClassLoader(runtimeClassLoader, classPathRegistry.getClassPath("GRADLE_EXTENSIONS"), legacyTypesSupport);
         this.gradleApiSpec = apiSpecFor(pluginsClassLoader);

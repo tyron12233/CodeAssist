@@ -1,4 +1,4 @@
-package com.tyron.builder.internal.logging;
+package com.tyron.builder.internal.logging.text;
 
 import com.tyron.builder.api.logging.StandardOutputListener;
 

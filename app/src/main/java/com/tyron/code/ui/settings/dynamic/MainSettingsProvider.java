@@ -31,6 +31,7 @@ public class MainSettingsProvider implements SettingsProvider{
         preferenceScreen.setTitle(R.string.menu_settings);
 
         Preference preference = new Preference(context);
+        preference.setIconSpaceReserved(false);
         preference.setTitle(R.string.settings_title_application);
         preference.setSummary(R.string.settings_desc_application);
         preference.setOnPreferenceClickListener(preference1 -> {
@@ -40,6 +41,7 @@ public class MainSettingsProvider implements SettingsProvider{
         preferenceScreen.addPreference(preference);
 
         Preference editorPreference = new Preference(context);
+        editorPreference.setIconSpaceReserved(false);
         editorPreference.setTitle(R.string.settings_title_editor);
         editorPreference.setSummary(R.string.settings_desc_editor);
         editorPreference.setOnPreferenceClickListener(preference1 -> {
@@ -49,6 +51,7 @@ public class MainSettingsProvider implements SettingsProvider{
         preferenceScreen.addPreference(editorPreference);
 
         Preference buildPreference = new Preference(context);
+        buildPreference.setIconSpaceReserved(false);
         buildPreference.setTitle(R.string.settings_build_run_title);
         buildPreference.setSummary(R.string.settings_build_run_desc);
         buildPreference.setOnPreferenceClickListener(preference1 -> {
@@ -58,6 +61,7 @@ public class MainSettingsProvider implements SettingsProvider{
         preferenceScreen.addPreference(buildPreference);
 
         Preference aboutPreference = new Preference(context);
+        aboutPreference.setIconSpaceReserved(false);
         aboutPreference.setTitle(R.string.settings_about_us_title);
         aboutPreference.setSummary(R.string.settings_about_us_desc);
         aboutPreference.setFragment(AboutUsFragment.class.getName());

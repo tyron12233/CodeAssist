@@ -3,11 +3,15 @@ package com.tyron.builder.internal.classloader;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.tyron.builder.internal.classpath.ClassPath;
+import com.tyron.builder.internal.classpath.DefaultClassPath;
 import com.tyron.builder.internal.hash.Hashes;
 
+import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -49,6 +53,24 @@ public class DefaultHashingClassLoaderFactory extends DefaultClassLoaderFactory 
         if (classLoader instanceof ImplementationHashAware) {
             ImplementationHashAware loader = (ImplementationHashAware) classLoader;
             return loader.getImplementationHash();
+        }
+        if (classLoader.getClass().getName().startsWith("dalvik.system.PathClassLoader")) {
+            String s = classLoader.toString();
+            s = s.substring("dalvik.system.PathClassLoader[DexPathList[[".length(), s.length() - 3);
+
+            String[] filePaths = s.split(",");
+            List<File> files = new ArrayList<>();
+            for (String filePath : filePaths) {
+                if (filePath.startsWith("dex file ")) {
+                    filePath = filePath.substring("dex file ".length());
+                }
+                if (filePath.startsWith("zip file ")) {
+                    filePath = filePath.substring("zip file ".length());
+                }
+                files.add(new File(filePath.substring(1, filePath.length() - 1)));
+            }
+
+            return classpathHasher.hash(DefaultClassPath.of(files));
         }
         return hashCodes.get(classLoader);
     }

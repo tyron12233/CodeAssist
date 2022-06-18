@@ -1,4 +1,4 @@
-package com.tyron.builder.api.internal.tasks.properties;
+package com.tyron.builder.api.internal.tasks;
 
 import com.tyron.builder.api.internal.file.FileOperations;
 import com.tyron.builder.internal.reflect.validation.TypeValidationContext;

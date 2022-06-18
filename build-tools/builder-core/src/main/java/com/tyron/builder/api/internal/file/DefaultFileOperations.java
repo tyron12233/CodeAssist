@@ -14,12 +14,16 @@ import com.tyron.builder.api.file.RegularFile;
 import com.tyron.builder.api.internal.DocumentationRegistry;
 import com.tyron.builder.api.internal.file.archive.ZipFileTree;
 import com.tyron.builder.api.internal.file.collections.FileTreeAdapter;
+import com.tyron.builder.api.internal.file.copy.DefaultCopySpec;
+import com.tyron.builder.api.internal.file.delete.DefaultDeleteSpec;
+import com.tyron.builder.api.internal.file.delete.DeleteSpecInternal;
 import com.tyron.builder.api.internal.file.temp.TemporaryFileProvider;
 import com.tyron.builder.api.internal.provider.ProviderInternal;
 import com.tyron.builder.api.internal.resources.ApiTextResourceAdapter;
 import com.tyron.builder.api.internal.resources.DefaultResourceHandler;
 import com.tyron.builder.api.resources.ReadableResource;
 import com.tyron.builder.api.resources.ResourceHandler;
+import com.tyron.builder.api.tasks.WorkResults;
 import com.tyron.builder.internal.Cast;
 import com.tyron.builder.internal.Factory;
 import com.tyron.builder.api.internal.file.collections.DirectoryFileTreeFactory;
@@ -42,6 +46,8 @@ import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.builder.internal.file.Deleter;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.Map;
 
@@ -176,7 +182,6 @@ public class DefaultFileOperations implements FileOperations {
 
     @Override
     public FileTreeInternal tarTree(Object tarPath) {
-        Provider<File> fileProvider = asFileProvider(tarPath);
 //        Provider<ReadableResourceInternal> resource = providers.provider(() -> {
 //            if (tarPath instanceof ReadableResourceInternal) {
 //                return (ReadableResourceInternal) tarPath;
@@ -253,31 +258,28 @@ public class DefaultFileOperations implements FileOperations {
 
     @Override
     public WorkResult delete(Action<? super DeleteSpec> action) {
-//        DeleteSpecInternal deleteSpec = new DefaultDeleteSpec();
-//        action.execute(deleteSpec);
-//        FileCollectionInternal roots = fileCollectionFactory.resolving(deleteSpec.getPaths());
-//        boolean didWork = false;
-//        for (File root : roots) {
-//            try {
-//                didWork |= deleter.deleteRecursively(root, deleteSpec.isFollowSymlinks());
-//            } catch (IOException ex) {
-//                throw new UncheckedIOException(ex);
-//            }
-//        }
-//        return WorkResults.didWork(didWork);
-        throw new UnsupportedOperationException();
+        DeleteSpecInternal deleteSpec = new DefaultDeleteSpec();
+        action.execute(deleteSpec);
+        FileCollectionInternal roots = fileCollectionFactory.resolving(deleteSpec.getPaths());
+        boolean didWork = false;
+        for (File root : roots) {
+            try {
+                didWork |= deleter.deleteRecursively(root, deleteSpec.isFollowSymlinks());
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+        }
+        return WorkResults.didWork(didWork);
     }
 
     @Override
     public WorkResult copy(Action<? super CopySpec> action) {
-//        return fileCopier.copy(action);
-        throw new UnsupportedOperationException();
+        return fileCopier.copy(action);
     }
 
     @Override
     public WorkResult sync(Action<? super CopySpec> action) {
-//        return fileCopier.sync(action);
-        throw new UnsupportedOperationException();
+        return fileCopier.sync(action);
     }
 
     public CopySpec copySpec(Action<? super CopySpec> action) {
@@ -288,8 +290,7 @@ public class DefaultFileOperations implements FileOperations {
 
     @Override
     public CopySpec copySpec() {
-        throw new UnsupportedOperationException();
-//        return instantiator.newInstance(DefaultCopySpec.class, fileCollectionFactory, instantiator, patternSetFactory);
+        return instantiator.newInstance(DefaultCopySpec.class, fileCollectionFactory, instantiator, patternSetFactory);
     }
 
     @Override

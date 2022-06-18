@@ -144,12 +144,7 @@ public class RootOfNestedBuildTree extends AbstractBuildState implements NestedR
             @Override
             public BuildOperationDescriptor.Builder description() {
                 return BuildOperationDescriptor.displayName("Run nested build")
-                        .details(new RunNestedBuildBuildOperationType.Details() {
-                            @Override
-                            public String getBuildPath() {
-                                return gradle.getIdentityPath().getPath();
-                            }
-                        });
+                        .details((RunNestedBuildBuildOperationType.Details) () -> gradle.getIdentityPath().getPath());
             }
         });
     }

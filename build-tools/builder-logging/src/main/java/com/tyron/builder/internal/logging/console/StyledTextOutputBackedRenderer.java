@@ -1,17 +1,18 @@
 package com.tyron.builder.internal.logging.console;
 
-import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Normal;
-
-import com.tyron.builder.internal.logging.text.StyledTextOutput;
-import com.tyron.builder.internal.logging.text.AbstractLineChoppingStyledTextOutput;
+import com.tyron.builder.api.logging.LogLevel;
+import com.tyron.builder.internal.logging.events.LogLevelChangeEvent;
 import com.tyron.builder.internal.logging.events.OutputEvent;
 import com.tyron.builder.internal.logging.events.OutputEventListener;
 import com.tyron.builder.internal.logging.events.RenderableOutputEvent;
-import com.tyron.builder.api.logging.LogLevel;
-import com.tyron.builder.internal.logging.events.LogLevelChangeEvent;
+import com.tyron.builder.internal.logging.text.AbstractLineChoppingStyledTextOutput;
+import com.tyron.builder.internal.logging.text.StyledTextOutput;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Error;
+import static com.tyron.builder.internal.logging.text.StyledTextOutput.Style.Normal;
 
 public class StyledTextOutputBackedRenderer implements OutputEventListener {
     public static final String ISO_8601_DATE_TIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
@@ -37,7 +38,7 @@ public class StyledTextOutputBackedRenderer implements OutputEventListener {
         }
         if (event instanceof RenderableOutputEvent) {
             RenderableOutputEvent outputEvent = (RenderableOutputEvent) event;
-            textOutput.style(outputEvent.getLogLevel() == LogLevel.ERROR ? StyledTextOutput.Style.Error : Normal);
+            textOutput.style(outputEvent.getLogLevel() == LogLevel.ERROR ? Error : Normal);
             if (debugOutput && (textOutput.atEndOfLine || lastEvent == null || !lastEvent.getCategory().equals(outputEvent.getCategory()))) {
                 if (!textOutput.atEndOfLine) {
                     textOutput.println();
@@ -81,3 +82,4 @@ public class StyledTextOutputBackedRenderer implements OutputEventListener {
         }
     }
 }
+

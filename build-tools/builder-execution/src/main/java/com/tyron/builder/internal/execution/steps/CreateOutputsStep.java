@@ -24,7 +24,10 @@ public class CreateOutputsStep<C extends WorkspaceContext, R extends Result> imp
     public R execute(UnitOfWork work, C context) {
         work.visitOutputs(context.getWorkspace(), new UnitOfWork.OutputVisitor() {
             @Override
-            public void visitOutputProperty(String propertyName, TreeType type, File root, FileCollection contents) {
+            public void visitOutputProperty(String propertyName,
+                                            TreeType type,
+                                            File root,
+                                            FileCollection contents) {
                 ensureOutput(propertyName, root, type);
             }
 
@@ -39,11 +42,12 @@ public class CreateOutputsStep<C extends WorkspaceContext, R extends Result> imp
     private static void ensureOutput(String name, File outputRoot, TreeType type) {
         switch (type) {
             case DIRECTORY:
-                LOGGER.debug("Ensuring directory exists for property " + name + " at " + outputRoot);
+                LOGGER.debug("Ensuring directory exists for property {} at {}", name, outputRoot);
                 mkdirs(outputRoot);
                 break;
             case FILE:
-                LOGGER.debug("Ensuring parent directory exists for property " + name + " at " + outputRoot);
+                LOGGER.debug("Ensuring parent directory exists for property {} at {}", name,
+                        outputRoot);
                 mkdirs(outputRoot.getParentFile());
                 break;
             default:

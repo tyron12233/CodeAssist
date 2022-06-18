@@ -3,12 +3,11 @@ package com.tyron.builder.api.internal.project.taskfactory;
 import com.tyron.builder.api.Task;
 import com.tyron.builder.api.internal.changedetection.changes.ChangesOnlyIncrementalTaskInputs;
 import com.tyron.builder.api.internal.changedetection.changes.RebuildIncrementalTaskInputs;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.reflect.DirectInstantiator;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
-import com.tyron.builder.api.tasks.incremental.IncrementalTaskInputs;
 import com.tyron.builder.api.tasks.incremental.InputFileDetails;
 import com.tyron.builder.work.InputChanges;
 

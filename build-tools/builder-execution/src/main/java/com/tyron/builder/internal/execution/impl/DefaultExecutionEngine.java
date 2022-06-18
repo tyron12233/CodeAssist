@@ -1,24 +1,23 @@
 package com.tyron.builder.internal.execution.impl;
 
 import com.tyron.builder.api.internal.DocumentationRegistry;
+import com.tyron.builder.cache.Cache;
 import com.tyron.builder.internal.Try;
 import com.tyron.builder.internal.execution.DeferredExecutionHandler;
 import com.tyron.builder.internal.execution.ExecutionEngine;
 import com.tyron.builder.internal.execution.UnitOfWork;
+import com.tyron.builder.internal.execution.UnitOfWork.Identity;
 import com.tyron.builder.internal.execution.WorkValidationContext;
 import com.tyron.builder.internal.execution.steps.DeferredExecutionAwareStep;
 import com.tyron.builder.internal.execution.steps.ExecutionRequestContext;
-import com.tyron.builder.cache.Cache;
 
 import java.util.Optional;
 
 public class DefaultExecutionEngine implements ExecutionEngine {
-
     private final DocumentationRegistry documentationRegistry;
     private final DeferredExecutionAwareStep<? super ExecutionRequestContext, ? extends Result> executeStep;
 
-    public DefaultExecutionEngine(DocumentationRegistry documentationRegistry, DeferredExecutionAwareStep<? super ExecutionRequestContext, ?
-            extends Result> executeStep) {
+    public DefaultExecutionEngine(DocumentationRegistry documentationRegistry, DeferredExecutionAwareStep<? super ExecutionRequestContext, ? extends Result> executeStep) {
         this.documentationRegistry = documentationRegistry;
         this.executeStep = executeStep;
     }
@@ -62,7 +61,7 @@ public class DefaultExecutionEngine implements ExecutionEngine {
             }
 
             @Override
-            public <O> CachedRequest<O> withIdentityCache(Cache<UnitOfWork.Identity, Try<O>> cache) {
+            public <O> CachedRequest<O> withIdentityCache(Cache<Identity, Try<O>> cache) {
                 return new CachedRequest<O>() {
                     @Override
                     public <T> T getOrDeferExecution(DeferredExecutionHandler<O, T> handler) {

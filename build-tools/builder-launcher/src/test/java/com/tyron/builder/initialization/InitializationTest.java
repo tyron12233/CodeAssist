@@ -28,10 +28,10 @@ public class InitializationTest {
         File projectDir = new File(resourcesDir, "TestProject");
 
         StartParameterInternal startParameterInternal = new StartParameterInternal();
-        startParameterInternal.setLogLevel(LogLevel.INFO);
+        startParameterInternal.setLogLevel(LogLevel.DEBUG);
         startParameterInternal.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
         startParameterInternal.setProjectDir(projectDir);
-        startParameterInternal.setBuildCacheEnabled(true);
+        startParameterInternal.setBuildCacheEnabled(false);
         startParameterInternal.setGradleUserHomeDir(new File(resourcesDir, ".gradle"));
         startParameterInternal.setTaskNames(ImmutableList.of(":consumer:compileJava"));
 

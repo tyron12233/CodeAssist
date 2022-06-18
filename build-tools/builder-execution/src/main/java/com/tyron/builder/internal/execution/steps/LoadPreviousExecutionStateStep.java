@@ -1,5 +1,6 @@
 package com.tyron.builder.internal.execution.steps;
 
+
 import com.google.common.collect.ImmutableSortedMap;
 import com.tyron.builder.internal.execution.UnitOfWork;
 import com.tyron.builder.internal.execution.UnitOfWork.Identity;
@@ -22,8 +23,8 @@ public class LoadPreviousExecutionStateStep<C extends WorkspaceContext, R extend
     @Override
     public R execute(UnitOfWork work, C context) {
         Identity identity = context.getIdentity();
-        Optional<PreviousExecutionState> previousExecutionState = context.getHistory()
-                .flatMap(history -> history.load(identity.getUniqueId()));
+        Optional<PreviousExecutionState> previousExecutionState =
+                context.getHistory().flatMap(history -> history.load(identity.getUniqueId()));
         return delegate.execute(work, new PreviousExecutionContext() {
             @Override
             public Optional<PreviousExecutionState> getPreviousExecutionState() {

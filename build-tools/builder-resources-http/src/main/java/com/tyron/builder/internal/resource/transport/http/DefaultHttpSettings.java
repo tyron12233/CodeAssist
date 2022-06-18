@@ -18,6 +18,7 @@ import javax.net.ssl.X509TrustManager;
 
 import cz.msebera.android.httpclient.conn.ssl.StrictHostnameVerifier;
 
+@SuppressWarnings("DEPRECATION")
 public class DefaultHttpSettings implements HttpSettings {
     private final Collection<Authentication> authenticationSettings;
     private final SslContextFactory sslContextFactory;

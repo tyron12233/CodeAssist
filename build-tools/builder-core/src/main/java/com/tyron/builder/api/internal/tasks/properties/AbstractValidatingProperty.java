@@ -1,5 +1,6 @@
 package com.tyron.builder.api.internal.tasks.properties;
 
+import com.tyron.builder.api.internal.tasks.TaskValidationContext;
 import com.tyron.builder.util.internal.DeferredUtil;
 import com.tyron.builder.internal.reflect.problems.ValidationProblemId;
 import com.tyron.builder.internal.reflect.validation.Severity;

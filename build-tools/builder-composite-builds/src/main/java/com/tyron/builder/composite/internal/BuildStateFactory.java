@@ -1,13 +1,18 @@
 package com.tyron.builder.composite.internal;
 
+import static com.tyron.builder.api.internal.SettingsInternal.BUILD_SRC;
+
 import com.tyron.builder.StartParameter;
 import com.tyron.builder.api.artifacts.component.BuildIdentifier;
 import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.api.internal.BuildDefinition;
 import com.tyron.builder.api.internal.StartParameterInternal;
+import com.tyron.builder.internal.Actions;
+import com.tyron.builder.internal.build.PublicBuildPath;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.service.scopes.Scopes;
 import com.tyron.builder.internal.service.scopes.ServiceScope;
+import com.tyron.builder.plugin.management.internal.PluginRequests;
 import com.tyron.builder.util.Path;
 import com.tyron.builder.internal.build.BuildState;
 import com.tyron.builder.internal.build.NestedBuildTree;
@@ -48,7 +53,7 @@ public class BuildStateFactory {
     public StandAloneNestedBuild createNestedBuild(BuildIdentifier buildIdentifier, Path identityPath, BuildDefinition buildDefinition, BuildState owner) {
         DefaultNestedBuild build = new DefaultNestedBuild(buildIdentifier, identityPath, buildDefinition, owner, buildTreeState);
         // Expose any contributions from the parent's settings
-//        build.getMutableModel().setClassLoaderScope(() -> owner.getMutableModel().getSettings().getClassLoaderScope());
+        build.getMutableModel().setClassLoaderScope(() -> owner.getMutableModel().getSettings().getClassLoaderScope());
         return build;
     }
 
@@ -62,22 +67,20 @@ public class BuildStateFactory {
     }
 
     public BuildDefinition buildDefinitionFor(File buildSrcDir, BuildState owner) {
-        throw new UnsupportedOperationException("buildSrc is not yet supported.");
-//        PublicBuildPath publicBuildPath = owner.getMutableModel().getServices().get(PublicBuildPath.class);
-//        StartParameterInternal buildSrcStartParameter = buildSrcStartParameterFor(buildSrcDir, owner.getMutableModel().getStartParameter());
-//        BuildDefinition buildDefinition = BuildDefinition.fromStartParameterForBuild(
-//                buildSrcStartParameter,
-//                BUILD_SRC,
-//                buildSrcDir,
-//                PluginRequests.EMPTY,
-//                Actions.doNothing(),
-//                publicBuildPath,
-//                true
-//        );
-//        @SuppressWarnings("deprecation")
-//        File customBuildFile = buildSrcStartParameter.getBuildFile();
-//        assert customBuildFile == null;
-//        return buildDefinition;
+        PublicBuildPath publicBuildPath = owner.getMutableModel().getServices().get(PublicBuildPath.class);
+        StartParameterInternal buildSrcStartParameter = buildSrcStartParameterFor(buildSrcDir, owner.getMutableModel().getStartParameter());
+        BuildDefinition buildDefinition = BuildDefinition.fromStartParameterForBuild(
+                buildSrcStartParameter,
+                BUILD_SRC,
+                buildSrcDir,
+                PluginRequests.EMPTY,
+                Actions.doNothing(),
+                publicBuildPath,
+                true
+        );
+        File customBuildFile = buildSrcStartParameter.getBuildFile();
+        assert customBuildFile == null;
+        return buildDefinition;
     }
 
     private StartParameterInternal buildSrcStartParameterFor(File buildSrcDir, StartParameter containingBuildParameters) {

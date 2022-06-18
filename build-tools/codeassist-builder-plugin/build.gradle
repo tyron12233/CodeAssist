@@ -8,9 +8,13 @@ dependencies {
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderBaseServicesGroovy
     implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderModelCore
     implementation projects.buildTools.builderCoreApi
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.buildLogic
+    implementation projects.buildTools.builderPlugins
+    implementation projects.buildTools.builderJava
+    implementation projects.buildTools.builderLanguageJvm
     implementation projects.buildTools.project
     implementation projects.buildTools.logging
 

@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Uses heuristics to guess the application's private data directory.
  */
-class AppDataDirGuesser {
+public class AppDataDirGuesser {
     // Copied from UserHandle, indicates range of uids allocated for a user.
     public static final int PER_USER_RANGE = 100000;
 

@@ -21,6 +21,7 @@ import com.tyron.builder.api.tasks.Optional;
 import com.tyron.builder.api.tasks.OutputDirectory;
 import com.tyron.builder.api.tasks.PathSensitive;
 import com.tyron.builder.api.tasks.PathSensitivity;
+import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import com.tyron.builder.process.CommandLineArgumentProvider;
 import com.tyron.builder.util.internal.CollectionUtils;
 
@@ -489,12 +490,11 @@ public class CompileOptions extends AbstractOptions {
     @Deprecated
     @ReplacedBy("generatedSourceOutputDirectory")
     public File getAnnotationProcessorGeneratedSourcesDirectory() {
-//        DeprecationLogger.deprecateProperty(CompileOptions.class, "annotationProcessorGeneratedSourcesDirectory")
-//                .replaceWith("generatedSourceOutputDirectory")
-//                .willBeRemovedInGradle8()
-//                .withDslReference()
-//                .nagUser();
-
+        DeprecationLogger.deprecateProperty(CompileOptions.class, "annotationProcessorGeneratedSourcesDirectory")
+                .replaceWith("generatedSourceOutputDirectory")
+                .willBeRemovedInGradle8()
+                .withDslReference()
+                .nagUser();
         return generatedSourceOutputDirectory.getAsFile().getOrNull();
     }
 

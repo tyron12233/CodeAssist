@@ -4,32 +4,25 @@ import static com.tyron.builder.api.internal.lambdas.SerializableLambdas.factory
 import static com.tyron.builder.util.GUtil.uncheckedCall;
 
 import com.tyron.builder.api.Action;
-import com.tyron.builder.api.DefaultTask;
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.InvalidUserDataException;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.api.internal.TaskInternal;
 import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.project.taskfactory.TaskIdentity;
 import com.tyron.builder.api.internal.tasks.InputChangesAwareTaskAction;
 import com.tyron.builder.api.tasks.Internal;
 import com.tyron.builder.internal.Factory;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.scripts.ScriptOrigin;
 import com.tyron.builder.internal.serialization.Cached;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;
 import com.tyron.builder.util.Predicates;
-import com.tyron.builder.util.internal.ConfigureUtil;
 import com.tyron.builder.work.DisableCachingByDefault;
 
 import java.io.File;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.util.concurrent.Callable;
 import java.util.function.Predicate;
-
-import groovy.lang.Closure;
 
 @DisableCachingByDefault(because = "Abstract super-class, not to be instantiated directly")
 public abstract class AbstractTask implements TaskInternal {
@@ -39,6 +32,8 @@ public abstract class AbstractTask implements TaskInternal {
     private Predicate<? super Task> onlyIf = Predicates.satisfyAll();
     private String reasonNotToTrackState;
     private boolean impliesSubProjects;
+
+    private String group;
 
     protected AbstractTask() {
         this(taskInfo());
@@ -50,6 +45,17 @@ public abstract class AbstractTask implements TaskInternal {
 
     protected static TaskInfo taskInfo() {
         return NEXT_INSTANCE.get();
+    }
+
+    @Internal
+    @Override
+    public String getGroup() {
+        return group;
+    }
+
+    @Override
+    public void setGroup(String group) {
+        this.group = group;
     }
 
     @Internal

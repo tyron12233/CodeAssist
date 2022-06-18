@@ -29,6 +29,9 @@ public interface TaskInternal extends Task {
      */
     List<InputChangesAwareTaskAction> getTaskActions();
 
+    @Internal
+    boolean hasTaskActions();
+
     /**
      * "Lifecycle dependencies" are dependencies of this task declared via an explicit {@link Task#dependsOn(Object...)} call,
      * as opposed to the recommended approach of connecting producer tasks' outputs to consumer tasks' inputs.
@@ -76,7 +79,7 @@ public interface TaskInternal extends Task {
      * Gradle considers the task as untracked if the reason is present.
      * When not tracking state, a reason must be present. Hence the {@code Optional} represents the state of enablement, too.
      *
-     * @see org.gradle.api.tasks.UntrackedTask
+     * @see com.tyron.builder.api.tasks.UntrackedTask
      */
     @Internal
     default Optional<String> getReasonNotToTrackState() {
@@ -89,6 +92,9 @@ public interface TaskInternal extends Task {
     void prependParallelSafeAction(Action<? super Task> action);
 
     void appendParallelSafeAction(Action<? super Task> action);
+
+    @Internal
+    boolean isHasCustomActions();
 
     @Internal
     Path getIdentityPath();

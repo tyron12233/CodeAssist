@@ -1,8 +1,5 @@
 package com.tyron.builder.internal.logging.text;
 
-import com.tyron.builder.internal.logging.text.StyledTextOutput;
-import com.tyron.builder.internal.logging.text.AbstractLineChoppingStyledTextOutput;
-import com.tyron.builder.internal.logging.text.Style;
 
 /**
  * A {@link StyledTextOutput} which prefixes each line of text with some fixed prefix. Does not prefix the first line.
@@ -10,7 +7,7 @@ import com.tyron.builder.internal.logging.text.Style;
 public class LinePrefixingStyledTextOutput extends AbstractLineChoppingStyledTextOutput {
     private final StyledTextOutput output;
     private final CharSequence prefix;
-    private boolean prefixFirstLine;
+    private final boolean prefixFirstLine;
     private boolean prefixed;
 
     public LinePrefixingStyledTextOutput(StyledTextOutput output, CharSequence prefix) {

@@ -25,6 +25,7 @@ import com.tyron.builder.internal.time.Timer;
 import com.tyron.builder.util.GUtil;
 import com.tyron.builder.util.internal.GFileUtils;
 import com.tyron.common.TestUtil;
+import com.tyron.groovy.DexBackedURLClassLoader;
 import com.tyron.groovy.ScriptFactory;
 
 import groovy.lang.GrooidClassLoader;
@@ -44,6 +45,7 @@ import org.codehaus.groovy.control.MultipleCompilationErrorsException;
 import org.codehaus.groovy.control.Phases;
 import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.messages.SyntaxErrorMessage;
+import org.codehaus.groovy.reflection.android.AndroidSupport;
 import org.codehaus.groovy.syntax.SyntaxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -343,26 +345,72 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
 
         private ClassLoaderScope prepareClassLoaderScope() {
             String scopeName = "groovy-dsl:" + source.getFileName() + ":" + scriptBaseClass.getSimpleName();
-            if (TestUtil.isDalvik()) {
-                List<File> asFiles = scriptClassPath.getAsFiles();
-                List<File> dexFiles = new ArrayList<>();
-                return GUtil.uncheckedCall(() -> {
-                    for (File file : asFiles) {
-                        File compiledDex = ScriptFactory.dexJar(file, file.getParentFile());
+//            if (TestUtil.isDalvik()) {
+//                List<File> asFiles = scriptClassPath.getAsFiles();
+//                List<File> dexFiles = new ArrayList<>();
+//                return GUtil.uncheckedCall(() -> {
+//                    for (File file : asFiles) {
+//                        File compiledDex = ScriptFactory.dexJar(file, file.getParentFile());
+//
+//                        File renamed = new File(file.getParent() + "/" + FilenameUtils.getBaseName(file.getName()) + ".dex");
+//                        GFileUtils.deleteIfExists(renamed);
+//                        boolean b = compiledDex.renameTo(renamed);
+//                        if (b) {
+//                            dexFiles.add(renamed);
+//                        }
+//                    }
+//
+//                    ClassPath dexClassPath = DefaultClassPath.of(dexFiles);
+//                    return targetScope.createLockedChild(scopeName, dexClassPath, sourceHashCode, parent -> new ScriptClassLoader(source, parent, dexClassPath, sourceHashCode));
+//                });
+//            }
+            return targetScope.createLockedChild(scopeName, scriptClassPath, sourceHashCode, parent -> {
+                if (AndroidSupport.isRunningAndroid()) {
+                    return new AndroidScriptClassLoader(source, parent, scriptClassPath, sourceHashCode);
+                }
+                return new ScriptClassLoader(source, parent, scriptClassPath, sourceHashCode);
+            });
+        }
+    }
+    
+    private static class AndroidScriptClassLoader extends DexBackedURLClassLoader implements ImplementationHashAware {
+        private final ScriptSource scriptSource;
+        private final HashCode implementationHash;
+        private final ClassPath classPath;
 
-                        File renamed = new File(file.getParent() + "/" + FilenameUtils.getBaseName(file.getName()) + ".dex");
-                        GFileUtils.deleteIfExists(renamed);
-                        boolean b = compiledDex.renameTo(renamed);
-                        if (b) {
-                            dexFiles.add(renamed);
-                        }
+        AndroidScriptClassLoader(ScriptSource scriptSource, ClassLoader parent, ClassPath classPath, HashCode implementationHash) {
+            super("groovy-script-" + scriptSource.getFileName() + "-loader", parent, classPath);
+            classPath.getAsURLs().forEach(this::addURL);
+            this.classPath = classPath;
+            this.scriptSource = scriptSource;
+            this.implementationHash = implementationHash;
+        }
+
+        @Override
+        public HashCode getImplementationHash() {
+            return implementationHash;
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            // Generated script class name must be unique - take advantage of this to avoid delegation
+            if (name.startsWith(scriptSource.getClassName())) {
+                // Synchronized to avoid multiple threads attempting to define the same class on a lookup miss
+                synchronized (this) {
+                    if (TestUtil.isDalvik()) {
+                        return ScriptFactory.loadClass(classPath.getAsFiles(), getParent(), name);
                     }
-
-                    ClassPath dexClassPath = DefaultClassPath.of(dexFiles);
-                    return targetScope.createLockedChild(scopeName, dexClassPath, sourceHashCode, parent -> new ScriptClassLoader(source, parent, dexClassPath, sourceHashCode));
-                });
+                    Class<?> cl = findLoadedClass(name);
+                    if (cl == null) {
+                        cl = findClass(name);
+                    }
+                    if (resolve) {
+                        resolveClass(cl);
+                    }
+                    return cl;
+                }
             }
-            return targetScope.createLockedChild(scopeName, scriptClassPath, sourceHashCode, parent -> new ScriptClassLoader(source, parent, scriptClassPath, sourceHashCode));
+            return super.loadClass(name, resolve);
         }
     }
 
@@ -376,6 +424,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
 
         ScriptClassLoader(ScriptSource scriptSource, ClassLoader parent, ClassPath classPath, HashCode implementationHash) {
             super("groovy-script-" + scriptSource.getFileName() + "-loader", parent, classPath);
+            classPath.getAsURLs().forEach(this::addURL);
             this.classPath = classPath;
             this.scriptSource = scriptSource;
             this.implementationHash = implementationHash;

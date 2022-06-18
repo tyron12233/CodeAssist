@@ -2,7 +2,7 @@ package com.tyron.builder.api.internal.project.taskfactory;
 
 import com.tyron.builder.api.Describable;
 import com.tyron.builder.api.Task;
-import com.tyron.builder.internal.execution.history.InputChangesInternal;
+import com.tyron.builder.internal.execution.history.changes.InputChangesInternal;
 import com.tyron.builder.internal.hash.ClassLoaderHierarchyHasher;
 import com.tyron.builder.internal.reflect.JavaMethod;
 import com.tyron.builder.internal.snapshot.impl.ImplementationSnapshot;

@@ -1,7 +1,12 @@
 package com.tyron.builder.execution;
 
+import com.tyron.builder.StartParameter;
+import com.tyron.builder.api.execution.TaskActionListener;
 import com.tyron.builder.api.execution.TaskExecutionGraph;
 import com.tyron.builder.api.execution.TaskExecutionListener;
+import com.tyron.builder.api.execution.internal.TaskInputsListeners;
+import com.tyron.builder.api.internal.changedetection.TaskExecutionModeResolver;
+import com.tyron.builder.api.internal.changedetection.changes.DefaultTaskExecutionModeResolver;
 import com.tyron.builder.api.internal.changedetection.state.LineEndingNormalizingFileSystemLocationSnapshotHasher;
 import com.tyron.builder.api.internal.changedetection.state.ResourceEntryFilter;
 import com.tyron.builder.api.internal.changedetection.state.ResourceFilter;
@@ -12,6 +17,7 @@ import com.tyron.builder.api.internal.project.ProjectInternal;
 import com.tyron.builder.api.internal.tasks.TaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.CatchExceptionTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.CleanupStaleOutputsExecuter;
+import com.tyron.builder.api.internal.tasks.execution.DefaultTaskCacheabilityResolver;
 import com.tyron.builder.api.internal.tasks.execution.EventFiringTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.ExecuteActionsTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.FinalizePropertiesTaskExecuter;
@@ -19,10 +25,14 @@ import com.tyron.builder.api.internal.tasks.execution.ResolveTaskExecutionModeEx
 import com.tyron.builder.api.internal.tasks.execution.SkipOnlyIfTaskExecuter;
 import com.tyron.builder.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter;
 import com.tyron.builder.api.internal.cache.StringInterner;
+import com.tyron.builder.api.internal.tasks.execution.TaskCacheabilityResolver;
+import com.tyron.builder.caching.internal.controller.BuildCacheController;
 import com.tyron.builder.execution.plan.ExecutionNodeAccessHierarchies;
+import com.tyron.builder.execution.taskgraph.TaskExecutionGraphInternal;
 import com.tyron.builder.execution.taskgraph.TaskListenerInternal;
 import com.tyron.builder.initialization.BuildCancellationToken;
 import com.tyron.builder.initialization.DefaultBuildCancellationToken;
+import com.tyron.builder.internal.enterprise.core.GradleEnterprisePluginManager;
 import com.tyron.builder.internal.event.ListenerManager;
 import com.tyron.builder.internal.execution.BuildOutputCleanupRegistry;
 import com.tyron.builder.internal.execution.ExecutionEngine;
@@ -34,8 +44,12 @@ import com.tyron.builder.internal.execution.fingerprint.impl.DefaultFileCollecti
 import com.tyron.builder.internal.execution.fingerprint.impl.FingerprinterRegistration;
 import com.tyron.builder.internal.execution.history.ExecutionHistoryStore;
 import com.tyron.builder.internal.execution.history.OutputFilesRepository;
+import com.tyron.builder.internal.file.DefaultReservedFileSystemLocationRegistry;
 import com.tyron.builder.internal.file.Deleter;
 import com.tyron.builder.internal.file.FileAccessTracker;
+import com.tyron.builder.internal.file.RelativeFilePathResolver;
+import com.tyron.builder.internal.file.ReservedFileSystemLocation;
+import com.tyron.builder.internal.file.ReservedFileSystemLocationRegistry;
 import com.tyron.builder.internal.fingerprint.DirectorySensitivity;
 import com.tyron.builder.internal.fingerprint.LineEndingSensitivity;
 import com.tyron.builder.internal.fingerprint.classpath.impl.DefaultClasspathFingerprinter;
@@ -59,27 +73,26 @@ import java.util.List;
 
 public class ProjectExecutionServices extends DefaultServiceRegistry {
 
-    private final ProjectInternal projectInternal;
-
     public ProjectExecutionServices(ProjectInternal project) {
         super("Configured project services for '" + project.getPath() + "'", project.getServices());
+    }
 
-        this.projectInternal = project;
+    TaskActionListener createTaskActionListener(ListenerManager listenerManager) {
+        return listenerManager.getBroadcaster(TaskActionListener.class);
+    }
 
-        BuildCancellationToken token = new DefaultBuildCancellationToken();
-        add(BuildCancellationToken.class, token);
+    TaskCacheabilityResolver createTaskCacheabilityResolver(RelativeFilePathResolver relativeFilePathResolver) {
+        return new DefaultTaskCacheabilityResolver(relativeFilePathResolver);
+    }
+
+    ReservedFileSystemLocationRegistry createReservedFileLocationRegistry(List<ReservedFileSystemLocation> reservedFileSystemLocations) {
+        return new DefaultReservedFileSystemLocationRegistry(reservedFileSystemLocations);
     }
 
     FileAccessTracker createFileAccessTracker() {
         return file -> {
 
         };
-    }
-
-    PathKeyFileStore createPathKeyFileStore(
-            ChecksumService checksumService
-    ) {
-        return new DefaultPathKeyFileStore(checksumService, projectInternal.getBuildDir());
     }
 
     FileSystemLocationSnapshotHasher createFileSystemLocationSnapshotHasher() {
@@ -244,35 +257,57 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         );
     }
 
-    protected TaskExecuter createTaskExecuter(
-            TaskExecutionGraph taskExecutionGraph,
-            ExecutionHistoryStore executionHistoryStore,
+    TaskExecutionModeResolver createExecutionModeResolver(
+            StartParameter startParameter
+    ) {
+        return new DefaultTaskExecutionModeResolver(startParameter);
+    }
+
+    TaskExecuter createTaskExecuter(
+            AsyncWorkTracker asyncWorkTracker,
+            BuildCacheController buildCacheController,
             BuildOperationExecutor buildOperationExecutor,
             BuildOutputCleanupRegistry cleanupRegistry,
+            GradleEnterprisePluginManager gradleEnterprisePluginManager,
+            ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
             Deleter deleter,
+            ExecutionHistoryStore executionHistoryStore,
+            FileCollectionFactory fileCollectionFactory,
+            FileOperations fileOperations,
+            ListenerManager listenerManager,
             OutputChangeListener outputChangeListener,
             OutputFilesRepository outputFilesRepository,
-            AsyncWorkTracker asyncWorkTracker,
-            ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
-            ExecutionEngine executionEngine,
-            InputFingerprinter inputFingerprinter,
-            ListenerManager listenerManager,
-            FileCollectionFactory factory,
+            ReservedFileSystemLocationRegistry reservedFileSystemLocationRegistry,
+            TaskActionListener actionListener,
+            TaskCacheabilityResolver taskCacheabilityResolver,
+            TaskExecutionGraphInternal taskExecutionGraph,
             TaskExecutionListener taskExecutionListener,
+            TaskExecutionModeResolver repository,
+            TaskInputsListeners taskInputsListeners,
             TaskListenerInternal taskListenerInternal,
-            FileOperations fileOperations
+            ExecutionEngine executionEngine,
+            InputFingerprinter inputFingerprinter
     ) {
         TaskExecuter executer = new ExecuteActionsTaskExecuter(
-                ExecuteActionsTaskExecuter.BuildCacheState.ENABLED,
+                buildCacheController.isEnabled()
+                        ? ExecuteActionsTaskExecuter.BuildCacheState.ENABLED
+                        : ExecuteActionsTaskExecuter.BuildCacheState.DISABLED,
+                gradleEnterprisePluginManager.isPresent()
+                        ? ExecuteActionsTaskExecuter.ScanPluginState.APPLIED
+                        : ExecuteActionsTaskExecuter.ScanPluginState.NOT_APPLIED,
                 executionHistoryStore,
                 buildOperationExecutor,
                 asyncWorkTracker,
+                actionListener,
+                taskCacheabilityResolver,
                 classLoaderHierarchyHasher,
                 executionEngine,
                 inputFingerprinter,
                 listenerManager,
-                factory,
-                fileOperations
+                reservedFileSystemLocationRegistry,
+                fileCollectionFactory,
+                fileOperations,
+                taskInputsListeners
         );
         executer = new CleanupStaleOutputsExecuter(
                 buildOperationExecutor,
@@ -283,8 +318,8 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                 executer
         );
         executer = new FinalizePropertiesTaskExecuter(executer);
-        executer = new ResolveTaskExecutionModeExecuter(executer);
-        executer = new SkipTaskWithNoActionsExecuter(executer, taskExecutionGraph);
+        executer = new ResolveTaskExecutionModeExecuter(repository, executer);
+        executer = new SkipTaskWithNoActionsExecuter(taskExecutionGraph, executer);
         executer = new SkipOnlyIfTaskExecuter(executer);
         executer = new CatchExceptionTaskExecuter(executer);
         executer = new EventFiringTaskExecuter(buildOperationExecutor, taskExecutionListener, taskListenerInternal, executer);

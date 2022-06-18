@@ -1,11 +1,7 @@
 package com.tyron.builder.internal.execution.steps;
 
-import static com.tyron.builder.internal.execution.history.impl.OutputSnapshotUtil.filterOutputsAfterExecution;
-
-import java.time.Duration;
-import java.util.Optional;
-
 import com.google.common.collect.ImmutableSortedMap;
+import com.tyron.builder.caching.internal.origin.OriginMetadata;
 import com.tyron.builder.internal.Try;
 import com.tyron.builder.internal.execution.ExecutionResult;
 import com.tyron.builder.internal.execution.OutputSnapshotter;
@@ -21,7 +17,11 @@ import com.tyron.builder.internal.operations.BuildOperationType;
 import com.tyron.builder.internal.snapshot.FileSystemSnapshot;
 import com.tyron.builder.internal.time.Time;
 import com.tyron.builder.internal.time.Timer;
-import com.tyron.builder.caching.internal.origin.OriginMetadata;
+
+import java.time.Duration;
+import java.util.Optional;
+
+import static com.tyron.builder.internal.execution.history.impl.OutputSnapshotUtil.filterOutputsAfterExecution;
 
 public class CaptureStateAfterExecutionStep<C extends BeforeExecutionContext> extends BuildOperationStep<C, AfterExecutionResult> {
     private final UniqueId buildInvocationScopeId;

@@ -3,6 +3,7 @@ package com.tyron.builder.internal.fingerprint.impl;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
+import com.tyron.builder.internal.deprecation.DeprecationLogger;
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinter;
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionFingerprinterRegistry;
 import com.tyron.builder.internal.execution.fingerprint.FileCollectionSnapshotter;
@@ -134,11 +135,11 @@ public class DefaultInputFingerprinter implements InputFingerprinter {
                 return value.getDirectorySensitivity();
             }
             if (result.isFileTreeOnly() && type.isSkipWhenEmpty()) {
-//                DeprecationLogger.deprecateIndirectUsage("Relying on FileTrees for ignoring empty directories when using @SkipWhenEmpty")
-//                        .withAdvice("Annotate the property " + propertyName + " with @IgnoreEmptyDirectories or remove @SkipWhenEmpty.")
-//                        .willBeRemovedInGradle8()
-//                        .withUpgradeGuideSection(7, "empty_directories_file_tree")
-//                        .nagUser();
+                DeprecationLogger.deprecateIndirectUsage("Relying on FileTrees for ignoring empty directories when using @SkipWhenEmpty")
+                        .withAdvice("Annotate the property " + propertyName + " with @IgnoreEmptyDirectories or remove @SkipWhenEmpty.")
+                        .willBeRemovedInGradle8()
+                        .withUpgradeGuideSection(7, "empty_directories_file_tree")
+                        .nagUser();
                 return DirectorySensitivity.IGNORE_DIRECTORIES;
             } else {
                 return DirectorySensitivity.DEFAULT;
