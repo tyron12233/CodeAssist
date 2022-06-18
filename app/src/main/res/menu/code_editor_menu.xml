@@ -45,6 +45,10 @@
     <item
         android:id="@+id/menu_settings"
         android:title="@string/menu_settings" />
+    
+    <item 
+          android:id="@+id/menu_iconmanager" 
+          android:title="@string/menu_icon_manager" />
 
     <item
         android:id="@+id/menu_preview_layout"
