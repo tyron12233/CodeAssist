@@ -3,6 +3,6 @@
 		"artifactId": "kotlin-stdlib",
 		"groupId": "org.jetbrains.kotlin",
 		"scope": "compile",
-		"versionName": "1.5.21"
+		"versionName": "1.7.0"
 	}
 ]
