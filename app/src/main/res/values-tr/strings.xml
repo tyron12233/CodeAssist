@@ -218,4 +218,16 @@
     <string name="tab_ide_logs_title">IDE Kayıtları</string>
     <string name="tab_diagnostics_title">Hata Teşhisleri</string>
     <string name="editor_delete_whitespaces">Whitespace\'i otomatik sil</string>
+    <string name="gradle_title">Gradle</string>
+    <string name="gradle_log_level">Kayıt seviyesi</string>
+    <string name="gradle_stacktrace">Yığın İzleme Modu</string>
+    <string name="gradle_stacktrace_summary">Günlüklerde yığın izlerinin nasıl görüntüleneceğini belirler.</string>
+    <string name="gradle_verbose_vfs_logging">Ayrıntılı VFS Günlüğü</string>
+    <string name="gradle_verbose_vfs_logging_summary">Sanal Dosya Sistemi hakkında ek bilgileri günlüğe kaydet</string>
+    <string name="editor_tabs_settings_title">Editör Sekmeleri</string>
+    <string name="editor_tab_unique_file_name">Benzersiz olmayan dosya adları için dizini göster</string>
+    <string name="editor_tab_unique_file_name_summary">Aynı dosya adlarına sahip dosyalar açılırsa, üst klasörleri göstererek görüntülenen dosya adlarını benzersiz kılar.</string>
+    <string name="error_no_project_opened">Hiçbir proje açılmadı</string>
+    <string name="dialog_confirm_save_title">XML\\\'e kaydet</string>
+    <string name="dialog_confirm_save_msg">Düzeni kaydetmek istiyor musunuz?</string>
 </resources>
