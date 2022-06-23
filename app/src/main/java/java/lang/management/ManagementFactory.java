@@ -1,5 +1,7 @@
 package java.lang.management;
 
+import static java.util.Collections.emptySet;
+
 import java.io.FilePermission;
 import java.io.IOException;
 import java.security.AccessControlContext;
@@ -16,6 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -30,7 +33,27 @@ import java.util.stream.Stream;
 //import javax.management.MBeanServerPermission;
 //import javax.management.MalformedObjectNameException;
 //import javax.management.NotCompliantMBeanException;
+import javax.management.Attribute;
+import javax.management.AttributeList;
+import javax.management.AttributeNotFoundException;
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.InstanceNotFoundException;
+import javax.management.IntrospectionException;
+import javax.management.InvalidAttributeValueException;
+import javax.management.ListenerNotFoundException;
+import javax.management.MBeanException;
+import javax.management.MBeanInfo;
+import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServer;
+import javax.management.NotCompliantMBeanException;
 import javax.management.NotificationEmitter;
+import javax.management.NotificationFilter;
+import javax.management.NotificationListener;
+import javax.management.ObjectInstance;
+import javax.management.ObjectName;
+import javax.management.QueryExp;
+import javax.management.ReflectionException;
+import javax.management.loading.ClassLoaderRepository;
 //import javax.management.ObjectName;
 //import javax.management.QueryExp;
 //import javax.management.StandardEmitterMBean;
@@ -366,23 +389,222 @@ public class ManagementFactory {
     public static List<Object> getGarbageCollectorMXBeans() {
         return Collections.emptyList();
     }
-//
-//    public static synchronized MBeanServer getPlatformMBeanServer() {
-//        SecurityManager sm = System.getSecurityManager();
-//        if (sm != null) {
-//            Permission perm = new MBeanServerPermission("createMBeanServer");
-//            sm.checkPermission(perm);
-//        }
-//
-//        if (platformMBeanServer == null) {
-//            platformMBeanServer = MBeanServerFactory.createMBeanServer();
-//            platformComponents().stream().filter(PlatformComponent::shouldRegister).flatMap((pc) -> pc.nameToMBeanMap().entrySet().stream()).forEach((entry) -> {
-//                addMXBean(platformMBeanServer, (String)entry.getKey(), entry.getValue());
-//            });
-//        }
-//
-//        return platformMBeanServer;
-//    }
+
+    public static synchronized MBeanServer getPlatformMBeanServer() {
+        return new MBeanServer() {
+            @Override
+            public ObjectInstance createMBean(String var1,
+                                              ObjectName var2) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException {
+                    return null;
+            }
+
+            @Override
+            public ObjectInstance createMBean(String var1,
+                                              ObjectName var2,
+                                              ObjectName var3) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException, InstanceNotFoundException {
+                return null;
+            }
+
+            @Override
+            public ObjectInstance createMBean(String var1,
+                                              ObjectName var2,
+                                              Object[] var3,
+                                              String[] var4) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException {
+                return null;
+            }
+
+            @Override
+            public ObjectInstance createMBean(String var1,
+                                              ObjectName var2,
+                                              ObjectName var3,
+                                              Object[] var4,
+                                              String[] var5) throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException, MBeanException, NotCompliantMBeanException, InstanceNotFoundException {
+                return null;
+            }
+
+            @Override
+            public ObjectInstance registerMBean(Object var1,
+                                                ObjectName var2) throws InstanceAlreadyExistsException, MBeanRegistrationException, NotCompliantMBeanException {
+                return null;
+            }
+
+            @Override
+            public void unregisterMBean(ObjectName var1) throws InstanceNotFoundException,
+                    MBeanRegistrationException {
+
+            }
+
+            @Override
+            public ObjectInstance getObjectInstance(ObjectName var1) throws InstanceNotFoundException {
+                return null;
+            }
+
+            @Override
+            public Set<ObjectInstance> queryMBeans(ObjectName var1, QueryExp var2) {
+                return emptySet();
+            }
+
+            @Override
+            public Set<ObjectName> queryNames(ObjectName var1, QueryExp var2) {
+                return emptySet();
+            }
+
+            @Override
+            public boolean isRegistered(ObjectName var1) {
+                return false;
+            }
+
+            @Override
+            public Integer getMBeanCount() {
+                return 0;
+            }
+
+            @Override
+            public Object getAttribute(ObjectName var1,
+                                       String var2) throws MBeanException,
+                    AttributeNotFoundException, InstanceNotFoundException, ReflectionException {
+                return new ConcurrentHashMap<>();
+            }
+
+            @Override
+            public AttributeList getAttributes(ObjectName var1,
+                                               String[] var2) throws InstanceNotFoundException, ReflectionException {
+                return null;
+            }
+
+            @Override
+            public void setAttribute(ObjectName var1,
+                                     Attribute var2) throws InstanceNotFoundException,
+                    AttributeNotFoundException, InvalidAttributeValueException, MBeanException,
+                    ReflectionException {
+
+            }
+
+            @Override
+            public AttributeList setAttributes(ObjectName var1,
+                                               AttributeList var2) throws InstanceNotFoundException, ReflectionException {
+                return null;
+            }
+
+            @Override
+            public Object invoke(ObjectName var1,
+                                 String var2,
+                                 Object[] var3,
+                                 String[] var4) throws InstanceNotFoundException, MBeanException,
+                    ReflectionException {
+                return null;
+            }
+
+            @Override
+            public String getDefaultDomain() {
+                return null;
+            }
+
+            @Override
+            public String[] getDomains() {
+                return new String[0];
+            }
+
+            @Override
+            public void addNotificationListener(ObjectName var1,
+                                                NotificationListener var2,
+                                                NotificationFilter var3,
+                                                Object var4) throws InstanceNotFoundException {
+
+            }
+
+            @Override
+            public void addNotificationListener(ObjectName var1,
+                                                ObjectName var2,
+                                                NotificationFilter var3,
+                                                Object var4) throws InstanceNotFoundException {
+
+            }
+
+            @Override
+            public void removeNotificationListener(ObjectName var1,
+                                                   ObjectName var2) throws InstanceNotFoundException, ListenerNotFoundException {
+
+            }
+
+            @Override
+            public void removeNotificationListener(ObjectName var1,
+                                                   ObjectName var2,
+                                                   NotificationFilter var3,
+                                                   Object var4) throws InstanceNotFoundException,
+                    ListenerNotFoundException {
+
+            }
+
+            @Override
+            public void removeNotificationListener(ObjectName var1,
+                                                   NotificationListener var2) throws InstanceNotFoundException, ListenerNotFoundException {
+
+            }
+
+            @Override
+            public void removeNotificationListener(ObjectName var1,
+                                                   NotificationListener var2,
+                                                   NotificationFilter var3,
+                                                   Object var4) throws InstanceNotFoundException,
+                    ListenerNotFoundException {
+
+            }
+
+            @Override
+            public MBeanInfo getMBeanInfo(ObjectName var1) throws InstanceNotFoundException,
+                    IntrospectionException, ReflectionException {
+                return null;
+            }
+
+            @Override
+            public boolean isInstanceOf(ObjectName var1,
+                                        String var2) throws InstanceNotFoundException {
+                return false;
+            }
+
+            @Override
+            public Object instantiate(String var1) throws ReflectionException, MBeanException {
+                return null;
+            }
+
+            @Override
+            public Object instantiate(String var1,
+                                      ObjectName var2) throws ReflectionException, MBeanException, InstanceNotFoundException {
+                return null;
+            }
+
+            @Override
+            public Object instantiate(String var1,
+                                      Object[] var2,
+                                      String[] var3) throws ReflectionException, MBeanException {
+                return null;
+            }
+
+            @Override
+            public Object instantiate(String var1,
+                                      ObjectName var2,
+                                      Object[] var3,
+                                      String[] var4) throws ReflectionException, MBeanException, InstanceNotFoundException {
+                return null;
+            }
+
+            @Override
+            public ClassLoader getClassLoaderFor(ObjectName var1) throws InstanceNotFoundException {
+                return null;
+            }
+
+            @Override
+            public ClassLoader getClassLoader(ObjectName var1) throws InstanceNotFoundException {
+                return null;
+            }
+
+            @Override
+            public ClassLoaderRepository getClassLoaderRepository() {
+                return null;
+            }
+        };
+    }
 
 //    public static <T> T newPlatformMXBeanProxy(MBeanServerConnection connection, String mxbeanName, Class<T> mxbeanInterface) throws IOException {
 //        ClassLoader loader = (ClassLoader)AccessController.doPrivileged(
