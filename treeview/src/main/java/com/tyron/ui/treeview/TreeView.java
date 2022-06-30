@@ -19,6 +19,7 @@ import android.content.Context;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.SimpleItemAnimator;
@@ -28,6 +29,7 @@ import com.tyron.ui.treeview.base.SelectableTreeAction;
 import com.tyron.ui.treeview.helper.TreeHelper;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Created by xinyuanzhong on 2017/4/20.
@@ -61,12 +63,22 @@ public class TreeView<D> implements SelectableTreeAction<D> {
         return rootView;
     }
 
+    @Nullable
+    public TreeNode<D> getRoot() {
+        List<TreeNode<D>> allNodes = getAllNodes();
+        if (allNodes.isEmpty()) {
+            return null;
+        }
+        return allNodes.get(0);
+    }
+
     @NonNull
     private RecyclerView buildRootView() {
         RecyclerView recyclerView = new RecyclerView(context);
 
         recyclerView.setMotionEventSplittingEnabled(false); // disable multi touch event to prevent terrible data set error when calculate list.
-        ((SimpleItemAnimator) recyclerView.getItemAnimator()).setSupportsChangeAnimations(false);
+        ((SimpleItemAnimator) Objects.requireNonNull(
+                recyclerView.getItemAnimator())).setSupportsChangeAnimations(false);
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
 
         return recyclerView;

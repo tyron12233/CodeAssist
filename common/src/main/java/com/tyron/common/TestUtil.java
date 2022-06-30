@@ -16,7 +16,7 @@ public class TestUtil {
                 .contains("Dalvik");
     }
 
-    public static File getResourcesDirectory() throws IOException {
+    public static File getResourcesDirectory() {
         File currentDirFile = Paths.get(".").toFile();
         String helper = currentDirFile.getAbsolutePath();
         String currentDir = helper.substring(0,

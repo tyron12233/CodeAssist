@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.com.intellij.patterns.PsiElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns;
 import org.jetbrains.kotlin.com.intellij.util.PairProcessor;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.source.tree.Tree;
+import com.sun.source.tree.Tree;
 
 import java.util.Arrays;
 import java.util.Collection;

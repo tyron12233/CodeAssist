@@ -32,6 +32,15 @@
             app:iconSpaceReserved="false"
             android:title="@string/settings_code_completions" />
 
+        <SwitchPreference
+            android:defaultValue="true"
+            android:iconSpaceReserved="false"
+            android:key="java_case_insensitive_match"
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:summary="@string/settings_case_insensitive_match_desc"
+            app:title="@string/settings_case_insensitive_match_title" />
+
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -75,18 +84,31 @@
             app:defaultValue="false"
             app:title="@string/editor_settings_wordwrap"
             app:key="editor_wordwrap" />
+
+        <SwitchPreference
+            app:iconSpaceReserved="false"
+            app:defaultValue="false"
+            app:title="@string/editor_delete_whitespaces"
+            app:key="editor_delete_whitespaces"/>
+
+        <Preference
+            app:key="scheme"
+            app:iconSpaceReserved="false"
+            app:title="@string/editor_scheme_title"
+            app:summary="@string/editor_scheme_desc"/>
     </PreferenceCategory>
 
     <PreferenceCategory
         app:iconSpaceReserved="false"
-        android:title="Keyboard">
+        android:title="@string/editor_tabs_settings_title">
 
         <SwitchPreference
-            android:defaultValue="false"
-            android:iconSpaceReserved="false"
-            android:key="keyboard_enable_suggestions"
             app:iconSpaceReserved="false"
-            android:title="@string/keyboard_enable_suggestions_description" />
+            app:defaultValue="true"
+            app:title="@string/editor_tab_unique_file_name"
+            app:summary="@string/editor_tab_unique_file_name_summary"
+            app:key="editor_tab_unique_file_name" />
 
     </PreferenceCategory>
+
 </PreferenceScreen>

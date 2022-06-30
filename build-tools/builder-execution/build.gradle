@@ -1,0 +1,30 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.buildCache
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderApi
+    implementation projects.buildTools.builderProblems
+    implementation projects.buildTools.builderPersistentCache
+
+
+    implementation 'org.jetbrains:annotations:23.0.0'
+    implementation common.slf4j
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

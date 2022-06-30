@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Text Actions -->
+    <string name="text_actions">Ações de texto</string>
+    <string name="expand_selection">Expandir seleção</string>
+    <string name="copied_to_clipoard">O texto foi copiado para área de transferência.</string>
+
+    <!-- File Actions -->
+    <string name="menu_action_new_java_class">Classe Java </string>
+    <string name="menu_action_new_kotlin_class">Classe Kotlin </string>
+    <string name="menu_action_new_directory">Diretório</string>
+    <string name="menu_action_new_file">Arquivo</string>
+    <string name="directory_name">Nome do diretório</string>
+    <string name="file_name">Nome do arquivo</string>
+    <string name="menu_new">Novo</string>
+    <string name="menu_refactor">Refatorar</string>
+    <string name="menu_new_layout">Novo layout</string>
+
+    <string name="error_file_creation">Incapaz de criar arquivo.</string>
+</resources>

@@ -15,8 +15,7 @@
         android:layout_height="wrap_content"
         android:text="@string/attributes_editor"
         android:textSize="18sp"
-        android:padding="8dp"
-        android:textColor="@color/white" />
+        android:padding="8dp" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"

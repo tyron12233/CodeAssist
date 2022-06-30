@@ -1,7 +1,5 @@
 package com.tyron.lint.parser;
 
-import static com.tyron.builder.compiler.manifest.SdkConstants.UTF_8;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -66,7 +64,7 @@ public class EcjParser extends JavaParser {
         options.parseLiteralExpressionsAsConstants = true;
         options.analyseResourceLeaks = false;
         options.docCommentSupport = false;
-        options.defaultEncoding = UTF_8;
+        options.defaultEncoding = "utf-8";
         options.suppressOptionalErrors = true;
         options.generateClassFiles = false;
         options.isAnnotationBasedNullAnalysisEnabled = false;

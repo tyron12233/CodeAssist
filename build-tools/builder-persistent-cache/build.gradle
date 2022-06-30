@@ -1,0 +1,29 @@
+plugins {
+    id 'java-library'
+}
+
+description = """Persistent caches on disk and cross process locking.
+    | Mostly for persisting Maps to the disk.
+    | Also contains implementations for in-memory caches in front of the disk cache.
+"""
+
+dependencies {
+    def buildTools = projects.buildTools
+
+    implementation projects.common
+
+    implementation buildTools.builderBaseServices
+    implementation buildTools.builderMessaging
+    implementation buildTools.builderNative
+    implementation buildTools.builderFiles
+    implementation buildTools.builderResources
+    implementation buildTools.builderLogging
+
+    implementation common.slf4j
+    implementation common.commonsLang3
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

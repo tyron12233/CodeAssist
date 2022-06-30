@@ -1,0 +1,259 @@
+/*
+ * Copyright 2017 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.tyron.builder.api.internal.artifacts.dsl.dependencies;
+
+import com.tyron.builder.api.internal.catalog.DependencyBundleValueSource;
+
+import groovy.lang.Closure;
+
+import com.tyron.builder.api.Action;
+import com.tyron.builder.api.InvalidUserCodeException;
+import com.tyron.builder.api.Transformer;
+import com.tyron.builder.api.artifacts.Configuration;
+import com.tyron.builder.api.artifacts.ConfigurationContainer;
+import com.tyron.builder.api.artifacts.DependencyConstraint;
+import com.tyron.builder.api.artifacts.MinimalExternalModuleDependency;
+import com.tyron.builder.api.artifacts.ModuleIdentifier;
+import com.tyron.builder.api.artifacts.ModuleVersionIdentifier;
+import com.tyron.builder.api.artifacts.MutableVersionConstraint;
+import com.tyron.builder.api.artifacts.VersionConstraint;
+import com.tyron.builder.api.artifacts.dsl.DependencyConstraintHandler;
+import com.tyron.builder.api.attributes.AttributeContainer;
+import com.tyron.builder.api.attributes.Category;
+import com.tyron.builder.api.internal.artifacts.dependencies.DependencyConstraintInternal;
+
+import com.tyron.builder.api.internal.provider.DefaultValueSourceProviderFactory;
+import com.tyron.builder.api.model.ObjectFactory;
+import com.tyron.builder.api.provider.ListProperty;
+import com.tyron.builder.api.provider.Provider;
+import com.tyron.builder.api.provider.ProviderConvertible;
+import com.tyron.builder.api.provider.ValueSource;
+import com.tyron.builder.internal.Cast;
+import com.tyron.builder.internal.metaobject.MethodAccess;
+import com.tyron.builder.internal.metaobject.MethodMixIn;
+import com.tyron.builder.util.internal.ConfigureUtil;
+
+import javax.annotation.Nullable;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public class DefaultDependencyConstraintHandler implements DependencyConstraintHandler, MethodMixIn {
+    private final static DependencyConstraint DUMMY_CONSTRAINT = new DependencyConstraintInternal() {
+        private InvalidUserCodeException shouldNotBeCalled() {
+            return new InvalidUserCodeException("You shouldn't use a dependency constraint created via a Provider directly");
+        }
+
+        @Override
+        public void setForce(boolean force) {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public boolean isForce() {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public void version(Action<? super MutableVersionConstraint> configureAction) {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public String getReason() {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public void because(@Nullable String reason) {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public AttributeContainer getAttributes() {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public DependencyConstraint attributes(Action<? super AttributeContainer> configureAction) {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public VersionConstraint getVersionConstraint() {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public String getGroup() {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public String getName() {
+            throw shouldNotBeCalled();
+        }
+
+        @Nullable
+        @Override
+        public String getVersion() {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public boolean matchesStrictly(ModuleVersionIdentifier identifier) {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public ModuleIdentifier getModule() {
+            throw shouldNotBeCalled();
+        }
+
+        @Override
+        public DependencyConstraint copy() {
+            throw shouldNotBeCalled();
+        }
+    };
+    private final ConfigurationContainer configurationContainer;
+    private final DependencyFactory dependencyFactory;
+    private final DynamicAddDependencyMethods dynamicMethods;
+    private final ObjectFactory objects;
+    private final PlatformSupport platformSupport;
+    private final Category platform;
+    private final Category enforcedPlatform;
+
+    public DefaultDependencyConstraintHandler(ConfigurationContainer configurationContainer,
+                                              DependencyFactory dependencyFactory,
+                                              ObjectFactory objects,
+                                              PlatformSupport platformSupport) {
+        this.configurationContainer = configurationContainer;
+        this.dependencyFactory = dependencyFactory;
+        this.dynamicMethods = new DynamicAddDependencyMethods(configurationContainer, new DependencyConstraintAdder());
+        this.objects = objects;
+        this.platformSupport = platformSupport;
+        platform = toCategory(Category.REGULAR_PLATFORM);
+        enforcedPlatform = toCategory(Category.ENFORCED_PLATFORM);
+    }
+
+    @Override
+    public DependencyConstraint add(String configurationName, Object dependencyNotation) {
+        return doAdd(configurationContainer.getByName(configurationName), dependencyNotation, null);
+    }
+
+    @Override
+    public DependencyConstraint add(String configurationName, Object dependencyNotation, Action<? super DependencyConstraint> configureAction) {
+        return doAdd(configurationContainer.getByName(configurationName), dependencyNotation, configureAction);
+    }
+
+    @Override
+    public DependencyConstraint create(Object dependencyNotation) {
+        return doCreate(dependencyNotation, null);
+    }
+
+    @Override
+    public DependencyConstraint create(Object dependencyNotation, Action<? super DependencyConstraint> configureAction) {
+        return doCreate(dependencyNotation, configureAction);
+    }
+
+    @Override
+    public DependencyConstraint enforcedPlatform(Object notation) {
+        DependencyConstraintInternal platformDependency = (DependencyConstraintInternal) create(notation);
+        platformDependency.setForce(true);
+        platformSupport.addPlatformAttribute(platformDependency, enforcedPlatform);
+        return platformDependency;
+    }
+
+    @Override
+    public DependencyConstraint enforcedPlatform(Object notation, Action<? super DependencyConstraint> configureAction) {
+        DependencyConstraint dep = enforcedPlatform(notation);
+        configureAction.execute(dep);
+        return dep;
+    }
+
+    private DependencyConstraint doCreate(Object dependencyNotation, @Nullable Action<? super DependencyConstraint> configureAction) {
+        DependencyConstraint dependencyConstraint = dependencyFactory.createDependencyConstraint(dependencyNotation);
+        if (configureAction != null) {
+            configureAction.execute(dependencyConstraint);
+        }
+        return dependencyConstraint;
+    }
+
+    private DependencyConstraint doAdd(Configuration configuration, Object dependencyNotation, @Nullable Action<? super DependencyConstraint> configureAction) {
+        if(dependencyNotation instanceof ProviderConvertible<?>) {
+            return doAddProvider(configuration, ((ProviderConvertible<?>) dependencyNotation).asProvider(), configureAction);
+        }
+        if (dependencyNotation instanceof Provider<?>) {
+            return doAddProvider(configuration, (Provider<?>) dependencyNotation, configureAction);
+        }
+        DependencyConstraint dependency = doCreate(dependencyNotation, configureAction);
+        configuration.getDependencyConstraints().add(dependency);
+        return dependency;
+    }
+
+    private DependencyConstraint doAddProvider(Configuration configuration, Provider<?> dependencyNotation, Action<? super DependencyConstraint> configureAction) {
+        if (dependencyNotation instanceof DefaultValueSourceProviderFactory.ValueSourceProvider) {
+            Class<? extends ValueSource<?, ?>> valueSourceType = ((DefaultValueSourceProviderFactory.ValueSourceProvider<?, ?>) dependencyNotation).getValueSourceType();
+            if (valueSourceType.isAssignableFrom(DependencyBundleValueSource.class)) {
+                return doAddListProvider(configuration, dependencyNotation, configureAction);
+            }
+        }
+        Provider<DependencyConstraint> lazyConstraint = dependencyNotation.map(mapDependencyConstraintProvider(configureAction));
+        configuration.getDependencyConstraints().addLater(lazyConstraint);
+        // Return a fake dependency constraint object to satisfy Kotlin DSL backwards compatibility
+        return DUMMY_CONSTRAINT;
+    }
+
+    private DependencyConstraint doAddListProvider(Configuration configuration, Provider<?> dependencyNotation, Action<? super DependencyConstraint>  configureAction) {
+        // workaround for the fact that mapping to a list will not create a `CollectionProviderInternal`
+        ListProperty<DependencyConstraint> constraints = objects.listProperty(DependencyConstraint.class);
+        constraints.set(dependencyNotation.map(notation -> {
+            List<MinimalExternalModuleDependency> deps = Cast.uncheckedCast(notation);
+            return deps.stream().map(d -> create(d, configureAction)).collect(Collectors.toList());
+        }));
+        configuration.getDependencyConstraints().addAllLater(constraints);
+        return DUMMY_CONSTRAINT;
+    }
+
+    private <T> Transformer<DependencyConstraint, T> mapDependencyConstraintProvider(Action<? super DependencyConstraint> configurationAction) {
+        return lazyNotation -> create(lazyNotation, configurationAction);
+    }
+
+    @Override
+    public MethodAccess getAdditionalMethods() {
+        return dynamicMethods;
+    }
+
+    private Category toCategory(String category) {
+        return objects.named(Category.class, category);
+    }
+
+    private class DependencyConstraintAdder implements DynamicAddDependencyMethods.DependencyAdder<DependencyConstraint> {
+        @Override
+        @SuppressWarnings("rawtypes")
+        public DependencyConstraint add(Configuration configuration, Object dependencyNotation, Closure configureClosure) {
+            if(dependencyNotation instanceof ProviderConvertible<?>) {
+                return doAddProvider(configuration, ((ProviderConvertible<?>) dependencyNotation).asProvider(), ConfigureUtil.configureUsing(configureClosure));
+            }
+            if (dependencyNotation instanceof Provider<?>) {
+                return doAddProvider(configuration, (Provider<?>) dependencyNotation, ConfigureUtil.configureUsing(configureClosure));
+            }
+            DependencyConstraint dependencyConstraint = ConfigureUtil.configure(configureClosure, dependencyFactory.createDependencyConstraint(dependencyNotation));
+            configuration.getDependencyConstraints().add(dependencyConstraint);
+            return dependencyConstraint;
+        }
+    }
+}

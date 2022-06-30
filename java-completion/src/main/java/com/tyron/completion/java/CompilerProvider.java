@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.tools.JavaFileObject;
 
 public interface CompilerProvider {
 

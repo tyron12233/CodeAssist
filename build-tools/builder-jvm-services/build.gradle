@@ -1,0 +1,22 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderProcessServices
+
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'javax.inject:javax.inject:1'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

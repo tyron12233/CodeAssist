@@ -1,10 +1,11 @@
 package com.tyron.completion.java.rewrite;
 
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.Trees;
 
 import com.tyron.completion.java.CompilerProvider;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.java.compiler.ParseTask;
 
@@ -16,7 +17,7 @@ import java.util.Map;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
-import org.openjdk.source.tree.ImportTree;
+import com.sun.source.tree.ImportTree;
 
 import java.io.File;
 
@@ -39,6 +40,9 @@ public class AddImport implements JavaRewrite {
     @Override
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
         ParseTask task = compiler.parse(currentFile.toPath());
+        if (ActionUtil.hasImport(task.root, className)) {
+            return CANCELLED;
+        }
         Position point = insertPosition(task);
         String text = "import " + className + ";\n";
         TextEdit[] edits = { new TextEdit(new Range(point, point), text)};
@@ -46,6 +50,18 @@ public class AddImport implements JavaRewrite {
     }
 
     public Map<File, TextEdit> getText(ParseTask task) {
+        if (ActionUtil.hasImport(task.root, className)) {
+            return Collections.emptyMap();
+        }
+
+        String packageName = className;
+        if (className.contains(".")) {
+            packageName = className.substring(0, className.lastIndexOf('.'));
+        }
+        if (packageName.equals(String.valueOf(task.root.getPackageName()))) {
+            return Collections.emptyMap();
+        }
+
         Position point = insertPosition(task);
 
         String text = "import " + className + ";\n";

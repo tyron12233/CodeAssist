@@ -1,12 +1,11 @@
 package com.tyron.lint.parser;
 
-import static com.tyron.builder.compiler.manifest.SdkConstants.UTF_8;
-
 import androidx.annotation.NonNull;
 
 import org.eclipse.jdt.internal.compiler.batch.CompilationUnit;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 
 public class EcjSourceFile extends CompilationUnit {
 
@@ -23,7 +22,7 @@ public class EcjSourceFile extends CompilationUnit {
         mSource = source;
     }
     public EcjSourceFile(@NonNull String source, @NonNull File file) {
-        this(source, file, UTF_8);
+        this(source, file, StandardCharsets.UTF_8.toString());
     }
 
     @NonNull

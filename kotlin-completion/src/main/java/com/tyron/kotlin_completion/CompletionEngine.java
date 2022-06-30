@@ -1,8 +1,5 @@
 package com.tyron.kotlin_completion;
 
-import android.util.Log;
-import android.util.Pair;
-
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.Debouncer;
@@ -17,6 +14,8 @@ import com.tyron.kotlin_completion.util.StringUtilsKt;
 import org.jetbrains.kotlin.diagnostics.Diagnostic;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.time.Duration;
@@ -28,10 +27,13 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import kotlin.Pair;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 
 public class CompletionEngine {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CompletionEngine.class);
 
     public enum Recompile {
         ALWAYS, AFTER_DOT, NEVER
@@ -45,7 +47,7 @@ public class CompletionEngine {
     private CachedCompletion cachedCompletion;
 
     private final Debouncer debounceLint = new Debouncer(Duration.ofMillis(500));
-    private Set<File> lintTodo = new HashSet<>();
+    private final Set<File> lintTodo = new HashSet<>();
     private int lintCount = 0;
 
     private CompletionEngine(AndroidModule project) {
@@ -61,7 +63,7 @@ public class CompletionEngine {
             INSTANCE = new CompletionEngine(project);
         } else {
             if (project != INSTANCE.mProject) {
-                Log.d("CompletionEngine", "Creating new instance");
+                LOG.debug("Creating new instance");
                 INSTANCE = new CompletionEngine(project);
             }
         }
@@ -98,7 +100,7 @@ public class CompletionEngine {
             compiled = sp.latestCompiledVersion(file);
         }
 
-        return Pair.create(compiled, offset);
+        return new Pair<>(compiled, offset);
     }
 
     public CompletableFuture<CompletionList> complete(File file, String contents, int cursor) {
@@ -108,7 +110,7 @@ public class CompletionEngine {
 
         return async.compute(() -> {
             Pair<CompiledFile, Integer> pair = recover(file, contents, Recompile.NEVER, cursor);
-            return new Completions().completions(pair.first, cursor, sp.getIndex());
+            return new Completions().completions(pair.getFirst(), cursor, sp.getIndex());
         });
     }
 
@@ -141,7 +143,7 @@ public class CompletionEngine {
         debounceLint.cancel();
 
         Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
-        CompletionList completions = new Completions().completions(recover.first, cursor,
+        CompletionList completions = new Completions().completions(recover.getFirst(), cursor,
                 sp.getIndex());
         String partialIdentifier = partialIdentifier(contents, cursor);
         cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier, completions);
@@ -218,6 +220,7 @@ public class CompletionEngine {
     }
 
     public void doLint(File file, String contents, LintCallback callback) {
+        debounceLint.cancel();
         debounceLint.schedule(cancel -> {
             doLint(file, contents, cancel, callback);
             return Unit.INSTANCE;
@@ -226,17 +229,23 @@ public class CompletionEngine {
 
     public void doLint(File file, String contents, Function0<Boolean> cancelCallback,
                        LintCallback callback) {
+        if (cancelCallback.invoke()) {
+            return;
+        }
+
         sp.put(file, contents, false);
         BindingContext context = sp.compileFiles(Collections.singletonList(file));
-        if (!cancelCallback.invoke()) {
-            List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
-            Diagnostics diagnostics = context.getDiagnostics();
-            for (Diagnostic it : diagnostics) {
-                diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
-            }
-            lintCount++;
-            callback.onLint(diagnosticWrappers);
+        if (cancelCallback.invoke()) {
+           return;
         }
+
+        List<DiagnosticWrapper> diagnosticWrappers = new ArrayList<>();
+        Diagnostics diagnostics = context.getDiagnostics();
+        for (Diagnostic it : diagnostics) {
+            diagnosticWrappers.addAll(ConvertDiagnosticKt.convertDiagnostic(it));
+        }
+        lintCount++;
+        callback.onLint(diagnosticWrappers);
     }
 
     public List<DiagnosticWrapper> doLint(Function0<Boolean> cancelCallback) {

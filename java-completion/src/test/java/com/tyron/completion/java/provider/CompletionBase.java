@@ -69,7 +69,7 @@ public abstract class CompletionBase {
                     mModule,
                     file,
                     contents,
-                    cursor);
+                    cursor).build();
         } catch (Throwable e) {
             throw e;
         }

@@ -6,7 +6,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.common.util.Decompress;
 import com.tyron.completion.java.compiler.SourceFileManager;
 
-import org.openjdk.javax.tools.StandardLocation;
+import javax.tools.StandardLocation;
 
 import java.io.File;
 import java.io.IOException;

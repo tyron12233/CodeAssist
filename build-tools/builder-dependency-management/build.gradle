@@ -1,0 +1,44 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderProblems
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.buildCache
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderResources
+    implementation projects.buildTools.builderResourcesHttp
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderExecution
+    implementation projects.buildTools.builderSecurity
+
+    implementation common.slf4j
+    implementation common.commonsLang3
+    implementation 'org.ow2.asm:asm-commons:9.3'
+    implementation 'org.apache.httpcomponents:httpcore:4.4.15'
+    implementation 'org.apache.commons:commons-text:1.9'
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.apache.maven:maven-settings-builder:3.8.5'
+    implementation 'org.apache.ivy:ivy:2.5.0'
+    implementation 'org.apache.ant:ant:1.10.12'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

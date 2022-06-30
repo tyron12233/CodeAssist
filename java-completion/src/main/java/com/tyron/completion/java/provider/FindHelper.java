@@ -3,27 +3,27 @@ package com.tyron.completion.java.provider;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.ParseTask;
 
-import org.openjdk.source.tree.ArrayTypeTree;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.ParameterizedTypeTree;
-import org.openjdk.source.tree.PrimitiveTypeTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.VariableTree;
+import com.sun.source.tree.ArrayTypeTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.ParameterizedTypeTree;
+import com.sun.source.tree.PrimitiveTypeTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
 
 import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.util.Types;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 
 
 /**

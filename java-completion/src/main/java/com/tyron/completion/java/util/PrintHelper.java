@@ -6,39 +6,46 @@ import static com.tyron.completion.java.rewrite.EditHelper.printThrows;
 
 import com.tyron.completion.java.rewrite.EditHelper;
 
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.ArrayType;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.tools.javac.code.Type;
-import org.openjdk.tools.javac.tree.TreeInfo;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.Name;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeMirror;
+import com.sun.source.tree.MethodTree;
+import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.tree.TreeInfo;
 
 import java.util.List;
 import java.util.StringJoiner;
 
 /**
- * Converts the given Element directly into String without converting first through {@link com.github.javaparser.JavaParser}
+ * Converts the given Element directly into String without converting first through
+ * {@link com.github.javaparser.JavaParser}
  */
 public class PrintHelper {
 
     /**
-     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to the method body
-     * if the source is null, it will get the parameter names from the class file which will be {@code arg1, arg2, arg3}
+     * Prints a given method into a String, adds {@code throws UnsupportedOperationException} to
+     * the method body
+     * if the source is null, it will get the parameter names from the class file which will be
+     * {@code arg1, arg2, arg3}
+     * <p>
+     * Not to be confused with
+     * {@link EditHelper#printMethod(ExecutableElement, ExecutableType, MethodTree)}
+     * This does not convert the method into a
+     * {@link com.github.javaparser.ast.body.MethodDeclaration}
      *
-     * Not to be confused with {@link EditHelper#printMethod(ExecutableElement, ExecutableType, MethodTree)}
-     * This does not convert the method into a {@link com.github.javaparser.ast.body.MethodDeclaration}
-     *
-     * @param method method to print
+     * @param method            method to print
      * @param parameterizedType type parameters of this method
-     * @param source the source method, in which the parameter names are fetched
+     * @param source            the source method, in which the parameter names are fetched
      * @return a string that represents the method
      */
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, MethodTree source) {
+    public static String printMethod(ExecutableElement method,
+                                     ExecutableType parameterizedType,
+                                     MethodTree source) {
         StringBuilder buf = new StringBuilder();
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
@@ -62,7 +69,9 @@ public class PrintHelper {
         return buf.toString();
     }
 
-    public static String printMethod(ExecutableElement method, ExecutableType parameterizedType, ExecutableElement source) {
+    public static String printMethod(ExecutableElement method,
+                                     ExecutableType parameterizedType,
+                                     ExecutableElement source) {
         StringBuilder buf = new StringBuilder();
         buf.append("@Override\n");
         if (method.getModifiers().contains(Modifier.PUBLIC)) {
@@ -101,7 +110,7 @@ public class PrintHelper {
     public static String printParameters(ExecutableType method, MethodTree source) {
         StringJoiner join = new StringJoiner(", ");
         for (int i = 0; i < method.getParameterTypes().size(); i++) {
-            String type = method.getParameterTypes().get(i).toString();
+            String type = printType(method.getParameterTypes().get(i));
             Name name = source.getParameters().get(i).getName();
             join.add(type + " " + name);
         }
@@ -127,7 +136,8 @@ public class PrintHelper {
             DeclaredType declared = (DeclaredType) type;
             if (declared instanceof Type.ClassType) {
                 Type.ClassType classType = (Type.ClassType) declared;
-                if (classType.all_interfaces_field != null && !classType.all_interfaces_field.isEmpty()) {
+                if (classType.all_interfaces_field != null &&
+                    !classType.all_interfaces_field.isEmpty()) {
                     Type next = classType.all_interfaces_field.get(0);
                     declared = (DeclaredType) next;
                 }
@@ -144,6 +154,12 @@ public class PrintHelper {
             } else {
                 return arrayType.toString();
             }
+        } else if (type instanceof Type.TypeVar) {
+            Type.TypeVar typeVar = ((Type.TypeVar) type);
+            if (typeVar.isCaptured()) {
+                return "? extends " + printType(typeVar.getUpperBound(), fqn);
+            }
+            return typeVar.toString();
         } else {
             if (fqn) {
                 return type.toString();

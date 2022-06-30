@@ -1,0 +1,20 @@
+import com.tyron.builder.api.*
+import com.tyron.builder.api.tasks.*
+import com.tyron.builder.api.attributes.*
+
+plugins {
+    id 'java-library'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("org.slf4j:slf4j-api:1.7.36")
+}
+
+java {
+    sourceCompatibility = "1.8"
+    targetCompatibility = "1.8"
+}

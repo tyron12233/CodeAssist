@@ -9,6 +9,7 @@ import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.ModuleSettings;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 
 import org.apache.commons.io.FileUtils;
@@ -27,8 +28,8 @@ public class ManifestMergeTask extends Task<AndroidModule> {
     private File[] mLibraryManifestFiles;
     private String mPackageName;
 
-    public ManifestMergeTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public ManifestMergeTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

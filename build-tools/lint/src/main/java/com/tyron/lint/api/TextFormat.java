@@ -2,9 +2,6 @@ package com.tyron.lint.api;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.builder.util.SdkUtils;
-import com.tyron.builder.util.XmlUtils;
-
 
 /**
  * Lint error message, issue explanations and location descriptions
@@ -13,7 +10,7 @@ import com.tyron.builder.util.XmlUtils;
  * also be converted to plain text and to HTML markup, using the
  * {@link #convertTo(String, TextFormat)} method.
  *
- * @see Issue#getDescription(TextFormat)
+// * @see Issue#getDescription(TextFormat)
  * @see Issue#getExplanation(TextFormat)
  * @see Issue#getBriefDescription(TextFormat)
  */
@@ -97,7 +94,8 @@ public enum TextFormat {
                     case RAW:
                         return message;
                     case HTML:
-                        return XmlUtils.toXmlTextValue(message);
+                        throw new UnsupportedOperationException("to fix");
+//                        return XmlUtils.toXmlTextValue(message);
                 }
             }
             case HTML: {
@@ -140,8 +138,9 @@ public enum TextFormat {
                 int end = html.indexOf(';', i);
                 if (end > i) {
                     String entity = html.substring(i, end + 1);
-                    sb.append(XmlUtils.fromXmlAttributeValue(entity));
+//                    sb.append(XmlUtils.fromXmlAttributeValue(entity));
                     i = end;
+                    throw new UnsupportedOperationException("to fix");
                 } else {
                     sb.append(c);
                 }
@@ -170,9 +169,9 @@ public enum TextFormat {
         s = sb.toString();
 
         // Line-wrap
-        s = SdkUtils.wrap(s, 60, null);
-
-        return s;
+//        s = SdkUtils.wrap(s, 60, null);
+        throw new UnsupportedOperationException("to fix");
+//        return s;
     }
 
     private static final String HTTP_PREFIX = "http://"; //$NON-NLS-1$

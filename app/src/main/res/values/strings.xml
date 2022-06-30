@@ -6,8 +6,8 @@
     <item name="paste" type="string">Paste</item>
     <item name="copy" type="string">Copy</item>
     <item name="selectAll" formatted="true" type="string">Select All</item>
-    <item name="saveToProject" translatable="false" type="string">Project</item>
-    <item name="cut" type="string" translatable="false">Cut</item>
+    <item name="saveToProject" type="string">Project</item>
+    <item name="cut" type="string">Cut</item>
     <item name="last" type="string">Last</item>
     <item name="next" type="string">Next</item>
     <item name="replace" type="string">Replace</item>
@@ -16,7 +16,7 @@
     <item name="cancel" type="string">Cancel</item>
     <item name="text_to_search" type="string">Text to search</item>
 
-    <item name="more" translatable="false" type="string">More</item>
+    <item name="more" type="string">More</item>
 
     <!-- Preference Titles -->
     <string name="messages_header">Messages</string>
@@ -71,8 +71,28 @@
     <string name="menu_settings">Settings</string>
 
     <!-- preferences -->
+    <string name="settings_title_application">Application</string>
+    <string name="settings_desc_application">General application preferences</string>
     <string name="settings_title_editor">Editor</string>
+    <string name="settings_desc_editor">Configure the editor</string>
     <string name="title_activity_settings">Settings</string>
+
+    <!-- Application settings -->
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_value_default">System default</string>
+    <string name="settings_theme_value_light">Light</string>
+    <string name="settings_theme_value_dark">Dark</string>
+
+    <string-array name="theme_values">
+        <item>default</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+    <string-array name="theme_entries">
+        <item>@string/settings_theme_value_default</item>
+        <item>@string/settings_theme_value_light</item>
+        <item>@string/settings_theme_value_dark</item>
+    </string-array>
     
 
     <!-- Editor settings -->
@@ -82,18 +102,50 @@
     <string name="settings_kotlin_completions_desc">This feature is still experimental and may be slow.
         Requires a powerful device.
     </string>
+    <string name="settings_case_insensitive_match_title">Case insensitive match</string>
+    <string name="settings_case_insensitive_match_desc">Suggest class names with lowercase prefix.</string>
     <string name="code_editor_error_highlight">Enable error highlighting</string>
 
     <string name="editor_settings_title">Code Editor settings</string>
     <string name="editor_settings_wordwrap">Word wrap mode</string>
+    <string name="editor_delete_whitespaces">Auto delete whitespace</string>
+    <string name="save">Save</string>
+    <string name="defaultString">Default</string>
+    <string name="editor_scheme_title">Editor color scheme</string>
+    <string name="editor_scheme_desc">Change the color scheme</string>
+    <string name="change_scheme_dialog_title">Paste the path of theme file</string>
     <string name="font_size_title">Font size</string>
     <string name="font_size_message">Set editor font size</string>
     <string name="font_size_summary">Specify the default font size of the editor</string>
     <string name="keyboard_settings_title">Keyboard</string>
     <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
+
+    <!-- Build and Run Settings Section -->
     <string name="settings_build_run_title">Build &amp; Run</string>
     <string name="settings_build_run_desc">Configure build and execution settings</string>
     <string name="run_title">Run</string>
+
+    <string name="gradle_title">Gradle</string>
+    <string name="gradle_log_level">Log level</string>
+    <string-array name="gradle_log_levels" translatable="false">
+        <item>DEBUG</item>
+        <item>INFO</item>
+        <item>LIFECYCLE</item>
+        <item>WARN</item>
+        <item>QUIET</item>
+        <item>ERROR</item>
+    </string-array>
+
+    <string name="gradle_stacktrace">Stacktrace Mode</string>
+    <string name="gradle_stacktrace_summary">Determines how stacktraces are displayed in logs.</string>
+    <string-array name="gradle_stacktrace_values" translatable="false">
+        <item>ALWAYS</item>
+        <item>ALWAYS_FULL</item>
+        <item>INTERNAL_EXCEPTIONS</item>
+    </string-array>
+    <string name="gradle_verbose_vfs_logging">Verbose VFS Logging</string>
+    <string name="gradle_verbose_vfs_logging_summary">Log extra information about the Virtual File System</string>
+
     <string name="settings_install_apk_title">APK Installation Prompt</string>
     <string name="settings_install_desc">Show APK installation prompt after successful compilation.</string>
     <string-array name="java_versions" translatable="false">
@@ -113,27 +165,24 @@
     <string name="completion_settings_java_title">Java</string>
     <string name="completion_java_target_version_title">Target version</string>
     <string name="completion_java_source_version_title">Source version</string>
+    <string name="editor_tabs_settings_title">Editor Tabs</string>
+    <string name="editor_tab_unique_file_name">Show directory for non-unique file names</string>
+    <string name="editor_tab_unique_file_name_summary">Makes displayed file names unique by showing parent folders if files with identical file names are opened.</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">About Us</string>
     <string name="settings_about_us_desc">More info about the developers.</string>
     <string name="app_description">Powerful and lightweight IDE for Android app development right within your pocket.</string>
-    <string name="app_version">Version %1$s</string>
+    <string name="app_version">Version</string>
     <string name="contact_group_title">Contact</string>
     <string name="app_source_title">Source code</string>
     <string name="sketchub_team">Sketchub Team</string>
     <string name="community">Community</string>
+    <string name="rate_us">Rate us</string>
+
     <!-- file manager menu -->
     <string name="error">Error</string>
-    <string name="error_resource_name_restriction">Resource names must only contain lowercase a–z, 0–9 or an underscore.</string>
-    <string name="menu_action_new_java_class">Java class </string>
-    <string name="menu_action_new_kotlin_class">Kotlin class</string>
-    <string name="menu_action_new_directory">Directory</string>
-    <string name="menu_action_new_file">File</string>
-    <string name="directory_name">Directory name</string>
-    <string name="file_name">File name</string>
-    <string name="menu_new">New</string>
-    <string name="menu_refactor">Refactor</string>
+    <string name="error_resource_name_restriction">Resource names must only contain lowercase letters (a–z), digits (0–9), and underscores.</string>
     <string name="item_project">Project</string>
     <string name="dialog_create_class_title">Create a class</string>
     <string name="create_class_dialog_class_name">Class name</string>
@@ -170,7 +219,7 @@
     <string name="project_manager_empty">Projects are empty</string>`
     <string name="project_manager_create_project">Create module</string>
     <string name="project_path_menu_title">Projects Path</string>
-    <string name="project_manager_null_projects">No Project Found</string>
+    <string name="project_manager_null_projects">No Projects Found</string>
     <string name="project_manager_suggestions">Suggestions:\n\n  - Create New Project\n  - Change Projects Path</string>
     
 
@@ -190,6 +239,10 @@
     <string name="attribute_value">Attribute value</string>
     <string name="menu_add_libs_gradle">Add libraries from build.gradle</string>
 
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">No project opened.</string>
+    <string name="dialog_confirm_save_title">Save to XML</string>
+    <string name="dialog_confirm_save_msg">Do you want to save the layout?</string>
     <!-- File Editor Manager -->
     <string name="file_editor_selection_title">Which editor would you like to open?</string>
 
@@ -197,4 +250,13 @@
     <string name="menu_close_file">Close</string>
     <string name="menu_close_others">Close others</string>
     <string name="menu_close_all">Close all</string>
+
+    <!-- Editor -->
+    <string name="editor_error_file">An error has occurred while reading the file. Changes will not be saved.</string>
+
+    <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">Build Logs</string>
+    <string name="tab_app_logs_title">App Logs</string>
+    <string name="tab_ide_logs_title">IDE Logs</string>
+    <string name="tab_diagnostics_title">Diagnostics</string>
 </resources>

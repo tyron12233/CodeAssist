@@ -1,11 +1,14 @@
 package com.tyron.completion.java.rewrite;
 
+import static com.tyron.completion.java.util.ActionUtil.containsVariableAtScope;
+import static com.tyron.completion.java.util.ActionUtil.getVariableName;
+
 import com.github.javaparser.ast.type.Type;
 import com.google.common.collect.ImmutableMap;
 
-import org.openjdk.source.tree.Scope;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.Scope;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
@@ -27,12 +30,10 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.type.TypeMirror;
+import javax.lang.model.element.Element;
+import javax.lang.model.type.TypeMirror;
 
 public class IntroduceLocalVariable implements JavaRewrite {
-
-    private static final Pattern DIGITS_PATTERN = Pattern.compile("^(.+?)(\\d+)$");
 
     private final Path file;
     private final String methodName;
@@ -60,7 +61,7 @@ public class IntroduceLocalVariable implements JavaRewrite {
             if (variableName == null) {
                 variableName = "variable";
             }
-            while (containsVariableAtScope(variableName, task)) {
+            while (containsVariableAtScope(variableName, position, task)) {
                 variableName = getVariableName(variableName);
             }
 
@@ -82,34 +83,5 @@ public class IntroduceLocalVariable implements JavaRewrite {
             }
             return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
         });
-    }
-
-    private boolean containsVariableAtScope(String name, CompileTask parse) {
-        TreePath scan = new FindCurrentPath(parse.task).scan(parse.root(), position + 1);
-        if (scan == null) {
-            return false;
-        }
-        Scope scope = Trees.instance(parse.task).getScope(scan);
-        Iterable<? extends Element> localElements = scope.getLocalElements();
-        for (Element element : localElements) {
-            if (name.contentEquals(element.getSimpleName())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String getVariableName(String name) {
-        Matcher matcher = DIGITS_PATTERN.matcher(name);
-        if (matcher.matches()) {
-            String variableName = matcher.group(1);
-            String stringNumber = matcher.group(2);
-            if (stringNumber == null) {
-                stringNumber = "0";
-            }
-            int number = Integer.parseInt(stringNumber) + 1;
-            return variableName + number;
-        }
-        return name + "1";
     }
 }

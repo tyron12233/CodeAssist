@@ -5,9 +5,7 @@
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#212121"
-        android:theme="@style/CodeEditorActionBar">
+        android:layout_height="wrap_content">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
@@ -15,8 +13,7 @@
             android:layout_height="wrap_content"/>
 
     </com.google.android.material.appbar.AppBarLayout>
-    <FrameLayout
-        android:background="@color/colorSurface"
+    <androidx.fragment.app.FragmentContainerView
         android:id="@+id/settings"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />

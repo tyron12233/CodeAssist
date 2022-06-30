@@ -43,10 +43,10 @@ public class OpenLibraryManagerAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        Context context = e.getData(CommonDataKeys.CONTEXT);
+        Context context = e.getRequiredData(CommonDataKeys.CONTEXT);
         context = getActivityContext(context);
 
-        Project project = e.getData(CommonDataKeys.PROJECT);
+        Project project = e.getRequiredData(CommonDataKeys.PROJECT);
         Module mainModule = project.getMainModule();
         if (context instanceof AppCompatActivity) {
             FragmentManager fragmentManager =

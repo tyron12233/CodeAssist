@@ -21,12 +21,12 @@ import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.common.util.ThreadUtil;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.source.tree.LambdaExpressionTree;
-import org.openjdk.source.util.TreePath;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeMirror;
+import javax.tools.Diagnostic;
+import com.sun.source.tree.LambdaExpressionTree;
+import com.sun.source.util.TreePath;
 
 import java.io.File;
 import java.util.Locale;

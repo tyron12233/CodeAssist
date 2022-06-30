@@ -1,0 +1,40 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api projects.buildTools.builderCoreApi
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.groovyCompiler
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderProblems
+
+    implementation 'javax.inject:javax.inject:1'
+    implementation common.commonsLang3
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'com.linkedin.dexmaker:dexmaker:2.28.1'
+    implementation 'org.codehaus.groovy:groovy:3.0.7:grooid'
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation 'com.linkedin.dexmaker:dexmaker:2.28.1'
+    testImplementation 'com.jakewharton.android.repackaged:dalvik-dx:9.0.0_r3'
+    testImplementation 'faker.android.base:dex2jar:1.0.1'
+    testImplementation 'io.github.skylot:jadx-core:1.4.1'
+    runtimeOnly 'io.github.skylot:jadx-dex-input:1.4.1'
+
+
+
+
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

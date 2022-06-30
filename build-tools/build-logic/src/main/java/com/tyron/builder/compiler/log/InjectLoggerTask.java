@@ -7,6 +7,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.StringSearch;
 
@@ -135,8 +136,8 @@ public class InjectLoggerTask extends Task<AndroidModule> {
     private File mApplicationFile;
     private String mOriginalApplication;
 
-    public InjectLoggerTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public InjectLoggerTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

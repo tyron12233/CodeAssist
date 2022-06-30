@@ -74,7 +74,9 @@ public class StringSearch {
         // pattern.
         int lastPrefix = last;
         for (int i = last; i >= 0; i--) {
-            if (hasPrefix(pattern, new Slice(pattern, i + 1))) lastPrefix = i + 1;
+            if (hasPrefix(pattern, new Slice(pattern, i + 1))) {
+                lastPrefix = i + 1;
+            }
             // lastPrefix is the shift, and (last-i) is len(suffix).
             goodSuffixSkip[i] = lastPrefix + last - i;
         }
@@ -119,7 +121,9 @@ public class StringSearch {
 
     private boolean hasPrefix(byte[] s, Slice prefix) {
         for (int i = 0; i < prefix.length(); i++) {
-            if (s[i] != prefix.get(i)) return false;
+            if (s[i] != prefix.get(i)) {
+                return false;
+            }
         }
         return true;
     }
@@ -147,15 +151,22 @@ public class StringSearch {
         int i = 0;
         while (true) {
             i = next(text, i);
-            if (i == -1) return -1;
-            if (isWord(text, i)) return i;
+            if (i == -1) {
+                return -1;
+            }
+            if (isWord(text, i)) {
+                return i;
+            }
             i++;
         }
     }
+
     public static int endOfLine(CharSequence contents, int cursor) {
         while (cursor < contents.length()) {
             char c = contents.charAt(cursor);
-            if (c == '\r' || c == '\n') break;
+            if (c == '\r' || c == '\n') {
+                break;
+            }
             cursor++;
         }
         return cursor;
@@ -167,12 +178,16 @@ public class StringSearch {
     }
 
     private boolean startsWord(ByteBuffer text, int offset) {
-        if (offset == 0) return true;
+        if (offset == 0) {
+            return true;
+        }
         return !isWordChar(text.get(offset - 1));
     }
 
     private boolean endsWord(ByteBuffer text, int offset) {
-        if (offset + 1 >= text.limit()) return true;
+        if (offset + 1 >= text.limit()) {
+            return true;
+        }
         return !isWordChar(text.get(offset + 1));
     }
 
@@ -201,14 +216,18 @@ public class StringSearch {
             throw new RuntimeException(e);
         }
     }
-    
+
     public static boolean matchesPartialName(CharSequence candidate, CharSequence partialName) {
-		if (partialName.length() == 1 && partialName.equals(".")) {
-			return true;
-		}
-        if (candidate.length() < partialName.length()) return false;
+        if (partialName.length() == 1 && partialName.equals(".")) {
+            return true;
+        }
+        if (candidate.length() < partialName.length()) {
+            return false;
+        }
         for (int i = 0; i < partialName.length(); i++) {
-            if (candidate.charAt(i) != partialName.charAt(i)) return false;
+            if (candidate.charAt(i) != partialName.charAt(i)) {
+                return false;
+            }
         }
         return true;
 //        if (candidate.length() > partialName.length()) {
@@ -217,13 +236,33 @@ public class StringSearch {
 //        double similarity = similarity(candidate.toString(), partialName.toString());
 //        return similarity > 0.5;
     }
-    
+
+    public static boolean matchesPartialNameLowercase(CharSequence candidate,
+                                                      CharSequence partialName) {
+        if (partialName.length() == 1 && partialName.equals(".")) {
+            return true;
+        }
+        if (candidate.length() < partialName.length()) {
+            return false;
+        }
+        for (int i = 0; i < partialName.length(); i++) {
+            if (Character.toLowerCase(candidate.charAt(i)) !=
+                Character.toLowerCase(partialName.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static String packageName(File file) {
         Pattern packagePattern = Pattern.compile("package\\s+([a-zA_Z][.\\w]*+)(;)?");
         Pattern startOfClass = Pattern.compile("^[\\w ]*class +\\w+");
         try (BufferedReader lines = bufferedReader(file)) {
             for (String line = lines.readLine(); line != null; line = lines.readLine()) {
-                if (startOfClass.matcher(line).find()) return "";
+                if (startOfClass.matcher(line)
+                        .find()) {
+                    return "";
+                }
                 Matcher matchPackage = packagePattern.matcher(line);
                 if (matchPackage.matches()) {
                     String id = matchPackage.group(1);
@@ -236,8 +275,8 @@ public class StringSearch {
         // TODO fall back on parsing file
         return "";
     }
-	
-	// TODO this doesn't work for inner classes, eliminate
+
+    // TODO this doesn't work for inner classes, eliminate
     public static String mostName(String name) {
         int lastDot = name.lastIndexOf('.');
         return lastDot == -1 ? "" : name.substring(0, lastDot);
@@ -246,8 +285,11 @@ public class StringSearch {
     // TODO this doesn't work for inner classes, eliminate
     public static String lastName(String name) {
         int i = name.lastIndexOf('.');
-        if (i == -1) return name;
-        else return name.substring(i + 1);
+        if (i == -1) {
+            return name;
+        } else {
+            return name.substring(i + 1);
+        }
     }
 
     public static BufferedReader bufferedReader(File file) {
@@ -285,8 +327,9 @@ public class StringSearch {
                 } else {
                     if (j > 0) {
                         int newValue = costs[j - 1];
-                        if (s1.charAt(i - 1) != s2.charAt(j - 1))
+                        if (s1.charAt(i - 1) != s2.charAt(j - 1)) {
                             newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                        }
                         costs[j - 1] = lastValue;
                         lastValue = newValue;
                     }
@@ -320,7 +363,7 @@ public class StringSearch {
         }
     }
 
-    public static boolean endsWithParen(String contents, int cursor) {
+    public static boolean endsWithParen(CharSequence contents, int cursor) {
         for (int i = cursor; i < contents.length(); i++) {
             if (!Character.isJavaIdentifierPart(contents.charAt(i))) {
                 return contents.charAt(i) == '(';

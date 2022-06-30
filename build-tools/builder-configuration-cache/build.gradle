@@ -1,0 +1,41 @@
+plugins {
+    id 'java-library'
+}
+apply plugin: 'kotlin'
+
+description = "Configuration cache implementation"
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderApi
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderCompositeBuilds
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.builderExecution
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.fileWatching
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderHashing
+    implementation projects.buildTools.builderLauncher
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderResources
+    implementation projects.buildTools.snapshots
+
+    implementation common.slf4j
+    implementation project(path: ':build-tools:builder-plugin-use')
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

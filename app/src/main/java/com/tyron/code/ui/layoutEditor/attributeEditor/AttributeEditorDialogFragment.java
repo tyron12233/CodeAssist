@@ -19,19 +19,23 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.R;
+import com.tyron.code.ui.layoutEditor.dom.FakeDomElement;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.xml.util.StyleUtils;
+import com.tyron.completion.progress.ProgressManager;
+import com.tyron.xml.completion.repository.api.AttrResourceValue;
+import com.tyron.xml.completion.repository.api.ResourceNamespace;
+import com.tyron.completion.xml.util.AttributeProcessingUtil;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.completion.xml.XmlRepository;
-import com.tyron.completion.xml.model.AttributeInfo;
-import com.tyron.completion.xml.model.DeclareStyleable;
 
+import org.eclipse.lemminx.commons.TextDocument;
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMElement;
+
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import kotlin.Pair;
 
@@ -154,44 +158,39 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
         MaterialAutoCompleteTextView editText = v.findViewById(R.id.value);
         XmlRepository xmlRepository = getXmlRepository();
 
-        String attributeName = attribute.getFirst();
-        String attributeNamespace = "";
-        if (attributeName.contains(":")) {
-            attributeNamespace = attributeName.substring(0, attributeName.indexOf(':'));
-            attributeName = attributeName.substring(attributeName.indexOf(':') + 1);
-        }
         if (xmlRepository != null) {
-            List<String> values = new ArrayList<>();
-            Set<DeclareStyleable> styles = new HashSet<>();
-            Map<String, DeclareStyleable> declareStyleables =
-                    xmlRepository.getDeclareStyleables();
-            styles.addAll(StyleUtils.getStyles(declareStyleables, mTag, mParentTag));
+            FakeDomElement fakeDomElement = new FakeDomElement(-1, -1);
+            fakeDomElement.setTagName(mTag);
 
-            for (DeclareStyleable style : styles) {
-                for (AttributeInfo attributeInfo : style.getAttributeInfos()) {
-                    if (!attributeNamespace.equals(attributeInfo.getNamespace())) {
-                        continue;
-                    }
-                    if (!attributeName.equals(attributeInfo.getName())) {
-                        continue;
-                    }
+            FakeDomElement fakeParent = new FakeDomElement(-1, -1);
+            fakeParent.setTagName(mParentTag);
+            fakeDomElement.setParent(fakeParent);
 
-                    if (attributeInfo.getFormats() == null || attributeInfo.getFormats().isEmpty()) {
-                        AttributeInfo extraAttribute =
-                                xmlRepository.getExtraAttribute(attributeName);
-                        if (extraAttribute != null) {
-                            attributeInfo = extraAttribute;
-                        }
-                    }
-                    values.addAll(attributeInfo.getValues());
-                }
+            String attributeName = attribute.getFirst();
+            if (attributeName.contains(":")) {
+                // strip the namespace prefix
+                attributeName = attributeName.substring(attributeName.indexOf(':') + 1);
             }
+
+            AttrResourceValue attr =
+                    AttributeProcessingUtil.getLayoutAttributeFromNode(
+                            xmlRepository.getRepository(), fakeDomElement,
+                            attributeName,
+                            ResourceNamespace.RES_AUTO);
+
+            List<String> values = new ArrayList<>();
+            if (attr != null) {
+                values.addAll(attr.getAttributeValues().keySet());
+            }
+
             ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
                     android.R.layout.simple_list_item_1, values);
-            editText.setThreshold(1);
-            editText.showDropDown();
-            editText.setAdapter(adapter);
 
+            ProgressManager.getInstance().runLater(() -> {
+                editText.setThreshold(1);
+                editText.showDropDown();
+                editText.setAdapter(adapter);
+            }, 300);
         }
 
         editText.setText(attribute.getSecond(), false);
@@ -220,7 +219,11 @@ public class AttributeEditorDialogFragment extends BottomSheetDialogFragment {
 
         XmlIndexProvider index = CompilerService.getInstance().getIndex(XmlIndexProvider.KEY);
         XmlRepository xmlRepository = index.get(currentProject, mainModule);
-        xmlRepository.initialize((AndroidModule) mainModule);
+        try {
+            xmlRepository.initialize((AndroidModule) mainModule);
+        } catch (IOException e) {
+            // ignored
+        }
         return xmlRepository;
     }
 }

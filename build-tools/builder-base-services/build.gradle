@@ -1,0 +1,24 @@
+plugins {
+    id 'java-library'
+}
+
+description = "A set of generic services and utilities."
+
+dependencies {
+    api projects.buildTools.builderBaseAnnotations
+    api projects.buildTools.builderHashing
+    api projects.buildTools.builderBuildOperations
+
+    implementation projects.common
+
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation common.slf4j
+    implementation common.commonsLang3
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+

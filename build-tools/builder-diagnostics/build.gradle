@@ -1,0 +1,32 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderReporting
+    implementation projects.buildTools.builderPlatformBase
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderApi
+
+    implementation projects.common
+    implementation common.commonsLang3
+    implementation 'javax.inject:javax.inject:1'
+    implementation('org.codehaus.groovy:groovy-json:3.0.7') {
+        transitive = false
+    }
+    implementation 'com.googlecode.jatl:jatl:0.2.3'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

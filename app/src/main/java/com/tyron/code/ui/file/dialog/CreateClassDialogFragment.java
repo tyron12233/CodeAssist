@@ -22,7 +22,7 @@ import com.tyron.code.template.java.JavaClassTemplate;
 import com.tyron.code.ui.file.RegexReason;
 import com.tyron.common.util.SingleTextWatcher;
 
-import org.openjdk.javax.lang.model.SourceVersion;
+import javax.lang.model.SourceVersion;
 
 import java.util.ArrayList;
 import java.util.List;

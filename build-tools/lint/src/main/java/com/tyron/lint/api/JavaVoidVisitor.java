@@ -1,6 +1,6 @@
 package com.tyron.lint.api;
 
-import org.openjdk.source.util.TreeScanner;
+import com.sun.source.util.TreeScanner;
 
 public class JavaVoidVisitor extends TreeScanner<Void, Void> {
 

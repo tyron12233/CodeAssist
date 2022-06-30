@@ -1,22 +1,19 @@
 package com.tyron.completion.main;
 
-import android.util.Log;
-
+import com.google.common.base.Throwables;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
-import com.tyron.completion.progress.ProgressManager;
+import com.tyron.editor.Editor;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.logging.Logger;
 
 /**
  * Main entry point for the completions api.
@@ -32,40 +29,32 @@ public class CompletionEngine {
         return sInstance;
     }
 
-    private final Set<CompletionProvider> mCompletionProviders;
+    private final Logger logger = IdeLog.getCurrentLogger(this);
 
     public CompletionEngine() {
-        mCompletionProviders = new HashSet<>();
-    }
 
-    public void registerCompletionProvider(CompletionProvider provider) {
-        mCompletionProviders.add(provider);
-    }
-
-    public List<CompletionProvider> getCompletionProviders(File file) {
-        List<CompletionProvider> providers = new ArrayList<>();
-        for (CompletionProvider provider : mCompletionProviders) {
-            if (provider.accept(file)) {
-                providers.add(provider);
-            }
-        }
-        return providers;
     }
 
     public CompletionList complete(Project project,
                                    Module module,
+                                   Editor editor,
                                    File file,
                                    String contents,
                                    String prefix,
                                    int line,
                                    int column,
                                    long index) {
+        if (project.isCompiling() || project.isIndexing()) {
+            return CompletionList.EMPTY;
+        }
+
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
 
         CompletionParameters parameters = CompletionParameters.builder()
                 .setProject(project)
                 .setModule(module)
+                .setEditor(editor)
                 .setFile(file)
                 .setContents(contents)
                 .setPrefix(prefix)
@@ -73,16 +62,26 @@ public class CompletionEngine {
                 .setColumn(column)
                 .setIndex(index)
                 .build();
-
-        List<CompletionProvider> providers = getCompletionProviders(file);
+        List<CompletionProvider> providers = CompletionProvider.forParameters(parameters);
         for (CompletionProvider provider : providers) {
-            CompletionList complete = provider.complete(parameters);
-            list.items.addAll(complete.items);
+            try {
+                CompletionList complete = provider.complete(parameters);
+                if (complete != null) {
+                    list.items.addAll(complete.items);
+                }
+            } catch (Throwable e) {
+                if (e instanceof ProcessCanceledException) {
+                    throw e;
+                }
+
+                String message = "Failed to complete: \n" +
+                                 "index: " + index + "\n" +
+                                 "prefix: " + prefix + "\n" +
+                                 "File: " + file.getName() + "\n" +
+                                 "Stack trace: " + Throwables.getStackTraceAsString(e);
+                logger.severe(message);
+            }
         }
         return list;
-    }
-
-    public void clear() {
-        mCompletionProviders.clear();
     }
 }

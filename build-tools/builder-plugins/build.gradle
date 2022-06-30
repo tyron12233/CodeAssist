@@ -1,0 +1,39 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+    
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderProcessServices
+    implementation projects.buildTools.builderPlatformBase
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.builderJava
+    implementation projects.buildTools.builderLanguageJvm
+    implementation projects.buildTools.builderExecution
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderPlatformJvm
+
+    implementation common.commonsLang3
+    implementation 'javax.inject:javax.inject:1'
+    implementation project(path: ':build-tools:builder-testing-base')
+    implementation project(path: ':build-tools:builder-testing-jvm')
+    implementation project(path: ':build-tools:builder-reporting')
+    implementation('org.codehaus.groovy:groovy-templates:3.0.7') {
+        transitive = false
+    }
+
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

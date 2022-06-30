@@ -8,7 +8,12 @@ java {
 }
 
 dependencies {
-    implementation project(path: ':common')
-    compileOnly project(path: ':android-stubs')
+
+    implementation projects.common
+    implementation projects.editorApi
+    compileOnly projects.androidStubs
+
+    implementation common.slf4j
     implementation 'androidx.annotation:annotation:1.3.0'
+    implementation 'org.apache.commons:commons-vfs2:2.9.0'
 }

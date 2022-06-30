@@ -1,10 +1,10 @@
 package com.tyron.completion.java.hover;
 
-import org.openjdk.source.doctree.DocCommentTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.DocTrees;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import com.sun.source.doctree.DocCommentTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.DocTrees;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.compiler.CompilerContainer;
@@ -19,12 +19,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.StringJoiner;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.tools.JavaFileObject;
 
 public class HoverProvider {
 

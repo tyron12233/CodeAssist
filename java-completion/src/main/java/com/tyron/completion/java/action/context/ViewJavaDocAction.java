@@ -15,7 +15,7 @@ import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.hover.HoverProvider;
 import com.tyron.editor.Editor;
 
-import org.openjdk.source.util.TreePath;
+import com.sun.source.util.TreePath;
 
 import java.io.File;
 import java.util.List;

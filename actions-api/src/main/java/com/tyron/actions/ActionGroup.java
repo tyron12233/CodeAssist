@@ -23,7 +23,7 @@ public abstract class ActionGroup extends AnAction {
     }
 
     public boolean isPopup() {
-        return false;
+        return true;
     }
 
     public abstract AnAction[] getChildren(@Nullable AnActionEvent e);

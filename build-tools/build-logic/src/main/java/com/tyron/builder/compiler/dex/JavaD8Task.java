@@ -12,6 +12,8 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.compiler.incremental.dex.IncrementalD8Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.Cache;
 
@@ -33,8 +35,8 @@ import java.util.stream.Collectors;
  */
 public class JavaD8Task extends Task<JavaModule> {
 
-    public JavaD8Task(JavaModule project, ILogger logger) {
-        super(project, logger);
+    public JavaD8Task(Project project, JavaModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

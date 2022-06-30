@@ -1,0 +1,18 @@
+plugins {
+    id 'java-library'
+}
+
+description = "Utilities for working with temporary files & directories"
+
+dependencies {
+    implementation(projects.common)
+    implementation(projects.buildTools.builderBaseAnnotations)
+    implementation(projects.buildTools.builderBaseServices)
+
+    implementation 'javax.inject:javax.inject:1'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

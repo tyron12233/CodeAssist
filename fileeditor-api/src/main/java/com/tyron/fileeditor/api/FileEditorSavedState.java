@@ -1,10 +1,13 @@
 package com.tyron.fileeditor.api;
 
+import androidx.annotation.Keep;
+
 import com.google.gson.annotations.SerializedName;
 import com.tyron.fileeditor.api.FileEditor;
 
 import java.io.File;
 
+@Keep
 public class FileEditorSavedState {
 
     @SerializedName("name")

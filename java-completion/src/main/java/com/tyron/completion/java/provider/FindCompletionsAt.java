@@ -1,20 +1,20 @@
 package com.tyron.completion.java.provider;
 
-import org.openjdk.source.tree.CaseTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ErroneousTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.LiteralTree;
-import org.openjdk.source.tree.MemberReferenceTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.SwitchTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.TreePathScanner;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.CaseTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ErroneousTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.MemberReferenceTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.SwitchTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.TreePathScanner;
+import com.sun.source.util.Trees;
 
 public class FindCompletionsAt extends TreePathScanner<TreePath, Long> {
     

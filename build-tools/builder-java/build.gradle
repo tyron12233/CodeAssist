@@ -1,0 +1,44 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    implementation projects.common
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderProcessServices
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.builderFileTemp
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderWorkers
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderExecution
+    implementation projects.buildTools.builderDependencyManagement
+
+    implementation 'org.apache.ant:ant:1.10.12'
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation common.slf4j
+    implementation project(path: ':build-tools:builder-language-jvm')
+    implementation project(path: ':build-tools:builder-jvm-services')
+    implementation project(path: ':build-tools:builder-platform-jvm')
+    implementation project(path: ':build-tools:builder-platform-base')
+    implementation project(path: ':build-tools:builder-worker-processes')
+    implementation project(path: ':build-tools:builder-build-events')
+    implementation project(path: ':build-tools:builder-tooling-api')
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.apache.commons:commons-lang3:3.12.0'
+}

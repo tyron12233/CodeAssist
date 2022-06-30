@@ -1,5 +1,11 @@
 package com.tyron.completion.java.rewrite;
 
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.CatchClause;
+import com.github.javaparser.ast.stmt.TryStmt;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.compiler.ParseTask;
@@ -33,9 +39,17 @@ public class AddTryCatch implements JavaRewrite {
     public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
         List<TextEdit> edits = new ArrayList<>();
         String newContents = insertColon(contents);
-        String edit =
-                "try {\n" + newContents + "\n} catch (" + ActionUtil.getSimpleName(exceptionName) +
-                        " e) { }";
+
+        BlockStmt blockStmt = new BlockStmt();
+        blockStmt.addStatement(newContents);
+
+        CatchClause clause = new CatchClause(
+                new Parameter(StaticJavaParser.parseType(ActionUtil.getSimpleName(exceptionName)),
+                              "e"), new BlockStmt());
+
+        TryStmt stmt = new TryStmt(blockStmt, NodeList.nodeList(clause), null);
+        String edit = stmt.toString();
+
         Range deleteRange = new Range(start, end);
         TextEdit delete = new TextEdit(deleteRange, "");
         edits.add(delete);

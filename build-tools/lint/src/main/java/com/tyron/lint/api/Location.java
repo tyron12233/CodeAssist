@@ -3,7 +3,6 @@ package com.tyron.lint.api;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.compiler.manifest.blame.SourcePosition;
 import com.tyron.completion.model.Position;
 
 import java.io.File;
@@ -175,23 +174,23 @@ public class Location {
      * @param position the source position
      * @return a new location
      */
-    @NonNull
-    public static Location create(
-            @NonNull File file,
-            @NonNull SourcePosition position) {
-        if (position.equals(SourcePosition.UNKNOWN)) {
-            return new Location(file, null /*start*/, null /*end*/);
-        }
-        return new Location(file,
-                new DefaultPosition(
-                        position.getStartLine(),
-                        position.getStartColumn(),
-                        position.getStartOffset()),
-                new DefaultPosition(
-                        position.getEndLine(),
-                        position.getEndColumn(),
-                        position.getEndOffset()));
-    }
+//    @NonNull
+//    public static Location create(
+//            @NonNull File file,
+//            @NonNull SourcePosition position) {
+//        if (position.equals(SourcePosition.UNKNOWN)) {
+//            return new Location(file, null /*start*/, null /*end*/);
+//        }
+//        return new Location(file,
+//                new DefaultPosition(
+//                        position.getStartLine(),
+//                        position.getStartColumn(),
+//                        position.getStartOffset()),
+//                new DefaultPosition(
+//                        position.getEndLine(),
+//                        position.getEndColumn(),
+//                        position.getEndOffset()));
+//    }
 
     /**
      * Creates a new location for the given file and starting and ending

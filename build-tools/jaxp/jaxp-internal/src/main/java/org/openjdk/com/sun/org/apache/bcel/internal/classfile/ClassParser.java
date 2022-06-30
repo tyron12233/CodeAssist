@@ -77,19 +77,19 @@ import  java.util.zip.*;
  *
  * @author <A HREF="mailto:markus.dahm@berlin.de">M. Dahm</A>
  */
-public final class ClassParser {
-  private DataInputStream file;
-  private ZipFile         zip;
-  private String          file_name;
-  private int             class_name_index, superclass_name_index;
-  private int             major, minor; // Compiler version
-  private int             access_flags; // Access rights of parsed class
-  private int[]           interfaces; // Names of implemented interfaces
-  private ConstantPool    constant_pool; // collection of constants
-  private Field[]         fields; // class fields, i.e., its variables
-  private Method[]        methods; // methods defined in the class
-  private Attribute[]     attributes; // attributes defined in the class
-  private boolean         is_zip; // Loaded from zip file
+public class ClassParser {
+  protected DataInputStream file;
+  protected ZipFile         zip;
+  protected String          file_name;
+  protected int             class_name_index, superclass_name_index;
+  protected int             major, minor; // Compiler version
+  protected int             access_flags; // Access rights of parsed class
+  protected int[]           interfaces; // Names of implemented interfaces
+  protected ConstantPool    constant_pool; // collection of constants
+  protected Field[]         fields; // class fields, i.e., its variables
+  protected Method[]        methods; // methods defined in the class
+  protected Attribute[]     attributes; // attributes defined in the class
+  protected boolean         is_zip; // Loaded from zip file
 
   private static final int BUFSIZE = 8192;
 
@@ -231,7 +231,7 @@ public final class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readClassInfo() throws IOException, ClassFormatException
+  protected final void readClassInfo() throws IOException, ClassFormatException
   {
     access_flags = file.readUnsignedShort();
 
@@ -253,7 +253,7 @@ public final class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readConstantPool() throws IOException, ClassFormatException
+  protected final void readConstantPool() throws IOException, ClassFormatException
   {
     constant_pool = new ConstantPool(file);
   }
@@ -282,7 +282,7 @@ public final class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readID() throws IOException, ClassFormatException
+  protected final void readID() throws IOException, ClassFormatException
   {
     int magic = 0xCAFEBABE;
 
@@ -294,7 +294,7 @@ public final class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readInterfaces() throws IOException, ClassFormatException
+  protected final void readInterfaces() throws IOException, ClassFormatException
   {
     int interfaces_count;
 
@@ -309,7 +309,7 @@ public final class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readMethods() throws IOException, ClassFormatException
+  protected final void readMethods() throws IOException, ClassFormatException
   {
     int methods_count;
 
@@ -324,7 +324,7 @@ public final class ClassParser {
    * @throws  IOException
    * @throws  ClassFormatException
    */
-  private final void readVersion() throws IOException, ClassFormatException
+  protected final void readVersion() throws IOException, ClassFormatException
   {
     minor = file.readUnsignedShort();
     major = file.readUnsignedShort();

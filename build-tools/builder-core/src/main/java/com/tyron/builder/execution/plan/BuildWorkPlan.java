@@ -1,0 +1,4 @@
+package com.tyron.builder.execution.plan;
+
+public interface BuildWorkPlan {
+}

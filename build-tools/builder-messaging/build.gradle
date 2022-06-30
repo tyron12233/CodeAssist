@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api 'it.unimi.dsi:fastutil:8.5.8'
+
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+
+    implementation common.slf4j
+    implementation 'com.esotericsoftware:kryo:5.3.0'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

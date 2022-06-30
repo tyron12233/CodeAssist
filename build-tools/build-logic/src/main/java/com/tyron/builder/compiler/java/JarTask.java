@@ -6,6 +6,8 @@ import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.internal.jar.JarArchive;
 import com.tyron.builder.internal.jar.JarOptionsImpl;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 
 import java.io.File;
@@ -16,8 +18,8 @@ public class JarTask extends Task<JavaModule> {
 
     private static final String TAG = JarTask.class.getSimpleName();
 
-    public JarTask(JavaModule project, ILogger logger) {
-        super(project, logger);
+    public JarTask(Project project, JavaModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

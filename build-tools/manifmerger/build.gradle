@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    compileOnly project(path: ':android-stubs')
+
+
+    implementation project(path: ':common')
+    implementation project(path: ':build-tools:logging')
+    implementation 'org.jetbrains:annotations:23.0.0'
+    implementation 'com.android.tools:sdklib:25.3.0'
+
+    implementation project(path: ':build-tools:jaxp:xml')
+    implementation project(path: ':build-tools:jaxp:jaxp-internal')
+}

@@ -1,0 +1,18 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    // for jar fs
+    api 'com.github.marschall:zipfilesystem-standalone:1.0.1'
+
+    api files('libs/javac-new.jar')
+    api files('libs/nb-javac-17.0.0.0-api.jar')
+    api files('libs/nb-javac-17.0.0.0.jar')
+    implementation files('libs/jrt-fs.jar')
+}

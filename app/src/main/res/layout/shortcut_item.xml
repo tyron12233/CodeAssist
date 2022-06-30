@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:orientation="vertical"
     android:gravity="center"
     android:layout_width="wrap_content"
@@ -7,7 +8,8 @@
     <TextView
         android:id="@+id/shortcut_label"
         android:gravity="center"
-        android:textSize="18sp"
-        android:layout_width="38dp"
-        android:layout_height="38dp"/>
+        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+        android:layout_width="45dp"
+        android:layout_height="45dp"
+        tools:text="{"/>
 </LinearLayout>

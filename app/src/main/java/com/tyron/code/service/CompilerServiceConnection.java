@@ -18,7 +18,7 @@ import com.tyron.builder.log.LogViewModel;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.util.ApkInstaller;
 
-import org.openjdk.javax.tools.Diagnostic;
+import javax.tools.Diagnostic;
 
 import java.io.File;
 import java.util.Objects;

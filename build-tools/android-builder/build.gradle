@@ -1,0 +1,92 @@
+import org.gradle.work.ChangeType
+import org.gradle.work.FileChange
+import org.gradle.work.Incremental
+import org.gradle.work.InputChanges
+
+import java.util.concurrent.Callable
+
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    implementation project(path: ':common')
+    implementation project(path: ':build-tools:builder-api')
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+def rootDir = file("src/test/resources/TestProject")
+
+class Aapt2Task extends SourceTask {
+
+    private final FileCollection stableSources = getProject().files((Callable<FileTree>) this::getSource);
+
+    @OutputDirectory
+    final DirectoryProperty outputDirectory = getProject().getObjects().directoryProperty();
+
+    public Aapt2Task() {
+        def rootDir = project.file("src/test/resources/TestProject")
+        File output = getProject().mkdir("$rootDir/build/intermediates/resources");
+        outputDirectory.set(output);
+    }
+
+    @TaskAction
+    def execute(InputChanges inputChanges) {
+        def changes = inputChanges.getFileChanges(stableSources)
+        println("Executing with changes: $changes")
+        changes.forEach {
+            handleChangedInput(it)
+        }
+    }
+
+     def handleChangedInput(FileChange fileChange) {
+        File file = fileChange.getFile();
+        ChangeType changeType = fileChange.getChangeType();
+        if (changeType == ChangeType.MODIFIED || changeType == ChangeType.REMOVED) {
+            def toDelete = new File(
+                    outputDirectory.getAsFile().get(),
+                    file.name
+            )
+            if (toDelete.exists()) {
+                toDelete.delete();
+            }
+        }
+
+        if (changeType == ChangeType.ADDED || changeType == ChangeType.MODIFIED) {
+            submitFileToBeCompiled(file);
+        }
+    }
+
+    private void submitFileToBeCompiled(File file) {
+        File testOutput = new File(outputDirectory.getAsFile().get(), file.name);
+        testOutput.createNewFile()
+    }
+
+
+    @Override
+    @Internal("tracked via stableSources")
+    public FileTree getSource() {
+        return super.getSource();
+    }
+
+    @SkipWhenEmpty
+    @IgnoreEmptyDirectories
+    @PathSensitive(PathSensitivity.RELATIVE)
+    @InputFiles
+    public FileCollection getStableSources() {
+        return stableSources;
+    }
+}
+
+tasks.register("Aapt2Task", Aapt2Task.class) {
+
+    it.setSource(project.fileTree("$rootDir/src/main/res"))
+
+    it.outputs.dir(project.file("$rootDir/build/intermediates/resources"))
+}

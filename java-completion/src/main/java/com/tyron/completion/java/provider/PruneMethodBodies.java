@@ -1,12 +1,13 @@
 package com.tyron.completion.java.provider;
 
 
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreeScanner;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
 
 import java.io.IOException;
 
@@ -34,20 +35,19 @@ public class PruneMethodBodies extends TreeScanner<StringBuilder, Long> {
     }
 
     @Override
-    public StringBuilder visitMethod(MethodTree t, Long find) {
+    public StringBuilder visitBlock(BlockTree blockTree, Long find) {
         SourcePositions pos = Trees.instance(task).getSourcePositions();
-        if (t.getBody() == null) return buf;
-            long start = pos.getStartPosition(root, t.getBody());
-            long end = pos.getEndPosition(root, t.getBody());
-            if (!(start <= find && find < end)) {
-                for (int i = (int) start + 1; i < end - 1; i++) {
-                    if (!Character.isWhitespace(buf.charAt(i))) {
-                        buf.setCharAt(i, ' ');
-                    }
+        long start = pos.getStartPosition(root, blockTree);
+        long end = pos.getEndPosition(root, blockTree);
+        if (!(start <= find && find < end)) {
+            for (int i = (int) start + 1; i < end - 1; i++) {
+                if (!Character.isWhitespace(buf.charAt(i))) {
+                    buf.setCharAt(i, ' ');
                 }
-                return buf;
             }
-        super.visitMethod(t, find);
+            return buf;
+        }
+        super.visitBlock(blockTree, find);
         return buf;
     }
 

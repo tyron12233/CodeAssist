@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.MenuProvider;
+import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -24,6 +25,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.transition.MaterialFade;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
@@ -36,6 +38,7 @@ import com.tyron.code.ui.library.adapter.LibraryManagerAdapter;
 import com.tyron.code.ui.project.DependencyManager;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.DependencyUtils;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.resolver.DependencyResolver;
 import com.tyron.resolver.model.Dependency;
@@ -98,6 +101,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.library_manager_fragment, container, false);
+        view.setClickable(true);
 
         mAdapter = new LibraryManagerAdapter();
 
@@ -121,8 +125,14 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                                 File gradleFile = new File(rootFile, "build.gradle");
                                 if (gradleFile.exists()) {
                                     try {
-                                        List<Dependency> poms = DependencyUtils.parseGradle(mRepositoryManager,
-                                                gradleFile, ILogger.EMPTY);
+                                        List<Dependency> poms;
+                                        if (mainModule.getFileManager().isOpened(gradleFile) && mainModule.getFileManager().getFileContent(gradleFile).isPresent()) {
+                                            poms = DependencyUtils.parseGradle(mRepositoryManager,
+                                                    mainModule.getFileManager().getFileContent(gradleFile).toString(),
+                                                    ILogger.EMPTY);
+                                        } else {
+                                            poms = DependencyUtils.parseGradle(mRepositoryManager, gradleFile, ILogger.EMPTY);
+                                        }
                                         List<Dependency> data = new ArrayList<>(mAdapter.getData());
                                         poms.forEach(dependency -> {
                                             if (!data.contains(dependency)) {
@@ -134,7 +144,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                                             toggleEmptyView(false, false, "");
                                         }
                                         save(((JavaModule) mainModule).getLibraryFile(), data);
-                                    } catch (IOException e) {
+                                    } catch (Throwable e) {
                                         new MaterialAlertDialogBuilder(requireContext())
                                                 .setTitle(R.string.error)
                                                 .setMessage(e.getMessage())
@@ -166,6 +176,10 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         }
         Toolbar toolbar = view.findViewById(R.id.toolbar);
         toolbar.setOnMenuItemClickListener(menu -> getParentFragmentManager().popBackStackImmediate());
+
+        View fab = view.findViewById(R.id.fab_add_dependency);
+        UiUtilsKt.addSystemWindowInsetToMargin(fab, false, false, false, true);
+        ViewCompat.requestApplyInsets(fab);
     }
 
     @Override
@@ -197,6 +211,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
                 for (Repository repository : repositories) {
                     mRepositoryManager.addRepository(repository);
                 }
+                mRepositoryManager.setCacheDirectory(requireContext().getExternalFilesDir("cache"));
                 mRepositoryManager.initialize();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -232,6 +247,7 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
         JavaModule javaModule = ((JavaModule) module);
 
         FloatingActionButton fab = requireView().findViewById(R.id.fab_add_dependency);
+
         fab.setOnClickListener(v -> {
             FragmentManager fm = getChildFragmentManager();
             if (fm.findFragmentByTag(AddDependencyDialogFragment.TAG) == null) {
@@ -324,11 +340,17 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
             return Collections.emptyList();
         }
         String contents;
-        try {
-            contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            contents = "";
+        Module module = getContainingModule(file);
+        if (module != null && module.getFileManager().isOpened(file) && module.getFileManager().getFileContent(file).isPresent()) {
+            contents = module.getFileManager().getFileContent(file).get().toString();
+        } else {
+            try {
+                contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                contents = "";
+            }
         }
+
         if (contents.isEmpty()) {
             return Collections.emptyList();
         }
@@ -340,14 +362,31 @@ public class LibraryManagerFragment extends Fragment implements ProjectManager.O
     }
 
     private Future<Boolean> save(File file, List<Dependency> dependencies) {
-        String jsonString = new Gson().toJson(dependencies, TYPE);
+        String jsonString = new GsonBuilder()
+                .setPrettyPrinting()
+                .create()
+                .toJson(dependencies, TYPE);
         return CompletableFuture.supplyAsync(() -> {
             try {
-                FileUtils.writeStringToFile(file, jsonString, StandardCharsets.UTF_8);
+                Module module = getContainingModule(file);
+                if (module != null && module.getFileManager().isOpened(file)) {
+                    module.getFileManager().setSnapshotContent(file, jsonString);
+                } else {
+                    FileUtils.writeStringToFile(file, jsonString, StandardCharsets.UTF_8);
+                }
                 return true;
             } catch (IOException e) {
                 return false;
             }
         });
+    }
+
+    @Nullable
+    private Module getContainingModule(@NonNull File file) {
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject == null) {
+            return null;
+        }
+        return currentProject.getModule(file);
     }
 }

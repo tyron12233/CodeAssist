@@ -6,13 +6,13 @@ import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.InitialPatternConditionPlus;
 import org.jetbrains.kotlin.com.intellij.patterns.ObjectPattern;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.LiteralTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.ModifiersTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.VariableTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.ModifiersTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
 
 public class JavacTreePatterns {
 

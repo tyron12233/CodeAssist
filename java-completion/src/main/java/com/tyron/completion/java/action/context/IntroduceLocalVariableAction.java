@@ -1,5 +1,8 @@
 package com.tyron.completion.java.action.context;
 
+import android.app.Activity;
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 
 import com.tyron.actions.ActionPlaces;
@@ -19,20 +22,23 @@ import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.type.ErrorType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeKind;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.ErrorType;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import com.sun.source.tree.ErroneousTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.code.Type;
 
 import java.io.File;
+import java.util.List;
 
 public class IntroduceLocalVariableAction extends AnAction {
 
@@ -97,7 +103,14 @@ public class IntroduceLocalVariableAction extends AnAction {
     }
 
     private JavaRewrite performInternal(CompileTask task, TreePath path, File file) {
-        Trees trees = Trees.instance(task.task);
+        if (path.getLeaf().getKind() == Tree.Kind.ERRONEOUS) {
+            ErroneousTree leaf = (ErroneousTree) path.getLeaf();
+            List<? extends Tree> errorTrees = leaf.getErrorTrees();
+            if (errorTrees != null && !errorTrees.isEmpty()) {
+                path = new TreePath(path.getParentPath(), errorTrees.get(0));
+            }
+        }
+        Trees trees = task.getTrees();
         Element element = trees.getElement(path);
 
         if (element == null) {
@@ -106,7 +119,7 @@ public class IntroduceLocalVariableAction extends AnAction {
 
         TypeMirror typeMirror = trees.getTypeMirror(path);
 
-        if (typeMirror instanceof ErrorType) {
+        if (typeMirror == null || typeMirror.getKind() == TypeKind.ERROR) {
             // information is incomplete and type cannot be determined, default to Object
             typeMirror = task.task.getElements()
                     .getTypeElement("java.lang.Object")
@@ -114,11 +127,9 @@ public class IntroduceLocalVariableAction extends AnAction {
         }
 
         if (typeMirror != null) {
-            if (typeMirror.getKind() == TypeKind.DECLARED) {
-                // use the new class as starting point
-                TreePath parentOfType = TreeUtil.findParentOfType(path, NewClassTree.class);
-                if (parentOfType != null) {
-                    path = parentOfType;
+            if (typeMirror.getKind() == TypeKind.TYPEVAR) {
+                if (((Type.TypeVar) typeMirror).isCaptured()) {
+                    typeMirror = ((Type.TypeVar) typeMirror).getUpperBound();
                 }
             }
             if (typeMirror.getKind() == TypeKind.EXECUTABLE) {

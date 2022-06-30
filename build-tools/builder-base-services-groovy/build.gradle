@@ -1,0 +1,15 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+    implementation projects.buildTools.builderBaseServices
+    api 'org.codehaus.groovy:groovy:3.0.7:grooid'
+//    implementation 'com.github.tyron12233:GroovyShellAndroid:1.0.0'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

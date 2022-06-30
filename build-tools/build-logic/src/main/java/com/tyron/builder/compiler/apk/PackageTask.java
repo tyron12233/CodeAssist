@@ -10,6 +10,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 
 import java.io.File;
@@ -41,8 +42,8 @@ public class PackageTask extends Task<AndroidModule> {
     private File mApk;
     private BuildType mBuildType;
 
-    public PackageTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public PackageTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

@@ -1,89 +1,92 @@
 package com.tyron.code.ui.settings;
 
-import android.content.Intent;
+import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
 
-import androidx.annotation.NonNull;
+import androidx.annotation.DrawableRes;
 import androidx.annotation.Nullable;
-import androidx.fragment.app.Fragment;
+import androidx.core.content.res.ResourcesCompat;
 
-import com.tyron.code.BuildConfig;
+import com.danielstone.materialaboutlibrary.ConvenienceBuilder;
+import com.danielstone.materialaboutlibrary.MaterialAboutFragment;
+import com.danielstone.materialaboutlibrary.items.MaterialAboutActionItem;
+import com.danielstone.materialaboutlibrary.model.MaterialAboutCard;
+import com.danielstone.materialaboutlibrary.model.MaterialAboutList;
+import com.danielstone.materialaboutlibrary.util.OpenSourceLicense;
+import com.google.android.material.transition.MaterialSharedAxis;
 import com.tyron.code.R;
 
-import mehdi.sakout.aboutpage.AboutPage;
-import mehdi.sakout.aboutpage.Element;
+public class AboutUsFragment extends MaterialAboutFragment {
 
-public class AboutUsFragment extends Fragment {
-
-    @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater,
-                             @Nullable ViewGroup container,
-                             @Nullable Bundle savedInstanceState) {
-        Element versionElement = new Element();
-        versionElement.setTitle(getString(R.string.app_version, BuildConfig.VERSION_NAME));
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-        return new AboutPage(requireContext(), /* forceDarkMode */ true)
-                .setDescription(getString(R.string.app_description))
-                .setImage(R.mipmap.ic_launcher)
-                .addItem(versionElement)
-                .addGroup(getString(R.string.contact_group_title))
-                .addItem(createGithubElement("tyron12233/CodeAssist", getString(R.string.app_source_title)))
-                .addItem(createEmail("contact.tyronscott@gmail.com", getString(R.string.about_contact_us)))
-                .addGroup(getString(R.string.sketchub_team))
-                .addItem(createGithubElement("ThatSketchub", "Github"))
-                .addGroup(getString(R.string.community))
-                .addItem(createCommunity("Discord",R.drawable.ic_icons8_discord,"https://discord.gg/pffnyE6prs"))
-                .addItem(createCommunity("Telegram",R.drawable.ic_icons8_telegram_app,"https://t.me/codeassist_app"))
-                .create();
+        setEnterTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
+        setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, true));
     }
 
-    public Element createGithubElement(String id, String title) {
-        Element gitHubElement = new Element();
-        gitHubElement.setTitle(title);
-        gitHubElement.setIconDrawable(R.drawable.about_icon_github);
-        gitHubElement.setIconTint(R.color.colorControlNormal);
-        gitHubElement.setValue(id);
+    @Override
+    protected MaterialAboutList getMaterialAboutList(Context context) {
+        MaterialAboutCard appCard = new MaterialAboutCard.Builder()
+                .addItem(ConvenienceBuilder.createAppTitleItem(context))
+                .addItem(new MaterialAboutActionItem.Builder()
+                        .subText(R.string.app_description)
+                        .build())
+                .addItem(ConvenienceBuilder.createVersionActionItem(context,
+                        getDrawable(R.drawable.ic_round_info_24),
+                        getString(R.string.app_version),
+                        true))
+                .addItem(ConvenienceBuilder.createEmailItem(context,
+                        getDrawable(R.drawable.ic_round_email_24),
+                        getString(R.string.settings_about_us_title),
+                        false,
+                        "contact.tyronscott@gmail.com",
+                        ""))
+                .addItem(ConvenienceBuilder.createWebsiteActionItem(context,
+                        getDrawable(R.drawable.ic_baseline_open_in_new_24),
+                        getString(R.string.app_source_title),
+                        false,
+                        Uri.parse("https://github.com/tyron12233/CodeAssist")))
+                .addItem(ConvenienceBuilder.createRateActionItem(context,
+                        getDrawable(R.drawable.ic_round_star_rate_24),
+                        getString(R.string.rate_us),
+                        null))
+                .build();
 
-        Intent intent = new Intent();
-        intent.setAction(Intent.ACTION_VIEW);
-        intent.addCategory(Intent.CATEGORY_BROWSABLE);
-        intent.setData(Uri.parse(String.format("https://github.com/%s", id)));
+        MaterialAboutCard communityCard = new MaterialAboutCard.Builder()
+                .title(R.string.community)
+                .addItem(ConvenienceBuilder.createWebsiteActionItem(context,
+                        getDrawable(R.drawable.ic_icons8_discord),
+                        "Discord",
+                        false,
+                        Uri.parse("https://discord.gg/pffnyE6prs")))
+                .addItem(ConvenienceBuilder.createWebsiteActionItem(context,
+                        getDrawable(R.drawable.ic_icons8_telegram_app),
+                        "Telegram",
+                        false,
+                        Uri.parse("https://t.me/codeassist_app")))
+                .build();
 
-        gitHubElement.setIntent(intent);
-        return gitHubElement;
+        MaterialAboutCard licenseCard = ConvenienceBuilder.createLicenseCard(context,
+                getDrawable(R.drawable.ic_baseline_menu_book_24),
+                getString(R.string.app_name),
+                "2022",
+                "Tyron",
+                OpenSourceLicense.GNU_GPL_3);
+
+        return new MaterialAboutList.Builder()
+                .addCard(appCard)
+                .addCard(communityCard)
+                .addCard(licenseCard)
+                .build();
     }
 
-    public Element createEmail(String email, String title) {
-        Element emailElement = new Element();
-        emailElement.setTitle(title);
-        emailElement.setIconDrawable(R.drawable.about_icon_email);
-        emailElement.setIconTint(R.color.colorControlNormal);
-
-        Intent intent = new Intent(Intent.ACTION_SENDTO);
-        intent.setData(Uri.parse("mailto:"));
-        intent.putExtra(Intent.EXTRA_EMAIL, new String[]{email});
-        emailElement.setIntent(intent);
-
-        return emailElement;
-    }
-
-    public Element createCommunity(String title, int drawable, String url) {
-        Element communityElement = new Element();
-        communityElement.setTitle(title);
-        communityElement.setIconDrawable(drawable);
-        communityElement.setIconTint(R.color.colorControlNormal);
-
-        Intent intent = new Intent();
-        intent.setAction(Intent.ACTION_VIEW);
-        intent.addCategory(Intent.CATEGORY_BROWSABLE);
-        intent.setData(Uri.parse(url));
-        communityElement.setIntent(intent);
-
-        return communityElement;
+    private Drawable getDrawable(@DrawableRes int drawable) {
+        return ResourcesCompat.getDrawable(requireContext().getResources(),
+                drawable,
+                requireContext().getTheme());
     }
 }

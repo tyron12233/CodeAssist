@@ -77,20 +77,20 @@
 
     <!-- Editor settings -->
     <string name="code_engine_title">Tamamlama Motoru</string>
-    <string name="settings_code_completions">Kod Tamamlamalarını Aktif Et</string>
+    <string name="settings_code_completions">Kod tamamlamalarını aktif et</string>
     <string name="settings_kotlin_completions">Kotlin İçin Kod Tamamlamalarını Aktif Et</string>
     <string name="settings_kotlin_completions_desc">Bu özellik hala deneysel ve yavaş olabilir.
         Güçlü cihaz gerektirir.
     </string>
-    <string name="code_editor_error_highlight">Hata Vurgulamalarını Aktif Et</string>
+    <string name="code_editor_error_highlight">Hata vurgulamalarını aktif et</string>
 
-    <string name="editor_settings_title">Kod Editörü Ayarları</string>
-    <string name="editor_settings_wordwrap">Kelime Sarma Modu</string>
-    <string name="font_size_title">Font Boyutu</string>
+    <string name="editor_settings_title">Kod Editörü ayarları</string>
+    <string name="editor_settings_wordwrap">Kelime sarma modu</string>
+    <string name="font_size_title">Font boyutu</string>
     <string name="font_size_message">Editör font boyutunu ayarla</string>
     <string name="font_size_summary">Editörün varsayılan yazı tipi boyutunu belirt</string>
     <string name="keyboard_settings_title">Klavye</string>
-    <string name="keyboard_enable_suggestions_description">Klavye Önerilerini Aktif Et</string>
+    <string name="keyboard_enable_suggestions_description">Klavye önerilerini aktif et</string>
     <string name="settings_build_run_title">Derleme &amp; Çalıştırma</string>
     <string name="settings_build_run_desc">Derleme ve çalıştırma ayarlarını düzenle</string>
     <string name="run_title">Çalıştırma</string>
@@ -118,9 +118,9 @@
     <string name="settings_about_us_title">Hakkında</string>
     <string name="settings_about_us_desc">Geliştiriciler hakkında daha fazla bilgi</string>
     <string name="app_description">Android uygulama geliştirme için cebinizde güçlü ve hafif bir IDE.</string>
-    <string name="app_version">Versiyon %1$s</string>
+    <string name="app_version">Versiyon</string>
     <string name="contact_group_title">İletişim</string>
-    <string name="app_source_title">Kaynak Kodu</string>
+    <string name="app_source_title">Kaynak kodu</string>
     <string name="sketchub_team">Sketchub Takımı</string>
     <string name="community">Topluluk</string>
     <!-- file manager menu -->
@@ -187,4 +187,35 @@
     <string name="menu_display_dependencies">Gereklilikleri listele</string>
     <string name="attributes_editor">Özellikler Editörü</string>
     <string name="attribute_value">Özellikler değeri</string>
+    <string name="rate_us">Bizi değerlendirin</string>
+    <string name="change_scheme_dialog_title">Tema dosyasının yolunu yapıştırın</string>
+    <string name="editor_scheme_desc">Renk şemasını değiştirin</string>
+    <string name="editor_scheme_title">Editör renk şeması</string>
+    <string name="defaultString">Varsayılan</string>
+    <string name="save">Kaydet</string>
+    <string name="settings_case_insensitive_match_title">Harf duyarsız eşleşme</string>
+    <string name="settings_case_insensitive_match_desc">Küçük harf önek ile sınıf isimleri öner</string>
+    <string name="settings_theme_value_dark">Koyu</string>
+    <string name="settings_theme_value_light">Açık</string>
+    <string name="settings_theme_value_default">Sistem varsayılanı</string>
+    <string name="settings_theme_title">Tema</string>
+    <string name="settings_desc_editor">Editörü yapılandır</string>
+    <string name="settings_desc_application">Genel uygulama tercihleri</string>
+    <string name="settings_title_application">Uygulama</string>
+    <string name="error_file_creation">Yeni dosya oluşturulamıyor.</string>
+    <string name="menu_new_layout">Yeni layout</string>
+    <string name="copied_to_clipoard">Yazı clipboard\'a kopyalandı</string>
+    <string name="expand_selection">Seçeneği Genişlet</string>
+    <string name="text_actions">Yazı Aksiyonları</string>
+    <string name="menu_add_libs_gradle">build.gradle\'dan kütüphane ekle</string>
+    <string name="file_editor_selection_title">Hangi editörü açmak istersiniz?</string>
+    <string name="menu_close_file">Kapat</string>
+    <string name="menu_close_others">Diğerlerini kapat</string>
+    <string name="menu_close_all">Tümünü kapat</string>
+    <string name="editor_error_file">Dosyayı okurken bir hata oluştu. Değişiklikler kaydedilmeyecek.</string>
+    <string name="tab_build_logs_title">Build Kayıtları</string>
+    <string name="tab_app_logs_title">Uygulama Kayıtları</string>
+    <string name="tab_ide_logs_title">IDE Kayıtları</string>
+    <string name="tab_diagnostics_title">Hata Teşhisleri</string>
+    <string name="editor_delete_whitespaces">Whitespace\'i otomatik sil</string>
 </resources>

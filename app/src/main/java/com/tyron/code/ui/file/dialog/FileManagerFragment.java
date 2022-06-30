@@ -119,7 +119,7 @@ public class FileManagerFragment extends Fragment {
 		
 		if (parent != null) {
 			if (parent instanceof MainFragment) {
-				((MainFragment) parent).openFile(FileEditorManagerImpl.getInstance().openFile(file, true)[0]);
+				((MainFragment) parent).openFile(FileEditorManagerImpl.getInstance().openFile(requireContext(), file, true)[0]);
 			}
 		}
 	}

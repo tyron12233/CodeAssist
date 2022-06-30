@@ -19,9 +19,9 @@ import com.tyron.completion.java.drawable.CircleDrawable;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.rosemoe.sora.lang.completion.CompletionItem;
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora2.R;
-import io.github.rosemoe.sora2.data.CompletionItem;
-import io.github.rosemoe.sora2.widget.EditorAutoCompleteWindow;
 
 public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAdapter.ViewHolder> {
 
@@ -36,7 +36,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
     private String partial;
 
     private final List<CompletionItem> items = new ArrayList<>();
-    private EditorAutoCompleteWindow mWindow;
+    private EditorAutoCompletion mWindow;
 
     private OnClickListener onClickListener;
     private OnLongClickListener longClickListener;
@@ -84,11 +84,11 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
         return items.size();
     }
 
-    public void attachAttributes(EditorAutoCompleteWindow window, List<CompletionItem> result) {
+    public void attachAttributes(EditorAutoCompletion window, List<CompletionItem> result) {
         mWindow = window;
         this.items.clear();
         this.items.addAll(result);
-        this.partial = getAfterLastDot(mWindow.getPrefix());
+//        this.partial = getAfterLastDot(mWindow.getPrefix());
 		notifyDataSetChanged();
     }
 
@@ -153,7 +153,7 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
             mDesc.setTooltipText(item.desc);
 
             if (partial != null && partial.length() > 0) {
-                if (item.label.startsWith(partial)) {
+                if (item.label.toString().startsWith(partial)) {
                     ForegroundColorSpan span = new ForegroundColorSpan(
                             0xFFCC7832);
 
@@ -171,9 +171,9 @@ public class CompletionItemAdapter extends RecyclerView.Adapter<CompletionItemAd
             }
             
             mIcon.setVisibility(View.VISIBLE);
-            if (item.item != null) {
-                mIcon.setImageDrawable(new CircleDrawable(item.item.iconKind));
-            }
+//            if (item.item != null) {
+//                mIcon.setImageDrawable(new CircleDrawable(item.item.iconKind));
+//            }
         }
     }
 }

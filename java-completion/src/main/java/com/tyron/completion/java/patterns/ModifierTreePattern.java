@@ -7,9 +7,9 @@ import org.jetbrains.kotlin.com.intellij.patterns.InitialPatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ModifiersTree;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ModifiersTree;
+import com.sun.source.util.Trees;
 
 public class ModifierTreePattern extends JavacTreePattern<ModifiersTree, ModifierTreePattern> {
 

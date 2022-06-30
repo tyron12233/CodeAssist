@@ -2,8 +2,7 @@ package com.tyron.code.ui.editor.shortcuts.action;
 
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
-
-import io.github.rosemoe.sora2.widget.CodeEditor;
+import com.tyron.editor.Editor;
 
 public class CursorMoveAction implements ShortcutAction {
 
@@ -28,7 +27,7 @@ public class CursorMoveAction implements ShortcutAction {
     }
 
     @Override
-    public void apply(CodeEditor editor, ShortcutItem item) {
+    public void apply(Editor editor, ShortcutItem item) {
         switch (mDirection) {
             case UP: editor.moveSelectionUp(); break;
             case DOWN: editor.moveSelectionDown(); break;

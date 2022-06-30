@@ -8,8 +8,8 @@ import org.jetbrains.kotlin.com.intellij.patterns.InitialPatternCondition;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.MethodInvocationTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.MethodInvocationTree;
 
 public class ExpressionTreePattern<T extends ExpressionTree, Self extends ExpressionTreePattern<T, Self>> extends JavacTreePattern<T, Self> {
     protected ExpressionTreePattern(@NonNull InitialPatternCondition<T> condition) {

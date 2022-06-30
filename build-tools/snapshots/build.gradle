@@ -1,0 +1,16 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api projects.buildTools.builderFiles
+
+    implementation projects.common
+    implementation projects.buildTools.builderHashing
+
+    implementation common.slf4j
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

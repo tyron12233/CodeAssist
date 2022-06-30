@@ -1,15 +1,28 @@
 package com.tyron.builder.compiler.dex;
 
+import androidx.annotation.NonNull;
+
+import com.android.tools.r8.ArchiveClassFileProvider;
+import com.android.tools.r8.ClassFileResourceProvider;
 import com.android.tools.r8.CompilationMode;
+import com.android.tools.r8.D8;
+import com.android.tools.r8.D8Command;
 import com.android.tools.r8.OutputMode;
+import com.android.tools.r8.ProgramResource;
 import com.android.tools.r8.R8;
 import com.android.tools.r8.R8Command;
+import com.android.tools.r8.inspector.Inspector;
 import com.android.tools.r8.origin.Origin;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.Library;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.common.util.AndroidUtilities;
+
+import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,13 +31,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class R8Task extends Task<AndroidModule> {
 
     private static final String TAG = R8Task.class.getSimpleName();
 
-    public R8Task(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public R8Task(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override
@@ -39,12 +56,13 @@ public class R8Task extends Task<AndroidModule> {
 
     @Override
     public void run() throws IOException, CompilationFailedException {
-        getLogger().debug("Running R8");
         try {
             File output = new File(getModule().getBuildDirectory(), "bin");
+            File mappingOutput = new File(output, "proguard-mapping.txt");
             R8Command.Builder command = R8Command.builder(new DexDiagnosticHandler(getLogger(), getModule()))
+                    .addProgramFiles(getModule().getLibraries().stream().map(File::toPath)
+                                             .collect(Collectors.toList()))
                     .addLibraryFiles(getLibraryFiles())
-                    .addProgramFiles(getJarFiles())
                     .addProgramFiles(D8Task.getClassFiles(new File(getModule().getBuildDirectory(),
                             "bin/kotlin/classes")))
                     .addProgramFiles(D8Task.getClassFiles(new File(getModule().getBuildDirectory(),
@@ -53,6 +71,7 @@ public class R8Task extends Task<AndroidModule> {
                     .addProguardConfigurationFiles(getProguardRules())
                     .setMinApiLevel(getModule().getMinSdk())
                     .setMode(CompilationMode.RELEASE)
+                    .setProguardMapOutputPath(mappingOutput.toPath())
                     .setOutput(output.toPath(), OutputMode.DexIndexed);
             R8.run(command.build());
         } catch (com.android.tools.r8.CompilationFailedException e) {

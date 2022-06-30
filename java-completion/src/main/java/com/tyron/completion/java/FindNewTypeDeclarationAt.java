@@ -1,12 +1,12 @@
 package com.tyron.completion.java;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreeScanner;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
 
 public class FindNewTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
 

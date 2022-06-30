@@ -4,7 +4,7 @@ import com.tyron.builder.model.DiagnosticWrapper
 import com.tyron.kotlin_completion.position.Position
 import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
-import org.openjdk.javax.tools.Diagnostic
+import javax.tools.Diagnostic
 import java.io.File
 import org.jetbrains.kotlin.diagnostics.Diagnostic as KotlinDiagnostic
 
@@ -18,6 +18,11 @@ fun convertDiagnostic(diagnostic: KotlinDiagnostic): List<DiagnosticWrapper> {
         wrapper.kind = severity(diagnostic.severity)
         wrapper.source = File(diagnostic.psiFile.viewProvider.virtualFile
             .path)
+        wrapper.startLine = -1
+        wrapper.startColumn = -1
+        wrapper.endLine = -1
+        wrapper.endColumn = -1
+        wrapper.position = it.startOffset.toLong()
         wrapper.startPosition = it.startOffset.toLong()
         wrapper.endPosition = it.endOffset.toLong()
         wrapper

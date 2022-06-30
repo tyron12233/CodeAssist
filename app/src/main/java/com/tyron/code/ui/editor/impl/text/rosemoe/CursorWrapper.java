@@ -42,4 +42,9 @@ public class CursorWrapper implements Caret {
     public int getEndColumn() {
         return mCursor.getRightColumn();
     }
+
+    @Override
+    public boolean isSelected() {
+        return mCursor.isSelected();
+    }
 }

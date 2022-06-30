@@ -1,11 +1,17 @@
 package com.tyron.code.ui.editor;
 
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.StateListDrawable;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.appcompat.widget.ThemeUtils;
+import androidx.core.content.res.ResourcesCompat;
 
 import com.tyron.common.util.AndroidUtilities;
 
@@ -47,17 +53,19 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
         if (view == null) {
             view = LayoutInflater.from(getContext()).inflate(R.layout.completion_result_item, parent, false);
         }
+        if (isCurrentCursorPosition) {
+            int color = ThemeUtils.getThemeAttrColor(getContext(), R.attr.colorControlHighlight);
+            view.setBackgroundColor(color);
+        } else {
+            view.setBackground(null);
+        }
+
         CompletionItem item = getItem(pos);
         TextView tv = view.findViewById(R.id.result_item_label);
         tv.setText(item.label);
         tv = view.findViewById(R.id.result_item_desc);
         tv.setText(item.desc);
         view.setTag(pos);
-        if (isCurrentCursorPosition) {
-            view.setBackgroundColor(0xffdddddd);
-        } else {
-            view.setBackgroundColor(0x00ffffff);
-        }
         ImageView iv = view.findViewById(R.id.result_item_image);
         if (item.icon == null) {
             iv.setVisibility(View.GONE);

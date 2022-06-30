@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/footer"
     android:minHeight="72dp"
     android:orientation="horizontal"
     android:clipChildren="false"
@@ -18,7 +19,7 @@
         android:layout_height="wrap_content"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:textColor="@color/white"
+        android:textColor="?attr/colorOnSurface"
         android:background="@android:color/transparent"
         android:elevation="0dp"
         android:text="@string/wizard_exit"/>

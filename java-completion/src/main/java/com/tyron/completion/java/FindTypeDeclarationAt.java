@@ -1,18 +1,23 @@
 package com.tyron.completion.java;
 
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.TreeScanner;
-import org.openjdk.source.util.Trees;
+import android.util.Pair;
+
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ErroneousTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
+
+import java.util.List;
 
 public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     private final SourcePositions pos;
     private final JavacTask task;
     private CompilationUnitTree root;
-    private long cursor;
 
     public FindTypeDeclarationAt(JavacTask task) {
         this.task = task;
@@ -22,7 +27,6 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     @Override
     public ClassTree visitCompilationUnit(CompilationUnitTree t, Long find) {
         root = t;
-        cursor = find;
         return super.visitCompilationUnit(t, find);
     }
 
@@ -32,12 +36,22 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
         if (smaller != null) {
             return smaller;
         }
-        if (pos.getStartPosition(root, t) <= find && find < pos.getEndPosition(root, t)) {
-            ClassTree evenSmaller = new FindNewTypeDeclarationAt(task, root).scan(t, find);
-            if (evenSmaller != null) {
-                return evenSmaller;
-            } else {
-                return t;
+        if (isInside(t, Pair.create(find, find))) {
+            return t;
+        }
+        return null;
+    }
+
+
+    @Override
+    public ClassTree visitErroneous(ErroneousTree tree, Long find) {
+        final List<? extends Tree> errorTrees = tree.getErrorTrees();
+        if (errorTrees != null) {
+            for (Tree errorTree : errorTrees) {
+                final ClassTree scan = scan(errorTree, find);
+                if (scan != null) {
+                    return scan;
+                }
             }
         }
         return null;
@@ -47,5 +61,11 @@ public class FindTypeDeclarationAt extends TreeScanner<ClassTree, Long> {
     public ClassTree reduce(ClassTree a, ClassTree b) {
         if (a != null) return a;
         return b;
+    }
+
+    private boolean isInside(Tree tree, Pair<Long, Long> find) {
+        long start = pos.getStartPosition(root, tree);
+        long end = pos.getEndPosition(root, tree);
+        return start <= find.first && find.second <= end;
     }
 }

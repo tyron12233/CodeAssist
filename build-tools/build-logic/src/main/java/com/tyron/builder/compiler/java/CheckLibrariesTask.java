@@ -9,6 +9,7 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.util.Decompress;
@@ -36,8 +37,8 @@ import java.util.zip.ZipFile;
  */
 public class CheckLibrariesTask extends Task<JavaModule> {
 
-    public CheckLibrariesTask(JavaModule project, ILogger logger) {
-        super(project, logger);
+    public CheckLibrariesTask(Project project, JavaModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override

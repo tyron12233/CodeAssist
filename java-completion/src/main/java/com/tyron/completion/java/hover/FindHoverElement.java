@@ -1,8 +1,8 @@
 package com.tyron.completion.java.hover;
 
-import org.openjdk.source.tree.*;
-import org.openjdk.source.util.*;
-import org.openjdk.javax.lang.model.element.Element;
+import com.sun.source.tree.*;
+import com.sun.source.util.*;
+import javax.lang.model.element.Element;
 
 /**
  * Class that searches where the current cursor is and returns the element

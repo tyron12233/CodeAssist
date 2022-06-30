@@ -27,4 +27,6 @@ public abstract class ActionManager {
     public abstract void replaceAction(@NonNull String actionId, @NonNull AnAction newAction);
 
     public abstract boolean isGroup(@NonNull String actionId);
+
+    public abstract void performAction(String id, AnActionEvent event);
 }

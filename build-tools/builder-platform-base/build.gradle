@@ -1,0 +1,28 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.builderWorkers
+    implementation projects.buildTools.builderExecution
+
+    implementation common.slf4j
+    implementation common.commonsLang3
+
+    implementation 'javax.inject:javax.inject:1'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

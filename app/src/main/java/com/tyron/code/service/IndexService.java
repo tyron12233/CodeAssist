@@ -56,7 +56,7 @@ public class IndexService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Notification notification = new NotificationCompat.Builder(this, createNotificationChannel())
                 .setProgress(100, 0, true)
-                .setSmallIcon(R.drawable.ic_launcher)
+                .setSmallIcon(R.drawable.ic_stat_code)
                 .setContentTitle("Indexing")
                 .setContentText("Preparing")
                 .build();
@@ -76,7 +76,7 @@ public class IndexService extends Service {
             public void onTaskStarted(String message) {
                 Notification notification = new NotificationCompat.Builder(IndexService.this, "Index")
                         .setProgress(100, 0, true)
-                        .setSmallIcon(R.drawable.ic_launcher)
+                        .setSmallIcon(R.drawable.ic_stat_code)
                         .setContentTitle("Indexing")
                         .setContentText(message)
                         .build();
@@ -99,7 +99,7 @@ public class IndexService extends Service {
             stopForeground(true);
             Notification notification = new NotificationCompat.Builder(IndexService.this, "Index")
                     .setProgress(100, 0, true)
-                    .setSmallIcon(R.drawable.ic_launcher)
+                    .setSmallIcon(R.drawable.ic_stat_code)
                     .setContentTitle("Indexing error")
                     .setContentText("Unknown error: " + e.getMessage())
                     .build();

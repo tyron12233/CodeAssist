@@ -2,7 +2,13 @@ package com.tyron.kotlin_completion.compiler;
 
 import android.util.Log;
 
+import com.tyron.builder.project.api.KotlinModule;
+import com.tyron.kotlin.completion.core.resolve.AnalysisResultWithProvider;
+import com.tyron.kotlin.completion.core.resolve.CodeAssistAnalyzerFacadeForJVM;
+import com.tyron.kotlin.completion.core.resolve.KotlinAnalyzer;
+
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
+import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
@@ -43,37 +49,27 @@ public class Compiler implements Closeable {
 
     private final CompilationEnvironment mDefaultCompileEnvironment;
     private final VirtualFileSystem mLocalFileSystem;
-    private final FakeLock mCompileLock = new FakeLock();
+    private final ReentrantLock mCompileLock = new ReentrantLock();
 
-    public class FakeLock {
-        public void lock() {
-
-        }
-
-        public void unlock() {
-
-        }
-    }
     private boolean closed = false;
 
 
-    public Compiler(Set<Path> javaSourcePath, Set<Path> classPath) {
+    public Compiler(KotlinModule module, Set<Path> javaSourcePath, Set<Path> classPath) {
         mJavaSourcePath = javaSourcePath;
         mClassPath = classPath;
-        mDefaultCompileEnvironment = new CompilationEnvironment(mJavaSourcePath, mClassPath);
+        mDefaultCompileEnvironment = new CompilationEnvironment(module, mJavaSourcePath, mClassPath);
         mLocalFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL);
-
         UtilKt.setIdeaIoUseFallback();
     }
 
     public PsiFile createPsiFile(String content) {
         return createPsiFile(content, Paths.get("dummy.virtual.kt"), KotlinLanguage.INSTANCE, CompletionKind.DEFAULT);
     }
+
     public PsiFile createPsiFile(String content, Path file, Language language, CompletionKind kind) {
         assert !content.contains("\r");
         PsiFile newFile = psiFileFactoryFor(kind).createFileFromText(file.toString(), language, content, true, false);
         assert newFile.getVirtualFile() != null;
-
         return newFile;
     }
 
@@ -96,10 +92,13 @@ public class Compiler implements Closeable {
     public Pair<BindingContext, ComponentProvider> compileKtFiles(Collection<? extends KtFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
         try {
-            Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
-            ((LazyTopDownAnalyzer) pair.getFirst().resolve(LazyTopDownAnalyzer.class).getValue())
-                    .analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
-            return new Pair<>(pair.getSecond().getBindingContext(), pair.getFirst());
+            AnalysisResultWithProvider result =
+                    KotlinAnalyzer.INSTANCE.analyzeFiles(sourcePath, files);
+            return new Pair<>(result.getAnalysisResult().getBindingContext(), result.getComponentProvider());
+//            Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
+//            ((LazyTopDownAnalyzer) pair.getFirst().resolve(LazyTopDownAnalyzer.class).getValue())
+//                    .analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
+//            return new Pair<>(pair.getSecond().getBindingContext(), pair.getFirst());
         } finally {
             mCompileLock.unlock();
         }

@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    compileOnly projects.androidStubs
+    
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderBaseServices
+
+    implementation 'com.android.tools:r8:3.3.28'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

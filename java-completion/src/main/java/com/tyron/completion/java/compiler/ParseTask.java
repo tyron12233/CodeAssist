@@ -1,7 +1,7 @@
 package com.tyron.completion.java.compiler;
 
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.JavacTask;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.JavacTask;
 
 public class ParseTask {
     public final JavacTask task;

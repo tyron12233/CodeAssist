@@ -16,9 +16,9 @@ import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.tools.javac.api.ClientCodeWrapper;
-import org.openjdk.tools.javac.util.JCDiagnostic;
+import javax.tools.Diagnostic;
+import com.sun.tools.javac.api.ClientCodeWrapper;
+import com.sun.tools.javac.util.JCDiagnostic;
 
 import java.io.File;
 

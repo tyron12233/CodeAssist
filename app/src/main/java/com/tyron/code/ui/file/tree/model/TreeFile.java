@@ -9,6 +9,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import com.tyron.code.R;
 
 import java.io.File;
+import java.util.Objects;
 
 public class TreeFile {
 
@@ -39,5 +40,22 @@ public class TreeFile {
     public Drawable getIcon(Context context) {
         return AppCompatResources.getDrawable(context,
                 R.drawable.round_insert_drive_file_24);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        TreeFile treeFile = (TreeFile) o;
+        return Objects.equals(mFile, treeFile.mFile);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mFile);
     }
 }

@@ -1,0 +1,16 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    implementation project(path: ':common')
+    implementation project(path: ':build-tools:javac')
+
+    implementation 'com.google.auto.value:auto-value-annotations:1.9'
+    annotationProcessor 'com.google.auto.value:auto-value:1.9'
+}

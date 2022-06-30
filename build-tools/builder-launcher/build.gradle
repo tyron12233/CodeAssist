@@ -1,0 +1,44 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.codeassistBuilderPlugin
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderFiles
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.snapshots
+    implementation projects.buildTools.builderPersistentCache
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.fileWatching
+
+    implementation common.slf4j
+    implementation common.commonsLang3
+
+    testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-23'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'net.rubygrapefruit:native-platform:0.22-milestone-23'
+    testImplementation projects.buildTools.builderApi
+    testImplementation projects.buildTools.builderCoreApi
+    testImplementation projects.buildTools.builderCore
+    testImplementation projects.buildTools.builderConfigurationCache
+    testImplementation projects.buildTools.builderBaseServicesGroovy
+    testImplementation projects.buildTools.groovyCompiler
+    testImplementation projects.buildTools.builderDependencyManagement
+    testImplementation projects.buildTools.builderPlatformBase
+    testImplementation projects.buildTools.builderPlugins
+    testImplementation projects.buildTools.builderPluginUse
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

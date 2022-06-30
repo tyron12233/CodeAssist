@@ -1,0 +1,15 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.buildTools.eclipseStandalone
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation projects.common
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

@@ -4,6 +4,8 @@ import android.util.Log;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.Library;
@@ -30,11 +32,13 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
 public class DependencyManager {
@@ -62,6 +66,9 @@ public class DependencyManager {
         List<RepositoryModel> repositoryModels = parseFile(repositoriesFile);
         List<Repository> repositories = new ArrayList<>();
         for (RepositoryModel model : repositoryModels) {
+            if (model.getName() == null) {
+                continue;
+            }
             if (model.getUrl() == null) {
                 repositories.add(new LocalRepository(model.getName()));
             } else {
@@ -74,17 +81,26 @@ public class DependencyManager {
     public static List<RepositoryModel> parseFile(File file) throws IOException {
         try {
             String contents = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-            Type type = new TypeToken<List<RepositoryModel>>() {}.getType();
-            List<RepositoryModel> models = new Gson().fromJson(contents, type);
+            Type type = new TypeToken<List<RepositoryModel>>(){}.getType();
+            List<RepositoryModel> models = new GsonBuilder()
+                    .setLenient()
+                    .create()
+                    .fromJson(contents, type);
             if (models != null) {
                 return models;
             }
+        } catch (JsonSyntaxException e) {
+            // returning an empty list for now, should probably log this
+            return Collections.emptyList();
         } catch (IOException ignored) {
             // add default ones
         }
 
         List<RepositoryModel> defaultRepositories = getDefaultRepositories();
-        String jsonContents = new Gson().toJson(defaultRepositories);
+        String jsonContents = new GsonBuilder()
+                .setPrettyPrinting()
+                .create()
+                .toJson(defaultRepositories);
         FileUtils.writeStringToFile(file, jsonContents, StandardCharsets.UTF_8);
         return defaultRepositories;
     }
@@ -121,6 +137,7 @@ public class DependencyManager {
                 logger.error(message);
             }
         });
+
         List<Dependency> declaredDependencies = DependencyUtils.parseLibraries(project.getLibraryFile(), logger);
         List<Pom> resolvedPoms = mResolver.resolveDependencies(declaredDependencies);
 
@@ -225,7 +242,8 @@ public class DependencyManager {
                 .apply();
     }
 
-    public List<Library> getFiles(List<Pom> resolvedPoms, ILogger logger) {
+    public List<Library> getFiles(List<Pom> resolvedPoms,
+                                  ILogger logger) {
         List<Library> files = new ArrayList<>();
         for (Pom resolvedPom : resolvedPoms) {
             try {

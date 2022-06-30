@@ -14,34 +14,29 @@
         android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="25"
-        tools:background="#212121" />
+        android:layout_weight="25" />
 
     <View
         android:layout_width="1dp"
         android:layout_height="match_parent"
-        tools:background="#484848" />
+        tools:background="?attr/dividerColor" />
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="75"
-        android:background="@color/colorBackground"
         android:orientation="vertical">
 
         <com.google.android.material.appbar.AppBarLayout
             android:id="@+id/app_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#212121"
-            android:theme="@style/CodeEditorActionBar"
             app:elevation="0dp">
 
             <com.tyron.actions.impl.ActionToolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:theme="@style/CodeEditorThemeOverlay" />
+                android:layout_height="wrap_content" />
         </com.google.android.material.appbar.AppBarLayout>
 
         <com.google.android.material.progressindicator.LinearProgressIndicator
@@ -54,7 +49,6 @@
             android:name="com.tyron.code.ui.editor.EditorContainerFragment"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            tools:background="#fe6868"
             tools:layout="@layout/editor_container_fragment" />
     </LinearLayout>
 </LinearLayout>

@@ -10,7 +10,6 @@
         <item name="android:statusBarColor">@color/colorBackground</item>
         <item name="colorControlNormal">@color/colorControlNormal</item>
         <item name="actionModeBackground">@android:color/transparent</item>
-        <item name="aboutStyle">@style/Widget.CodeAssist.AboutPage</item>
 	</style>
 
     <style name="HorizontalDivider">

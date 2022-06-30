@@ -32,7 +32,8 @@ public class WizardTemplate {
             template.setMinSdk(jsonObject.getInt("minSdk"));
             template.setName(jsonObject.getString("name"));
             template.setPath(parent.getAbsolutePath());
-
+            template.setSupportsJava(jsonObject.getBoolean("supportsJava"));
+            template.setSupportsKotlin(jsonObject.getBoolean("supportsKotlin"));
             return template;
         } catch (JSONException | IOException e) {
             return null;
@@ -43,6 +44,10 @@ public class WizardTemplate {
     private int minSdk;
 
     private String path;
+
+    private boolean supportsKotlin;
+
+    private boolean supportsJava;
 
     public WizardTemplate() {
 
@@ -70,5 +75,21 @@ public class WizardTemplate {
 
     public void setPath(String path) {
         this.path = path;
+    }
+
+    public boolean isSupportsJava() {
+        return supportsJava;
+    }
+
+    public void setSupportsJava(boolean supportsJava) {
+        this.supportsJava = supportsJava;
+    }
+
+    public boolean isSupportsKotlin() {
+        return supportsKotlin;
+    }
+
+    public void setSupportsKotlin(boolean supportsKotlin) {
+        this.supportsKotlin = supportsKotlin;
     }
 }

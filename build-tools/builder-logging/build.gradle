@@ -1,0 +1,22 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.common
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderEnterpriseWorkers
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderApi
+    
+    api common.slf4j
+    implementation 'org.fusesource.jansi:jansi:2.4.0'
+    implementation common.commonsLang3
+    implementation 'org.apache.ant:ant:1.10.12'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

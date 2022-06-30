@@ -12,13 +12,13 @@ import com.tyron.lint.api.Detector.JavaScanner;
 import com.tyron.lint.api.JavaContext;
 import com.tyron.lint.api.JavaVoidVisitor;
 
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.VariableTree;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
 
 import java.util.ArrayList;
 import java.util.HashMap;

@@ -10,10 +10,13 @@ import android.widget.EditText;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
+import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.ActionContext;
@@ -40,8 +43,8 @@ public class CreateFileAction extends FileAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getData(CommonDataKeys.FRAGMENT);
-        TreeNode<TreeFile> currentNode = e.getData(CommonFileKeys.TREE_NODE);
+        TreeFileManagerFragment fragment = (TreeFileManagerFragment) e.getRequiredData(CommonDataKeys.FRAGMENT);
+        TreeNode<TreeFile> currentNode = e.getRequiredData(CommonFileKeys.TREE_NODE);
         ActionContext actionContext = new ActionContext(fragment, fragment.getTreeView(),
                 currentNode);
         onMenuItemClick(actionContext);
@@ -50,7 +53,7 @@ public class CreateFileAction extends FileAction {
     @SuppressWarnings("ConstantConditions")
     private void onMenuItemClick(ActionContext context) {
         File currentDir = context.getCurrentNode().getValue().getFile();
-        AlertDialog dialog = new AlertDialog.Builder(context.getFragment().requireContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(context.getFragment().requireContext())
                 .setView(R.layout.create_class_dialog)
                 .setTitle(R.string.menu_action_new_file)
                 .setPositiveButton(R.string.create_class_dialog_positive, null)
@@ -74,6 +77,12 @@ public class CreateFileAction extends FileAction {
                 } else {
                     refreshTreeView(context);
                     dialog.dismiss();
+
+                    try {
+                        InjectResourcesTask.inject(ProjectManager.getInstance().getCurrentProject());
+                    } catch (IOException e) {
+                        // ignored
+                    }
                 }
             });
             editText.addTextChangedListener(new SingleTextWatcher() {

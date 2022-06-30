@@ -11,27 +11,29 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
+        android:paddingBottom="45dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tablayout"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="start"
-            android:background="#ff212121"
+            android:gravity="start"
             app:tabIndicator="@drawable/tab_indicator"
-            app:tabIndicatorColor="@color/colorPrimary"
+            app:tabIndicatorColor="?attr/colorPrimary"
             app:tabIndicatorFullWidth="false"
             app:tabInlineLabel="true"
             app:tabMode="scrollable"
+            app:tabGravity="start"
+            android:visibility="gone"
             app:tabTextAppearance="@style/TabLayoutText" />
 
-        <androidx.viewpager2.widget.ViewPager2
+        <FrameLayout
             android:id="@+id/viewpager"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            tools:background="#ff2b2b2b" />
+            android:layout_weight="1" />
     </LinearLayout>
 
     <androidx.fragment.app.FragmentContainerView
@@ -39,8 +41,10 @@
         android:name="com.tyron.code.ui.editor.BottomEditorFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#2e2e2e"
-        app:behavior_peekHeight="38dp"
+        android:background="?attr/colorSurface"
+        android:elevation="4dp"
+        app:behavior_peekHeight="45dp"
+        app:behavior_hideable="false"
         app:layout_behavior="@string/bottom_sheet_behavior"
         tools:layout="@layout/bottom_editor_fragment" />
 

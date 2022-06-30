@@ -53,35 +53,35 @@ import com.github.javaparser.printer.configuration.PrinterConfiguration;
 import com.tyron.completion.java.rewrite.EditHelper;
 
 import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeNoTypeArgumentsOnRhsError;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.TypeParameterElement;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.type.TypeVariable;
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.AssignmentTree;
-import org.openjdk.source.tree.BlockTree;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ErroneousTree;
-import org.openjdk.source.tree.ExpressionStatementTree;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.LineMap;
-import org.openjdk.source.tree.LiteralTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.PackageTree;
-import org.openjdk.source.tree.StatementTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.TypeParameterTree;
-import org.openjdk.source.tree.VariableTree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.tree.JCTree;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeParameterElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.AssignmentTree;
+import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ErroneousTree;
+import com.sun.source.tree.ExpressionStatementTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.LineMap;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.PackageTree;
+import com.sun.source.tree.StatementTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.TypeParameterTree;
+import com.sun.source.tree.VariableTree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.tree.JCTree;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -523,7 +523,7 @@ public class JavaParserUtil {
     }
 
 
-    public static Modifier toModifier(org.openjdk.javax.lang.model.element.Modifier modifier) {
+    public static Modifier toModifier(javax.lang.model.element.Modifier modifier) {
         return new Modifier(Modifier.Keyword.valueOf(modifier.name()));
     }
 
@@ -535,7 +535,7 @@ public class JavaParserUtil {
         Parameter parameter = new Parameter();
         parameter.setType(EditHelper.printType(type));
         if (parameter.getType().isArrayType()) {
-            if (((org.openjdk.tools.javac.code.Type.ArrayType) type).isVarargs()) {
+            if (((com.sun.tools.javac.code.Type.ArrayType) type).isVarargs()) {
                 parameter.setType(parameter.getType().asArrayType().getComponentType());
                 parameter.setVarArgs(true);
             }

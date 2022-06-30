@@ -6,6 +6,7 @@ import org.jetbrains.jps.model.java.impl.JavaSdkUtil
 import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager
 import org.jetbrains.kotlin.com.intellij.openapi.application.PathManager
 import java.io.File
+import java.lang.IllegalStateException
 import java.util.regex.Pattern
 
 object PathUtil {
@@ -158,9 +159,13 @@ object PathUtil {
 
     @JvmStatic
     fun getResourcePathForClass(aClass: Class<*>): File {
+        val resourceRoot = PathManager.getResourceRoot(aClass, aClass.name)
+        if (resourceRoot != null) {
+            return File(resourceRoot).absoluteFile
+        }
         val path = "/" + aClass.name.replace('.', '/') + ".clazz"
-        val resourceRoot = PathManager.getResourceRoot(aClass, path) ?: throw IllegalStateException("Resource not found: $path")
-        return File(resourceRoot).absoluteFile
+        val modified = PathManager.getResourceRoot(aClass, path) ?: throw IllegalStateException("Unable to find resource $path")
+        return File(modified).absoluteFile
     }
 
     @JvmStatic

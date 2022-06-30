@@ -25,24 +25,24 @@ import com.github.javaparser.ast.type.VoidType;
 import com.github.javaparser.ast.type.WildcardType;
 import com.tyron.completion.java.compiler.ParseTask;
 
-import org.openjdk.source.tree.AnnotationTree;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.LineMap;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.ModifiersTree;
-import org.openjdk.source.tree.ParameterizedTypeTree;
-import org.openjdk.source.tree.PrimitiveTypeTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.TypeParameterTree;
-import org.openjdk.source.tree.WildcardTree;
-import org.openjdk.source.util.TreeScanner;
-import org.openjdk.tools.javac.code.BoundKind;
-import org.openjdk.tools.javac.tree.DocCommentTable;
-import org.openjdk.tools.javac.tree.EndPosTable;
-import org.openjdk.tools.javac.tree.JCTree;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.LineMap;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.ModifiersTree;
+import com.sun.source.tree.ParameterizedTypeTree;
+import com.sun.source.tree.PrimitiveTypeTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.TypeParameterTree;
+import com.sun.source.tree.WildcardTree;
+import com.sun.source.util.TreeScanner;
+import com.sun.tools.javac.code.BoundKind;
+import com.sun.tools.javac.tree.DocCommentTable;
+import com.sun.tools.javac.tree.EndPosTable;
+import com.sun.tools.javac.tree.JCTree;
 
 import java.util.List;
 
@@ -304,7 +304,7 @@ public class CompilationUnitConverter extends TreeScanner<Void, Node> {
         // ModifiersTree also contains annotations, add them here
         if (node instanceof NodeWithModifiers) {
             NodeList<Modifier> modifiers = new NodeList<>();
-            for (org.openjdk.javax.lang.model.element.Modifier flag : modifiersTree.getFlags()) {
+            for (javax.lang.model.element.Modifier flag : modifiersTree.getFlags()) {
                 Modifier modifier = JavaParserUtil.toModifier(flag);
                 addNodeRange(modifiersTree, modifier);
                 modifiers.add(modifier);
