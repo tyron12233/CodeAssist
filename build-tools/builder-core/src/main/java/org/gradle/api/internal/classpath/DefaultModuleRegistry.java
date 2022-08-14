@@ -120,9 +120,6 @@ public class DefaultModuleRegistry implements ModuleRegistry, GlobalCache {
     }
 
     private Module loadModule(String moduleName) {
-        if ("gradle-core".equals(moduleName)) {
-            moduleName = "builder-core";
-        }
         Module module = loadOptionalModule(moduleName);
         if (module != null) {
             return module;
@@ -275,7 +272,7 @@ public class DefaultModuleRegistry implements ModuleRegistry, GlobalCache {
 
     private File findJar(String name, Predicate<File> allowedJarFiles) {
         // CodeAssist changed: removed -\d.*
-        Pattern pattern = Pattern.compile(Pattern.quote(name) + "\\.jar");
+        Pattern pattern = Pattern.compile(Pattern.quote(name) + "-\\d.*\\.jar");
         if (gradleInstallation != null) {
             for (File libDir : gradleInstallation.getLibDirs()) {
                 for (File file : libDir.listFiles()) {

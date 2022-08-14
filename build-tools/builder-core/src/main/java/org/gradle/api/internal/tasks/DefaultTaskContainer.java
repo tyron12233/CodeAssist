@@ -11,6 +11,7 @@ import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.NonNullApi;
 import org.gradle.api.Task;
+import org.gradle.api.Transformer;
 import org.gradle.api.UnknownTaskException;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.MutationGuards;
@@ -45,6 +46,7 @@ import org.gradle.util.internal.ConfigureUtil;
 import org.gradle.util.internal.GUtil;
 
 import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -55,6 +57,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.function.BiFunction;
 
 import javax.annotation.Nullable;
 
@@ -286,16 +289,18 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
         return doCreate(options, ConfigureUtil.configureUsing(configureClosure));
     }
 
+    @NotNull
     @Override
-    public <T extends Task> T create(String name, Class<T> type) {
+    public <T extends Task> T create(@NotNull String name, @NotNull Class<T> type) {
         assertMutable("create(String, Class)");
         return doCreate(name, type, NO_ARGS, Actions.doNothing());
     }
 
+    @NotNull
     @Override
-    public <T extends Task> T create(final String name,
-                                     final Class<T> type,
-                                     final Object... constructorArgs) throws InvalidUserDataException {
+    public <T extends Task> T create(@NotNull final String name,
+                                     @NotNull final Class<T> type,
+                                     @NotNull final Object... constructorArgs) throws InvalidUserDataException {
         assertMutable("create(String, Class, Object...)");
         return doCreate(name, type, constructorArgs, Actions.doNothing());
     }
@@ -345,15 +350,17 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
         return taskFactory.create(identity, constructorArgs);
     }
 
+    @NotNull
     @Override
-    public Task create(String name) {
+    public Task create(@NotNull String name) {
         assertMutable("create(String)");
         return doCreate(name, DefaultTask.class, NO_ARGS, Actions.doNothing());
     }
 
+    @NotNull
     @Override
-    public Task create(String name,
-                       Action<? super Task> configureAction) throws InvalidUserDataException {
+    public Task create(@NotNull String name,
+                       @NotNull Action<? super Task> configureAction) throws InvalidUserDataException {
         assertMutable("create(String, Action)");
         return doCreate(name, DefaultTask.class, NO_ARGS, configureAction);
     }
@@ -367,22 +374,25 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
         return create(name);
     }
 
+    @NotNull
     @Override
-    public Task replace(String name) {
+    public Task replace(@NotNull String name) {
         assertMutable("replace(String)");
         return replace(name, DefaultTask.class);
     }
 
+    @NotNull
     @Override
-    public Task create(String name, Closure configureClosure) {
+    public Task create(@NotNull String name, @NotNull Closure configureClosure) {
         assertMutable("create(String, Closure)");
         return doCreate(name, DefaultTask.class, NO_ARGS,
                 ConfigureUtil.configureUsing(configureClosure));
     }
 
+    @NotNull
     @Override
-    public <T extends Task> T create(String name,
-                                     Class<T> type,
+    public <T extends Task> T create(@NotNull String name,
+                                     @NotNull Class<T> type,
                                      Action<? super T> configuration) throws InvalidUserDataException {
         assertMutable("create(String, Class, Action)");
         T task = create(name, type);
@@ -390,17 +400,19 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
         return task;
     }
 
+    @NotNull
     @Override
-    public TaskProvider<Task> register(String name,
-                                       Action<? super Task> configurationAction) throws InvalidUserDataException {
+    public TaskProvider<Task> register(@NotNull String name,
+                                       @NotNull Action<? super Task> configurationAction) throws InvalidUserDataException {
         assertMutable("register(String, Action)");
         return Cast.uncheckedCast(register(name, DefaultTask.class, configurationAction));
     }
 
+    @NotNull
     @Override
-    public <T extends Task> TaskProvider<T> register(String name,
-                                                     Class<T> type,
-                                                     Action<? super T> configurationAction) throws InvalidUserDataException {
+    public <T extends Task> TaskProvider<T> register(@NotNull String name,
+                                                     @NotNull Class<T> type,
+                                                     @NotNull Action<? super T> configurationAction) throws InvalidUserDataException {
         assertMutable("register(String, Class, Action)");
         return registerTask(name, type, configurationAction, NO_ARGS);
     }
@@ -418,10 +430,11 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
         return Cast.uncheckedCast(register(name, DefaultTask.class));
     }
 
+    @NotNull
     @Override
-    public <T extends Task> TaskProvider<T> register(String name,
-                                                     Class<T> type,
-                                                     Object... constructorArgs) {
+    public <T extends Task> TaskProvider<T> register(@NotNull String name,
+                                                     @NotNull Class<T> type,
+                                                     @NotNull Object... constructorArgs) {
         assertMutable("register(String, Class, Object...)");
         return registerTask(name, type, null, constructorArgs);
     }

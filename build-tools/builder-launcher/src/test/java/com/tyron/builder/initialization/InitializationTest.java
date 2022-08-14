@@ -1,50 +1,25 @@
-package org.gradle.initialization;
+package com.tyron.builder.initialization;
 
-import com.google.common.collect.ImmutableList;
-
-import org.gradle.api.internal.StartParameterInternal;
-import org.gradle.api.logging.LogLevel;
-import org.gradle.api.logging.configuration.ConsoleOutput;
-import org.gradle.api.logging.configuration.ShowStacktrace;
-import org.gradle.internal.logging.LoggingManagerInternal;
-import org.gradle.launcher.ProjectLauncher;
-import org.gradle.plugin.CodeAssistPlugin;
-import com.tyron.common.TestUtil;
-
-import org.junit.Before;
+import org.gradle.internal.installation.CurrentGradleInstallation;
+import org.gradle.internal.installation.GradleInstallation;
+import org.gradle.internal.jvm.Jvm;
 import org.junit.Test;
 
 import java.io.File;
 
 public class InitializationTest {
 
-    private ProjectLauncher projectLauncher;
-
-    @Before
-    public void setup() {
-        System.setProperty("org.gradle.native", "true");
-
-        File resourcesDir = TestUtil.getResourcesDirectory();
-        File projectDir = new File(resourcesDir, "TestProject");
-
-        StartParameterInternal startParameterInternal = new StartParameterInternal();
-        startParameterInternal.setLogLevel(LogLevel.LIFECYCLE);
-        startParameterInternal.setShowStacktrace(ShowStacktrace.ALWAYS_FULL);
-        startParameterInternal.setProjectDir(projectDir);
-        startParameterInternal.setBuildCacheEnabled(true);
-        startParameterInternal.setGradleUserHomeDir(new File(resourcesDir, ".gradle"));
-        startParameterInternal.setTaskNames(ImmutableList.of(":consumer:assemble"));
-
-        projectLauncher = new ProjectLauncher(startParameterInternal);
-
-        LoggingManagerInternal loggingManagerInternal =
-                projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
-        loggingManagerInternal.attachSystemOutAndErr();
-        loggingManagerInternal.attachProcessConsole(ConsoleOutput.Plain);
-    }
-
     @Test
     public void testInitialization() {
-        projectLauncher.execute();
+        Jvm current = Jvm.current();
+        CurrentGradleInstallation.setInstance(
+                new CurrentGradleInstallation(
+                        new GradleInstallation(
+                                new File("C:\\Users\\TyronScott\\" +
+                                         ".gradle\\wrapper\\dists\\gradle-7.4-bin\\c0gwcg53nkjbqw7r0h0umtfvt\\gradle-7.4")
+                        )
+                )
+        );
+        Launcher.main(new String[0]);
     }
 }

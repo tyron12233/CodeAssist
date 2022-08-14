@@ -1,24 +1,27 @@
 package org.gradle;
 
-import static java.util.Collections.emptyList;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.gradle.api.Incubating;
 import org.gradle.api.artifacts.verification.DependencyVerificationMode;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.configuration.ConsoleOutput;
 import org.gradle.api.logging.configuration.LoggingConfiguration;
 import org.gradle.api.logging.configuration.ShowStacktrace;
 import org.gradle.api.logging.configuration.WarningMode;
-import org.gradle.util.internal.GFileUtils;
 import org.gradle.concurrent.ParallelismConfiguration;
 import org.gradle.initialization.BuildLayoutParameters;
+import org.gradle.initialization.CompositeInitScriptFinder;
+import org.gradle.initialization.DistributionInitScriptFinder;
+import org.gradle.initialization.UserHomeInitScriptFinder;
 import org.gradle.internal.DefaultTaskExecutionRequest;
 import org.gradle.internal.concurrent.DefaultParallelismConfiguration;
 import org.gradle.internal.logging.DefaultLoggingConfiguration;
+import org.gradle.util.internal.GFileUtils;
 
-import org.jetbrains.annotations.Nullable;
-
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -29,6 +32,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static java.util.Collections.emptyList;
 
 /**
  * <p>{@code StartParameter} defines the configuration used by a Gradle instance to execute a build. The properties of {@code StartParameter} generally correspond to the command-line options of
@@ -78,13 +83,87 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     private DependencyVerificationMode verificationMode = DependencyVerificationMode.STRICT;
     private boolean isRefreshKeys;
     private boolean isExportKeys;
-    private boolean isWriteDependencyLocks;
-    private boolean isBuildProjectDependencies = true;
-    private boolean isRefreshDependencies;
-    private DependencyVerificationMode dependencyVerificationMode;
-    private boolean exportKeys;
-    private boolean isConfigureOnDemand;
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public LogLevel getLogLevel() {
+        return loggingConfiguration.getLogLevel();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setLogLevel(LogLevel logLevel) {
+        loggingConfiguration.setLogLevel(logLevel);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public ShowStacktrace getShowStacktrace() {
+        return loggingConfiguration.getShowStacktrace();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setShowStacktrace(ShowStacktrace showStacktrace) {
+        loggingConfiguration.setShowStacktrace(showStacktrace);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public ConsoleOutput getConsoleOutput() {
+        return loggingConfiguration.getConsoleOutput();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setConsoleOutput(ConsoleOutput consoleOutput) {
+        loggingConfiguration.setConsoleOutput(consoleOutput);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public WarningMode getWarningMode() {
+        return loggingConfiguration.getWarningMode();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setWarningMode(WarningMode warningMode) {
+        loggingConfiguration.setWarningMode(warningMode);
+    }
+
+    /**
+     * Sets the project's cache location. Set to null to use the default location.
+     */
+    public void setProjectCacheDir(@Nullable File projectCacheDir) {
+        this.projectCacheDir = projectCacheDir;
+    }
+
+    /**
+     * Returns the project's cache dir.
+     *
+     * @return project's cache dir, or null if the default location is to be used.
+     */
+    @Nullable
+    public File getProjectCacheDir() {
+        return projectCacheDir;
+    }
 
     /**
      * Creates a {@code StartParameter} with default values. This is roughly equivalent to running Gradle on the command-line with no arguments.
@@ -162,10 +241,98 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         p.writeDependencyLocks = writeDependencyLocks;
         p.writeDependencyVerifications = writeDependencyVerifications;
         p.lockedDependenciesToUpdate = new ArrayList<>(lockedDependenciesToUpdate);
-//        p.verificationMode = verificationMode;
+        p.verificationMode = verificationMode;
         p.isRefreshKeys = isRefreshKeys;
         p.isExportKeys = isExportKeys;
         return p;
+    }
+
+    public boolean equals(Object obj) {
+        return EqualsBuilder.reflectionEquals(this, obj);
+    }
+
+    public int hashCode() {
+        return HashCodeBuilder.reflectionHashCode(this);
+    }
+
+    /**
+     * Returns the build file to use to select the default project. Returns null when the build file is not used to select the default project.
+     *
+     * @return The build file. May be null.
+     *
+     * @deprecated Setting custom build file to select the default project has been deprecated.
+     * This method will be removed in Gradle 8.0.
+     */
+    @Deprecated
+    @Nullable
+    public File getBuildFile() {
+        return buildFile;
+    }
+
+    /**
+     * Sets the build file to use to select the default project. Use null to disable selecting the default project using the build file.
+     *
+     * @param buildFile The build file. May be null.
+     *
+     * @deprecated Setting custom build file to select the default project has been deprecated.
+     * Please use {@link #setProjectDir(File)} to specify the directory of the default project instead.
+     * This method will be removed in Gradle 8.0.
+     */
+    @Deprecated
+    public void setBuildFile(@Nullable File buildFile) {
+        if (buildFile == null) {
+            this.buildFile = null;
+            setCurrentDir(null);
+        } else {
+            this.buildFile = GFileUtils.canonicalize(buildFile);
+            setProjectDir(this.buildFile.getParentFile());
+        }
+    }
+
+    /**
+     * Returns the names of the tasks to execute in this build. When empty, the default tasks for the project will be executed. If {@link TaskExecutionRequest}s are set for this build then names from these task parameters are returned.
+     *
+     * @return the names of the tasks to execute in this build. Never returns null.
+     */
+    public List<String> getTaskNames() {
+        List<String> taskNames = Lists.newArrayList();
+        for (TaskExecutionRequest taskRequest : taskRequests) {
+            taskNames.addAll(taskRequest.getArgs());
+        }
+        return taskNames;
+    }
+
+    /**
+     * <p>Sets the tasks to execute in this build. Set to an empty list, or null, to execute the default tasks for the project. The tasks are executed in the order provided, subject to dependency
+     * between the tasks.</p>
+     *
+     * @param taskNames the names of the tasks to execute in this build.
+     */
+    public void setTaskNames(@Nullable Iterable<String> taskNames) {
+        if (taskNames == null) {
+            this.taskRequests = emptyList();
+        } else {
+            this.taskRequests = Arrays.asList(new DefaultTaskExecutionRequest(taskNames));
+        }
+    }
+
+    /**
+     * Returns the tasks to execute in this build. When empty, the default tasks for the project will be executed.
+     *
+     * @return the tasks to execute in this build. Never returns null.
+     */
+    public List<TaskExecutionRequest> getTaskRequests() {
+        return taskRequests;
+    }
+
+    /**
+     * <p>Sets the task parameters to execute in this build. Set to an empty list, to execute the default tasks for the project. The tasks are executed in the order provided, subject to dependency
+     * between the tasks.</p>
+     *
+     * @param taskParameters the tasks to execute in this build.
+     */
+    public void setTaskRequests(Iterable<? extends TaskExecutionRequest> taskParameters) {
+        this.taskRequests = Lists.newArrayList(taskParameters);
     }
 
     /**
@@ -186,78 +353,13 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         this.excludedTaskNames = Sets.newLinkedHashSet(excludedTaskNames);
     }
 
-
-
-    @Override
-    public LogLevel getLogLevel() {
-        return loggingConfiguration.getLogLevel();
-    }
-
-    @Override
-    public void setLogLevel(LogLevel logLevel) {
-        loggingConfiguration.setLogLevel(logLevel);
-    }
-
-    @Override
-    public ConsoleOutput getConsoleOutput() {
-        return loggingConfiguration.getConsoleOutput();
-    }
-
-    @Override
-    public void setConsoleOutput(ConsoleOutput consoleOutput) {
-        loggingConfiguration.setConsoleOutput(consoleOutput);
-    }
-
-    @Override
-    public WarningMode getWarningMode() {
-        return loggingConfiguration.getWarningMode();
-    }
-
-    @Override
-    public void setWarningMode(WarningMode warningMode) {
-        loggingConfiguration.setWarningMode(warningMode);
-    }
-
-    @Override
-    public ShowStacktrace getShowStacktrace() {
-        return loggingConfiguration.getShowStacktrace();
-    }
-
-    @Override
-    public void setShowStacktrace(ShowStacktrace showStacktrace) {
-        loggingConfiguration.setShowStacktrace(showStacktrace);
-    }
-
-    @Override
-    public boolean isParallelProjectExecutionEnabled() {
-        return parallelismConfiguration.isParallelProjectExecutionEnabled();
-    }
-
-    @Override
-    public void setParallelProjectExecutionEnabled(boolean parallelProjectExecution) {
-        parallelismConfiguration.setParallelProjectExecutionEnabled(parallelProjectExecution);
-    }
-
-    @Override
-    public int getMaxWorkerCount() {
-        return parallelismConfiguration.getMaxWorkerCount();
-    }
-
-    @Override
-    public void setMaxWorkerCount(int maxWorkerCount) {
-        parallelismConfiguration.setMaxWorkerCount(maxWorkerCount);
-    }
-
-    public void setGradleUserHomeDir(File userHomeDir) {
-        this.gradleUserHomeDir = userHomeDir;
-    }
-
-    public File getGradleUserHomeDir() {
-        return gradleUserHomeDir;
-    }
-
-    public boolean isRerunTasks() {
-        return false;
+    /**
+     * Returns the directory to use to select the default project, and to search for the settings file.
+     *
+     * @return The current directory. Never returns null.
+     */
+    public File getCurrentDir() {
+        return currentDir;
     }
 
     /**
@@ -287,6 +389,84 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 
     public void setSystemPropertiesArgs(Map<String, String> systemPropertiesArgs) {
         this.systemPropertiesArgs = systemPropertiesArgs;
+    }
+
+    /**
+     * Returns the directory to use as the user home directory.
+     *
+     * @return The home directory.
+     */
+    public File getGradleUserHomeDir() {
+        return gradleUserHomeDir;
+    }
+
+    /**
+     * Sets the directory to use as the user home directory. Set to null to use the default directory.
+     *
+     * @param gradleUserHomeDir The home directory. May be null.
+     */
+    public void setGradleUserHomeDir(@Nullable File gradleUserHomeDir) {
+        this.gradleUserHomeDir = gradleUserHomeDir == null ? new BuildLayoutParameters().getGradleUserHomeDir() : GFileUtils.canonicalize(gradleUserHomeDir);
+    }
+
+    /**
+     * Returns true if project dependencies are to be built, false if they should not be. The default is true.
+     */
+    public boolean isBuildProjectDependencies() {
+        return buildProjectDependencies;
+    }
+
+    /**
+     * Specifies whether project dependencies should be built. Defaults to true.
+     *
+     * @return this
+     */
+    public StartParameter setBuildProjectDependencies(boolean build) {
+        this.buildProjectDependencies = build;
+        return this;
+    }
+
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
+    }
+
+    /**
+     * Sets the settings file to use for the build. Use null to use the default settings file.
+     *
+     * @param settingsFile The settings file to use. May be null.
+     *
+     * @deprecated Setting custom settings file for the build has been deprecated.
+     * Please use {@link #setProjectDir(File)} to specify the directory of the default project instead.
+     * This method will be removed in Gradle 8.0.
+     */
+    @Deprecated
+    public void setSettingsFile(@Nullable File settingsFile) {
+        if (settingsFile == null) {
+            this.settingsFile = null;
+        } else {
+            this.settingsFile = GFileUtils.canonicalize(settingsFile);
+            currentDir = this.settingsFile.getParentFile();
+        }
+    }
+
+    /**
+     * Returns the explicit settings file to use for the build, or null.
+     *
+     * Will return null if the default settings file is to be used.
+     *
+     * @return The settings file. May be null.
+     *
+     * @deprecated Setting custom build file to select the default project has been deprecated.
+     * This method will be removed in Gradle 8.0.
+     */
+    @Deprecated
+    @Nullable
+    public File getSettingsFile() {
+        return settingsFile;
     }
 
     /**
@@ -323,13 +503,13 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @return All init scripts, including explicit init scripts and implicit init scripts.
      */
     public List<File> getAllInitScripts() {
-//        CompositeInitScriptFinder initScriptFinder = new CompositeInitScriptFinder(
-//                new UserHomeInitScriptFinder(getGradleUserHomeDir()),
-//                new DistributionInitScriptFinder(gradleHomeDir)
-//        );
+        CompositeInitScriptFinder initScriptFinder = new CompositeInitScriptFinder(
+                new UserHomeInitScriptFinder(getGradleUserHomeDir()),
+                new DistributionInitScriptFinder(gradleHomeDir)
+        );
 
         List<File> scripts = new ArrayList<>(getInitScripts());
-//        initScriptFinder.findScripts(scripts);
+        initScriptFinder.findScripts(scripts);
         return Collections.unmodifiableList(scripts);
     }
 
@@ -350,186 +530,396 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     }
 
     /**
-     * Returns the names of the tasks to execute in this build. When empty, the default tasks for the project will be executed. If {@link TaskExecutionRequest}s are set for this build then names from these task parameters are returned.
+     * Returns the project dir to use to select the default project.
      *
-     * @return the names of the tasks to execute in this build. Never returns null.
+     * Returns null when the build file is not used to select the default project
+     *
+     * @return The project dir. May be null.
      */
-    public List<String> getTaskNames() {
-        List<String> taskNames = Lists.newArrayList();
-        for (TaskExecutionRequest taskRequest : taskRequests) {
-            taskNames.addAll(taskRequest.getArgs());
-        }
-        return taskNames;
-    }
-
-    /**
-     * Returns the directory to use to select the default project, and to search for the settings file.
-     *
-     * @return The current directory. Never returns null.
-     */
-    public File getCurrentDir() {
-        return currentDir;
-    }
-
-    /**
-     * Returns the explicit settings file to use for the build, or null.
-     *
-     * Will return null if the default settings file is to be used.
-     *
-     * @return The settings file. May be null.
-     *
-     * @deprecated Setting custom build file to select the default project has been deprecated.
-     * This method will be removed in Gradle 8.0.
-     */
-    @Deprecated
     @Nullable
-    public File getSettingsFile() {
-        return settingsFile;
-    }
-
-    public File getProjectCacheDir() {
-        return projectCacheDir;
-    }
-
-    public File getBuildFile() {
-        return buildFile;
-    }
-
-    public List<TaskExecutionRequest> getTaskRequests() {
-        return taskRequests;
-    }
-
-    /**
-     * <p>Sets the tasks to execute in this build. Set to an empty list, or null, to execute the default tasks for the project. The tasks are executed in the order provided, subject to dependency
-     * between the tasks.</p>
-     *
-     * @param taskNames the names of the tasks to execute in this build.
-     */
-    public void setTaskNames(@Nullable Iterable<String> taskNames) {
-        if (taskNames == null) {
-            this.taskRequests = emptyList();
-        } else {
-            this.taskRequests = Arrays.asList(new DefaultTaskExecutionRequest(taskNames));
-        }
-    }
-
-    public boolean isDryRun() {
-        return dryRun;
-    }
-
-    public boolean isContinueOnFailure() {
-        return continueOnFailure;
-    }
-
     public File getProjectDir() {
         return projectDir;
     }
 
-    public void setSettingsFile(File o) {
-        this.settingsFile = o;
+    /**
+     * Specifies if a profile report should be generated.
+     *
+     * @param profile true if a profile report should be generated
+     */
+    public void setProfile(boolean profile) {
+        this.profile = profile;
     }
 
-    public List<File> getIncludedBuilds() {
-        return includedBuilds;
+    /**
+     * Returns true if a profile report will be generated.
+     */
+    public boolean isProfile() {
+        return profile;
     }
 
-    public void setContinuous(boolean b) {
-        this.continuous = b;
+    /**
+     * Specifies whether the build should continue on task failure. The default is false.
+     */
+    public boolean isContinueOnFailure() {
+        return continueOnFailure;
     }
 
-    public boolean isBuildCacheEnabled() {
-        return buildCacheEnabled;
+    /**
+     * Specifies whether the build should continue on task failure. The default is false.
+     */
+    public void setContinueOnFailure(boolean continueOnFailure) {
+        this.continueOnFailure = continueOnFailure;
     }
 
-    public void setBuildCacheEnabled(boolean enabled) {
-        buildCacheEnabled = enabled;
-    }
-
+    /**
+     * Specifies whether the build should be performed offline (ie without network access).
+     */
     public boolean isOffline() {
         return offline;
     }
 
+    /**
+     * Specifies whether the build should be performed offline (ie without network access).
+     */
+    public void setOffline(boolean offline) {
+        this.offline = offline;
+    }
+
+    /**
+     * Specifies whether the dependencies should be refreshed..
+     */
+    public boolean isRefreshDependencies() {
+        return refreshDependencies;
+    }
+
+    /**
+     * Specifies whether the dependencies should be refreshed..
+     */
+    public void setRefreshDependencies(boolean refreshDependencies) {
+        this.refreshDependencies = refreshDependencies;
+    }
+
+    /**
+     * Specifies whether the cached task results should be ignored and each task should be forced to be executed.
+     */
+    public boolean isRerunTasks() {
+        return rerunTasks;
+    }
+
+    /**
+     * Specifies whether the cached task results should be ignored and each task should be forced to be executed.
+     */
+    public void setRerunTasks(boolean rerunTasks) {
+        this.rerunTasks = rerunTasks;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean isParallelProjectExecutionEnabled() {
+        return parallelismConfiguration.isParallelProjectExecutionEnabled();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setParallelProjectExecutionEnabled(boolean parallelProjectExecution) {
+        parallelismConfiguration.setParallelProjectExecutionEnabled(parallelProjectExecution);
+    }
+
+    /**
+     * Returns true if the build cache is enabled.
+     *
+     * @since 3.5
+     */
+    public boolean isBuildCacheEnabled() {
+        return buildCacheEnabled;
+    }
+
+    /**
+     * Enables/disables the build cache.
+     *
+     * @since 3.5
+     */
+    public void setBuildCacheEnabled(boolean buildCacheEnabled) {
+        this.buildCacheEnabled = buildCacheEnabled;
+    }
+
+    /**
+     * Whether build cache debug logging is enabled.
+     *
+     * @since 4.6
+     */
     public boolean isBuildCacheDebugLogging() {
         return buildCacheDebugLogging;
     }
 
-    public boolean isWriteDependencyLocks() {
-        return isWriteDependencyLocks;
+    /**
+     * Whether build cache debug logging is enabled.
+     *
+     * @since 4.6
+     */
+    public void setBuildCacheDebugLogging(boolean buildCacheDebugLogging) {
+        this.buildCacheDebugLogging = buildCacheDebugLogging;
     }
 
-    public boolean isBuildProjectDependencies() {
-        return isBuildProjectDependencies;
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int getMaxWorkerCount() {
+        return parallelismConfiguration.getMaxWorkerCount();
     }
 
-    public void setBuildProjectDependencies(boolean buildProjectDependencies) {
-        isBuildProjectDependencies = buildProjectDependencies;
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setMaxWorkerCount(int maxWorkerCount) {
+        parallelismConfiguration.setMaxWorkerCount(maxWorkerCount);
     }
 
-    public void setWriteDependencyLocks(boolean writeDependencyLocks) {
-        isWriteDependencyLocks = writeDependencyLocks;
-    }
-
-    public boolean isRefreshKeys() {
-        return isRefreshKeys;
-    }
-
-    public boolean isRefreshDependencies() {
-        return isRefreshDependencies;
-    }
-
-    public void setRefreshDependencies(boolean refreshDependencies) {
-        isRefreshDependencies = refreshDependencies;
-    }
-
-    public List<String> getWriteDependencyVerifications() {
-        return writeDependencyVerifications;
-    }
-
-    public void setWriteDependencyVerifications(List<String> writeDependencyVerifications) {
-        this.writeDependencyVerifications = writeDependencyVerifications;
-    }
-
-    public DependencyVerificationMode getDependencyVerificationMode() {
-        return dependencyVerificationMode;
-    }
-
-    public void setDependencyVerificationMode(DependencyVerificationMode dependencyVerificationMode) {
-        this.dependencyVerificationMode = dependencyVerificationMode;
-    }
-
-    public boolean isExportKeys() {
-        return exportKeys;
-    }
-
-    public void setExportKeys(boolean exportKeys) {
-        this.exportKeys = exportKeys;
-    }
-
-    public List<String> getLockedDependenciesToUpdate() {
-        return writeDependencyVerifications;
-    }
-
-    public void setLockedDependenciesToUpdate(List<String> lockedDependenciesToUpdate) {
-        this.writeDependencyVerifications = lockedDependenciesToUpdate;
-    }
-
+    /**
+     * If the configure-on-demand mode is active
+     */
+    @Incubating
     public boolean isConfigureOnDemand() {
-        return isConfigureOnDemand;
+        return configureOnDemand;
     }
 
-    public boolean isNoBuildScan() {
-        return noBuildScan;
+    @Override
+    public String toString() {
+        return "StartParameter{"
+               + "taskRequests=" + taskRequests
+               + ", excludedTaskNames=" + excludedTaskNames
+               + ", currentDir=" + currentDir
+               + ", projectDir=" + projectDir
+               + ", projectProperties=" + projectProperties
+               + ", systemPropertiesArgs=" + systemPropertiesArgs
+               + ", gradleUserHomeDir=" + gradleUserHomeDir
+               + ", gradleHome=" + gradleHomeDir
+               + ", logLevel=" + getLogLevel()
+               + ", showStacktrace=" + getShowStacktrace()
+               + ", buildFile=" + buildFile
+               + ", initScripts=" + initScripts
+               + ", dryRun=" + dryRun
+               + ", rerunTasks=" + rerunTasks
+               + ", offline=" + offline
+               + ", refreshDependencies=" + refreshDependencies
+               + ", parallelProjectExecution=" + isParallelProjectExecutionEnabled()
+               + ", configureOnDemand=" + configureOnDemand
+               + ", maxWorkerCount=" + getMaxWorkerCount()
+               + ", buildCacheEnabled=" + buildCacheEnabled
+               + ", writeDependencyLocks=" + writeDependencyLocks
+               + ", verificationMode=" + verificationMode
+               + ", refreshKeys=" + isRefreshKeys
+               + '}';
     }
 
-    public void setNoBuildScan(boolean noBuildScan) {
-        this.noBuildScan = noBuildScan;
+    /**
+     * Package scope for testing purposes.
+     */
+    void setGradleHomeDir(File gradleHomeDir) {
+        this.gradleHomeDir = gradleHomeDir;
     }
 
+    @Incubating
+    public void setConfigureOnDemand(boolean configureOnDemand) {
+        this.configureOnDemand = configureOnDemand;
+    }
+
+    public boolean isContinuous() {
+        return continuous;
+    }
+
+    public void setContinuous(boolean enabled) {
+        this.continuous = enabled;
+    }
+
+    public void includeBuild(File includedBuild) {
+        includedBuilds.add(includedBuild);
+    }
+
+    public void setIncludedBuilds(List<File> includedBuilds) {
+        this.includedBuilds = includedBuilds;
+    }
+
+    public List<File> getIncludedBuilds() {
+        return Collections.unmodifiableList(includedBuilds);
+    }
+
+    /**
+     * Returns true if build scan should be created.
+     *
+     * @since 3.4
+     */
     public boolean isBuildScan() {
         return buildScan;
     }
 
+    /**
+     * Specifies whether a build scan should be created.
+     *
+     * @since 3.4
+     */
     public void setBuildScan(boolean buildScan) {
         this.buildScan = buildScan;
     }
+
+    /**
+     * Returns true when build scan creation is explicitly disabled.
+     *
+     * @since 3.4
+     */
+    public boolean isNoBuildScan() {
+        return noBuildScan;
+    }
+
+    /**
+     * Specifies whether build scan creation is explicitly disabled.
+     *
+     * @since 3.4
+     */
+    public void setNoBuildScan(boolean noBuildScan) {
+        this.noBuildScan = noBuildScan;
+    }
+
+    /**
+     * Specifies whether dependency resolution needs to be persisted for locking
+     *
+     * @since 4.8
+     */
+    public void setWriteDependencyLocks(boolean writeDependencyLocks) {
+        this.writeDependencyLocks = writeDependencyLocks;
+    }
+
+    /**
+     * Returns true when dependency resolution is to be persisted for locking
+     *
+     * @since 4.8
+     */
+    public boolean isWriteDependencyLocks() {
+        return writeDependencyLocks;
+    }
+
+    /**
+     * Indicates that specified dependencies are to be allowed to update their version.
+     * Implicitly activates dependency locking persistence.
+     *
+     * @param lockedDependenciesToUpdate the modules to update
+     * @see #isWriteDependencyLocks()
+     * @since 4.8
+     */
+    public void setLockedDependenciesToUpdate(List<String> lockedDependenciesToUpdate) {
+        this.lockedDependenciesToUpdate = Lists.newArrayList(lockedDependenciesToUpdate);
+        this.writeDependencyLocks = true;
+    }
+
+    /**
+     * Indicates if a dependency verification metadata file should be written at the
+     * end of this build. If the list is not empty, then it means we need to generate
+     * or update the dependency verification file with the checksums specified in the
+     * list.
+     *
+     * @since 6.1
+     */
+    public List<String> getWriteDependencyVerifications() {
+        return writeDependencyVerifications;
+    }
+
+    /**
+     * Tells if a dependency verification metadata file should be written at the end
+     * of this build.
+     *
+     * @param checksums the list of checksums to generate
+     * @since 6.1
+     */
+    public void setWriteDependencyVerifications(List<String> checksums) {
+        this.writeDependencyVerifications = checksums;
+    }
+
+    /**
+     * Returns the list of modules that are to be allowed to update their version compared to the lockfile.
+     *
+     * @return a list of modules allowed to have a version update
+     * @since 4.8
+     */
+    public List<String> getLockedDependenciesToUpdate() {
+        return lockedDependenciesToUpdate;
+    }
+
+    /**
+     * Sets the dependency verification mode. There are three different modes:
+     * <ul>
+     *     <li><i>strict</i>, the default, verification is enabled as soon as a dependency verification file is present.</li>
+     *     <li><i>lenient</i>, in this mode, failure to verify a checksum, missing checksums or signatures will be logged
+     *     but will not fail the build. This mode should only be used when updating dependencies as it is inherently unsafe.</li>
+     *     <li><i>off</i>, this mode disables all verifications</li>
+     * </ul>
+     *
+     * @param verificationMode if true, enables lenient dependency verification
+     * @since 6.2
+     */
+    public void setDependencyVerificationMode(DependencyVerificationMode verificationMode) {
+        this.verificationMode = verificationMode;
+    }
+
+    /**
+     * Returns the dependency verification mode.
+     *
+     * @since 6.2
+     */
+    public DependencyVerificationMode getDependencyVerificationMode() {
+        return verificationMode;
+    }
+
+    /**
+     * Sets the key refresh flag.
+     *
+     * @param refresh If set to true, missing keys will be checked again. By default missing keys are cached for 24 hours.
+     * @since 6.2
+     */
+    public void setRefreshKeys(boolean refresh) {
+        isRefreshKeys = refresh;
+    }
+
+    /**
+     * If true, Gradle will try to download missing keys again.
+     *
+     * @since 6.2
+     */
+    public boolean isRefreshKeys() {
+        return isRefreshKeys;
+    }
+
+    /**
+     * If true, after writing the dependency verification file, a public keyring
+     * file will be generated with all keys seen during generation of the file.
+     *
+     * This file can then be used as a source for public keys instead of reaching
+     * out public key servers.
+     *
+     * @return true if keys should be exported
+     * @since 6.2
+     */
+    public boolean isExportKeys() {
+        return isExportKeys;
+    }
+
+    /**
+     * If true, after writing the dependency verification file, a public keyring
+     * file will be generated with all keys seen during generation of the file.
+     *
+     * This file can then be used as a source for public keys instead of reaching
+     * out public key servers.
+     *
+     * @param exportKeys set to true if keys should be exported
+     * @since 6.2
+     */
+    public void setExportKeys(boolean exportKeys) {
+        isExportKeys = exportKeys;
+    }
 }
+

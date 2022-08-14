@@ -3,6 +3,10 @@ package org.gradle.internal.nativeintegration.services;
 import org.gradle.api.Action;
 import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
 import org.gradle.internal.Cast;
+import org.gradle.internal.jvm.Jvm;
+import org.gradle.internal.nativeintegration.ProcessEnvironment;
+import org.gradle.internal.nativeintegration.jna.UnsupportedEnvironment;
+import org.gradle.internal.nativeintegration.processenvironment.NativePlatformBackedProcessEnvironment;
 import org.gradle.internal.os.OperatingSystem;
 import org.gradle.internal.nativeintegration.network.HostnameLookup;
 import org.gradle.internal.service.DefaultServiceRegistry;
@@ -15,6 +19,7 @@ import org.gradle.internal.SystemProperties;
 import net.rubygrapefruit.platform.Native;
 import net.rubygrapefruit.platform.NativeException;
 import net.rubygrapefruit.platform.NativeIntegrationUnavailableException;
+import net.rubygrapefruit.platform.Process;
 import net.rubygrapefruit.platform.ProcessLauncher;
 import net.rubygrapefruit.platform.SystemInfo;
 import net.rubygrapefruit.platform.WindowsRegistry;
@@ -193,7 +198,7 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
     }
 
     private NativeServices() {
-//        addProvider(new FileSystemServices());
+        addProvider(new FileSystemServices());
         register(registration -> registration.add(GradleUserHomeTemporaryFileProvider.class));
     }
 
@@ -215,22 +220,22 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
         return OperatingSystem.current();
     }
 
-//    protected Jvm createJvm() {
-//        return Jvm.current();
-//    }
+    protected Jvm createJvm() {
+        return Jvm.current();
+    }
 //
-//    protected ProcessEnvironment createProcessEnvironment(OperatingSystem operatingSystem) {
-//        if (useNativeIntegrations) {
-//            try {
-//                net.rubygrapefruit.platform.Process process = net.rubygrapefruit.platform.Native.get(Process.class);
-//                return new NativePlatformBackedProcessEnvironment(process);
-//            } catch (NativeIntegrationUnavailableException ex) {
-//                LOGGER.debug("Native-platform process integration is not available. Continuing with fallback.");
-//            }
-//        }
-//
-//        return new UnsupportedEnvironment();
-//    }
+    protected ProcessEnvironment createProcessEnvironment(OperatingSystem operatingSystem) {
+        if (useNativeIntegrations) {
+            try {
+                net.rubygrapefruit.platform.Process process = net.rubygrapefruit.platform.Native.get(Process.class);
+                return new NativePlatformBackedProcessEnvironment(process);
+            } catch (NativeIntegrationUnavailableException ex) {
+                LOGGER.debug("Native-platform process integration is not available. Continuing with fallback.");
+            }
+        }
+
+        return new UnsupportedEnvironment();
+    }
 
 //    protected ConsoleDetector createConsoleDetector(OperatingSystem operatingSystem) {
 //        return new TestOverrideConsoleDetector(backingConsoleDetector(operatingSystem));

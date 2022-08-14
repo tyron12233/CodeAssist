@@ -7,6 +7,10 @@ dependencies {
 
     implementation projects.buildTools.codeassistBuilderPlugin
 
+    implementation projects.buildTools.builderApi
+    implementation projects.buildTools.builderToolingApi
+    implementation projects.buildTools.builderJvmServices
+    implementation projects.buildTools.builderProcessServices
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderEnterpriseOperations
     implementation projects.buildTools.builderMessaging

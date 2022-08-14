@@ -72,6 +72,7 @@ public class DefaultTask extends AbstractTask {
         private boolean hasCustomActions;
     private final TaskLocalState localState;
     private final Property<Duration> timeout;
+    private String reasonIncompatibleWithConfigurationCache;
 
     public String toString() {
         return getPath();
@@ -108,8 +109,8 @@ public class DefaultTask extends AbstractTask {
         this(taskInfo());
     }
 
-    protected DefaultTask(TaskInfo taskInfo) {
-        super(taskInfo);
+        protected DefaultTask(TaskInfo taskInfo) {
+            super(taskInfo);
         this.taskIdentity = taskInfo.identity;
         this.name = taskIdentity.name;
         this.project = taskInfo.project;
@@ -232,6 +233,13 @@ public class DefaultTask extends AbstractTask {
     @Override
     public void setDependsOn(Iterable<?> dependsOnTasks) {
         lifecycleDependencies.setValues(dependsOnTasks);
+    }
+
+    @Override
+    public void notCompatibleWithConfigurationCache(String reason) {
+        taskMutator.mutate("Task.notCompatibleWithConfigurationCache(String)", () -> {
+            reasonIncompatibleWithConfigurationCache = reason;
+        });
     }
 
     @Internal

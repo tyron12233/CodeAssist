@@ -25,6 +25,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -220,10 +221,11 @@ public class ScriptFactory {
 
     public static File dexJar(File inputJar, File outputDir) {
         D8Command.Builder builder = D8Command.builder();
-        builder.setMinApiLevel(26);
-        builder.setDisableDesugaring(true);
         builder.setMode(CompilationMode.DEBUG);
+        builder.setMinApiLevel(24);
         builder.addProgramFiles(inputJar.toPath());
+        builder.addLibraryFiles(Paths.get("/data/data/com.tyron.code/files/core-lambda-stubs.jar"));
+        builder.addLibraryFiles(Paths.get("/data/data/com.tyron.code/files/rt.jar"));
         builder.setOutput(outputDir.toPath(), OutputMode.DexIndexed);
         try {
             D8.run(builder.build());

@@ -32,4 +32,8 @@ public class CurrentGradleInstallation {
         return instance;
     }
 
+    public static void setInstance(CurrentGradleInstallation instance) {
+        CurrentGradleInstallation.instance = instance;
+    }
+
 }
