@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Text Actions -->
+    <string name="text_actions">Дії з текстом</string>
+    <string name="expand_selection">Збільшити виділення</string>
+    <string name="copied_to_clipoard">Текст скопійовано до буферу обміну.</string>
+
+    <!-- File Actions -->
+    <string name="menu_action_new_java_class">Java клас</string>
+    <string name="menu_action_new_kotlin_class">Kotlin клас</string>
+    <string name="menu_action_new_directory">Тека</string>
+    <string name="menu_action_new_file">Файл</string>
+    <string name="directory_name">Ім\'я теки</string>
+    <string name="file_name">Ім\'я файлу</string>
+    <string name="menu_new">Створити</string>
+    <string name="menu_import">Імпорт</string>
+    <string name="menu_refactor">Рефакторити</string>
+    <string name="menu_new_layout">Новий макет</string>
+
+    <string name="error_file_creation">Не вдалось створити файл.</string>
+</resources>
