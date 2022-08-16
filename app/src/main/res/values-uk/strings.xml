@@ -97,7 +97,7 @@
     <string name="editor_settings_wordwrap">Перенесення слів</string>
     <string name="font_size_title">Розмір шрифту</string>
     <string name="font_size_message">Встановіть розмір шрифту редактора</string>
-    <string name="font_size_summary">Вкажіть розмір шрифту редактора за промовчанням</string>
+    <string name="font_size_summary">Вкажіть розмір шрифту редактора за замовчуванням</string>
     <string name="keyboard_settings_title">Клавіатура</string>
     <string name="keyboard_enable_suggestions_description">Увімкнути підказки клавіатури</string>
     <string name="settings_build_run_title">Збирання та запуск</string>
@@ -124,9 +124,9 @@
     <string name="menu_action_new_kotlin_class">Kotlin-клас</string>
     <string name="menu_action_new_directory">Нова тека</string>
     <string name="menu_action_new_file">Новий файл</string>
-    <string name="directory_name">Имя теки</string>
-    <string name="file_name">Имя файла</string>
-    <string name="menu_new">Создать</string>
+    <string name="directory_name">Ім\'я теки</string>
+    <string name="file_name">Ім\'я файлу</string>
+    <string name="menu_new">Створити</string>
     <string name="menu_refactor">Рефакторинг</string>
     <string name="item_project">Ваш проект</string>
     <string name="dialog_create_class_title">Створити клас</string>
@@ -137,7 +137,7 @@
 
     <string name="success">Успішно</string>
     <string name="delete_success">Успішно видалено.</string>
-    <string name="dialog_confirm_delete">Ви впевнені, що хочете видалити%1$s?</string>
+    <string name="dialog_confirm_delete">Ви впевнені, що хочете видалити %1$s?</string>
     <string name="dialog_delete">Видалити</string>
     <string name="menu_preview_layout">Перегляд макету</string>
     <string name="action_menu_build_release">Створити APK-release</string>
@@ -146,7 +146,7 @@
     
     <string name="project_manager_alpha_notice_title">Повідомлення про альфа-версію</string>
     <string name="project_manager_alpha_notice">CodeAssist все ще в альфа-версії, 
-        ви можете зіткнутися з збоями, помилками та незавершеними функціями.\nВи 
+        ви можете зіткнутися зі збоями, помилками та незавершеними функціями.\nВи 
         можете повідомити про ці проблеми на https://github.com/tyron12233/CodeAssist/issues</string>
     <string name="project_manager_save_location_title">Вибрати місце збереження</string>
     <string name="project_manager_permission_denied">Доступ заборонено</string>
