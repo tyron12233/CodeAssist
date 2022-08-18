@@ -12,7 +12,10 @@ import java.util.Map;
  *            the type of key that uniquely identifies debounced methods.
  */
 public class DebouncerStore<K> {
-	private Map<K, DebounceExecutor> store = new HashMap<K, DebounceExecutor>();
+
+	public static final DebouncerStore<String> DEFAULT = new DebouncerStore<>();
+
+	private final Map<K, DebounceExecutor> store = new HashMap<K, DebounceExecutor>();
 
 	public boolean hasDebouncer(K m) {
 		return store.containsKey(m);
