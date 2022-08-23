@@ -122,8 +122,7 @@ public class DefaultConfigurableFileCollection extends CompositeFileCollection i
     }
 
     public int getFactoryId() {
-        return Objects.hashCode("Not yet impl");
-//        return ManagedFactories.ConfigurableFileCollectionManagedFactory.FACTORY_ID;
+        return ManagedFactories.ConfigurableFileCollectionManagedFactory.FACTORY_ID;
     }
 
     @Override
