@@ -1,11 +1,13 @@
 package org.gradle.api.artifacts.component;
 
+import org.gradle.internal.scan.UsedByScanPlugin;
+
 /**
  * An identifier for a component instance that is built as part of the current build.
  *
  * @since 1.10
  */
-//@UsedByScanPlugin
+@UsedByScanPlugin
 public interface ProjectComponentIdentifier extends ComponentIdentifier {
     /**
      * Identifies the build that contains the project that produces this component.

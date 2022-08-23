@@ -1,5 +1,7 @@
 package org.gradle.work;
 
+import org.gradle.api.tasks.TaskOutputs;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
