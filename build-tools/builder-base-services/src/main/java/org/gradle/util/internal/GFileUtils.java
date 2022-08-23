@@ -2,12 +2,17 @@ package org.gradle.util.internal;
 
 import static org.apache.commons.io.FilenameUtils.removeExtension;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+
 import org.gradle.api.UncheckedIOException;
 import org.gradle.internal.IoActions;
 import org.gradle.util.GUtil;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -25,6 +30,7 @@ import java.util.stream.Collectors;
 import java.util.zip.Checksum;
 
 public class GFileUtils {
+    private static final Joiner PATH_JOINER = Joiner.on(File.separatorChar);
 
     public static String readFile(File file) {
         return GUtil.uncheckedCall(() -> FileUtils.readFileToString(file, StandardCharsets.UTF_8));
@@ -335,6 +341,121 @@ public class GFileUtils {
             IoActions.closeQuietly(fileReader);
             IoActions.closeQuietly(reader);
         }
+    }
+
+    /**
+     * Converts a system-dependent path into a /-based path.
+     *
+     * @param path the system dependent path
+     * @return the system independent path
+     */
+    @NotNull
+    public static String toSystemIndependentPath(@NotNull String path) {
+        if (File.separatorChar != '/') {
+            path = path.replace(File.separatorChar, '/');
+        }
+        return path;
+    }
+
+    /**
+     * Makes sure {@code path} is an empty directory. If {@code path} is a directory, its contents
+     * are removed recursively, leaving an empty directory. If {@code path} is not a directory,
+     * it is removed and a directory created with the given path. If {@code path} does not
+     * exist, a directory is created with the given path.
+     *
+     * @param path the path, that may exist or not and may be a file or directory
+     * @throws IOException failed to delete directory contents, failed to delete {@code path} or
+     * failed to create a directory at {@code path}
+     */
+    public static void cleanOutputDir(@NotNull File path) throws IOException {
+        if (!path.isDirectory()) {
+            if (path.exists()) {
+                deleteIfExists(path);
+            }
+
+            if (!path.mkdirs()) {
+                throw new IOException(String.format("Could not create empty folder %s", path));
+            }
+
+            return;
+        }
+
+        deleteDirectoryContents(path);
+    }
+
+    /**
+     * Recursively deletes a directory content (including the sub directories) but not itself.
+     *
+     * @param directory the directory, that must exist and be a valid directory
+     * @throws IOException failed to delete the file / directory
+     */
+    public static void deleteDirectoryContents(@NotNull final File directory) throws IOException {
+        Preconditions.checkArgument(directory.isDirectory(), "!directory.isDirectory");
+
+        File[] files = directory.listFiles();
+        Preconditions.checkNotNull(files);
+        for (File file : files) {
+            deleteIfExists(file);
+        }
+    }
+
+    /**
+     * Joins a list of path segments to a given File object.
+     *
+     * @param dir the file object.
+     * @param paths the segments.
+     * @return a new File object.
+     */
+    @NotNull
+    public static File join(@NotNull File dir, @NotNull String... paths) {
+        if (paths.length == 0) {
+            return dir;
+        }
+
+        return new File(dir, PATH_JOINER.join(paths));
+    }
+
+    /**
+     * Joins a list of path segments to a given File object.
+     *
+     * @param dir the file object.
+     * @param paths the segments.
+     * @return a new File object.
+     */
+    @NotNull
+    public static File join(@NotNull File dir, @NotNull Iterable<String> paths) {
+        return new File(dir, PATH_JOINER.join(removeEmpty(paths)));
+    }
+
+    /**
+     * Joins a set of segment into a string, separating each segments with a host-specific
+     * path separator.
+     *
+     * @param paths the segments.
+     * @return a string with the segments.
+     */
+    @NotNull
+    public static String join(@NotNull String... paths) {
+        return PATH_JOINER.join(removeEmpty(Lists.newArrayList(paths)));
+    }
+
+    /**
+     * Joins a set of segment into a string, separating each segments with a host-specific
+     * path separator.
+     *
+     * @param paths the segments.
+     * @return a string with the segments.
+     */
+    @NotNull
+    public static String join(@NotNull Iterable<String> paths) {
+        return PATH_JOINER.join(paths);
+    }
+
+    private static Iterable<String> removeEmpty(Iterable<String> input) {
+        return Lists.newArrayList(input)
+                .stream()
+                .filter(it -> !it.isEmpty())
+                .collect(Collectors.toList());
     }
 
     public static class TailReadingException extends RuntimeException {
