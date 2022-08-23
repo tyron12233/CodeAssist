@@ -26,6 +26,11 @@ public interface ILogger {
         public void error(DiagnosticWrapper wrapper) {
             System.out.println("[ERROR] " + wrapper.toString());
         }
+
+        @Override
+        public void quiet(String s) {
+
+        }
     };
 
     ILogger EMPTY = new ILogger() {
@@ -46,6 +51,11 @@ public interface ILogger {
 
         @Override
         public void error(DiagnosticWrapper wrapper) {
+
+        }
+
+        @Override
+        public void quiet(String s) {
 
         }
     };
@@ -70,6 +80,11 @@ public interface ILogger {
             @Override
             public void error(DiagnosticWrapper wrapper) {
                 logViewModel.e(LogViewModel.BUILD_LOG, wrapper);
+            }
+
+            @Override
+            public void quiet(String s) {
+
             }
         };
     }
@@ -133,4 +148,8 @@ public interface ILogger {
         wrapper.setMessage(message);
         return wrapper;
     }
+
+    default void quiet(String message) {
+        debug(message);
+    };
 }
