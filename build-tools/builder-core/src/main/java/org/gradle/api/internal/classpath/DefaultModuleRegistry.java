@@ -125,7 +125,9 @@ public class DefaultModuleRegistry implements ModuleRegistry, GlobalCache {
             return module;
         }
         if (gradleInstallation == null) {
-            throw new UnknownModuleException(String.format("Cannot locate manifest for module '%s' in classpath: %s.", moduleName, classpath));
+            // CodeAssist changed: return module
+//            throw new UnknownModuleException(String.format("Cannot locate manifest for module '%s' in classpath: %s.", moduleName, classpath));
+            return new DefaultModule(moduleName, Collections.emptySet(), Collections.emptySet());
         }
         throw new UnknownModuleException(String.format("Cannot locate JAR for module '%s' in distribution directory '%s'.", moduleName, gradleInstallation.getGradleHome()));
     }

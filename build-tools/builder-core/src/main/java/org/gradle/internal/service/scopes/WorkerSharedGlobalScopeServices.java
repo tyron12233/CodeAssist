@@ -7,6 +7,7 @@ import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.FileFactory;
 import org.gradle.api.internal.file.FilePropertyFactory;
 import org.gradle.api.internal.file.FileResolver;
+import org.gradle.api.internal.file.collections.ManagedFactories;
 import org.gradle.api.internal.model.NamedObjectInstantiator;
 import org.gradle.api.internal.provider.DefaultPropertyFactory;
 import org.gradle.api.internal.provider.PropertyFactory;
@@ -83,10 +84,10 @@ public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
         return new DefaultPropertyFactory(propertyHost);
     }
 
-    ManagedFactoryRegistry createManagedFactoryRegistry(InstantiatorFactory instantiatorFactory, PropertyFactory propertyFactory, FileCollectionFactory fileCollectionFactory, FileFactory fileFactory, FilePropertyFactory filePropertyFactory) {
+    ManagedFactoryRegistry createManagedFactoryRegistry(NamedObjectInstantiator namedObjectInstantiator, InstantiatorFactory instantiatorFactory, PropertyFactory propertyFactory, FileCollectionFactory fileCollectionFactory, FileFactory fileFactory, FilePropertyFactory filePropertyFactory) {
         return new DefaultManagedFactoryRegistry().withFactories(
                 instantiatorFactory.getManagedFactory(),
-//                new ConfigurableFileCollectionManagedFactory(fileCollectionFactory),
+                new ManagedFactories.ConfigurableFileCollectionManagedFactory(fileCollectionFactory),
                 new org.gradle.api.internal.file.ManagedFactories.RegularFileManagedFactory(fileFactory),
                 new org.gradle.api.internal.file.ManagedFactories.RegularFilePropertyManagedFactory(filePropertyFactory),
                 new org.gradle.api.internal.file.ManagedFactories.DirectoryManagedFactory(fileFactory),
@@ -95,7 +96,8 @@ public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
                 new ListPropertyManagedFactory(propertyFactory),
                 new MapPropertyManagedFactory(propertyFactory),
                 new PropertyManagedFactory(propertyFactory),
-                new ProviderManagedFactory()
+                new ProviderManagedFactory(),
+                namedObjectInstantiator
         );
     }
 }

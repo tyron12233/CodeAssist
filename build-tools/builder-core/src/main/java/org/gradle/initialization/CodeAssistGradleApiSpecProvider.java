@@ -28,6 +28,7 @@ public class CodeAssistGradleApiSpecProvider extends GradleApiSpecProvider.SpecA
     @Override
     public Set<String> getExportedPackages() {
         return ImmutableSet.of(
+                "com.tyron.builder.plugin",
                 "org.gradle",
                 "org.apache.tools.ant",
                 "groovy",

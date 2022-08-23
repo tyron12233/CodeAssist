@@ -57,6 +57,7 @@ import org.gradle.internal.fingerprint.classpath.impl.DefaultCompileClasspathFin
 import org.gradle.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
 import org.gradle.internal.fingerprint.impl.AbsolutePathFileCollectionFingerprinter;
 import org.gradle.internal.fingerprint.impl.DefaultInputFingerprinter;
+import org.gradle.internal.fingerprint.impl.FileCollectionFingerprinterRegistrations;
 import org.gradle.internal.fingerprint.impl.RelativePathFileCollectionFingerprinter;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
@@ -69,6 +70,7 @@ import org.gradle.internal.snapshot.ValueSnapshotter;
 import org.gradle.internal.work.AsyncWorkTracker;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 public class ProjectExecutionServices extends DefaultServiceRegistry {
@@ -99,150 +101,28 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
         return LineEndingNormalizingFileSystemLocationSnapshotHasher.DEFAULT;
     }
 
+    FileCollectionFingerprinterRegistrations createFileCollectionFingerprinterRegistrations(
+            StringInterner stringInterner,
+            FileCollectionSnapshotter fileCollectionSnapshotter,
+            ResourceSnapshotterCacheService resourceSnapshotterCacheService
+//            InputNormalizationHandlerInternal inputNormalizationHandler
+    ) {
+        return new FileCollectionFingerprinterRegistrations(
+                stringInterner,
+                fileCollectionSnapshotter,
+                resourceSnapshotterCacheService,
+//                inputNormalizationHandler.getRuntimeClasspath().getClasspathResourceFilter(),
+//                inputNormalizationHandler.getRuntimeClasspath().getManifestAttributeResourceEntryFilter(),
+//                inputNormalizationHandler.getRuntimeClasspath().getPropertiesFileFilters()
+                ResourceFilter.FILTER_NOTHING,
+                ResourceEntryFilter.FILTER_NOTHING,
+                new HashMap<>()
+        );
+    }
+
     FileCollectionFingerprinterRegistry createFileCollectionFingerprinterRegistry(
-            List<FingerprinterRegistration> registrations,
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            FileSystemLocationSnapshotHasher fileSystemLocationSnapshotHasher
-    ){
-        return new DefaultFileCollectionFingerprinterRegistry(registrations);
-    }
-
-    FingerprinterRegistration createAbsolutePathDefaultFingerprinter(
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            FileSystemLocationSnapshotHasher fileSystemLocationSnapshotHasher
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.DEFAULT,
-                LineEndingSensitivity.DEFAULT,
-                new AbsolutePathFileCollectionFingerprinter(
-                        DirectorySensitivity.DEFAULT,
-                        fileCollectionSnapshotter,
-                        fileSystemLocationSnapshotHasher
-                )
-        );
-    }
-
-    FingerprinterRegistration createAbsolutePathIgnoreDirectoryFingerprinter(
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            FileSystemLocationSnapshotHasher fileSystemLocationSnapshotHasher
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.IGNORE_DIRECTORIES,
-                LineEndingSensitivity.DEFAULT,
-                new AbsolutePathFileCollectionFingerprinter(
-                        DirectorySensitivity.IGNORE_DIRECTORIES,
-                        fileCollectionSnapshotter,
-                        fileSystemLocationSnapshotHasher
-                )
-        );
-    }
-
-    FingerprinterRegistration createIgnoreDirectoryNormalizeLineEndingsRelativePathInputFingerprinter(
-            FileSystemLocationSnapshotHasher hasher,
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            StringInterner interner
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.IGNORE_DIRECTORIES,
-                LineEndingSensitivity.NORMALIZE_LINE_ENDINGS,
-                new RelativePathFileCollectionFingerprinter(
-                        interner,
-                        DirectorySensitivity.IGNORE_DIRECTORIES,
-                        fileCollectionSnapshotter,
-                        hasher
-                )
-        );
-    }
-
-    FingerprinterRegistration createIgnoreDirectoryDefaultLineEndingsRelativePathInputFingerprinter(
-            FileSystemLocationSnapshotHasher hasher,
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            StringInterner interner
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.IGNORE_DIRECTORIES,
-                LineEndingSensitivity.DEFAULT,
-                new RelativePathFileCollectionFingerprinter(
-                        interner,
-                        DirectorySensitivity.IGNORE_DIRECTORIES,
-                        fileCollectionSnapshotter,
-                        hasher
-                )
-        );
-    }
-
-    FingerprinterRegistration createCompileClassPathFingerprinter(
-            ResourceSnapshotterCacheService resourceSnapshotterCacheService,
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            StringInterner interner
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.DEFAULT,
-                LineEndingSensitivity.DEFAULT,
-                new DefaultCompileClasspathFingerprinter(
-                        resourceSnapshotterCacheService,
-                        fileCollectionSnapshotter,
-                        interner
-                )
-        );
-    }
-
-    FingerprinterRegistration createClassPathNormalizerIgnoreDirectoriesInputFingerprinter(
-            ResourceSnapshotterCacheService resourceSnapshotterCacheService,
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            StringInterner interner
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.IGNORE_DIRECTORIES,
-                LineEndingSensitivity.DEFAULT,
-                new DefaultClasspathFingerprinter(
-                        resourceSnapshotterCacheService,
-                        fileCollectionSnapshotter,
-                        ResourceFilter.FILTER_NOTHING,
-                        ResourceEntryFilter.FILTER_NOTHING,
-                        Collections.emptyMap(),
-                        interner,
-                        LineEndingSensitivity.DEFAULT
-                )
-        );
-    }
-
-
-    FingerprinterRegistration createClassPathNormalizerInputFingerprinter(
-            ResourceSnapshotterCacheService resourceSnapshotterCacheService,
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            StringInterner interner
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.DEFAULT,
-                LineEndingSensitivity.DEFAULT,
-                new DefaultClasspathFingerprinter(
-                        resourceSnapshotterCacheService,
-                        fileCollectionSnapshotter,
-                        ResourceFilter.FILTER_NOTHING,
-                        ResourceEntryFilter.FILTER_NOTHING,
-                        Collections.emptyMap(),
-                        interner,
-                        LineEndingSensitivity.DEFAULT
-                )
-        );
-    }
-
-    FingerprinterRegistration createRelativePathDefaultDefaultFingerprinter(
-            FileSystemLocationSnapshotHasher hasher,
-            FileCollectionSnapshotter fileCollectionSnapshotter,
-            StringInterner interner
-    ) {
-        return FingerprinterRegistration.registration(
-                DirectorySensitivity.DEFAULT,
-                LineEndingSensitivity.DEFAULT,
-                new RelativePathFileCollectionFingerprinter(
-                        interner,
-                        DirectorySensitivity.DEFAULT,
-                        fileCollectionSnapshotter,
-                        hasher
-                )
-        );
+            FileCollectionFingerprinterRegistrations fileCollectionFingerprinterRegistrations) {
+        return new DefaultFileCollectionFingerprinterRegistry(fileCollectionFingerprinterRegistrations.getRegistrants());
     }
 
     InputFingerprinter createInputFingerprinter(

@@ -24,6 +24,8 @@ import org.gradle.internal.execution.fingerprint.FileCollectionSnapshotter;
 import org.gradle.internal.execution.fingerprint.impl.FingerprinterRegistration;
 import org.gradle.internal.fingerprint.DirectorySensitivity;
 import org.gradle.internal.fingerprint.LineEndingSensitivity;
+import org.gradle.internal.fingerprint.classpath.impl.DefaultClasspathFingerprinter;
+import org.gradle.internal.fingerprint.classpath.impl.DefaultCompileClasspathFingerprinter;
 import org.gradle.internal.fingerprint.hashing.FileSystemLocationSnapshotHasher;
 import org.gradle.api.internal.cache.StringInterner;
 
@@ -84,8 +86,8 @@ public class FileCollectionFingerprinterRegistrations {
             FileSystemLocationSnapshotHasher normalizedContentHasher
     ) {
         return Lists.newArrayList(
-//                new AbsolutePathFileCollectionFingerprinter(directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher),
-//                new RelativePathFileCollectionFingerprinter(stringInterner, directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher),
+                new AbsolutePathFileCollectionFingerprinter(directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher),
+                new RelativePathFileCollectionFingerprinter(stringInterner, directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher)
 //                new NameOnlyFileCollectionFingerprinter(directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher)
         );
     }
@@ -104,16 +106,16 @@ public class FileCollectionFingerprinterRegistrations {
             StringInterner stringInterner
     ) {
         return Lists.newArrayList(
-//                new IgnoredPathFileCollectionFingerprinter(fileCollectionSnapshotter, normalizedContentHasher),
-//                new DefaultClasspathFingerprinter(
-//                        resourceSnapshotterCacheService,
-//                        fileCollectionSnapshotter,
-//                        resourceFilter,
-//                        metaInfFilter,
-//                        propertiesFileFilters,
-//                        stringInterner,
-//                        lineEndingSensitivity
-//                )
+                new IgnoredPathFileCollectionFingerprinter(fileCollectionSnapshotter, normalizedContentHasher),
+                new DefaultClasspathFingerprinter(
+                        resourceSnapshotterCacheService,
+                        fileCollectionSnapshotter,
+                        resourceFilter,
+                        metaInfFilter,
+                        propertiesFileFilters,
+                        stringInterner,
+                        lineEndingSensitivity
+                )
         );
     }
 
@@ -122,7 +124,7 @@ public class FileCollectionFingerprinterRegistrations {
      */
     private static List<? extends FileCollectionFingerprinter> insensitiveFingerprinters(ResourceSnapshotterCacheService resourceSnapshotterCacheService, FileCollectionSnapshotter fileCollectionSnapshotter, StringInterner stringInterner) {
         return Lists.newArrayList(
-//                new DefaultCompileClasspathFingerprinter(resourceSnapshotterCacheService, fileCollectionSnapshotter, stringInterner)
+                new DefaultCompileClasspathFingerprinter(resourceSnapshotterCacheService, fileCollectionSnapshotter, stringInterner)
         );
     }
 
