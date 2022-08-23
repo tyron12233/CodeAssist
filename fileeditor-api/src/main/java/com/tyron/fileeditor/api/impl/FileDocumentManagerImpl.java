@@ -1,28 +1,21 @@
 package com.tyron.fileeditor.api.impl;
 
-import com.google.common.collect.Sets;
 import com.tyron.common.util.ThreadUtil;
 import com.tyron.editor.Content;
 import com.tyron.editor.event.ContentEvent;
 import com.tyron.editor.event.ContentListener;
 import com.tyron.editor.event.PrioritizedContentListener;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.vfs2.FileContent;
 import org.apache.commons.vfs2.FileObject;
-import org.apache.commons.vfs2.FileSystemException;
-import org.apache.commons.vfs2.provider.DefaultFileContent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,7 +29,7 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FileDocumentManagerImpl.class);
 
-    private final Set<Content> unsavedContents = Sets.newConcurrentHashSet();
+    private final Set<Content> unsavedContents = new HashSet<>();
 
     private final PrioritizedContentListener physicalContentTracker = new PrioritizedContentListener() {
         @Override
@@ -46,7 +39,11 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
 
         @Override
         public void contentChanged(@NotNull ContentEvent e) {
-            unsavedContents.add(e.getContent());
+            Set<Content> contents = new HashSet<>(unsavedContents);
+            contents.add(e.getContent());
+
+            unsavedContents.clear();
+            unsavedContents.addAll(contents);
         }
     };
 
@@ -80,7 +77,7 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
         if (LOGGER.isTraceEnabled()) {
             LOGGER.trace("saving: " + file);
         }
-        if (file == null) {
+        if (file == null || !file.exists()) {
             return;
         }
 
@@ -93,7 +90,10 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
         }
         LOGGER.trace(" done");
         
-        unsavedContents.remove(content);
+        Set<Content> set = new HashSet<>(unsavedContents);
+        set.remove(content);
+        unsavedContents.clear();
+        unsavedContents.addAll(set);
     }
 
     @Override
