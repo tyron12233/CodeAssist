@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.tyron.builder.model.Library;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.StringSearch;
@@ -32,7 +32,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     // Map of fully qualified names and the jar they are contained in
     private final Map<String, File> mClassFiles;
     private final Map<String, File> mJavaFiles;
-    private final Map<String, Library> mLibraryHashMap;
+    private final Map<String, CodeAssistLibrary> mLibraryHashMap;
     private final Map<String, File> mInjectedClassesMap;
     private final Set<File> mLibraries;
 
@@ -83,13 +83,13 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void putLibraryHashes(Map<String, Library> hashes) {
+    public void putLibraryHashes(Map<String, CodeAssistLibrary> hashes) {
         mLibraryHashMap.putAll(hashes);
     }
 
     @Nullable
     @Override
-    public Library getLibrary(String hash) {
+    public CodeAssistLibrary getLibrary(String hash) {
         return mLibraryHashMap.get(hash);
     }
 

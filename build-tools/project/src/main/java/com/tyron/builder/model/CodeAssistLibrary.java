@@ -8,7 +8,7 @@ import com.google.gson.annotations.SerializedName;
 import java.io.File;
 import java.util.Objects;
 
-public class Library {
+public class CodeAssistLibrary {
 
     @SerializedName("sourceFile")
     private String sourceFile;
@@ -37,8 +37,8 @@ public class Library {
 
     @Override
     public boolean equals(@Nullable Object obj) {
-        if (obj instanceof Library) {
-            Library that = ((Library) obj);
+        if (obj instanceof CodeAssistLibrary) {
+            CodeAssistLibrary that = ((CodeAssistLibrary) obj);
             return this.sourceFile.equals(that.sourceFile);
         }
         return false;
