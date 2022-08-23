@@ -8,7 +8,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Library;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
@@ -38,7 +38,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
 public class DependencyManager {
@@ -142,23 +141,23 @@ public class DependencyManager {
         List<Pom> resolvedPoms = mResolver.resolveDependencies(declaredDependencies);
 
         listener.onTaskStarted("Downloading dependencies");
-        List<Library> files = getFiles(resolvedPoms, logger);
+        List<CodeAssistLibrary> files = getFiles(resolvedPoms, logger);
 
         listener.onTaskStarted("Checking dependencies");
         checkLibraries(project, logger, files);
     }
 
-    private void checkLibraries(JavaModule project, ILogger logger, List<Library> newLibraries) throws IOException {
-        Set<Library> libraries = new HashSet<>(newLibraries);
+    private void checkLibraries(JavaModule project, ILogger logger, List<CodeAssistLibrary> newLibraries) throws IOException {
+        Set<CodeAssistLibrary> libraries = new HashSet<>(newLibraries);
 
-        Map<String, Library> fileLibsHashes = new HashMap<>();
+        Map<String, CodeAssistLibrary> fileLibsHashes = new HashMap<>();
         File[] fileLibraries = project.getLibraryDirectory().listFiles(c ->
                 c.getName().endsWith(".aar") || c.getName().endsWith(".jar"));
         if (fileLibraries != null) {
             for (File fileLibrary : fileLibraries) {
                 try {
                     ZipFile zipFile = new ZipFile(fileLibrary);
-                    Library library = new Library();
+                    CodeAssistLibrary library = new CodeAssistLibrary();
                     library.setSourceFile(fileLibrary);
                     fileLibsHashes.put(AndroidUtilities.calculateMD5(fileLibrary), library);
                 } catch (IOException e) {
@@ -172,10 +171,10 @@ public class DependencyManager {
 
         String librariesString = project.getSettings().getString("libraries", "[]");
         try {
-            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>() {
+            List<CodeAssistLibrary> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<CodeAssistLibrary>>() {
             }.getType());
             if (parsedLibraries != null) {
-                for (Library parsedLibrary : parsedLibraries) {
+                for (CodeAssistLibrary parsedLibrary : parsedLibraries) {
                     if (!libraries.contains(parsedLibrary)) {
                         Log.d("LibraryCheck", "Removed library" + parsedLibrary);
                     } else {
@@ -187,7 +186,7 @@ public class DependencyManager {
 
         }
 
-        Map<String, Library> md5Map = new HashMap<>();
+        Map<String, CodeAssistLibrary> md5Map = new HashMap<>();
         libraries.forEach(it ->
                 md5Map.put(AndroidUtilities.calculateMD5(it.getSourceFile()), it));
         File buildLibs = new File(project.getBuildDirectory(), "libs");
@@ -205,8 +204,8 @@ public class DependencyManager {
         saveLibraryToProject(project, md5Map, fileLibsHashes);
     }
 
-    private void saveLibraryToProject(Module module, Map<String, Library> libraries, Map<String, Library> fileLibraries) throws IOException {
-        Map<String, Library> combined = new HashMap<>();
+    private void saveLibraryToProject(Module module, Map<String, CodeAssistLibrary> libraries, Map<String, CodeAssistLibrary> fileLibraries) throws IOException {
+        Map<String, CodeAssistLibrary> combined = new HashMap<>();
         combined.putAll(libraries);
         combined.putAll(fileLibraries);
 
@@ -214,9 +213,9 @@ public class DependencyManager {
             ((JavaModule) module).putLibraryHashes(combined);
         }
 
-        for (Map.Entry<String, Library> entry : combined.entrySet()) {
+        for (Map.Entry<String, CodeAssistLibrary> entry : combined.entrySet()) {
             String hash = entry.getKey();
-            Library library = entry.getValue();
+            CodeAssistLibrary library = entry.getValue();
 
             File libraryDir = new File(module.getBuildDirectory(), "libs/" + hash);
             if (!libraryDir.exists()) {
@@ -242,14 +241,14 @@ public class DependencyManager {
                 .apply();
     }
 
-    public List<Library> getFiles(List<Pom> resolvedPoms,
-                                  ILogger logger) {
-        List<Library> files = new ArrayList<>();
+    public List<CodeAssistLibrary> getFiles(List<Pom> resolvedPoms,
+                                            ILogger logger) {
+        List<CodeAssistLibrary> files = new ArrayList<>();
         for (Pom resolvedPom : resolvedPoms) {
             try {
                 File file = mRepository.getLibrary(resolvedPom);
                 if (file != null) {
-                    Library library = new Library();
+                    CodeAssistLibrary library = new CodeAssistLibrary();
                     library.setSourceFile(file);
                     library.setDeclaration(resolvedPom.getDeclarationString());
                     files.add(library);

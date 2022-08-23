@@ -6,11 +6,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.language.DiagnosticSpanMapUpdater;
 import com.tyron.code.language.HighlightUtil;
+import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
+
+import org.eclipse.tm4e.core.theme.IRawTheme;
 
 import java.io.InputStream;
 import java.io.Reader;
@@ -20,12 +22,12 @@ import java.util.function.Consumer;
 
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.analysis.StyleReceiver;
-import io.github.rosemoe.sora.lang.styling.CodeBlock;
+import io.github.rosemoe.sora.lang.brackets.BracketsProvider;
+import io.github.rosemoe.sora.lang.diagnostic.DiagnosticsContainer;
 import io.github.rosemoe.sora.lang.styling.Styles;
+import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
-import io.github.rosemoe.sora.textmate.core.grammar.StackElement;
-import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
 
 public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
 
@@ -36,12 +38,13 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
 
     private final Consumer<Styles> mStyleModifier;
 
-    public DiagnosticTextmateAnalyzer(Editor editor,
+    public DiagnosticTextmateAnalyzer(TextMateLanguage language,
+                                      Editor editor,
                                       String grammarName,
                                       InputStream grammarIns,
                                       Reader languageConfiguration,
                                       IRawTheme theme) throws Exception {
-        super(editor, grammarName, grammarIns, languageConfiguration, theme);
+        super(language, editor, grammarName, grammarIns, languageConfiguration, theme);
         mEditor = editor;
         mStyleModifier = this::modifyStyles;
     }
@@ -81,11 +84,11 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         }
 
         if (start.getLine() != end.getLine()) {
-            DiagnosticSpanMapUpdater
-                    .shiftDiagnosticsOnMultiLineInsert(mDiagnostics, ref, start, end);
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineInsert(mDiagnostics, ref, start,
+                    end);
         } else {
-            DiagnosticSpanMapUpdater
-                    .shiftDiagnosticsOnSingleLineInsert(mDiagnostics, ref, start, end);
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineInsert(mDiagnostics, ref, start,
+                    end);
         }
     }
 
@@ -102,11 +105,11 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         }
 
         if (start.getLine() != end.getLine()) {
-            DiagnosticSpanMapUpdater
-                    .shiftDiagnosticsOnMultiLineDelete(mDiagnostics, ref, start, end);
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnMultiLineDelete(mDiagnostics, ref, start,
+                    end);
         } else {
-            DiagnosticSpanMapUpdater
-                    .shiftDiagnosticsOnSingleLineDelete(mDiagnostics, ref, start, end);
+            DiagnosticSpanMapUpdater.shiftDiagnosticsOnSingleLineDelete(mDiagnostics, ref, start,
+                    end);
         }
     }
 
@@ -154,7 +157,8 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         private final StyleReceiver mReceiver;
         private final Consumer<Styles> mConsumer;
 
-        public StyleReceiverInterceptor(@NonNull StyleReceiver base, @NonNull Consumer<Styles> consumer) {
+        public StyleReceiverInterceptor(@NonNull StyleReceiver base,
+                                        @NonNull Consumer<Styles> consumer) {
             mReceiver = base;
             mConsumer = consumer;
         }
@@ -163,6 +167,18 @@ public abstract class DiagnosticTextmateAnalyzer extends BaseTextmateAnalyzer {
         public void setStyles(AnalyzeManager sourceManager, Styles styles) {
             mConsumer.accept(styles);
             mReceiver.setStyles(sourceManager, styles);
+        }
+
+        @Override
+        public void setDiagnostics(@NonNull AnalyzeManager sourceManager,
+                                   @Nullable DiagnosticsContainer diagnostics) {
+
+        }
+
+        @Override
+        public void updateBracketProvider(@NonNull AnalyzeManager sourceManager,
+                                          @Nullable BracketsProvider provider) {
+
         }
     }
 }

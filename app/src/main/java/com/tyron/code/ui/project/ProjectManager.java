@@ -5,6 +5,12 @@ import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.code.Symtab;
+import com.sun.tools.javac.file.BaseFileManager;
+import com.sun.tools.javac.file.PathFileObject;
+import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.Names;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
 import com.tyron.builder.compiler.manifest.ManifestMergeTask;
@@ -23,6 +29,9 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.compiler.CompilerContainer;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.parse.CompilationInfo;
+import com.tyron.completion.java.parse.CompilationInfoImpl;
+import com.tyron.completion.java.parse.JavacParser;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.XmlIndexProvider;
@@ -31,6 +40,7 @@ import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 
 import java.io.File;
 import java.io.IOException;
@@ -38,9 +48,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.logging.Logger;
+
+import javax.tools.JavaFileManager;
 
 import kotlin.collections.CollectionsKt;
 
@@ -120,6 +135,34 @@ public class ProjectManager {
             mCurrentProject.index();
         } catch (IOException exception) {
             logger.warning("Failed to open project: " + exception.getMessage());
+        }
+
+
+        CompilationInfo compilationInfo = new CompilationInfo(
+                new CompilationInfoImpl(new JavacParser(), null,
+                        null, null, null));
+        logger.info("Compilation info created");
+        project.getMainModule().putUserData(CompilationInfo.COMPILATION_INFO_KEY, compilationInfo);
+
+        if (mCurrentProject.getMainModule() instanceof JavaModule) {
+            JavaModule javaModule = (JavaModule) mCurrentProject.getMainModule();
+
+            JavacTaskImpl javacTask = compilationInfo.impl.getJavacTask();
+            Context context = javacTask.getContext();
+            Symtab symtab = Symtab.instance(context);
+            Names names = Names.instance(context);
+            BaseFileManager fileManager = (BaseFileManager) context.get(JavaFileManager.class);
+            for (File library : javaModule.getLibraries()) {
+                try (JarFile libraryJar = new JarFile(library)) {
+                    Enumeration<JarEntry> entries = libraryJar.entries();
+                    while (entries.hasMoreElements()) {
+                        JarEntry entry = entries.nextElement();
+
+                        String name = entry.getName();
+                    }
+                } catch (IOException ignored) {
+                }
+            }
         }
 
 //        Module module = mCurrentProject.getMainModule();

@@ -6,6 +6,10 @@ import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
 
+import org.eclipse.tm4e.core.theme.FontStyle;
+import org.eclipse.tm4e.core.theme.IRawTheme;
+import org.eclipse.tm4e.core.theme.ThemeTrieElementRule;
+
 import java.io.InputStream;
 import java.io.Reader;
 import java.util.ArrayList;
@@ -16,21 +20,19 @@ import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.Spans;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.lang.styling.TextStyle;
-import io.github.rosemoe.sora.textmate.core.grammar.StackElement;
-import io.github.rosemoe.sora.textmate.core.theme.FontStyle;
-import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
-import io.github.rosemoe.sora.textmate.core.theme.ThemeTrieElementRule;
+import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 
 public abstract class SemanticAnalyzeManager extends DiagnosticTextmateAnalyzer {
 
     private List<SemanticToken> mSemanticTokens;
 
-    public SemanticAnalyzeManager(Editor editor,
+    public SemanticAnalyzeManager(TextMateLanguage language,
+                                  Editor editor,
                                   String grammarName,
                                   InputStream grammarIns,
                                   Reader languageConfiguration,
                                   IRawTheme theme) throws Exception {
-        super(editor, grammarName, grammarIns, languageConfiguration, theme);
+        super(language, editor, grammarName, grammarIns, languageConfiguration, theme);
     }
 
     public abstract List<SemanticToken> analyzeSpansAsync(CharSequence contents);
@@ -72,7 +74,7 @@ public abstract class SemanticAnalyzeManager extends DiagnosticTextmateAnalyzer 
             int foreground = next.foreground;
             int fontStyle = next.fontStyle;
             return TextStyle.makeStyle(foreground + 255, 0,
-                                       (fontStyle & FontStyle.Bold) == FontStyle.Bold,
+                    (fontStyle & FontStyle.Bold) == FontStyle.Bold,
                                        (fontStyle & FontStyle.Italic) == FontStyle.Italic,
                                        false);
         }

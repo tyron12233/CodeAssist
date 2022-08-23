@@ -1,5 +1,10 @@
 package com.tyron.code.language.textmate;
 
+import org.eclipse.tm4e.core.internal.oniguruma.OnigRegExp;
+import org.eclipse.tm4e.core.internal.oniguruma.OnigResult;
+import org.eclipse.tm4e.core.internal.oniguruma.OnigString;
+import org.eclipse.tm4e.languageconfiguration.internal.supports.Folding;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,17 +14,13 @@ import io.github.rosemoe.sora.langs.textmate.folding.IndentRange;
 import io.github.rosemoe.sora.langs.textmate.folding.PreviousRegion;
 import io.github.rosemoe.sora.langs.textmate.folding.RangesCollector;
 import io.github.rosemoe.sora.text.Content;
-import io.github.rosemoe.sora.textmate.core.internal.oniguruma.OnigRegExp;
-import io.github.rosemoe.sora.textmate.core.internal.oniguruma.OnigResult;
-import io.github.rosemoe.sora.textmate.core.internal.oniguruma.OnigString;
-import io.github.rosemoe.sora.textmate.languageconfiguration.internal.supports.Folding;
 
 public class CodeBlockUtils {
 
     @SuppressWarnings("rawtype")
     public static FoldingRegions computeRanges(Content model, int tabSize , boolean offSide, Folding markers, int foldingRangesLimit, BaseIncrementalAnalyzeManager.CodeBlockAnalyzeDelegate delegate) throws Exception {
 
-        RangesCollector result = new RangesCollector(foldingRangesLimit, tabSize);
+        RangesCollector result = new RangesCollector();
 
         OnigRegExp pattern = null;
         if (markers != null) {

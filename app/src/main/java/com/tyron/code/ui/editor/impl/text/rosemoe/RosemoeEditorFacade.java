@@ -8,16 +8,20 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.widget.ForwardingListener;
 import androidx.core.content.res.ResourcesCompat;
 
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.tree.JCTree;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
-import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.code.language.LanguageManager;
@@ -28,22 +32,42 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.CoordinatePopupMenu;
 import com.tyron.code.util.PopupMenuHelper;
 import com.tyron.common.util.AndroidUtilities;
-import com.tyron.completion.java.util.DiagnosticUtil;
+import com.tyron.common.util.DebouncerStore;
+import com.tyron.completion.java.action.FindCurrentPath;
+import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.editor.Content;
+import com.tyron.editor.event.ContentEvent;
+import com.tyron.editor.event.ContentListener;
 import com.tyron.fileeditor.api.FileEditor;
+import com.tyron.language.xml.XmlLanguage;
+import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.vfs2.FileObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+
+import javax.lang.model.element.Element;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
 
 import io.github.rosemoe.sora.event.ClickEvent;
+import io.github.rosemoe.sora.event.EditorKeyEvent;
 import io.github.rosemoe.sora.event.LongPressEvent;
+import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.lang.diagnostic.DiagnosticsContainer;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class RosemoeEditorFacade {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RosemoeEditorFacade.class);
 
     private final FileEditor fileEditor;
     private final Content content;
@@ -64,6 +88,59 @@ public class RosemoeEditorFacade {
         editor = new CodeEditorView(context);
         configureEditor(editor, file);
         container.addView(editor);
+
+        content.addContentListener(new ContentListener() {
+            @Override
+            public void contentChanged(@NonNull ContentEvent event) {
+                ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                    DebouncerStore.DEFAULT.registerOrGetDebouncer("contentChange").debounce(300, () -> {
+                        try {
+                            onContentChange(event.getContent());
+                        } catch (Throwable t) {
+                            LOGGER.error("Error in onContentChange", t);
+                        }
+                    });
+                });
+            }
+        });
+    }
+
+    /**
+     * Background updates
+     *
+     * @param content the current content when the update is called
+     */
+    private void onContentChange(Content content) throws IOException {
+        Language language = editor.getEditorLanguage();
+        Project project = editor.getProject();
+
+        if (project == null) {
+            return;
+        }
+
+        // TODO: Move implementation to each language
+        if (language instanceof LanguageXML) {
+            InjectResourcesTask.inject(project);
+            InjectViewBindingTask.inject(project);
+        } else if (language instanceof JavaLanguage) {
+
+            CompilationInfo compilationInfo = project.getMainModule().getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+            if (compilationInfo == null) {
+                return;
+            }
+            JavaFileObject fileObject = new SimpleJavaFileObject(editor.getCurrentFile().toURI(),
+                    JavaFileObject.Kind.SOURCE) {
+                @Override
+                public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                    return content;
+                }
+            };
+            try {
+                compilationInfo.update(fileObject);
+            } catch (Throwable t) {
+                LOGGER.error("Failed to update compilation unit", t);
+            }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -80,14 +157,16 @@ public class RosemoeEditorFacade {
         bundle.putBoolean("loaded", true);
         bundle.putBoolean("bg", true);
         editor.setText(content, bundle);
-        editor.setTypefaceText(ResourcesCompat.getFont(editor.getContext(), R.font.jetbrains_mono_regular));
+        editor.setDiagnostics(new DiagnosticsContainer());
+        editor.setTypefaceText(
+                ResourcesCompat.getFont(editor.getContext(), R.font.jetbrains_mono_regular));
 
         editor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
         editor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        editor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                            | EditorInfo.TYPE_CLASS_TEXT
-                            | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE
-                            | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        editor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
+                            EditorInfo.TYPE_CLASS_TEXT |
+                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
+                            EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
 
         editor.setOnTouchListener((v, motionEvent) -> {
             if (dragToOpenListener instanceof ForwardingListener) {
@@ -163,6 +242,7 @@ public class RosemoeEditorFacade {
 
     /**
      * Create the data context specific to this fragment for use with the actions API.
+     *
      * @return the data context.
      */
     private DataContext createDataContext() {
@@ -178,17 +258,6 @@ public class RosemoeEditorFacade {
             JavaDataContextUtil.addEditorKeys(dataContext, currentProject, editor.getCurrentFile(),
                     editor.getCursor().getLeft());
         }
-
-        DiagnosticWrapper diagnosticWrapper = DiagnosticUtil
-                .getDiagnosticWrapper(editor.getDiagnostics(),
-                        editor.getCursor().getLeft(),
-                        editor.getCursor().getRight());
-        if (diagnosticWrapper == null && editor.getEditorLanguage() instanceof LanguageXML) {
-            diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(editor.getDiagnostics(),
-                    editor.getCursor()
-                            .getLeftLine());
-        }
-        dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
         return dataContext;
     }
 
