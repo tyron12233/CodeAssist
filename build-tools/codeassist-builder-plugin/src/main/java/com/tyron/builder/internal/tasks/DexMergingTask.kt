@@ -2,7 +2,6 @@ package com.tyron.builder.internal.tasks
 
 import com.google.common.annotations.VisibleForTesting
 import com.google.common.base.Throwables
-import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.dexing.*
 import com.tyron.builder.dexing.DexingType.*
 import com.tyron.builder.files.SerializableFileChanges
@@ -24,6 +23,10 @@ import org.gradle.api.Action
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ArtifactView
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.artifacts.component.ComponentIdentifier
+import org.gradle.api.artifacts.component.LibraryBinaryIdentifier
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.attributes.LibraryElements
@@ -39,7 +42,6 @@ import org.gradle.work.InputChanges
 import org.gradle.workers.WorkAction
 import org.gradle.workers.WorkParameters
 import org.gradle.workers.WorkerExecutor
-import org.jetbrains.kotlin.utils.addToStdlib.cast
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.ForkJoinPool
@@ -278,12 +280,13 @@ abstract class DexMergingTask : IncrementalTask() {
                                 }
                             val runtimeConfiguration = project.configurations.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)
                             val detachedConfiguration = project.configurations.detachedConfiguration()
-                            detachedConfiguration.dependencies.add(project.dependencies.create(runtimeConfiguration))
+                            val projectDependencies = runtimeConfiguration.allDependencies.filter{ it !is ProjectDependency}
+                            detachedConfiguration.dependencies.addAll(
+                                projectDependencies.map { project.dependencies.create(it) }
+                            )
                             detachedConfiguration.incoming
                                 .artifactView{config: ArtifactView.ViewConfiguration ->
                                     config.attributes(attributesAction)
-                                    config.componentFilter{ it !is ProjectComponentIdentifier }
-                                    config.lenient(true)
                                 }.artifacts
                                 .artifactFiles
                         } else {
@@ -304,24 +307,18 @@ abstract class DexMergingTask : IncrementalTask() {
                                     LibraryElements::class.java,
                                     LibraryElements.CLASSES
                                 )
-                            check(attributes.libraryElementsAttribute == null)
-                            val updatedAttributes = AndroidAttributes(
-                                attributes.stringAttributes, classesLibraryElements
-                            )
 
-                            val attributesAction =
-                                Action { container: AttributeContainer ->
-                                    container.attribute(AndroidArtifacts.ARTIFACT_TYPE, AndroidArtifacts.ArtifactType.DEX.type)
-                                    updatedAttributes.addAttributesToContainer(container)
-                                }
-
-                            val compileConfiguration = project.configurations.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)
+                            val runtimeConfiguration = project.configurations.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)
                             val detachedConfiguration = project.configurations.detachedConfiguration()
-                            detachedConfiguration.dependencies.add(project.dependencies.create(compileConfiguration))
+                            val projectDependencies = runtimeConfiguration.allDependencies.filterIsInstance<ProjectDependency>()
+                            detachedConfiguration.dependencies.addAll(
+                                projectDependencies.map { project.dependencies.create(it) }
+                            )
                             detachedConfiguration.incoming
                                 .artifactView{config: ArtifactView.ViewConfiguration ->
-                                    config.attributes(attributesAction)
-                                    config.componentFilter{ it is ProjectComponentIdentifier}
+                                    config.attributes
+                                        .attribute(AndroidArtifacts.ARTIFACT_TYPE, AndroidArtifacts.ArtifactType.DEX.type)
+                                        .attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, classesLibraryElements)
 
                                 }.artifacts
                                 .artifactFiles
@@ -341,16 +338,18 @@ abstract class DexMergingTask : IncrementalTask() {
                         // technically, the Provider<> may not be needed, but the code would
                         // then assume that EXTERNAL_LIBS_DEX has already been registered by a
                         // Producer. Better to execute as late as possible.
-                        return project.files(
+                        val p = project
+                        return project.objects.fileCollection().from(
                             forAction(MERGE_PROJECT),
                             forAction(MERGE_LIBRARY_PROJECTS),
-                            if (dexingType == LEGACY_MULTIDEX) {
-                                // we have to dex it
-                                forAction(MERGE_EXTERNAL_LIBS)
-                            } else {
-                                // we merge external dex in a separate task
-                                artifacts.getAll(InternalMultipleArtifactType.EXTERNAL_LIBS_DEX)
-                            }
+//                            if (dexingType == LEGACY_MULTIDEX) {
+//                                // we have to dex it
+//                                forAction(MERGE_EXTERNAL_LIBS)
+//                            } else {
+//                                // we merge external dex in a separate task
+//                                artifacts.getAll(InternalMultipleArtifactType.EXTERNAL_LIBS_DEX)
+//                            }
+                            forAction(MERGE_EXTERNAL_LIBS)
                         )
                     }
                     MERGE_TRANSFORMED_CLASSES -> {

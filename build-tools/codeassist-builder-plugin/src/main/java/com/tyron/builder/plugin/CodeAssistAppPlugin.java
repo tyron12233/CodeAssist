@@ -14,6 +14,7 @@ import com.tyron.builder.internal.publishing.AndroidArtifacts;
 import com.tyron.builder.internal.scope.InternalArtifactType;
 import com.tyron.builder.internal.scope.InternalMultipleArtifactType;
 import com.tyron.builder.internal.tasks.DexArchiveBuilderTask;
+import com.tyron.builder.internal.tasks.DexArchiveBuilderTaskKt;
 import com.tyron.builder.internal.tasks.DexMergingAction;
 import com.tyron.builder.internal.tasks.DexMergingTask;
 import com.tyron.builder.internal.tasks.DexingExternalLibArtifactTransform;
@@ -28,7 +29,9 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.DependencySet;
+import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.artifacts.transform.InputArtifact;
 import org.gradle.api.artifacts.transform.TransformAction;
 import org.gradle.api.artifacts.transform.TransformOutputs;
@@ -53,11 +56,11 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import kotlin.Pair;
 import kotlin.jvm.functions.Function1;
 
-@SuppressWarnings("Convert2Lambda")
 public class CodeAssistAppPlugin implements Plugin<Project> {
 
     private ApkCreationConfig apkCreationConfig;
@@ -197,90 +200,31 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
         configurator.configureGeneralTransforms(true);
 
         AppExtension codeAssist = project.getExtensions().create("codeAssist", AppExtension.class);
-        project.getTasks().register("assembleDebug", new Action<Task>() {
-            @Override
-            public void execute(@NotNull Task task) {
-                task.dependsOn("assemble");
-            }
+
+        createDexTasks();
+        createDexMergingTasks();
+
+        taskFactory.register("assembleDebug", it -> {
+            it.dependsOn("mergeExtDexDebug", "mergeLibDexDebug");
+        });
+        taskFactory.configure("mergeLibDexDebug", it -> {
+            it.dependsOn("mergeProjectDexDebug");
         });
 
-        project.getTasks().getByName("assemble").dependsOn("package");
-
-        project.getTasks().register("package", new Action<Task>() {
-            @Override
-            public void execute(@NotNull Task task) {
-                TaskContainer tasks = project.getTasks();
-                tasks.getByName("mergeLibDexDebug").dependsOn("mergeProjectDexDebug");
-                tasks.getByName("mergeProjectDexDebug").dependsOn("mergeExtDexDebug");
-                tasks.getByName("mergeExtDexDebug").dependsOn("compileDex");
-                task.dependsOn("mergeLibDexDebug");
-                task.getOutputs().upToDateWhen(Specs.satisfyNone());
-
-                task.doLast(new Action<Task>() {
-                    @Override
-                    public void execute(@NotNull Task task) {
-
-                    }
-                });
-            }
+        taskFactory.configure("mergeProjectDexDebug", it -> {
+            it.dependsOn("dexBuilderDebug");
+        });
+        taskFactory.configure("dexBuilderDebug", it -> {
+            it.dependsOn("compileJava");
         });
 
-        configureDexTasks(project);
-        createDexMergingTasks(project);
     }
 
-    private void configureDexTasks(Project project) {
-        TaskProvider<DexArchiveBuilderTask> provider = project.getTasks()
-                .register("compileDex", DexArchiveBuilderTask.class,
-                        new Action<DexArchiveBuilderTask>() {
-                            @Override
-                            public void execute(@NotNull DexArchiveBuilderTask task) {
-                                task.dependsOn(JavaPlugin.COMPILE_JAVA_TASK_NAME);
-
-                                task.getProjectClasses().setFrom(
-                                        project.getLayout().getBuildDirectory().dir("classes"));
-                                task.getProjectVariant().set("debug");
-
-                                task.getExternalLibClasses()
-                                        .from(getDexForExternalLibs(task, "jar"));
-                                task.getExternalLibClasses()
-                                        .from(getDexForExternalLibs(task, "dir"));
-
-                                task.getNumberOfBuckets().set(1);
-                                task.getDexParams().getDebuggable().set(true);
-                                task.getDexParams().getErrorFormatMode()
-                                        .set(SyncOptions.ErrorFormatMode.HUMAN_READABLE);
-                                task.getDexParams().getMinSdkVersion().set(21);
-                                task.getDexParams().getWithDesugaring().set(false);
-                            }
-                        });
-        ArtifactsImpl artifacts = (ArtifactsImpl) project.getExtensions().getByName("artifacts");
-        artifacts.setInitialProvider(provider, it -> it.getProjectOutputs().getDex())
-                .withName("out")
-                .withName("out")
-                .on(InternalArtifactType.PROJECT_DEX_ARCHIVE.INSTANCE);
-        artifacts.setInitialProvider(provider, it -> it.getSubProjectOutputs().getDex())
-                .withName("out")
-                .withName("out")
-                .on(InternalArtifactType.SUB_PROJECT_DEX_ARCHIVE.INSTANCE);
-        artifacts.setInitialProvider(provider, it -> it.getExternalLibsOutputs().getDex())
-                .withName("out")
-                .on(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE.INSTANCE);
-        artifacts.setInitialProvider(provider, it -> it.getExternalLibsFromArtifactTransformsOutputs().getDex())
-                .withName("out")
-                .on(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE_WITH_ARTIFACT_TRANSFORMS.INSTANCE);
-        artifacts.setInitialProvider(provider, it -> it.getMixedScopeOutputs().getDex())
-                .withName("out")
-                .on(InternalArtifactType.MIXED_SCOPE_DEX_ARCHIVE.INSTANCE);
-        artifacts.setInitialProvider(provider, DexArchiveBuilderTask::getInputJarHashesFile)
-                .on(InternalArtifactType.DEX_ARCHIVE_INPUT_JAR_HASHES.INSTANCE);
-        artifacts.setInitialProvider(provider, DexArchiveBuilderTask::getDesugarGraphDir)
-                .on(InternalArtifactType.DESUGAR_GRAPH.INSTANCE);
-        artifacts.setInitialProvider(provider, DexArchiveBuilderTask::getPreviousRunNumberOfBucketsFile)
-                .on(InternalArtifactType.DEX_NUMBER_OF_BUCKETS_FILE.INSTANCE);
+    private void createDexTasks() {
+        taskFactory.register(new DexArchiveBuilderTask.CreationAction(apkCreationConfig));
     }
 
-    private void createDexMergingTasks(Project project) {
+    private void createDexMergingTasks() {
         final boolean dexingUsingArtifactTransforms = true;
         final boolean separateFileDependenciesDexingTask = false;
 
@@ -310,46 +254,7 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
         ));
     }
 
-    private FileCollection getDexForExternalLibs(DexArchiveBuilderTask task, String inputType) {
-        Configuration runtimeClasspath = task.getProject().getConfigurations()
-                .getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME);
-        task.getProject().getDependencies().registerTransform(
-                DexingExternalLibArtifactTransform.class,
-                new Action<TransformSpec<DexingExternalLibArtifactTransform.Parameters>>() {
-                    @Override
-                    public void execute(@NotNull TransformSpec<DexingExternalLibArtifactTransform.Parameters> spec) {
-                        spec.parameters(it -> {
-                            it.getProjectName().set(task.getProject().getName());
-                            it.getMinSdkVersion().set(task.getDexParams().getMinSdkVersion());
-                            it.getDebuggable().set(task.getDexParams().getDebuggable());
-                            it.getBootClasspath().from(task.getDexParams().getDesugarClasspath());
-                            it.getDesugaringClasspath().from();
-                            it.getEnableDesugaring().set(task.getDexParams().getWithDesugaring());
-                            it.getLibConfiguration().set(task.getDexParams().getCoreLibDesugarConfig());
-                            it.getErrorFormat().set(task.getDexParams().getErrorFormatMode());
-                        });
 
-                        // Until Gradle provides a better way to run artifact transforms for arbitrary
-                        // configuration, use "artifactType" attribute as that one is always present.
-                        spec.getFrom().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, inputType);
-                        // Make this attribute unique by using task name. This ensures that every task will
-                        // have a unique transform to run which is required as input parameters are
-                        // task-specific.
-                        spec.getTo().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "ext-dex-debug");
-                    }
-                });
-
-        Configuration dex = task.getProject().getConfigurations().detachedConfiguration();
-        dex.getDependencies().add(
-                task.getProject().getDependencies().create(
-                        runtimeClasspath
-                )
-        );
-        return dex.getIncoming().artifactView(it -> it.getAttributes().attribute(
-                ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
-                "ext-dex-debug"
-            )).getFiles();
-    }
 
     private boolean hasJavaPlugin(Project project) {
         return project.getPlugins().hasPlugin("java");

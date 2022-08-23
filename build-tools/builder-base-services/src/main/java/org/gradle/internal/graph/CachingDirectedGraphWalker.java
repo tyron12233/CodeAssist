@@ -1,5 +1,7 @@
 package org.gradle.internal.graph;
 
+import org.gradle.util.GUtil;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,9 +45,7 @@ public class CachingDirectedGraphWalker<N, T> {
      * Adds some start nodes.
      */
     public CachingDirectedGraphWalker<?, ?> add(Iterable<? extends N> values) {
-        for (N value : values) {
-            startNodes.add(value);
-        }
+        GUtil.addToCollection(startNodes, values);
         return this;
     }
 

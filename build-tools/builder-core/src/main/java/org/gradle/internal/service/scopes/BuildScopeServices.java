@@ -72,6 +72,7 @@ import org.gradle.execution.plan.ExecutionPlanFactory;
 import org.gradle.execution.plan.TaskDependencyResolver;
 import org.gradle.execution.plan.TaskNodeDependencyResolver;
 import org.gradle.execution.plan.TaskNodeFactory;
+import org.gradle.execution.plan.WorkNodeDependencyResolver;
 import org.gradle.groovy.scripts.DefaultScriptCompilerFactory;
 import org.gradle.groovy.scripts.ScriptCompilerFactory;
 import org.gradle.groovy.scripts.internal.DefaultScriptCompilationHandler;
@@ -172,7 +173,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             registration.add(TaskNodeFactory.class);
             registration.add(TaskNodeDependencyResolver.class);
             registration.add(DefaultFileOperations.class);
-//            registration.add(WorkNodeDependencyResolver.class);
+            registration.add(WorkNodeDependencyResolver.class);
             registration.add(TaskDependencyResolver.class);
             registration.add(DefaultBuildWorkGraphController.class);
             registration.add(TaskPathProjectEvaluator.class);

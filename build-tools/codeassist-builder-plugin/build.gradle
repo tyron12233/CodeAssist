@@ -20,6 +20,8 @@ dependencies {
     implementation projects.buildTools.project
     implementation projects.buildTools.logging
 
+    implementation projects.buildTools.manifmerger
+
     implementation common.slf4j
     implementation 'javax.inject:javax.inject:1'
 }

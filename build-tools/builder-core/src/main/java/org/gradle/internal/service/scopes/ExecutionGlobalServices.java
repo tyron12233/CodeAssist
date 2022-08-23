@@ -12,9 +12,7 @@ import org.gradle.api.internal.DefaultNamedDomainObjectSet;
 import org.gradle.api.internal.project.taskfactory.DefaultTaskClassInfoStore;
 import org.gradle.api.internal.project.taskfactory.TaskClassInfoStore;
 import org.gradle.api.tasks.CacheableTask;
-import org.gradle.internal.instantiation.DeserializationInstantiator;
-import org.gradle.internal.instantiation.InstanceFactory;
-import org.gradle.internal.instantiation.InstanceGenerator;
+import org.gradle.api.tasks.UntrackedTask;
 import org.gradle.internal.instantiation.InstantiationScheme;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.reflect.annotations.TypeAnnotationMetadataStore;
@@ -70,12 +68,11 @@ import org.gradle.cache.internal.CrossBuildInMemoryCacheFactory;
 
 import java.lang.annotation.Annotation;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 import groovy.lang.GroovyObject;
 
+@SuppressWarnings("unused")
 public class ExecutionGlobalServices {
 
     @VisibleForTesting
@@ -115,8 +112,8 @@ public class ExecutionGlobalServices {
                 ImmutableSet.of(
                         CacheableTask.class,
                         CacheableTransform.class,
-                        DisableCachingByDefault.class
-//                        UntrackedTask.class
+                        DisableCachingByDefault.class,
+                        UntrackedTask.class
                 ),
                 ModifierAnnotationCategory.asMap(builder.build()),
                 ImmutableSet.of(

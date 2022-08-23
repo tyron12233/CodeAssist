@@ -30,6 +30,7 @@ import org.gradle.execution.plan.ExecutionNodeAccessHierarchies;
 import org.gradle.execution.plan.LocalTaskNodeExecutor;
 import org.gradle.execution.plan.NodeExecutor;
 import org.gradle.execution.plan.PlanExecutor;
+import org.gradle.execution.plan.WorkNodeExecutor;
 import org.gradle.internal.Factory;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.internal.build.BuildState;
@@ -129,9 +130,9 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         );
     }
 
-//    WorkNodeExecutor createWorkNodeExecutor() {
-//        return new WorkNodeExecutor();
-//    }
+    WorkNodeExecutor createWorkNodeExecutor() {
+        return new WorkNodeExecutor();
+    }
 
     ListenerBroadcast<TaskExecutionGraphListener> createTaskExecutionGraphListenerBroadcast(
             ListenerManager listenerManager

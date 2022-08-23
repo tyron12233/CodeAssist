@@ -2,6 +2,8 @@ package org.gradle.api.internal.tasks;
 
 import static com.google.common.collect.Iterables.toArray;
 
+import static org.gradle.util.GUtil.uncheckedCall;
+
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import org.gradle.api.Buildable;
@@ -9,6 +11,7 @@ import org.gradle.api.Task;
 import org.gradle.api.internal.provider.ProviderInternal;
 import org.gradle.api.internal.provider.ValueSupplier;
 import org.gradle.api.tasks.TaskDependency;
+import org.gradle.internal.Cast;
 import org.gradle.internal.typeconversion.UnsupportedNotationException;
 
 import java.nio.file.Path;
@@ -26,6 +29,14 @@ import java.util.concurrent.Callable;
 
 import groovy.lang.Closure;
 
+/**
+ * A task dependency which can have both mutable and immutable dependency values.
+ *
+ * If dependencies are known up-front, it is much more efficient to pass
+ * them as immutable values to the {@link DefaultTaskDependency#DefaultTaskDependency(TaskResolver, ImmutableSet)}
+ * constructor than to use the {@link #add(Object...)} method, as the former will
+ * require less memory to store them.
+ */
 public class DefaultTaskDependency extends AbstractTaskDependency {
 
     private final ImmutableSet<Object> immutableValues;
@@ -58,8 +69,7 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
             Object dependency = queue.removeFirst();
             if (dependency instanceof Buildable) {
                 context.add(dependency);
-            } else
-            if (dependency instanceof Task) {
+            } else if (dependency instanceof Task) {
                 context.add(dependency);
             } else if (dependency instanceof TaskDependency) {
                 context.add(dependency);
@@ -82,7 +92,7 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
                     queue.addFirst(closureResult);
                 }
             } else if (dependency instanceof List) {
-                List<?> list = (List<?>) dependency;
+                List<?> list = (List) dependency;
                 if (list instanceof RandomAccess) {
                     for (int i = list.size() - 1; i >= 0; i--) {
                         queue.addFirst(list.get(i));
@@ -96,29 +106,24 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
                 }
             } else if (dependency instanceof Iterable && !(dependency instanceof Path)) {
                 // Path is Iterable, but we don't want to unpack it
-                Iterable<?> iterable = (Iterable<?>) dependency;
+                Iterable<?> iterable = Cast.uncheckedNonnullCast(dependency);
                 addAllFirst(queue, toArray(iterable, Object.class));
             } else if (dependency instanceof Map) {
-                Map<?, ?> map = (Map<?, ?>) dependency;
+                Map<?, ?> map = Cast.uncheckedNonnullCast(dependency);
                 addAllFirst(queue, map.values().toArray());
             } else if (dependency instanceof Object[]) {
                 Object[] array = (Object[]) dependency;
                 addAllFirst(queue, array);
             } else if (dependency instanceof Callable) {
-                Callable<?> callable = (Callable<?>) dependency;
-                Object callableResult = null;
-                try {
-                    callableResult = callable.call();
-                } catch (Exception e) {
-                    callable = null;
-                }
+                Callable<?> callable = Cast.uncheckedNonnullCast(dependency);
+                Object callableResult = uncheckedCall(Cast.uncheckedNonnullCast(callable));
                 if (callableResult != null) {
                     queue.addFirst(callableResult);
                 }
             } else if (resolver != null && dependency instanceof CharSequence) {
                 context.add(resolver.resolveTask(dependency.toString()));
             } else {
-                List<String> formats = new ArrayList<>();
+                List<String> formats = new ArrayList<String>();
                 if (resolver != null) {
                     formats.add("A String or CharSequence task name or path");
                 }

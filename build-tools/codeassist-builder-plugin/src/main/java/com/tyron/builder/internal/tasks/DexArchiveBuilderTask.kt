@@ -1,16 +1,23 @@
 package com.tyron.builder.internal.tasks
 
+import com.tyron.builder.internal.component.ApkCreationConfig
 import com.tyron.builder.internal.dependency.BaseDexingTransform
-import com.tyron.builder.tasks.IncrementalTask
-
 import com.tyron.builder.internal.dexing.DexParameters
+import com.tyron.builder.internal.scope.InternalArtifactType
+import com.tyron.builder.internal.tasks.factory.VariantTaskCreationAction
 import com.tyron.builder.plugin.SdkConstants
 import com.tyron.builder.plugin.options.SyncOptions
+import com.tyron.builder.tasks.IncrementalTask
+import org.gradle.api.artifacts.ArtifactView
+import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.transform.CacheableTransform
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.FileCollection
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.plugins.JavaPlugin
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.util.internal.GFileUtils
@@ -22,6 +29,7 @@ import org.gradle.workers.WorkAction
 import org.gradle.workers.WorkParameters
 import java.io.File
 import java.nio.file.Path
+import java.util.stream.Collectors
 
 /**
  * Task that converts CLASS files into dex archives.
@@ -178,12 +186,127 @@ abstract class DexArchiveBuilderTask : IncrementalTask() {
         ).doProcess()
     }
 
-    class CreationAction {
-        fun configure(task: DexArchiveBuilderTask) {
+    class CreationAction(
+        creationConfig: ApkCreationConfig,
+    ) : VariantTaskCreationAction<DexArchiveBuilderTask, ApkCreationConfig>(
+        creationConfig
+    ) {
 
+        override val name = "dexBuilderDebug"
+
+        override val type: Class<DexArchiveBuilderTask> = DexArchiveBuilderTask::class.java
+
+        override fun handleProvider(taskProvider: TaskProvider<DexArchiveBuilderTask>) {
+            super.handleProvider(taskProvider)
+
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider
+            ) { it.projectOutputs.dex }
+                .withName("out").withName("out").on(InternalArtifactType.PROJECT_DEX_ARCHIVE)
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider
+            ) { it.subProjectOutputs.dex }
+                .withName("out").withName("out").on(InternalArtifactType.SUB_PROJECT_DEX_ARCHIVE)
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider
+            ) { it.externalLibsOutputs.dex }
+                .withName("out").on(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE)
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider
+            ) { it.externalLibsFromArtifactTransformsOutputs.dex }
+                .withName("out")
+                .on(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE_WITH_ARTIFACT_TRANSFORMS)
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider
+            ) { it.mixedScopeOutputs.dex }
+                .withName("out").on(InternalArtifactType.MIXED_SCOPE_DEX_ARCHIVE)
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider,
+                DexArchiveBuilderTask::inputJarHashesFile
+            ).withName("out").on(InternalArtifactType.DEX_ARCHIVE_INPUT_JAR_HASHES)
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider,
+                DexArchiveBuilderTask::desugarGraphDir
+            ).withName("out").on(InternalArtifactType.DESUGAR_GRAPH)
+            creationConfig.artifacts.setInitialProvider(
+                taskProvider,
+                DexArchiveBuilderTask::previousRunNumberOfBucketsFile
+            ).withName("out").on(InternalArtifactType.DEX_NUMBER_OF_BUCKETS_FILE)
         }
 
+        override fun configure(task: DexArchiveBuilderTask) {
+            super.configure(task)
 
+            task.projectClasses.setFrom(
+                task.project.layout.buildDirectory.dir("classes")
+            )
+            task.projectVariant.set("debug")
+
+            task.externalLibClasses
+                .from(getDexForExternalLibs(task, "jar"))
+            task.externalLibClasses
+                .from(getDexForExternalLibs(task, "dir"))
+
+            task.numberOfBuckets.set(
+                task.project.providers.provider{DEFAULT_NUM_BUCKETS}
+            )
+            task.dexParams.debuggable.set(true)
+            task.dexParams.errorFormatMode
+                .set(SyncOptions.ErrorFormatMode.HUMAN_READABLE)
+            task.dexParams.minSdkVersion.set(21)
+            task.dexParams.withDesugaring.set(false)
+        }
+
+        private fun getDexForExternalLibs(
+            task: DexArchiveBuilderTask,
+            inputType: String
+        ): FileCollection? {
+            val runtimeClasspath = task.project.configurations
+                .getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)
+            task.project.dependencies.registerTransform(
+                DexingExternalLibArtifactTransform::class.java
+            ) { spec ->
+                spec.parameters {
+                    it.projectName.set(task.project.name)
+                    it.minSdkVersion.set(task.dexParams.minSdkVersion)
+                    it.debuggable.set(task.dexParams.debuggable)
+                    it.bootClasspath.from(task.dexParams.desugarClasspath)
+                    it.desugaringClasspath.from()
+                    it.enableDesugaring.set(task.dexParams.withDesugaring)
+                    it.libConfiguration.set(task.dexParams.coreLibDesugarConfig)
+                    it.errorFormat.set(task.dexParams.errorFormatMode)
+                }
+
+                // Until Gradle provides a better way to run artifact transforms for arbitrary
+                // configuration, use "artifactType" attribute as that one is always present.
+                spec.from.attribute(
+                    ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+                    inputType
+                )
+                // Make this attribute unique by using task name. This ensures that every task will
+                // have a unique transform to run which is required as input parameters are
+                // task-specific.
+                spec.to.attribute(
+                    ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+                    "ext-dex-debug"
+                )
+            }
+            val externalLibraryDependencies = runtimeClasspath.allDependencies.stream()
+                .filter { it: Dependency? -> it !is ProjectDependency }
+                .collect(Collectors.toList())
+            val dex = task.project.configurations.detachedConfiguration()
+            dex.dependencies.addAll(
+                externalLibraryDependencies.stream().map {
+                    task.project.dependencies.create(it)
+                }.collect(Collectors.toList())
+            )
+            return dex.incoming.artifactView {
+                it.attributes.attribute(
+                    ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+                    "ext-dex-debug"
+                )
+            }.artifacts.artifactFiles
+        }
     }
 
 
