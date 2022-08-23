@@ -12,6 +12,7 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
+import com.tyron.completion.java.rewrite.JavaRewrite2;
 import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.java.rewrite.JavaRewrite;
@@ -108,8 +109,9 @@ public class ImportClassAction extends AnAction {
         for (String qualifiedName : compiler.publicTopLevelTypes()) {
             if (qualifiedName.endsWith("." + simpleName)) {
                 String title = e.getDataContext().getString(R.string.import_class_name, qualifiedName);
-                JavaRewrite addImport = new AddImport(file.toFile(), qualifiedName);
-                map.put(title, addImport);
+//                JavaRewrite2 addImport = new AddImport(file.toFile(), qualifiedName);
+//                map.put(title, addImport);
+                throw new UnsupportedOperationException();
             }
         }
 

@@ -38,13 +38,13 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path,
+    public void complete(CompletionList.Builder builder, JavacUtilitiesProvider task, TreePath path,
                          String partial, boolean endsWithParen) {
         checkCanceled();
         addCompletionItems(task, path, partial, endsWithParen, builder);
     }
 
-    public static void addCompletionItems(CompileTask task, TreePath path, String partial,
+    public static void addCompletionItems(JavacUtilitiesProvider task, TreePath path, String partial,
                                           boolean endsWithParen, CompletionList.Builder builder) {
         Trees trees = task.getTrees();
         Scope scope = trees.getScope(path);
@@ -66,7 +66,7 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
 
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement executableElement = (ExecutableElement) element;
-                String sortText = "";
+                String sortText;
                 if (Objects.equals(scope.getEnclosingClass(), element.getEnclosingElement())) {
                     sortText = JavaSortCategory.DIRECT_MEMBER.toString();
                 } else {

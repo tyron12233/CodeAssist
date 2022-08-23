@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
+import com.sun.tools.javac.api.JavacTaskImpl;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
@@ -43,6 +44,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -170,6 +173,9 @@ public class JavaCompilerService implements CompilerProvider {
             mContainer.initialize(() -> {
                 if (needsCompile(sources)) {
                     loadCompile(sources);
+                }
+                if (cachedCompile.task == null || ((JavacTaskImpl) cachedCompile.task).getContext() == null) {
+                    System.out.println();
                 }
                 CompileTask task = new CompileTask(cachedCompile);
                 mContainer.setCompileTask(task);
@@ -511,7 +517,7 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
+    public synchronized CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
         return compileBatch(sources);
     }
 

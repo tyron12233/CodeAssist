@@ -4,76 +4,52 @@ import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
 import android.util.Log;
 
+import com.sun.source.util.TreePath;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.comp.AttrContext;
+import com.sun.tools.javac.comp.Env;
+import com.sun.tools.javac.main.JavaCompiler;
+import com.sun.tools.javac.parser.JavacParser;
+import com.sun.tools.javac.parser.ParserFactory;
+import com.sun.tools.javac.tree.JCTree;
+import com.sun.tools.javac.util.Context;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
-import com.tyron.builder.project.api.KotlinModule;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
+import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.compiler.services.NBEnter;
+import com.tyron.completion.java.compiler.services.NBJavaCompiler;
+import com.tyron.completion.java.compiler.services.NBLog;
+import com.tyron.completion.java.compiler.services.NBParserFactory;
+import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.provider.Completions;
-import com.tyron.completion.java.provider.JavaKotlincCompletionProvider;
-import com.tyron.completion.java.util.CompletionItemFactory;
+import com.tyron.completion.java.provider.DefaultJavacUtilitiesProvider;
+import com.tyron.completion.java.provider.IdentifierCompletionProvider;
+import com.tyron.completion.java.provider.JavacUtilitiesProvider;
+import com.tyron.completion.java.provider.MemberReferenceCompletionProvider;
+import com.tyron.completion.java.provider.MemberSelectCompletionProvider;
+import com.tyron.completion.java.provider.VariableNameCompletionProvider;
+import com.tyron.completion.java.util.FileContentFixer;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
-import com.tyron.completion.progress.ProgressManager;
-import com.tyron.kotlin.completion.core.model.KotlinEnvironment;
-
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
-import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
-import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
-import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.DocumentEx;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.event.DocumentEventImpl;
-import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator;
-import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator;
-import org.jetbrains.kotlin.com.intellij.openapi.progress.impl.CoreProgressManager;
-import org.jetbrains.kotlin.com.intellij.openapi.progress.util.AbstractProgressIndicatorBase;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
-import org.jetbrains.kotlin.com.intellij.psi.FileViewProvider;
-import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
-import org.jetbrains.kotlin.com.intellij.psi.PsiDirectory;
-import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory;
-import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
-import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl;
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.SymbolCollectingProcessor;
-import org.jetbrains.kotlin.com.intellij.psi.scope.util.PsiScopesUtil;
-import org.jetbrains.kotlin.com.intellij.psi.stubs.StubTreeLoader;
-import org.jetbrains.kotlin.com.intellij.util.Processor;
-import org.jetbrains.kotlin.com.intellij.util.containers.MostlySingularMultiMap;
 
 import java.io.File;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.util.Comparator;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
-import me.xdrop.fuzzywuzzy.FuzzySearch;
+import javax.lang.model.element.Element;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
 
 public class JavaCompletionProvider extends CompletionProvider {
-
-    private static final String COMPLETION_THREAD_CLASS = "io.github.rosemoe.sora.widget.component.EditorAutoCompletion$CompletionThread";
-    private static final Field sCanceledField;
-
-    static {
-        try {
-            Class<?> completionThreadClass = Class.forName(COMPLETION_THREAD_CLASS);
-            sCanceledField = completionThreadClass.getDeclaredField("mAborted");
-            sCanceledField.setAccessible(true);
-        } catch (Throwable e) {
-            throw new Error("Rosemoe thread implementation has changed", e);
-        }
-    }
 
     private CachedCompletion mCachedCompletion;
 
@@ -106,8 +82,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             }
         }
 
-        CompletionList.Builder complete = complete(params.getProject(), (JavaModule) params.getModule(),
-                params.getFile(), params.getContents(), params.getIndex());
+        CompletionList.Builder complete = completeV2(params);
         if (complete == null) {
             return CompletionList.EMPTY;
         }
@@ -118,82 +93,65 @@ public class JavaCompletionProvider extends CompletionProvider {
             newPrefix = partialIdentifier(params.getPrefix(), params.getPrefix().length());
         }
 
-        mCachedCompletion = new CachedCompletion(params.getFile(), params.getLine(),
-                params.getColumn(), newPrefix, list);
+        mCachedCompletion =
+                new CachedCompletion(params.getFile(), params.getLine(), params.getColumn(),
+                        newPrefix, list);
         return list;
     }
 
-    public CompletionList.Builder completeWithKotlinc(
-            Project project, JavaModule module, File file, String contents, long cursor) {
-        if (!(module instanceof KotlinModule)) {
-            // should not happen as all android modules are kotlin module
-            throw new RuntimeException("Not a kotlin module");
+    public CompletionList.Builder completeV2(CompletionParameters parameters) {
+        CompilationInfo compilationInfo =
+                parameters.getModule().getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+        if (compilationInfo == null) {
+            return null;
         }
-        KotlinModule kotlinModule = ((KotlinModule) module);
-        KotlinCoreEnvironment environment = KotlinEnvironment.getEnvironment(kotlinModule);
-        org.jetbrains.kotlin.com.intellij.openapi.project.Project jetProject = environment.getProject();
 
-        setCurrentIndicator();
+        JavacTaskImpl javacTask = compilationInfo.impl.getJavacTask();
+        Context context = javacTask.getContext();
+        SimpleJavaFileObject fileObject = new SimpleJavaFileObject(parameters.getFile().toURI(), JavaFileObject.Kind.SOURCE) {
+                    @Override
+                    public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                        return new FileContentFixer(context).fixFileContent(parameters.getContents());
+                    }
+                };
 
-        VirtualFile virtualFile = environment.getProjectEnvironment().getEnvironment().getLocalFileSystem()
-                        .findFileByIoFile(file);
-        assert virtualFile != null && virtualFile.isValid();
+        JCTree.JCCompilationUnit unit = compilationInfo.updateImmediately(fileObject);
+        if (unit == null) {
+            return null;
+        }
+        JavacUtilitiesProvider javacUtilities = new DefaultJavacUtilitiesProvider(javacTask, unit, parameters.getProject());
+        TreePath scanned = new FindCurrentPath(javacTask).scan(unit, parameters.getIndex());
+        if (scanned == null || scanned.getLeaf() == null) {
+            return null;
+        }
+        CompletionList.Builder builder = CompletionList.builder(parameters.getPrefix());
 
-        PsiFile storedPsi = PsiManager.getInstance(jetProject).findFile(virtualFile);
-        assert storedPsi != null && storedPsi.isValid();
-
-        Document document = PsiDocumentManager.getInstance(jetProject).getDocument(storedPsi);
-        assert document != null;
-        WriteCommandAction.runWriteCommandAction(jetProject, () -> {
-            document.setText(contents);
-        });
-
-        PsiElement elementAt = storedPsi.findElementAt((int) cursor);
-
-        CompletionList.Builder builder = new CompletionList.Builder(elementAt.getText());
-        JavaKotlincCompletionProvider provider =
-                new JavaKotlincCompletionProvider(module);
-        provider.fillCompletionVariants(elementAt, builder);
+        switch (scanned.getLeaf().getKind()) {
+            case IDENTIFIER:
+                new IdentifierCompletionProvider(null).complete(builder, javacUtilities,
+                        scanned, parameters.getPrefix(), false);
+                break;
+            case MEMBER_SELECT:
+                new MemberSelectCompletionProvider(null).complete(builder, javacUtilities,
+                        scanned, parameters.getPrefix(), false);
+                break;
+            case MEMBER_REFERENCE:
+                new MemberReferenceCompletionProvider(null).complete(builder, javacUtilities,
+                        scanned, parameters.getPrefix(), false);
+            case VARIABLE:
+                new VariableNameCompletionProvider(null).complete(builder, javacUtilities,
+                        scanned, parameters.getPrefix(), false);
+                break;
+        }
         return builder;
     }
 
-    private void setCurrentIndicator() {
-        try {
-            ProgressIndicator indicator = new AbstractProgressIndicatorBase() {
-                @Override
-                public void checkCanceled() {
-                    ProgressManager.checkCanceled();
-                    if (Thread.currentThread().getClass().getName().equals(COMPLETION_THREAD_CLASS)) {
-                        try {
-                            Object o = sCanceledField.get(Thread.currentThread());
-                            if (o instanceof Boolean) {
-                                if (((Boolean) o)) {
-                                    cancel();
-                                }
-                            }
-                        } catch (IllegalAccessException e) {
-                            // ignored
-                        }
-                    }
-                    super.checkCanceled();
-                }
-            };
 
-            // the kotlin compiler does not provide implementations to run a progress indicator,
-            // since the PSI infrastructure calls ProgressManager#checkCancelled, we need this
-            // hack to make thread cancellation work
-            Method setCurrentIndicator = CoreProgressManager.class
-                    .getDeclaredMethod("setCurrentIndicator", long.class, ProgressIndicator.class);
-            setCurrentIndicator.setAccessible(true);
-            setCurrentIndicator.invoke(null, Thread.currentThread().getId(), indicator);
-        } catch (Throwable e) {
-            throw new Error(e);
-        }
-    }
-
-
-    public CompletionList.Builder complete(
-            Project project, JavaModule module, File file, String contents, long cursor) {
+    public CompletionList.Builder complete(Project project,
+                                           JavaModule module,
+                                           File file,
+                                           String contents,
+                                           long cursor) {
         JavaCompilerProvider compilerProvider =
                 CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
         JavaCompilerService service = compilerProvider.getCompiler(project, module);
@@ -219,11 +177,6 @@ public class JavaCompletionProvider extends CompletionProvider {
             start--;
         }
         return contents.substring(start, end);
-    }
-
-    private int getRatio(CompletionItem item, String partialIdentifier) {
-        String label = getLabel(item);
-        return FuzzySearch.ratio(label, partialIdentifier);
     }
 
     private String getLabel(CompletionItem item) {
@@ -274,6 +227,7 @@ public class JavaCompletionProvider extends CompletionProvider {
             return false;
         }
 
-        return prefix.length() - cachedCompletion.getPrefix().length() == column - cachedCompletion.getColumn();
+        return prefix.length() - cachedCompletion.getPrefix().length() ==
+               column - cachedCompletion.getColumn();
     }
 }

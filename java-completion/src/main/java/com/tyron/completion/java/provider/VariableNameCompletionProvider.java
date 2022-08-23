@@ -25,8 +25,8 @@ public class VariableNameCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path, String partial, boolean endsWithParen) {
-        Element element = Trees.instance(task.task).getElement(path);
+    public void complete(CompletionList.Builder builder, JavacUtilitiesProvider task, TreePath path, String partial, boolean endsWithParen) {
+        Element element = task.getTrees().getElement(path);
         if (element == null) {
             return;
         }

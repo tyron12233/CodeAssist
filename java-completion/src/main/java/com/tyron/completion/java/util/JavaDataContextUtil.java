@@ -18,6 +18,7 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.util.TreePath;
+import com.tyron.completion.java.parse.CompilationInfo;
 
 import java.io.File;
 
@@ -26,26 +27,10 @@ public class JavaDataContextUtil {
     public static void addEditorKeys(DataContext context, Project project, File file, int cursor) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         if (project != null && preferences.getBoolean(SharedPreferenceKeys.JAVA_ERROR_HIGHLIGHTING, true)) {
-            Module currentModule = project.getModule(file);
-            if (currentModule instanceof JavaModule) {
-                JavaCompilerProvider service = CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-                JavaCompilerService compiler = service.getCompiler(project, (JavaModule) currentModule);
-
-                CompilerContainer cachedContainer = compiler.getCachedContainer();
-                // don't block the ui thread
-                if (!cachedContainer.isWriting()) {
-                    cachedContainer.run(task -> {
-                        if (task != null) {
-                            CompilationUnitTree root = task.root(file);
-                            if (root != null) {
-                                FindCurrentPath findCurrentPath = new FindCurrentPath(task.task);
-                                TreePath currentPath = findCurrentPath.scan(root, cursor);
-                                context.putData(CommonJavaContextKeys.CURRENT_PATH, currentPath);
-                            }
-                        }
-                    });
-                }
-                context.putData(CommonJavaContextKeys.COMPILER, compiler);
+            Module module = project.getModule(file);
+            CompilationInfo compilationInfo = module.getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+            if (compilationInfo != null) {
+                context.putData(CompilationInfo.COMPILATION_INFO_KEY, compilationInfo);
             }
         }
     }

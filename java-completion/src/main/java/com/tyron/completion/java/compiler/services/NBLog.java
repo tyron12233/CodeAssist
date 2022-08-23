@@ -4,6 +4,8 @@ import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.JCDiagnostic;
 import com.sun.tools.javac.util.Log;
+import com.sun.tools.javac.util.Pair;
+
 import java.io.PrintWriter;
 import java.net.URI;
 import java.util.ArrayList;
@@ -79,7 +81,7 @@ public class NBLog extends Log {
     @Override
     protected boolean shouldReport(JavaFileObject file, int pos) {
         if (partialReparseFile != null) {
-            return file == partialReparseFile && seenPartialReparsePositions.add(pos);
+            return file.equals(partialReparseFile) && seenPartialReparsePositions.add(pos);
         } else {
             return super.shouldReport(file, pos);
         }
@@ -106,5 +108,9 @@ public class NBLog extends Log {
     public void endPartialReparse(JavaFileObject inFile) {
         partialReparseFile = null;
         seenPartialReparsePositions.clear(); //TODO: not tested
+    }
+
+    public Set<Pair<JavaFileObject, Integer>> getRecorded() {
+        return recorded;
     }
 }

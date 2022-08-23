@@ -47,7 +47,7 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public void complete(CompletionList.Builder builder, CompileTask task, TreePath treePath, String path, boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder, JavacUtilitiesProvider task, TreePath treePath, String path, boolean endsWithParen) {
         checkCanceled();
 
         Set<String> names = new HashSet<>();
@@ -133,11 +133,11 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
         return items;
     }
 
-    public static void addStaticImports(CompileTask task, CompilationUnitTree root, String partial,
+    public static void addStaticImports(JavacUtilitiesProvider task, CompilationUnitTree root, String partial,
                                   boolean endsWithParen, CompletionList.Builder list) {
         checkCanceled();
 
-        Trees trees = Trees.instance(task.task);
+        Trees trees = task.getTrees();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         for (ImportTree i : root.getImports()) {
             if (!i.isStatic()) continue;

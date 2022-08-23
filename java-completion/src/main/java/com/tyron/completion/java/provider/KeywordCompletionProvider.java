@@ -41,7 +41,7 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
         super(service);
     }
 
-    public static void addKeywords(CompileTask task, TreePath path, String partial, CompletionList.Builder list) {
+    public static void addKeywords(JavacUtilitiesProvider task, TreePath path, String partial, CompletionList.Builder list) {
         checkCanceled();
 
         if (!partial.isEmpty() && Character.isUpperCase(partial.charAt(0))) {
@@ -72,7 +72,7 @@ public class KeywordCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path, String partial, boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder, JavacUtilitiesProvider task, TreePath path, String partial, boolean endsWithParen) {
         addKeywords(task, path, partial, builder);
     }
 

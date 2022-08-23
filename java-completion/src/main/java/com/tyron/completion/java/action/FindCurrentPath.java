@@ -36,13 +36,15 @@ import java.util.List;
  */
 public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>> {
 
-    private final JavacTask task;
     private final SourcePositions mPos;
     private CompilationUnitTree mCompilationUnit;
 
     public FindCurrentPath(JavacTask task) {
-        this.task = task;
         mPos = Trees.instance(task).getSourcePositions();
+    }
+
+    public FindCurrentPath(Trees trees) {
+        mPos = trees.getSourcePositions();
     }
 
     public TreePath scan(Tree tree, long start) {

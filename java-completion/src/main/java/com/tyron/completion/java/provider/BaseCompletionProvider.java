@@ -1,10 +1,8 @@
 package com.tyron.completion.java.provider;
 
-import com.tyron.completion.java.compiler.CompileTask;
+import com.sun.source.util.TreePath;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CompletionList;
-
-import com.sun.source.util.TreePath;
 
 public abstract class BaseCompletionProvider {
 
@@ -18,6 +16,9 @@ public abstract class BaseCompletionProvider {
         return mCompiler;
     }
 
-    public abstract void complete(CompletionList.Builder builder, CompileTask task, TreePath path
-            , String partial, boolean endsWithParen);
+    public abstract void complete(CompletionList.Builder builder,
+                                  JavacUtilitiesProvider task,
+                                  TreePath path,
+                                  String partial,
+                                  boolean endsWithParen);
 }

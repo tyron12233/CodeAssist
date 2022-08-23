@@ -10,7 +10,15 @@ import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.JCClassDecl;
 import com.sun.tools.javac.tree.TreeInfo;
+import com.sun.tools.javac.tree.TreeScanner;
 import com.sun.tools.javac.util.Context;
+
+import java.lang.reflect.Field;
+import java.util.HashMap;
+import java.util.Map;
+
+import javax.lang.model.element.Name;
+import javax.tools.JavaFileObject;
 
 /**
  *
@@ -19,11 +27,7 @@ import com.sun.tools.javac.util.Context;
 public class NBEnter extends Enter {
 
     public static void preRegister(Context context) {
-        context.put(enterKey, new Context.Factory<Enter>() {
-            public Enter make(Context c) {
-                return new NBEnter(c);
-            }
-        });
+        context.put(enterKey, (Context.Factory<Enter>) NBEnter::new);
     }
 
     private final CancelService cancelService;
@@ -62,4 +66,23 @@ public class NBEnter extends Enter {
         return env;
     }
 
+    private static final Field COMPILATION_UNITS_FIELD;
+
+    static {
+        try {
+            COMPILATION_UNITS_FIELD = Enter.class.getDeclaredField("compilationUnits");
+            COMPILATION_UNITS_FIELD.setAccessible(true);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void removeCompilationUnit(JavaFileObject file) {
+        try {
+            Object o = COMPILATION_UNITS_FIELD.get(this);
+            ((Map) o).remove(file.toUri());
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

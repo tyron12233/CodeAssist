@@ -134,12 +134,12 @@ public class OverrideInheritedMethod implements JavaRewrite {
                     : Objects.requireNonNull(sourceFileObject).mFile.toFile();
             for (String s : typesToImport) {
                 if (!ActionUtil.hasImport(root, s)) {
-                    JavaRewrite addImport = new AddImport(source, s);
-                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                    TextEdit[] textEdits = rewrite.get(source.toPath());
-                    if (textEdits != null) {
-                        Collections.addAll(edits, textEdits);
-                    }
+//                    JavaRewrite addImport = new AddImport(source, s);
+//                    Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+//                    TextEdit[] textEdits = rewrite.get(source.toPath());
+//                    if (textEdits != null) {
+//                        Collections.addAll(edits, textEdits);
+//                    }
                 }
             }
             return Collections.singletonMap(source.toPath(), edits.toArray(new TextEdit[0]));
