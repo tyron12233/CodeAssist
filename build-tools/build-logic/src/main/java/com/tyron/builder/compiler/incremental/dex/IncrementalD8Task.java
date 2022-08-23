@@ -11,7 +11,7 @@ import com.tyron.builder.compiler.dex.D8Task;
 import com.tyron.builder.compiler.dex.DexDiagnosticHandler;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Library;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.cache.CacheHolder;
@@ -218,7 +218,7 @@ public class IncrementalD8Task extends Task<AndroidModule> {
                 }
                 if (lib.exists()) {
                     String message;
-                    Library library = getModule().getLibrary(parentFile.getName());
+                    CodeAssistLibrary library = getModule().getLibrary(parentFile.getName());
                     if (library != null) {
                         boolean declared = library.getDeclaration() != null;
                         message = "Dexing library " +

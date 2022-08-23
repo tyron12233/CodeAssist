@@ -8,7 +8,7 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Library;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
@@ -57,16 +57,16 @@ public class CheckLibrariesTask extends Task<JavaModule> {
     }
 
     private void checkLibraries(JavaModule project, ILogger logger, List<File> newLibraries) throws IOException {
-        Set<Library> libraries = new HashSet<>();
+        Set<CodeAssistLibrary> libraries = new HashSet<>();
 
-        Map<String, Library> fileLibsHashes = new HashMap<>();
+        Map<String, CodeAssistLibrary> fileLibsHashes = new HashMap<>();
         File[] fileLibraries = project.getLibraryDirectory().listFiles(c ->
                 c.getName().endsWith(".aar") || c.getName().endsWith(".jar"));
         if (fileLibraries != null) {
             for (File fileLibrary : fileLibraries) {
                 try {
                     ZipFile zipFile = new ZipFile(fileLibrary);
-                    Library library = new Library();
+                    CodeAssistLibrary library = new CodeAssistLibrary();
                     library.setSourceFile(fileLibrary);
                     fileLibsHashes.put(calculateMD5(fileLibrary), library);
                 } catch (IOException e) {
@@ -79,14 +79,14 @@ public class CheckLibrariesTask extends Task<JavaModule> {
 
 
         newLibraries.forEach(it -> {
-            Library library = new Library();
+            CodeAssistLibrary library = new CodeAssistLibrary();
             library.setSourceFile(it);
             libraries.add(library);
         });
 
         String librariesString = project.getSettings().getString("libraries", "[]");
         try {
-            List<Library> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<Library>>() {}.getType());
+            List<CodeAssistLibrary> parsedLibraries = new Gson().fromJson(librariesString, new TypeToken<List<CodeAssistLibrary>>() {}.getType());
             if (parsedLibraries != null) {
                 libraries.addAll(parsedLibraries);
             }
@@ -94,7 +94,7 @@ public class CheckLibrariesTask extends Task<JavaModule> {
 
         }
 
-        Map<String, Library> md5Map = new HashMap<>();
+        Map<String, CodeAssistLibrary> md5Map = new HashMap<>();
         libraries.forEach(it ->
                 md5Map.put(calculateMD5(it.getSourceFile()), it));
         File buildLibs = new File(project.getBuildDirectory(), "libs");
@@ -112,16 +112,16 @@ public class CheckLibrariesTask extends Task<JavaModule> {
         saveLibraryToProject(project, md5Map, fileLibsHashes);
     }
 
-    private void saveLibraryToProject(Module module, Map<String, Library> libraries, Map<String, Library> fileLibraries) throws IOException {
-        Map<String, Library> combined = new HashMap<>();
+    private void saveLibraryToProject(Module module, Map<String, CodeAssistLibrary> libraries, Map<String, CodeAssistLibrary> fileLibraries) throws IOException {
+        Map<String, CodeAssistLibrary> combined = new HashMap<>();
         combined.putAll(libraries);
         combined.putAll(fileLibraries);
 
         getModule().putLibraryHashes(combined);
 
-        for (Map.Entry<String, Library> entry : combined.entrySet()) {
+        for (Map.Entry<String, CodeAssistLibrary> entry : combined.entrySet()) {
             String hash = entry.getKey();
-            Library library = entry.getValue();
+            CodeAssistLibrary library = entry.getValue();
 
             File libraryDir = new File(module.getBuildDirectory(), "libs/" + hash);
             if (!libraryDir.exists()) {

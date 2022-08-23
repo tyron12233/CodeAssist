@@ -1,28 +1,16 @@
 package com.tyron.builder.compiler.dex;
 
-import androidx.annotation.NonNull;
-
-import com.android.tools.r8.ArchiveClassFileProvider;
-import com.android.tools.r8.ClassFileResourceProvider;
 import com.android.tools.r8.CompilationMode;
-import com.android.tools.r8.D8;
-import com.android.tools.r8.D8Command;
 import com.android.tools.r8.OutputMode;
-import com.android.tools.r8.ProgramResource;
 import com.android.tools.r8.R8;
 import com.android.tools.r8.R8Command;
-import com.android.tools.r8.inspector.Inspector;
 import com.android.tools.r8.origin.Origin;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.Library;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.common.util.AndroidUtilities;
-
-import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -31,9 +19,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class R8Task extends Task<AndroidModule> {

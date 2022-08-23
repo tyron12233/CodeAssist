@@ -118,7 +118,7 @@ public class IncrementalAapt2Task extends Task<AndroidModule> {
         for (File file : libraries) {
             File parent = file.getParentFile();
             if (parent == null) {
-                throw new IOException("Library folder doesn't exist");
+                throw new IOException("CodeAssistLibrary folder doesn't exist");
             }
             File[] files = parent.listFiles();
             if (files == null) {

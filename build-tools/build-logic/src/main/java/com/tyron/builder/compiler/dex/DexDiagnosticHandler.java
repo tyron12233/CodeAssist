@@ -8,8 +8,8 @@ import com.android.tools.r8.DiagnosticsLevel;
 import com.android.tools.r8.errors.DuplicateTypesDiagnostic;
 import com.android.tools.r8.origin.Origin;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.builder.model.Library;
 import com.tyron.builder.project.api.JavaModule;
 
 import java.io.File;
@@ -127,7 +127,7 @@ public class DexDiagnosticHandler implements DiagnosticsHandler {
         }
 
         String hash = parent.getName();
-        Library library = mModule.getLibrary(hash);
+        CodeAssistLibrary library = mModule.getLibrary(hash);
         if (library == null) {
             return part;
         }

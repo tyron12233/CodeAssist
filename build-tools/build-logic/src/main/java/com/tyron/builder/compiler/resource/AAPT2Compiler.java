@@ -76,7 +76,7 @@ public class AAPT2Compiler {
 		for (File file : mProject.getLibraries()) {
 			File parent = file.getParentFile();
 			if (parent == null) {
-				throw new IOException("Library folder doesn't exist");
+				throw new IOException("CodeAssistLibrary folder doesn't exist");
 			}
 
 			File resFolder = new File(parent, "res");
