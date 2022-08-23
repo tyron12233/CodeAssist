@@ -1,5 +1,7 @@
 package org.gradle.api;
 
+import org.jetbrains.annotations.NotNull;
+
 /**
  * Performs some actions against objects of of type T
  *
@@ -12,7 +14,7 @@ public interface Action<T> {
      *
      * @param t The object to perform the action on.
      */
-    void execute(T t);
+    void execute(@NotNull T t);
 
     default void invoke(String name, Object[] args) {
         throw new UnsupportedOperationException();
