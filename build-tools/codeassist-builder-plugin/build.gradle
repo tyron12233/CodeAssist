@@ -1,6 +1,7 @@
 plugins {
     id 'java-library'
 }
+apply plugin: 'kotlin'
 
 dependencies {
     implementation projects.common
@@ -13,12 +14,14 @@ dependencies {
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.buildLogic
     implementation projects.buildTools.builderPlugins
+    implementation projects.buildTools.builderWorkers
     implementation projects.buildTools.builderJava
     implementation projects.buildTools.builderLanguageJvm
     implementation projects.buildTools.project
     implementation projects.buildTools.logging
 
     implementation common.slf4j
+    implementation 'javax.inject:javax.inject:1'
 }
 
 java {
