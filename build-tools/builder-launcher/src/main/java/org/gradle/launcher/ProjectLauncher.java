@@ -39,7 +39,7 @@ public class ProjectLauncher {
     public ProjectLauncher(StartParameterInternal startParameter, OutputEventListener outputEventListener) {
         this.startParameter = startParameter;
         this.outputEventListener = outputEventListener;
-        globalServices = ProjectBuilderImpl.createGlobalServices(startParameter);
+        globalServices = ProjectBuilderImpl.getGlobalServices(startParameter);
     }
 
     public ServiceRegistry getGlobalServices() {
@@ -76,8 +76,7 @@ public class ProjectLauncher {
     private Runnable runBuildAndCloseServices(StartParameterInternal startParameter, BuildActionExecuter<BuildActionParameters, BuildRequestContext> executer, ServiceRegistry sharedServices, Object... stopBeforeSharedServices) {
         BuildActionParameters
                 parameters = createBuildActionParameters(startParameter);
-        Stoppable stoppable = new CompositeStoppable().add(stopBeforeSharedServices).add(sharedServices);
-        return new RunBuildAction(executer, startParameter, clientMetaData(), getBuildStartTime(), parameters, sharedServices, stoppable);
+        return new RunBuildAction(executer, startParameter, clientMetaData(), getBuildStartTime(), parameters, sharedServices, null);
     }
 
     private BuildActionParameters createBuildActionParameters(StartParameter startParameter) {
