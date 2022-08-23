@@ -56,6 +56,8 @@ import org.gradle.internal.buildoption.BuildOption;
 import org.gradle.internal.logging.LoggingManagerInternal;
 import org.gradle.internal.logging.text.StyledTextOutput;
 import org.gradle.internal.nativeintegration.console.ConsoleMetaData;
+import org.gradle.internal.service.ServiceRegistry;
+import org.gradle.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import org.gradle.launcher.ProjectLauncher;
 
 import java.io.File;
@@ -248,15 +250,17 @@ public class CompilerService extends Service {
         }
     }
 
+    private static boolean consoleAttached = false;
+
     private void compileWithBuilderApi(Project project, BuildType type) {
         StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setVfsVerboseLogging(getVerboseVfsLogging());
         startParameter.setShowStacktrace(getShowStacktrace());
         startParameter.setParallelProjectExecutionEnabled(true);
-        startParameter.setConfigurationCache(BuildOption.Value.value(true));
+        startParameter.setConfigurationCache(BuildOption.Value.value(false));
         startParameter.setConfigurationCacheDebug(true);
         startParameter.setWarningMode(WarningMode.All);
-        startParameter.setBuildCacheEnabled(true);
+        startParameter.setBuildCacheEnabled(false);
         File rootFile = project.getRootFile();
         startParameter.setProjectDir(rootFile);
         startParameter.setLogLevel(getLogLevel());
@@ -264,44 +268,47 @@ public class CompilerService extends Service {
         startParameter.setGradleUserHomeDir(new File(getCacheDir(), ".gradle"));
         startParameter.setTaskNames(Collections.singletonList(":app:assembleDebug"));
 
-        try {
-            Os.setenv("ANDROID_HOME", getExternalFilesDir("android_home").getAbsolutePath(), true);
-        } catch (ErrnoException e) {
-            throw new GradleException(e.getMessage());
-        }
-        System.setProperty("user.home", startParameter.getGradleUserHomeDir().getAbsolutePath());
-
-        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter, null);
+        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter, null);;
 
         LoggingManagerInternal loggingManagerInternal =
                 projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
         loggingManagerInternal.captureSystemSources();
-        loggingManagerInternal.attachConsole(AppLogFragment.outputStream, AppLogFragment.errorOutputStream, ConsoleOutput.Verbose, new ConsoleMetaData() {
-            @Override
-            public boolean isStdOut() {
-                return true;
-            }
+       if (!consoleAttached) {
+           loggingManagerInternal.attachConsole(AppLogFragment.outputStream, AppLogFragment.errorOutputStream, ConsoleOutput.Verbose, new ConsoleMetaData() {
+               @Override
+               public boolean isStdOut() {
+                   return true;
+               }
 
-            @Override
-            public boolean isStdErr() {
-                return true;
-            }
+               @Override
+               public boolean isStdErr() {
+                   return true;
+               }
 
-            @Override
-            public int getCols() {
-                return 60;
-            }
+               @Override
+               public int getCols() {
+                   return 60;
+               }
 
-            @Override
-            public int getRows() {
-                return 20;
-            }
+               @Override
+               public int getRows() {
+                   return 20;
+               }
 
-            @Override
-            public boolean isWrapStreams() {
-                return false;
-            }
-        });
+               @Override
+               public boolean isWrapStreams() {
+                   return false;
+               }
+           });
+
+           consoleAttached = true;
+       }
+
+        GradleUserHomeScopeServiceRegistry gradleUserHomeServices =
+                projectLauncher.getGlobalServices().get(GradleUserHomeScopeServiceRegistry.class);
+        ServiceRegistry servicesFor =
+                gradleUserHomeServices.getServicesFor(startParameter.getGradleUserHomeDir());
+
 
         try {
             projectLauncher.execute();

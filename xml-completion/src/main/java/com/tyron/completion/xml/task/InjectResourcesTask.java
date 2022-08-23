@@ -13,9 +13,7 @@ import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.FileManager;
-import com.tyron.builder.project.api.JavaModule;
-import com.tyron.completion.java.JavaCompilerProvider;
-import com.tyron.completion.java.compiler.JavaCompilerService;
+import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.xml.XmlRepository;
 import com.tyron.xml.completion.repository.ResourceItem;
 import com.tyron.xml.completion.repository.ResourceRepository;
@@ -30,7 +28,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,8 +47,8 @@ public class InjectResourcesTask {
     }
 
     public static void inject(@NonNull Project project, @NonNull AndroidModule module) throws IOException {
-        JavaCompilerService service = JavaCompilerProvider.get(project, module);
-        if (service == null) {
+        CompilationInfo compilationInfo = module.getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+        if (compilationInfo == null) {
             return;
         }
 
@@ -60,9 +57,8 @@ public class InjectResourcesTask {
             if (project.isCompiling() || project.isIndexing()) {
                 return;
             }
-            SourceFileObject sourceFileObject =
-                    new SourceFileObject(resourceFile.toPath(), module, Instant.now());
-            service.compile(Collections.singletonList(sourceFileObject));
+            SourceFileObject sourceFileObject = new SourceFileObject(resourceFile.toPath(), module, Instant.now());
+            compilationInfo.update(sourceFileObject);
         });
     }
     private final AndroidModule mModule;
@@ -88,7 +84,7 @@ public class InjectResourcesTask {
         consumer.accept(classFile);
     }
 
-    private void updateSymbols(XmlRepository xmlRepository) throws IOException {
+    private synchronized void updateSymbols(XmlRepository xmlRepository) throws IOException {
         Map<String, List<File>> files = IncrementalAapt2Task
                 .getFiles(mModule, IncrementalAapt2Task.getOutputDirectory(mModule));
         List<File> allFiles = files.values().stream().flatMap(Collection::stream)
