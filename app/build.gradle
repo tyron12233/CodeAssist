@@ -59,6 +59,7 @@ configurations.implementation {
 }
 
 dependencies {
+    implementation 'com.github.tiann:FreeReflection:3.1.0'
     implementation projects.terminalview
 
     // TODO: Removed these modules, the features that are using these modules
@@ -97,6 +98,7 @@ dependencies {
     implementation projects.buildTools.builderPlugins
     implementation projects.buildTools.builderJava
     implementation projects.buildTools.builderNative
+    implementation projects.buildTools.codeassistBuilderPlugin
     // emulating console
     implementation 'org.fusesource.jansi:jansi:2.4.0'
 
