@@ -54,12 +54,12 @@ public class FilteringClassLoader extends ClassLoader implements ClassLoaderHier
 
     public FilteringClassLoader(ClassLoader parent, Spec spec) {
         super(parent);
-        packageNames = new HashSet<String>(spec.packageNames);
+        packageNames = new HashSet<>(spec.packageNames);
         packagePrefixes = new TrieSet(spec.packagePrefixes);
-        resourceNames = new HashSet<String>(spec.resourceNames);
+        resourceNames = new HashSet<>(spec.resourceNames);
         resourcePrefixes = new TrieSet(spec.resourcePrefixes);
-        classNames = new HashSet<String>(spec.classNames);
-        disallowedClassNames = new HashSet<String>(spec.disallowedClassNames);
+        classNames = new HashSet<>(spec.classNames);
+        disallowedClassNames = new HashSet<>(spec.disallowedClassNames);
         disallowedPackagePrefixes = new TrieSet(spec.disallowedPackagePrefixes);
     }
 
@@ -344,7 +344,7 @@ public class FilteringClassLoader extends ClassLoader implements ClassLoaderHier
 
         public TrieSet(Collection<String> words) {
             this.trie = Trie.from(words);
-            this.set = new HashSet<String>(words);
+            this.set = new HashSet<>(words);
         }
 
         public boolean find(CharSequence seq) {
