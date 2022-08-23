@@ -260,7 +260,7 @@ public class ApplicationPlugin implements Plugin<Project> {
 
         binChildSpec.into((Callable<Object>) pluginConvention::getExecutableDir);
         binChildSpec.from(startScripts);
-        binChildSpec.setFileMode(0755);
+        binChildSpec.setFileMode(493);
 
         CopySpec childSpec = project.copySpec();
         childSpec.from(project.file("src/dist"));

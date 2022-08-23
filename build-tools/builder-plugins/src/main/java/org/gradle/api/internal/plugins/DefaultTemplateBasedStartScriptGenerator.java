@@ -22,6 +22,7 @@ import org.gradle.api.Transformer;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.internal.resources.CharSourceBackedTextResource;
 import org.gradle.api.resources.TextResource;
+import org.gradle.internal.UncheckedException;
 import org.gradle.internal.io.IoUtils;
 import org.gradle.jvm.application.scripts.JavaAppStartScriptGenerationDetails;
 import org.gradle.jvm.application.scripts.TemplateBasedScriptGenerator;
@@ -33,7 +34,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.Writer;
+import java.lang.reflect.Constructor;
 import java.util.Map;
+import java.util.Objects;
 
 import groovy.text.SimpleTemplateEngine;
 import groovy.text.Template;
@@ -78,13 +81,24 @@ public class DefaultTemplateBasedStartScriptGenerator implements TemplateBasedSc
 
     private String generateStartScriptContentFromTemplate(final Map<String, String> binding) {
         return IoUtils.get(getTemplate().asReader(), reader -> {
+            if (true) {
+                return "";
+            }
             try {
-                SimpleTemplateEngine engine = new SimpleTemplateEngine();
+                Class<?> classLoaderClass = Class.forName("com.tyron.groovy.DexBackedURLClassLoader");
+                Constructor<?> constructor = classLoaderClass.getConstructor(ClassLoader.class);
+                Object classLoaderObject = constructor.newInstance((Object) null);
+                ClassLoader classLoader = (ClassLoader) classLoaderObject;
+                SimpleTemplateEngine engine = new SimpleTemplateEngine(
+                        classLoader
+                );
                 Template template = engine.createTemplate(reader);
                 String output = template.make(binding).toString();
-                return TextUtil.convertLineSeparators(output, lineSeparator);
+                return Objects.requireNonNull(TextUtil.convertLineSeparators(output, lineSeparator));
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
+            } catch (ReflectiveOperationException t) {
+                throw UncheckedException.throwAsUncheckedException(t);
             }
         });
     }
