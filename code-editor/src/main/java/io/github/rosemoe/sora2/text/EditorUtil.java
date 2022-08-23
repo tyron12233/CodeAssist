@@ -9,18 +9,19 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.eclipse.tm4e.core.internal.theme.ThemeRaw;
+import org.eclipse.tm4e.core.internal.theme.reader.ThemeReader;
+import org.eclipse.tm4e.core.theme.IRawTheme;
+import org.eclipse.tm4e.core.theme.IRawThemeSetting;
+
 import java.lang.reflect.Method;
 import java.util.Collection;
 
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.lang.Language;
-import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ICUUtils;
-import io.github.rosemoe.sora.textmate.core.internal.theme.ThemeRaw;
-import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
-import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
-import io.github.rosemoe.sora.textmate.core.theme.IRawThemeSetting;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
@@ -58,11 +59,11 @@ public class EditorUtil {
             if (completionWindowBackground == null) {
                 completionWindowBackground = setting.get(KEY_BACKGROUND);
             }
-            scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_BG,
+            scheme.setColor(EditorColorScheme.COMPLETION_WND_BACKGROUND,
                             getColor(completionWindowBackground));
 
             Object completionStroke = setting.get(KEY_COMPLETION_WINDOW_STROKE);
-            scheme.setColor(EditorColorScheme.AUTO_COMP_PANEL_CORNER,
+            scheme.setColor(EditorColorScheme.COMPLETION_WND_CORNER,
                             getColor(completionStroke, Color.TRANSPARENT));
         }
         return scheme;
@@ -148,7 +149,7 @@ public class EditorUtil {
         // Find word edges
         int startLine = line, endLine = line;
         ContentLine lineObj = editor.getText().getLine(line);
-        long edges = ICUUtils.getWordEdges(lineObj, column);
+        long edges = ICUUtils.getWordEdges(lineObj, column, false);
         int startColumn = IntPair.getFirst(edges);
         int endColumn = IntPair.getSecond(edges);
         if (startColumn == endColumn) {
