@@ -87,8 +87,8 @@ public class FileCollectionFingerprinterRegistrations {
     ) {
         return Lists.newArrayList(
                 new AbsolutePathFileCollectionFingerprinter(directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher),
-                new RelativePathFileCollectionFingerprinter(stringInterner, directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher)
-//                new NameOnlyFileCollectionFingerprinter(directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher)
+                new RelativePathFileCollectionFingerprinter(stringInterner, directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher),
+                new NameOnlyFileCollectionFingerprinter(directorySensitivity, fileCollectionSnapshotter, normalizedContentHasher)
         );
     }
 
