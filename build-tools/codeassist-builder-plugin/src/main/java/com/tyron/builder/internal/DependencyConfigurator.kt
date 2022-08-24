@@ -22,7 +22,7 @@ class DependencyConfigurator(
         // The aars/jars may need to be processed (e.g., jetified to AndroidX) before they can be
         // used
         val autoNamespaceDependencies =
-            namespacedAndroidResources &&  false//projectOptions[BooleanOption.CONVERT_NON_NAMESPACED_DEPENDENCIES]
+            namespacedAndroidResources &&  true//projectOptions[BooleanOption.CONVERT_NON_NAMESPACED_DEPENDENCIES]
 
         val jetifiedAarOutputType = if (autoNamespaceDependencies) {
             AndroidArtifacts.ArtifactType.MAYBE_NON_NAMESPACED_PROCESSED_AAR
@@ -78,7 +78,7 @@ class DependencyConfigurator(
             AarToClassTransform::class.java
         ) { reg: TransformSpec<AarToClassTransform.Params> ->
             reg.from.attribute(
-                ArtifactAttributes.ARTIFACT_FORMAT,
+                ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
                 AndroidArtifacts.ArtifactType.PROCESSED_AAR.type
             )
             reg.from.attribute(
@@ -86,7 +86,7 @@ class DependencyConfigurator(
                 apiUsage
             )
             reg.to.attribute(
-                ArtifactAttributes.ARTIFACT_FORMAT,
+                ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
                 AndroidArtifacts.ArtifactType.CLASSES_JAR.type
             )
             reg.to.attribute(
