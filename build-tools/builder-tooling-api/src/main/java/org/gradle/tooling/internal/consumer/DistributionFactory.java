@@ -19,6 +19,7 @@ import org.gradle.api.internal.classpath.DefaultModuleRegistry;
 import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.initialization.layout.BuildLayout;
 import org.gradle.initialization.layout.BuildLayoutFactory;
+import org.gradle.internal.classloader.ClasspathUtil;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.logging.progress.ProgressLoggerFactory;
@@ -80,10 +81,13 @@ public class DistributionFactory {
      * Returns the distribution at the given URI.
      */
     public Distribution getDistribution(URI gradleDistribution) {
+        if (gradleDistribution.equals(URI.create("codeAssist"))) {
+            return new CodeAssistDistribution();
+        }
 //        WrapperConfiguration configuration = new WrapperConfiguration();
 //        configuration.setDistribution(gradleDistribution);
 //        return new ZippedDistribution(configuration, clock);
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException("Downloading external distributions is not supported.");
     }
 
     /**
@@ -238,6 +242,21 @@ public class DistributionFactory {
                                                            BuildCancellationToken cancellationToken) {
             DefaultModuleRegistry registry = new DefaultModuleRegistry(null);
             return registry.getModule("gradle-launcher").getAllRequiredModulesClasspath();
+        }
+    }
+
+    public static class CodeAssistDistribution implements Distribution {
+        @Override
+        public String getDisplayName() {
+            return "Gradle distribution bundled in CodeAssist";
+        }
+
+        @Override
+        public ClassPath getToolingImplementationClasspath(ProgressLoggerFactory progressLoggerFactory,
+                                                           InternalBuildProgressListener progressListener,
+                                                           ConnectionParameters connectionParameters,
+                                                           BuildCancellationToken cancellationToken) {
+            return ClasspathUtil.getClasspath(getClass().getClassLoader());
         }
     }
 }

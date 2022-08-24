@@ -43,7 +43,7 @@ public class DaemonStartupCommunication {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        target.println(byteArrayOutputStream.toString());
+        target.println(byteArrayOutputStream);
 
         //ibm vm 1.6 + windows XP gotchas:
         //we need to print something else to the stream after we print the daemon greeting.

@@ -2,16 +2,15 @@ package org.gradle.execution;
 
 import org.gradle.api.Task;
 import org.gradle.api.internal.GradleInternal;
+import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.build.IncludedBuildState;
 import org.gradle.util.Path;
-import org.gradle.util.Predicates;
-
-import java.io.File;
-import java.util.function.Predicate;
 
 import javax.annotation.Nullable;
+import java.io.File;
 
 public class CompositeAwareTaskSelector extends TaskSelector {
     private final GradleInternal gradle;
@@ -27,7 +26,7 @@ public class CompositeAwareTaskSelector extends TaskSelector {
     }
 
     @Override
-    public Predicate<Task> getFilter(String path) {
+    public Spec<Task> getFilter(String path) {
         Path taskPath = Path.path(path);
         if (taskPath.isAbsolute()) {
             BuildState build = findIncludedBuild(taskPath);
@@ -41,7 +40,7 @@ public class CompositeAwareTaskSelector extends TaskSelector {
             return getUnqualifiedBuildSelector().getFilter(path);
         } else {
             // Included build ignores this exclusion since it doesn't apply directly to it
-            return Predicates.satisfyAll();
+            return Specs.satisfyAll();
         }
     }
 

@@ -114,7 +114,7 @@ public abstract class DelegatingCopySpecInternal implements CopySpecInternal {
     }
 
     @Override
-    public CopySpec include(Predicate<FileTreeElement> includeSpec) {
+    public CopySpec include(Spec<FileTreeElement> includeSpec) {
         return getDelegateCopySpec().include(includeSpec);
     }
 //
@@ -134,7 +134,7 @@ public abstract class DelegatingCopySpecInternal implements CopySpecInternal {
     }
 
     @Override
-    public CopySpec exclude(Predicate<FileTreeElement> excludeSpec) {
+    public CopySpec exclude(Spec<FileTreeElement> excludeSpec) {
         return getDelegateCopySpec().exclude(excludeSpec);
     }
 //

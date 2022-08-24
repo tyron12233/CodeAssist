@@ -140,7 +140,7 @@ public class CopySpecWrapper implements CopySpec {
     }
 
     @Override
-    public CopySpec include(Predicate<FileTreeElement> includeSpec) {
+    public CopySpec include(Spec<FileTreeElement> includeSpec) {
         delegate.include(includeSpec);
         return this;
     }
@@ -164,7 +164,7 @@ public class CopySpecWrapper implements CopySpec {
     }
 
     @Override
-    public CopySpec exclude(Predicate<FileTreeElement> excludeSpec) {
+    public CopySpec exclude(Spec<FileTreeElement> excludeSpec) {
         delegate.exclude(excludeSpec);
         return this;
     }

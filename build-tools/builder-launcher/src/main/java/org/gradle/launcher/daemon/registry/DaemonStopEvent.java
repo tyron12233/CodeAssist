@@ -120,7 +120,7 @@ public class DaemonStopEvent implements Serializable {
         @Override
         public void write(Encoder encoder, DaemonStopEvent value) throws Exception {
             encoder.writeLong(value.timestamp.getTime());
-            encoder.writeLong(value.pid);
+            encoder.writeLong(value.pid != null ? value.pid : -1);
             encoder.writeBoolean(value.status != null);
             if (value.status != null) {
                 encoder.writeByte((byte) value.status.ordinal());

@@ -5,20 +5,18 @@ import org.gradle.api.Action;
 import org.gradle.api.file.FileVisitDetails;
 import org.gradle.api.file.FileVisitor;
 import org.gradle.api.file.RelativePath;
-import org.gradle.api.internal.file.FileCollectionStructureVisitor;
-import org.gradle.internal.Factory;
 import org.gradle.api.internal.file.AbstractFileTreeElement;
-import org.gradle.internal.file.Chmod;
 import org.gradle.api.internal.file.FileTreeInternal;
+import org.gradle.api.tasks.util.PatternSet;
+import org.gradle.internal.Factory;
+import org.gradle.internal.file.Chmod;
 import org.gradle.internal.io.StreamByteBuffer;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
-import org.gradle.api.tasks.util.PatternSet;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.UncheckedIOException;
 import java.util.Arrays;
 
 /**
@@ -86,7 +84,7 @@ public class GeneratedSingletonFileTree implements FileSystemMirroringFileTree, 
     }
 
     @Override
-    public void visitStructure(FileCollectionStructureVisitor visitor, FileTreeInternal owner) {
+    public void visitStructure(MinimalFileTreeStructureVisitor visitor, FileTreeInternal owner) {
         visitor.visitFileTree(getFile(), new PatternSet(), owner);
     }
 
@@ -145,7 +143,7 @@ public class GeneratedSingletonFileTree implements FileSystemMirroringFileTree, 
                     fileGenerationListener.execute(file);
                     Files.write(generatedContent, file);
                 } catch (IOException e) {
-                    throw new UncheckedIOException(e);
+                    throw new org.gradle.api.UncheckedIOException(e);
                 }
             }
         }

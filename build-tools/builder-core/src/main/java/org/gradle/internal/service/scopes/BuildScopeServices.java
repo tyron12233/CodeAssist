@@ -69,6 +69,7 @@ import org.gradle.execution.TaskSelector;
 import org.gradle.execution.plan.DefaultNodeValidator;
 import org.gradle.execution.plan.ExecutionNodeAccessHierarchies;
 import org.gradle.execution.plan.ExecutionPlanFactory;
+import org.gradle.execution.plan.OrdinalGroupFactory;
 import org.gradle.execution.plan.TaskDependencyResolver;
 import org.gradle.execution.plan.TaskNodeDependencyResolver;
 import org.gradle.execution.plan.TaskNodeFactory;
@@ -137,6 +138,7 @@ import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.BuildOperationQueueFactory;
 import org.gradle.internal.operations.DefaultBuildOperationQueueFactory;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.internal.resources.ResourceLockCoordinationService;
 import org.gradle.internal.service.DefaultServiceRegistry;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.resource.StringTextResource;
@@ -556,22 +558,28 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 //        }, buildOperationIdFactory);
 //    }
 
+    OrdinalGroupFactory createOrdinalGroupFactory() {
+        return new OrdinalGroupFactory();
+    }
+
     ExecutionPlanFactory createExecutionPlanFactory(
             GradleInternal gradleInternal,
             TaskNodeFactory taskNodeFactory,
+            OrdinalGroupFactory ordinalGroupFactory,
             TaskDependencyResolver dependencyResolver,
-            ExecutionNodeAccessHierarchies executionNodeAccessHierarchies
+            ExecutionNodeAccessHierarchies executionNodeAccessHierarchies,
+            ResourceLockCoordinationService lockCoordinationService
     ) {
         return new ExecutionPlanFactory(
                 gradleInternal.getIdentityPath().toString(),
                 taskNodeFactory,
+                ordinalGroupFactory,
                 dependencyResolver,
-                new DefaultNodeValidator(),
                 executionNodeAccessHierarchies.getOutputHierarchy(),
-                executionNodeAccessHierarchies.getDestroyableHierarchy()
+                executionNodeAccessHierarchies.getDestroyableHierarchy(),
+                lockCoordinationService
         );
     }
-
     ExecutionNodeAccessHierarchies createExecutionNodeAccessHierarchies() {
         return new ExecutionNodeAccessHierarchies(CaseSensitivity.CASE_INSENSITIVE, FileSystems.getDefault());
     }

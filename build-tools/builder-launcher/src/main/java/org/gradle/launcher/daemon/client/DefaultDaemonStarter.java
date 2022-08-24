@@ -15,6 +15,8 @@
  */
 package org.gradle.launcher.daemon.client;
 
+import com.tyron.common.TestUtil;
+
 import org.gradle.api.GradleException;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.internal.classpath.DefaultModuleRegistry;
@@ -22,6 +24,7 @@ import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.internal.classpath.ClassPath;
+import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.internal.installation.CurrentGradleInstallation;
 import org.gradle.internal.installation.GradleInstallation;
@@ -47,11 +50,14 @@ import org.gradle.util.GradleVersion;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class DefaultDaemonStarter implements DaemonStarter {
     private static final Logger LOGGER = Logging.getLogger(DefaultDaemonStarter.class);
@@ -85,18 +91,54 @@ public class DefaultDaemonStarter implements DaemonStarter {
             classpath = registry.getModule("gradle-launcher").getImplementationClasspath();
             searchClassPath = Collections.emptyList();
         }
-        if (classpath.isEmpty()) {
-            throw new IllegalStateException("Unable to construct a bootstrap classpath when starting the daemon");
+//        if (classpath.isEmpty()) {
+//            throw new IllegalStateException("Unable to construct a bootstrap classpath when starting the daemon");
+//        }
+
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        List<File> dexElements = new ArrayList<>();
+
+        Function<String, String> extractor = s -> s.substring(s.indexOf("[") + 1, s.lastIndexOf("]"));
+        while (contextClassLoader != null) {
+            try {
+                Class<?> aClass = Class.forName("dalvik.system.PathClassLoader");
+                if (aClass.isAssignableFrom(contextClassLoader.getClass())) {
+                    String classLoaderString = contextClassLoader.toString();
+
+                    String dexPathList = extractor.apply(classLoaderString);
+                    String fileList = extractor.apply(extractor.apply(dexPathList));
+                    fileList = fileList.substring(0, fileList.lastIndexOf("]"));
+                    String[] filePaths = fileList.split(", ");
+                    for (String filePath : filePaths) {
+                        if (filePath.startsWith("dex file ")) {
+                            dexElements.add(new File(filePath.substring("dex file  ".length(), filePath.length() - 1)));
+                        } else if (filePath.startsWith("zip file ")) {
+                            dexElements.add(new File(filePath.substring("zip file  ".length(), filePath.length() - 1)));
+                        }
+                    }
+                    System.out.println(fileList);
+                }
+            } catch (Exception e) {
+                // ignored
+            }
+            contextClassLoader = contextClassLoader.getParent();
         }
+        classpath = DefaultClassPath.of(dexElements);
 
         versionValidator.validate(daemonParameters);
 
-        List<String> daemonArgs = new ArrayList<String>();
+        List<String> daemonArgs = new ArrayList<>();
         daemonArgs.addAll(getPriorityArgs(daemonParameters.getPriority()));
-        daemonArgs.add(daemonParameters.getEffectiveJvm().getJavaExecutable().getAbsolutePath());
+
+        if (TestUtil.isDalvik()) {
+            daemonArgs.add("dalvikvm");
+        } else {
+            daemonArgs.add(daemonParameters.getEffectiveJvm().getJavaExecutable().getAbsolutePath());
+        }
 
         List<String> daemonOpts = daemonParameters.getEffectiveJvmArgs();
-        daemonArgs.addAll(daemonOpts);
+        daemonOpts.add("-Dcodeassist.user.dir=" + System.getProperty("codeassist.user.dir"));
+//        daemonArgs.addAll(daemonOpts);
         daemonArgs.add("-cp");
         daemonArgs.add(CollectionUtils.join(File.pathSeparator, classpath.getAsFiles()));
 

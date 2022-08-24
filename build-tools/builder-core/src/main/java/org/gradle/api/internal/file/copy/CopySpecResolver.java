@@ -7,6 +7,7 @@ import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileTreeElement;
 import org.gradle.api.file.RelativePath;
 
+import org.gradle.api.specs.Spec;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -41,9 +42,9 @@ public interface CopySpecResolver {
 
     List<String> getAllExcludes();
 
-    List<Predicate<FileTreeElement>> getAllIncludeSpecs();
+    List<Spec<FileTreeElement>> getAllIncludeSpecs();
 
-    List<Predicate<FileTreeElement>> getAllExcludeSpecs();
+    List<Spec<FileTreeElement>> getAllExcludeSpecs();
 
     DuplicatesStrategy getDuplicatesStrategy();
 

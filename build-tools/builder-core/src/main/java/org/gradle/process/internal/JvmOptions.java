@@ -56,7 +56,7 @@ public class JvmOptions {
 
     private final JavaDebugOptions debugOptions;
 
-    protected final Map<String, Object> immutableSystemProperties = new TreeMap<String, Object>();
+    protected final Map<String, Object> immutableSystemProperties = new TreeMap<>();
 
     public JvmOptions(FileCollectionFactory fileCollectionFactory, JavaDebugOptions debugOptions) {
         this.debugOptions = debugOptions;
@@ -64,7 +64,7 @@ public class JvmOptions {
         immutableSystemProperties.put(FILE_ENCODING_KEY, Charset.defaultCharset().name());
         immutableSystemProperties.put(USER_LANGUAGE_KEY, DEFAULT_LOCALE.getLanguage());
         immutableSystemProperties.put(USER_COUNTRY_KEY, DEFAULT_LOCALE.getCountry());
-        immutableSystemProperties.put(USER_VARIANT_KEY, DEFAULT_LOCALE.getVariant());
+//        immutableSystemProperties.put(USER_VARIANT_KEY, DEFAULT_LOCALE.getVariant());
     }
 
     public JvmOptions(FileCollectionFactory fileCollectionFactory) {
@@ -101,7 +101,7 @@ public class JvmOptions {
      * The result is a subset of options returned by {@link #getAllJvmArgs()}
      */
     public List<String> getAllImmutableJvmArgs() {
-        List<String> args = new ArrayList<String>(getJvmArgs());
+        List<String> args = new ArrayList<>(getJvmArgs());
         args.addAll(getManagedJvmArgs());
         return args;
     }
@@ -114,6 +114,8 @@ public class JvmOptions {
         List<String> args = new ArrayList<String>();
         if (minHeapSize != null) {
             args.add(XMS_PREFIX + minHeapSize);
+        } else {
+            args.add(XMS_PREFIX + "512m");
         }
         if (maxHeapSize != null) {
             args.add(XMX_PREFIX + maxHeapSize);

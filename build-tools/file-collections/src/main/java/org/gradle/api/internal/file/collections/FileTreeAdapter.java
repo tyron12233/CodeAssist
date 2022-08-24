@@ -1,17 +1,17 @@
 package org.gradle.api.internal.file.collections;
 
+import org.gradle.api.Buildable;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileVisitor;
-import org.gradle.internal.Factory;
 import org.gradle.api.internal.file.AbstractFileTree;
 import org.gradle.api.internal.file.FileCollectionStructureVisitor;
 import org.gradle.api.internal.file.FileTreeInternal;
-import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.api.internal.tasks.TaskDependencyContainer;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
-import org.gradle.api.Buildable;
 import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.api.tasks.util.PatternSet;
+import org.gradle.internal.Factory;
+import org.gradle.internal.logging.text.TreeFormatter;
 
 import java.io.File;
 import java.util.function.Consumer;
@@ -89,16 +89,7 @@ public final class FileTreeAdapter extends AbstractFileTree {
 
     @Override
     protected void visitContents(FileCollectionStructureVisitor visitor) {
-        tree.visitStructure(new FileCollectionStructureVisitor() {
-            @Override
-            public void visitCollection(Source source, Iterable<File> contents) {
-                visitor.visitCollection(source, contents);
-            }
-
-            @Override
-            public void visitGenericFileTree(FileTreeInternal fileTree, FileSystemMirroringFileTree sourceTree) {
-                visitor.visitGenericFileTree(fileTree, sourceTree);
-            }
+        tree.visitStructure(new MinimalFileTree.MinimalFileTreeStructureVisitor() {
 
             @Override
             public void visitFileTree(File root, PatternSet patterns, FileTreeInternal fileTree) {

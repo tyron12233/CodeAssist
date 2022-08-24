@@ -25,6 +25,7 @@ import org.gradle.api.internal.file.copy.CopySpecResolver;
 import org.gradle.api.internal.file.copy.CopySpecSource;
 import org.gradle.api.internal.file.copy.DefaultCopySpec;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.util.internal.ClosureBackedAction;
@@ -339,7 +340,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
      * {@inheritDoc}
      */
     @Override
-    public AbstractCopyTask include(Predicate<FileTreeElement> includeSpec) {
+    public AbstractCopyTask include(Spec<FileTreeElement> includeSpec) {
         getMainSpec().include(includeSpec);
         return this;
     }
@@ -375,7 +376,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
      * {@inheritDoc}
      */
     @Override
-    public AbstractCopyTask exclude(Predicate<FileTreeElement> excludeSpec) {
+    public AbstractCopyTask exclude(Spec<FileTreeElement> excludeSpec) {
         getMainSpec().exclude(excludeSpec);
         return this;
     }

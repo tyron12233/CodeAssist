@@ -1,38 +1,49 @@
 package org.gradle.api.internal.tasks;
 
-import static java.lang.String.format;
-
-import org.gradle.api.Action;
+import com.google.common.base.Preconditions;
 import org.gradle.api.Buildable;
+import org.gradle.api.NonNullApi;
 import org.gradle.api.Task;
 import org.gradle.internal.graph.CachingDirectedGraphWalker;
 import org.gradle.internal.graph.DirectedGraph;
-import org.gradle.api.tasks.TaskDependency;
 
+import javax.annotation.Nullable;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.Set;
 
+import static java.lang.String.format;
+
 /**
  * <p>A {@link TaskDependencyResolveContext} which caches the dependencies for each {@link
- * TaskDependency} and {@link Buildable} instance during traversal of task
+ * org.gradle.api.tasks.TaskDependency} and {@link org.gradle.api.Buildable} instance during traversal of task
  * dependencies.</p>
  *
+ * <p>Supported types:</p> <ul>
+ *
+ * <li>{@link org.gradle.api.Task}</li>
+ *
+ * <li>{@link org.gradle.api.tasks.TaskDependency}</li>
+ *
+ * <li>{@link org.gradle.api.internal.tasks.TaskDependencyInternal}</li>
+ *
+ * <li>{@link org.gradle.api.Buildable}</li>
+ *
+ * </ul>
  */
+@NonNullApi
 public class CachingTaskDependencyResolveContext<T> extends AbstractTaskDependencyResolveContext {
     private final Deque<Object> queue = new ArrayDeque<Object>();
     private final CachingDirectedGraphWalker<Object, T> walker;
-    private final Collection<? extends WorkDependencyResolver<T>> workResolvers;
     private Task task;
 
     public CachingTaskDependencyResolveContext(Collection<? extends WorkDependencyResolver<T>> workResolvers) {
         this.walker = new CachingDirectedGraphWalker<>(new TaskGraphImpl(workResolvers));
-        this.workResolvers = workResolvers;
     }
 
-    public Set<T> getDependencies(Task task, Object dependencies) {
-        assert this.task == null;
+    public Set<T> getDependencies(@Nullable Task task, Object dependencies) {
+        Preconditions.checkState(this.task == null);
         this.task = task;
         try {
             walker.add(dependencies);
@@ -46,26 +57,19 @@ public class CachingTaskDependencyResolveContext<T> extends AbstractTaskDependen
     }
 
     @Override
+    @Nullable
     public Task getTask() {
         return task;
     }
 
     @Override
     public void add(Object dependency) {
-        assert dependency != null;
+        Preconditions.checkNotNull(dependency);
         if (dependency == TaskDependencyContainer.EMPTY) {
             // Ignore things we know are empty
             return;
         }
         queue.add(dependency);
-    }
-
-    private void attachFinalizerTo(T value, Action<? super Task> action) {
-        for (WorkDependencyResolver<T> resolver : workResolvers) {
-            if (resolver.attachActionTo(value, action)) {
-                break;
-            }
-        }
     }
 
     private class TaskGraphImpl implements DirectedGraph<Object, T> {
@@ -87,16 +91,6 @@ public class CachingTaskDependencyResolveContext<T> extends AbstractTaskDependen
             if (node instanceof Buildable) {
                 Buildable buildable = (Buildable) node;
                 connectedNodes.add(buildable.getBuildDependencies());
-                return;
-            }
-            if (node instanceof FinalizeAction) {
-                FinalizeAction finalizeAction = (FinalizeAction) node;
-                TaskDependencyContainer dependencies = finalizeAction.getDependencies();
-                Set<T> deps = new CachingTaskDependencyResolveContext<T>(workResolvers).getDependencies(task, dependencies);
-                for (T dep : deps) {
-                    attachFinalizerTo(dep, finalizeAction);
-                    values.add(dep);
-                }
                 return;
             }
             for (WorkDependencyResolver<T> workResolver : workResolvers) {

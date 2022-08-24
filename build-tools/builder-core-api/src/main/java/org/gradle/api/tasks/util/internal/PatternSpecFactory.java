@@ -2,6 +2,8 @@ package org.gradle.api.tasks.util.internal;
 
 import org.gradle.api.file.FileTreeElement;
 import org.gradle.api.internal.file.RelativePathSpec;
+import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
 import org.gradle.internal.file.pattern.PatternMatcher;
 import org.gradle.internal.file.pattern.PatternMatcherFactory;
 import org.gradle.api.tasks.util.PatternSet;
@@ -19,16 +21,16 @@ import java.util.function.Predicate;
 public class PatternSpecFactory {
     public static final PatternSpecFactory INSTANCE = new PatternSpecFactory();
     private String[] previousDefaultExcludes;
-    private final Map<CaseSensitivity, Predicate<FileTreeElement>>
+    private final Map<CaseSensitivity, Spec<FileTreeElement>>
             defaultExcludeSpecCache = new EnumMap<>(CaseSensitivity.class);
 
-    public Predicate<FileTreeElement> createSpec(PatternSet patternSet) {
+    public Spec<FileTreeElement> createSpec(PatternSet patternSet) {
 
-        return Predicates.intersect(createIncludeSpec(patternSet), Predicates.negate(createExcludeSpec(patternSet)));
+        return Specs.intersect(createIncludeSpec(patternSet), Specs.negate(createExcludeSpec(patternSet)));
     }
 
-    public Predicate<FileTreeElement> createIncludeSpec(PatternSet patternSet) {
-        List<Predicate<FileTreeElement>> allIncludeSpecs = new ArrayList<>(1 + patternSet.getIncludeSpecs().size());
+    public Spec<FileTreeElement> createIncludeSpec(PatternSet patternSet) {
+        List<Spec<FileTreeElement>> allIncludeSpecs = new ArrayList<>(1 + patternSet.getIncludeSpecs().size());
 
         if (!patternSet.getIncludes().isEmpty()) {
             allIncludeSpecs.add(createSpec(patternSet.getIncludes(), true, patternSet.isCaseSensitive()));
@@ -36,11 +38,11 @@ public class PatternSpecFactory {
 
         allIncludeSpecs.addAll(patternSet.getIncludeSpecs());
 
-        return Predicates.union(allIncludeSpecs);
+        return Specs.union(allIncludeSpecs);
     }
 
-    public Predicate<FileTreeElement> createExcludeSpec(PatternSet patternSet) {
-        List<Predicate<FileTreeElement>> allExcludeSpecs = new ArrayList<>(2 + patternSet.getExcludeSpecs().size());
+    public Spec<FileTreeElement> createExcludeSpec(PatternSet patternSet) {
+        List<Spec<FileTreeElement>> allExcludeSpecs = new ArrayList<>(2 + patternSet.getExcludeSpecs().size());
 
         if (!patternSet.getExcludes().isEmpty()) {
             allExcludeSpecs.add(createSpec(patternSet.getExcludes(), false, patternSet.isCaseSensitive()));
@@ -50,13 +52,13 @@ public class PatternSpecFactory {
         allExcludeSpecs.addAll(patternSet.getExcludeSpecs());
 
         if (allExcludeSpecs.isEmpty()) {
-            return Predicates.satisfyNone();
+            return Specs.satisfyNone();
         } else {
-            return Predicates.union(allExcludeSpecs);
+            return Specs.union(allExcludeSpecs);
         }
     }
 
-    private synchronized Predicate<FileTreeElement> getDefaultExcludeSpec(CaseSensitivity caseSensitivity) {
+    private synchronized Spec<FileTreeElement> getDefaultExcludeSpec(CaseSensitivity caseSensitivity) {
         String[] defaultExcludes = {};
         if (defaultExcludeSpecCache.isEmpty()) {
             updateDefaultExcludeSpecCache(defaultExcludes);
@@ -93,9 +95,9 @@ public class PatternSpecFactory {
         }
     }
 
-    protected Predicate<FileTreeElement> createSpec(Collection<String> patterns, boolean include, boolean caseSensitive) {
+    protected Spec<FileTreeElement> createSpec(Collection<String> patterns, boolean include, boolean caseSensitive) {
         if (patterns.isEmpty()) {
-            return include ? Predicates.satisfyAll() : Predicates.satisfyNone();
+            return include ? Specs.satisfyAll() : Specs.satisfyNone();
         }
 
         PatternMatcher

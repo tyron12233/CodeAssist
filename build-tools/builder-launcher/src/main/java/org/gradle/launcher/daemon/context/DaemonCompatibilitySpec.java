@@ -17,7 +17,11 @@ public class DaemonCompatibilitySpec implements ExplainingSpec<DaemonContext> {
 
     @Override
     public boolean isSatisfiedBy(DaemonContext potentialContext) {
-        return whyUnsatisfied(potentialContext) == null;
+        String unsatisfied = whyUnsatisfied(potentialContext);
+        if (unsatisfied != null && unsatisfied.contains("Java home is different")) {
+            return true;
+        }
+        return unsatisfied == null;
     }
 
     @Override

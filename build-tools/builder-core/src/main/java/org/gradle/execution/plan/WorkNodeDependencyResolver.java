@@ -33,10 +33,4 @@ public class WorkNodeDependencyResolver implements DependencyResolver {
         }
         return actionNode;
     }
-
-    @Override
-    public boolean attachActionTo(Node value, Action<? super Task> action) {
-        return false;
-    }
-
 }

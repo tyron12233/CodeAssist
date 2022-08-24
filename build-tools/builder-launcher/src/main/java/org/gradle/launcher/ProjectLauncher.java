@@ -24,7 +24,10 @@ import org.gradle.launcher.exec.BuildActionExecuter;
 import org.gradle.launcher.exec.BuildActionParameters;
 import org.gradle.launcher.exec.BuildExecuter;
 import org.gradle.launcher.exec.DefaultBuildActionParameters;
+import org.gradle.tooling.GradleConnector;
+import org.gradle.tooling.ProjectConnection;
 
+import java.net.URI;
 import java.util.Collections;
 
 public class ProjectLauncher {
@@ -52,9 +55,17 @@ public class ProjectLauncher {
     }
 
     public void execute() {
+        if (false) {
+            GradleConnector gradleConnector = GradleConnector.newConnector()
+                    .forProjectDirectory(startParameter.getProjectDir())
+                    .useDistribution(URI.create("codeAssist"));
+            ProjectConnection projectConnection = gradleConnector.connect();
+            projectConnection.newBuild().forTasks("assemble").run();
+            return;
+        }
+        BuildExecuter buildExecuter = globalServices.get(BuildExecuter.class);
         Runnable runnable = runBuildAndCloseServices(
-                startParameter,
-                globalServices.get(BuildExecuter.class),
+                startParameter, buildExecuter,
                 globalServices,
                 globalServices.get(GradleUserHomeScopeServiceRegistry.class)
         );

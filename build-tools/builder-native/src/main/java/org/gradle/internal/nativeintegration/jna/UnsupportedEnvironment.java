@@ -1,5 +1,7 @@
 package org.gradle.internal.nativeintegration.jna;
 
+import com.tyron.common.TestUtil;
+
 import org.gradle.internal.nativeintegration.NativeIntegrationException;
 import org.gradle.internal.nativeintegration.NativeIntegrationUnavailableException;
 import org.gradle.internal.nativeintegration.ProcessEnvironment;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
+import java.sql.Ref;
 import java.util.Map;
 
 public class UnsupportedEnvironment implements ProcessEnvironment {
@@ -28,6 +31,13 @@ public class UnsupportedEnvironment implements ProcessEnvironment {
      * This works on Solaris and should work with any Java VM
      */
     private Long extractPIDFromRuntimeMXBeanName() {
+        if (TestUtil.isDalvik()) {
+            try {
+                return (Long) Class.forName("android.os.Process").getDeclaredMethod("myPid").invoke(null);
+            } catch (ReflectiveOperationException e) {
+                throw new RuntimeException(e);
+            }
+        }
         Long pid = null;
         String runtimeMXBeanName = ManagementFactory.getRuntimeMXBean().getName();
         int separatorPos = runtimeMXBeanName.indexOf('@');

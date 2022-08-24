@@ -1,8 +1,8 @@
 package org.gradle.execution.plan;
 
 import com.google.common.collect.Maps;
-import org.gradle.api.Project;
 import org.gradle.api.Plugin;
+import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.GradleInternal;
@@ -13,6 +13,7 @@ import org.gradle.composite.internal.BuildTreeWorkGraphController;
 import org.gradle.internal.Cast;
 import org.gradle.internal.execution.WorkValidationContext;
 import org.gradle.internal.execution.impl.DefaultWorkValidationContext;
+import org.gradle.internal.operations.BuildOperationRunner;
 import org.gradle.internal.service.scopes.Scopes;
 import org.gradle.internal.service.scopes.ServiceScope;
 import org.gradle.plugin.use.PluginId;
@@ -32,14 +33,24 @@ import java.util.Set;
 public class TaskNodeFactory {
     private final Map<Task, TaskNode> nodes = new HashMap<>();
     private final BuildTreeWorkGraphController workGraphController;
+    private final NodeValidator nodeValidator;
+    private final BuildOperationRunner buildOperationRunner;
     private final GradleInternal thisBuild;
     private final DocumentationRegistry documentationRegistry;
     private final DefaultTypeOriginInspectorFactory typeOriginInspectorFactory;
 
-    public TaskNodeFactory(GradleInternal thisBuild, DocumentationRegistry documentationRegistry, BuildTreeWorkGraphController workGraphController) {
+    public TaskNodeFactory(
+            GradleInternal thisBuild,
+            DocumentationRegistry documentationRegistry,
+            BuildTreeWorkGraphController workGraphController,
+            NodeValidator nodeValidator,
+            BuildOperationRunner buildOperationRunner
+    ) {
         this.thisBuild = thisBuild;
         this.documentationRegistry = documentationRegistry;
         this.workGraphController = workGraphController;
+        this.nodeValidator = nodeValidator;
+        this.buildOperationRunner = buildOperationRunner;
         this.typeOriginInspectorFactory = new DefaultTypeOriginInspectorFactory();
     }
 
@@ -47,11 +58,16 @@ public class TaskNodeFactory {
         return nodes.keySet();
     }
 
+    @Nullable
+    public TaskNode getNode(Task task) {
+        return nodes.get(task);
+    }
+
     public TaskNode getOrCreateNode(Task task) {
         TaskNode node = nodes.get(task);
         if (node == null) {
             if (task.getProject().getGradle() == thisBuild) {
-                node = new LocalTaskNode((TaskInternal) task, new DefaultWorkValidationContext(documentationRegistry, typeOriginInspectorFactory.forTask(task)));
+                node = new LocalTaskNode((TaskInternal) task, nodeValidator, new DefaultWorkValidationContext(documentationRegistry, typeOriginInspectorFactory.forTask(task)), buildOperationRunner);
             } else {
                 node = TaskInAnotherBuild.of((TaskInternal) task, workGraphController);
             }
@@ -74,12 +90,6 @@ public class TaskNodeFactory {
 
         @Nullable
         private File jarFileFor(Class<?> pluginClass) {
-            if (pluginClass.getProtectionDomain() == null) {
-                return null;
-            }
-            if (pluginClass.getProtectionDomain().getCodeSource() == null) {
-                return null;
-            }
             return clazzToFile.computeIfAbsent(pluginClass, clazz -> toFile(pluginClass.getProtectionDomain().getCodeSource().getLocation()));
         }
 

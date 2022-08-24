@@ -2,6 +2,7 @@ package org.gradle.api.tasks.util;
 
 import com.google.common.collect.Sets;
 import org.gradle.api.file.FileTreeElement;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.typeconversion.NotationParser;
 import org.gradle.internal.typeconversion.NotationParserBuilder;
 import org.gradle.api.tasks.util.internal.PatternSpecFactory;
@@ -21,8 +22,8 @@ public class PatternSet implements PatternFilterable {
 
     private Set<String> includes;
     private Set<String> excludes;
-    private Set<Predicate<FileTreeElement>> includeSpecs;
-    private Set<Predicate<FileTreeElement>> excludeSpecs;
+    private Set<Spec<FileTreeElement>> includeSpecs;
+    private Set<Spec<FileTreeElement>> excludeSpecs;
     private boolean caseSensitive = true;
 
     public PatternSet() {
@@ -129,7 +130,7 @@ public class PatternSet implements PatternFilterable {
                && (excludeSpecs == null || excludeSpecs.isEmpty());
     }
 
-    public Predicate<FileTreeElement> getAsSpec() {
+    public Spec<FileTreeElement> getAsSpec() {
         return patternSpecFactory.createSpec(this);
     }
 
@@ -148,7 +149,7 @@ public class PatternSet implements PatternFilterable {
         return includes;
     }
 
-    public Set<Predicate<FileTreeElement>> getIncludeSpecs() {
+    public Set<Spec<FileTreeElement>> getIncludeSpecs() {
         if (includeSpecs == null) {
             includeSpecs = Sets.newLinkedHashSet();
         }
@@ -173,7 +174,7 @@ public class PatternSet implements PatternFilterable {
         return this;
     }
 
-    public PatternSet include(Predicate<FileTreeElement> spec) {
+    public PatternSet include(Spec<FileTreeElement> spec) {
         getIncludeSpecs().add(spec);
         return this;
     }
@@ -186,7 +187,7 @@ public class PatternSet implements PatternFilterable {
     }
 
 
-    public Set<Predicate<FileTreeElement>> getExcludeSpecs() {
+    public Set<Spec<FileTreeElement>> getExcludeSpecs() {
         if (excludeSpecs == null) {
             excludeSpecs = Sets.newLinkedHashSet();
         }
@@ -210,8 +211,8 @@ public class PatternSet implements PatternFilterable {
     /*
     This can't be called just include, because it has the same erasure as include(Iterable<String>).
      */
-    public PatternSet includeSpecs(Iterable<Predicate<FileTreeElement>> includeSpecs) {
-        getIncludeSpecs().addAll((Collection<? extends Predicate<FileTreeElement>>) includeSpecs);
+    public PatternSet includeSpecs(Iterable<Spec<FileTreeElement>> includeSpecs) {
+        getIncludeSpecs().addAll((Collection<? extends Spec<FileTreeElement>>) includeSpecs);
         return this;
     }
 
@@ -227,13 +228,13 @@ public class PatternSet implements PatternFilterable {
         return this;
     }
 
-    public PatternSet exclude(Predicate<FileTreeElement> spec) {
+    public PatternSet exclude(Spec<FileTreeElement> spec) {
         getExcludeSpecs().add(spec);
         return this;
     }
 
-    public PatternSet excludeSpecs(Iterable<Predicate<FileTreeElement>> excludes) {
-        getExcludeSpecs().addAll((Collection<? extends Predicate<FileTreeElement>>) excludes);
+    public PatternSet excludeSpecs(Iterable<Spec<FileTreeElement>> excludes) {
+        getExcludeSpecs().addAll((Collection<? extends Spec<FileTreeElement>>) excludes);
         return this;
     }
 

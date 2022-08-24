@@ -81,7 +81,7 @@ public class DefaultBuildLauncher extends AbstractLongRunningOperation<DefaultBu
 
     @Override
     public void run() {
-        BlockingResultHandler<Void> handler = new BlockingResultHandler<Void>(Void.class);
+        BlockingResultHandler<Void> handler = new BlockingResultHandler<>(Void.class);
         run(handler);
         handler.getResult();
     }
@@ -97,20 +97,15 @@ public class DefaultBuildLauncher extends AbstractLongRunningOperation<DefaultBu
 
             @Override
             public Void run(ConsumerConnection connection) {
-                Void sink = connection.run(Void.class, operationParameters);
-                return sink;
+                return connection.run(Void.class, operationParameters);
             }
         }, new ResultHandlerAdapter(handler));
     }
 
     private class ResultHandlerAdapter extends org.gradle.tooling.internal.consumer.ResultHandlerAdapter<Void> {
         public ResultHandlerAdapter(ResultHandler<? super Void> handler) {
-            super(handler, new ExceptionTransformer(new Transformer<String, Throwable>() {
-                @Override
-                public String transform(Throwable throwable) {
-                    return String.format("Could not execute build using %s.", connection.getDisplayName());
-                }
-            }));
+            super(handler, new ExceptionTransformer(
+                    throwable -> String.format("Could not execute build using %s.", connection.getDisplayName())));
         }
     }
 }

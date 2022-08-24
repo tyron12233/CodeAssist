@@ -6,13 +6,11 @@ import org.gradle.api.internal.TaskInternal;
 import org.gradle.execution.plan.Node;
 import org.gradle.execution.plan.TaskNode;
 import org.gradle.execution.plan.TaskNodeFactory;
-import org.gradle.internal.UncheckedException;
 import org.gradle.internal.build.BuildLifecycleController;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.build.BuildWorkGraph;
 import org.gradle.internal.build.ExecutionResult;
 import org.gradle.internal.build.ExportedTaskNode;
-import org.gradle.internal.concurrent.Stoppable;
 import org.gradle.internal.graph.CachingDirectedGraphWalker;
 import org.gradle.internal.graph.DirectedGraphRenderer;
 import org.gradle.internal.logging.text.StyledTextOutput;
@@ -21,20 +19,19 @@ import org.gradle.internal.operations.CurrentBuildOperationRef;
 import org.gradle.internal.work.WorkerLeaseService;
 
 import java.io.StringWriter;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
-class DefaultBuildController implements BuildController, Stoppable {
+class DefaultBuildController implements BuildController {
     private enum State {
-        DiscoveringTasks, ReadyToRun, RunningTasks, Finished
+        DiscoveringTasks,
+        ReadyToRun,
+        RunningTasks,
+        Finished
     }
 
     private final BuildWorkGraph workGraph;
@@ -43,11 +40,6 @@ class DefaultBuildController implements BuildController, Stoppable {
     private final WorkerLeaseService workerLeaseService;
 
     private State state = State.DiscoveringTasks;
-    // Lock protects the following state
-    private final Lock lock = new ReentrantLock();
-    private final Condition stateChange = lock.newCondition();
-    private boolean finished;
-    private final List<Throwable> executionFailures = new ArrayList<>();
 
     public DefaultBuildController(BuildState build, WorkerLeaseService workerLeaseService) {
         this.workerLeaseService = workerLeaseService;
@@ -101,44 +93,15 @@ class DefaultBuildController implements BuildController, Stoppable {
     }
 
     @Override
-    public void startExecution(ExecutorService executorService) {
+    public void startExecution(ExecutorService executorService, Consumer<ExecutionResult<Void>> completionHandler) {
         assertInState(State.ReadyToRun);
-        executorService.submit(new BuildOpRunnable(CurrentBuildOperationRef.instance().get()));
+        executorService.submit(new BuildOpRunnable(CurrentBuildOperationRef.instance().get(), completionHandler));
         state = State.RunningTasks;
     }
 
     @Override
-    public ExecutionResult<Void> awaitCompletion() {
-        assertInState(State.RunningTasks);
-        doAwaitCompletion();
-        state = State.Finished;
-        lock.lock();
-        try {
-            return ExecutionResult.maybeFailed(executionFailures);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
     public void stop() {
-        if (state == State.RunningTasks) {
-            throw new IllegalStateException("Build is currently running tasks.");
-        }
-    }
-
-    private void doAwaitCompletion() {
-        // Ensure that this thread does not hold locks while waiting and so prevent this work from completing
-        workerLeaseService.blocking(() -> {
-            lock.lock();
-            try {
-                while (!finished) {
-                    awaitStateChange();
-                }
-            } finally {
-                lock.unlock();
-            }
-        });
+        workGraph.stop();
     }
 
     private void assertInState(State expectedState) {
@@ -154,19 +117,23 @@ class DefaultBuildController implements BuildController, Stoppable {
         }
         if (!visiting.add(task)) {
             // Visiting dependencies -> have found a cycle
-            CachingDirectedGraphWalker<TaskInternal, Void> graphWalker = new CachingDirectedGraphWalker<>((node, values, connectedNodes) -> visitDependenciesOf(node, connectedNodes::add));
+            CachingDirectedGraphWalker<TaskInternal, Void> graphWalker = new CachingDirectedGraphWalker<>(
+                    (node, values, connectedNodes) -> visitDependenciesOf(node, connectedNodes::add));
             graphWalker.add(task);
             List<Set<TaskInternal>> cycles = graphWalker.findCycles();
             Set<TaskInternal> cycle = cycles.get(0);
 
-            DirectedGraphRenderer<TaskInternal> graphRenderer = new DirectedGraphRenderer<>((node, output) -> output.withStyle(StyledTextOutput.Style.Identifier).text(node.getIdentityPath()), (node, values, connectedNodes) -> visitDependenciesOf(node, dep -> {
-                if (cycle.contains(dep)) {
-                    connectedNodes.add(dep);
-                }
-            }));
+            DirectedGraphRenderer<TaskInternal> graphRenderer = new DirectedGraphRenderer<>(
+                    (node, output) -> output.withStyle(StyledTextOutput.Style.Identifier).text(node.getIdentityPath()),
+                    (node, values, connectedNodes) -> visitDependenciesOf(node, dep -> {
+                        if (cycle.contains(dep)) {
+                            connectedNodes.add(dep);
+                        }
+                    }));
             StringWriter writer = new StringWriter();
             graphRenderer.renderTo(task, writer);
-            throw new CircularDependencyException(String.format("Circular dependency between the following tasks:%n%s", writer.toString()));
+            throw new CircularDependencyException(String.format("Circular dependency between the " +
+                                                                "following tasks:%n%s", writer));
         }
         visitDependenciesOf(task, dep -> checkForCyclesFor(dep, visited, visiting));
         visiting.remove(task);
@@ -174,7 +141,8 @@ class DefaultBuildController implements BuildController, Stoppable {
     }
 
     private void visitDependenciesOf(TaskInternal task, Consumer<TaskInternal> consumer) {
-        TaskNodeFactory taskNodeFactory = ((GradleInternal) task.getProject().getGradle()).getServices().get(TaskNodeFactory.class);
+        TaskNodeFactory taskNodeFactory =
+                ((GradleInternal) task.getProject().getGradle()).getServices().get(TaskNodeFactory.class);
         TaskNode node = taskNodeFactory.getOrCreateNode(task);
         for (Node dependency : node.getAllSuccessors()) {
             if (dependency instanceof TaskNode) {
@@ -183,69 +151,28 @@ class DefaultBuildController implements BuildController, Stoppable {
         }
     }
 
-    private void doRun() {
+    private ExecutionResult<Void> doRun() {
         try {
-            workerLeaseService.runAsWorkerThread(this::doBuild);
+            return workerLeaseService.runAsWorkerThread(workGraph::runWork);
         } catch (Throwable t) {
-            executionFailed(t);
-        } finally {
-            markFinished();
-        }
-    }
-
-    private void markFinished() {
-        lock.lock();
-        try {
-            finished = true;
-            stateChange.signalAll();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void awaitStateChange() {
-        try {
-            stateChange.await();
-        } catch (InterruptedException e) {
-            throw UncheckedException.throwAsUncheckedException(e);
-        }
-    }
-
-    private void doBuild() {
-        ExecutionResult<Void> result = workGraph.runWork();
-        executionFinished(result);
-    }
-
-    private void executionFinished(ExecutionResult<Void> result) {
-        lock.lock();
-        try {
-            executionFailures.addAll(result.getFailures());
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void executionFailed(Throwable failure) {
-        lock.lock();
-        try {
-            executionFailures.add(failure);
-        } finally {
-            lock.unlock();
+            return ExecutionResult.failed(t);
         }
     }
 
     private class BuildOpRunnable implements Runnable {
         private final BuildOperationRef parentBuildOperation;
+        private final Consumer<ExecutionResult<Void>> completionHandler;
 
-        BuildOpRunnable(BuildOperationRef parentBuildOperation) {
+        BuildOpRunnable(BuildOperationRef parentBuildOperation, Consumer<ExecutionResult<Void>> completionHandler) {
             this.parentBuildOperation = parentBuildOperation;
+            this.completionHandler = completionHandler;
         }
 
         @Override
         public void run() {
             CurrentBuildOperationRef.instance().set(parentBuildOperation);
             try {
-                doRun();
+                completionHandler.accept(doRun());
             } finally {
                 CurrentBuildOperationRef.instance().set(null);
             }

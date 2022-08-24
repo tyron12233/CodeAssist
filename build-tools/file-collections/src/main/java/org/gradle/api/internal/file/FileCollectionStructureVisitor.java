@@ -1,5 +1,6 @@
 package org.gradle.api.internal.file;
 
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.file.collections.FileSystemMirroringFileTree;
 import org.gradle.api.tasks.util.PatternSet;
 
@@ -53,11 +54,6 @@ public interface FileCollectionStructureVisitor {
      * Visits an opaque file source that cannot be visited in further detail.
      */
     void visitCollection(FileCollectionInternal.Source source, Iterable<File> contents);
-
-    /**
-     * Visits a file tree whose content is generated from some opaque source.
-     */
-    void visitGenericFileTree(FileTreeInternal fileTree, FileSystemMirroringFileTree sourceTree);
 
     /**
      * Visits a file tree at a root file on the file system (potentially filtered).

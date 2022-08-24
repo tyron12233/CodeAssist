@@ -86,11 +86,13 @@ dependencies {
 
     implementation project(path: ':language-api')
 
+    implementation projects.buildTools.builderLauncher
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderCore
     implementation projects.buildTools.builderCoreApi
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderLauncher
+    implementation projects.buildTools.builderToolingApiBuilders
     implementation projects.buildTools.builderBuildOperations
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderEnterpriseWorkers
@@ -176,3 +178,12 @@ dependencies {
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
 }
+
+afterEvaluate {
+    tasks.getByName("packageDebug").doLast {
+        println "====================="
+        println it.class
+        inputs.files.each{println it}
+    }
+}
+

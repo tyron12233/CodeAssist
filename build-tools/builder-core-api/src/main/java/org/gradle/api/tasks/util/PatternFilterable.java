@@ -1,9 +1,9 @@
 package org.gradle.api.tasks.util;
 
 import org.gradle.api.file.FileTreeElement;
+import org.gradle.api.specs.Spec;
 
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * <p>A {@code PatternFilterable} represents some file container which Ant-style include and exclude patterns or specs
@@ -120,7 +120,7 @@ public interface PatternFilterable {
      * @return this
      * @see PatternFilterable Pattern Format
      */
-    PatternFilterable include(Predicate<FileTreeElement> includeSpec);
+    PatternFilterable include(Spec<FileTreeElement> includeSpec);
 
 //    /**
 //     * Adds an include spec. This method may be called multiple times to append new specs. The given closure is passed a
@@ -171,7 +171,7 @@ public interface PatternFilterable {
      * @return this
      * @see PatternFilterable Pattern Format
      */
-    PatternFilterable exclude(Predicate<FileTreeElement> excludeSpec);
+    PatternFilterable exclude(Spec<FileTreeElement> excludeSpec);
 
 //    /**
 //     * Adds an exclude spec. This method may be called multiple times to append new specs.The given closure is passed a

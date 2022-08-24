@@ -4,25 +4,24 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Sets;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.file.FileSystemLocationProperty;
-import org.gradle.internal.file.TreeType;
-import org.gradle.util.internal.DeferredUtil;
 import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.FileCollectionInternal;
 import org.gradle.api.internal.file.FileCollectionStructureVisitor;
 import org.gradle.api.internal.file.FileTreeInternal;
 import org.gradle.api.internal.file.collections.FileSystemMirroringFileTree;
-import org.gradle.internal.fingerprint.AbsolutePathInputNormalizer;
-import org.gradle.internal.fingerprint.IgnoredPathInputNormalizer;
-import org.gradle.internal.fingerprint.NameOnlyInputNormalizer;
-import org.gradle.internal.fingerprint.RelativePathInputNormalizer;
 import org.gradle.api.internal.tasks.PropertyFileCollection;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.FileNormalizer;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.util.PatternSet;
+import org.gradle.internal.file.TreeType;
+import org.gradle.internal.fingerprint.AbsolutePathInputNormalizer;
+import org.gradle.internal.fingerprint.IgnoredPathInputNormalizer;
+import org.gradle.internal.fingerprint.NameOnlyInputNormalizer;
+import org.gradle.internal.fingerprint.RelativePathInputNormalizer;
+import org.gradle.util.internal.DeferredUtil;
 
-import org.jetbrains.annotations.Nullable;
-
+import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Iterator;
 import java.util.Map;
@@ -32,8 +31,7 @@ import java.util.function.Consumer;
 
 public class FileParameterUtils {
 
-    public static Class<? extends FileNormalizer> determineNormalizerForPathSensitivity(
-            PathSensitivity pathSensitivity) {
+    public static Class<? extends FileNormalizer> determineNormalizerForPathSensitivity(PathSensitivity pathSensitivity) {
         switch (pathSensitivity) {
             case NONE:
                 return IgnoredPathInputNormalizer.class;
@@ -141,11 +139,6 @@ public class FileParameterUtils {
                         FileCollectionInternal outputFiles = fileCollectionFactory.fixed(content);
                         consumer.accept(new DefaultCacheableOutputFilePropertySpec(propertyName, "$" + index.incrementAndGet(), outputFiles, outputType));
                     }
-                }
-
-                @Override
-                public void visitGenericFileTree(FileTreeInternal fileTree, FileSystemMirroringFileTree sourceTree) {
-                    failOnInvalidOutputType(fileTree);
                 }
 
                 @Override

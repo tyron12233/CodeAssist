@@ -1,17 +1,18 @@
 package org.gradle.execution.plan;
 
 import org.gradle.api.Action;
-import org.gradle.api.Task;
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.tasks.TaskContainerInternal;
 import org.gradle.api.internal.tasks.properties.DefaultTaskProperties;
+import org.gradle.api.internal.tasks.properties.OutputFilePropertySpec;
 import org.gradle.api.internal.tasks.properties.PropertyWalker;
 import org.gradle.api.internal.tasks.properties.TaskProperties;
 import org.gradle.api.tasks.TaskExecutionException;
-import org.gradle.internal.ImmutableActionSet;
 import org.gradle.internal.execution.WorkValidationContext;
+import org.gradle.internal.operations.BuildOperationRunner;
 import org.gradle.internal.resources.ResourceLock;
 import org.gradle.internal.service.ServiceRegistry;
 
@@ -19,6 +20,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * A {@link TaskNode} implementation for a task in the current build.
@@ -26,16 +28,17 @@ import java.util.Set;
 public class LocalTaskNode extends TaskNode {
     private final TaskInternal task;
     private final WorkValidationContext validationContext;
-    private ImmutableActionSet<Task> postAction = ImmutableActionSet.empty();
+    private final ResolveMutationsNode resolveMutationsNode;
     private Set<Node> lifecycleSuccessors;
 
     private boolean isolated;
     private List<? extends ResourceLock> resourceLocks;
     private TaskProperties taskProperties;
 
-    public LocalTaskNode(TaskInternal task, WorkValidationContext workValidationContext) {
+    public LocalTaskNode(TaskInternal task, NodeValidator nodeValidator, WorkValidationContext workValidationContext, BuildOperationRunner buildOperationRunner) {
         this.task = task;
         this.validationContext = workValidationContext;
+        this.resolveMutationsNode = new ResolveMutationsNode(this, nodeValidator, buildOperationRunner);
     }
 
     /**
@@ -81,17 +84,12 @@ public class LocalTaskNode extends TaskNode {
     }
 
     @Override
-    public Action<? super Task> getPostAction() {
-        return postAction;
+    public boolean isPublicNode() {
+        return true;
     }
 
     public TaskProperties getTaskProperties() {
         return taskProperties;
-    }
-
-    @Override
-    public void appendPostAction(Action<? super Task> action) {
-        postAction = postAction.add(action);
     }
 
     @Override
@@ -100,20 +98,14 @@ public class LocalTaskNode extends TaskNode {
     }
 
     @Override
-    public void rethrowNodeFailure() {
-        task.getState().rethrowFailure();
-    }
-
-    @Override
-    public void prepareForExecution() {
+    public void prepareForExecution(Action<Node> monitor) {
         ((TaskContainerInternal) task.getProject().getTasks()).prepareForExecution(task);
     }
 
     @Override
-    public void resolveDependencies(TaskDependencyResolver dependencyResolver, Action<Node> processHardSuccessor) {
+    public void resolveDependencies(TaskDependencyResolver dependencyResolver) {
         for (Node targetNode : getDependencies(dependencyResolver)) {
             addDependencySuccessor(targetNode);
-            processHardSuccessor.execute(targetNode);
         }
 
         lifecycleSuccessors = dependencyResolver.resolveDependenciesFor(task, task.getLifecycleDependencies());
@@ -123,7 +115,6 @@ public class LocalTaskNode extends TaskNode {
                 throw new IllegalStateException("Only tasks can be finalizers: " + targetNode);
             }
             addFinalizerNode((TaskNode) targetNode);
-            processHardSuccessor.execute(targetNode);
         }
         for (Node targetNode : getMustRunAfter(dependencyResolver)) {
             addMustSuccessor((TaskNode) targetNode);
@@ -133,16 +124,9 @@ public class LocalTaskNode extends TaskNode {
         }
     }
 
-    @Override
-    public boolean requiresMonitoring() {
-        return false;
-    }
-
     private void addFinalizerNode(TaskNode finalizerNode) {
-        addFinalizer(finalizerNode);
-        if (!finalizerNode.isInKnownState()) {
-            finalizerNode.mustNotRun();
-        }
+        deprecateLifecycleHookReferencingNonLocalTask("finalizedBy", finalizerNode);
+        finalizerNode.addFinalizingSuccessor(this);
     }
 
     private Set<Node> getDependencies(TaskDependencyResolver dependencyResolver) {
@@ -162,20 +146,59 @@ public class LocalTaskNode extends TaskNode {
     }
 
     @Override
-    public int compareTo(Node other) {
-        if (getClass() != other.getClass()) {
-            return getClass().getName().compareTo(other.getClass().getName());
-        }
-        LocalTaskNode localTask = (LocalTaskNode) other;
-        return task.compareTo(localTask.task);
-    }
-
-    @Override
     public String toString() {
         return task.getIdentityPath().toString();
     }
 
+    private void addOutputFilesToMutations(Set<OutputFilePropertySpec> outputFilePropertySpecs) {
+        final MutationInfo mutations = getMutationInfo();
+        outputFilePropertySpecs.forEach(spec -> {
+            File outputLocation = spec.getOutputFile();
+            if (outputLocation != null) {
+                mutations.outputPaths.add(outputLocation.getAbsolutePath());
+            }
+            mutations.hasOutputs = true;
+        });
+    }
+
+    private void addLocalStateFilesToMutations(FileCollection localStateFiles) {
+        final MutationInfo mutations = getMutationInfo();
+        localStateFiles.forEach(file -> {
+            mutations.outputPaths.add(file.getAbsolutePath());
+            mutations.hasLocalState = true;
+        });
+    }
+
+    private void addDestroyablesToMutations(FileCollection destroyables) {
+        destroyables
+                .forEach(file -> getMutationInfo().destroyablePaths.add(file.getAbsolutePath()));
+    }
+
     @Override
+    public void visitPreExecutionNodes(Consumer<? super Node> visitor) {
+        visitor.accept(resolveMutationsNode);
+    }
+
+    public Node getPrepareNode() {
+        return resolveMutationsNode;
+    }
+
+    @Override
+    public void markFailedDueToDependencies(Consumer<Node> completionAction) {
+        super.markFailedDueToDependencies(completionAction);
+        if (!resolveMutationsNode.isComplete()) {
+            resolveMutationsNode.markFailedDueToDependencies(completionAction);
+        }
+    }
+
+    @Override
+    public void cancelExecution(Consumer<Node> completionAction) {
+        super.cancelExecution(completionAction);
+        if (!resolveMutationsNode.isComplete()) {
+            resolveMutationsNode.cancelExecution(completionAction);
+        }
+    }
+
     public void resolveMutations() {
         final LocalTaskNode taskNode = this;
         final TaskInternal task = getTask();
@@ -186,25 +209,15 @@ public class LocalTaskNode extends TaskNode {
         PropertyWalker propertyWalker = serviceRegistry.get(PropertyWalker.class);
         try {
             taskProperties = DefaultTaskProperties.resolve(propertyWalker, fileCollectionFactory, task);
-            taskProperties.getOutputFileProperties().forEach(spec -> {
-                File outputLocation = spec.getOutputFile();
-                if (outputLocation != null) {
-                    mutations.outputPaths.add(outputLocation.getAbsolutePath());
-                }
-                mutations.hasOutputs = true;
-            });
-            taskProperties.getLocalStateFiles().forEach(file -> {
-                mutations.outputPaths.add(file.getAbsolutePath());
-                mutations.hasLocalState = true;
-            });
-            taskProperties.getDestroyableFiles()
-                    .forEach(file -> mutations.destroyablePaths.add(file.getAbsolutePath()));
+
+            addOutputFilesToMutations(taskProperties.getOutputFileProperties());
+            addLocalStateFilesToMutations(taskProperties.getLocalStateFiles());
+            addDestroyablesToMutations(taskProperties.getDestroyableFiles());
+
             mutations.hasFileInputs = !taskProperties.getInputFileProperties().isEmpty();
         } catch (Exception e) {
             throw new TaskExecutionException(task, e);
         }
-
-        mutations.resolved = true;
 
         if (!mutations.destroyablePaths.isEmpty()) {
             if (mutations.hasOutputs) {
@@ -217,6 +230,16 @@ public class LocalTaskNode extends TaskNode {
                 throw new IllegalStateException("Task " + taskNode + " has both local state and destroyables defined.  A task can define either local state or destroyables, but not both.");
             }
         }
+    }
+
+    @Override
+    public Set<Node> getLifecycleSuccessors() {
+        return lifecycleSuccessors;
+    }
+
+    @Override
+    public void setLifecycleSuccessors(Set<Node> lifecycleSuccessors) {
+        this.lifecycleSuccessors = lifecycleSuccessors;
     }
 
     /**

@@ -13,6 +13,7 @@ dependencies {
     implementation projects.buildTools.builderProcessServices
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderEnterpriseWorkers
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.builderNative
     implementation projects.buildTools.builderBuildEvents
@@ -27,6 +28,8 @@ dependencies {
 
     implementation common.slf4j
     implementation common.commonsLang3
+    implementation 'org.ow2.asm:asm:9.3'
+
 
     testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-23'
     testImplementation 'junit:junit:4.13.2'

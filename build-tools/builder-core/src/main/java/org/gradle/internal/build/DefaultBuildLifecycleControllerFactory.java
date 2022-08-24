@@ -1,13 +1,11 @@
 package org.gradle.internal.build;
 
-
 import org.gradle.StartParameter;
 import org.gradle.api.Action;
 import org.gradle.api.internal.BuildDefinition;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.logging.configuration.ShowStacktrace;
 import org.gradle.execution.BuildWorkExecutor;
-import org.gradle.initialization.BuildCompletionListener;
 import org.gradle.initialization.exception.ExceptionAnalyser;
 import org.gradle.initialization.internal.InternalBuildFinishedListener;
 import org.gradle.internal.deprecation.DeprecationLogger;
@@ -85,14 +83,11 @@ public class DefaultBuildLifecycleControllerFactory implements BuildLifecycleCon
                 buildModelController,
                 exceptionAnalyser,
                 gradle.getBuildListenerBroadcaster(),
-                listenerManager.getBroadcaster(BuildCompletionListener.class),
                 listenerManager.getBroadcaster(InternalBuildFinishedListener.class),
                 gradle.getServices().get(BuildWorkPreparer.class),
                 gradle.getServices().get(BuildWorkExecutor.class),
-                buildScopeServices,
                 buildToolingModelControllerFactory,
                 stateTransitionControllerFactory
         );
     }
 }
-

@@ -43,6 +43,7 @@ import org.gradle.api.internal.tasks.testing.worker.TestWorker;
 import org.gradle.api.jvm.ModularitySpec;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
+import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.IgnoreEmptyDirectories;
@@ -745,7 +746,7 @@ public class Test extends AbstractTestTask implements JavaForkOptions, PatternFi
      * {@inheritDoc}
      */
     @Override
-    public Test include(Predicate<FileTreeElement> includeSpec) {
+    public Test include(Spec<FileTreeElement> includeSpec) {
         patternSet.include(includeSpec);
         return this;
     }
@@ -785,7 +786,7 @@ public class Test extends AbstractTestTask implements JavaForkOptions, PatternFi
      * {@inheritDoc}
      */
     @Override
-    public Test exclude(Predicate<FileTreeElement> excludeSpec) {
+    public Test exclude(Spec<FileTreeElement> excludeSpec) {
         patternSet.exclude(excludeSpec);
         return this;
     }

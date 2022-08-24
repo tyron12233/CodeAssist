@@ -16,6 +16,8 @@
 package org.gradle.launcher.daemon.client;
 
 import com.google.common.base.Preconditions;
+import com.tyron.common.TestUtil;
+
 import org.gradle.api.internal.specs.ExplainingSpec;
 import org.gradle.api.internal.specs.ExplainingSpecs;
 import org.gradle.api.logging.Logger;
@@ -248,9 +250,19 @@ public class DefaultDaemonConnector implements DaemonConnector {
             if (daemonInfo.getUid().equals(daemon.getUid())) {
                 try {
                     if (!constraint.isSatisfiedBy(daemonInfo.getContext())) {
-                        throw new DaemonConnectionException("The newly created daemon process has a different context than expected."
-                            + "\nIt won't be possible to reconnect to this daemon. Context mismatch: "
-                            + "\n" + constraint.whyUnsatisfied(daemonInfo.getContext()));
+                        boolean shouldIgnore = false;
+                        if (TestUtil.isDalvik()) {
+                            if (constraint.whyUnsatisfied(daemonInfo.getContext()).contains("Java home is different")) {
+                                shouldIgnore = true;
+                            }
+                        }
+                        if (!shouldIgnore) {
+                            throw new DaemonConnectionException(
+                                    "The newly created daemon process has a different context than expected." +
+                                    "\nIt won't be possible to reconnect to this daemon. Context mismatch: " +
+                                    "\n" +
+                                    constraint.whyUnsatisfied(daemonInfo.getContext()));
+                        }
                     }
                     return connectToDaemon(daemonInfo, new CleanupOnStaleAddress(daemonInfo, false));
                 } catch (ConnectException e) {

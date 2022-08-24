@@ -7,22 +7,20 @@ import org.gradle.api.file.FileVisitDetails;
 import org.gradle.api.file.FileVisitor;
 import org.gradle.api.file.RelativePath;
 import org.gradle.api.internal.file.DefaultFileVisitDetails;
-import org.gradle.api.internal.file.FileCollectionStructureVisitor;
 import org.gradle.api.internal.file.FileTreeInternal;
+import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
+import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.internal.file.pattern.PatternStep;
 import org.gradle.internal.file.pattern.PatternStepFactory;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 import org.gradle.internal.nativeintegration.services.FileSystems;
-import org.gradle.api.tasks.util.PatternSet;
-import org.gradle.util.Predicates;
 
 import java.io.File;
-
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Predicate;
 
 /**
  * Directory walker that supports a single Ant-style include pattern
@@ -34,14 +32,14 @@ public class SingleIncludePatternFileTree implements MinimalFileTree, LocalFileT
     private final File baseDir;
     private final String includePattern;
     private final List<String> patternSegments;
-    private final Predicate<FileTreeElement> excludeSpec;
+    private final Spec<FileTreeElement> excludeSpec;
     private final FileSystem fileSystem = FileSystems.getDefault();
 
     public SingleIncludePatternFileTree(File baseDir, String includePattern) {
-        this(baseDir, includePattern, Predicates.satisfyNone());
+        this(baseDir, includePattern, Specs.satisfyNone());
     }
 
-    public SingleIncludePatternFileTree(File baseDir, String includePattern, Predicate<FileTreeElement> excludeSpec) {
+    public SingleIncludePatternFileTree(File baseDir, String includePattern, Spec<FileTreeElement> excludeSpec) {
         this.baseDir = baseDir;
         if (includePattern.endsWith("/") || includePattern.endsWith("\\")) {
             includePattern += "**";
@@ -62,7 +60,7 @@ public class SingleIncludePatternFileTree implements MinimalFileTree, LocalFileT
     }
 
     @Override
-    public void visitStructure(FileCollectionStructureVisitor visitor, FileTreeInternal owner) {
+    public void visitStructure(MinimalFileTreeStructureVisitor visitor, FileTreeInternal owner) {
         visitor.visitFileTree(baseDir, getPatterns(), owner);
     }
 
@@ -116,16 +114,15 @@ public class SingleIncludePatternFileTree implements MinimalFileTree, LocalFileT
         if (file.isFile()) {
             if (segmentIndex == patternSegments.size()) {
                 RelativePath path = new RelativePath(true, relativePath.toArray(new String[relativePath.size()]));
-                FileVisitDetails
-                        details = new DefaultFileVisitDetails(file, path, stopFlag, fileSystem, fileSystem);
-                if (!excludeSpec.test(details)) {
+                FileVisitDetails details = new DefaultFileVisitDetails(file, path, stopFlag, fileSystem, fileSystem);
+                if (!excludeSpec.isSatisfiedBy(details)) {
                     visitor.visitFile(details);
                 }
             }
         } else if (file.isDirectory()) {
             RelativePath path = new RelativePath(false, relativePath.toArray(new String[relativePath.size()]));
             FileVisitDetails details = new DefaultFileVisitDetails(file, path, stopFlag, fileSystem, fileSystem);
-            if (!excludeSpec.test(details)) {
+            if (!excludeSpec.isSatisfiedBy(details)) {
                 visitor.visitDir(details);
             }
             if (segmentIndex < patternSegments.size()) {

@@ -138,7 +138,7 @@ public class DefaultSourceDirectorySet extends CompositeFileTree implements Sour
     }
 
     @Override
-    public PatternFilterable include(Predicate<FileTreeElement> includeSpec) {
+    public PatternFilterable include(Spec<FileTreeElement> includeSpec) {
         patterns.include(includeSpec);
         return this;
     }
@@ -162,7 +162,7 @@ public class DefaultSourceDirectorySet extends CompositeFileTree implements Sour
     }
 
     @Override
-    public PatternFilterable exclude(Predicate<FileTreeElement> excludeSpec) {
+    public PatternFilterable exclude(Spec<FileTreeElement> excludeSpec) {
         patterns.exclude(excludeSpec);
         return this;
     }

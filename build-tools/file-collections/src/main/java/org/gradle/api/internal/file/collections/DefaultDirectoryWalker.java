@@ -6,6 +6,7 @@ import org.gradle.api.file.FileVisitor;
 import org.gradle.api.file.RelativePath;
 import org.gradle.api.internal.file.AttributeBasedFileVisitDetails;
 import org.gradle.api.internal.file.UnauthorizedFileVisitDetails;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 
 import org.jetbrains.annotations.Nullable;
@@ -37,7 +38,7 @@ public class DefaultDirectoryWalker implements DirectoryWalker {
     }
 
     @Override
-    public void walkDir(File rootDir, RelativePath rootPath, FileVisitor visitor, Predicate<? super FileTreeElement> spec, AtomicBoolean stopFlag, boolean postfix) {
+    public void walkDir(File rootDir, RelativePath rootPath, FileVisitor visitor, Spec<? super FileTreeElement> spec, AtomicBoolean stopFlag, boolean postfix) {
         Deque<FileVisitDetails> directoryDetailsHolder = new ArrayDeque<>();
 
         try {

@@ -5,6 +5,7 @@ import org.gradle.api.logging.LoggingManager;
 import org.gradle.api.plugins.Convention;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.provider.Property;
+import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.TaskDependency;
@@ -151,7 +152,7 @@ public interface Task extends Comparable<Task>, ExtensionAware {
      *
      * @param onlyIfSpec specifies if a task should be run
      */
-    void onlyIf(Predicate<? super Task> onlyIfSpec);
+    void onlyIf(Spec<? super Task> onlyIfSpec);
 
     /**
      * <p>Execute the task only if the given spec is satisfied. The spec will be evaluated at task execution time, not
@@ -161,7 +162,7 @@ public interface Task extends Comparable<Task>, ExtensionAware {
      *
      * @param onlyIfSpec specifies if a task should be run
      */
-    void setOnlyIf(Predicate<? super Task> onlyIfSpec);
+    void setOnlyIf(Spec<? super Task> onlyIfSpec);
 
     /**
      * Returns the execution state of this task. This provides information about the execution of this task, such as

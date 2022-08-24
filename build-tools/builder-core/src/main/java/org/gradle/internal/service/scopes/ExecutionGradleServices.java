@@ -104,26 +104,6 @@ public class ExecutionGradleServices {
         return new DefaultOutputFilesRepository(cacheAccess, inMemoryCacheDecoratorFactory);
     }
 
-    PlanExecutor createPlanExecutor(
-            ParallelismConfiguration parallelismConfiguration,
-            ExecutorFactory executorFactory,
-            WorkerLeaseService workerLeaseService,
-            BuildCancellationToken cancellationToken,
-            ResourceLockCoordinationService coordinationService) {
-        int parallelThreads = parallelismConfiguration.getMaxWorkerCount();
-        if (parallelThreads < 1) {
-            throw new IllegalStateException(String.format("Cannot create executor for requested number of worker threads: %s.", parallelThreads));
-        }
-
-        return new DefaultPlanExecutor(
-                parallelismConfiguration,
-                executorFactory,
-                workerLeaseService,
-                cancellationToken,
-                coordinationService
-        );
-    }
-
     OutputChangeListener createOutputChangeListener(ListenerManager listenerManager) {
         return listenerManager.getBroadcaster(OutputChangeListener.class);
     }

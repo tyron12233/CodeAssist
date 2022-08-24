@@ -152,10 +152,9 @@ public class GradleScopeServices extends DefaultServiceRegistry {
             BuildOperationExecutor buildOperationExecutor,
             ListenerBuildOperationDecorator listenerBuildOperationDecorator,
             GradleInternal gradleInternal,
-            ListenerBroadcast<TaskExecutionListener> taskListeners,
+            ListenerBroadcast<org.gradle.api.execution.TaskExecutionListener> taskListeners,
             ListenerBroadcast<TaskExecutionGraphListener> graphListeners,
             ListenerManager listenerManager,
-            ProjectStateRegistry projectStateRegistry,
             ServiceRegistry gradleScopedServices
     ) {
         return new DefaultTaskExecutionGraph(
@@ -167,7 +166,6 @@ public class GradleScopeServices extends DefaultServiceRegistry {
                 graphListeners,
                 taskListeners,
                 listenerManager.getBroadcaster(BuildScopeListenerRegistrationListener.class),
-                projectStateRegistry,
                 gradleScopedServices
         );
     }
@@ -217,11 +215,11 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         };
     }
 
-    BuildConfigurationActionExecuter createBuildConfigurationActionExecuter(CommandLineTaskParser commandLineTaskParser, ProjectConfigurer projectConfigurer, ProjectStateRegistry projectStateRegistry, List<BuiltInCommand> builtInCommands) {
+    BuildConfigurationActionExecuter createBuildConfigurationActionExecuter(CommandLineTaskParser commandLineTaskParser, ProjectConfigurer projectConfigurer, List<BuiltInCommand> builtInCommands) {
         List<BuildConfigurationAction> taskSelectionActions = new LinkedList<>();
         taskSelectionActions.add(new DefaultTasksBuildExecutionAction(projectConfigurer, builtInCommands));
         taskSelectionActions.add(new TaskNameResolvingBuildConfigurationAction(commandLineTaskParser));
-        return new DefaultBuildConfigurationActionExecuter(taskSelectionActions, projectStateRegistry);
+        return new DefaultBuildConfigurationActionExecuter(taskSelectionActions);
     }
 
     TaskExecutionPreparer createTaskExecutionPreparer(BuildConfigurationActionExecuter buildConfigurationActionExecuter, BuildOperationExecutor buildOperationExecutor, BuildModelParameters buildModelParameters) {

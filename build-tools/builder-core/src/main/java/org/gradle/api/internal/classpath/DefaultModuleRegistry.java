@@ -88,10 +88,11 @@ public class DefaultModuleRegistry implements ModuleRegistry, GlobalCache {
     private Module loadExternalModule(String name) {
         File externalJar = findJar(name, SATISFY_ALL);
         if (externalJar == null) {
-            if (gradleInstallation == null) {
-                throw new UnknownModuleException(String.format("Cannot locate JAR for module '%s' in classpath: %s.", name, classpath));
-            }
-            throw new UnknownModuleException(String.format("Cannot locate JAR for module '%s' in distribution directory '%s'.", name, gradleInstallation.getGradleHome()));
+            return new DefaultModule(name, Collections.emptySet(), Collections.emptySet());
+//            if (gradleInstallation == null) {
+//                throw new UnknownModuleException(String.format("Cannot locate JAR for module '%s' in classpath: %s.", name, classpath));
+//            }
+//            throw new UnknownModuleException(String.format("Cannot locate JAR for module '%s' in distribution directory '%s'.", name, gradleInstallation.getGradleHome()));
         }
         return new DefaultModule(name, Collections.singleton(externalJar), Collections.emptySet());
     }

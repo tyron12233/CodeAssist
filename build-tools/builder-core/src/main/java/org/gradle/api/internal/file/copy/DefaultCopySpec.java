@@ -323,7 +323,7 @@ public class DefaultCopySpec implements CopySpecInternal {
     }
 
     @Override
-    public CopySpec include(Predicate<FileTreeElement> includeSpec) {
+    public CopySpec include(Spec<FileTreeElement> includeSpec) {
         patternSet.include(includeSpec);
         return this;
     }
@@ -358,7 +358,7 @@ public class DefaultCopySpec implements CopySpecInternal {
     }
 
     @Override
-    public CopySpec exclude(Predicate<FileTreeElement> excludeSpec) {
+    public CopySpec exclude(Spec<FileTreeElement> excludeSpec) {
         patternSet.exclude(excludeSpec);
         return this;
     }
@@ -651,8 +651,8 @@ public class DefaultCopySpec implements CopySpecInternal {
 
 
         @Override
-        public List<Predicate<FileTreeElement>> getAllExcludeSpecs() {
-            List<Predicate<FileTreeElement>> result = new ArrayList<>();
+        public List<Spec<FileTreeElement>> getAllExcludeSpecs() {
+            List<Spec<FileTreeElement>> result = new ArrayList<>();
             if (parentResolver != null) {
                 result.addAll(parentResolver.getAllExcludeSpecs());
             }
@@ -727,8 +727,8 @@ public class DefaultCopySpec implements CopySpecInternal {
         }
 
         @Override
-        public List<Predicate<FileTreeElement>> getAllIncludeSpecs() {
-            List<Predicate<FileTreeElement>> result = new ArrayList<>();
+        public List<Spec<FileTreeElement>> getAllIncludeSpecs() {
+            List<Spec<FileTreeElement>> result = new ArrayList<>();
             if (parentResolver != null) {
                 result.addAll(parentResolver.getAllIncludeSpecs());
             }

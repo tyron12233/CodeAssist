@@ -17,12 +17,7 @@ public interface BuildTreeWorkGraphController {
     /**
      * Locates a task node in another build's work graph. Does not schedule the task for execution, use {@link IncludedBuildTaskResource#queueForExecution()} to queue the task for execution.
      */
-    IncludedBuildTaskResource locateTask(BuildIdentifier targetBuild, TaskInternal task);
-
-    /**
-     * Locates a task node in another build's work graph. Does not schedule the task for execution, use {@link IncludedBuildTaskResource#queueForExecution()} to queue the task for execution.
-     */
-    IncludedBuildTaskResource locateTask(BuildIdentifier targetBuild, String taskPath);
+    IncludedBuildTaskResource locateTask(TaskIdentifier taskIdentifier);
 
     /**
      * Runs the given action against a new, empty work graph. This allows tasks to be run while calculating the task graph of the build tree, for example to run `buildSrc` tasks or

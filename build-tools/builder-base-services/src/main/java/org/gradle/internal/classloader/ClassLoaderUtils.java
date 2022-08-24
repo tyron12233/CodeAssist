@@ -228,7 +228,7 @@ public abstract class ClassLoaderUtils {
 
                 Method addDexPath = classLoader.getClass().getMethod("addDexPath", String.class, Boolean.TYPE);
                 for (String path : individualPaths) {
-                    addDexPath.invoke(classLoader, path, true);
+                    addDexPath.invoke(classLoader, path, false);
                 }
             });
 

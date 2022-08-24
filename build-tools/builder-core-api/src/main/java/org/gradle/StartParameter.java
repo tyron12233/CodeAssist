@@ -6,6 +6,7 @@ import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.gradle.api.Incubating;
 import org.gradle.api.artifacts.verification.DependencyVerificationMode;
+import org.gradle.api.launcher.cli.WelcomeMessageConfiguration;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.configuration.ConsoleOutput;
 import org.gradle.api.logging.configuration.LoggingConfiguration;
@@ -83,6 +84,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     private DependencyVerificationMode verificationMode = DependencyVerificationMode.STRICT;
     private boolean isRefreshKeys;
     private boolean isExportKeys;
+    private WelcomeMessageConfiguration welcomeMessageConfiguration;
 
     /**
      * {@inheritDoc}
@@ -920,6 +922,14 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      */
     public void setExportKeys(boolean exportKeys) {
         isExportKeys = exportKeys;
+    }
+
+    public WelcomeMessageConfiguration getWelcomeMessageConfiguration() {
+        return welcomeMessageConfiguration;
+    }
+
+    public void setWelcomeMessageConfiguration(WelcomeMessageConfiguration welcomeMessageConfiguration) {
+        this.welcomeMessageConfiguration = welcomeMessageConfiguration;
     }
 }
 

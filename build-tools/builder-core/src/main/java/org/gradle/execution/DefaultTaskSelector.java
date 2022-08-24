@@ -5,20 +5,18 @@ import org.gradle.api.Task;
 import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.project.ProjectInternal;
+import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
+import org.gradle.api.specs.Spec;
 import org.gradle.execution.taskpath.ResolvedTaskPath;
 import org.gradle.execution.taskpath.TaskPathResolver;
 import org.gradle.util.NameMatcher;
 
-import org.slf4j.Logger;
-
+import javax.annotation.Nullable;
 import java.io.File;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
-
-import javax.annotation.Nullable;
 
 public class DefaultTaskSelector extends TaskSelector {
     private static final Logger LOGGER = Logging.getLogger(DefaultTaskSelector.class);
@@ -38,7 +36,7 @@ public class DefaultTaskSelector extends TaskSelector {
         return getSelection(path, gradle.getDefaultProject());
     }
 
-    public Predicate<Task> getFilter(String path) {
+    public Spec<Task> getFilter(String path) {
         final ResolvedTaskPath taskPath = taskPathResolver.resolvePath(path, gradle.getDefaultProject());
         if (!taskPath.isQualified()) {
             ProjectInternal targetProject = taskPath.getProject();
@@ -50,9 +48,9 @@ public class DefaultTaskSelector extends TaskSelector {
         }
 
         final Set<Task> selectedTasks = getSelection(path, gradle.getDefaultProject()).getTasks();
-        return new Predicate<Task>() {
+        return new Spec<Task>() {
             @Override
-            public boolean test(Task element) {
+            public boolean isSatisfiedBy(Task element) {
                 return !selectedTasks.contains(element);
             }
         };
@@ -106,7 +104,7 @@ public class DefaultTaskSelector extends TaskSelector {
         }
     }
 
-    private static class TaskPathSpec implements Predicate<Task> {
+    private static class TaskPathSpec implements Spec<Task> {
         private final ProjectInternal targetProject;
         private final String taskName;
 
@@ -116,7 +114,7 @@ public class DefaultTaskSelector extends TaskSelector {
         }
 
         @Override
-        public boolean test(Task element) {
+        public boolean isSatisfiedBy(Task element) {
             if (!element.getName().equals(taskName)) {
                 return true;
             }

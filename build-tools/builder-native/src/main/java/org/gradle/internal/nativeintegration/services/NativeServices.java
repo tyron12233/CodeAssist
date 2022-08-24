@@ -4,8 +4,10 @@ import org.gradle.api.Action;
 import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
 import org.gradle.internal.Cast;
 import org.gradle.internal.jvm.Jvm;
+import org.gradle.internal.nativeintegration.NativeIntegrationException;
 import org.gradle.internal.nativeintegration.ProcessEnvironment;
 import org.gradle.internal.nativeintegration.jna.UnsupportedEnvironment;
+import org.gradle.internal.nativeintegration.processenvironment.AbstractProcessEnvironment;
 import org.gradle.internal.nativeintegration.processenvironment.NativePlatformBackedProcessEnvironment;
 import org.gradle.internal.os.OperatingSystem;
 import org.gradle.internal.nativeintegration.network.HostnameLookup;
@@ -234,7 +236,37 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
             }
         }
 
-        return new UnsupportedEnvironment();
+        return new AbstractProcessEnvironment() {
+            @Override
+            protected void removeNativeEnvironmentVariable(String name) {
+
+            }
+
+            @Override
+            protected void setNativeEnvironmentVariable(String name, String value) {
+
+            }
+
+            @Override
+            protected void setNativeProcessDir(File processDir) {
+
+            }
+
+            @Override
+            public File getProcessDir() throws NativeIntegrationException {
+                return null;
+            }
+
+            @Override
+            public Long getPid() throws NativeIntegrationException {
+                return null;
+            }
+
+            @Override
+            public void detachProcess() {
+
+            }
+        };
     }
 
 //    protected ConsoleDetector createConsoleDetector(OperatingSystem operatingSystem) {

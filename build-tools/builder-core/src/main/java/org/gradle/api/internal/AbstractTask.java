@@ -10,6 +10,8 @@ import org.gradle.api.Task;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.project.taskfactory.TaskIdentity;
 import org.gradle.api.internal.tasks.InputChangesAwareTaskAction;
+import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
 import org.gradle.api.tasks.Internal;
 import org.gradle.internal.Factory;
 import org.gradle.internal.execution.history.changes.InputChangesInternal;
@@ -29,7 +31,7 @@ public abstract class AbstractTask implements TaskInternal {
 
     private static final ThreadLocal<TaskInfo> NEXT_INSTANCE = new ThreadLocal<TaskInfo>();
 
-    private Predicate<? super Task> onlyIf = Predicates.satisfyAll();
+    private Spec<? super Task> onlyIf = Specs.satisfyAll();
     private String reasonNotToTrackState;
     private boolean impliesSubProjects;
 
@@ -71,7 +73,7 @@ public abstract class AbstractTask implements TaskInternal {
 
     @Internal
     @Override
-    public Predicate<? super TaskInternal> getOnlyIf() {
+    public Spec<? super TaskInternal> getOnlyIf() {
         return onlyIf;
     }
 
@@ -84,12 +86,12 @@ public abstract class AbstractTask implements TaskInternal {
     }
 
     @Override
-    public void setOnlyIf(Predicate<? super Task> onlyIfSpec) {
+    public void setOnlyIf(Spec<? super Task> onlyIfSpec) {
         this.onlyIf = onlyIfSpec;
     }
 
     @Override
-    public void onlyIf(Predicate<? super Task> onlyIfSpec) {
+    public void onlyIf(Spec<? super Task> onlyIfSpec) {
         setOnlyIf(onlyIfSpec);
     }
 

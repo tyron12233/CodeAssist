@@ -6,5 +6,5 @@ public interface SharedResource {
      */
     int getMaxUsages();
 
-    ResourceLock getResourceLock(int usages);
+    ResourceLock getResourceLock();
 }

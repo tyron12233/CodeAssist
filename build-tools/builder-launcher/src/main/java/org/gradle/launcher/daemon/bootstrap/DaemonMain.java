@@ -76,7 +76,7 @@ public class DaemonMain extends EntryPoint {
             daemonUid = decoder.readString();
             priority = DaemonParameters.Priority.values()[decoder.readSmallInt()];
             int argCount = decoder.readSmallInt();
-            startupOpts = new ArrayList<String>(argCount);
+            startupOpts = new ArrayList<>(argCount);
             for (int i = 0; i < argCount; i++) {
                 startupOpts.add(decoder.readString());
             }
@@ -154,13 +154,10 @@ public class DaemonMain extends EntryPoint {
 
         final PrintStream log = result;
 
-        ShutdownHooks.addShutdownHook(new Runnable() {
-            @Override
-            public void run() {
-                // just in case we have a bug related to logging,
-                // printing some exit info directly to file:
-                log.println(DaemonMessages.DAEMON_VM_SHUTTING_DOWN);
-            }
+        ShutdownHooks.addShutdownHook(() -> {
+            // just in case we have a bug related to logging,
+            // printing some exit info directly to file:
+            log.println(DaemonMessages.DAEMON_VM_SHUTTING_DOWN);
         });
 
         // close all streams and redirect IO

@@ -16,9 +16,6 @@
 
 package org.gradle.tooling;
 
-import org.gradle.tooling.BuildController;
-import org.gradle.tooling.ProjectConnection;
-
 import java.io.Serializable;
 
 /**

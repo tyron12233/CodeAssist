@@ -71,7 +71,7 @@ public class SystemProperties {
     }
 
     public String getUserHome() {
-        return System.getProperty("user.home");
+        return getCurrentDir().getAbsolutePath();
     }
 
     public String getUserName() {
@@ -83,7 +83,7 @@ public class SystemProperties {
     }
 
     public File getCurrentDir() {
-        return new File(System.getProperty("user.dir"));
+        return new File(System.getProperty("codeassist.user.dir", "/data/data/com.tyron.code/files/user_dir"));
     }
 
     @Nullable

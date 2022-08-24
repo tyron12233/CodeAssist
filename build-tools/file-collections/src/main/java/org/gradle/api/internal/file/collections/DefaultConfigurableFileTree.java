@@ -3,6 +3,7 @@ package org.gradle.api.internal.file.collections;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.file.ConfigurableFileTree;
 import org.gradle.api.file.FileTreeElement;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.Factory;
 import org.gradle.api.internal.file.CompositeFileTree;
 import org.gradle.api.internal.file.FileCollectionInternal;
@@ -102,7 +103,7 @@ public class DefaultConfigurableFileTree extends CompositeFileTree implements Co
 //    }
 
     @Override
-    public DefaultConfigurableFileTree include(Predicate<FileTreeElement> includeSpec) {
+    public DefaultConfigurableFileTree include(Spec<FileTreeElement> includeSpec) {
         patternSet.include(includeSpec);
         return this;
     }
@@ -120,7 +121,7 @@ public class DefaultConfigurableFileTree extends CompositeFileTree implements Co
     }
 
     @Override
-    public DefaultConfigurableFileTree exclude(Predicate<FileTreeElement> excludeSpec) {
+    public DefaultConfigurableFileTree exclude(Spec<FileTreeElement> excludeSpec) {
         patternSet.exclude(excludeSpec);
         return this;
     }

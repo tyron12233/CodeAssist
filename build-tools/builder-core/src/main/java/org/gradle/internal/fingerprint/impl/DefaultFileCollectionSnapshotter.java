@@ -68,12 +68,6 @@ public class DefaultFileCollectionSnapshotter implements FileCollectionSnapshott
         }
 
         @Override
-        public void visitGenericFileTree(FileTreeInternal fileTree, FileSystemMirroringFileTree sourceTree) {
-            roots.add(genericFileTreeSnapshotter.snapshotFileTree(fileTree));
-            fileTreeOnly = false;
-        }
-
-        @Override
         public void visitFileTree(File root, PatternSet patterns, FileTreeInternal fileTree) {
             fileSystemAccess.read(
                     root.getAbsolutePath(),

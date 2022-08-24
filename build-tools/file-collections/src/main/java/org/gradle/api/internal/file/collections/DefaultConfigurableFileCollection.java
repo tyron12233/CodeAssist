@@ -2,26 +2,23 @@ package org.gradle.api.internal.file.collections;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.gradle.api.file.FileCollection;
-import org.gradle.internal.Factory;
-import org.gradle.api.internal.file.CompositeFileCollection;
 import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.internal.file.CompositeFileCollection;
 import org.gradle.api.internal.file.FileCollectionInternal;
 import org.gradle.api.internal.file.FileCollectionStructureVisitor;
-import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.file.FileTreeInternal;
-import org.gradle.internal.file.PathToFileResolver;
-import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.api.internal.provider.HasConfigurableValueInternal;
 import org.gradle.api.internal.provider.PropertyHost;
-import org.gradle.internal.state.Managed;
+import org.gradle.api.internal.tasks.DefaultTaskDependency;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
-import org.gradle.api.internal.tasks.DefaultTaskDependency;
 import org.gradle.api.tasks.util.PatternSet;
+import org.gradle.internal.Factory;
+import org.gradle.internal.file.PathToFileResolver;
+import org.gradle.internal.logging.text.TreeFormatter;
+import org.gradle.internal.state.Managed;
 
-import org.jetbrains.annotations.Nullable;
-
+import javax.annotation.Nullable;
 import java.io.File;
 import java.util.AbstractSet;
 import java.util.ArrayList;
@@ -30,13 +27,12 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * A {@link FileCollection} which resolves a set of paths relative to a {@link FileResolver}.
+ * A {@link org.gradle.api.file.FileCollection} which resolves a set of paths relative to a {@link org.gradle.api.internal.file.FileResolver}.
  */
 public class DefaultConfigurableFileCollection extends CompositeFileCollection implements ConfigurableFileCollection, Managed, HasConfigurableValueInternal {
     public static final EmptyCollector EMPTY_COLLECTOR = new EmptyCollector();
@@ -233,11 +229,6 @@ public class DefaultConfigurableFileCollection extends CompositeFileCollection i
                 if (!files.isEmpty()) {
                     builder.add(new FileCollectionAdapter(new ListBackedFileSet(files), patternSetFactory));
                 }
-            }
-
-            @Override
-            public void visitGenericFileTree(FileTreeInternal fileTree, FileSystemMirroringFileTree sourceTree) {
-                builder.add(fileTree);
             }
 
             @Override

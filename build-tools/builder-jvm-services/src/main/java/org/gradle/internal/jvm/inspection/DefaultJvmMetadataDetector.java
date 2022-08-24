@@ -1,6 +1,8 @@
 package org.gradle.internal.jvm.inspection;
 
 import com.google.common.io.Files;
+import com.tyron.common.TestUtil;
+
 import org.gradle.api.JavaVersion;
 import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.internal.jvm.Jvm;
@@ -33,6 +35,17 @@ public class DefaultJvmMetadataDetector implements JvmMetadataDetector {
 
     @Override
     public JvmInstallationMetadata getMetadata(File javaHome) {
+        if (TestUtil.isDalvik()) {
+            return JvmInstallationMetadata.from(
+                    javaHome,
+                    "1.8",
+                    "1.8",
+                    "1.8",
+                    "Android",
+                    "Android",
+                    ""
+            );
+        }
         if (javaHome == null || !javaHome.exists()) {
             return failure(javaHome, "No such directory: " + javaHome);
         }

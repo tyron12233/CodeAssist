@@ -1,5 +1,23 @@
 package org.gradle.internal.build;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Collections2;
+import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSortedSet;
+import org.gradle.api.Task;
+import org.gradle.api.internal.GradleInternal;
+import org.gradle.api.internal.project.taskfactory.TaskIdentity;
+import org.gradle.execution.plan.ExecutionPlan;
+import org.gradle.execution.plan.LocalTaskNode;
+import org.gradle.execution.plan.Node;
+import org.gradle.execution.plan.TaskNode;
+import org.gradle.initialization.DefaultPlannedTask;
+import org.gradle.internal.operations.BuildOperationContext;
+import org.gradle.internal.operations.BuildOperationDescriptor;
+import org.gradle.internal.operations.BuildOperationExecutor;
+import org.gradle.internal.operations.RunnableBuildOperation;
+import org.gradle.internal.taskgraph.CalculateTaskGraphBuildOperationType;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -8,28 +26,9 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import static java.util.Collections.newSetFromMap;
 import static java.util.Objects.requireNonNull;
-
-import com.google.common.collect.Collections2;
-import com.google.common.collect.FluentIterable;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedSet;
-import org.gradle.api.Task;
-import org.gradle.execution.plan.ExecutionPlan;
-import org.gradle.execution.plan.LocalTaskNode;
-import org.gradle.execution.plan.Node;
-import org.gradle.execution.plan.TaskNode;
-import org.gradle.api.internal.GradleInternal;
-import org.gradle.internal.operations.BuildOperationContext;
-import org.gradle.internal.operations.BuildOperationDescriptor;
-import org.gradle.internal.operations.BuildOperationExecutor;
-import org.gradle.internal.operations.RunnableBuildOperation;
-import org.gradle.api.internal.project.taskfactory.TaskIdentity;
-import org.gradle.initialization.DefaultPlannedTask;
-import org.gradle.internal.taskgraph.CalculateTaskGraphBuildOperationType;
 
 @SuppressWarnings({"Guava"})
 public class BuildOperationFiringBuildWorkPreparer implements BuildWorkPreparer {
@@ -76,7 +75,7 @@ public class BuildOperationFiringBuildWorkPreparer implements BuildWorkPreparer 
             // create copy now - https://github.com/gradle/gradle/issues/12527
             Set<Task> requestedTasks = plan.getRequestedTasks();
             Set<Task> filteredTasks = plan.getFilteredTasks();
-            List<Node> scheduledWork = plan.getScheduledNodes();
+            ExecutionPlan.ScheduledNodes scheduledWork = plan.getScheduledNodes();
 
             buildOperationContext.setResult(new CalculateTaskGraphBuildOperationType.Result() {
                 @Override
@@ -94,11 +93,16 @@ public class BuildOperationFiringBuildWorkPreparer implements BuildWorkPreparer 
                     return toPlannedTasks(scheduledWork);
                 }
 
-                private List<CalculateTaskGraphBuildOperationType.PlannedTask> toPlannedTasks(List<Node> scheduledWork) {
-                    return FluentIterable.from(scheduledWork)
-                            .filter(LocalTaskNode.class)
-                            .transform(this::toPlannedTask)
-                            .toList();
+                private List<CalculateTaskGraphBuildOperationType.PlannedTask> toPlannedTasks(ExecutionPlan.ScheduledNodes scheduledWork) {
+                    List<CalculateTaskGraphBuildOperationType.PlannedTask> tasks = new ArrayList<>();
+                    scheduledWork.visitNodes(nodes -> {
+                        for (Node node : nodes) {
+                            if (node instanceof LocalTaskNode) {
+                                tasks.add(toPlannedTask((LocalTaskNode) node));
+                            }
+                        }
+                    });
+                    return tasks;
                 }
 
                 private CalculateTaskGraphBuildOperationType.PlannedTask toPlannedTask(LocalTaskNode taskNode) {

@@ -4,6 +4,7 @@ import groovy.lang.Closure;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.Transformer;
+import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.internal.HasInternalProtocol;
 
@@ -241,7 +242,7 @@ public interface CopySpec extends CopySourceSpec, CopyProcessingSpec, PatternFil
      * @see org.gradle.api.tasks.util.PatternFilterable Pattern Format
      */
     @Override
-    CopySpec include(Predicate<FileTreeElement> includeSpec);
+    CopySpec include(Spec<FileTreeElement> includeSpec);
 
 //    /**
 //     * {@inheritDoc}
@@ -273,7 +274,7 @@ public interface CopySpec extends CopySourceSpec, CopyProcessingSpec, PatternFil
      * @see org.gradle.api.tasks.util.PatternFilterable Pattern Format
      */
     @Override
-    CopySpec exclude(Predicate<FileTreeElement> excludeSpec);
+    CopySpec exclude(Spec<FileTreeElement> excludeSpec);
 
 //    /**
 //     * {@inheritDoc}

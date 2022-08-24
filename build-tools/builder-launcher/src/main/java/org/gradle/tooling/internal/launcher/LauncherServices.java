@@ -8,6 +8,8 @@ import org.gradle.execution.WorkValidationWarningReporter;
 import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.initialization.BuildEventConsumer;
 import org.gradle.initialization.BuildRequestMetaData;
+import org.gradle.initialization.exception.ExceptionAnalyser;
+import org.gradle.initialization.layout.BuildLayout;
 import org.gradle.internal.build.BuildLayoutValidator;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.build.event.BuildEventListenerFactory;
@@ -68,15 +70,6 @@ public class LauncherServices extends AbstractPluginServiceRegistry {
     @Override
     public void registerGlobalServices(ServiceRegistration registration) {
         registration.addProvider(new ToolingGlobalScopeServices());
-
-        // TODO: add tooling launcher services
-        registration.add(BuildEventListenerFactory.class, new BuildEventListenerFactory() {
-            @Override
-            public Iterable<Object> createListeners(BuildEventSubscriptions subscriptions,
-                                                    BuildEventConsumer consumer) {
-                return emptyList();
-            }
-        });
     }
 
     @Override
@@ -96,17 +89,20 @@ public class LauncherServices extends AbstractPluginServiceRegistry {
 
     static class ToolingGlobalScopeServices {
 
-        BuildExecuter createBuildExecuter(StyledTextOutputFactory styledTextOutputFactory,
-                                          LoggingManagerInternal loggingManager,
-                                          WorkValidationWarningReporter workValidationWarningReporter,
-                                          GradleUserHomeScopeServiceRegistry userHomeServiceRegistry,
-                                          ServiceRegistry globalServices) {
+        BuildExecuter createBuildExecuter(
+                StyledTextOutputFactory styledTextOutputFactory,
+                LoggingManagerInternal loggingManager,
+                WorkValidationWarningReporter workValidationWarningReporter,
+                GradleUserHomeScopeServiceRegistry userHomeServiceRegistry,
+                ServiceRegistry globalServices
+        ) {
             // @formatter:off
-            return new SetupLoggingActionExecuter(loggingManager,
-                    new SessionFailureReportingActionExecuter(styledTextOutputFactory, Time.clock(),
-                            workValidationWarningReporter, new StartParamsValidatingActionExecuter(
-                            new BuildSessionLifecycleBuildActionExecuter(userHomeServiceRegistry,
-                                    globalServices))));
+            return
+                    new SetupLoggingActionExecuter(loggingManager,
+                            new SessionFailureReportingActionExecuter(styledTextOutputFactory, Time.clock(), workValidationWarningReporter,
+                                    new StartParamsValidatingActionExecuter(
+                                            new BuildSessionLifecycleBuildActionExecuter(userHomeServiceRegistry, globalServices
+                                            ))));
             // @formatter:on
         }
 
@@ -171,15 +167,15 @@ public class LauncherServices extends AbstractPluginServiceRegistry {
                                                      ListenerManager listenerManager,
                                                      BuildStartedTime buildStartedTime,
                                                      BuildRequestMetaData buildRequestMetaData,
-//                GradleEnterprisePluginManager gradleEnterprisePluginManager,
+//                                                     GradleEnterprisePluginManager gradleEnterprisePluginManager,
                                                      BuildLifecycleAwareVirtualFileSystem virtualFileSystem,
-//                StatStatistics.Collector statStatisticsCollector,
-//                FileHasherStatistics.Collector fileHasherStatisticsCollector,
+//                                                     StatStatistics.Collector statStatisticsCollector,
+//                                                     FileHasherStatistics.Collector fileHasherStatisticsCollector,
                                                      DirectorySnapshotterStatistics.Collector directorySnapshotterStatisticsCollector,
                                                      BuildOperationRunner buildOperationRunner,
                                                      Clock clock
-//                BuildLayout buildLayout,
-//                ExceptionAnalyser exceptionAnalyser
+//                                                     BuildLayout buildLayout,
+//                                                     ExceptionAnalyser exceptionAnalyser
         ) {
             return new RootBuildLifecycleBuildActionExecutor(buildStateRegistry,
                     new BuildCompletionNotifyingBuildActionRunner(

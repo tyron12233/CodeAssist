@@ -1,6 +1,8 @@
 package org.gradle.api.tasks.util;
 
 import org.gradle.api.file.FileTreeElement;
+import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
 import org.gradle.util.Predicates;
 
 import java.util.function.Predicate;
@@ -19,8 +21,8 @@ public class IntersectionPatternSet extends PatternSet {
     }
 
     @Override
-    public Predicate<FileTreeElement> getAsSpec() {
-        return Predicates.intersect(super.getAsSpec(), other.getAsSpec());
+    public Spec<FileTreeElement> getAsSpec() {
+        return Specs.intersect(super.getAsSpec(), other.getAsSpec());
     }
 
 

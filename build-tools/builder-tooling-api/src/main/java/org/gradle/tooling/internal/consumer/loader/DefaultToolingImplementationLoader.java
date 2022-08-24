@@ -29,6 +29,7 @@ import org.gradle.tooling.UnsupportedVersionException;
 import org.gradle.tooling.internal.adapter.ProtocolToModelAdapter;
 import org.gradle.tooling.internal.consumer.ConnectionParameters;
 import org.gradle.tooling.internal.consumer.Distribution;
+import org.gradle.tooling.internal.consumer.DistributionFactory;
 import org.gradle.tooling.internal.consumer.connection.AbstractConsumerConnection;
 import org.gradle.tooling.internal.consumer.connection.ConsumerConnection;
 import org.gradle.tooling.internal.consumer.connection.NoToolingApiConnection;
@@ -109,6 +110,9 @@ public class DefaultToolingImplementationLoader implements ToolingImplementation
     }
 
     private ClassLoader createImplementationClassLoader(Distribution distribution, ProgressLoggerFactory progressLoggerFactory, InternalBuildProgressListener progressListener, ConnectionParameters connectionParameters, BuildCancellationToken cancellationToken) {
+        if (distribution instanceof DistributionFactory.CodeAssistDistribution) {
+            return getClass().getClassLoader();
+        }
         ClassPath implementationClasspath = distribution.getToolingImplementationClasspath(progressLoggerFactory, progressListener, connectionParameters, cancellationToken);
         LOGGER.debug("Using tooling provider classpath: {}", implementationClasspath);
         FilteringClassLoader.Spec filterSpec = new FilteringClassLoader.Spec();

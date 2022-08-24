@@ -1,12 +1,15 @@
 package org.gradle.internal.buildtree;
 
 import org.gradle.api.internal.GradleInternal;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.RunnableBuildOperation;
 import org.gradle.internal.resources.ProjectLeaseRegistry;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.build.BuildToolingModelController;
+import org.gradle.tooling.provider.model.UnknownModelException;
+import org.gradle.tooling.provider.model.internal.ToolingModelScope;
 
 import java.util.Collection;
 
@@ -44,20 +47,20 @@ public class DefaultBuildTreeModelCreator implements BuildTreeModelCreator {
             return defaultTarget.withToolingModels(BuildToolingModelController::getConfiguredModel);
         }
 
-//        @Override
-//        public ToolingModelScope locateBuilderForDefaultTarget(String modelName, boolean param) throws UnknownModelException {
-//            return locateBuilderForTarget(defaultTarget, modelName, param);
-//        }
-//
-//        @Override
-//        public ToolingModelScope locateBuilderForTarget(BuildState target, String modelName, boolean param) throws UnknownModelException {
-//            return target.withToolingModels(controller -> controller.locateBuilderForTarget(modelName, param));
-//        }
-//
-//        @Override
-//        public ToolingModelScope locateBuilderForTarget(ProjectState target, String modelName, boolean param) throws UnknownModelException {
-//            return target.getOwner().withToolingModels(controller -> controller.locateBuilderForTarget(target, modelName, param));
-//        }
+        @Override
+        public ToolingModelScope locateBuilderForDefaultTarget(String modelName, boolean param) throws UnknownModelException {
+            return locateBuilderForTarget(defaultTarget, modelName, param);
+        }
+
+        @Override
+        public ToolingModelScope locateBuilderForTarget(BuildState target, String modelName, boolean param) throws UnknownModelException {
+            return target.withToolingModels(controller -> controller.locateBuilderForTarget(modelName, param));
+        }
+
+        @Override
+        public ToolingModelScope locateBuilderForTarget(ProjectState target, String modelName, boolean param) throws UnknownModelException {
+            return target.getOwner().withToolingModels(controller -> controller.locateBuilderForTarget(target, modelName, param));
+        }
 
         @Override
         public boolean queryModelActionsRunInParallel() {

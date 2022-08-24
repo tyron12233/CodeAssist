@@ -2,6 +2,7 @@ package org.gradle.api.internal;
 
 import org.gradle.api.Action;
 import org.gradle.api.Task;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.Factory;
 import org.gradle.internal.logging.StandardOutputCapture;
 import org.gradle.api.internal.project.taskfactory.TaskIdentity;
@@ -37,7 +38,7 @@ public interface TaskInternal extends Task {
     TaskDependency getLifecycleDependencies();
 
     @Internal
-    Predicate<? super TaskInternal> getOnlyIf();
+    Spec<? super TaskInternal> getOnlyIf();
 
     /**
      * <p>Gets the shared resources required by this task.</p>
