@@ -24,6 +24,11 @@ dependencies {
 
     implementation common.slf4j
     implementation 'javax.inject:javax.inject:1'
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'org.ow2.asm:asm-commons:9.3'
+    implementation 'com.android:zipflinger:7.2.2'
+
+
 }
 
 java {

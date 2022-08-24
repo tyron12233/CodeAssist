@@ -1,8 +1,6 @@
 package com.tyron.builder.internal
 
-import com.tyron.builder.internal.dependency.ClassesDirToClassesTransform
-import com.tyron.builder.internal.dependency.GenericTransformParameters
-import com.tyron.builder.internal.dependency.IdentityTransform
+import com.tyron.builder.internal.dependency.*
 import com.tyron.builder.internal.publishing.AndroidArtifacts
 import com.tyron.builder.internal.utils.setDisallowChanges
 import org.gradle.api.Project
@@ -10,6 +8,7 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.transform.TransformAction
 import org.gradle.api.artifacts.transform.TransformSpec
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.attributes.Usage
 import org.gradle.api.internal.artifacts.ArtifactAttributes
 
 class DependencyConfigurator(
@@ -46,6 +45,92 @@ class DependencyConfigurator(
                 AndroidArtifacts.ArtifactType.JAR,
                 AndroidArtifacts.ArtifactType.PROCESSED_JAR
             )
+        }
+
+        registerTransform(
+            ExtractAarTransform::class.java,
+            AndroidArtifacts.ArtifactType.PROCESSED_AAR,
+            AndroidArtifacts.ArtifactType.EXPLODED_AAR
+        )
+        registerTransform(
+            ExtractAarTransform::class.java,
+            AndroidArtifacts.ArtifactType.LOCAL_AAR_FOR_LINT,
+            AndroidArtifacts.ArtifactType.LOCAL_EXPLODED_AAR_FOR_LINT
+        )
+
+        val sharedLibSupport = true //projectOptions[BooleanOption.CONSUME_DEPENDENCIES_AS_SHARED_LIBRARIES]
+
+        for (transformTarget in AarTransform.getTransformTargets()) {
+            registerTransform(
+                AarTransform::class.java,
+                AndroidArtifacts.ArtifactType.EXPLODED_AAR,
+                transformTarget
+            ) { params ->
+                params.targetType.setDisallowChanges(transformTarget)
+                params.sharedLibSupport.setDisallowChanges(sharedLibSupport)
+            }
+        }
+
+        // API Jar: Produce a single API jar that can also contain the library R class from the AAR
+        val apiUsage: Usage = project.objects.named(Usage::class.java, Usage.JAVA_API)
+
+        project.dependencies.registerTransform(
+            AarToClassTransform::class.java
+        ) { reg: TransformSpec<AarToClassTransform.Params> ->
+            reg.from.attribute(
+                ArtifactAttributes.ARTIFACT_FORMAT,
+                AndroidArtifacts.ArtifactType.PROCESSED_AAR.type
+            )
+            reg.from.attribute(
+                Usage.USAGE_ATTRIBUTE,
+                apiUsage
+            )
+            reg.to.attribute(
+                ArtifactAttributes.ARTIFACT_FORMAT,
+                AndroidArtifacts.ArtifactType.CLASSES_JAR.type
+            )
+            reg.to.attribute(
+                Usage.USAGE_ATTRIBUTE,
+                apiUsage
+            )
+            reg.parameters { params: AarToClassTransform.Params ->
+                params.forCompileUse.set(true)
+                params.generateRClassJar
+                    .set(
+//                        projectOptions.get(
+//                            BooleanOption.COMPILE_CLASSPATH_LIBRARY_R_CLASSES
+//                        )
+                    true
+                    )
+            }
+        }
+        // Produce a single runtime jar from the AAR.
+        val runtimeUsage: Usage = project.objects.named(Usage::class.java, Usage.JAVA_RUNTIME)
+
+        project.dependencies.registerTransform(
+            AarToClassTransform::class.java
+        ) { reg: TransformSpec<AarToClassTransform.Params> ->
+            reg.from.attribute(
+                ArtifactAttributes.ARTIFACT_FORMAT,
+                AndroidArtifacts.ArtifactType.PROCESSED_AAR.type
+            )
+            reg.from.attribute(
+                Usage.USAGE_ATTRIBUTE,
+                runtimeUsage
+            )
+            reg.to.attribute(
+                ArtifactAttributes.ARTIFACT_FORMAT,
+                AndroidArtifacts.ArtifactType.CLASSES_JAR.type
+            )
+            reg.to.attribute(
+                Usage.USAGE_ATTRIBUTE,
+                runtimeUsage
+            )
+            reg.parameters { params: AarToClassTransform.Params ->
+                params.forCompileUse.set(false)
+
+                params.generateRClassJar.set(false)
+            }
         }
 
         // Transform to go from external jars to CLASSES and JAVA_RES artifacts. This returns the

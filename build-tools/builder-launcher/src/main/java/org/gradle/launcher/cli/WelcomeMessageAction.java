@@ -20,7 +20,7 @@ import java.io.StringWriter;
 
 import javax.annotation.Nullable;
 
-class WelcomeMessageAction implements Action<ExecutionListener> {
+public class WelcomeMessageAction implements Action<ExecutionListener> {
 
     private final Logger logger;
     private final BuildLayoutResult buildLayout;
@@ -28,7 +28,7 @@ class WelcomeMessageAction implements Action<ExecutionListener> {
     private final Function<String, InputStream> inputStreamProvider;
     private final Action<ExecutionListener> action;
 
-    WelcomeMessageAction(BuildLayoutResult buildLayout, Action<ExecutionListener> action) {
+    public WelcomeMessageAction(BuildLayoutResult buildLayout, Action<ExecutionListener> action) {
         this(Logging.getLogger(WelcomeMessageAction.class), buildLayout, GradleVersion.current(),
                 new Function<String, InputStream>() {
                     @Nullable

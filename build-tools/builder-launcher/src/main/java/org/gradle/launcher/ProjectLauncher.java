@@ -19,6 +19,7 @@ import org.gradle.internal.vfs.FileSystemAccess;
 import org.gradle.internal.vfs.VirtualFileSystem;
 import org.gradle.launcher.cli.ExceptionReportingAction;
 import org.gradle.launcher.cli.RunBuildAction;
+import org.gradle.launcher.cli.WelcomeMessageAction;
 import org.gradle.launcher.exec.BuildActionExecuter;
 import org.gradle.launcher.exec.BuildActionParameters;
 import org.gradle.launcher.exec.BuildExecuter;
@@ -39,7 +40,7 @@ public class ProjectLauncher {
     public ProjectLauncher(StartParameterInternal startParameter, OutputEventListener outputEventListener) {
         this.startParameter = startParameter;
         this.outputEventListener = outputEventListener;
-        globalServices = ProjectBuilderImpl.getGlobalServices(startParameter);
+        globalServices = ProjectBuilderImpl.createGlobalServices(startParameter);
     }
 
     public ServiceRegistry getGlobalServices() {
@@ -76,7 +77,8 @@ public class ProjectLauncher {
     private Runnable runBuildAndCloseServices(StartParameterInternal startParameter, BuildActionExecuter<BuildActionParameters, BuildRequestContext> executer, ServiceRegistry sharedServices, Object... stopBeforeSharedServices) {
         BuildActionParameters
                 parameters = createBuildActionParameters(startParameter);
-        return new RunBuildAction(executer, startParameter, clientMetaData(), getBuildStartTime(), parameters, sharedServices, null);
+        Stoppable stoppable = new CompositeStoppable().add(stopBeforeSharedServices).add(sharedServices);
+        return new RunBuildAction(executer, startParameter, clientMetaData(), getBuildStartTime(), parameters, sharedServices, stoppable);
     }
 
     private BuildActionParameters createBuildActionParameters(StartParameter startParameter) {
