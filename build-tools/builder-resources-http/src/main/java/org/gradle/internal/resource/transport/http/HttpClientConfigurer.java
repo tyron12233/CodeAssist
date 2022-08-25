@@ -13,6 +13,7 @@ import org.gradle.internal.authentication.AllSchemesAuthentication;
 import org.gradle.internal.authentication.AuthenticationInternal;
 import org.gradle.internal.jvm.Jvm;
 import org.gradle.internal.resource.UriTextResource;
+import org.gradle.internal.resource.transport.http.android.SSLConnectionSocketFactoryFixed;
 import org.gradle.internal.resource.transport.http.ntlm.NTLMCredentials;
 import org.gradle.internal.resource.transport.http.ntlm.NTLMSchemeFactory;
 import org.gradle.util.internal.CollectionUtils;
@@ -39,7 +40,6 @@ import cz.msebera.android.httpclient.client.protocol.HttpClientContext;
 import cz.msebera.android.httpclient.client.utils.DateUtils;
 import cz.msebera.android.httpclient.config.RegistryBuilder;
 import cz.msebera.android.httpclient.config.SocketConfig;
-import cz.msebera.android.httpclient.conn.ssl.SSLConnectionSocketFactory;
 import cz.msebera.android.httpclient.conn.util.PublicSuffixMatcher;
 import cz.msebera.android.httpclient.conn.util.PublicSuffixMatcherLoader;
 import cz.msebera.android.httpclient.cookie.CookieSpecProvider;
@@ -144,7 +144,7 @@ public class HttpClientConfigurer {
                                                      SslContextFactory sslContextFactory,
                                                      HostnameVerifier hostnameVerifier) {
         builder.setSSLSocketFactory(
-                new SSLConnectionSocketFactory(sslContextFactory.createSslContext(), sslProtocols,
+                new SSLConnectionSocketFactoryFixed(sslContextFactory.createSslContext(), sslProtocols,
                         null, hostnameVerifier));
     }
 
