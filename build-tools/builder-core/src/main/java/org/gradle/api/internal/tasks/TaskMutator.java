@@ -3,8 +3,10 @@ package org.gradle.api.internal.tasks;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.internal.UncheckedException;
 
-import java.beans.PropertyChangeEvent;
 import java.util.concurrent.Callable;
+
+import groovy.util.ObservableList;
+import groovyjarjaropenbeans.PropertyChangeEvent;
 
 public class TaskMutator {
     private final TaskInternal task;
@@ -37,28 +39,28 @@ public class TaskMutator {
         }
 
         String method = null;
-//        if (evt instanceof ObservableList.ElementEvent) {
-//            switch (((ObservableList.ElementEvent) evt).getChangeType()) {
-//                case ADDED:
-//                    method = String.format("%s.%s", listname, "add()");
-//                    break;
-//                case UPDATED:
-//                    method = String.format("%s.%s", listname, "set(int, Object)");
-//                    break;
-//                case REMOVED:
-//                    method = String.format("%s.%s", listname, "remove()");
-//                    break;
-//                case CLEARED:
-//                    method = String.format("%s.%s", listname, "clear()");
-//                    break;
-//                case MULTI_ADD:
-//                    method = String.format("%s.%s", listname, "addAll()");
-//                    break;
-//                case MULTI_REMOVE:
-//                    method = String.format("%s.%s", listname, "removeAll()");
-//                    break;
-//            }
-//        }
+        if (evt instanceof ObservableList.ElementEvent) {
+            switch (((ObservableList.ElementEvent) evt).getChangeType()) {
+                case ADDED:
+                    method = String.format("%s.%s", listname, "add()");
+                    break;
+                case UPDATED:
+                    method = String.format("%s.%s", listname, "set(int, Object)");
+                    break;
+                case REMOVED:
+                    method = String.format("%s.%s", listname, "remove()");
+                    break;
+                case CLEARED:
+                    method = String.format("%s.%s", listname, "clear()");
+                    break;
+                case MULTI_ADD:
+                    method = String.format("%s.%s", listname, "addAll()");
+                    break;
+                case MULTI_REMOVE:
+                    method = String.format("%s.%s", listname, "removeAll()");
+                    break;
+            }
+        }
         if (method == null) {
             return;
         }

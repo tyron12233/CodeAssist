@@ -10,13 +10,8 @@ import org.gradle.cache.FileLockManager;
 import org.gradle.cache.PersistentCache;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.cache.scopes.BuildScopedCache;
-import org.gradle.caching.internal.controller.BuildCacheCommandFactory;
 import org.gradle.caching.internal.controller.BuildCacheController;
-import org.gradle.concurrent.ParallelismConfiguration;
-import org.gradle.execution.plan.DefaultPlanExecutor;
-import org.gradle.execution.plan.PlanExecutor;
 import org.gradle.initialization.BuildCancellationToken;
-import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.internal.enterprise.core.GradleEnterprisePluginManager;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.execution.BuildOutputCleanupRegistry;
@@ -33,7 +28,6 @@ import org.gradle.internal.execution.history.impl.DefaultExecutionHistoryStore;
 import org.gradle.internal.execution.history.impl.DefaultOutputFilesRepository;
 import org.gradle.internal.execution.impl.DefaultExecutionEngine;
 import org.gradle.internal.execution.steps.AssignWorkspaceStep;
-import org.gradle.internal.execution.steps.BroadcastChangingOutputsStep;
 import org.gradle.internal.execution.steps.BuildCacheStep;
 import org.gradle.internal.execution.steps.CancelExecutionStep;
 import org.gradle.internal.execution.steps.CaptureStateAfterExecutionStep;
@@ -54,7 +48,7 @@ import org.gradle.internal.execution.steps.SkipUpToDateStep;
 import org.gradle.internal.execution.steps.StoreExecutionStateStep;
 import org.gradle.internal.execution.steps.TimeoutStep;
 import org.gradle.internal.execution.steps.ValidateStep;
-import org.gradle.internal.execution.steps.WorkInputListeners;
+import org.gradle.internal.execution.WorkInputListeners;
 import org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep;
 import org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep;
 import org.gradle.internal.execution.timeout.TimeoutHandler;
@@ -66,7 +60,6 @@ import org.gradle.internal.resources.ResourceLockCoordinationService;
 import org.gradle.internal.resources.SharedResourceLeaseRegistry;
 import org.gradle.internal.scopeids.id.BuildInvocationScopeId;
 import org.gradle.internal.vfs.VirtualFileSystem;
-import org.gradle.internal.work.WorkerLeaseService;
 import org.gradle.util.GradleVersion;
 
 import java.util.Collections;
@@ -113,54 +106,52 @@ public class ExecutionGradleServices {
     }
 
     public ExecutionEngine createExecutionEngine(
-        BuildCacheCommandFactory buildCacheCommandFactory,
-        BuildCacheController buildCacheController,
-        BuildCancellationToken cancellationToken,
-        BuildInvocationScopeId buildInvocationScopeId,
-        BuildOperationExecutor buildOperationExecutor,
-        BuildOutputCleanupRegistry buildOutputCleanupRegistry,
-        GradleEnterprisePluginManager gradleEnterprisePluginManager,
-        ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
-        CurrentBuildOperationRef currentBuildOperationRef,
-        Deleter deleter,
-        ExecutionStateChangeDetector changeDetector,
-        OutputChangeListener outputChangeListener,
-        OutputFilesRepository outputFilesRepository,
-        OutputSnapshotter outputSnapshotter,
-        OverlappingOutputDetector overlappingOutputDetector,
-        TimeoutHandler timeoutHandler,
-        ValidateStep.ValidationWarningRecorder validationWarningRecorder,
-        VirtualFileSystem virtualFileSystem,
-        DocumentationRegistry documentationRegistry
+            BuildCacheController buildCacheController,
+            BuildCancellationToken cancellationToken,
+            BuildInvocationScopeId buildInvocationScopeId,
+            BuildOperationExecutor buildOperationExecutor,
+            BuildOutputCleanupRegistry buildOutputCleanupRegistry,
+            GradleEnterprisePluginManager gradleEnterprisePluginManager,
+            ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
+            CurrentBuildOperationRef currentBuildOperationRef,
+            Deleter deleter,
+            ExecutionStateChangeDetector changeDetector,
+            OutputChangeListener outputChangeListener,
+            WorkInputListeners workInputListeners, OutputFilesRepository outputFilesRepository,
+            OutputSnapshotter outputSnapshotter,
+            OverlappingOutputDetector overlappingOutputDetector,
+            TimeoutHandler timeoutHandler,
+            ValidateStep.ValidationWarningRecorder validationWarningRecorder,
+            VirtualFileSystem virtualFileSystem,
+            DocumentationRegistry documentationRegistry
     ) {
         Supplier<OutputsCleaner> skipEmptyWorkOutputsCleanerSupplier = () -> new OutputsCleaner(deleter, buildOutputCleanupRegistry::isOutputOwnedByBuild, buildOutputCleanupRegistry::isOutputOwnedByBuild);
         // @formatter:off
         return new DefaultExecutionEngine(documentationRegistry,
-            new IdentifyStep<>(
-            new IdentityCacheStep<>(
-            new AssignWorkspaceStep<>(
-            new LoadPreviousExecutionStateStep<>(
-            new MarkSnapshottingInputsStartedStep<>(
-            new RemoveUntrackedExecutionStateStep<>(
-            new SkipEmptyWorkStep(outputChangeListener, skipEmptyWorkOutputsCleanerSupplier,
-            new CaptureStateBeforeExecutionStep<>(buildOperationExecutor, classLoaderHierarchyHasher, outputSnapshotter, overlappingOutputDetector,
-            new ValidateStep<>(virtualFileSystem, validationWarningRecorder,
-            new ResolveCachingStateStep<>(buildCacheController, false,
-            new MarkSnapshottingInputsFinishedStep<>(
-            new ResolveChangesStep<>(changeDetector,
-            new SkipUpToDateStep<>(
-            new RecordOutputsStep<>(outputFilesRepository,
-            new StoreExecutionStateStep<>(
-            new BuildCacheStep(buildCacheController, buildCacheCommandFactory, deleter, outputChangeListener,
-            new BroadcastChangingOutputsStep<>(outputChangeListener,
-            new CaptureStateAfterExecutionStep<>(buildOperationExecutor, buildInvocationScopeId.getId(), outputSnapshotter,
-            new CreateOutputsStep<>(
-            new TimeoutStep<>(timeoutHandler, currentBuildOperationRef,
-            new CancelExecutionStep<>(cancellationToken,
-            new ResolveInputChangesStep<>(
-            new RemovePreviousOutputsStep<>(deleter, outputChangeListener,
-            new ExecuteStep<>(buildOperationExecutor
-        )))))))))))))))))))))))));
+                new IdentifyStep<>(
+                        new IdentityCacheStep<>(
+                                new AssignWorkspaceStep<>(
+                                        new LoadPreviousExecutionStateStep<>(
+                                                new MarkSnapshottingInputsStartedStep<>(
+                                                        new RemoveUntrackedExecutionStateStep<>(
+                                                                new SkipEmptyWorkStep(outputChangeListener, workInputListeners, skipEmptyWorkOutputsCleanerSupplier,
+                                                                        new CaptureStateBeforeExecutionStep<>(buildOperationExecutor, classLoaderHierarchyHasher, outputSnapshotter, overlappingOutputDetector,
+                                                                                new ValidateStep<>(virtualFileSystem, validationWarningRecorder,
+                                                                                        new ResolveCachingStateStep<>(buildCacheController, gradleEnterprisePluginManager.isPresent(),
+                                                                                                new MarkSnapshottingInputsFinishedStep<>(
+                                                                                                        new ResolveChangesStep<>(changeDetector,
+                                                                                                                new SkipUpToDateStep<>(
+                                                                                                                        new RecordOutputsStep<>(outputFilesRepository,
+                                                                                                                                new StoreExecutionStateStep<>(
+                                                                                                                                        new BuildCacheStep(buildCacheController, deleter, outputChangeListener,
+                                                                                                                                                new ResolveInputChangesStep<>(
+                                                                                                                                                        new CaptureStateAfterExecutionStep<>(buildOperationExecutor, buildInvocationScopeId.getId(), outputSnapshotter, outputChangeListener,
+                                                                                                                                                                new CreateOutputsStep<>(
+                                                                                                                                                                        new TimeoutStep<>(timeoutHandler, currentBuildOperationRef,
+                                                                                                                                                                                new CancelExecutionStep<>(cancellationToken,
+                                                                                                                                                                                        new RemovePreviousOutputsStep<>(deleter, outputChangeListener,
+                                                                                                                                                                                                new ExecuteStep<>(buildOperationExecutor
+                                                                                                                                                                                                ))))))))))))))))))))))));
         // @formatter:on
     }
 

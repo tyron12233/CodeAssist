@@ -1,6 +1,7 @@
 package org.gradle.internal.execution.steps;
 
 import com.google.common.collect.ImmutableCollection;
+import org.gradle.internal.reflect.validation.TypeValidationProblem;
 
 import java.util.Optional;
 
@@ -11,6 +12,6 @@ public interface ValidationFinishedContext extends BeforeExecutionContext {
     Optional<ValidationResult> getValidationProblems();
 
     interface ValidationResult {
-        ImmutableCollection<String> getWarnings();
+        ImmutableCollection<TypeValidationProblem> getWarnings();
     }
 }

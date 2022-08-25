@@ -158,12 +158,11 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
             OutputChangeListener outputChangeListener,
             OutputFilesRepository outputFilesRepository,
             ReservedFileSystemLocationRegistry reservedFileSystemLocationRegistry,
-            TaskActionListener actionListener,
+            org.gradle.api.execution.TaskActionListener actionListener,
             TaskCacheabilityResolver taskCacheabilityResolver,
             TaskExecutionGraphInternal taskExecutionGraph,
-            TaskExecutionListener taskExecutionListener,
+            org.gradle.api.execution.TaskExecutionListener taskExecutionListener,
             TaskExecutionModeResolver repository,
-            TaskInputsListeners taskInputsListeners,
             TaskListenerInternal taskListenerInternal,
             ExecutionEngine executionEngine,
             InputFingerprinter inputFingerprinter
@@ -186,8 +185,7 @@ public class ProjectExecutionServices extends DefaultServiceRegistry {
                 listenerManager,
                 reservedFileSystemLocationRegistry,
                 fileCollectionFactory,
-                fileOperations,
-                taskInputsListeners
+                fileOperations
         );
         executer = new CleanupStaleOutputsExecuter(
                 buildOperationExecutor,

@@ -6,14 +6,11 @@ import org.gradle.api.internal.BuildDefinition;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.artifacts.DefaultBuildIdentifier;
-import org.gradle.internal.event.ListenerManager;
-import org.gradle.internal.operations.BuildOperationExecutor;
-import org.gradle.internal.service.scopes.BuildScopeServices;
-import org.gradle.util.Path;
 import org.gradle.initialization.IncludedBuildSpec;
 import org.gradle.initialization.RootBuildLifecycleListener;
 import org.gradle.initialization.exception.ExceptionAnalyser;
 import org.gradle.initialization.layout.BuildLayout;
+import org.gradle.internal.InternalBuildAdapter;
 import org.gradle.internal.build.BuildLifecycleController;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.build.RootBuildState;
@@ -25,7 +22,13 @@ import org.gradle.internal.buildtree.BuildTreeState;
 import org.gradle.internal.buildtree.BuildTreeWorkExecutor;
 import org.gradle.internal.buildtree.DefaultBuildTreeFinishExecutor;
 import org.gradle.internal.buildtree.DefaultBuildTreeWorkExecutor;
+import org.gradle.internal.buildtree.ExecutionPhaseNotifyingBuildTreeWorkExecutor;
 import org.gradle.internal.composite.IncludedBuildInternal;
+import org.gradle.internal.enterprise.core.GradleEnterprisePluginManager;
+import org.gradle.internal.event.ListenerManager;
+import org.gradle.internal.operations.BuildOperationExecutor;
+import org.gradle.internal.service.scopes.BuildScopeServices;
+import org.gradle.util.Path;
 
 import java.io.File;
 import java.util.function.Function;
@@ -38,7 +41,8 @@ class DefaultRootBuildState extends AbstractCompositeParticipantBuildState imple
     DefaultRootBuildState(
             BuildDefinition buildDefinition,
             BuildTreeState buildTree,
-            ListenerManager listenerManager
+            ListenerManager listenerManager,
+            GradleEnterprisePluginManager enterprisePluginManager
     ) {
         super(buildTree, buildDefinition, null);
         this.listenerManager = listenerManager;
@@ -49,7 +53,9 @@ class DefaultRootBuildState extends AbstractCompositeParticipantBuildState imple
         BuildOperationExecutor buildOperationExecutor = buildScopeServices.get(BuildOperationExecutor.class);
         BuildStateRegistry buildStateRegistry = buildScopeServices.get(BuildStateRegistry.class);
         BuildTreeLifecycleControllerFactory buildTreeLifecycleControllerFactory = buildScopeServices.get(BuildTreeLifecycleControllerFactory.class);
-        BuildTreeWorkExecutor workExecutor = new BuildOperationFiringBuildTreeWorkExecutor(new DefaultBuildTreeWorkExecutor(), buildOperationExecutor);
+        BuildTreeWorkExecutor workExecutor = new ExecutionPhaseNotifyingBuildTreeWorkExecutor(
+                new BuildOperationFiringBuildTreeWorkExecutor(new DefaultBuildTreeWorkExecutor(), buildOperationExecutor),
+                enterprisePluginManager);
         BuildTreeFinishExecutor finishExecutor = new DefaultBuildTreeFinishExecutor(buildStateRegistry, exceptionAnalyser, buildLifecycleController);
         this.buildTreeLifecycleController = buildTreeLifecycleControllerFactory.createRootBuildController(buildLifecycleController, workExecutor, finishExecutor);
     }

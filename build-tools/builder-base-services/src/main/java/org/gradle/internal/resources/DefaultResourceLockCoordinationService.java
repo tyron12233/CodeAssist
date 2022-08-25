@@ -1,10 +1,12 @@
 package org.gradle.internal.resources;
 
+import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.gradle.api.Action;
 import org.gradle.api.Transformer;
 import org.gradle.internal.MutableReference;
+import org.gradle.internal.UncheckedException;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -14,13 +16,10 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Supplier;
 
 public class DefaultResourceLockCoordinationService implements ResourceLockCoordinationService, Closeable {
-
-//    final Lock lock = new ReentrantLock();
     private final Object lock = new Object();
-    private final Set<Action<ResourceLock>> releaseHandlers = new LinkedHashSet<>();
+    private final Set<Action<ResourceLock>> releaseHandlers = new LinkedHashSet<Action<ResourceLock>>();
     private final ThreadLocal<List<ResourceLockState>> currentState = new ThreadLocal<List<ResourceLockState>>() {
         @Override
         protected List<ResourceLockState> initialValue() {
@@ -62,18 +61,24 @@ public class DefaultResourceLockCoordinationService implements ResourceLockCoord
 
     @Override
     public void withStateLock(final Runnable action) {
-        withStateLock(resourceLockState -> {
-            action.run();
-            return ResourceLockState.Disposition.FINISHED;
+        withStateLock(new Transformer<ResourceLockState.Disposition, ResourceLockState>() {
+            @Override
+            public ResourceLockState.Disposition transform(ResourceLockState resourceLockState) {
+                action.run();
+                return ResourceLockState.Disposition.FINISHED;
+            }
         });
     }
 
     @Override
     public <T> T withStateLock(final Supplier<T> action) {
         final MutableReference<T> result = MutableReference.empty();
-        withStateLock(resourceLockState -> {
-            result.set(action.get());
-            return ResourceLockState.Disposition.FINISHED;
+        withStateLock(new Transformer<ResourceLockState.Disposition, ResourceLockState>() {
+            @Override
+            public ResourceLockState.Disposition transform(ResourceLockState resourceLockState) {
+                result.set(action.get());
+                return ResourceLockState.Disposition.FINISHED;
+            }
         });
         return result.get();
     }
@@ -83,7 +88,6 @@ public class DefaultResourceLockCoordinationService implements ResourceLockCoord
         while (true) {
             DefaultResourceLockState resourceLockState = new DefaultResourceLockState();
             ResourceLockState.Disposition disposition;
-
             synchronized (lock) {
                 try {
                     currentState.get().add(resourceLockState);
@@ -96,7 +100,7 @@ public class DefaultResourceLockCoordinationService implements ResourceLockCoord
                             try {
                                 lock.wait();
                             } catch (InterruptedException e) {
-                                throw new RuntimeException(e);
+                                throw UncheckedException.throwAsUncheckedException(e);
                             }
                             break;
                         case FINISHED:
@@ -110,7 +114,7 @@ public class DefaultResourceLockCoordinationService implements ResourceLockCoord
                     }
                 } catch (Throwable t) {
                     resourceLockState.releaseLocks();
-                    throw new RuntimeException(t);
+                    throw UncheckedException.throwAsUncheckedException(t);
                 } finally {
                     currentState.get().remove(resourceLockState);
                 }

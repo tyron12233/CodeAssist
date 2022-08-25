@@ -83,4 +83,7 @@ public class GradleEnterprisePluginManager {
         }
     }
 
+    public void executionPhaseStarted() {
+
+    }
 }

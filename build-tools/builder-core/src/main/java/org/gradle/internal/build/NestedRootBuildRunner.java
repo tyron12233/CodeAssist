@@ -1,7 +1,9 @@
 package org.gradle.internal.build;
+
 import org.gradle.StartParameter;
 import org.gradle.api.internal.BuildDefinition;
 import org.gradle.api.internal.StartParameterInternal;
+import org.gradle.internal.buildtree.NestedBuildTree;
 import org.gradle.internal.service.ServiceRegistry;
 
 import javax.annotation.Nullable;

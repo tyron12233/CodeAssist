@@ -1,10 +1,10 @@
 package org.gradle.internal.build;
 
-import org.gradle.execution.plan.ExecutionPlan;
 import org.gradle.api.internal.GradleInternal;
-import org.gradle.internal.execution.BuildOutputCleanupRegistry;
-import org.gradle.execution.taskgraph.TaskExecutionGraphInternal;
+import org.gradle.execution.plan.ExecutionPlan;
 import org.gradle.execution.plan.ExecutionPlanFactory;
+import org.gradle.execution.taskgraph.TaskExecutionGraphInternal;
+import org.gradle.internal.execution.BuildOutputCleanupRegistry;
 
 import java.util.function.Consumer;
 
@@ -29,6 +29,7 @@ public class DefaultBuildWorkPreparer implements BuildWorkPreparer {
     @Override
     public void finalizeWorkGraph(GradleInternal gradle, ExecutionPlan plan) {
         TaskExecutionGraphInternal taskGraph = gradle.getTaskGraph();
+        plan.finalizePlan();
         taskGraph.populate(plan);
         BuildOutputCleanupRegistry buildOutputCleanupRegistry = gradle.getServices().get(BuildOutputCleanupRegistry.class);
         buildOutputCleanupRegistry.resolveOutputs();

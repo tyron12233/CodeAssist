@@ -40,6 +40,11 @@ public class ResolveMutationsNode extends Node implements SelfExecutingNode {
     }
 
     @Override
+    public boolean isCanCancel() {
+        return node.isCanCancel();
+    }
+
+    @Override
     public void resolveDependencies(TaskDependencyResolver dependencyResolver) {
     }
 
@@ -73,7 +78,7 @@ public class ResolveMutationsNode extends Node implements SelfExecutingNode {
             public BuildOperationDescriptor.Builder description() {
                 TaskIdentity<?> taskIdentity = node.getTask().getTaskIdentity();
                 return BuildOperationDescriptor.displayName("Resolve mutations for task " + taskIdentity.getIdentityPath())
-                    .details(new ResolveTaskMutationsDetails(taskIdentity));
+                        .details(new ResolveTaskMutationsDetails(taskIdentity));
             }
         });
     }

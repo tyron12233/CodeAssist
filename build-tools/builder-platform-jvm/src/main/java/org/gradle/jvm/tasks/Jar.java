@@ -52,10 +52,10 @@ public class Jar extends Zip {
         final Cached<ManifestInternal> manifest = Cached.of(this::computeManifest);
         final OutputChangeListener outputChangeListener = outputChangeListener();
         return fileCollectionFactory().generated(
-            getTemporaryDirFactory(),
-            "MANIFEST.MF",
-            action(file -> outputChangeListener.beforeOutputChange(ImmutableList.of(file.getAbsolutePath()))),
-            action(outputStream -> manifest.get().writeTo(outputStream))
+                getTemporaryDirFactory(),
+                "MANIFEST.MF",
+                action(file -> outputChangeListener.invalidateCachesFor(ImmutableList.of(file.getAbsolutePath()))),
+                action(outputStream -> manifest.get().writeTo(outputStream))
         );
     }
 

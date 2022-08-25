@@ -1,10 +1,12 @@
 package org.gradle.internal.resources;
 
+import com.google.common.base.Supplier;
 import org.gradle.api.Action;
 import org.gradle.api.Transformer;
+import org.gradle.internal.service.scopes.Scopes;
+import org.gradle.internal.service.scopes.ServiceScope;
 
-import java.util.function.Supplier;
-
+@ServiceScope(Scopes.BuildSession.class)
 public interface ResourceLockCoordinationService {
     /**
      * Gets the current {@link ResourceLockState} active in this thread.  This must be called in the context

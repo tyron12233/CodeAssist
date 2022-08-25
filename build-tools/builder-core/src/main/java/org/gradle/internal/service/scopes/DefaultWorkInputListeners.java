@@ -4,8 +4,8 @@ import org.gradle.internal.event.AnonymousListenerBroadcast;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.execution.UnitOfWork;
 import org.gradle.internal.execution.fingerprint.InputFingerprinter;
-import org.gradle.internal.execution.steps.WorkInputListener;
-import org.gradle.internal.execution.steps.WorkInputListeners;
+import org.gradle.internal.execution.WorkInputListener;
+import org.gradle.internal.execution.WorkInputListeners;
 
 import java.util.EnumSet;
 

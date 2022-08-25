@@ -3,6 +3,9 @@ package org.gradle.internal.buildtree;
 import org.gradle.internal.build.BuildLifecycleController;
 import org.gradle.internal.build.BuildState;
 
+import org.gradle.internal.build.BuildLifecycleController;
+import org.gradle.internal.build.BuildState;
+
 public class DefaultBuildTreeWorkPreparer implements BuildTreeWorkPreparer {
     private final BuildState targetBuild;
     private final BuildLifecycleController buildController;

@@ -1,6 +1,5 @@
 package org.gradle.cache.internal;
 
-import com.google.common.hash.HashCode;
 import org.gradle.cache.FileLockManager;
 import org.gradle.cache.PersistentCache;
 import org.gradle.cache.PersistentIndexedCache;
@@ -22,6 +21,8 @@ import java.util.concurrent.ConcurrentMap;
 
 import static org.gradle.cache.internal.filelock.LockOptionsBuilder.mode;
 
+import com.google.common.hash.HashCode;
+
 public class DefaultFileContentCacheFactory implements FileContentCacheFactory, Closeable {
     private final ListenerManager listenerManager;
     private final FileSystemAccess fileSystemAccess;
@@ -35,10 +36,10 @@ public class DefaultFileContentCacheFactory implements FileContentCacheFactory, 
         this.fileSystemAccess = fileSystemAccess;
         this.inMemoryCacheDecoratorFactory = inMemoryCacheDecoratorFactory;
         cache = cacheRepository
-            .cache("fileContent")
-            .withDisplayName("file content cache")
-            .withLockOptions(mode(FileLockManager.LockMode.OnDemand)) // Lock on demand
-            .open();
+                .cache("fileContent")
+                .withDisplayName("file content cache")
+                .withLockOptions(mode(FileLockManager.LockMode.OnDemand)) // Lock on demand
+                .open();
     }
 
     @Override
@@ -49,7 +50,7 @@ public class DefaultFileContentCacheFactory implements FileContentCacheFactory, 
     @Override
     public <V> FileContentCache<V> newCache(String name, int normalizedCacheSize, final Calculator<? extends V> calculator, Serializer<V> serializer) {
         PersistentIndexedCacheParameters<HashCode, V> parameters = PersistentIndexedCacheParameters.of(name, hashCodeSerializer, serializer)
-            .withCacheDecorator(inMemoryCacheDecoratorFactory.decorator(normalizedCacheSize, true));
+                .withCacheDecorator(inMemoryCacheDecoratorFactory.decorator(normalizedCacheSize, true));
         PersistentIndexedCache<HashCode, V> store = cache.createCache(parameters);
 
         DefaultFileContentCache<V> cache = Cast.uncheckedCast(caches.get(name));
@@ -87,7 +88,7 @@ public class DefaultFileContentCacheFactory implements FileContentCacheFactory, 
         }
 
         @Override
-        public void beforeOutputChange(Iterable<String> affectedOutputPaths) {
+        public void invalidateCachesFor(Iterable<String> affectedOutputPaths) {
             // A very dumb strategy for invalidating cache
             locationCache.clear();
         }
@@ -95,12 +96,12 @@ public class DefaultFileContentCacheFactory implements FileContentCacheFactory, 
         @Override
         public V get(File file) {
             return locationCache.computeIfAbsent(file,
-                location -> fileSystemAccess.readRegularFileContentHash(
-                    location.getAbsolutePath(),
-                    contentHash -> contentCache.get(contentHash, key -> calculator.calculate(location, true))
-                ).orElseGet(
-                    () -> calculator.calculate(location, false)
-                ));
+                    location -> fileSystemAccess.readRegularFileContentHash(
+                            location.getAbsolutePath(),
+                            contentHash -> contentCache.get(contentHash, key -> calculator.calculate(location, true))
+                    ).orElseGet(
+                            () -> calculator.calculate(location, false)
+                    ));
         }
 
         private void assertStoredIn(PersistentIndexedCache<HashCode, V> store) {

@@ -38,23 +38,18 @@ import org.gradle.internal.execution.history.OverlappingOutputDetector;
 import org.gradle.internal.execution.history.changes.DefaultExecutionStateChangeDetector;
 import org.gradle.internal.execution.history.changes.ExecutionStateChangeDetector;
 import org.gradle.internal.execution.history.impl.DefaultOverlappingOutputDetector;
-import org.gradle.internal.execution.steps.WorkInputListeners;
+import org.gradle.internal.execution.WorkInputListeners;
 import org.gradle.api.internal.file.FileCollectionFactory;
-import org.gradle.internal.file.FileException;
-import org.gradle.internal.file.FileMetadata;
 import org.gradle.api.internal.file.FilePropertyFactory;
-import org.gradle.internal.file.impl.DefaultFileMetadata;
 import org.gradle.internal.hash.DefaultFileHasher;
 import org.gradle.internal.hash.FileHasher;
 import org.gradle.internal.hash.StreamHasher;
 import org.gradle.internal.installation.CurrentGradleInstallation;
-import org.gradle.internal.installation.GradleRuntimeShadedJarDetector;
 import org.gradle.internal.instantiation.InjectAnnotationHandler;
 import org.gradle.internal.instantiation.InstanceGenerator;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.instantiation.generator.DefaultInstantiatorFactory;
 import org.gradle.internal.logging.LoggingManagerInternal;
-import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 import org.gradle.internal.operations.BuildOperationListener;
 import org.gradle.internal.operations.BuildOperationListenerManager;
 import org.gradle.internal.operations.BuildOperationProgressEventEmitter;
@@ -97,7 +92,6 @@ import org.gradle.process.internal.health.memory.OsMemoryInfo;
 import net.rubygrapefruit.platform.file.FileSystems;
 import net.rubygrapefruit.platform.internal.PosixFileSystems;
 
-import java.io.File;
 import java.util.List;
 
 public class GlobalServices extends WorkerSharedGlobalScopeServices {

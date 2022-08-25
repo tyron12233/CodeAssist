@@ -176,7 +176,6 @@ import org.gradle.internal.execution.history.PreviousExecutionState;
 import org.gradle.internal.execution.history.changes.ExecutionStateChangeDetector;
 import org.gradle.internal.execution.impl.DefaultExecutionEngine;
 import org.gradle.internal.execution.steps.AssignWorkspaceStep;
-import org.gradle.internal.execution.steps.BroadcastChangingOutputsStep;
 import org.gradle.internal.execution.steps.CachingContext;
 import org.gradle.internal.execution.steps.CachingResult;
 import org.gradle.internal.execution.steps.CaptureStateAfterExecutionStep;
@@ -726,46 +725,46 @@ class DependencyManagementBuildScopeServices {
      * Currently used for running artifact transformations in buildscript blocks.
      */
     ExecutionEngine createExecutionEngine(
-        BuildOperationExecutor buildOperationExecutor,
-        CurrentBuildOperationRef currentBuildOperationRef,
-        ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
-        Deleter deleter,
-        ExecutionStateChangeDetector changeDetector,
-        InputFingerprinter inputFingerprinter,
-        ListenerManager listenerManager,
-        OutputSnapshotter outputSnapshotter,
-        OverlappingOutputDetector overlappingOutputDetector,
-        TimeoutHandler timeoutHandler,
-        ValidateStep.ValidationWarningRecorder validationWarningRecorder,
-        VirtualFileSystem virtualFileSystem,
-        DocumentationRegistry documentationRegistry
+            BuildOperationExecutor buildOperationExecutor,
+            CurrentBuildOperationRef currentBuildOperationRef,
+            ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
+            Deleter deleter,
+            ExecutionStateChangeDetector changeDetector,
+            InputFingerprinter inputFingerprinter,
+            ListenerManager listenerManager,
+            OutputSnapshotter outputSnapshotter,
+            OverlappingOutputDetector overlappingOutputDetector,
+            TimeoutHandler timeoutHandler,
+            ValidateStep.ValidationWarningRecorder validationWarningRecorder,
+            VirtualFileSystem virtualFileSystem,
+            DocumentationRegistry documentationRegistry
     ) {
         OutputChangeListener outputChangeListener = listenerManager.getBroadcaster(OutputChangeListener.class);
         // TODO: Figure out how to get rid of origin scope id in snapshot outputs step
         UniqueId fixedUniqueId = UniqueId.from("dhwwyv4tqrd43cbxmdsf24wquu");
         // @formatter:off
         return new DefaultExecutionEngine(documentationRegistry,
-            new IdentifyStep<>(
-            new IdentityCacheStep<>(
-            new AssignWorkspaceStep<>(
-            new LoadPreviousExecutionStateStep<>(
-            new RemoveUntrackedExecutionStateStep<>(
-            new CaptureStateBeforeExecutionStep<>(buildOperationExecutor, classLoaderHierarchyHasher, outputSnapshotter, overlappingOutputDetector,
-            new ValidateStep<>(virtualFileSystem, validationWarningRecorder,
-            new NoOpCachingStateStep<>(
-            new ResolveChangesStep<>(changeDetector,
-            new SkipUpToDateStep<>(
-            new BroadcastChangingOutputsStep<>(outputChangeListener,
-            new StoreExecutionStateStep<>(
-            new CaptureStateAfterExecutionStep<>(buildOperationExecutor, fixedUniqueId, outputSnapshotter,
-            new CreateOutputsStep<>(
-            new TimeoutStep<>(timeoutHandler, currentBuildOperationRef,
-            new ResolveInputChangesStep<>(
-            new RemovePreviousOutputsStep<>(deleter, outputChangeListener,
-            new ExecuteStep<>(buildOperationExecutor
-        )))))))))))))))))));
+                new IdentifyStep<>(
+                        new IdentityCacheStep<>(
+                                new AssignWorkspaceStep<>(
+                                        new LoadPreviousExecutionStateStep<>(
+                                                new RemoveUntrackedExecutionStateStep<>(
+                                                        new CaptureStateBeforeExecutionStep<>(buildOperationExecutor, classLoaderHierarchyHasher, outputSnapshotter, overlappingOutputDetector,
+                                                                new ValidateStep<>(virtualFileSystem, validationWarningRecorder,
+                                                                        new NoOpCachingStateStep<>(
+                                                                                new ResolveChangesStep<>(changeDetector,
+                                                                                        new SkipUpToDateStep<>(
+                                                                                                new StoreExecutionStateStep<>(
+                                                                                                        new ResolveInputChangesStep<>(
+                                                                                                                new CaptureStateAfterExecutionStep<>(buildOperationExecutor, fixedUniqueId, outputSnapshotter, outputChangeListener,
+                                                                                                                        new CreateOutputsStep<>(
+                                                                                                                                new TimeoutStep<>(timeoutHandler, currentBuildOperationRef,
+                                                                                                                                        new RemovePreviousOutputsStep<>(deleter, outputChangeListener,
+                                                                                                                                                new ExecuteStep<>(buildOperationExecutor
+                                                                                                                                                ))))))))))))))))));
         // @formatter:on
     }
+
 
     private static class NoOpCachingStateStep<C extends ValidationFinishedContext> implements Step<C, CachingResult> {
         private final Step<? super CachingContext, ? extends UpToDateResult> delegate;

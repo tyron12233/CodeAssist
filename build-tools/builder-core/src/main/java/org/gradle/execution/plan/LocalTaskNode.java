@@ -253,4 +253,3 @@ public class LocalTaskNode extends TaskNode {
         return lifecycleSuccessors.contains(dependency);
     }
 }
-

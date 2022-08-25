@@ -43,7 +43,7 @@ public class NodeComparator implements Comparator<Node> {
         if (o1 instanceof LocalTaskNode) {
             if (o2 instanceof LocalTaskNode) {
                 return ((LocalTaskNode) o1).getTask().compareTo(
-                    ((LocalTaskNode) o2).getTask()
+                        ((LocalTaskNode) o2).getTask()
                 );
             }
             return -1;
@@ -61,7 +61,7 @@ public class NodeComparator implements Comparator<Node> {
 
         if (o1 instanceof TaskInAnotherBuild && o2 instanceof TaskInAnotherBuild) {
             return ((TaskInAnotherBuild) o1).getTaskIdentityPath().compareTo(
-                ((TaskInAnotherBuild) o2).getTaskIdentityPath()
+                    ((TaskInAnotherBuild) o2).getTaskIdentityPath()
             );
         }
         int diff = o1.getClass().getName().compareTo(o2.getClass().getName());

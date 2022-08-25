@@ -5,8 +5,8 @@ import org.gradle.internal.Try;
 import org.gradle.internal.execution.ExecutionOutcome;
 import org.gradle.internal.execution.ExecutionResult;
 import org.gradle.internal.execution.UnitOfWork;
-import org.gradle.internal.execution.history.changes.InputChangesInternal;
 import org.gradle.internal.execution.history.PreviousExecutionState;
+import org.gradle.internal.execution.history.changes.InputChangesInternal;
 import org.gradle.internal.operations.BuildOperationContext;
 import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationExecutor;
@@ -21,7 +21,7 @@ import java.io.File;
 import java.time.Duration;
 import java.util.Optional;
 
-public class ExecuteStep<C extends InputChangesContext> implements Step<C, Result> {
+public class ExecuteStep<C extends ChangingOutputsContext> implements Step<C, Result> {
 
     private final BuildOperationExecutor buildOperationExecutor;
 

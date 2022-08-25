@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Maps;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
+
 import org.gradle.api.NonNullApi;
 import org.gradle.api.internal.tasks.properties.InputFilePropertySpec;
 import org.gradle.api.internal.tasks.properties.PropertySpec;
@@ -70,13 +71,13 @@ import java.util.stream.Collectors;
 public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInputsBuildOperationType.Result, CustomOperationTraceSerialization {
 
     private static final Map<Class<? extends FileNormalizer>, String> FINGERPRINTING_STRATEGIES_BY_NORMALIZER = ImmutableMap.<Class<? extends FileNormalizer>, String>builder()
-        .put(ClasspathNormalizer.class, FingerprintingStrategy.CLASSPATH_IDENTIFIER)
-        .put(CompileClasspathNormalizer.class, FingerprintingStrategy.COMPILE_CLASSPATH_IDENTIFIER)
-        .put(AbsolutePathInputNormalizer.class, AbsolutePathFingerprintingStrategy.IDENTIFIER)
-        .put(RelativePathInputNormalizer.class, RelativePathFingerprintingStrategy.IDENTIFIER)
-        .put(NameOnlyInputNormalizer.class, NameOnlyFingerprintingStrategy.IDENTIFIER)
-        .put(IgnoredPathInputNormalizer.class, IgnoredPathFingerprintingStrategy.IDENTIFIER)
-        .build();
+            .put(ClasspathNormalizer.class, FingerprintingStrategy.CLASSPATH_IDENTIFIER)
+            .put(CompileClasspathNormalizer.class, FingerprintingStrategy.COMPILE_CLASSPATH_IDENTIFIER)
+            .put(AbsolutePathInputNormalizer.class, AbsolutePathFingerprintingStrategy.IDENTIFIER)
+            .put(RelativePathInputNormalizer.class, RelativePathFingerprintingStrategy.IDENTIFIER)
+            .put(NameOnlyInputNormalizer.class, NameOnlyFingerprintingStrategy.IDENTIFIER)
+            .put(IgnoredPathInputNormalizer.class, IgnoredPathFingerprintingStrategy.IDENTIFIER)
+            .build();
 
     @VisibleForTesting
     final CachingState cachingState;
@@ -90,15 +91,15 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
     @Override
     public Map<String, byte[]> getInputValueHashesBytes() {
         return getBeforeExecutionState()
-            .map(InputExecutionState::getInputProperties)
-            .filter(inputValueFingerprints -> !inputValueFingerprints.isEmpty())
-            .map(inputValueFingerprints -> inputValueFingerprints.entrySet().stream()
-                .collect(toLinkedHashMap(valueSnapshot -> {
-                    Hasher hasher = Hashes.newHasher();
-                    valueSnapshot.appendToHasher(hasher);
-                    return hasher.hash().asBytes();
-                })))
-            .orElse(null);
+                .map(InputExecutionState::getInputProperties)
+                .filter(inputValueFingerprints -> !inputValueFingerprints.isEmpty())
+                .map(inputValueFingerprints -> inputValueFingerprints.entrySet().stream()
+                        .collect(toLinkedHashMap(valueSnapshot -> {
+                            Hasher hasher = Hashes.newHasher();
+                            valueSnapshot.appendToHasher(hasher);
+                            return hasher.hash().asBytes();
+                        })))
+                .orElse(null);
     }
 
     @NonNullApi
@@ -133,9 +134,9 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
         public Set<String> getPropertyAttributes() {
             InputFilePropertySpec propertySpec = propertySpec(propertyName);
             return ImmutableSortedSet.of(
-                FilePropertyAttribute.fromNormalizerClass(propertySpec.getNormalizer()).name(),
-                FilePropertyAttribute.from(propertySpec.getDirectorySensitivity()).name(),
-                FilePropertyAttribute.from(propertySpec.getLineEndingNormalization()).name()
+                    FilePropertyAttribute.fromNormalizerClass(propertySpec.getNormalizer()).name(),
+                    FilePropertyAttribute.from(propertySpec.getDirectorySensitivity()).name(),
+                    FilePropertyAttribute.from(propertySpec.getLineEndingNormalization()).name()
             );
         }
 
@@ -294,21 +295,21 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
     @Override
     public void visitInputFileProperties(final InputFilePropertyVisitor visitor) {
         getBeforeExecutionState()
-            .map(BeforeExecutionState::getInputFileProperties)
-            .ifPresent(inputFileProperties -> {
-                State state = new State(visitor);
-                for (Map.Entry<String, CurrentFileCollectionFingerprint> entry : inputFileProperties.entrySet()) {
-                    CurrentFileCollectionFingerprint fingerprint = entry.getValue();
+                .map(BeforeExecutionState::getInputFileProperties)
+                .ifPresent(inputFileProperties -> {
+                    State state = new State(visitor);
+                    for (Map.Entry<String, CurrentFileCollectionFingerprint> entry : inputFileProperties.entrySet()) {
+                        CurrentFileCollectionFingerprint fingerprint = entry.getValue();
 
-                    state.propertyName = entry.getKey();
-                    state.propertyHash = fingerprint.getHash();
-                    state.fingerprints = fingerprint.getFingerprints();
+                        state.propertyName = entry.getKey();
+                        state.propertyHash = fingerprint.getHash();
+                        state.fingerprints = fingerprint.getFingerprints();
 
-                    visitor.preProperty(state);
-                    fingerprint.getSnapshot().accept(state);
-                    visitor.postProperty();
-                }
-            });
+                        visitor.preProperty(state);
+                        fingerprint.getSnapshot().accept(state);
+                        visitor.postProperty();
+                    }
+                });
     }
 
     @Nullable
@@ -321,52 +322,57 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
     @Override
     public byte[] getClassLoaderHashBytes() {
         return getBeforeExecutionState()
-            .map(InputExecutionState::getImplementation)
-            .map(ImplementationSnapshot::getClassLoaderHash)
-            .map(HashCode::asBytes)
-            .orElse(null);
+                .map(InputExecutionState::getImplementation)
+                .map(SnapshotTaskInputsBuildOperationResult::getClassLoaderHashBytesOrNull)
+                .orElse(null);
     }
 
     @Override
     public List<byte[]> getActionClassLoaderHashesBytes() {
         return getBeforeExecutionState()
-            .map(BeforeExecutionState::getAdditionalImplementations)
-            .filter(additionalImplementation -> !additionalImplementation.isEmpty())
-            .map(additionalImplementations -> additionalImplementations.stream()
-                .map(input -> input.getClassLoaderHash() == null ? null : input.getClassLoaderHash().asBytes())
-                .collect(Collectors.toList()))
-            .orElse(null);
+                .map(BeforeExecutionState::getAdditionalImplementations)
+                .filter(additionalImplementation -> !additionalImplementation.isEmpty())
+                .map(additionalImplementations -> additionalImplementations.stream()
+                        .map(SnapshotTaskInputsBuildOperationResult::getClassLoaderHashBytesOrNull) // preserve nulls
+                        .collect(Collectors.toList()))
+                .orElse(null);
+    }
+
+    @Nullable
+    private static byte[] getClassLoaderHashBytesOrNull(ImplementationSnapshot implementation) {
+        HashCode hash = implementation.getClassLoaderHash();
+        return hash == null ? null : hash.asBytes();
     }
 
     @Nullable
     @Override
     public List<String> getActionClassNames() {
         return getBeforeExecutionState()
-            .map(BeforeExecutionState::getAdditionalImplementations)
-            .filter(additionalImplementations -> !additionalImplementations.isEmpty())
-            .map(additionalImplementations -> additionalImplementations.stream()
-                .map(ImplementationSnapshot::getTypeName)
-                .collect(Collectors.toList())
-            )
-            .orElse(null);
+                .map(BeforeExecutionState::getAdditionalImplementations)
+                .filter(additionalImplementations -> !additionalImplementations.isEmpty())
+                .map(additionalImplementations -> additionalImplementations.stream()
+                        .map(ImplementationSnapshot::getClassIdentifier)
+                        .collect(Collectors.toList())
+                )
+                .orElse(null);
     }
 
     @Nullable
     @Override
     public List<String> getOutputPropertyNames() {
         return getBeforeExecutionState()
-            .map(BeforeExecutionState::getOutputFileLocationSnapshots)
-            .map(ImmutableSortedMap::keySet)
-            .filter(outputPropertyNames -> !outputPropertyNames.isEmpty())
-            .map(ImmutableSet::asList)
-            .orElse(null);
+                .map(BeforeExecutionState::getOutputFileLocationSnapshots)
+                .map(ImmutableSortedMap::keySet)
+                .filter(outputPropertyNames -> !outputPropertyNames.isEmpty())
+                .map(ImmutableSet::asList)
+                .orElse(null);
     }
 
     @Override
     public byte[] getHashBytes() {
         return getKey()
-            .map(BuildCacheKey::toByteArray)
-            .orElse(null);
+                .map(BuildCacheKey::toByteArray)
+                .orElse(null);
     }
 
     @Override
@@ -376,8 +382,8 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
         List<byte[]> actionClassLoaderHashesBytes = getActionClassLoaderHashesBytes();
         if (actionClassLoaderHashesBytes != null) {
             List<String> actionClassloaderHashes = getActionClassLoaderHashesBytes().stream()
-                .map(hash -> hash == null ? null : HashCode.fromBytes(hash).toString())
-                .collect(Collectors.toList());
+                    .map(hash -> hash == null ? null : HashCode.fromBytes(hash).toString())
+                    .collect(Collectors.toList());
             model.put("actionClassLoaderHashes", actionClassloaderHashes);
         } else {
             model.put("actionClassLoaderHashes", null);
@@ -405,7 +411,7 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
         Map<String, byte[]> inputValueHashesBytes = getInputValueHashesBytes();
         if (inputValueHashesBytes != null) {
             Map<String, String> inputValueHashes = inputValueHashesBytes.entrySet().stream()
-                .collect(toLinkedHashMap(value -> value == null ? null : HashCode.fromBytes(value).toString()));
+                    .collect(toLinkedHashMap(value -> value == null ? null : HashCode.fromBytes(value).toString()));
             model.put("inputValueHashes", inputValueHashes);
         } else {
             model.put("inputValueHashes", null);
@@ -418,10 +424,10 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
 
     private static <K, V, U> Collector<Map.Entry<K, V>, ?, LinkedHashMap<K, U>> toLinkedHashMap(Function<? super V, ? extends U> valueMapper) {
         return Collectors.toMap(
-            Map.Entry::getKey,
-            entry -> valueMapper.apply(entry.getValue()),
-            (a, b) -> b,
-            LinkedHashMap::new
+                Map.Entry::getKey,
+                entry -> valueMapper.apply(entry.getValue()),
+                (a, b) -> b,
+                LinkedHashMap::new
         );
     }
 
@@ -555,15 +561,15 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
 
     private Optional<BeforeExecutionState> getBeforeExecutionState() {
         return cachingState.fold(
-            enabled -> Optional.of(enabled.getBeforeExecutionState()),
-            CachingState.Disabled::getBeforeExecutionState
+                enabled -> Optional.of(enabled.getBeforeExecutionState()),
+                CachingState.Disabled::getBeforeExecutionState
         );
     }
 
     private Optional<BuildCacheKey> getKey() {
         return cachingState.fold(
-            enabled -> Optional.of(enabled.getKey()),
-            CachingState.Disabled::getKey
+                enabled -> Optional.of(enabled.getKey()),
+                CachingState.Disabled::getKey
         );
     }
 
@@ -590,25 +596,25 @@ public class SnapshotTaskInputsBuildOperationResult implements SnapshotTaskInput
         LINE_ENDING_SENSITIVITY_NORMALIZE_LINE_ENDINGS;
 
         private static final Map<Class<? extends FileNormalizer>, FilePropertyAttribute> BY_NORMALIZER_CLASS = ImmutableMap.<Class<? extends FileNormalizer>, FilePropertyAttribute>builder()
-            .put(ClasspathNormalizer.class, FINGERPRINTING_STRATEGY_CLASSPATH)
-            .put(CompileClasspathNormalizer.class, FINGERPRINTING_STRATEGY_COMPILE_CLASSPATH)
-            .put(AbsolutePathInputNormalizer.class, FINGERPRINTING_STRATEGY_ABSOLUTE_PATH)
-            .put(RelativePathInputNormalizer.class, FINGERPRINTING_STRATEGY_RELATIVE_PATH)
-            .put(NameOnlyInputNormalizer.class, FINGERPRINTING_STRATEGY_NAME_ONLY)
-            .put(IgnoredPathInputNormalizer.class, FINGERPRINTING_STRATEGY_IGNORED_PATH)
-            .build();
+                .put(ClasspathNormalizer.class, FINGERPRINTING_STRATEGY_CLASSPATH)
+                .put(CompileClasspathNormalizer.class, FINGERPRINTING_STRATEGY_COMPILE_CLASSPATH)
+                .put(AbsolutePathInputNormalizer.class, FINGERPRINTING_STRATEGY_ABSOLUTE_PATH)
+                .put(RelativePathInputNormalizer.class, FINGERPRINTING_STRATEGY_RELATIVE_PATH)
+                .put(NameOnlyInputNormalizer.class, FINGERPRINTING_STRATEGY_NAME_ONLY)
+                .put(IgnoredPathInputNormalizer.class, FINGERPRINTING_STRATEGY_IGNORED_PATH)
+                .build();
 
         @SuppressWarnings("deprecation")
         private static final Map<DirectorySensitivity, FilePropertyAttribute> BY_DIRECTORY_SENSITIVITY = Maps.immutableEnumMap(ImmutableMap.<DirectorySensitivity, FilePropertyAttribute>builder()
-            .put(DirectorySensitivity.DEFAULT, DIRECTORY_SENSITIVITY_DEFAULT)
-            .put(DirectorySensitivity.UNSPECIFIED, DIRECTORY_SENSITIVITY_DEFAULT)
-            .put(DirectorySensitivity.IGNORE_DIRECTORIES, DIRECTORY_SENSITIVITY_IGNORE_DIRECTORIES)
-            .build());
+                .put(DirectorySensitivity.DEFAULT, DIRECTORY_SENSITIVITY_DEFAULT)
+                .put(DirectorySensitivity.UNSPECIFIED, DIRECTORY_SENSITIVITY_DEFAULT)
+                .put(DirectorySensitivity.IGNORE_DIRECTORIES, DIRECTORY_SENSITIVITY_IGNORE_DIRECTORIES)
+                .build());
 
         private static final Map<LineEndingSensitivity, FilePropertyAttribute> BY_LINE_ENDING_SENSITIVITY = Maps.immutableEnumMap(ImmutableMap.<LineEndingSensitivity, FilePropertyAttribute>builder()
-            .put(LineEndingSensitivity.DEFAULT, LINE_ENDING_SENSITIVITY_DEFAULT)
-            .put(LineEndingSensitivity.NORMALIZE_LINE_ENDINGS, LINE_ENDING_SENSITIVITY_NORMALIZE_LINE_ENDINGS)
-            .build());
+                .put(LineEndingSensitivity.DEFAULT, LINE_ENDING_SENSITIVITY_DEFAULT)
+                .put(LineEndingSensitivity.NORMALIZE_LINE_ENDINGS, LINE_ENDING_SENSITIVITY_NORMALIZE_LINE_ENDINGS)
+                .build());
 
         private static <T> FilePropertyAttribute findFor(T value, Map<T, FilePropertyAttribute> mapping) {
             FilePropertyAttribute attribute = mapping.get(value);

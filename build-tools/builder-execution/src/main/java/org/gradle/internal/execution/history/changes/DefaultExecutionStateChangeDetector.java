@@ -1,7 +1,5 @@
 package org.gradle.internal.execution.history.changes;
 
-import static org.gradle.internal.execution.history.impl.OutputSnapshotUtil.findOutputsStillPresentSincePreviousExecution;
-
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
@@ -11,7 +9,10 @@ import org.gradle.internal.execution.history.BeforeExecutionState;
 import org.gradle.internal.execution.history.OutputFileChanges;
 import org.gradle.internal.execution.history.PreviousExecutionState;
 import org.gradle.internal.snapshot.FileSystemSnapshot;
-import org.gradle.internal.snapshot.impl.KnownImplementationSnapshot;
+import org.gradle.internal.snapshot.impl.ClassImplementationSnapshot;
+import org.gradle.internal.snapshot.impl.ImplementationSnapshot;
+
+import static org.gradle.internal.execution.history.impl.OutputSnapshotUtil.findOutputsStillPresentSincePreviousExecution;
 
 public class DefaultExecutionStateChangeDetector implements ExecutionStateChangeDetector {
     @Override
@@ -30,8 +31,8 @@ public class DefaultExecutionStateChangeDetector implements ExecutionStateChange
         // After validation, the current implementations can't be unknown when detecting changes.
         // Previous implementations can still be unknown, since we store the inputs in the task history even if validation fails.
         // When we fail the build for unknown implementations, then the previous implementations also can't be unknown.
-        KnownImplementationSnapshot currentImplementation = Cast.uncheckedNonnullCast(thisExecution.getImplementation());
-        ImmutableList<KnownImplementationSnapshot> currentAdditionalImplementations = Cast.uncheckedNonnullCast(thisExecution.getAdditionalImplementations());
+        ClassImplementationSnapshot currentImplementation = Cast.uncheckedNonnullCast(thisExecution.getImplementation());
+        ImmutableList<ImplementationSnapshot> currentAdditionalImplementations = Cast.uncheckedNonnullCast(thisExecution.getAdditionalImplementations());
         ChangeContainer implementationChanges = new ImplementationChanges(
                 lastExecution.getImplementation(), lastExecution.getAdditionalImplementations(),
                 currentImplementation, currentAdditionalImplementations,
@@ -111,8 +112,7 @@ public class DefaultExecutionStateChangeDetector implements ExecutionStateChange
 
     private static ImmutableList<String> collectChanges(ChangeContainer changes) {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
-        MessageCollectingChangeVisitor visitor = new MessageCollectingChangeVisitor(builder,
-                MAX_OUT_OF_DATE_MESSAGES);
+        MessageCollectingChangeVisitor visitor = new MessageCollectingChangeVisitor(builder, ExecutionStateChangeDetector.MAX_OUT_OF_DATE_MESSAGES);
         changes.accept(visitor);
         return builder.build();
     }

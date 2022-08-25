@@ -1,11 +1,9 @@
 package org.gradle.caching.internal.controller.service;
 
-import org.gradle.api.Action;
 import org.gradle.caching.BuildCacheKey;
 import org.gradle.caching.local.internal.LocalBuildCacheService;
 
-import org.jetbrains.annotations.Nullable;
-
+import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -28,13 +26,10 @@ public class DefaultLocalBuildCacheServiceHandle implements LocalBuildCacheServi
     }
 
     @Override
-    public boolean canLoad() {
-        return true;
-    }
-
-    @Override
-    public void load(BuildCacheKey key, Action<? super File> reader) {
-        service.loadLocally(key, reader);
+    public Optional<BuildCacheLoadResult> maybeLoad(BuildCacheKey key, Function<File, BuildCacheLoadResult> unpackFunction) {
+        AtomicReference<Optional<BuildCacheLoadResult>> result = new AtomicReference<>(Optional.empty());
+        service.loadLocally(key, file -> result.set(Optional.ofNullable(unpackFunction.apply(file))));
+        return result.get();
     }
 
     @Override
@@ -43,8 +38,12 @@ public class DefaultLocalBuildCacheServiceHandle implements LocalBuildCacheServi
     }
 
     @Override
-    public void store(BuildCacheKey key, File file) {
-        service.storeLocally(key, file);
+    public boolean maybeStore(BuildCacheKey key, File file) {
+        if (canStore()) {
+            service.storeLocally(key, file);
+            return true;
+        }
+        return false;
     }
 
     @Override

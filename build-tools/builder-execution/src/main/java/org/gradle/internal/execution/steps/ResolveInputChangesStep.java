@@ -5,13 +5,12 @@ import org.gradle.internal.execution.UnitOfWork;
 import org.gradle.internal.execution.WorkValidationContext;
 import org.gradle.internal.execution.history.BeforeExecutionState;
 import org.gradle.internal.execution.history.ExecutionHistoryStore;
-import org.gradle.internal.execution.history.changes.InputChangesInternal;
 import org.gradle.internal.execution.history.PreviousExecutionState;
 import org.gradle.internal.execution.history.changes.ExecutionStateChanges;
+import org.gradle.internal.execution.history.changes.InputChangesInternal;
 import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
 import org.gradle.internal.snapshot.ValueSnapshot;
 import org.gradle.work.InputChanges;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,7 +100,7 @@ public class ResolveInputChangesStep<C extends IncrementalChangesContext, R exte
                 .orElseThrow(() -> new IllegalStateException("Changes are not tracked, unable determine incremental changes."));
         InputChangesInternal inputChanges = changes.createInputChanges();
         if (!inputChanges.isIncremental()) {
-            LOGGER.debug("The input changes require a full rebuild for incremental " + work.getDisplayName());
+            LOGGER.info("The input changes require a full rebuild for incremental {}.", work.getDisplayName());
         }
         return Optional.of(inputChanges);
     }

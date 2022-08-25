@@ -3,6 +3,7 @@ package org.gradle.caching.internal.services;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.api.internal.GeneratedSubclasses;
+import org.gradle.api.internal.cache.StringInterner;
 import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.caching.BuildCacheService;
 import org.gradle.caching.BuildCacheServiceFactory;
@@ -13,6 +14,8 @@ import org.gradle.caching.internal.controller.BuildCacheController;
 import org.gradle.caching.internal.controller.DefaultBuildCacheController;
 import org.gradle.caching.internal.controller.NoOpBuildCacheController;
 import org.gradle.caching.internal.controller.service.BuildCacheServiceRole;
+import org.gradle.caching.internal.origin.OriginMetadataFactory;
+import org.gradle.caching.internal.packaging.BuildCacheEntryPacker;
 import org.gradle.caching.internal.service.BuildCacheServicesConfiguration;
 import org.gradle.caching.local.DirectoryBuildCache;
 import org.gradle.caching.local.internal.DirectoryBuildCacheService;
@@ -22,6 +25,7 @@ import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.CallableBuildOperation;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.internal.vfs.FileSystemAccess;
 import org.gradle.util.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,15 +51,19 @@ public final class BuildCacheControllerFactory {
     }
 
     public static BuildCacheController create(
-        final BuildOperationExecutor buildOperationExecutor,
-        final Path buildIdentityPath,
-        final TemporaryFileProvider temporaryFileProvider,
-        final BuildCacheConfigurationInternal buildCacheConfiguration,
-        final BuildCacheMode buildCacheState,
-        final RemoteAccessMode remoteAccessMode,
-        final boolean logStackTraces,
-        final boolean emitDebugLogging,
-        final Instantiator instantiator
+            final BuildOperationExecutor buildOperationExecutor,
+            final Path buildIdentityPath,
+            final TemporaryFileProvider temporaryFileProvider,
+            final BuildCacheConfigurationInternal buildCacheConfiguration,
+            final BuildCacheMode buildCacheState,
+            final RemoteAccessMode remoteAccessMode,
+            final boolean logStackTraces,
+            final boolean emitDebugLogging,
+            final Instantiator instantiator,
+            final FileSystemAccess fileSystemAccess,
+            final BuildCacheEntryPacker packer,
+            final OriginMetadataFactory originMetadataFactory,
+            final StringInterner stringInterner
     ) {
         return buildOperationExecutor.call(new CallableBuildOperation<BuildCacheController>() {
             @Override
@@ -77,19 +85,19 @@ public final class BuildCacheControllerFactory {
                 }
 
                 DescribedBuildCacheService<DirectoryBuildCache, DirectoryBuildCacheService> localDescribedService = localEnabled
-                    ? createBuildCacheService(local, BuildCacheServiceRole.LOCAL, buildIdentityPath, buildCacheConfiguration, instantiator)
-                    : null;
+                        ? createBuildCacheService(local, BuildCacheServiceRole.LOCAL, buildIdentityPath, buildCacheConfiguration, instantiator)
+                        : null;
 
                 DescribedBuildCacheService<BuildCache, BuildCacheService> remoteDescribedService = remoteEnabled
-                    ? createBuildCacheService(remote, BuildCacheServiceRole.REMOTE, buildIdentityPath, buildCacheConfiguration, instantiator)
-                    : null;
+                        ? createBuildCacheService(remote, BuildCacheServiceRole.REMOTE, buildIdentityPath, buildCacheConfiguration, instantiator)
+                        : null;
 
                 context.setResult(new ResultImpl(
-                    true,
-                    local.isEnabled(),
-                    remote != null && remote.isEnabled() && remoteAccessMode == RemoteAccessMode.ONLINE,
-                    localDescribedService == null ? null : localDescribedService.description,
-                    remoteDescribedService == null ? null : remoteDescribedService.description
+                        true,
+                        local.isEnabled(),
+                        remote != null && remote.isEnabled() && remoteAccessMode == RemoteAccessMode.ONLINE,
+                        localDescribedService == null ? null : localDescribedService.description,
+                        remoteDescribedService == null ? null : remoteDescribedService.description
                 ));
 
                 if (!localEnabled && !remoteEnabled) {
@@ -97,17 +105,21 @@ public final class BuildCacheControllerFactory {
                     return NoOpBuildCacheController.INSTANCE;
                 } else {
                     BuildCacheServicesConfiguration config = toConfiguration(
-                        localDescribedService,
-                        remoteDescribedService
+                            localDescribedService,
+                            remoteDescribedService
                     );
 
                     return new DefaultBuildCacheController(
-                        config,
-                        buildOperationExecutor,
-                        temporaryFileProvider,
-                        logStackTraces,
-                        emitDebugLogging,
-                        !Boolean.getBoolean(REMOTE_CONTINUE_ON_ERROR_PROPERTY)
+                            config,
+                            buildOperationExecutor,
+                            temporaryFileProvider,
+                            logStackTraces,
+                            emitDebugLogging,
+                            !Boolean.getBoolean(REMOTE_CONTINUE_ON_ERROR_PROPERTY),
+                            fileSystemAccess,
+                            packer,
+                            originMetadataFactory,
+                            stringInterner
                     );
                 }
             }
@@ -115,31 +127,31 @@ public final class BuildCacheControllerFactory {
             @Override
             public BuildOperationDescriptor.Builder description() {
                 return BuildOperationDescriptor.displayName("Finalize build cache configuration")
-                    .details(new DetailsImpl(buildIdentityPath.getPath()));
+                        .details(new DetailsImpl(buildIdentityPath.getPath()));
             }
         });
     }
 
     private static BuildCacheServicesConfiguration toConfiguration(
-        @Nullable DescribedBuildCacheService<DirectoryBuildCache, DirectoryBuildCacheService> local,
-        @Nullable DescribedBuildCacheService<BuildCache, BuildCacheService> remote
+            @Nullable DescribedBuildCacheService<DirectoryBuildCache, DirectoryBuildCacheService> local,
+            @Nullable DescribedBuildCacheService<BuildCache, BuildCacheService> remote
     ) {
         boolean localPush = local != null && local.config.isPush();
         boolean remotePush = remote != null && remote.config.isPush();
         return new BuildCacheServicesConfiguration(
-            local != null ? local.service : null, localPush,
-            remote != null ? remote.service : null, remotePush);
+                local != null ? local.service : null, localPush,
+                remote != null ? remote.service : null, remotePush);
     }
 
     private static <C extends BuildCache, S> DescribedBuildCacheService<C, S> createBuildCacheService(
-        C configuration,
-        BuildCacheServiceRole role,
-        Path buildIdentityPath,
-        BuildCacheConfigurationInternal buildCacheConfiguration,
-        Instantiator instantiator
+            C configuration,
+            BuildCacheServiceRole role,
+            Path buildIdentityPath,
+            BuildCacheConfigurationInternal buildCacheConfiguration,
+            Instantiator instantiator
     ) {
         Class<? extends BuildCacheServiceFactory<C>> castFactoryType = Cast.uncheckedNonnullCast(
-            buildCacheConfiguration.getBuildCacheServiceFactoryType(configuration.getClass())
+                buildCacheConfiguration.getBuildCacheServiceFactoryType(configuration.getClass())
         );
 
         BuildCacheServiceFactory<C> factory = instantiator.newInstance(castFactoryType);
@@ -186,10 +198,10 @@ public final class BuildCacheControllerFactory {
             }
 
             LOGGER.info("Using {} {} build cache for {}{}.",
-                role.getDisplayName(),
-                description.type == null ? description.className : description.type,
-                buildDescription,
-                config
+                    role.getDisplayName(),
+                    description.type == null ? description.className : description.type,
+                    buildDescription,
+                    config
             );
         }
     }

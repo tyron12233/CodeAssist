@@ -49,12 +49,12 @@ public abstract class CompositeSpec<T> implements Spec<T> {
     }
 
     @SuppressWarnings("unchecked")
-    protected static <T> T uncheckedCast(Object object) {
+    static <T> T uncheckedCast(Object object) {
         return (T) object;
     }
 
     // Not public. Evaluation of these specs is a major hot spot for large builds, so use an array for iteration
-    protected Spec<? super T>[] getSpecsArray() {
+    Spec<? super T>[] getSpecsArray() {
         return specs;
     }
 

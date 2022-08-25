@@ -243,8 +243,8 @@ class DetermineExecutionPlanAction {
 
     private void removeShouldRunAfterSuccessorsIfTheyImposeACycle(TaskNode node, int visitingSegment) {
         Iterables.removeIf(
-            node.getShouldSuccessors(),
-            input -> visitingNodes.containsEntry(input, visitingSegment)
+                node.getShouldSuccessors(),
+                input -> visitingNodes.containsEntry(input, visitingSegment)
         );
     }
 
@@ -288,15 +288,15 @@ class DetermineExecutionPlanAction {
         List<Node> cycle = sortedListOf(nodes);
 
         DirectedGraphRenderer<Node> graphRenderer = new DirectedGraphRenderer<>(
-            (it, output) -> output.withStyle(StyledTextOutput.Style.Identifier).text(it),
-            (it, values, connectedNodes) -> {
-                for (Node dependency : cycle) {
-                    Set<Node> successors = Sets.newHashSet(it.getHardSuccessors());
-                    if (dependency instanceof TaskNode && successors.contains(dependency)) {
-                        connectedNodes.add(dependency);
+                (it, output) -> output.withStyle(StyledTextOutput.Style.Identifier).text(it),
+                (it, values, connectedNodes) -> {
+                    for (Node dependency : cycle) {
+                        Set<Node> successors = Sets.newHashSet(it.getHardSuccessors());
+                        if (dependency instanceof TaskNode && successors.contains(dependency)) {
+                            connectedNodes.add(dependency);
+                        }
                     }
-                }
-            });
+                });
         StringWriter writer = new StringWriter();
         graphRenderer.renderTo(cycle.get(0), writer);
         return writer;
@@ -408,9 +408,9 @@ class DetermineExecutionPlanAction {
         @Override
         public String toString() {
             return "NodeInVisitingSegment{" +
-                "node=" + node +
-                ", visitingSegment=" + visitingSegment +
-                '}';
+                   "node=" + node +
+                   ", visitingSegment=" + visitingSegment +
+                   '}';
         }
     }
 
@@ -426,9 +426,9 @@ class DetermineExecutionPlanAction {
         @Override
         public String toString() {
             return "GraphEdge{" +
-                "from=" + from +
-                ", to=" + to +
-                '}';
+                   "from=" + from +
+                   ", to=" + to +
+                   '}';
         }
     }
 }

@@ -3,14 +3,10 @@ package org.gradle.api.internal.tasks.execution;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
-import org.gradle.api.execution.TaskActionListener;
-import org.gradle.api.execution.TaskExecutionListener;
-import org.gradle.api.execution.internal.TaskInputsListeners;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.GeneratedSubclasses;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.TaskOutputsInternal;
-import org.gradle.api.internal.file.CompositeFileCollection;
 import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.FileCollectionInternal;
 import org.gradle.api.internal.file.FileOperations;
@@ -76,12 +72,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.gradle.internal.work.AsyncWorkTracker.ProjectLockRetention.RELEASE_AND_REACQUIRE_PROJECT_LOCKS;
 import static org.gradle.internal.work.AsyncWorkTracker.ProjectLockRetention.RELEASE_PROJECT_LOCKS;
 
+@SuppressWarnings("deprecation")
 public class TaskExecution implements UnitOfWork {
     private static final Logger LOGGER = LoggerFactory.getLogger(TaskExecution.class);
     private static final SnapshotTaskInputsBuildOperationType.Details SNAPSHOT_TASK_INPUTS_DETAILS = new SnapshotTaskInputsBuildOperationType.Details() {
@@ -91,7 +87,7 @@ public class TaskExecution implements UnitOfWork {
     private final TaskExecutionContext context;
     private final boolean emitLegacySnapshottingOperations;
 
-    private final TaskActionListener actionListener;
+    private final org.gradle.api.execution.TaskActionListener actionListener;
     private final AsyncWorkTracker asyncWorkTracker;
     private final BuildOperationExecutor buildOperationExecutor;
     private final ClassLoaderHierarchyHasher classLoaderHierarchyHasher;
@@ -102,14 +98,13 @@ public class TaskExecution implements UnitOfWork {
     private final ListenerManager listenerManager;
     private final ReservedFileSystemLocationRegistry reservedFileSystemLocationRegistry;
     private final TaskCacheabilityResolver taskCacheabilityResolver;
-    private final TaskInputsListeners taskInputsListeners;
 
     public TaskExecution(
             TaskInternal task,
             TaskExecutionContext context,
             boolean emitLegacySnapshottingOperations,
 
-            TaskActionListener actionListener,
+            org.gradle.api.execution.TaskActionListener actionListener,
             AsyncWorkTracker asyncWorkTracker,
             BuildOperationExecutor buildOperationExecutor,
             ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
@@ -119,8 +114,7 @@ public class TaskExecution implements UnitOfWork {
             InputFingerprinter inputFingerprinter,
             ListenerManager listenerManager,
             ReservedFileSystemLocationRegistry reservedFileSystemLocationRegistry,
-            TaskCacheabilityResolver taskCacheabilityResolver,
-            TaskInputsListeners taskInputsListeners
+            TaskCacheabilityResolver taskCacheabilityResolver
     ) {
         this.task = task;
         this.context = context;
@@ -137,7 +131,6 @@ public class TaskExecution implements UnitOfWork {
         this.listenerManager = listenerManager;
         this.reservedFileSystemLocationRegistry = reservedFileSystemLocationRegistry;
         this.taskCacheabilityResolver = taskCacheabilityResolver;
-        this.taskInputsListeners = taskInputsListeners;
     }
 
     @Override
@@ -184,7 +177,7 @@ public class TaskExecution implements UnitOfWork {
     }
 
     private void executeActions(TaskInternal task, @Nullable InputChangesInternal inputChanges) {
-        boolean hasTaskListener = listenerManager.hasListeners(TaskActionListener.class) || listenerManager.hasListeners(TaskExecutionListener.class);
+        boolean hasTaskListener = listenerManager.hasListeners(org.gradle.api.execution.TaskActionListener.class) || listenerManager.hasListeners(org.gradle.api.execution.TaskExecutionListener.class);
         Iterator<InputChangesAwareTaskAction> actions = new ArrayList<>(task.getTaskActions()).iterator();
         while (actions.hasNext()) {
             InputChangesAwareTaskAction action = actions.next();
@@ -362,7 +355,7 @@ public class TaskExecution implements UnitOfWork {
                     .withAdvice("Use a Copy task with Task.doNotTrackState() instead.");
         } else {
             builder = DeprecationLogger.deprecateAction(String.format("Cannot access %s property '%s' of %s (see --info log for details). Accessing unreadable inputs or outputs",
-                    propertyType, propertyName, getDisplayName()))
+                            propertyType, propertyName, getDisplayName()))
                     .withAdvice("Declare the task as untracked by using Task.doNotTrackState().");
 
         }
@@ -460,25 +453,6 @@ public class TaskExecution implements UnitOfWork {
                 typeValidationContext
         ));
         context.getValidationAction().validate(context.getTaskExecutionMode().isTaskHistoryMaintained(), typeValidationContext);
-    }
-
-    @Override
-    public void broadcastRelevantFileSystemInputs(boolean hasEmptySources) {
-        taskInputsListeners.broadcastFileSystemInputsOf(task, new CompositeFileCollection() {
-            @Override
-            public String getDisplayName() {
-                return TaskExecution.this.getDisplayName() + " relevant file inputs";
-            }
-
-            @Override
-            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
-                for (InputFilePropertySpec filePropertySpec : context.getTaskProperties().getInputFileProperties()) {
-                    if (!hasEmptySources || filePropertySpec.isSkipWhenEmpty()) {
-                        visitor.accept(filePropertySpec.getPropertyFiles());
-                    }
-                }
-            }
-        });
     }
 
     @Override
