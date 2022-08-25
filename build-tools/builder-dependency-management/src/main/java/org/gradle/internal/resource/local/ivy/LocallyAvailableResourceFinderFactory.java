@@ -16,19 +16,18 @@
 package org.gradle.internal.resource.local.ivy;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.hash.HashCode;
-import org.gradle.api.internal.artifacts.repositories.resolver.IvyResourcePattern;
-import org.gradle.api.internal.artifacts.repositories.resolver.M2ResourcePattern;
-import org.gradle.api.internal.artifacts.repositories.resolver.ResourcePattern;
-import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
-import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheMetadata;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCachesProvider;
 import org.gradle.api.internal.artifacts.mvnsettings.CannotLocateLocalMavenRepositoryException;
 import org.gradle.api.internal.artifacts.mvnsettings.LocalMavenRepositoryLocator;
-
+import org.gradle.api.internal.artifacts.repositories.resolver.IvyResourcePattern;
+import org.gradle.api.internal.artifacts.repositories.resolver.M2ResourcePattern;
+import org.gradle.api.internal.artifacts.repositories.resolver.ResourcePattern;
 import org.gradle.internal.Factory;
+import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
+import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata;
 import org.gradle.internal.hash.ChecksumService;
+import com.google.common.hash.HashCode;
 import org.gradle.internal.resource.local.CompositeLocallyAvailableResourceFinder;
 import org.gradle.internal.resource.local.FileStoreSearcher;
 import org.gradle.internal.resource.local.LocallyAvailableResource;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,15 @@
  * limitations under the License.
  */
 
-package org.gradle.internal.resolve.result;
+package org.gradle.internal.component.model;
 
-import org.gradle.internal.component.model.ComponentArtifacts;
-import org.gradle.internal.resolve.ArtifactResolveException;
+import java.util.List;
 
-public class DefaultBuildableComponentArtifactsResolveResult extends DefaultBuildableTypedResolveResult<ComponentArtifacts, ArtifactResolveException> implements BuildableComponentArtifactsResolveResult {
+/**
+ * Immutable metadata for the artifacts of a variant instance that is used to perform dependency graph resolution.
+ *
+ * <p>Note: only provides a limited view of the artifact metadata, exposing only that required to perform graph resolution.</p>
+ */
+public interface VariantArtifactGraphResolveMetadata {
+    List<? extends ComponentArtifactMetadata> getArtifacts();
 }

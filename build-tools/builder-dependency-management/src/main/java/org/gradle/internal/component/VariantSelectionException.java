@@ -17,8 +17,8 @@
 package org.gradle.internal.component;
 
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedVariantSet;
-import org.gradle.internal.exceptions.StyledException;
 import org.gradle.internal.exceptions.Contextual;
+import org.gradle.internal.exceptions.StyledException;
 
 @Contextual
 public class VariantSelectionException extends StyledException {

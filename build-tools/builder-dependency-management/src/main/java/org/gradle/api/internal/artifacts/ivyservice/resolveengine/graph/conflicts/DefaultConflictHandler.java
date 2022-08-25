@@ -18,6 +18,7 @@ package org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflic
 
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.ModuleIdentifier;
+import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.internal.artifacts.dsl.ModuleReplacementsData;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.ComponentResolutionState;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.ConflictResolverDetails;
@@ -32,6 +33,8 @@ import org.gradle.internal.UncheckedException;
 
 import javax.annotation.Nullable;
 import java.util.Set;
+
+import static org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.PotentialConflictFactory.potentialConflict;
 
 public class DefaultConflictHandler implements ModuleConflictHandler {
 
@@ -59,8 +62,7 @@ public class DefaultConflictHandler implements ModuleConflictHandler {
     public PotentialConflict registerCandidate(CandidateModule candidate) {
         ModuleReplacementsData.Replacement replacement = moduleReplacements.getReplacementFor(candidate.getId());
         ModuleIdentifier replacedBy = replacement == null ? null : replacement.getTarget();
-        return PotentialConflictFactory
-                .potentialConflict(conflicts.newElement(candidate.getId(), candidate.getVersions(), replacedBy));
+        return potentialConflict(conflicts.newElement(candidate.getId(), candidate.getVersions(), replacedBy));
     }
 
     /**
@@ -111,4 +113,8 @@ public class DefaultConflictHandler implements ModuleConflictHandler {
         compositeResolver.addFirst(conflictResolver);
     }
 
+    @Override
+    public boolean hasKnownConflictFor(ModuleVersionIdentifier id) {
+        return conflicts.hasMatchingConflict(state -> state.getId().equals(id));
+    }
 }

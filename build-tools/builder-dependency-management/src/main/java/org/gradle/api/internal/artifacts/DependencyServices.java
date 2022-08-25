@@ -17,7 +17,6 @@
 package org.gradle.api.internal.artifacts;
 
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactSetToFileCollectionFactory;
-
 import org.gradle.api.internal.artifacts.transform.ArtifactTransformListener;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.service.ServiceRegistration;

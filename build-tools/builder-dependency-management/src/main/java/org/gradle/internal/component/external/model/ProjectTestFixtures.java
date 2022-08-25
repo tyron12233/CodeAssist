@@ -15,11 +15,11 @@
  */
 package org.gradle.internal.component.external.model;
 
-import static org.gradle.internal.component.external.model.TestFixturesSupport.TEST_FIXTURES_FEATURE_NAME;
-
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ModuleDependencyCapabilitiesHandler;
+
+import static org.gradle.internal.component.external.model.TestFixturesSupport.TEST_FIXTURES_FEATURE_NAME;
 
 public class ProjectTestFixtures implements Action<ModuleDependencyCapabilitiesHandler> {
     private final Project project;
@@ -30,7 +30,6 @@ public class ProjectTestFixtures implements Action<ModuleDependencyCapabilitiesH
 
     @Override
     public void execute(ModuleDependencyCapabilitiesHandler capabilities) {
-        capabilities.requireCapability(
-                new ProjectDerivedCapability(project, TEST_FIXTURES_FEATURE_NAME));
+        capabilities.requireCapability(new ProjectDerivedCapability(project, TEST_FIXTURES_FEATURE_NAME));
     }
 }

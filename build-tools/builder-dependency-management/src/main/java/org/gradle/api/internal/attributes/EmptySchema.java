@@ -16,11 +16,10 @@
 
 package org.gradle.api.internal.attributes;
 
-import org.gradle.internal.component.model.AttributeMatcher;
-
 import org.gradle.api.Action;
 import org.gradle.api.attributes.Attribute;
 import org.gradle.api.attributes.AttributeMatchingStrategy;
+import org.gradle.internal.component.model.AttributeMatcher;
 
 import java.util.Collections;
 import java.util.List;
@@ -87,7 +86,22 @@ public class EmptySchema implements AttributesSchemaInternal {
 
     @Override
     public boolean hasAttribute(Attribute<?> key) {
+        return false;
+    }
+
+    @Override
+    public void attributeDisambiguationPrecedence(Attribute<?>... attribute) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setAttributeDisambiguationPrecedence(List<Attribute<?>> attributes) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<Attribute<?>> getAttributeDisambiguationPrecedence() {
+        return Collections.emptyList();
     }
 
     private static class DoNothingCompatibilityRule implements CompatibilityRule<Object> {

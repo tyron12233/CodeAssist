@@ -16,7 +16,13 @@
 package org.gradle.api.internal.artifacts.repositories;
 
 import com.google.common.base.Joiner;
+import org.gradle.api.Action;
+import org.gradle.api.InvalidUserDataException;
+import org.gradle.api.artifacts.repositories.FlatDirectoryArtifactRepository;
+import org.gradle.api.artifacts.repositories.RepositoryResourceAccessor;
+import org.gradle.api.internal.artifacts.ModuleVersionPublisher;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ConfiguredModuleComponentRepository;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
 import org.gradle.api.internal.artifacts.repositories.descriptor.FlatDirRepositoryDescriptor;
 import org.gradle.api.internal.artifacts.repositories.descriptor.RepositoryDescriptor;
 import org.gradle.api.internal.artifacts.repositories.metadata.DefaultArtifactMetadataSource;
@@ -28,18 +34,11 @@ import org.gradle.api.internal.artifacts.repositories.metadata.MetadataSource;
 import org.gradle.api.internal.artifacts.repositories.resolver.IvyResolver;
 import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransport;
 import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransportFactory;
+import org.gradle.api.internal.file.FileCollectionFactory;
+import org.gradle.api.model.ObjectFactory;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata;
 import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
-
-import org.gradle.api.Action;
-import org.gradle.api.InvalidUserDataException;
-import org.gradle.api.artifacts.repositories.FlatDirectoryArtifactRepository;
-import org.gradle.api.artifacts.repositories.RepositoryResourceAccessor;
-import org.gradle.api.internal.artifacts.ModuleVersionPublisher;
-
-import org.gradle.api.internal.file.FileCollectionFactory;
-import org.gradle.api.model.ObjectFactory;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.reflect.Instantiator;
@@ -76,8 +75,10 @@ public class DefaultFlatDirArtifactRepository extends AbstractResolutionAwareArt
                                             IvyMutableModuleMetadataFactory metadataFactory,
                                             InstantiatorFactory instantiatorFactory,
                                             ObjectFactory objectFactory,
-                                            ChecksumService checksumService) {
-        super(objectFactory);
+                                            ChecksumService checksumService,
+                                            VersionParser versionParser
+    ) {
+        super(objectFactory, versionParser);
         this.fileCollectionFactory = fileCollectionFactory;
         this.transportFactory = transportFactory;
         this.locallyAvailableResourceFinder = locallyAvailableResourceFinder;
@@ -165,8 +166,7 @@ public class DefaultFlatDirArtifactRepository extends AbstractResolutionAwareArt
     }
 
     private ImmutableMetadataSources createMetadataSources() {
-        MetadataSource<MutableModuleComponentResolveMetadata>
-                artifactMetadataSource = new DefaultArtifactMetadataSource(metadataFactory);
+        MetadataSource<MutableModuleComponentResolveMetadata> artifactMetadataSource = new DefaultArtifactMetadataSource(metadataFactory);
         return new DefaultImmutableMetadataSources(Collections.singletonList(artifactMetadataSource));
     }
 

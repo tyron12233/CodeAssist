@@ -16,11 +16,10 @@
 
 package org.gradle.api.internal.attributes;
 
+import org.gradle.api.attributes.Attribute;
 import org.gradle.internal.component.model.AttributeMatcher;
 
-import org.gradle.api.attributes.Attribute;
-
-    public interface AttributesSchemaInternal extends DescribableAttributesSchema {
+public interface AttributesSchemaInternal extends DescribableAttributesSchema {
     /**
      * Returns a matcher that uses the consumer rules from this schema, and the producer rules from the given schema.
      */

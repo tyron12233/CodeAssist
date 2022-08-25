@@ -16,9 +16,8 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine;
 
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictResolverDetails;
-
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictResolverDetails;
 import org.gradle.internal.Cast;
 
 import java.util.ArrayList;

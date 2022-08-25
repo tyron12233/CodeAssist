@@ -6,7 +6,6 @@ import org.gradle.api.specs.Spec;
 
 import java.io.File;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * <p>A {@code FileCollection} represents a collection of file system locations which you can query in certain ways. A file collection

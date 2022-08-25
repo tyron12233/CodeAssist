@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,11 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.gradle.internal.resolve.result;
 
-import org.gradle.internal.component.model.ComponentArtifacts;
-import org.gradle.internal.resolve.ArtifactResolveException;
+package org.gradle.internal.classpath.intercept;
 
-public interface BuildableComponentArtifactsResolveResult extends ResolveResult, BuildableTypedResolveResult<ComponentArtifacts, ArtifactResolveException> {
-    boolean isSuccessful();
+import org.codehaus.groovy.runtime.wrappers.Wrapper;
+
+class InvocationUtils {
+    private InvocationUtils() {}
+
+    static Object unwrap(Object obj) {
+        if (obj instanceof Wrapper) {
+            return ((Wrapper) obj).unwrap();
+        }
+        return obj;
+    }
 }

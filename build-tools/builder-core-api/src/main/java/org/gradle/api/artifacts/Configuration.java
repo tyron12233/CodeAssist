@@ -1,3 +1,18 @@
+/*
+ * Copyright 2011 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.gradle.api.artifacts;
 
 import groovy.lang.Closure;
@@ -6,6 +21,7 @@ import org.gradle.api.Action;
 import org.gradle.api.Incubating;
 import org.gradle.api.attributes.HasConfigurableAttributes;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.TaskDependency;
 import org.gradle.internal.HasInternalProtocol;
 
@@ -13,7 +29,6 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 
 import static groovy.lang.Closure.DELEGATE_FIRST;
 
@@ -201,7 +216,7 @@ public interface Configuration extends FileCollection, HasConfigurableAttributes
      * @param dependencySpec The spec describing a filter applied to the all the dependencies of this configuration (including dependencies from extended configurations).
      * @return The files of a subset of dependencies of this configuration.
      */
-    Set<File> files(Predicate<? super Dependency> dependencySpec);
+    Set<File> files(Spec<? super Dependency> dependencySpec);
 
     /**
      * Resolves this configuration. This locates and downloads the files which make up this configuration.
@@ -221,7 +236,7 @@ public interface Configuration extends FileCollection, HasConfigurableAttributes
      * @param dependencySpec The spec describing a filter applied to the all the dependencies of this configuration (including dependencies from extended configurations).
      * @return The FileCollection with a subset of dependencies of this configuration.
      */
-    FileCollection fileCollection(Predicate<? super Dependency> dependencySpec);
+    FileCollection fileCollection(Spec<? super Dependency> dependencySpec);
 
     /**
      * Takes a closure which gets coerced into a {@link Spec}. Behaves otherwise in the same way as
@@ -262,7 +277,7 @@ public interface Configuration extends FileCollection, HasConfigurableAttributes
 
     /**
      * Returns a {@code TaskDependency} object containing all required dependencies to build the local dependencies
-     * (e.g.<!-- --> project dependencies) belonging to this configuration or to one of its super configurations.
+     * (e.g. project dependencies) belonging to this configuration or to one of its super configurations.
      *
      * @return a TaskDependency object
      */
@@ -471,7 +486,7 @@ public interface Configuration extends FileCollection, HasConfigurableAttributes
      * @param dependencySpec filtering requirements
      * @return copy of this configuration
      */
-    Configuration copy(Predicate<? super Dependency> dependencySpec);
+    Configuration copy(Spec<? super Dependency> dependencySpec);
 
     /**
      * Creates a copy of this configuration with dependencies from superconfigurations (see {@link #copyRecursive()})
@@ -480,7 +495,7 @@ public interface Configuration extends FileCollection, HasConfigurableAttributes
      * @param dependencySpec filtering requirements
      * @return copy of this configuration
      */
-    Configuration copyRecursive(Predicate<? super Dependency> dependencySpec);
+    Configuration copyRecursive(Spec<? super Dependency> dependencySpec);
 
     /**
      * Takes a closure which gets coerced into a {@link Spec}. Behaves otherwise in the same way as {@link #copy(org.gradle.api.specs.Spec)}

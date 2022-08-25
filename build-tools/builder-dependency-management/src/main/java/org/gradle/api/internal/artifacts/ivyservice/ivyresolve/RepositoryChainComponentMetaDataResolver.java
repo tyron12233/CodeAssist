@@ -16,16 +16,13 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import org.gradle.api.internal.artifacts.repositories.resolver.MetadataFetchingCost;
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-import org.gradle.internal.resolve.ResolveExceptionAnalyzer;
-
 import org.gradle.api.Transformer;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
-
+import org.gradle.api.internal.artifacts.repositories.resolver.MetadataFetchingCost;
 import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
 import org.gradle.internal.component.model.ComponentOverrideMetadata;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 import org.gradle.internal.resolve.resolver.ComponentMetaDataResolver;
 import org.gradle.internal.resolve.result.BuildableComponentResolveResult;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
@@ -36,6 +33,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+
+import static org.gradle.internal.resolve.ResolveExceptionAnalyzer.hasCriticalFailure;
+import static org.gradle.internal.resolve.ResolveExceptionAnalyzer.isCriticalFailure;
 
 public class RepositoryChainComponentMetaDataResolver implements ComponentMetaDataResolver {
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryChainComponentMetaDataResolver.class);
@@ -117,7 +117,7 @@ public class RepositoryChainComponentMetaDataResolver implements ComponentMetaDa
 
         // A first pass to do local resolves only
         RepositoryChainModuleResolution best = findBestMatch(queue, failures, missing);
-        if (ResolveExceptionAnalyzer.hasCriticalFailure(failures)) {
+        if (hasCriticalFailure(failures)) {
             return null;
         }
         if (best != null) {
@@ -139,7 +139,7 @@ public class RepositoryChainComponentMetaDataResolver implements ComponentMetaDa
             switch (metaDataResolveResult.getState()) {
                 case Failed:
                     failures.add(metaDataResolveResult.getFailure());
-                    if (ResolveExceptionAnalyzer.isCriticalFailure(metaDataResolveResult.getFailure())) {
+                    if (isCriticalFailure(metaDataResolveResult.getFailure())) {
                         queue.clear();
                     }
                     break;

@@ -15,18 +15,17 @@
  */
 package org.gradle.internal.resolve.result;
 
-import org.gradle.internal.component.model.ComponentResolveMetadata;
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
+import org.gradle.internal.component.model.ComponentGraphResolveState;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 
 import javax.annotation.Nullable;
 
 /**
  * The result of resolving a module version selector to a particular component.
  *
- * <p>Very similar to {@link ComponentIdResolveResult}, could probably merge these.
+ * <p>Very similar to {@link org.gradle.internal.resolve.result.ComponentIdResolveResult}, could probably merge these.
  */
 public interface ComponentResolveResult extends ResolveResult {
 
@@ -38,16 +37,16 @@ public interface ComponentResolveResult extends ResolveResult {
     /**
      * Returns the module version id of the component.
      *
-     * @throws ModuleVersionResolveException If resolution was unsuccessful and the id is unknown.
+     * @throws org.gradle.internal.resolve.ModuleVersionResolveException If resolution was unsuccessful and the id is unknown.
      */
     ModuleVersionIdentifier getModuleVersionId() throws ModuleVersionResolveException;
 
     /**
-     * Returns the meta-data for the component.
+     * Returns the graph resolution state for the component.
      *
      * @throws ModuleVersionResolveException If resolution was unsuccessful and the descriptor is not available.
      */
-    ComponentResolveMetadata getMetadata() throws ModuleVersionResolveException;
+    ComponentGraphResolveState getState() throws ModuleVersionResolveException;
 
     /**
      * Returns the resolve failure, if any.

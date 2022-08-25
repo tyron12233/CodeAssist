@@ -16,13 +16,11 @@
 package org.gradle.api.internal.artifacts.ivyservice.modulecache;
 
 import com.google.common.collect.ImmutableList;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.AttributeContainerSerializer;
-
 import org.gradle.api.artifacts.ComponentMetadata;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.internal.artifacts.ModuleVersionIdentifierSerializer;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.UserProvidedMetadata;
-
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.AttributeContainerSerializer;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.Decoder;

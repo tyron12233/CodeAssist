@@ -16,8 +16,6 @@
 package org.gradle.api.internal.artifacts.dsl.dependencies;
 
 import com.google.common.base.Objects;
-import org.gradle.api.internal.artifacts.repositories.metadata.MavenImmutableAttributesFactory;
-
 import org.gradle.api.attributes.AttributeDisambiguationRule;
 import org.gradle.api.attributes.AttributeMatchingStrategy;
 import org.gradle.api.attributes.AttributesSchema;
@@ -25,6 +23,7 @@ import org.gradle.api.attributes.Category;
 import org.gradle.api.attributes.HasConfigurableAttributes;
 import org.gradle.api.attributes.MultipleCandidatesDetails;
 import org.gradle.api.internal.ReusableAction;
+import org.gradle.api.internal.artifacts.repositories.metadata.MavenImmutableAttributesFactory;
 import org.gradle.api.internal.model.NamedObjectInstantiator;
 import org.gradle.internal.component.external.model.ComponentVariant;
 

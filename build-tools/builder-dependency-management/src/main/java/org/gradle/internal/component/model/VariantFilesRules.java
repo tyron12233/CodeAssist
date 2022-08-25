@@ -17,17 +17,16 @@ package org.gradle.internal.component.model;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import org.gradle.api.artifacts.MutableVariantFilesMetadata;
+import org.gradle.api.artifacts.VariantFileMetadata;
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.repositories.resolver.DefaultMutableVariantFilesMetadata;
+import org.gradle.internal.Cast;
 import org.gradle.internal.component.external.model.AbstractMutableModuleComponentResolveMetadata;
 import org.gradle.internal.component.external.model.ComponentVariant;
 import org.gradle.internal.component.external.model.DefaultModuleComponentArtifactMetadata;
 import org.gradle.internal.component.external.model.UrlBackedArtifactMetadata;
 import org.gradle.internal.component.external.model.VariantMetadataRules;
-
-import org.gradle.api.artifacts.MutableVariantFilesMetadata;
-import org.gradle.api.artifacts.VariantFileMetadata;
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
-import org.gradle.internal.Cast;
 
 import java.util.List;
 

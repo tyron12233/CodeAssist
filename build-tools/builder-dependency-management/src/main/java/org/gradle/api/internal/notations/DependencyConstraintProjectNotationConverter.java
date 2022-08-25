@@ -39,8 +39,7 @@ public class DependencyConstraintProjectNotationConverter implements NotationCon
     }
 
     @Override
-    public void convert(Project notation,
-                        NotationConvertResult<? super DependencyConstraint> result) throws TypeConversionException {
+    public void convert(Project notation, NotationConvertResult<? super DependencyConstraint> result) throws TypeConversionException {
         result.converted(new DefaultProjectDependencyConstraint(factory.create(notation)));
     }
 }

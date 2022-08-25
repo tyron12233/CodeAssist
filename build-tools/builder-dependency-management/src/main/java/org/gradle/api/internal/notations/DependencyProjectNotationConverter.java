@@ -24,8 +24,7 @@ import org.gradle.internal.typeconversion.NotationConvertResult;
 import org.gradle.internal.typeconversion.NotationConverter;
 import org.gradle.internal.typeconversion.TypeConversionException;
 
-public class DependencyProjectNotationConverter implements NotationConverter<Project,
-        ProjectDependency> {
+public class DependencyProjectNotationConverter implements NotationConverter<Project, ProjectDependency> {
 
     private final DefaultProjectDependencyFactory factory;
 
@@ -39,8 +38,7 @@ public class DependencyProjectNotationConverter implements NotationConverter<Pro
     }
 
     @Override
-    public void convert(Project notation,
-                        NotationConvertResult<? super ProjectDependency> result) throws TypeConversionException {
+    public void convert(Project notation, NotationConvertResult<? super ProjectDependency> result) throws TypeConversionException {
         result.converted(factory.create(notation));
     }
 }

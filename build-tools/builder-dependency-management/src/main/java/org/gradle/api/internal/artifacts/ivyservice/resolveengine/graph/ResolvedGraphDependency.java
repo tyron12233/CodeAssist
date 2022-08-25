@@ -16,11 +16,10 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph;
 
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-
 import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.artifacts.result.ComponentSelectionReason;
 import org.gradle.api.artifacts.result.ResolvedVariantResult;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 
 import javax.annotation.Nullable;
 
@@ -51,5 +50,6 @@ public interface ResolvedGraphDependency {
 
     ResolvedVariantResult getFromVariant();
 
+    @Nullable
     ResolvedVariantResult getSelectedVariant();
 }

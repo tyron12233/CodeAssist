@@ -16,13 +16,14 @@
 package org.gradle.api.internal.notations;
 
 import com.google.common.collect.Interner;
-import org.gradle.api.internal.artifacts.dependencies.DefaultClientModule;
-
 import org.gradle.api.artifacts.ClientModule;
+import org.gradle.api.internal.artifacts.dependencies.DefaultClientModule;
 import org.gradle.internal.Factory;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.typeconversion.NotationParser;
 import org.gradle.internal.typeconversion.NotationParserBuilder;
+
+import javax.annotation.Nonnull;
 
 public class ClientModuleNotationParserFactory implements Factory<NotationParser<Object, ClientModule>> {
 
@@ -34,6 +35,7 @@ public class ClientModuleNotationParserFactory implements Factory<NotationParser
         this.stringInterner = stringInterner;
     }
 
+    @Nonnull
     @Override
     public NotationParser<Object, ClientModule> create() {
         return NotationParserBuilder.toType(ClientModule.class)

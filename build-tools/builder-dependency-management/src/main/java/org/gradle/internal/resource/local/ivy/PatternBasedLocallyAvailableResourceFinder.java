@@ -15,12 +15,11 @@
  */
 package org.gradle.internal.resource.local.ivy;
 
-import org.gradle.api.internal.artifacts.repositories.resolver.ResourcePattern;
-import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata;
-
 import org.gradle.api.Transformer;
 import org.gradle.api.file.EmptyFileVisitor;
 import org.gradle.api.file.FileVisitDetails;
+import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata;
+import org.gradle.api.internal.artifacts.repositories.resolver.ResourcePattern;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.resource.local.AbstractLocallyAvailableResourceFinder;
 import org.gradle.api.internal.file.collections.MinimalFileTree;

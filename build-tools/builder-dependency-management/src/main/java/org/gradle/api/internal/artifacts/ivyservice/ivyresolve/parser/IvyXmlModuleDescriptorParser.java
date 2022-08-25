@@ -18,8 +18,6 @@ package org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Sets;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.PatternMatchers;
-
 import org.apache.ivy.core.IvyPatternHelper;
 import org.apache.ivy.core.NormalRelativeUrlResolver;
 import org.apache.ivy.core.RelativeUrlResolver;
@@ -50,6 +48,7 @@ import org.gradle.api.internal.artifacts.DefaultModuleIdentifier;
 import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
 import org.gradle.api.internal.artifacts.ivyservice.IvyUtil;
 import org.gradle.api.internal.artifacts.ivyservice.NamespaceId;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.PatternMatchers;
 import org.gradle.api.internal.artifacts.repositories.metadata.IvyMutableModuleMetadataFactory;
 import org.gradle.api.internal.component.ArtifactType;
 import org.gradle.api.resources.MissingResourceException;
@@ -1320,8 +1319,7 @@ public class IvyXmlModuleDescriptorParser extends AbstractModuleDescriptorParser
         @Override
         public void comment(char[] ch, int start, int length) {
             String comment = new String(ch, start, length);
-            if (comment.contains(GRADLE_6_METADATA_MARKER) || comment.contains(
-                    GRADLE_METADATA_MARKER)) {
+            if (comment.contains(MetaDataParser.GRADLE_6_METADATA_MARKER) || comment.contains(MetaDataParser.GRADLE_METADATA_MARKER)) {
                 hasGradleMetadataRedirect = true;
             }
         }

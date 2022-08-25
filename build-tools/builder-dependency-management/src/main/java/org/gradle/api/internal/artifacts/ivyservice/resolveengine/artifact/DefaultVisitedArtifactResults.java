@@ -20,10 +20,12 @@ import com.google.common.collect.Lists;
 import org.gradle.api.artifacts.ResolutionStrategy;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.transform.VariantSelector;
+import org.gradle.api.specs.Spec;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Predicate;
+
+import static org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet.EMPTY;
 
 public class DefaultVisitedArtifactResults implements VisitedArtifactsResults {
     private final ResolutionStrategy.SortOrder sortOrder;
@@ -36,7 +38,7 @@ public class DefaultVisitedArtifactResults implements VisitedArtifactsResults {
     }
 
     @Override
-    public SelectedArtifactResults select(Predicate<? super ComponentIdentifier> componentFilter, VariantSelector selector) {
+    public SelectedArtifactResults select(Spec<? super ComponentIdentifier> componentFilter, VariantSelector selector) {
         if (artifactsById.isEmpty()) {
             return NoArtifactResults.INSTANCE;
         }
@@ -61,12 +63,12 @@ public class DefaultVisitedArtifactResults implements VisitedArtifactsResults {
 
         @Override
         public ResolvedArtifactSet getArtifacts() {
-            return ResolvedArtifactSet.EMPTY;
+            return EMPTY;
         }
 
         @Override
         public ResolvedArtifactSet getArtifactsWithId(int id) {
-            return ResolvedArtifactSet.EMPTY;
+            return EMPTY;
         }
     }
 

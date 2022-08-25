@@ -17,8 +17,6 @@
 package org.gradle.api.internal.artifacts.transform;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.hash.HashCode;
-import com.google.common.hash.Hasher;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
@@ -29,6 +27,8 @@ import org.gradle.internal.fingerprint.AbsolutePathInputNormalizer;
 import org.gradle.internal.fingerprint.DirectorySensitivity;
 import org.gradle.internal.fingerprint.LineEndingSensitivity;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
+import com.google.common.hash.HashCode;
+import com.google.common.hash.Hasher;
 import org.gradle.internal.hash.Hashes;
 import org.gradle.internal.instantiation.InstantiationScheme;
 import org.gradle.internal.isolation.Isolatable;

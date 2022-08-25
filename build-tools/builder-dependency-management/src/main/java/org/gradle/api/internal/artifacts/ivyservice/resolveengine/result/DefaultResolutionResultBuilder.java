@@ -16,8 +16,6 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.result;
 
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ModuleVersionSelector;
 import org.gradle.api.artifacts.UnresolvedDependency;
@@ -38,6 +36,7 @@ import org.gradle.api.internal.artifacts.result.DefaultResolvedComponentResult;
 import org.gradle.internal.Describables;
 import org.gradle.internal.Factory;
 import org.gradle.internal.component.external.model.DefaultModuleComponentSelector;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -55,7 +54,7 @@ public class DefaultResolutionResultBuilder {
     public static ResolutionResult empty(ModuleVersionIdentifier id, ComponentIdentifier componentIdentifier, AttributeContainer attributes) {
         DefaultResolutionResultBuilder builder = new DefaultResolutionResultBuilder();
         builder.setRequestedAttributes(attributes);
-        builder.visitComponent(new DetachedComponentResult(0L, id, ComponentSelectionReasons.root(), componentIdentifier, Collections.emptyList(), null));
+        builder.visitComponent(new DetachedComponentResult(0L, id, ComponentSelectionReasons.root(), componentIdentifier, Collections.emptyList(), Collections.emptyList(), null));
         return builder.complete(0L);
     }
 
@@ -68,7 +67,7 @@ public class DefaultResolutionResultBuilder {
     }
 
     public void visitComponent(ResolvedGraphComponent component) {
-        create(component.getResultId(), component.getModuleVersion(), component.getSelectionReason(), component.getComponentId(), component.getResolvedVariants(), component.getRepositoryName());
+        create(component.getResultId(), component.getModuleVersion(), component.getSelectionReason(), component.getComponentId(), component.getResolvedVariants(), component.getAllVariants(), component.getRepositoryName());
     }
 
     public void visitOutgoingEdges(Long fromComponent, Collection<? extends ResolvedGraphDependency> dependencies) {
@@ -93,9 +92,9 @@ public class DefaultResolutionResultBuilder {
         }
     }
 
-    private void create(Long id, ModuleVersionIdentifier moduleVersion, ComponentSelectionReason selectionReason, ComponentIdentifier componentId, List<ResolvedVariantResult> variants, String repoName) {
+    private void create(Long id, ModuleVersionIdentifier moduleVersion, ComponentSelectionReason selectionReason, ComponentIdentifier componentId, List<ResolvedVariantResult> selectedVariants, List<ResolvedVariantResult> allVariants, String repoName) {
         if (!modules.containsKey(id)) {
-            modules.put(id, new DefaultResolvedComponentResult(moduleVersion, selectionReason, componentId, variants, repoName));
+            modules.put(id, new DefaultResolvedComponentResult(moduleVersion, selectionReason, componentId, selectedVariants, allVariants, repoName));
         }
     }
 

@@ -1,3 +1,19 @@
+/*
+ * Copyright 2020 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.gradle.internal.execution.workspace.impl;
 
 import org.gradle.api.internal.cache.StringInterner;
@@ -13,6 +29,7 @@ import org.gradle.internal.execution.history.impl.DefaultExecutionHistoryStore;
 import org.gradle.internal.execution.workspace.WorkspaceProvider;
 import org.gradle.internal.file.FileAccessTimeJournal;
 import org.gradle.internal.file.impl.SingleDepthFileAccessTracker;
+import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 
 import java.io.Closeable;
 import java.io.File;
@@ -30,58 +47,61 @@ public class DefaultImmutableWorkspaceProvider implements WorkspaceProvider, Clo
     private final PersistentCache cache;
 
     public static DefaultImmutableWorkspaceProvider withBuiltInHistory(
-        CacheBuilder cacheBuilder,
-        FileAccessTimeJournal fileAccessTimeJournal,
-        InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
-        StringInterner stringInterner
+            CacheBuilder cacheBuilder,
+            FileAccessTimeJournal fileAccessTimeJournal,
+            InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
+            StringInterner stringInterner,
+            ClassLoaderHierarchyHasher classLoaderHasher
     ) {
         return withBuiltInHistory(
-            cacheBuilder,
-            fileAccessTimeJournal,
-            inMemoryCacheDecoratorFactory,
-            stringInterner,
-            DEFAULT_FILE_TREE_DEPTH_TO_TRACK_AND_CLEANUP
+                cacheBuilder,
+                fileAccessTimeJournal,
+                inMemoryCacheDecoratorFactory,
+                stringInterner,
+                classLoaderHasher,
+                DEFAULT_FILE_TREE_DEPTH_TO_TRACK_AND_CLEANUP
         );
     }
 
     public static DefaultImmutableWorkspaceProvider withBuiltInHistory(
-        CacheBuilder cacheBuilder,
-        FileAccessTimeJournal fileAccessTimeJournal,
-        InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
-        StringInterner stringInterner,
-        int treeDepthToTrackAndCleanup
+            CacheBuilder cacheBuilder,
+            FileAccessTimeJournal fileAccessTimeJournal,
+            InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
+            StringInterner stringInterner,
+            ClassLoaderHierarchyHasher classLoaderHasher,
+            int treeDepthToTrackAndCleanup
     ) {
         return new DefaultImmutableWorkspaceProvider(
-            cacheBuilder,
-            fileAccessTimeJournal,
-            cache -> new DefaultExecutionHistoryStore(() -> cache, inMemoryCacheDecoratorFactory, stringInterner),
-            treeDepthToTrackAndCleanup
+                cacheBuilder,
+                fileAccessTimeJournal,
+                cache -> new DefaultExecutionHistoryStore(() -> cache, inMemoryCacheDecoratorFactory, stringInterner, classLoaderHasher),
+                treeDepthToTrackAndCleanup
         );
     }
 
     public static DefaultImmutableWorkspaceProvider withExternalHistory(
-        CacheBuilder cacheBuilder,
-        FileAccessTimeJournal fileAccessTimeJournal,
-        ExecutionHistoryStore executionHistoryStore
+            CacheBuilder cacheBuilder,
+            FileAccessTimeJournal fileAccessTimeJournal,
+            ExecutionHistoryStore executionHistoryStore
     ) {
         return new DefaultImmutableWorkspaceProvider(
-            cacheBuilder,
-            fileAccessTimeJournal,
-            __ -> executionHistoryStore,
-            DEFAULT_FILE_TREE_DEPTH_TO_TRACK_AND_CLEANUP
+                cacheBuilder,
+                fileAccessTimeJournal,
+                __ -> executionHistoryStore,
+                DEFAULT_FILE_TREE_DEPTH_TO_TRACK_AND_CLEANUP
         );
     }
 
     private DefaultImmutableWorkspaceProvider(
-        CacheBuilder cacheBuilder,
-        FileAccessTimeJournal fileAccessTimeJournal,
-        Function<PersistentCache, ExecutionHistoryStore> historyFactory,
-        int treeDepthToTrackAndCleanup
+            CacheBuilder cacheBuilder,
+            FileAccessTimeJournal fileAccessTimeJournal,
+            Function<PersistentCache, ExecutionHistoryStore> historyFactory,
+            int treeDepthToTrackAndCleanup
     ) {
         PersistentCache cache = cacheBuilder
-            .withCleanup(createCleanupAction(fileAccessTimeJournal, treeDepthToTrackAndCleanup))
-            .withLockOptions(mode(FileLockManager.LockMode.OnDemand)) // Lock on demand
-            .open();
+                .withCleanup(createCleanupAction(fileAccessTimeJournal, treeDepthToTrackAndCleanup))
+                .withLockOptions(mode(FileLockManager.LockMode.OnDemand)) // Lock on demand
+                .open();
         this.cache = cache;
         this.baseDirectory = cache.getBaseDir();
         this.fileAccessTracker = new SingleDepthFileAccessTracker(fileAccessTimeJournal, baseDirectory, treeDepthToTrackAndCleanup);
@@ -90,9 +110,9 @@ public class DefaultImmutableWorkspaceProvider implements WorkspaceProvider, Clo
 
     private static CleanupAction createCleanupAction(FileAccessTimeJournal fileAccessTimeJournal, int treeDepthToTrackAndCleanup) {
         return new LeastRecentlyUsedCacheCleanup(
-            new SingleDepthFilesFinder(treeDepthToTrackAndCleanup),
-            fileAccessTimeJournal,
-            DEFAULT_MAX_AGE_IN_DAYS_FOR_RECREATABLE_CACHE_ENTRIES
+                new SingleDepthFilesFinder(treeDepthToTrackAndCleanup),
+                fileAccessTimeJournal,
+                DEFAULT_MAX_AGE_IN_DAYS_FOR_RECREATABLE_CACHE_ENTRIES
         );
     }
 

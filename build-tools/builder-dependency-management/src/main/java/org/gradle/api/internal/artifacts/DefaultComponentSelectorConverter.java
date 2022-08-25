@@ -15,9 +15,6 @@
  */
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
-import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentRegistry;
-
 import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ModuleVersionSelector;
@@ -26,7 +23,9 @@ import org.gradle.api.artifacts.component.LibraryComponentSelector;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentSelector;
-import org.gradle.internal.component.local.model.LocalComponentMetadata;
+import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentRegistry;
+import org.gradle.internal.component.local.model.LocalComponentGraphResolveState;
 import org.gradle.util.internal.GUtil;
 
 public class DefaultComponentSelectorConverter implements ComponentSelectorConverter {
@@ -57,7 +56,7 @@ public class DefaultComponentSelectorConverter implements ComponentSelectorConve
         if (selector instanceof ProjectComponentSelector) {
             ProjectComponentSelector projectSelector = (ProjectComponentSelector) selector;
             ProjectComponentIdentifier projectId = componentIdentifierFactory.createProjectComponentIdentifier(projectSelector);
-            LocalComponentMetadata projectComponent = localComponentRegistry.getComponent(projectId);
+            LocalComponentGraphResolveState projectComponent = localComponentRegistry.getComponent(projectId);
             if (projectComponent != null) {
                 ModuleVersionIdentifier moduleVersionId = projectComponent.getModuleVersionId();
                 return DefaultModuleVersionSelector.newSelector(moduleVersionId.getModule(), moduleVersionId.getVersion());

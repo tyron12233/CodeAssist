@@ -15,7 +15,6 @@
  */
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
-import com.google.common.hash.HashCode;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
 import org.gradle.api.internal.filestore.ArtifactIdentifierFileStore;
@@ -23,6 +22,7 @@ import org.gradle.internal.component.external.model.DefaultModuleComponentIdenti
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
 import org.gradle.internal.component.external.model.ModuleComponentFileArtifactIdentifier;
 import org.gradle.internal.component.model.PersistentModuleSource;
+import com.google.common.hash.HashCode;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
 
@@ -31,10 +31,9 @@ import java.io.IOException;
 
 /**
  * A codec for {@link MetadataFileSource}. This codec is particular because of the persistent cache
- * which must be relocatable. As a consequence, it would be an error to serialize the file path
- * because
+ * which must be relocatable. As a consequence, it would be an error to serialize the file path because
  * it would contain an absolute path to the descriptor file.
- * <p>
+ *
  * Therefore, the deserialized metadata file source reconstructs the file path from the component
  * module artifact identifier.
  */
@@ -42,8 +41,7 @@ public class DefaultMetadataFileSourceCodec implements PersistentModuleSource.Co
     private final ImmutableModuleIdentifierFactory moduleIdentifierFactory;
     private final ArtifactIdentifierFileStore fileStore;
 
-    public DefaultMetadataFileSourceCodec(ImmutableModuleIdentifierFactory moduleIdentifierFactory,
-                                          ArtifactIdentifierFileStore fileStore) {
+    public DefaultMetadataFileSourceCodec(ImmutableModuleIdentifierFactory moduleIdentifierFactory, ArtifactIdentifierFileStore fileStore) {
         this.moduleIdentifierFactory = moduleIdentifierFactory;
         this.fileStore = fileStore;
     }
@@ -66,27 +64,28 @@ public class DefaultMetadataFileSourceCodec implements PersistentModuleSource.Co
         String version = decoder.readString();
         String name = decoder.readString();
         byte[] sha1 = decoder.readBinary();
-        return createSource(sha1, group, module, version, name);
+        DefaultMetadataFileSource source = createSource(sha1, group, module, version, name);
+        return source;
     }
 
-    private DefaultMetadataFileSource createSource(byte[] sha1,
-                                                   String group,
-                                                   String module,
-                                                   String version,
-                                                   String name) {
-        ModuleComponentArtifactIdentifier artifactId =
-                createArtifactId(group, module, version, name);
+    private DefaultMetadataFileSource createSource(byte[] sha1, String group, String module, String version, String name) {
+        ModuleComponentArtifactIdentifier artifactId = createArtifactId(group, module, version, name);
         HashCode hashCode = HashCode.fromBytes(sha1);
         File metadataFile = fileStore.whereIs(artifactId, hashCode.toString());
-        return new DefaultMetadataFileSource(artifactId, metadataFile, hashCode);
+        return new DefaultMetadataFileSource(
+            artifactId,
+            metadataFile,
+            hashCode);
     }
 
-    private ModuleComponentFileArtifactIdentifier createArtifactId(String group,
-                                                                   String module,
-                                                                   String version,
-                                                                   String name) {
-        return new ModuleComponentFileArtifactIdentifier(DefaultModuleComponentIdentifier
-                .newId(moduleIdentifierFactory.module(group, module), version), name);
+    private ModuleComponentFileArtifactIdentifier createArtifactId(String group, String module, String version, String name) {
+        return new ModuleComponentFileArtifactIdentifier(
+            DefaultModuleComponentIdentifier.newId(
+                moduleIdentifierFactory.module(group, module),
+                version
+            ),
+            name
+        );
     }
 
     @Override

@@ -17,12 +17,12 @@
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
 import com.google.common.collect.Sets;
-import org.gradle.internal.resolve.ResolveExceptionAnalyzer;
-
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 
 import java.util.Set;
+
+import static org.gradle.internal.resolve.ResolveExceptionAnalyzer.isCriticalFailure;
 
 public class ConnectionFailureRepositoryDisabler implements RepositoryDisabler {
     private static final Logger LOGGER = Logging.getLogger(ConnectionFailureRepositoryDisabler.class);
@@ -42,7 +42,7 @@ public class ConnectionFailureRepositoryDisabler implements RepositoryDisabler {
             return true;
         }
 
-        if (ResolveExceptionAnalyzer.isCriticalFailure(throwable)) {
+        if (isCriticalFailure(throwable)) {
             LOGGER.debug("Repository {} has been disabled for this build due to connectivity issues", repositoryId);
             disabledRepositories.add(repositoryId);
             return true;

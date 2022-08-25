@@ -16,10 +16,8 @@
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.simple;
 
 import com.google.common.collect.ImmutableSet;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.factories.ExcludeFactory;
-
 import org.gradle.api.artifacts.ModuleIdentifier;
-
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.factories.ExcludeFactory;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.specs.ExcludeEverything;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.specs.ExcludeNothing;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.specs.ExcludeSpec;

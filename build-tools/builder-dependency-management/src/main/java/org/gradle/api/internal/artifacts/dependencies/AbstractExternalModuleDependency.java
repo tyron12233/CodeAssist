@@ -70,7 +70,7 @@ public abstract class AbstractExternalModuleDependency extends AbstractModuleDep
 
     @Override
     public boolean matchesStrictly(ModuleVersionIdentifier identifier) {
-        return new ModuleVersionSelectorStrictSpec(this).test(identifier);
+        return new ModuleVersionSelectorStrictSpec(this).isSatisfiedBy(identifier);
     }
 
     @Override

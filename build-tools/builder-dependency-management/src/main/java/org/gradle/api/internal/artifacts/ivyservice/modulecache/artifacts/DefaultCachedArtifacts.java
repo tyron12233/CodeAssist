@@ -15,8 +15,8 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.modulecache.artifacts;
 
-import com.google.common.hash.HashCode;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
+import com.google.common.hash.HashCode;
 
 import java.util.Set;
 

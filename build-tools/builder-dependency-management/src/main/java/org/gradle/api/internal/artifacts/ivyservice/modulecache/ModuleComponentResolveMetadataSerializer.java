@@ -18,14 +18,6 @@ package org.gradle.api.internal.artifacts.ivyservice.modulecache;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import org.gradle.internal.component.external.model.ivy.DefaultIvyModuleResolveMetadata;
-import org.gradle.internal.component.external.model.ivy.RealisedIvyModuleResolveMetadata;
-import org.gradle.internal.component.external.model.ivy.RealisedIvyModuleResolveMetadataSerializationHelper;
-import org.gradle.internal.component.external.model.maven.DefaultMavenModuleResolveMetadata;
-import org.gradle.internal.component.external.model.maven.MavenDependencyDescriptor;
-import org.gradle.internal.component.external.model.maven.RealisedMavenModuleResolveMetadata;
-import org.gradle.internal.component.external.model.maven.RealisedMavenModuleResolveMetadataSerializationHelper;
-
 import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
@@ -38,6 +30,13 @@ import org.gradle.internal.component.external.model.ExternalDependencyDescriptor
 import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
 import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
 import org.gradle.internal.component.external.model.VirtualComponentIdentifier;
+import org.gradle.internal.component.external.model.ivy.DefaultIvyModuleResolveMetadata;
+import org.gradle.internal.component.external.model.ivy.RealisedIvyModuleResolveMetadata;
+import org.gradle.internal.component.external.model.ivy.RealisedIvyModuleResolveMetadataSerializationHelper;
+import org.gradle.internal.component.external.model.maven.DefaultMavenModuleResolveMetadata;
+import org.gradle.internal.component.external.model.maven.MavenDependencyDescriptor;
+import org.gradle.internal.component.external.model.maven.RealisedMavenModuleResolveMetadata;
+import org.gradle.internal.component.external.model.maven.RealisedMavenModuleResolveMetadataSerializationHelper;
 import org.gradle.internal.resolve.caching.DesugaringAttributeContainerSerializer;
 import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.Decoder;

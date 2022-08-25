@@ -16,10 +16,9 @@
 
 package org.gradle.api.internal.artifacts.dsl;
 
-import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
-
 import org.gradle.api.artifacts.ComponentMetadataContext;
 import org.gradle.api.artifacts.ComponentMetadataDetails;
+import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
 
 class DefaultComponentMetadataContext implements ComponentMetadataContext {
 

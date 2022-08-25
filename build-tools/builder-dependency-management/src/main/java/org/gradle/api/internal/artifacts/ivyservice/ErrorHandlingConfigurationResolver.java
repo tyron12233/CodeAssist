@@ -15,14 +15,7 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice;
 
-import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.SelectedArtifactSet;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.VisitedArtifactSet;
-import org.gradle.api.internal.artifacts.repositories.ResolutionAwareRepository;
-
 import groovy.lang.Closure;
-
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.LenientConfiguration;
@@ -39,7 +32,11 @@ import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.api.internal.artifacts.ConfigurationResolver;
 import org.gradle.api.internal.artifacts.ResolveContext;
 import org.gradle.api.internal.artifacts.ResolverResults;
-
+import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.SelectedArtifactSet;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.VisitedArtifactSet;
+import org.gradle.api.internal.artifacts.repositories.ResolutionAwareRepository;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.provider.DefaultProvider;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
@@ -49,7 +46,6 @@ import org.gradle.api.specs.Spec;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 
 public class ErrorHandlingConfigurationResolver implements ConfigurationResolver {
     private final ConfigurationResolver delegate;
@@ -138,7 +134,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public Set<ResolvedArtifact> getArtifacts(Predicate<? super Dependency> dependencySpec) {
+        public Set<ResolvedArtifact> getArtifacts(Spec<? super Dependency> dependencySpec) {
             try {
                 return lenientConfiguration.getArtifacts(dependencySpec);
             } catch (Exception e) {
@@ -156,7 +152,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Predicate<? super Dependency> dependencySpec) {
+        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) {
             try {
                 return lenientConfiguration.getFirstLevelModuleDependencies(dependencySpec);
             } catch (Exception e) {
@@ -192,7 +188,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public Set<File> getFiles(Predicate<? super Dependency> dependencySpec) {
+        public Set<File> getFiles(Spec<? super Dependency> dependencySpec) {
             try {
                 return lenientConfiguration.getFiles(dependencySpec);
             } catch (Exception e) {
@@ -313,7 +309,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public Set<File> getFiles(Predicate<? super Dependency> dependencySpec) throws ResolveException {
+        public Set<File> getFiles(Spec<? super Dependency> dependencySpec) throws ResolveException {
             try {
                 return resolvedConfiguration.getFiles(dependencySpec);
             } catch (Exception e) {
@@ -331,7 +327,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Predicate<? super Dependency> dependencySpec) throws ResolveException {
+        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) throws ResolveException {
             try {
                 return resolvedConfiguration.getFirstLevelModuleDependencies(dependencySpec);
             } catch (Exception e) {
@@ -379,7 +375,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public Set<File> getFiles(Predicate<? super Dependency> dependencySpec) throws ResolveException {
+        public Set<File> getFiles(Spec<? super Dependency> dependencySpec) throws ResolveException {
             throw wrapException(ex, configuration);
         }
 
@@ -389,7 +385,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Predicate<? super Dependency> dependencySpec) throws ResolveException {
+        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) throws ResolveException {
             throw wrapException(ex, configuration);
         }
 
@@ -399,7 +395,7 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         }
 
         @Override
-        public SelectedArtifactSet select(Predicate<? super Dependency> dependencySpec, AttributeContainerInternal requestedAttributes, Predicate<? super ComponentIdentifier> componentSpec, boolean allowNoMatchingVariant) {
+        public SelectedArtifactSet select(Spec<? super Dependency> dependencySpec, AttributeContainerInternal requestedAttributes, Spec<? super ComponentIdentifier> componentSpec, boolean allowNoMatchingVariant) {
             return this;
         }
 

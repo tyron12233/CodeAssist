@@ -15,13 +15,11 @@
  */
 package org.gradle.api.internal.artifacts.query;
 
-import org.gradle.api.internal.artifacts.configurations.ConfigurationContainerInternal;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ResolveIvyFactory;
-
 import org.gradle.api.artifacts.query.ArtifactResolutionQuery;
 import org.gradle.api.internal.artifacts.GlobalDependencyResolutionRules;
 import org.gradle.api.internal.artifacts.RepositoriesSupplier;
-
+import org.gradle.api.internal.artifacts.configurations.ConfigurationContainerInternal;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ResolveIvyFactory;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.api.internal.component.ComponentTypeRegistry;
 import org.gradle.internal.resolve.caching.ComponentMetadataSupplierRuleExecutor;

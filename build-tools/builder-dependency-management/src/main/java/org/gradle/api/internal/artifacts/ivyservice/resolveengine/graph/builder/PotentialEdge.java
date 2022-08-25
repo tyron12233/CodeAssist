@@ -15,14 +15,13 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.builder;
 
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.specs.ExcludeSpec;
-
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
-import org.gradle.internal.component.model.ComponentResolveMetadata;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.specs.ExcludeSpec;
+import org.gradle.internal.component.model.ComponentGraphResolveState;
 
 import javax.annotation.Nullable;
 
@@ -37,13 +36,14 @@ import javax.annotation.Nullable;
 class PotentialEdge {
     final EdgeState edge;
     final ModuleVersionIdentifier toModuleVersionId;
-    final ComponentResolveMetadata metadata;
+    @Nullable
+    final ComponentGraphResolveState state;
     final ComponentState component;
 
-    private PotentialEdge(EdgeState edge, ModuleVersionIdentifier toModuleVersionId, @Nullable ComponentResolveMetadata metadata, ComponentState component) {
+    private PotentialEdge(EdgeState edge, ModuleVersionIdentifier toModuleVersionId, @Nullable ComponentGraphResolveState state, ComponentState component) {
         this.edge = edge;
         this.toModuleVersionId = toModuleVersionId;
-        this.metadata = metadata;
+        this.state = state;
         this.component = component;
     }
 
@@ -64,7 +64,7 @@ class PotentialEdge {
         ComponentState version = resolveState.getModule(toSelector.getModuleIdentifier()).getVersion(toModuleVersionId, toComponent);
         // We need to check if the target version exists. For this, we have to try to get metadata for the aligned version.
         // If it's there, it means we can align, otherwise, we must NOT add the edge, or resolution would fail
-        ComponentResolveMetadata metadata = version.getMetadata();
+        ComponentGraphResolveState metadata = version.getResolveStateOrNull();
         return new PotentialEdge(edge, toModuleVersionId, metadata, version);
     }
 

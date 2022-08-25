@@ -19,17 +19,16 @@ package org.gradle.api.internal.artifacts;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ListMultimap;
-import org.gradle.api.internal.artifacts.ivyservice.ArtifactCollectingVisitor;
-import org.gradle.api.internal.artifacts.ivyservice.modulecache.dynamicversions.DefaultResolvedModuleVersion;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.CompositeResolvedArtifactSet;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ParallelResolveArtifactSet;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet;
-
 import org.apache.commons.lang3.ObjectUtils;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.artifacts.ResolvedModuleVersion;
+import org.gradle.api.internal.artifacts.ivyservice.ArtifactCollectingVisitor;
+import org.gradle.api.internal.artifacts.ivyservice.modulecache.dynamicversions.DefaultResolvedModuleVersion;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.CompositeResolvedArtifactSet;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ParallelResolveArtifactSet;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet;
 import org.gradle.internal.operations.BuildOperationExecutor;
 
 import java.util.Collection;
@@ -223,7 +222,7 @@ public class DefaultResolvedDependency implements ResolvedDependency, Dependency
                 return diff;
             }
             // Use an arbitrary ordering when the artifacts have the same public attributes
-            return artifact1.hashCode() - artifact2.hashCode();
+            return Integer.compare(artifact1.hashCode(), artifact2.hashCode());
         }
     }
 }

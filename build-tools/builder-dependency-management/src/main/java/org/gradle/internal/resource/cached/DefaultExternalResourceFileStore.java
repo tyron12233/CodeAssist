@@ -15,10 +15,9 @@
  */
 package org.gradle.internal.resource.cached;
 
-import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheMetadata;
-
 import org.apache.commons.lang3.StringUtils;
 import org.gradle.api.Namer;
+import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheMetadata;
 import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.internal.file.FileAccessTimeJournal;
 import org.gradle.internal.hash.ChecksumService;

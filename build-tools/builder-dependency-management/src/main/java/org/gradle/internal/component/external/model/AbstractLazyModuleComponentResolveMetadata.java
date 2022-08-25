@@ -22,16 +22,17 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import org.gradle.internal.component.external.descriptor.Configuration;
-
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
-
+import org.gradle.internal.component.external.descriptor.Configuration;
 import org.gradle.internal.component.model.ConfigurationMetadata;
 import org.gradle.internal.component.model.ExcludeMetadata;
 import org.gradle.internal.component.model.ModuleConfigurationMetadata;
 import org.gradle.internal.component.model.ModuleSources;
+import org.gradle.internal.component.model.VariantGraphResolveMetadata;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -50,14 +51,15 @@ public abstract class AbstractLazyModuleComponentResolveMetadata extends Abstrac
     private final VariantMetadataRules variantMetadataRules;
     private final ImmutableMap<String, Configuration> configurationDefinitions;
 
-    private Optional<ImmutableList<? extends ConfigurationMetadata>> graphVariants;
     // Configurations are built on-demand, but only once.
     private final Map<String, ConfigurationMetadata> configurations = Maps.newHashMap();
 
+    private Optional<List<? extends VariantGraphResolveMetadata>> graphVariants;
+
     protected AbstractLazyModuleComponentResolveMetadata(AbstractMutableModuleComponentResolveMetadata metadata) {
         super(metadata);
-        configurationDefinitions = metadata.getConfigurationDefinitions();
-        variantMetadataRules = metadata.getVariantMetadataRules();
+        this.configurationDefinitions = metadata.getConfigurationDefinitions();
+        this.variantMetadataRules = metadata.getVariantMetadataRules();
     }
 
     /**
@@ -66,7 +68,7 @@ public abstract class AbstractLazyModuleComponentResolveMetadata extends Abstrac
     protected AbstractLazyModuleComponentResolveMetadata(AbstractLazyModuleComponentResolveMetadata metadata, ModuleSources sources, VariantDerivationStrategy variantDerivationStrategy) {
         super(metadata, sources, variantDerivationStrategy);
         this.configurationDefinitions = metadata.configurationDefinitions;
-        variantMetadataRules = metadata.variantMetadataRules;
+        this.variantMetadataRules = metadata.variantMetadataRules;
     }
 
     /**
@@ -94,12 +96,12 @@ public abstract class AbstractLazyModuleComponentResolveMetadata extends Abstrac
         return configurationDefinitions;
     }
 
-    private Optional<ImmutableList<? extends ConfigurationMetadata>> buildVariantsForGraphTraversal() {
+    private Optional<List<? extends VariantGraphResolveMetadata>> buildVariantsForGraphTraversal() {
         ImmutableList<? extends ComponentVariant> variants = getVariants();
         if (variants.isEmpty()) {
             return addVariantsByRule(maybeDeriveVariants());
         }
-        ImmutableList.Builder<ConfigurationMetadata> configurations = new ImmutableList.Builder<>();
+        ImmutableList.Builder<VariantGraphResolveMetadata> configurations = new ImmutableList.Builder<>();
         for (ComponentVariant variant : variants) {
             configurations.add(new LazyVariantBackedConfigurationMetadata(getId(), variant, getAttributes(), getAttributesFactory(), variantMetadataRules));
         }
@@ -107,18 +109,21 @@ public abstract class AbstractLazyModuleComponentResolveMetadata extends Abstrac
 
     }
 
-    private Optional<ImmutableList<? extends ConfigurationMetadata>> addVariantsByRule(Optional<ImmutableList<? extends ConfigurationMetadata>> variants) {
+    private Optional<List<? extends VariantGraphResolveMetadata>> addVariantsByRule(Optional<List<? extends VariantGraphResolveMetadata>> variants) {
         if (variantMetadataRules.getAdditionalVariants().isEmpty()) {
             return variants;
         }
-        Map<String, ConfigurationMetadata> variantsByName = variants.or(ImmutableList.of()).stream().collect(Collectors.toMap(ConfigurationMetadata::getName, Function.identity()));
-        ImmutableList.Builder<ConfigurationMetadata> builder = new ImmutableList.Builder<>();
+        Map<String, VariantGraphResolveMetadata> variantsByName;
+        ImmutableList.Builder<VariantGraphResolveMetadata> builder = new ImmutableList.Builder<>();
         if (variants.isPresent()) {
+            variantsByName = variants.get().stream().collect(Collectors.toMap(VariantGraphResolveMetadata::getName, Function.identity()));
             builder.addAll(variants.get());
+        } else {
+            variantsByName = Collections.emptyMap();
         }
         for (AdditionalVariant additionalVariant : variantMetadataRules.getAdditionalVariants()) {
             String baseName = additionalVariant.getBase();
-            ConfigurationMetadata base = null;
+            VariantGraphResolveMetadata base = null;
             if (baseName != null) {
                 if (variants.isPresent()) {
                     base = variantsByName.get(baseName);
@@ -141,7 +146,7 @@ public abstract class AbstractLazyModuleComponentResolveMetadata extends Abstrac
     }
 
     @Override
-    public synchronized Optional<ImmutableList<? extends ConfigurationMetadata>> getVariantsForGraphTraversal() {
+    public synchronized Optional<List<? extends VariantGraphResolveMetadata>> getVariantsForGraphTraversal() {
         if (graphVariants == null) {
             graphVariants = buildVariantsForGraphTraversal();
         }
@@ -193,15 +198,15 @@ public abstract class AbstractLazyModuleComponentResolveMetadata extends Abstrac
         }
     }
 
-    private ImmutableList<ExcludeMetadata> constructVariantExcludes(ConfigurationMetadata base) {
-        if(base == null) {
+    private ImmutableList<ExcludeMetadata> constructVariantExcludes(VariantGraphResolveMetadata base) {
+        if (base == null) {
             return ImmutableList.of();
         }
-        return base.getExcludes();
+        return ImmutableList.copyOf(base.getExcludes());
     }
 
     /**
-     * Creates a {@link ConfigurationMetadata} implementation for this component.
+     * Creates a {@link org.gradle.internal.component.model.ConfigurationMetadata} implementation for this component.
      */
     protected abstract DefaultConfigurationMetadata createConfiguration(ModuleComponentIdentifier componentId, String name, boolean transitive, boolean visible, ImmutableSet<String> hierarchy, VariantMetadataRules componentMetadataRules);
 
@@ -223,7 +228,6 @@ public abstract class AbstractLazyModuleComponentResolveMetadata extends Abstrac
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(super.hashCode(),
-            configurationDefinitions);
+        return Objects.hashCode(super.hashCode(), configurationDefinitions);
     }
 }

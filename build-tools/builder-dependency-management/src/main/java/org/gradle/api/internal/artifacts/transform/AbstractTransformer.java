@@ -16,10 +16,11 @@
 
 package org.gradle.api.internal.artifacts.transform;
 
-import com.google.common.hash.Hasher;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.hash.Hashes;
+
+import com.google.common.hash.Hasher;
 
 import java.nio.charset.StandardCharsets;
 
@@ -47,8 +48,7 @@ public abstract class AbstractTransformer<T> implements Transformer {
         return implementationClass.getSimpleName();
     }
 
-    protected static void appendActionImplementation(Class<?> implementation,
-                                                     Hasher hasher, ClassLoaderHierarchyHasher classLoaderHierarchyHasher) {
+    protected static void appendActionImplementation(Class<?> implementation, Hasher hasher, ClassLoaderHierarchyHasher classLoaderHierarchyHasher) {
         hasher.putString(implementation.getName(), StandardCharsets.UTF_8);
         Hashes.putHash(hasher, classLoaderHierarchyHasher.getClassLoaderHash(implementation.getClassLoader()));
     }

@@ -18,13 +18,11 @@ package org.gradle.internal.component.external.model;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.gradle.api.internal.artifacts.dsl.dependencies.PlatformSupport;
-
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.capabilities.CapabilitiesMetadata;
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier;
-
+import org.gradle.api.internal.artifacts.dsl.dependencies.PlatformSupport;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.internal.Describables;
 import org.gradle.internal.DisplayName;
@@ -156,11 +154,6 @@ class AbstractVariantBackedConfigurationMetadata implements ModuleConfigurationM
     @Override
     public CapabilitiesMetadata getCapabilities() {
         return variant.getCapabilities();
-    }
-
-    @Override
-    public boolean requiresMavenArtifactDiscovery() {
-        return false;
     }
 
     @Override

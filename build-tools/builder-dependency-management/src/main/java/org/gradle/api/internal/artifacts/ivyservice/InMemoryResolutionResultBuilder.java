@@ -16,6 +16,7 @@
 
 package org.gradle.api.internal.artifacts.ivyservice;
 
+import org.gradle.api.artifacts.result.ResolutionResult;
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphNode;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphSelector;
@@ -23,14 +24,11 @@ import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.Dependen
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.RootGraphNode;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.DefaultResolutionResultBuilder;
 
-import org.gradle.api.artifacts.result.ResolutionResult;
-import org.gradle.api.internal.artifacts.ResolverResults;
-
 /**
  * Dependency graph visitor that will build a {@link ResolutionResult} eagerly.
  * It is designed to be used during resolution for build dependencies.
  *
- * @see DefaultConfigurationResolver#resolveBuildDependencies( ConfigurationInternal, ResolverResults )
+ * @see DefaultConfigurationResolver#resolveBuildDependencies(ConfigurationInternal, org.gradle.api.internal.artifacts.ResolverResults)
  */
 public class InMemoryResolutionResultBuilder implements DependencyGraphVisitor {
 
@@ -49,7 +47,6 @@ public class InMemoryResolutionResultBuilder implements DependencyGraphVisitor {
 
     @Override
     public void visitSelector(DependencyGraphSelector selector) {
-
     }
 
     @Override

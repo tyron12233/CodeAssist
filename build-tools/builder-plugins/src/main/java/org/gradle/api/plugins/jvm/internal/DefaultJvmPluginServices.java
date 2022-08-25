@@ -15,7 +15,6 @@
  */
 package org.gradle.api.plugins.jvm.internal;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.gradle.api.Action;
@@ -24,12 +23,11 @@ import org.gradle.api.JavaVersion;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.ConfigurationPublications;
-import org.gradle.api.artifacts.PublishArtifact;
+import org.gradle.api.artifacts.ConfigurationVariant;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
 import org.gradle.api.attributes.Category;
 import org.gradle.api.attributes.HasConfigurableAttributes;
 import org.gradle.api.attributes.LibraryElements;
-import org.gradle.api.attributes.java.TargetJvmEnvironment;
 import org.gradle.api.capabilities.Capability;
 import org.gradle.api.component.AdhocComponentWithVariants;
 import org.gradle.api.component.ConfigurationVariantDetails;
@@ -49,24 +47,22 @@ import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskContainer;
-import org.gradle.api.tasks.TaskDependency;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.AbstractCompile;
 import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.internal.Cast;
-import org.gradle.internal.Factory;
 import org.gradle.internal.component.external.model.ImmutableCapability;
 import org.gradle.internal.component.external.model.ProjectDerivedCapability;
 import org.gradle.internal.instantiation.InstanceGenerator;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
-import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class DefaultJvmPluginServices implements JvmPluginServices {
     private final ConfigurationContainer configurations;
@@ -100,15 +96,6 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
     }
 
     @Override
-    public void configureClassesDirectoryVariant(String configurationName, SourceSet sourceSet) {
-        configurations.all(config -> {
-            if (configurationName.equals(config.getName())) {
-                registerClassesDirVariant(sourceSet, config);
-            }
-        });
-    }
-
-    @Override
     public <T> void configureAsCompileClasspath(HasConfigurableAttributes<T> configuration) {
         configureAttributes(configuration, details -> details.library().apiUsage().withExternalDependencies().preferStandardJVM());
     }
@@ -116,8 +103,8 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
     @Override
     public <T> void configureAsRuntimeClasspath(HasConfigurableAttributes<T> configuration) {
         configureAttributes(
-            configuration,
-            details -> details.library().runtimeUsage().asJar().withExternalDependencies().preferStandardJVM()
+                configuration,
+                details -> details.library().runtimeUsage().asJar().withExternalDependencies().preferStandardJVM()
         );
     }
 
@@ -135,7 +122,7 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
         Set<TaskProvider<?>> compileTasks = configurationToCompileTasks.computeIfAbsent(configurationInternal, key -> {
             HashSet<TaskProvider<?>> taskProviders = new HashSet<>();
             configurationInternal.beforeLocking(
-                configureDefaultTargetPlatform(configuration.isCanBeConsumed(), (Set) taskProviders));
+                    configureDefaultTargetPlatform(configuration.isCanBeConsumed(), (Set) taskProviders));
             return taskProviders;
         });
         compileTasks.add(compileTask);
@@ -153,9 +140,9 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
     @Override
     public void registerJvmLanguageSourceDirectory(SourceSet sourceSet, String name, Action<? super JvmLanguageSourceDirectoryBuilder> configuration) {
         DefaultJvmLanguageSourceDirectoryBuilder builder = instanceGenerator.newInstance(DefaultJvmLanguageSourceDirectoryBuilder.class,
-            name,
-            project,
-            sourceSet);
+                name,
+                project,
+                sourceSet);
         configuration.execute(builder);
         builder.build();
     }
@@ -163,8 +150,8 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
     @Override
     public void registerJvmLanguageGeneratedSourceDirectory(SourceSet sourceSet, Action<? super JvmLanguageGeneratedSourceDirectoryBuilder> configuration) {
         DefaultJvmLanguageGeneratedSourceDirectoryBuilder builder = instanceGenerator.newInstance(DefaultJvmLanguageGeneratedSourceDirectoryBuilder.class,
-            project,
-            sourceSet);
+                project,
+                sourceSet);
         configuration.execute(builder);
         builder.build();
     }
@@ -185,31 +172,35 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
         }
     }
 
-    private void registerClassesDirVariant(final SourceSet sourceSet, Configuration configuration) {
-        // Define a classes variant to use for compilation
+    @Override
+    public ConfigurationVariant configureResourcesDirectoryVariant(Configuration configuration, SourceSet sourceSet) {
+        ConfigurationPublications publications = configuration.getOutgoing();
+        ConfigurationVariantInternal variant = (ConfigurationVariantInternal) publications.getVariants().maybeCreate("resources");
+        variant.setDescription("Directories containing assembled resource files for " + sourceSet.getName() + ".");
+        variant.getAttributes().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objectFactory.named(LibraryElements.class, LibraryElements.RESOURCES));
+        DefaultSourceSetOutput output = Cast.uncheckedCast(sourceSet.getOutput());
+        DefaultSourceSetOutput.DirectoryContribution resourcesContribution = output.getResourcesContribution();
+        if (resourcesContribution != null) {
+            variant.artifact(new JvmPluginsHelper.ProviderBasedIntermediateJavaArtifact(ArtifactTypeDefinition.JVM_RESOURCES_DIRECTORY, resourcesContribution.getTask(), resourcesContribution.getDirectory()));
+        }
+        return variant;
+    }
+
+    @Override
+    public ConfigurationVariant configureClassesDirectoryVariant(Configuration configuration, SourceSet sourceSet) {
         ConfigurationPublications publications = configuration.getOutgoing();
         ConfigurationVariantInternal variant = (ConfigurationVariantInternal) publications.getVariants().maybeCreate("classes");
+        variant.setDescription("Directories containing compiled class files for " + sourceSet.getName() + ".");
         variant.getAttributes().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objectFactory.named(LibraryElements.class, LibraryElements.CLASSES));
-        variant.artifactsProvider(new Factory<List<PublishArtifact>>() {
-            @Nullable
-            @Override
-            public List<PublishArtifact> create() {
-                Set<File> classesDirs = sourceSet.getOutput().getClassesDirs().getFiles();
-                DefaultSourceSetOutput output = Cast.uncheckedCast(sourceSet.getOutput());
-                TaskDependency classesContributors = output.getClassesContributors();
-                ImmutableList.Builder<PublishArtifact> artifacts = ImmutableList.builderWithExpectedSize(classesDirs.size());
-                for (File classesDir : classesDirs) {
-                    // this is an approximation: all "compiled" sources will use the same task dependency
-                    artifacts.add(new JvmPluginsHelper.IntermediateJavaArtifact(ArtifactTypeDefinition.JVM_CLASS_DIRECTORY, classesContributors) {
-                        @Override
-                        public File getFile() {
-                            return classesDir;
-                        }
-                    });
-                }
-                return artifacts.build();
-            }
+        variant.artifactsProvider(() ->  {
+            DefaultSourceSetOutput output = Cast.uncheckedCast(sourceSet.getOutput());
+            List<DefaultSourceSetOutput.DirectoryContribution> classesContributors = output.getClassesContributors();
+
+            return classesContributors.stream().map(contribution ->
+                            new JvmPluginsHelper.ProviderBasedIntermediateJavaArtifact(ArtifactTypeDefinition.JVM_CLASS_DIRECTORY, contribution.getTask(), contribution.getDirectory()))
+                    .collect(Collectors.toList());
         });
+        return variant;
     }
 
     private <COMPILE extends AbstractCompile & HasCompileOptions> Action<ConfigurationInternal> configureDefaultTargetPlatform(boolean alwaysEnabled, Set<TaskProvider<COMPILE>> compileTasks) {
@@ -240,11 +231,11 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
     @Override
     public Configuration createOutgoingElements(String name, Action<? super OutgoingElementsBuilder> configuration) {
         DefaultElementsConfigurationBuilder builder = instanceGenerator.newInstance(DefaultElementsConfigurationBuilder.class,
-            name,
-            this,
-            configurations,
-            components,
-            tasks);
+                name,
+                this,
+                configurations,
+                components,
+                tasks);
         configuration.execute(builder);
         return builder.build();
     }
@@ -252,9 +243,9 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
     @Override
     public Configuration createResolvableConfiguration(String name, Action<? super ResolvableConfigurationBuilder> action) {
         DefaultResolvableConfigurationBuilder builder = instanceGenerator.newInstance(DefaultResolvableConfigurationBuilder.class,
-            name,
-            this,
-            configurations);
+                name,
+                this,
+                configurations);
         action.execute(builder);
         return builder.build();
     }
@@ -262,14 +253,14 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
     @Override
     public void createJvmVariant(String name, Action<? super JvmVariantBuilder> configuration) {
         DefaultJvmVariantBuilder builder = instanceGenerator.newInstance(DefaultJvmVariantBuilder.class,
-            name,
-            new ProjectDerivedCapability(project, name),
-            this,
-            sourceSets,
-            configurations,
-            tasks,
-            components,
-            project);
+                name,
+                new ProjectDerivedCapability(project, name),
+                this,
+                sourceSets,
+                configurations,
+                tasks,
+                components,
+                project);
         configuration.execute(builder);
         builder.build();
     }
@@ -313,22 +304,22 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
                 cnf.extendsFrom(extendsFrom);
             }
             jvmEcosystemUtilities.configureAttributes(cnf, details -> {
-                    details.library()
-                        .withExternalDependencies();
-                    if (api) {
-                        details.apiUsage();
-                    } else {
-                        details.runtimeUsage();
-                    }
-                    if (attributesRefiner != null) {
-                        attributesRefiner.execute(details);
-                    }
-                    if (Category.LIBRARY.equals(cnf.getAttributes().getAttribute(Category.CATEGORY_ATTRIBUTE).getName())) {
-                        if (!cnf.getAttributes().contains(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE)) {
-                            details.asJar();
+                        details.library()
+                                .withExternalDependencies();
+                        if (api) {
+                            details.apiUsage();
+                        } else {
+                            details.runtimeUsage();
+                        }
+                        if (attributesRefiner != null) {
+                            attributesRefiner.execute(details);
+                        }
+                        if (Category.LIBRARY.equals(cnf.getAttributes().getAttribute(Category.CATEGORY_ATTRIBUTE).getName())) {
+                            if (!cnf.getAttributes().contains(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE)) {
+                                details.asJar();
+                            }
                         }
                     }
-                }
             );
             if (sourceSet != null) {
                 jvmEcosystemUtilities.useDefaultTargetPlatformInference(cnf, tasks.named(sourceSet.getCompileJavaTaskName(), JavaCompile.class));
@@ -351,7 +342,7 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
                 if (sourceSet == null) {
                     throw new IllegalStateException("Cannot add a class directory variant without specifying the source set");
                 }
-                jvmEcosystemUtilities.configureClassesDirectoryVariant(name, sourceSet);
+                jvmEcosystemUtilities.configureClassesDirectoryVariant(cnf, sourceSet);
             }
             if (published) {
                 AdhocComponentWithVariants component = findJavaComponent();
@@ -492,24 +483,24 @@ public class DefaultJvmPluginServices implements JvmPluginServices {
                 resolvable.extendsFrom(extendsFrom);
             }
             jvmEcosystemUtilities.configureAttributes(resolvable, details -> {
-                    if (libraryApi != null && libraryApi) {
-                        details.library()
-                            .asJar()
-                            .withExternalDependencies()
-                            .apiUsage();
-                    } else if (libraryRuntime != null && libraryRuntime) {
-                        details.library()
-                            .asJar()
-                            .withExternalDependencies()
-                            .runtimeUsage();
+                        if (libraryApi != null && libraryApi) {
+                            details.library()
+                                    .asJar()
+                                    .withExternalDependencies()
+                                    .apiUsage();
+                        } else if (libraryRuntime != null && libraryRuntime) {
+                            details.library()
+                                    .asJar()
+                                    .withExternalDependencies()
+                                    .runtimeUsage();
+                        }
+                        if (libraryRuntime == null && libraryApi == null && attributesRefiner == null) {
+                            throw new IllegalStateException("You didn't tell what kind of component to look for. You need to configure at least one attribute");
+                        }
+                        if (attributesRefiner != null) {
+                            attributesRefiner.execute(details);
+                        }
                     }
-                    if (libraryRuntime == null && libraryApi == null && attributesRefiner == null) {
-                        throw new IllegalStateException("You didn't tell what kind of component to look for. You need to configure at least one attribute");
-                    }
-                    if (attributesRefiner != null) {
-                        attributesRefiner.execute(details);
-                    }
-                }
             );
             return resolvable;
         }

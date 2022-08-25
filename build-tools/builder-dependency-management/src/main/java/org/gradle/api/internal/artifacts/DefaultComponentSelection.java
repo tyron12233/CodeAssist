@@ -16,11 +16,10 @@
 
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.MetadataProvider;
-
 import org.gradle.api.artifacts.ComponentMetadata;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.artifacts.ivy.IvyModuleDescriptor;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.MetadataProvider;
 
 import javax.annotation.Nullable;
 

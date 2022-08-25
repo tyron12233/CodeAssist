@@ -15,39 +15,34 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 
+import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
 import org.gradle.api.internal.artifacts.Module;
-import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.LocalComponentMetadataBuilder;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.project.ProjectState;
+import org.gradle.internal.Cast;
 import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata;
 import org.gradle.internal.component.local.model.LocalComponentMetadata;
-import org.gradle.internal.model.CalculatedValueContainer;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
 /**
  * Provides the metadata for a component consumed from the same build that produces it.
- * <p>
- * Currently, the metadata for a component is different based on whether it is consumed from the
- * producing build or from another build. This difference should go away.
+ *
+ * Currently, the metadata for a component is different based on whether it is consumed from the producing build or from another build. This difference should go away.
  */
 public class DefaultProjectLocalComponentProvider implements LocalComponentProvider {
     private final LocalComponentMetadataBuilder metadataBuilder;
     private final ImmutableModuleIdentifierFactory moduleIdentifierFactory;
-    private final Map<ProjectComponentIdentifier, CalculatedValueContainer<LocalComponentMetadata
-            , ?>>
-            projects = new ConcurrentHashMap<>();
 
-    public DefaultProjectLocalComponentProvider(LocalComponentMetadataBuilder metadataBuilder,
-                                                ImmutableModuleIdentifierFactory moduleIdentifierFactory) {
+    public DefaultProjectLocalComponentProvider(
+        LocalComponentMetadataBuilder metadataBuilder,
+        ImmutableModuleIdentifierFactory moduleIdentifierFactory
+    ) {
         this.metadataBuilder = metadataBuilder;
         this.moduleIdentifierFactory = moduleIdentifierFactory;
     }
@@ -59,19 +54,13 @@ public class DefaultProjectLocalComponentProvider implements LocalComponentProvi
         return projectState.fromMutableState(p -> getLocalComponentMetadata(projectState, p));
     }
 
-    private LocalComponentMetadata getLocalComponentMetadata(ProjectState projectState,
-                                                             ProjectInternal project) {
+    private LocalComponentMetadata getLocalComponentMetadata(ProjectState projectState, ProjectInternal project) {
         Module module = project.getDependencyMetaDataProvider().getModule();
-        ModuleVersionIdentifier moduleVersionIdentifier = moduleIdentifierFactory
-                .moduleWithVersion(module.getGroup(), module.getName(), module.getVersion());
+        ModuleVersionIdentifier moduleVersionIdentifier = moduleIdentifierFactory.moduleWithVersion(module.getGroup(), module.getName(), module.getVersion());
         ProjectComponentIdentifier componentIdentifier = projectState.getComponentIdentifier();
-        DefaultLocalComponentMetadata metaData =
-                new DefaultLocalComponentMetadata(moduleVersionIdentifier, componentIdentifier,
-                        module.getStatus(),
-                        (AttributesSchemaInternal) project.getDependencies().getAttributesSchema());
-        for (ConfigurationInternal configuration : project.getConfigurations()
-                .withType(ConfigurationInternal.class)) {
-            metadataBuilder.addConfiguration(metaData, configuration);
+        DefaultLocalComponentMetadata metaData = new DefaultLocalComponentMetadata(moduleVersionIdentifier, componentIdentifier, module.getStatus(), (AttributesSchemaInternal) project.getDependencies().getAttributesSchema());
+        for (Configuration configuration : project.getConfigurations()) {
+            metadataBuilder.addConfiguration(metaData, Cast.uncheckedCast(configuration));
         }
         return metaData;
     }

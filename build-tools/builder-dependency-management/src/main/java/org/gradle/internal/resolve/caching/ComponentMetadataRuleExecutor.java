@@ -16,16 +16,15 @@
 
 package org.gradle.internal.resolve.caching;
 
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ModuleDescriptorHashModuleSource;
-import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
-
 import org.gradle.api.Transformer;
 import org.gradle.api.artifacts.ComponentMetadataContext;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ResolvedModuleVersion;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ModuleDescriptorHashModuleSource;
 import org.gradle.cache.internal.InMemoryCacheController;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.cache.scopes.GlobalScopedCache;
+import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
 import org.gradle.internal.serialize.Serializer;
 import org.gradle.internal.snapshot.ValueSnapshotter;
 import org.gradle.util.internal.BuildCommencedTimeProvider;
@@ -41,8 +40,7 @@ public class ComponentMetadataRuleExecutor extends CrossBuildCachingRuleExecutor
     }
 
     private static Transformer<Object, ModuleComponentResolveMetadata> getKeyToSnapshotableTransformer() {
-        return moduleMetadata -> moduleMetadata.getSources().withSource(
-                ModuleDescriptorHashModuleSource.class, source -> {
+        return moduleMetadata -> moduleMetadata.getSources().withSource(ModuleDescriptorHashModuleSource.class, source -> {
             return source.map(metadataFileSource -> metadataFileSource.getDescriptorHash().toString() + moduleMetadata.getVariantDerivationStrategy().getClass().getName())
                 .orElseThrow(() -> new RuntimeException("Cannot find original content hash"));
         });

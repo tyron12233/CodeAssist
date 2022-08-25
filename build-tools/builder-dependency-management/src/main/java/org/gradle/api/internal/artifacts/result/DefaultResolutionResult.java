@@ -72,9 +72,11 @@ public class DefaultResolutionResult implements ResolutionResult {
         allDependencies(ConfigureUtil.configureUsing(closure));
     }
 
-    private void eachElement(ResolvedComponentResult node,
-                             Action<? super ResolvedComponentResult> moduleAction, Action<? super DependencyResult> dependencyAction,
-                             Set<ResolvedComponentResult> visited) {
+    private void eachElement(
+        ResolvedComponentResult node,
+        Action<? super ResolvedComponentResult> moduleAction, Action<? super DependencyResult> dependencyAction,
+        Set<ResolvedComponentResult> visited
+    ) {
         if (!visited.add(node)) {
             return;
         }

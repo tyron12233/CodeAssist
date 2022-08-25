@@ -18,12 +18,10 @@ package org.gradle.api.internal.artifacts.ivyservice.modulecache;
 
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Maps;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvableArtifact;
-
 import org.gradle.api.artifacts.component.ComponentArtifactIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.BaseModuleComponentRepository;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ModuleComponentRepository;
-
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvableArtifact;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.internal.concurrent.Stoppable;
@@ -38,22 +36,23 @@ public class ResolvedArtifactCaches implements Stoppable {
     private final static Logger LOG = Logging.getLogger(ResolvedArtifactCaches.class);
 
     private final Map<String, Map<ComponentArtifactIdentifier, ResolvableArtifact>> cachePerRepo = new MapMaker().makeMap();
+    private final Map<String, Map<ComponentArtifactIdentifier, ResolvableArtifact>> cachePerRepoWithVerification = new MapMaker().makeMap();
 
     /**
      * For a remote repository, the only thing required is a resolved artifact cache.
      * The rest of the in-memory caching is handled by the CachingModuleComponentRepository.
      */
-    public ModuleComponentRepository provideResolvedArtifactCache(ModuleComponentRepository input) {
-        Map<ComponentArtifactIdentifier, ResolvableArtifact> caches = getResolvedArtifactCache(input);
+    public ModuleComponentRepository provideResolvedArtifactCache(ModuleComponentRepository input, boolean withVerification) {
+        Map<ComponentArtifactIdentifier, ResolvableArtifact> caches = getResolvedArtifactCache(withVerification ? cachePerRepoWithVerification : cachePerRepo, input);
         return new ResolvedArtifactCacheProvidingModuleComponentRepository(caches, input);
     }
 
-    private Map<ComponentArtifactIdentifier, ResolvableArtifact> getResolvedArtifactCache(ModuleComponentRepository input) {
-        Map<ComponentArtifactIdentifier, ResolvableArtifact> resolvedArtifactCache = cachePerRepo.get(input.getId());
+    private Map<ComponentArtifactIdentifier, ResolvableArtifact> getResolvedArtifactCache(Map<String, Map<ComponentArtifactIdentifier, ResolvableArtifact>> cache, ModuleComponentRepository input) {
+        Map<ComponentArtifactIdentifier, ResolvableArtifact> resolvedArtifactCache = cache.get(input.getId());
         if (resolvedArtifactCache == null) {
             LOG.debug("Creating new in-memory cache for repo '{}' [{}].", input.getName(), input.getId());
             resolvedArtifactCache = Maps.newConcurrentMap();
-            cachePerRepo.put(input.getId(), resolvedArtifactCache);
+            cache.put(input.getId(), resolvedArtifactCache);
         } else {
             LOG.debug("Reusing in-memory cache for repo '{}' [{}].", input.getName(), input.getId());
         }
@@ -63,6 +62,7 @@ public class ResolvedArtifactCaches implements Stoppable {
     @Override
     public void stop() {
         cachePerRepo.clear();
+        cachePerRepoWithVerification.clear();
     }
 
     private static class ResolvedArtifactCacheProvidingModuleComponentRepository extends BaseModuleComponentRepository {

@@ -15,7 +15,6 @@
  */
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
-import com.google.common.hash.Hasher;
 import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ComponentResolvers;
@@ -25,18 +24,16 @@ import org.gradle.api.internal.artifacts.repositories.resolver.VersionLister;
 import org.gradle.internal.component.external.model.ModuleDependencyMetadata;
 import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
 import org.gradle.internal.component.model.ComponentOverrideMetadata;
+import com.google.common.hash.Hasher;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
 import org.gradle.internal.resolve.result.BuildableModuleVersionListingResolveResult;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
-import javax.annotation.Nullable;
-
 /**
- * Represents a source of metadata for a repository. Each implementation is responsible for a
- * different metadata
- * format: for discovering the metadata artifact, parsing the metadata and constructing a
- * `MutableModuleComponentResolveMetadata`.
+ * Represents a source of metadata for a repository. Each implementation is responsible for a different metadata
+ * format: for discovering the metadata artifact, parsing the metadata and constructing a `MutableModuleComponentResolveMetadata`.
  */
 public interface MetadataSource<S extends MutableModuleComponentResolveMetadata> {
 
@@ -45,27 +42,18 @@ public interface MetadataSource<S extends MutableModuleComponentResolveMetadata>
              ComponentResolvers componentResolvers,
              ModuleComponentIdentifier moduleComponentIdentifier,
              ComponentOverrideMetadata prescribedMetaData,
-             ExternalResourceArtifactResolver artifactResolver,
-// Required for MavenLocal to verify the presence of the artifact
+             ExternalResourceArtifactResolver artifactResolver, // Required for MavenLocal to verify the presence of the artifact
              BuildableModuleComponentMetaDataResolveResult result);
 
     /**
-     * Use the supplied patterns and version lister to list available versions for the supplied
-     * dependency/module.
-     * <p>
-     * This method would encapsulates all version listing for a metadata source, supplying the
-     * result (if found) to the
+     * Use the supplied patterns and version lister to list available versions for the supplied dependency/module.
+     *
+     * This method would encapsulates all version listing for a metadata source, supplying the result (if found) to the
      * {@link BuildableModuleVersionListingResolveResult} parameter.
-     * <p>
-     * Ideally, the ivyPatterns + artifactPatterns + versionLister would be encapsulated into a
-     * single 'module resource accessor'.
+     *
+     * Ideally, the ivyPatterns + artifactPatterns + versionLister would be encapsulated into a single 'module resource accessor'.
      */
-    void listModuleVersions(ModuleDependencyMetadata dependency,
-                            ModuleIdentifier module,
-                            List<ResourcePattern> ivyPatterns,
-                            List<ResourcePattern> artifactPatterns,
-                            VersionLister versionLister,
-                            BuildableModuleVersionListingResolveResult result);
+    void listModuleVersions(ModuleDependencyMetadata dependency, ModuleIdentifier module, List<ResourcePattern> ivyPatterns, List<ResourcePattern> artifactPatterns, VersionLister versionLister, BuildableModuleVersionListingResolveResult result);
 
     void appendId(Hasher hasher);
 }

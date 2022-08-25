@@ -17,12 +17,11 @@
 package org.gradle.api.internal.artifacts.dsl;
 
 import com.google.common.collect.Lists;
+import org.gradle.api.artifacts.ComponentMetadataDetails;
+import org.gradle.internal.DisplayName;
 import org.gradle.internal.component.external.model.NoOpDerivationStrategy;
 import org.gradle.internal.component.external.model.VariantDerivationStrategy;
 import org.gradle.internal.rules.SpecRuleAction;
-
-import org.gradle.api.artifacts.ComponentMetadataDetails;
-import org.gradle.internal.DisplayName;
 
 import java.util.Collection;
 import java.util.Iterator;

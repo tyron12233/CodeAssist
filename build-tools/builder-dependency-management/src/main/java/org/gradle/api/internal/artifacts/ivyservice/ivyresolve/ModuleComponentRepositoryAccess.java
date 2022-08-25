@@ -16,32 +16,26 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import org.gradle.api.internal.artifacts.repositories.resolver.MetadataFetchingCost;
-
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
+import org.gradle.api.internal.artifacts.repositories.resolver.MetadataFetchingCost;
 import org.gradle.api.internal.component.ArtifactType;
 import org.gradle.internal.component.external.model.ModuleDependencyMetadata;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
 import org.gradle.internal.component.model.ComponentOverrideMetadata;
 import org.gradle.internal.component.model.ComponentResolveMetadata;
-import org.gradle.internal.component.model.ConfigurationMetadata;
 import org.gradle.internal.component.model.ModuleSources;
 import org.gradle.internal.resolve.result.BuildableArtifactResolveResult;
 import org.gradle.internal.resolve.result.BuildableArtifactSetResolveResult;
-import org.gradle.internal.resolve.result.BuildableComponentArtifactsResolveResult;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
 import org.gradle.internal.resolve.result.BuildableModuleVersionListingResolveResult;
-import org.gradle.internal.resolve.resolver.ArtifactResolver;
-import org.gradle.internal.resolve.resolver.ComponentMetaDataResolver;
-import org.gradle.internal.resolve.resolver.DependencyToComponentIdResolver;
 
 /**
  * Provides access to a repository of components that are identified by a ModuleComponentIdentifier.
  *
  * The plan is to eventually sync this with
- * {@link DependencyToComponentIdResolver},
- * {@link ComponentMetaDataResolver} and
- * {@link ArtifactResolver}.
+ * {@link org.gradle.internal.resolve.resolver.DependencyToComponentIdResolver},
+ * {@link org.gradle.internal.resolve.resolver.ComponentMetaDataResolver} and
+ * {@link org.gradle.internal.resolve.resolver.ArtifactResolver}.
  */
 public interface ModuleComponentRepositoryAccess {
     /**
@@ -53,11 +47,6 @@ public interface ModuleComponentRepositoryAccess {
      * Resolves the metadata for a module component.
      */
     void resolveComponentMetaData(ModuleComponentIdentifier moduleComponentIdentifier, ComponentOverrideMetadata requestMetaData, BuildableModuleComponentMetaDataResolveResult result);
-
-    /**
-     * Resolves a set of artifacts belonging to the given component. Any failures are packaged up in the result.
-     */
-    void resolveArtifacts(ComponentResolveMetadata component, ConfigurationMetadata variant, BuildableComponentArtifactsResolveResult result);
 
     /**
      * Resolves a set of artifacts belonging to the given component, with the type specified. Any failures are packaged up in the result.

@@ -20,21 +20,19 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.hash.HashCode;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.ArtifactVerificationOperation;
-import org.gradle.api.internal.artifacts.verification.signatures.SignatureVerificationResultBuilder;
-import org.gradle.api.internal.artifacts.verification.signatures.SignatureVerificationService;
-
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
-
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.ArtifactVerificationOperation;
 import org.gradle.api.internal.artifacts.verification.model.ArtifactVerificationMetadata;
 import org.gradle.api.internal.artifacts.verification.model.Checksum;
 import org.gradle.api.internal.artifacts.verification.model.ChecksumKind;
 import org.gradle.api.internal.artifacts.verification.model.ComponentVerificationMetadata;
 import org.gradle.api.internal.artifacts.verification.model.IgnoredKey;
+import org.gradle.api.internal.artifacts.verification.signatures.SignatureVerificationResultBuilder;
+import org.gradle.api.internal.artifacts.verification.signatures.SignatureVerificationService;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
 import org.gradle.internal.hash.ChecksumService;
+import com.google.common.hash.HashCode;
 import org.gradle.security.internal.Fingerprint;
 import org.gradle.security.internal.PublicKeyService;
 
@@ -108,10 +106,17 @@ public class DependencyVerifier {
             for (ArtifactVerificationMetadata verification : verifications) {
                 String verifiedArtifact = verification.getArtifactName();
                 if (verifiedArtifact.equals(foundArtifactFileName)) {
-                    if (signature == null && config.isVerifySignatures()) {
-                        builder.failWith(new MissingSignature(file));
-                    }
-                    if (signature != null) {
+                    if (signature == null) {
+                        // There is no signature file or verify-signature=false
+                        if (config.isVerifySignatures()) {
+                            builder.failWith(new MissingSignature(file));
+                        }
+                        if (verification.getChecksums().isEmpty()) {
+                            builder.failWith(new MissingChecksums(file));
+                            return;
+                        }
+                    } else {
+                        // There is a signature file and verify-signature=true
                         DefaultSignatureVerificationResultBuilder result = new DefaultSignatureVerificationResultBuilder(file, signature);
                         verifySignature(signatureVerificationService, file, signature, allTrustedKeys(foundArtifact, verification.getTrustedPgpKeys()), allIgnoredKeys(verification.getIgnoredPgpKeys()), result);
                         if (result.hasOnlyIgnoredKeys()) {
@@ -141,7 +146,9 @@ public class DependencyVerifier {
             if (result.hasError()) {
                 builder.failWith(result.asError(publicKeyService));
                 return;
-            } else if (!result.hasOnlyIgnoredKeys()) {
+            } else if (result.hasOnlyIgnoredKeys()) {
+                builder.failWith(new OnlyIgnoredKeys(file));
+            } else {
                 return;
             }
         }

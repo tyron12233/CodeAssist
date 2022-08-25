@@ -34,10 +34,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static org.apache.commons.io.FilenameUtils.removeExtension;
+import static java.lang.String.format;
 
 /**
  * Provides a generic transform from a zipped file to an extracted directory.  The extracted directory
@@ -46,6 +48,34 @@ import static org.apache.commons.io.FilenameUtils.removeExtension;
  */
 @DisableCachingByDefault(because = "Not worth caching")
 public abstract class UnzipTransform implements TransformAction<TransformParameters.None> {
+
+    public static boolean isUnsafeZipEntryName(String name) {
+        return name.isEmpty()
+               || name.startsWith("/")
+               || name.startsWith("\\")
+               || name.contains("..")
+               || (name.contains(":") && isWindows());
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name").toLowerCase(Locale.US).contains("windows");
+    }
+
+    /**
+     * Checks the entry name for zip-slip vulnerable sequences.
+     *
+     * <b>IMPLEMENTATION NOTE</b>
+     * We do it this way instead of the way recommended in https://snyk.io/research/zip-slip-vulnerability
+     * for performance reasons, calling {@link File#getCanonicalPath()} is too expensive.
+     *
+     * @throws IllegalArgumentException if the entry contains vulnerable sequences
+     */
+    public static String safeZipEntryName(String name) {
+        if (isUnsafeZipEntryName(name)) {
+            throw new IllegalArgumentException(format("'%s' is not a safe zip entry name.", name));
+        }
+        return name;
+    }
 
     @PathSensitive(PathSensitivity.NAME_ONLY)
     @InputArtifact
@@ -70,7 +100,7 @@ public abstract class UnzipTransform implements TransformAction<TransformParamet
                 if (entry.isDirectory()) {
                     continue;
                 }
-                File outFile = new File(unzipDir, entry.getName());
+                File outFile = new File(unzipDir, safeZipEntryName(entry.getName()));
                 Files.createParentDirs(outFile);
                 try (FileOutputStream outputStream = new FileOutputStream(outFile)) {
                     IOUtils.copyLarge(inputStream, outputStream);

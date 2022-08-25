@@ -16,15 +16,14 @@
 
 package org.gradle.api.internal.artifacts.component;
 
-import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier;
-import org.gradle.internal.component.local.model.DefaultProjectComponentSelector;
-
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentSelector;
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier;
 import org.gradle.api.internal.artifacts.Module;
 import org.gradle.internal.build.BuildState;
+import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier;
+import org.gradle.internal.component.local.model.DefaultProjectComponentSelector;
 import org.gradle.util.Path;
 
 public class DefaultComponentIdentifierFactory implements ComponentIdentifierFactory {
@@ -47,8 +46,7 @@ public class DefaultComponentIdentifierFactory implements ComponentIdentifierFac
 
     @Override
     public ProjectComponentSelector createProjectComponentSelector(String projectPath) {
-        return DefaultProjectComponentSelector
-                .newSelector(currentBuild.getProjects().getProject(Path.path(projectPath)).getComponentIdentifier());
+        return DefaultProjectComponentSelector.newSelector(currentBuild.getProjects().getProject(Path.path(projectPath)).getComponentIdentifier());
     }
 
     @Override

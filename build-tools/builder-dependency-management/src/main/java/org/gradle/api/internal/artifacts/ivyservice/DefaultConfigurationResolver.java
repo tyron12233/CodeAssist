@@ -17,7 +17,18 @@
 package org.gradle.api.internal.artifacts.ivyservice;
 
 import com.google.common.collect.ImmutableList;
+import org.gradle.api.artifacts.ProjectDependency;
+import org.gradle.api.artifacts.UnresolvedDependency;
+import org.gradle.api.artifacts.component.BuildIdentifier;
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
+import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.internal.artifacts.ArtifactDependencyResolver;
+import org.gradle.api.internal.artifacts.ComponentSelectorConverter;
+import org.gradle.api.internal.artifacts.ConfigurationResolver;
+import org.gradle.api.internal.artifacts.GlobalDependencyResolutionRules;
+import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
+import org.gradle.api.internal.artifacts.RepositoriesSupplier;
+import org.gradle.api.internal.artifacts.ResolverResults;
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
 import org.gradle.api.internal.artifacts.configurations.ConflictResolution;
 import org.gradle.api.internal.artifacts.configurations.ResolutionStrategyInternal;
@@ -46,21 +57,6 @@ import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.Streami
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.store.ResolutionResultsStoreFactory;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.store.StoreSet;
 import org.gradle.api.internal.artifacts.repositories.ResolutionAwareRepository;
-import org.gradle.internal.component.local.model.DslOriginDependencyMetadata;
-import org.gradle.internal.locking.DependencyLockingArtifactVisitor;
-
-import org.gradle.api.artifacts.ProjectDependency;
-import org.gradle.api.artifacts.UnresolvedDependency;
-import org.gradle.api.artifacts.component.BuildIdentifier;
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
-import org.gradle.api.artifacts.result.ResolvedComponentResult;
-
-import org.gradle.api.internal.artifacts.ComponentSelectorConverter;
-import org.gradle.api.internal.artifacts.ConfigurationResolver;
-import org.gradle.api.internal.artifacts.GlobalDependencyResolutionRules;
-import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
-import org.gradle.api.internal.artifacts.RepositoriesSupplier;
-import org.gradle.api.internal.artifacts.ResolverResults;
 import org.gradle.api.internal.artifacts.transform.ArtifactTransforms;
 import org.gradle.api.internal.artifacts.type.ArtifactTypeRegistry;
 import org.gradle.api.internal.attributes.AttributeDesugaring;
@@ -70,10 +66,11 @@ import org.gradle.api.specs.Specs;
 import org.gradle.cache.internal.BinaryStore;
 import org.gradle.cache.internal.Store;
 import org.gradle.internal.Cast;
-
+import org.gradle.internal.component.local.model.DslOriginDependencyMetadata;
 import org.gradle.internal.component.model.DependencyMetadata;
-
+import org.gradle.internal.locking.DependencyLockingArtifactVisitor;
 import org.gradle.internal.operations.BuildOperationExecutor;
+import org.gradle.internal.work.WorkerLeaseService;
 
 import java.util.Collections;
 import java.util.List;
@@ -97,6 +94,7 @@ public class DefaultConfigurationResolver implements ConfigurationResolver {
     private final AttributeDesugaring attributeDesugaring;
     private final DependencyVerificationOverride dependencyVerificationOverride;
     private final ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory;
+    private final WorkerLeaseService workerLeaseService;
 
     public DefaultConfigurationResolver(ArtifactDependencyResolver resolver,
                                         RepositoriesSupplier repositoriesSupplier,
@@ -112,7 +110,8 @@ public class DefaultConfigurationResolver implements ConfigurationResolver {
                                         AttributeContainerSerializer attributeContainerSerializer,
                                         BuildIdentifier currentBuild, AttributeDesugaring attributeDesugaring,
                                         DependencyVerificationOverride dependencyVerificationOverride,
-                                        ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory) {
+                                        ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory,
+                                        WorkerLeaseService workerLeaseService) {
         this.resolver = resolver;
         this.repositoriesSupplier = repositoriesSupplier;
         this.metadataHandler = metadataHandler;
@@ -129,6 +128,7 @@ public class DefaultConfigurationResolver implements ConfigurationResolver {
         this.attributeDesugaring = attributeDesugaring;
         this.dependencyVerificationOverride = dependencyVerificationOverride;
         this.componentSelectionDescriptorFactory = componentSelectionDescriptorFactory;
+        this.workerLeaseService = workerLeaseService;
     }
 
     @Override
@@ -156,8 +156,7 @@ public class DefaultConfigurationResolver implements ConfigurationResolver {
 
         BinaryStore newModelStore = stores.nextBinaryStore();
         Store<ResolvedComponentResult> newModelCache = stores.newModelCache();
-        StreamingResolutionResultBuilder
-                newModelBuilder = new StreamingResolutionResultBuilder(newModelStore, newModelCache, moduleIdentifierFactory, attributeContainerSerializer, attributeDesugaring, componentSelectionDescriptorFactory);
+        StreamingResolutionResultBuilder newModelBuilder = new StreamingResolutionResultBuilder(newModelStore, newModelCache, moduleIdentifierFactory, attributeContainerSerializer, attributeDesugaring, componentSelectionDescriptorFactory, configuration.getReturnAllVariants());
 
         ResolvedLocalComponentsResultGraphVisitor localComponentsVisitor = new ResolvedLocalComponentsResultGraphVisitor(currentBuild);
 
@@ -222,7 +221,7 @@ public class DefaultConfigurationResolver implements ConfigurationResolver {
 
         TransientConfigurationResultsLoader transientConfigurationResultsFactory = new TransientConfigurationResultsLoader(transientConfigurationResultsBuilder, graphResults);
 
-        DefaultLenientConfiguration result = new DefaultLenientConfiguration(configuration, resolveState.failures, artifactResults, resolveState.fileDependencyResults, transientConfigurationResultsFactory, artifactTransforms, buildOperationExecutor, dependencyVerificationOverride);
+        DefaultLenientConfiguration result = new DefaultLenientConfiguration(configuration, resolveState.failures, artifactResults, resolveState.fileDependencyResults, transientConfigurationResultsFactory, artifactTransforms, buildOperationExecutor, dependencyVerificationOverride, workerLeaseService);
         results.artifactsResolved(new DefaultResolvedConfiguration(result), result);
     }
 

@@ -17,40 +17,33 @@ package org.gradle.api.internal.artifacts.ivyservice.modulecache.artifacts;
 
 import com.google.common.hash.HashCode;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 public class TwoStageModuleArtifactCache implements ModuleArtifactCache {
     private final ModuleArtifactCache readOnlyCache;
     private final ModuleArtifactCache writableCache;
     private final Path readOnlyCachePath;
 
-    public TwoStageModuleArtifactCache(Path readOnlyCachePath,
-                                       ModuleArtifactCache readOnlyCache,
-                                       ModuleArtifactCache writableCache) {
+    public TwoStageModuleArtifactCache(Path readOnlyCachePath, ModuleArtifactCache readOnlyCache, ModuleArtifactCache writableCache) {
         this.readOnlyCachePath = readOnlyCachePath;
         this.readOnlyCache = readOnlyCache;
         this.writableCache = writableCache;
     }
 
     @Override
-    public void store(ArtifactAtRepositoryKey key,
-                      File artifactFile,
-                      HashCode moduleDescriptorHash) {
+    public void store(ArtifactAtRepositoryKey key, File artifactFile, HashCode moduleDescriptorHash) {
         if (artifactFile.toPath().startsWith(readOnlyCachePath)) {
             // skip writing because the file comes from the RO cache
             return;
         }
-        writableCache.store(key, artifactFile, moduleDescriptorHash);
+        writableCache.store(key, artifactFile,  moduleDescriptorHash);
     }
 
     @Override
-    public void storeMissing(ArtifactAtRepositoryKey key,
-                             List<String> attemptedLocations,
-                             HashCode descriptorHash) {
+    public void storeMissing(ArtifactAtRepositoryKey key, List<String> attemptedLocations, HashCode descriptorHash) {
         writableCache.storeMissing(key, attemptedLocations, descriptorHash);
     }
 

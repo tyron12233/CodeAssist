@@ -16,13 +16,12 @@
 package org.gradle.internal.component.model;
 
 import com.google.common.collect.Lists;
-import org.gradle.internal.component.external.model.VariantMetadataRules;
-
 import org.gradle.api.Action;
 import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
+import org.gradle.internal.component.external.model.VariantMetadataRules;
 
 import java.util.List;
 

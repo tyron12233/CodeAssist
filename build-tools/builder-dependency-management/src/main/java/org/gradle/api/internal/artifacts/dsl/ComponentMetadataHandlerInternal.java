@@ -15,11 +15,11 @@
  */
 package org.gradle.api.internal.artifacts.dsl;
 
-import org.gradle.internal.component.external.model.VariantDerivationStrategy;
 import org.gradle.api.internal.artifacts.ComponentMetadataProcessor;
 import org.gradle.api.internal.artifacts.ComponentMetadataProcessorFactory;
 import org.gradle.api.internal.artifacts.MetadataResolutionContext;
 import org.gradle.internal.DisplayName;
+import org.gradle.internal.component.external.model.VariantDerivationStrategy;
 import org.gradle.internal.management.DependencyResolutionManagementInternal;
 
 import java.util.function.Consumer;

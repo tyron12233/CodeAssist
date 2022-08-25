@@ -16,13 +16,13 @@
 package org.gradle.api.internal.artifacts.ivyservice.modulecache.artifacts;
 
 import com.google.common.base.Objects;
-import com.google.common.hash.HashCode;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ComponentIdentifierSerializer;
 import org.gradle.api.internal.artifacts.metadata.ComponentArtifactMetadataSerializer;
 import org.gradle.cache.PersistentIndexedCache;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
+import com.google.common.hash.HashCode;
 import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
@@ -35,34 +35,26 @@ import java.util.Set;
 public class DefaultModuleArtifactsCache extends AbstractArtifactsCache {
     private final ArtifactCacheLockingManager artifactCacheLockingManager;
 
-    private PersistentIndexedCache<ArtifactsAtRepositoryKey,
-            AbstractArtifactsCache.ModuleArtifactsCacheEntry>
-            cache;
+    private PersistentIndexedCache<ArtifactsAtRepositoryKey, AbstractArtifactsCache.ModuleArtifactsCacheEntry> cache;
 
-    public DefaultModuleArtifactsCache(BuildCommencedTimeProvider timeProvider,
-                                       ArtifactCacheLockingManager artifactCacheLockingManager) {
+    public DefaultModuleArtifactsCache(BuildCommencedTimeProvider timeProvider, ArtifactCacheLockingManager artifactCacheLockingManager) {
         super(timeProvider);
         this.artifactCacheLockingManager = artifactCacheLockingManager;
     }
 
-    private PersistentIndexedCache<ArtifactsAtRepositoryKey,
-            AbstractArtifactsCache.ModuleArtifactsCacheEntry> getCache() {
+    private PersistentIndexedCache<ArtifactsAtRepositoryKey, AbstractArtifactsCache.ModuleArtifactsCacheEntry> getCache() {
         if (cache == null) {
             cache = initCache();
         }
         return cache;
     }
 
-    private PersistentIndexedCache<ArtifactsAtRepositoryKey,
-            AbstractArtifactsCache.ModuleArtifactsCacheEntry> initCache() {
-        return artifactCacheLockingManager
-                .createCache("module-artifacts", new ModuleArtifactsKeySerializer(),
-                        new ModuleArtifactsCacheEntrySerializer());
+    private PersistentIndexedCache<ArtifactsAtRepositoryKey, AbstractArtifactsCache.ModuleArtifactsCacheEntry> initCache() {
+        return artifactCacheLockingManager.createCache("module-artifacts", new ModuleArtifactsKeySerializer(), new ModuleArtifactsCacheEntrySerializer());
     }
 
     @Override
-    protected void store(ArtifactsAtRepositoryKey key,
-                         AbstractArtifactsCache.ModuleArtifactsCacheEntry entry) {
+    protected void store(ArtifactsAtRepositoryKey key, AbstractArtifactsCache.ModuleArtifactsCacheEntry entry) {
         getCache().put(key, entry);
     }
 
@@ -72,8 +64,7 @@ public class DefaultModuleArtifactsCache extends AbstractArtifactsCache {
     }
 
     private static class ModuleArtifactsKeySerializer extends AbstractSerializer<ArtifactsAtRepositoryKey> {
-        private final ComponentIdentifierSerializer identifierSerializer =
-                new ComponentIdentifierSerializer();
+        private final ComponentIdentifierSerializer identifierSerializer = new ComponentIdentifierSerializer();
 
         @Override
         public void write(Encoder encoder, ArtifactsAtRepositoryKey value) throws Exception {
@@ -108,8 +99,7 @@ public class DefaultModuleArtifactsCache extends AbstractArtifactsCache {
 
     private static class ModuleArtifactsCacheEntrySerializer extends AbstractSerializer<ModuleArtifactsCacheEntry> {
         private final Serializer<Set<ComponentArtifactMetadata>> artifactsSerializer =
-                new SetSerializer<>(new ComponentArtifactMetadataSerializer());
-
+            new SetSerializer<>(new ComponentArtifactMetadataSerializer());
         @Override
         public void write(Encoder encoder, ModuleArtifactsCacheEntry value) throws Exception {
             encoder.writeLong(value.createTimestamp);

@@ -6,7 +6,6 @@ import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.api.internal.tasks.TaskDependencyContainer;
 
 import java.io.File;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public interface FileCollectionInternal extends FileCollection, TaskDependencyContainer {

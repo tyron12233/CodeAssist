@@ -16,12 +16,11 @@
 
 package org.gradle.api.internal.artifacts.ivyservice;
 
-import org.gradle.api.internal.artifacts.ArtifactPublisher;
-import org.gradle.api.internal.artifacts.repositories.PublicationAwareRepository;
-
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.PublishException;
+import org.gradle.api.internal.artifacts.ArtifactPublisher;
 import org.gradle.api.internal.artifacts.Module;
+import org.gradle.api.internal.artifacts.repositories.PublicationAwareRepository;
 
 import java.io.File;
 

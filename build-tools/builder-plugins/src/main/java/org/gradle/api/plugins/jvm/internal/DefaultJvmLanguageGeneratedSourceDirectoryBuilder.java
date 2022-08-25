@@ -74,7 +74,7 @@ public class DefaultJvmLanguageGeneratedSourceDirectoryBuilder implements JvmLan
                 compileTask.source(details.getSourceDirectory());
                 compileTask.setClasspath(sourceSet.getCompileClasspath());
                 compileTask.getDestinationDirectory().set(project.getLayout().getBuildDirectory().dir(
-                    "classes/" + compileTaskName + "/" + sourceSet.getName()
+                        "classes/" + compileTaskName + "/" + sourceSet.getName()
                 ));
                 compilerConfiguration.execute(compileTask);
             });
@@ -100,14 +100,13 @@ public class DefaultJvmLanguageGeneratedSourceDirectoryBuilder implements JvmLan
         }
         Provider<Directory> sourceDirectory = sourceTaskProvider.flatMap(task -> mapping.apply(Cast.uncheckedCast(task)));
         DefaultCompileTaskDetails details = createTaskDetails(
-            project.getObjects().directoryProperty().convention(sourceDirectory)
+                project.getObjects().directoryProperty().convention(sourceDirectory)
         );
         DefaultSourceSetOutput sourceSetOutput = Cast.cast(DefaultSourceSetOutput.class, sourceSet.getOutput());
-        sourceSetOutput.addClassesDir(details.compileTask.flatMap(task -> details.compileMapping.apply(Cast.uncheckedCast(task))));
-        sourceSetOutput.registerClassesContributor(details.compileTask);
+        sourceSetOutput.addClassesDir(details.compileTask.flatMap(task -> details.compileMapping.apply(Cast.uncheckedCast(task))), details.compileTask);
         sourceSetOutput.getGeneratedSourcesDirs().from(sourceDirectory);
         project.getTasks().matching(DefaultJvmLanguageGeneratedSourceDirectoryBuilder::isClassesTask).configureEach(classes ->
-            classes.dependsOn(details.compileTask));
+                classes.dependsOn(details.compileTask));
         if (includeInAllJava) {
             sourceSet.getAllJava().srcDir(sourceDirectory);
         }

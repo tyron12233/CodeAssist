@@ -15,13 +15,12 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine;
 
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.builder.VirtualPlatformState;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ComponentSelectionDescriptorInternal;
-
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.StringVersioned;
-import org.gradle.internal.component.model.ComponentResolveMetadata;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.builder.VirtualPlatformState;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ComponentSelectionDescriptorInternal;
+import org.gradle.internal.component.model.ComponentGraphResolveMetadata;
 
 import javax.annotation.Nullable;
 import java.util.Set;
@@ -37,7 +36,7 @@ public interface ComponentResolutionState extends StringVersioned {
      * @return null if the meta-data is not available due to some failure.
      */
     @Nullable
-    ComponentResolveMetadata getMetadata();
+    ComponentGraphResolveMetadata getMetadataOrNull();
 
     void addCause(ComponentSelectionDescriptorInternal componentSelectionDescriptor);
 

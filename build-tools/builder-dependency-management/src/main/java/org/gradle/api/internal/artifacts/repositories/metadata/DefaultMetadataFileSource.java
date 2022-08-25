@@ -15,8 +15,8 @@
  */
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
-import com.google.common.hash.HashCode;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
+import com.google.common.hash.HashCode;
 
 import java.io.File;
 
@@ -29,9 +29,7 @@ public class DefaultMetadataFileSource implements MetadataFileSource {
     private final File artifactFile;
     private final HashCode sha1;
 
-    public DefaultMetadataFileSource(ModuleComponentArtifactIdentifier artifactId,
-                                     File artifactFile,
-                                     HashCode sha1) {
+    public DefaultMetadataFileSource(ModuleComponentArtifactIdentifier artifactId, File artifactFile, HashCode sha1) {
         this.artifactId = artifactId;
         this.artifactFile = artifactFile;
         this.sha1 = sha1;
@@ -79,12 +77,9 @@ public class DefaultMetadataFileSource implements MetadataFileSource {
     @Override
     public String toString() {
         return "MetadataFileSource{" +
-               "artifactId=" +
-               artifactId +
-               ", artifactFile=" +
-               artifactFile +
-               ", sha1=" +
-               sha1 +
-               '}';
+            "artifactId=" + artifactId +
+            ", artifactFile=" + artifactFile +
+            ", sha1=" + sha1 +
+            '}';
     }
 }

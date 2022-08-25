@@ -16,8 +16,6 @@
 
 package org.gradle.api.internal.artifacts.dsl.dependencies;
 
-import org.gradle.internal.locking.MissingLockStateException;
-
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.artifacts.dsl.LockMode;
 import org.gradle.api.file.RegularFileProperty;
@@ -37,7 +35,7 @@ public interface DependencyLockingProvider {
      * @param configurationName the configuration to load lock state for
      *
      * @return the lock state of the configuration
-     * @throws MissingLockStateException If the {@code LockMode} is {@link LockMode#STRICT} but no lock state can be found.
+     * @throws org.gradle.internal.locking.MissingLockStateException If the {@code LockMode} is {@link LockMode#STRICT} but no lock state can be found.
      */
     DependencyLockingState loadLockState(String configurationName);
 

@@ -16,10 +16,7 @@
 
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.internal.artifacts.repositories.ArtifactRepositoryInternal;
-
 import groovy.lang.Closure;
-
 import org.gradle.api.Action;
 import org.gradle.api.Namer;
 import org.gradle.api.UnknownDomainObjectException;
@@ -29,6 +26,7 @@ import org.gradle.api.artifacts.repositories.ArtifactRepository;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.DefaultNamedDomainObjectList;
 import org.gradle.api.internal.InternalAction;
+import org.gradle.api.internal.artifacts.repositories.ArtifactRepositoryInternal;
 import org.gradle.internal.Actions;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.util.internal.ConfigureUtil;

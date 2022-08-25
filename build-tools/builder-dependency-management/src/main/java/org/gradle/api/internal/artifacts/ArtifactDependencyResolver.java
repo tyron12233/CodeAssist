@@ -20,16 +20,16 @@ import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.Dependen
 import org.gradle.api.internal.artifacts.repositories.ResolutionAwareRepository;
 import org.gradle.api.internal.artifacts.type.ArtifactTypeRegistry;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.component.model.DependencyMetadata;
 
 import java.util.List;
-import java.util.function.Predicate;
 
 public interface ArtifactDependencyResolver {
     void resolve(ResolveContext resolveContext,
                  List<? extends ResolutionAwareRepository> repositories,
                  GlobalDependencyResolutionRules metadataHandler,
-                 Predicate<? super DependencyMetadata> edgeFilter,
+                 Spec<? super DependencyMetadata> edgeFilter,
                  DependencyGraphVisitor graphVisitor,
                  DependencyArtifactsVisitor artifactsVisitor,
                  AttributesSchemaInternal consumerSchema,

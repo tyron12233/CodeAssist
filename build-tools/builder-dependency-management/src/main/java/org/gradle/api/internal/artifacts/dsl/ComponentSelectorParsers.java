@@ -64,9 +64,7 @@ public class ComponentSelectorParsers {
         }
 
         protected ModuleComponentSelector parseMap(@MapKey("group") String group, @MapKey("name") String name, @MapKey("version") String version) {
-            return newSelector(DefaultModuleIdentifier.newId(group, name),
-                    DefaultImmutableVersionConstraint
-                    .of(version));
+            return newSelector(DefaultModuleIdentifier.newId(group, name), DefaultImmutableVersionConstraint.of(version));
         }
     }
 

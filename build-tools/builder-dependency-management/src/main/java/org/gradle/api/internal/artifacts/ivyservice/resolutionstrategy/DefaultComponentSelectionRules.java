@@ -16,7 +16,7 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy;
 
-import groovy.lang.Closure;import org.gradle.internal.rules.DefaultRuleActionAdapter;import org.gradle.internal.rules.DefaultRuleActionValidator;import org.gradle.internal.rules.RuleAction;import org.gradle.internal.rules.RuleActionAdapter;import org.gradle.internal.rules.RuleActionValidator;import org.gradle.internal.rules.SpecRuleAction;
+import groovy.lang.Closure;
 import org.gradle.api.Action;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.artifacts.ComponentSelection;
@@ -27,16 +27,21 @@ import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
 import org.gradle.api.internal.artifacts.configurations.MutationValidator;
 import org.gradle.api.internal.notations.ModuleIdentifierNotationConverter;
 import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
+import org.gradle.internal.rules.DefaultRuleActionAdapter;
+import org.gradle.internal.rules.DefaultRuleActionValidator;
+import org.gradle.internal.rules.RuleAction;
+import org.gradle.internal.rules.RuleActionAdapter;
+import org.gradle.internal.rules.RuleActionValidator;
+import org.gradle.internal.rules.SpecRuleAction;
 import org.gradle.internal.typeconversion.NotationParser;
 import org.gradle.internal.typeconversion.NotationParserBuilder;
 import org.gradle.internal.typeconversion.UnsupportedNotationException;
-import org.gradle.util.Predicates;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.function.Predicate;
 
 import static org.gradle.api.internal.artifacts.configurations.MutationValidator.MutationType.STRATEGY;
 
@@ -132,15 +137,15 @@ public class DefaultComponentSelectionRules implements ComponentSelectionRulesIn
             throw new InvalidUserCodeException(String.format(INVALID_SPEC_ERROR, id == null ? "null" : id.toString()), e);
         }
 
-        Predicate<ComponentSelection> spec = new ComponentSelectionMatchingSpec(moduleIdentifier);
+        Spec<ComponentSelection> spec = new ComponentSelectionMatchingSpec(moduleIdentifier);
         return new SpecRuleAction<>(ruleAction, spec);
     }
 
     private SpecRuleAction<? super ComponentSelection> createAllSpecRulesAction(RuleAction<? super ComponentSelection> ruleAction) {
-        return new SpecRuleAction<>(ruleAction, Predicates.satisfyAll());
+        return new SpecRuleAction<>(ruleAction, Specs.satisfyAll());
     }
 
-    static class ComponentSelectionMatchingSpec implements Spec<ComponentSelection>, Predicate<ComponentSelection> {
+    static class ComponentSelectionMatchingSpec implements Spec<ComponentSelection> {
         final ModuleIdentifier target;
 
         private ComponentSelectionMatchingSpec(ModuleIdentifier target) {
@@ -149,11 +154,6 @@ public class DefaultComponentSelectionRules implements ComponentSelectionRulesIn
 
         @Override
         public boolean isSatisfiedBy(ComponentSelection selection) {
-            return selection.getCandidate().getGroup().equals(target.getGroup()) && selection.getCandidate().getModule().equals(target.getName());
-        }
-
-        @Override
-        public boolean test(ComponentSelection selection) {
             return selection.getCandidate().getGroup().equals(target.getGroup()) && selection.getCandidate().getModule().equals(target.getName());
         }
     }

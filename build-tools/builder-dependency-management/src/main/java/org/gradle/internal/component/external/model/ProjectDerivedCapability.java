@@ -16,8 +16,8 @@
 package org.gradle.internal.component.external.model;
 
 import com.google.common.base.Objects;
-import org.gradle.api.Project;
 import org.gradle.api.InvalidUserDataException;
+import org.gradle.api.Project;
 import org.gradle.api.capabilities.Capability;
 import org.gradle.util.internal.TextUtil;
 
@@ -67,9 +67,9 @@ public class ProjectDerivedCapability implements CapabilityInternal {
         }
 
         Capability that = (Capability) o;
-        return Objects.equal(getGroup(), that.getGroup()) &&
-               Objects.equal(getName(), that.getName()) &&
-               Objects.equal(getVersion(), that.getVersion());
+        return Objects.equal(getGroup(), that.getGroup())
+            && Objects.equal(getName(), that.getName())
+            && Objects.equal(getVersion(), that.getVersion());
 
     }
 

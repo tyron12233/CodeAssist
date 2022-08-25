@@ -17,12 +17,10 @@
 package org.gradle.api.internal.artifacts.type;
 
 import com.google.common.io.Files;
-import org.gradle.api.internal.artifacts.ArtifactTransformRegistration;
-
 import org.gradle.api.artifacts.type.ArtifactTypeContainer;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
-
+import org.gradle.api.internal.artifacts.ArtifactTransformRegistration;
 import org.gradle.api.internal.artifacts.VariantTransformRegistry;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;

@@ -15,17 +15,6 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice;
 
-import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
-import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider;
-import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingState;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.SelectedArtifactSet;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.VisitedArtifactSet;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedLocalComponentsResult;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedLocalComponentsResultGraphVisitor;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.DefaultResolutionResultBuilder;
-import org.gradle.api.internal.artifacts.repositories.ResolutionAwareRepository;
-
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.LenientConfiguration;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
@@ -42,7 +31,16 @@ import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
 import org.gradle.api.internal.artifacts.Module;
 import org.gradle.api.internal.artifacts.ResolverResults;
 import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
-
+import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
+import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider;
+import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingState;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.SelectedArtifactSet;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.VisitedArtifactSet;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedLocalComponentsResult;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedLocalComponentsResultGraphVisitor;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.DefaultResolutionResultBuilder;
+import org.gradle.api.internal.artifacts.repositories.ResolutionAwareRepository;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
 import org.gradle.api.specs.Spec;
@@ -51,7 +49,6 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 
 public class ShortCircuitEmptyConfigurationResolver implements ConfigurationResolver {
     private final ConfigurationResolver delegate;
@@ -91,8 +88,7 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
 
     private void emptyGraph(ConfigurationInternal configuration, ResolverResults results, boolean verifyLocking) {
         if (verifyLocking && configuration.getResolutionStrategy().isDependencyLockingEnabled()) {
-            DependencyLockingProvider
-                    dependencyLockingProvider = configuration.getResolutionStrategy().getDependencyLockingProvider();
+            DependencyLockingProvider dependencyLockingProvider = configuration.getResolutionStrategy().getDependencyLockingProvider();
             DependencyLockingState lockingState = dependencyLockingProvider.loadLockState(configuration.getName());
             if (lockingState.mustValidateLockState() && !lockingState.getLockedDependencies().isEmpty()) {
                 // Invalid lock state, need to do a real resolution to gather locking failures
@@ -104,10 +100,8 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
         Module module = configuration.getModule();
         ModuleVersionIdentifier id = moduleIdentifierFactory.moduleWithVersion(module);
         ComponentIdentifier componentIdentifier = componentIdentifierFactory.createComponentIdentifier(module);
-        ResolutionResult emptyResult = DefaultResolutionResultBuilder
-                .empty(id, componentIdentifier, configuration.getAttributes());
-        ResolvedLocalComponentsResult
-                emptyProjectResult = new ResolvedLocalComponentsResultGraphVisitor(thisBuild);
+        ResolutionResult emptyResult = DefaultResolutionResultBuilder.empty(id, componentIdentifier, configuration.getAttributes());
+        ResolvedLocalComponentsResult emptyProjectResult = new ResolvedLocalComponentsResultGraphVisitor(thisBuild);
         results.graphResolved(emptyResult, emptyProjectResult, EmptyResults.INSTANCE);
     }
 
@@ -124,7 +118,7 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
         private static final EmptyResults INSTANCE = new EmptyResults();
 
         @Override
-        public SelectedArtifactSet select(Predicate<? super Dependency> dependencySpec, AttributeContainerInternal requestedAttributes, Predicate<? super ComponentIdentifier> componentSpec, boolean allowNoMatchingVariant) {
+        public SelectedArtifactSet select(Spec<? super Dependency> dependencySpec, AttributeContainerInternal requestedAttributes, Spec<? super ComponentIdentifier> componentSpec, boolean allowNoMatchingVariant) {
             return this;
         }
 
@@ -153,7 +147,7 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
                 }
 
                 @Override
-                public Set<ResolvedDependency> getFirstLevelModuleDependencies(Predicate<? super Dependency> dependencySpec) {
+                public Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) {
                     return Collections.emptySet();
                 }
 
@@ -173,7 +167,7 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
                 }
 
                 @Override
-                public Set<File> getFiles(Predicate<? super Dependency> dependencySpec) {
+                public Set<File> getFiles(Spec<? super Dependency> dependencySpec) {
                     return Collections.emptySet();
                 }
 
@@ -183,7 +177,7 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
                 }
 
                 @Override
-                public Set<ResolvedArtifact> getArtifacts(Predicate<? super Dependency> dependencySpec) {
+                public Set<ResolvedArtifact> getArtifacts(Spec<? super Dependency> dependencySpec) {
                     return Collections.emptySet();
                 }
             };
@@ -199,7 +193,7 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
         }
 
         @Override
-        public Set<File> getFiles(Predicate<? super Dependency> dependencySpec) {
+        public Set<File> getFiles(Spec<? super Dependency> dependencySpec) {
             return Collections.emptySet();
         }
 
@@ -209,7 +203,7 @@ public class ShortCircuitEmptyConfigurationResolver implements ConfigurationReso
         }
 
         @Override
-        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Predicate<? super Dependency> dependencySpec) throws ResolveException {
+        public Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) throws ResolveException {
             return Collections.emptySet();
         }
 

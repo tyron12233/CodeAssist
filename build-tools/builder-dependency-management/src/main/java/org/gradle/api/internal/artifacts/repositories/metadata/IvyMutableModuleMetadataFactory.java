@@ -17,10 +17,6 @@ package org.gradle.api.internal.artifacts.repositories.metadata;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.gradle.internal.component.external.model.ivy.DefaultMutableIvyModuleResolveMetadata;
-import org.gradle.internal.component.external.model.ivy.IvyDependencyDescriptor;
-import org.gradle.internal.component.external.model.ivy.MutableIvyModuleResolveMetadata;
-
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
@@ -29,6 +25,9 @@ import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.internal.component.external.descriptor.Artifact;
 import org.gradle.internal.component.external.descriptor.Configuration;
 import org.gradle.internal.component.external.model.PreferJavaRuntimeVariant;
+import org.gradle.internal.component.external.model.ivy.DefaultMutableIvyModuleResolveMetadata;
+import org.gradle.internal.component.external.model.ivy.IvyDependencyDescriptor;
+import org.gradle.internal.component.external.model.ivy.MutableIvyModuleResolveMetadata;
 import org.gradle.internal.component.model.DefaultIvyArtifactName;
 import org.gradle.internal.component.model.Exclude;
 

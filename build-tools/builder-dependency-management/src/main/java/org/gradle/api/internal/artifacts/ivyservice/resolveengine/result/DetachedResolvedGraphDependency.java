@@ -16,12 +16,11 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.result;
 
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-
 import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.artifacts.result.ComponentSelectionReason;
 import org.gradle.api.artifacts.result.ResolvedVariantResult;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.ResolvedGraphDependency;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 
 /**
  * The deserialized representation of an edge in the resolution result.

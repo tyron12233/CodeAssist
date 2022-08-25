@@ -18,18 +18,6 @@ package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.gradle.api.internal.artifacts.configurations.dynamicversion.CachePolicy;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.Version;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
-import org.gradle.internal.resolve.ModuleVersionNotFoundException;
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-import org.gradle.internal.resolve.RejectedByAttributesVersion;
-import org.gradle.internal.resolve.RejectedByRuleVersion;
-import org.gradle.internal.resolve.RejectedBySelectorVersion;
-import org.gradle.internal.resolve.RejectedVersion;
-import org.gradle.internal.resolve.ResolveExceptionAnalyzer;
-
 import org.gradle.api.Action;
 import org.gradle.api.Transformer;
 import org.gradle.api.artifacts.ComponentMetadataSupplierDetails;
@@ -38,7 +26,11 @@ import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.api.internal.artifacts.ComponentMetadataProcessorFactory;
 import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
+import org.gradle.api.internal.artifacts.configurations.dynamicversion.CachePolicy;
 import org.gradle.api.internal.artifacts.dependencies.DefaultImmutableVersionConstraint;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.Version;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
 import org.gradle.api.internal.artifacts.repositories.ArtifactResolutionDetails;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
@@ -50,6 +42,12 @@ import org.gradle.internal.component.external.model.ModuleDependencyMetadata;
 import org.gradle.internal.component.model.DefaultComponentOverrideMetadata;
 import org.gradle.internal.component.model.DependencyMetadata;
 import org.gradle.internal.component.model.IvyArtifactName;
+import org.gradle.internal.resolve.ModuleVersionNotFoundException;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
+import org.gradle.internal.resolve.RejectedByAttributesVersion;
+import org.gradle.internal.resolve.RejectedByRuleVersion;
+import org.gradle.internal.resolve.RejectedBySelectorVersion;
+import org.gradle.internal.resolve.RejectedVersion;
 import org.gradle.internal.resolve.caching.ComponentMetadataSupplierRuleExecutor;
 import org.gradle.internal.resolve.result.BuildableComponentIdResolveResult;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
@@ -69,6 +67,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.gradle.internal.resolve.ResolveExceptionAnalyzer.hasCriticalFailure;
+import static org.gradle.internal.resolve.ResolveExceptionAnalyzer.isCriticalFailure;
 import static org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult.State.Failed;
 import static org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult.State.Resolved;
 
@@ -156,7 +156,7 @@ public class DynamicVersionResolver {
 
         // A first pass to do local resolves only
         RepositoryChainModuleResolution best = findLatestModule(queue, failures, missing);
-        if (ResolveExceptionAnalyzer.hasCriticalFailure(failures)) {
+        if (hasCriticalFailure(failures)) {
             return null;
         }
         if (best != null) {
@@ -178,7 +178,7 @@ public class DynamicVersionResolver {
                 request.resolve();
             } catch (Exception t) {
                 failures.add(t);
-                if (ResolveExceptionAnalyzer.isCriticalFailure(t)) {
+                if (isCriticalFailure(t)) {
                     queue.clear();
                 }
                 continue;
@@ -186,7 +186,7 @@ public class DynamicVersionResolver {
             switch (request.resolvedVersionMetadata.getState()) {
                 case Failed:
                     failures.add(request.resolvedVersionMetadata.getFailure());
-                    if (ResolveExceptionAnalyzer.isCriticalFailure(request.resolvedVersionMetadata.getFailure())) {
+                    if (isCriticalFailure(request.resolvedVersionMetadata.getFailure())) {
                         queue.clear();
                     }
                     break;

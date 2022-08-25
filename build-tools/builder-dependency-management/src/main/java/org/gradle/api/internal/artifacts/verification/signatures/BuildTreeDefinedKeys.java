@@ -16,8 +16,6 @@
 
 package org.gradle.api.internal.artifacts.verification.signatures;
 
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.DependencyVerificationOverride;
-
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.gradle.security.internal.KeyringFilePublicKeyService;
 import org.gradle.security.internal.PublicKeyService;
@@ -28,6 +26,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+
+import static org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.DependencyVerificationOverride.VERIFICATION_KEYRING_DRYRUN_GPG;
 
 public class BuildTreeDefinedKeys {
     private final KeyringFilePublicKeyService keyService;
@@ -56,6 +56,10 @@ public class BuildTreeDefinedKeys {
         return SecuritySupport.asciiArmoredFileFor(keyringsFile);
     }
 
+    public File getEffectiveKeyringsFile() {
+        return effectiveKeyringsFile;
+    }
+
     public List<PGPPublicKeyRing> loadKeys() throws IOException {
         if (effectiveKeyringsFile != null) {
             return SecuritySupport.loadKeyRingFile(effectiveKeyringsFile);
@@ -73,7 +77,6 @@ public class BuildTreeDefinedKeys {
     }
 
     public BuildTreeDefinedKeys dryRun() {
-        return new BuildTreeDefinedKeys(new File(keyringsFile.getParentFile(),
-                DependencyVerificationOverride.VERIFICATION_KEYRING_DRYRUN_GPG));
+        return new BuildTreeDefinedKeys(new File(keyringsFile.getParentFile(), VERIFICATION_KEYRING_DRYRUN_GPG));
     }
 }

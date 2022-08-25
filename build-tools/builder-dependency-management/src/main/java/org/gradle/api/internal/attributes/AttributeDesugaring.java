@@ -16,14 +16,13 @@
 package org.gradle.api.internal.attributes;
 
 import com.google.common.collect.Maps;
-import org.gradle.internal.component.external.model.DefaultModuleComponentSelector;
-import org.gradle.internal.component.local.model.DefaultProjectComponentSelector;
-
 import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.attributes.Attribute;
 import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.internal.Cast;
+import org.gradle.internal.component.external.model.DefaultModuleComponentSelector;
+import org.gradle.internal.component.local.model.DefaultProjectComponentSelector;
 
 import java.util.Map;
 import java.util.Set;
@@ -68,8 +67,7 @@ public class AttributeDesugaring {
             AttributeContainer moduleAttributes = module.getAttributes();
             if (!moduleAttributes.isEmpty()) {
                 ImmutableAttributes attributes = ((AttributeContainerInternal) moduleAttributes).asImmutable();
-                return DefaultModuleComponentSelector
-                        .newSelector(module.getModuleIdentifier(), module.getVersionConstraint(), desugar(attributes), module.getRequestedCapabilities());
+                return DefaultModuleComponentSelector.newSelector(module.getModuleIdentifier(), module.getVersionConstraint(), desugar(attributes), module.getRequestedCapabilities());
             }
         }
         if (selector instanceof DefaultProjectComponentSelector) {

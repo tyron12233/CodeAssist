@@ -16,7 +16,6 @@
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
 import com.google.common.base.Joiner;
-import com.google.common.hash.HashCode;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ComponentResolvers;
@@ -35,20 +34,19 @@ import org.gradle.internal.component.model.IvyArtifactName;
 import org.gradle.internal.component.model.ModuleDescriptorArtifactMetadata;
 import org.gradle.internal.component.model.MutableModuleSources;
 import org.gradle.internal.hash.ChecksumService;
+import com.google.common.hash.HashCode;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
 import org.gradle.internal.resolve.result.ResourceAwareResolveResult;
 import org.gradle.internal.resource.local.FileResourceRepository;
 import org.gradle.internal.resource.local.LocallyAvailableExternalResource;
 import org.gradle.internal.resource.metadata.ExternalResourceMetaData;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 abstract class AbstractRepositoryMetadataSource<S extends MutableModuleComponentResolveMetadata> extends AbstractMetadataSource<S> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ExternalResourceResolver.class);

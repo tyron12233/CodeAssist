@@ -15,8 +15,6 @@
  */
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.internal.artifacts.configurations.MutationValidator;
-
 import org.gradle.api.Action;
 import org.gradle.api.Describable;
 import org.gradle.api.DomainObjectSet;
@@ -25,6 +23,7 @@ import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.DependencySet;
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.internal.DelegatingDomainObjectSet;
+import org.gradle.api.internal.artifacts.configurations.MutationValidator;
 import org.gradle.api.internal.artifacts.dependencies.AbstractModuleDependency;
 import org.gradle.api.tasks.TaskDependency;
 import org.gradle.internal.Actions;

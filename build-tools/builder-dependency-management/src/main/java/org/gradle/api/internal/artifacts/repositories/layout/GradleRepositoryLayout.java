@@ -16,9 +16,8 @@
 package org.gradle.api.internal.artifacts.repositories.layout;
 
 import com.google.common.collect.ImmutableSet;
-import org.gradle.api.internal.artifacts.repositories.resolver.PatternBasedResolver;
-
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository;
+import org.gradle.api.internal.artifacts.repositories.resolver.PatternBasedResolver;
 
 import java.net.URI;
 import java.util.Set;

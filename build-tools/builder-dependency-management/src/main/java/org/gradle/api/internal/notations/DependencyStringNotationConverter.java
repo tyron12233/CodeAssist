@@ -17,14 +17,13 @@
 package org.gradle.api.internal.notations;
 
 import com.google.common.collect.Interner;
-import org.gradle.api.internal.artifacts.dsl.ParsedModuleStringNotation;
-import org.gradle.api.internal.artifacts.dsl.dependencies.ModuleFactoryHelper;
-
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.ClientModule;
 import org.gradle.api.artifacts.DependencyConstraint;
 import org.gradle.api.artifacts.ExternalDependency;
 import org.gradle.api.artifacts.MutableVersionConstraint;
+import org.gradle.api.internal.artifacts.dsl.ParsedModuleStringNotation;
+import org.gradle.api.internal.artifacts.dsl.dependencies.ModuleFactoryHelper;
 import org.gradle.api.internal.catalog.parser.StrictVersionParser;
 import org.gradle.internal.exceptions.DiagnosticsVisitor;
 import org.gradle.internal.reflect.Instantiator;

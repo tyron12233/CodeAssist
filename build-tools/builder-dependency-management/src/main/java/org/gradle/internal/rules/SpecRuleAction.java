@@ -16,16 +16,16 @@
 
 package org.gradle.internal.rules;
 
-import java.util.function.Predicate;
+import org.gradle.api.specs.Spec;
 
 /**
  * Represents a tuple containing a Spec and a RuleAction
  */
 public class SpecRuleAction<T> {
     final RuleAction<? super T> action;
-    final Predicate<? super T> spec;
+    final Spec<? super T> spec;
 
-    public SpecRuleAction(RuleAction<? super T> action, Predicate<? super T> spec) {
+    public SpecRuleAction(RuleAction<? super T> action, Spec<? super T> spec) {
         this.action = action;
         this.spec = spec;
     }
@@ -34,7 +34,7 @@ public class SpecRuleAction<T> {
         return action;
     }
 
-    public Predicate<? super T> getSpec() {
+    public Spec<? super T> getSpec() {
         return spec;
     }
 }

@@ -22,11 +22,16 @@ import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.artifacts.dsl.RepositoryHandler;
 import org.gradle.api.component.SoftwareComponentContainer;
 import org.gradle.api.file.CopySpec;
+import org.gradle.api.internal.DomainObjectContext;
 import org.gradle.api.internal.DynamicObjectAware;
 import org.gradle.api.internal.MutationGuards;
 import org.gradle.api.internal.ProcessOperations;
+import org.gradle.api.internal.artifacts.DependencyManagementServices;
+import org.gradle.api.internal.artifacts.DependencyResolutionServices;
+import org.gradle.api.internal.artifacts.dsl.dependencies.UnknownProjectFinder;
 import org.gradle.api.internal.collections.DomainObjectCollectionFactory;
 import org.gradle.api.internal.file.DefaultProjectLayout;
+import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.api.internal.initialization.ScriptHandlerFactory;
 import org.gradle.api.internal.initialization.ScriptHandlerInternal;
@@ -64,6 +69,7 @@ import org.gradle.internal.metaobject.BeanDynamicObject;
 import org.gradle.internal.metaobject.DynamicObject;
 import org.gradle.internal.model.ModelContainer;
 import org.gradle.internal.model.RuleBasedPluginListener;
+import org.gradle.internal.service.DefaultServiceRegistry;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.resource.TextUriResourceLoader;
 import org.gradle.internal.service.scopes.ServiceRegistryFactory;
@@ -658,6 +664,53 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
         return owner;
     }
 
+
+    @Override
+    public DetachedResolver newDetachedResolver() {
+        DependencyManagementServices dms = getServices().get(DependencyManagementServices.class);
+        InstantiatorFactory instantiatorFactory = services.get(InstantiatorFactory.class);
+        DefaultServiceRegistry lookup = new DefaultServiceRegistry(services);
+        lookup.addProvider(new Object() {
+            public DependencyResolutionServices createServices() {
+                return dms.create(
+                        services.get(FileResolver.class),
+                        services.get(FileCollectionFactory.class),
+                        services.get(DependencyMetaDataProvider.class),
+                        new UnknownProjectFinder("Detached resolvers do not support resolving projects"),
+                        new DetachedDependencyResolutionDomainObjectContext(services.get(
+                                DomainObjectContext.class))
+                );
+            }
+        });
+        return instantiatorFactory.decorate(lookup).newInstance(
+                LocalDetachedResolver.class
+        );
+    }
+
+    public static class LocalDetachedResolver implements DetachedResolver {
+        private final DependencyResolutionServices resolutionServices;
+
+        @Inject
+        public LocalDetachedResolver(DependencyResolutionServices resolutionServices) {
+            this.resolutionServices = resolutionServices;
+        }
+
+        @Override
+        public RepositoryHandler getRepositories() {
+            return resolutionServices.getResolveRepositoryHandler();
+        }
+
+        @Override
+        public DependencyHandler getDependencies() {
+            return resolutionServices.getDependencyHandler();
+        }
+
+        @Override
+        public ConfigurationContainer getConfigurations() {
+            return resolutionServices.getConfigurationContainer();
+        }
+    }
+
     @Override
     public ServiceRegistry getServices() {
         return services;
@@ -1111,4 +1164,64 @@ public abstract class DefaultProject extends AbstractPluginAware implements Proj
 
     @Inject
     protected abstract ListenerBuildOperationDecorator getListenerBuildOperationDecorator();
+
+    private static class DetachedDependencyResolutionDomainObjectContext implements DomainObjectContext {
+        private final DomainObjectContext delegate;
+
+        private DetachedDependencyResolutionDomainObjectContext(DomainObjectContext delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Path identityPath(String name) {
+            return delegate.identityPath(name);
+        }
+
+        @Override
+        public Path projectPath(String name) {
+            return delegate.projectPath(name);
+        }
+
+        @Override
+        @Nullable
+        public Path getProjectPath() {
+            return delegate.getProjectPath();
+        }
+
+        @Override
+        @Nullable
+        public ProjectInternal getProject() {
+            return delegate.getProject();
+        }
+
+        @Override
+        public ModelContainer<?> getModel() {
+            return delegate.getModel();
+        }
+
+        @Override
+        public Path getBuildPath() {
+            return delegate.getBuildPath();
+        }
+
+        @Override
+        public boolean isRootScript() {
+            return delegate.isRootScript();
+        }
+
+        @Override
+        public boolean isPluginContext() {
+            return delegate.isPluginContext();
+        }
+
+        @Override
+        public boolean isScript() {
+            return delegate.isScript();
+        }
+
+        @Override
+        public boolean isDetachedState() {
+            return true;
+        }
+    }
 }

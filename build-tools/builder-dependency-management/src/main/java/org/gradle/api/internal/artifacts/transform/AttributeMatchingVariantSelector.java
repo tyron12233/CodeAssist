@@ -18,16 +18,12 @@ package org.gradle.api.internal.artifacts.transform;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.gradle.api.attributes.Attribute;
+import org.gradle.api.attributes.HasAttributes;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.BrokenResolvedArtifactSet;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedVariant;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedVariantSet;
-import org.gradle.internal.component.AmbiguousVariantSelectionException;
-import org.gradle.internal.component.NoMatchingVariantSelectionException;
-import org.gradle.internal.component.VariantSelectionException;
-
-import org.gradle.api.attributes.Attribute;
-import org.gradle.api.attributes.HasAttributes;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.AttributeDescriber;
 import org.gradle.api.internal.attributes.AttributeValue;
@@ -36,7 +32,9 @@ import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.internal.Cast;
 import org.gradle.internal.Pair;
-
+import org.gradle.internal.component.AmbiguousVariantSelectionException;
+import org.gradle.internal.component.NoMatchingVariantSelectionException;
+import org.gradle.internal.component.VariantSelectionException;
 import org.gradle.internal.component.model.AttributeMatcher;
 import org.gradle.internal.component.model.AttributeMatchingExplanationBuilder;
 import org.gradle.internal.component.model.DescriberSelector;

@@ -15,9 +15,9 @@
  */
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
-import com.google.common.hash.HashCode;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
 import org.gradle.internal.component.model.PersistentModuleSource;
+import com.google.common.hash.HashCode;
 
 import java.io.File;
 
@@ -26,7 +26,7 @@ import java.io.File;
  * from which a module resolve metadata has been built. In particular,
  * it stores the artifact id corresponding to the metadata file and
  * gives access to the file stored in the local artifact cache.
- * <p>
+ *
  * This information is used during dependency verification (either
  * writing or validating).
  */

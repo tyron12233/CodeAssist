@@ -17,7 +17,6 @@
 package org.gradle.api.internal.artifacts;
 
 import org.gradle.api.internal.artifacts.configurations.dynamicversion.CachePolicy;
-
 import org.gradle.internal.reflect.Instantiator;
 
 /**

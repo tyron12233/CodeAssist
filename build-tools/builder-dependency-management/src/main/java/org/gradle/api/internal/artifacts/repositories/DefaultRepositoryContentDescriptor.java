@@ -20,17 +20,16 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionComparator;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionSelectorScheme;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelectorScheme;
-
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.attributes.Attribute;
 import org.gradle.api.attributes.AttributeContainer;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionComparator;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionSelectorScheme;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelectorScheme;
 import org.gradle.internal.Actions;
 import org.gradle.internal.Cast;
 
@@ -55,9 +54,16 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
     private final VersionSelectorScheme versionSelectorScheme;
     private final ConcurrentHashMap<String, VersionSelector> versionSelectors = new ConcurrentHashMap<>();
 
-    public DefaultRepositoryContentDescriptor(Supplier<String> repositoryNameSupplier) {
-        this.versionSelectorScheme = new DefaultVersionSelectorScheme(new DefaultVersionComparator(), new VersionParser());
+    private final VersionParser versionParser;
+
+    public DefaultRepositoryContentDescriptor(Supplier<String> repositoryNameSupplier, VersionParser versionParser) {
+        this.versionSelectorScheme = new DefaultVersionSelectorScheme(new DefaultVersionComparator(), versionParser);
         this.repositoryNameSupplier = repositoryNameSupplier;
+        this.versionParser = versionParser;
+    }
+
+    protected VersionParser getVersionParser() {
+        return versionParser;
     }
 
     private void assertMutable() {
@@ -88,7 +94,7 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
 
     @Override
     public RepositoryContentDescriptorInternal asMutableCopy() {
-        DefaultRepositoryContentDescriptor copy = new DefaultRepositoryContentDescriptor(repositoryNameSupplier);
+        DefaultRepositoryContentDescriptor copy = new DefaultRepositoryContentDescriptor(repositoryNameSupplier, getVersionParser());
         if (includedConfigurations != null) {
             copy.includedConfigurations = Sets.newHashSet(includedConfigurations);
         }

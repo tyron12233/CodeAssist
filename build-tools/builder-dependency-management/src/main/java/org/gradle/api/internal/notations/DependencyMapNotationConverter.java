@@ -15,9 +15,8 @@
  */
 package org.gradle.api.internal.notations;
 
-import org.gradle.api.internal.artifacts.dsl.dependencies.ModuleFactoryHelper;
-
 import org.gradle.api.artifacts.ExternalDependency;
+import org.gradle.api.internal.artifacts.dsl.dependencies.ModuleFactoryHelper;
 import org.gradle.internal.exceptions.DiagnosticsVisitor;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.typeconversion.MapKey;
@@ -53,8 +52,7 @@ public class DependencyMapNotationConverter<T> extends MapNotationConverter<T> {
             dependency = instantiator.newInstance(resultingType, group, name, version, configuration);
         }
         if (dependency instanceof ExternalDependency) {
-            ModuleFactoryHelper
-                    .addExplicitArtifactsIfDefined((ExternalDependency) dependency, ext, classifier);
+            ModuleFactoryHelper.addExplicitArtifactsIfDefined((ExternalDependency) dependency, ext, classifier);
         }
         return dependency;
     }

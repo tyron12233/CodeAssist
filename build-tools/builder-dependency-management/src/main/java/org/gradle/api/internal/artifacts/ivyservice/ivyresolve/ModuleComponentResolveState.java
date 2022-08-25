@@ -16,12 +16,10 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import org.gradle.api.internal.artifacts.configurations.dynamicversion.CachePolicy;
-
 import org.gradle.api.artifacts.ComponentMetadataSupplierDetails;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.ComponentMetadataProcessorFactory;
-
+import org.gradle.api.internal.artifacts.configurations.dynamicversion.CachePolicy;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.internal.action.InstantiatingAction;
 import org.gradle.internal.resolve.caching.ComponentMetadataSupplierRuleExecutor;

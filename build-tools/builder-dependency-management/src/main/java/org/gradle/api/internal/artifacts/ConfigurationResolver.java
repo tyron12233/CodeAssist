@@ -15,10 +15,9 @@
  */
 package org.gradle.api.internal.artifacts;
 
+import org.gradle.api.artifacts.ResolveException;
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
 import org.gradle.api.internal.artifacts.repositories.ResolutionAwareRepository;
-
-import org.gradle.api.artifacts.ResolveException;
 
 import java.util.List;
 

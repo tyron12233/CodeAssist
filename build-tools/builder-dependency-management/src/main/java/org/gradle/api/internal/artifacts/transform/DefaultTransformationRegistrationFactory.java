@@ -17,8 +17,6 @@
 package org.gradle.api.internal.artifacts.transform;
 
 import com.google.common.collect.ImmutableMap;
-import org.gradle.api.internal.artifacts.ArtifactTransformRegistration;
-
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.artifacts.transform.CacheableTransform;
 import org.gradle.api.artifacts.transform.InputArtifact;
@@ -27,6 +25,7 @@ import org.gradle.api.artifacts.transform.TransformAction;
 import org.gradle.api.artifacts.transform.TransformParameters;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.DomainObjectContext;
+import org.gradle.api.internal.artifacts.ArtifactTransformRegistration;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.file.FileCollectionFactory;
@@ -211,6 +210,11 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
         @Override
         public TransformationStep getTransformationStep() {
             return transformationStep;
+        }
+
+        @Override
+        public String toString() {
+            return transformationStep + " transform from " + from + " to " + to;
         }
     }
 

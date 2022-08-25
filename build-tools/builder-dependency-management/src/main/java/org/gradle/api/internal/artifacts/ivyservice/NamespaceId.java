@@ -15,7 +15,6 @@
  */
 
 package org.gradle.api.internal.artifacts.ivyservice;
-
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.Serializable;

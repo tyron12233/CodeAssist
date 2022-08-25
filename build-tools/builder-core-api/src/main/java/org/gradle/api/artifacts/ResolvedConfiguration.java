@@ -1,8 +1,24 @@
+/*
+ * Copyright 2009 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.gradle.api.artifacts;
+
+import org.gradle.api.specs.Spec;
 
 import java.io.File;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * A {@code ResolvedConfiguration} represents the result of resolving a {@link Configuration}, and provides access
@@ -46,7 +62,7 @@ public interface ResolvedConfiguration {
      * @return The artifact files of the specified dependencies.
      * @throws ResolveException when the resolve was not successful.
      */
-    Set<File> getFiles(Predicate<? super Dependency> dependencySpec) throws ResolveException;
+    Set<File> getFiles(Spec<? super Dependency> dependencySpec) throws ResolveException;
 
     /**
      * Returns the {@link ResolvedDependency} instances for each direct dependency of the configuration. Via those
@@ -67,7 +83,7 @@ public interface ResolvedConfiguration {
      * @return A {@code ResolvedDependency} instance for each direct dependency.
      * @throws ResolveException when the resolve was not successful.
      */
-    Set<ResolvedDependency> getFirstLevelModuleDependencies(Predicate<? super Dependency> dependencySpec) throws ResolveException;
+    Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) throws ResolveException;
 
     /**
      * Returns the set of artifact meta-data for this configuration.

@@ -16,10 +16,7 @@
 package org.gradle.api.internal.artifacts.dsl;
 
 import com.google.common.collect.Lists;
-import org.gradle.api.internal.artifacts.BaseRepositoryFactory;
-
 import groovy.lang.Closure;
-
 import org.gradle.api.Action;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.artifacts.dsl.RepositoryHandler;
@@ -32,7 +29,7 @@ import org.gradle.api.artifacts.repositories.MavenArtifactRepository;
 import org.gradle.api.artifacts.repositories.RepositoryContentDescriptor;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.ConfigureByMapAction;
-
+import org.gradle.api.internal.artifacts.BaseRepositoryFactory;
 import org.gradle.api.internal.artifacts.DefaultArtifactRepositoryContainer;
 import org.gradle.internal.Actions;
 import org.gradle.internal.Cast;

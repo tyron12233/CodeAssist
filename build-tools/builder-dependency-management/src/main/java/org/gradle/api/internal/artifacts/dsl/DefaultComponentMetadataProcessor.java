@@ -17,22 +17,6 @@
 package org.gradle.api.internal.artifacts.dsl;
 
 import com.google.common.collect.Lists;
-import org.gradle.api.internal.artifacts.dsl.dependencies.PlatformSupport;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.UserProvidedMetadata;
-import org.gradle.api.internal.artifacts.repositories.resolver.ComponentMetadataDetailsAdapter;
-import org.gradle.api.internal.artifacts.repositories.resolver.DependencyConstraintMetadataImpl;
-import org.gradle.api.internal.artifacts.repositories.resolver.DirectDependencyMetadataImpl;
-import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
-import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
-import org.gradle.internal.component.external.model.VariantDerivationStrategy;
-import org.gradle.internal.component.external.model.ivy.DefaultIvyModuleResolveMetadata;
-import org.gradle.internal.component.external.model.ivy.RealisedIvyModuleResolveMetadata;
-import org.gradle.internal.component.external.model.maven.DefaultMavenModuleResolveMetadata;
-import org.gradle.internal.component.external.model.maven.RealisedMavenModuleResolveMetadata;
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-import org.gradle.internal.rules.RuleAction;
-import org.gradle.internal.rules.SpecRuleAction;
-
 import org.gradle.api.Action;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.Transformer;
@@ -45,7 +29,11 @@ import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.api.internal.artifacts.ComponentMetadataProcessor;
 import org.gradle.api.internal.artifacts.MetadataResolutionContext;
-
+import org.gradle.api.internal.artifacts.dsl.dependencies.PlatformSupport;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.UserProvidedMetadata;
+import org.gradle.api.internal.artifacts.repositories.resolver.ComponentMetadataDetailsAdapter;
+import org.gradle.api.internal.artifacts.repositories.resolver.DependencyConstraintMetadataImpl;
+import org.gradle.api.internal.artifacts.repositories.resolver.DirectDependencyMetadataImpl;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.api.internal.project.ProjectInternal;
@@ -53,10 +41,18 @@ import org.gradle.internal.Actions;
 import org.gradle.internal.action.ConfigurableRule;
 import org.gradle.internal.action.DefaultConfigurableRules;
 import org.gradle.internal.action.InstantiatingAction;
+import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
+import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
+import org.gradle.internal.component.external.model.VariantDerivationStrategy;
+import org.gradle.internal.component.external.model.ivy.DefaultIvyModuleResolveMetadata;
+import org.gradle.internal.component.external.model.ivy.RealisedIvyModuleResolveMetadata;
+import org.gradle.internal.component.external.model.maven.DefaultMavenModuleResolveMetadata;
+import org.gradle.internal.component.external.model.maven.RealisedMavenModuleResolveMetadata;
 import org.gradle.internal.reflect.Instantiator;
-
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 import org.gradle.internal.resolve.caching.ComponentMetadataRuleExecutor;
-
+import org.gradle.internal.rules.RuleAction;
+import org.gradle.internal.rules.SpecRuleAction;
 import org.gradle.internal.serialize.InputStreamBackedDecoder;
 import org.gradle.internal.serialize.OutputStreamBackedEncoder;
 import org.gradle.internal.serialize.Serializer;
@@ -258,7 +254,7 @@ public class DefaultComponentMetadataProcessor implements ComponentMetadataProce
         }
         ArrayList<ConfigurableRule<ComponentMetadataContext>> collectedRules = new ArrayList<>();
         for (SpecConfigurableRule classBasedRule : rules) {
-            if (classBasedRule.getSpec().test(id)) {
+            if (classBasedRule.getSpec().isSatisfiedBy(id)) {
                 collectedRules.add(classBasedRule.getConfigurableRule());
             }
         }
@@ -267,7 +263,7 @@ public class DefaultComponentMetadataProcessor implements ComponentMetadataProce
 
 
     private void processRule(SpecRuleAction<? super ComponentMetadataDetails> specRuleAction, ModuleComponentResolveMetadata metadata, final ComponentMetadataDetails details) {
-        if (!specRuleAction.getSpec().test(details)) {
+        if (!specRuleAction.getSpec().isSatisfiedBy(details)) {
             return;
         }
         final RuleAction<? super ComponentMetadataDetails> action = specRuleAction.getAction();

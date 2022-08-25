@@ -19,40 +19,32 @@ package org.gradle.api.internal.artifacts.ivyservice.modulecache.artifacts;
 import com.google.common.hash.HashCode;
 import org.gradle.internal.resource.cached.CachedExternalResource;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 public interface ModuleArtifactCache {
     /**
      * Adds a resolution to the index.
-     * <p>
-     * The incoming file is expected to be in the persistent local. This method will not
-     * move/copy the file there. <p>
      *
-     * @param key                  The key to cache this resolution under in the index. Cannot be
-     *                            null.
-     * @param artifactFile         The artifact file in the persistent file store. Cannot be null
+     * The incoming file is expected to be in the persistent local. This method will not move/copy the file there. <p>
+     *  @param key The key to cache this resolution under in the index. Cannot be null.
+     * @param artifactFile The artifact file in the persistent file store. Cannot be null
      * @param moduleDescriptorHash The checksum (SHA1) of the related moduledescriptor.
      */
     void store(ArtifactAtRepositoryKey key, File artifactFile, HashCode moduleDescriptorHash);
 
     /**
      * Record that the artifact with the given key was missing.
-     *
-     * @param key            The key to cache this resolution under in the index.
+     *  @param key The key to cache this resolution under in the index.
      * @param descriptorHash The SHA1 hash of the related moduleDescriptor
      */
-    void storeMissing(ArtifactAtRepositoryKey key,
-                      List<String> attemptedLocations,
-                      HashCode descriptorHash);
+    void storeMissing(ArtifactAtRepositoryKey key, List<String> attemptedLocations, HashCode descriptorHash);
 
     /**
      * Lookup a cached resolution.
-     * <p>
-     * The {@link CachedExternalResource#getCachedFile()} is guaranteed to exist at the time that
-     * the entry is returned from this method.
+     *
+     * The {@link CachedExternalResource#getCachedFile()} is guaranteed to exist at the time that the entry is returned from this method.
      *
      * @param key The key to search the index for
      * @return The cached artifact resolution if one exists, otherwise null.

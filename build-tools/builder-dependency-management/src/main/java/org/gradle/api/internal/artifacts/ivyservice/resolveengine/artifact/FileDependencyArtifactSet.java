@@ -23,8 +23,6 @@ import org.gradle.api.specs.Spec;
 import org.gradle.internal.component.local.model.LocalFileDependencyMetadata;
 import org.gradle.internal.model.CalculatedValueContainerFactory;
 
-import java.util.function.Predicate;
-
 public class FileDependencyArtifactSet implements ArtifactSet {
     private final LocalFileDependencyMetadata fileDependency;
     private final ArtifactTypeRegistry artifactTypeRegistry;
@@ -37,7 +35,7 @@ public class FileDependencyArtifactSet implements ArtifactSet {
     }
 
     @Override
-    public ResolvedArtifactSet select(Predicate<? super ComponentIdentifier> componentFilter, VariantSelector selector) {
+    public ResolvedArtifactSet select(Spec<? super ComponentIdentifier> componentFilter, VariantSelector selector) {
         // Select the artifacts later, as this is a function of the file names and these may not be known yet because the producing tasks have not yet executed
         return new LocalFileDependencyBackedArtifactSet(fileDependency, componentFilter, selector, artifactTypeRegistry, calculatedValueContainerFactory);
     }

@@ -17,8 +17,7 @@ package org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.rep
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
-import org.apache.commons.text.StringEscapeUtils;
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.internal.DocumentationRegistry;

@@ -16,13 +16,12 @@
 
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.internal.artifacts.ivyservice.ArtifactCachesProvider;
-import org.gradle.api.internal.artifacts.ivyservice.DefaultArtifactCaches;
-import org.gradle.api.internal.artifacts.transform.ImmutableTransformationWorkspaceServices;
-
 import org.gradle.BuildAdapter;
 import org.gradle.BuildResult;
 import org.gradle.api.internal.DocumentationRegistry;
+import org.gradle.api.internal.artifacts.ivyservice.ArtifactCachesProvider;
+import org.gradle.api.internal.artifacts.ivyservice.DefaultArtifactCaches;
+import org.gradle.api.internal.artifacts.transform.ImmutableTransformationWorkspaceServices;
 import org.gradle.api.internal.cache.StringInterner;
 import org.gradle.api.internal.changedetection.state.DefaultExecutionHistoryCacheAccess;
 import org.gradle.cache.CacheBuilder;
@@ -37,6 +36,7 @@ import org.gradle.internal.execution.history.ExecutionHistoryCacheAccess;
 import org.gradle.internal.execution.history.ExecutionHistoryStore;
 import org.gradle.internal.execution.history.impl.DefaultExecutionHistoryStore;
 import org.gradle.internal.file.FileAccessTimeJournal;
+import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 
 public class DependencyManagementGradleUserHomeScopeServices {
 
@@ -54,13 +54,16 @@ public class DependencyManagementGradleUserHomeScopeServices {
         };
     }
 
-    ArtifactCachesProvider createArtifactCaches(GlobalScopedCache globalScopedCache,
-                                                CacheRepository cacheRepository,
-                                                DefaultArtifactCaches.WritableArtifactCacheLockingParameters parameters,
-                                                ListenerManager listenerManager,
-                                                DocumentationRegistry documentationRegistry) {
+    ArtifactCachesProvider createArtifactCaches(
+        GlobalScopedCache globalScopedCache,
+        CacheRepository cacheRepository,
+        DefaultArtifactCaches.WritableArtifactCacheLockingParameters parameters,
+        ListenerManager listenerManager,
+        DocumentationRegistry documentationRegistry
+    ) {
         DefaultArtifactCaches artifactCachesProvider = new DefaultArtifactCaches(globalScopedCache, cacheRepository, parameters, documentationRegistry);
         listenerManager.addListener(new BuildAdapter() {
+            @SuppressWarnings("deprecation")
             @Override
             public void buildFinished(BuildResult result) {
                 artifactCachesProvider.getWritableCacheLockingManager().useCache(() -> {
@@ -78,12 +81,14 @@ public class DependencyManagementGradleUserHomeScopeServices {
     ExecutionHistoryStore createExecutionHistoryStore(
         ExecutionHistoryCacheAccess executionHistoryCacheAccess,
         InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
-        StringInterner stringInterner
+        StringInterner stringInterner,
+        ClassLoaderHierarchyHasher classLoaderHasher
     ) {
         return new DefaultExecutionHistoryStore(
             executionHistoryCacheAccess,
             inMemoryCacheDecoratorFactory,
-            stringInterner
+            stringInterner,
+            classLoaderHasher
         );
     }
 

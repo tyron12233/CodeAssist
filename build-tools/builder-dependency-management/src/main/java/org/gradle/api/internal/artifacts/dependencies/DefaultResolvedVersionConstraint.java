@@ -17,12 +17,11 @@ package org.gradle.api.internal.artifacts.dependencies;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import org.gradle.api.artifacts.VersionConstraint;
+import org.gradle.api.internal.artifacts.ResolvedVersionConstraint;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.UnionVersionSelector;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelectorScheme;
-
-import org.gradle.api.artifacts.VersionConstraint;
-import org.gradle.api.internal.artifacts.ResolvedVersionConstraint;
 
 import java.util.List;
 

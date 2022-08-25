@@ -52,18 +52,17 @@ import org.gradle.internal.operations.RunnableBuildOperation;
 import java.io.File;
 import java.util.Collections;
 import java.util.Set;
-import java.util.function.Predicate;
 
 public class LocalFileDependencyBackedArtifactSet implements ResolvedArtifactSet, LocalDependencyFiles, VariantSelector.Factory {
     private static final DisplayName LOCAL_FILE = Describables.of("local file");
 
     private final LocalFileDependencyMetadata dependencyMetadata;
-    private final Predicate<? super ComponentIdentifier> componentFilter;
+    private final Spec<? super ComponentIdentifier> componentFilter;
     private final VariantSelector selector;
     private final ArtifactTypeRegistry artifactTypeRegistry;
     private final CalculatedValueContainerFactory calculatedValueContainerFactory;
 
-    public LocalFileDependencyBackedArtifactSet(LocalFileDependencyMetadata dependencyMetadata, Predicate<? super ComponentIdentifier> componentFilter, VariantSelector selector, ArtifactTypeRegistry artifactTypeRegistry, CalculatedValueContainerFactory calculatedValueContainerFactory) {
+    public LocalFileDependencyBackedArtifactSet(LocalFileDependencyMetadata dependencyMetadata, Spec<? super ComponentIdentifier> componentFilter, VariantSelector selector, ArtifactTypeRegistry artifactTypeRegistry, CalculatedValueContainerFactory calculatedValueContainerFactory) {
         this.dependencyMetadata = dependencyMetadata;
         this.componentFilter = componentFilter;
         this.selector = selector;
@@ -79,7 +78,7 @@ public class LocalFileDependencyBackedArtifactSet implements ResolvedArtifactSet
         return artifactTypeRegistry;
     }
 
-    public Predicate<? super ComponentIdentifier> getComponentFilter() {
+    public Spec<? super ComponentIdentifier> getComponentFilter() {
         return componentFilter;
     }
 
@@ -96,7 +95,7 @@ public class LocalFileDependencyBackedArtifactSet implements ResolvedArtifactSet
         }
 
         ComponentIdentifier componentIdentifier = dependencyMetadata.getComponentId();
-        if (componentIdentifier != null && !componentFilter.test(componentIdentifier)) {
+        if (componentIdentifier != null && !componentFilter.isSatisfiedBy(componentIdentifier)) {
             listener.visitArtifacts(new EndCollection(this));
             return;
         }
@@ -115,7 +114,7 @@ public class LocalFileDependencyBackedArtifactSet implements ResolvedArtifactSet
             ComponentArtifactIdentifier artifactIdentifier;
             if (componentIdentifier == null) {
                 artifactIdentifier = new OpaqueComponentArtifactIdentifier(file);
-                if (!componentFilter.test(artifactIdentifier.getComponentIdentifier())) {
+                if (!componentFilter.isSatisfiedBy(artifactIdentifier.getComponentIdentifier())) {
                     continue;
                 }
             } else {

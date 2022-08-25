@@ -141,7 +141,7 @@ public class DefaultDependencyConstraint implements DependencyConstraintInternal
 
     @Override
     public boolean matchesStrictly(ModuleVersionIdentifier identifier) {
-        return new ModuleVersionSelectorStrictSpec(this).test(identifier);
+        return new ModuleVersionSelectorStrictSpec(this).isSatisfiedBy(identifier);
     }
 
     @Override

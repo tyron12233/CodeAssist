@@ -1,6 +1,5 @@
 package org.gradle.api.artifacts;
 
-import org.gradle.api.Incubating;
 import org.gradle.internal.HasInternalProtocol;
 
 /**
@@ -8,9 +7,8 @@ import org.gradle.internal.HasInternalProtocol;
  *
  * @since 6.8
  */
-@Incubating
 @HasInternalProtocol
-public interface MinimalExternalModuleDependency {
+public interface MinimalExternalModuleDependency extends ExternalModuleDependency {
     ModuleIdentifier getModule();
     VersionConstraint getVersionConstraint();
 }

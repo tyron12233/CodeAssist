@@ -15,7 +15,6 @@
  */
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
-import com.google.common.hash.HashCode;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
@@ -34,63 +33,43 @@ import org.gradle.internal.component.model.DefaultIvyArtifactName;
 import org.gradle.internal.component.model.IvyArtifactName;
 import org.gradle.internal.component.model.MutableModuleSources;
 import org.gradle.internal.hash.ChecksumService;
+import com.google.common.hash.HashCode;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
 import org.gradle.internal.resolve.result.BuildableModuleVersionListingResolveResult;
 import org.gradle.internal.resource.local.LocallyAvailableExternalResource;
 import org.gradle.internal.resource.metadata.ExternalResourceMetaData;
 
+import javax.inject.Inject;
 import java.io.File;
 import java.util.List;
 
-import javax.inject.Inject;
-
 /**
- * TODO: This class sources Gradle metadata files, but there's no corresponding
- * ModuleComponentResolveMetadata for this metadata yet.
- * Because of this, we will generate an empty instance (either a Ivy or Maven) based on the
- * repository type.
+ * TODO: This class sources Gradle metadata files, but there's no corresponding ModuleComponentResolveMetadata for this metadata yet.
+ * Because of this, we will generate an empty instance (either a Ivy or Maven) based on the repository type.
  */
 public class DefaultGradleModuleMetadataSource extends AbstractMetadataSource<MutableModuleComponentResolveMetadata> {
     private final GradleModuleMetadataParser metadataParser;
     private final GradleModuleMetadataCompatibilityConverter metadataCompatibilityConverter;
-    private final MutableModuleMetadataFactory<? extends MutableModuleComponentResolveMetadata>
-            mutableModuleMetadataFactory;
+    private final MutableModuleMetadataFactory<? extends MutableModuleComponentResolveMetadata> mutableModuleMetadataFactory;
     private final boolean listVersions;
     private final ChecksumService checksumService;
 
     @Inject
-    public DefaultGradleModuleMetadataSource(GradleModuleMetadataParser metadataParser,
-                                             MutableModuleMetadataFactory<?
-                                                     extends MutableModuleComponentResolveMetadata> mutableModuleMetadataFactory,
-                                             boolean listVersions,
-                                             ChecksumService checksumService) {
+    public DefaultGradleModuleMetadataSource(GradleModuleMetadataParser metadataParser, MutableModuleMetadataFactory<? extends MutableModuleComponentResolveMetadata> mutableModuleMetadataFactory, boolean listVersions, ChecksumService checksumService) {
         this.metadataParser = metadataParser;
-        this.metadataCompatibilityConverter = new GradleModuleMetadataCompatibilityConverter(
-                metadataParser.getAttributesFactory(), metadataParser.getInstantiator());
+        this.metadataCompatibilityConverter = new GradleModuleMetadataCompatibilityConverter(metadataParser.getAttributesFactory(), metadataParser.getInstantiator());
         this.mutableModuleMetadataFactory = mutableModuleMetadataFactory;
         this.listVersions = listVersions;
         this.checksumService = checksumService;
     }
 
     @Override
-    public MutableModuleComponentResolveMetadata create(String repositoryName,
-                                                        ComponentResolvers componentResolvers,
-                                                        ModuleComponentIdentifier moduleComponentIdentifier,
-                                                        ComponentOverrideMetadata prescribedMetaData,
-                                                        ExternalResourceArtifactResolver artifactResolver,
-                                                        BuildableModuleComponentMetaDataResolveResult result) {
-        DefaultIvyArtifactName moduleMetadataArtifact =
-                new DefaultIvyArtifactName(moduleComponentIdentifier.getModule(), "module",
-                        "module");
-        DefaultModuleComponentArtifactMetadata artifactId =
-                new DefaultModuleComponentArtifactMetadata(moduleComponentIdentifier,
-                        moduleMetadataArtifact);
-        LocallyAvailableExternalResource gradleMetadataArtifact =
-                artifactResolver.resolveArtifact(artifactId, result);
+    public MutableModuleComponentResolveMetadata create(String repositoryName, ComponentResolvers componentResolvers, ModuleComponentIdentifier moduleComponentIdentifier, ComponentOverrideMetadata prescribedMetaData, ExternalResourceArtifactResolver artifactResolver, BuildableModuleComponentMetaDataResolveResult result) {
+        DefaultIvyArtifactName moduleMetadataArtifact = new DefaultIvyArtifactName(moduleComponentIdentifier.getModule(), "module", "module");
+        DefaultModuleComponentArtifactMetadata artifactId = new DefaultModuleComponentArtifactMetadata(moduleComponentIdentifier, moduleMetadataArtifact);
+        LocallyAvailableExternalResource gradleMetadataArtifact = artifactResolver.resolveArtifact(artifactId, result);
         if (gradleMetadataArtifact != null) {
-            MutableModuleComponentResolveMetadata metaDataFromResource =
-                    mutableModuleMetadataFactory
-                            .createForGradleModuleMetadata(moduleComponentIdentifier);
+            MutableModuleComponentResolveMetadata metaDataFromResource = mutableModuleMetadataFactory.createForGradleModuleMetadata(moduleComponentIdentifier);
             metadataParser.parse(gradleMetadataArtifact, metaDataFromResource);
             validateGradleMetadata(metaDataFromResource);
             createModuleSources(artifactId, gradleMetadataArtifact, metaDataFromResource);
@@ -100,15 +79,11 @@ public class DefaultGradleModuleMetadataSource extends AbstractMetadataSource<Mu
         return null;
     }
 
-    private void createModuleSources(DefaultModuleComponentArtifactMetadata artifactId,
-                                     LocallyAvailableExternalResource gradleMetadataArtifact,
-                                     MutableModuleComponentResolveMetadata metaDataFromResource) {
+    private void createModuleSources(DefaultModuleComponentArtifactMetadata artifactId, LocallyAvailableExternalResource gradleMetadataArtifact, MutableModuleComponentResolveMetadata metaDataFromResource) {
         MutableModuleSources sources = metaDataFromResource.getSources();
         File file = gradleMetadataArtifact.getFile();
-        sources.add(new ModuleDescriptorHashModuleSource(checksumService.md5(file),
-                metaDataFromResource.isChanging()));
-        sources.add(new DefaultMetadataFileSource(artifactId.getId(), file,
-                findSha1(gradleMetadataArtifact.getMetaData(), file)));
+        sources.add(new ModuleDescriptorHashModuleSource(checksumService.md5(file), metaDataFromResource.isChanging()));
+        sources.add(new DefaultMetadataFileSource(artifactId.getId(), file, findSha1(gradleMetadataArtifact.getMetaData(), file)));
     }
 
     private HashCode findSha1(ExternalResourceMetaData metaData, File artifact) {
@@ -120,26 +95,17 @@ public class DefaultGradleModuleMetadataSource extends AbstractMetadataSource<Mu
     }
 
     private static void validateGradleMetadata(MutableModuleComponentResolveMetadata metaDataFromResource) {
-        List<? extends MutableComponentVariant> mutableVariants =
-                metaDataFromResource.getMutableVariants();
+        List<? extends MutableComponentVariant> mutableVariants = metaDataFromResource.getMutableVariants();
         if (mutableVariants == null || mutableVariants.isEmpty()) {
-            throw new InvalidUserDataException("Gradle Module Metadata for module " +
-                                               metaDataFromResource.getModuleVersionId() +
-                                               " is invalid because it doesn't declare any variant");
+            throw new InvalidUserDataException("Gradle Module Metadata for module " + metaDataFromResource.getModuleVersionId() + " is invalid because it doesn't declare any variant");
         }
     }
 
     @Override
-    public void listModuleVersions(ModuleDependencyMetadata dependency,
-                                   ModuleIdentifier module,
-                                   List<ResourcePattern> ivyPatterns,
-                                   List<ResourcePattern> artifactPatterns,
-                                   VersionLister versionLister,
-                                   BuildableModuleVersionListingResolveResult result) {
+    public void listModuleVersions(ModuleDependencyMetadata dependency, ModuleIdentifier module, List<ResourcePattern> ivyPatterns, List<ResourcePattern> artifactPatterns, VersionLister versionLister, BuildableModuleVersionListingResolveResult result) {
         if (listVersions) {
             // List modules based on metadata files, but only if we won't check for maven-metadata (which is preferred)
-            IvyArtifactName metaDataArtifact =
-                    new DefaultIvyArtifactName(module.getName(), "module", "module");
+            IvyArtifactName metaDataArtifact = new DefaultIvyArtifactName(module.getName(), "module", "module");
             versionLister.listVersions(module, metaDataArtifact, ivyPatterns, result);
         }
     }

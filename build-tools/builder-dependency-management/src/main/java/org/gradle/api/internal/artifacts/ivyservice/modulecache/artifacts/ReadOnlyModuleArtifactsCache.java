@@ -15,18 +15,17 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.modulecache.artifacts;
 
-import com.google.common.hash.HashCode;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ModuleComponentRepository;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
+import com.google.common.hash.HashCode;
 import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import java.util.Collection;
 
 public class ReadOnlyModuleArtifactsCache extends DefaultModuleArtifactsCache {
-    public ReadOnlyModuleArtifactsCache(BuildCommencedTimeProvider timeProvider,
-                                        ArtifactCacheLockingManager artifactCacheLockingManager) {
+    public ReadOnlyModuleArtifactsCache(BuildCommencedTimeProvider timeProvider, ArtifactCacheLockingManager artifactCacheLockingManager) {
         super(timeProvider, artifactCacheLockingManager);
     }
 
@@ -36,17 +35,12 @@ public class ReadOnlyModuleArtifactsCache extends DefaultModuleArtifactsCache {
     }
 
     @Override
-    public CachedArtifacts cacheArtifacts(ModuleComponentRepository repository,
-                                          ComponentIdentifier componentId,
-                                          String context,
-                                          HashCode descriptorHash,
-                                          Collection<? extends ComponentArtifactMetadata> artifacts) {
+    public CachedArtifacts cacheArtifacts(ModuleComponentRepository repository, ComponentIdentifier componentId, String context, HashCode descriptorHash, Collection<? extends ComponentArtifactMetadata> artifacts) {
         return operationShouldNotHaveBeenCalled();
     }
 
     private static <T> T operationShouldNotHaveBeenCalled() {
-        throw new UnsupportedOperationException(
-                "A write operation shouldn't have been called in a read-only cache");
+        throw new UnsupportedOperationException("A write operation shouldn't have been called in a read-only cache");
     }
 
 }

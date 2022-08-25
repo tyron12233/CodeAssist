@@ -23,12 +23,10 @@ import org.gradle.api.artifacts.ResolvedConfiguration;
 import org.gradle.api.artifacts.ResolvedDependency;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.specs.Specs;
-import org.gradle.util.Predicates;
 
 import java.io.File;
 import java.util.Collection;
 import java.util.Set;
-import java.util.function.Predicate;
 
 public class DefaultResolvedConfiguration implements ResolvedConfiguration {
     private final DefaultLenientConfiguration configuration;
@@ -54,11 +52,11 @@ public class DefaultResolvedConfiguration implements ResolvedConfiguration {
 
     @Override
     public Set<File> getFiles() throws ResolveException {
-        return getFiles(Predicates.satisfyAll());
+        return getFiles(Specs.satisfyAll());
     }
 
     @Override
-    public Set<File> getFiles(final Predicate<? super Dependency> dependencySpec) throws ResolveException {
+    public Set<File> getFiles(final Spec<? super Dependency> dependencySpec) throws ResolveException {
         ResolvedFilesCollectingVisitor visitor = new ResolvedFilesCollectingVisitor();
         configuration.select(dependencySpec).visitArtifacts(visitor, false);
         Collection<Throwable> failures = visitor.getFailures();
@@ -75,7 +73,7 @@ public class DefaultResolvedConfiguration implements ResolvedConfiguration {
     }
 
     @Override
-    public Set<ResolvedDependency> getFirstLevelModuleDependencies(Predicate<? super Dependency> dependencySpec) throws ResolveException {
+    public Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) throws ResolveException {
         rethrowFailure();
         return configuration.getFirstLevelModuleDependencies(dependencySpec);
     }

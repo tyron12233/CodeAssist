@@ -49,10 +49,8 @@ public class ComponentIdentifierParserFactory implements Factory<NotationParser<
             @MapKey("version") String version) {
 
             return DefaultModuleComponentIdentifier.newId(
-                DefaultModuleIdentifier.newId(ModuleNotationValidation.validate(group.trim()),
-                        ModuleNotationValidation
-                        .validate(name.trim())),
-                ModuleNotationValidation.validate(version.trim())
+                DefaultModuleIdentifier.newId(validate(group.trim()), validate(name.trim())),
+                validate(version.trim())
             );
         }
     }
@@ -70,10 +68,8 @@ public class ComponentIdentifierParserFactory implements Factory<NotationParser<
                 throw new InvalidUserDataException("Invalid module component notation: " + notation + " : must be a valid 3 part identifier, eg.: org.gradle:gradle:1.0");
             }
             return DefaultModuleComponentIdentifier.newId(
-                DefaultModuleIdentifier.newId(
-                        ModuleNotationValidation.validate(parts[0].trim(), notation), ModuleNotationValidation
-                                .validate(parts[1].trim(), notation)),
-                ModuleNotationValidation.validate(parts[2].trim(), notation)
+                DefaultModuleIdentifier.newId(validate(parts[0].trim(), notation), validate(parts[1].trim(), notation)),
+                validate(parts[2].trim(), notation)
             );
         }
     }

@@ -15,9 +15,9 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.modulecache.artifacts;
 
-import com.google.common.hash.HashCode;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
 import org.gradle.internal.file.FileAccessTracker;
+import com.google.common.hash.HashCode;
 import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import java.io.File;
@@ -25,26 +25,17 @@ import java.nio.file.Path;
 import java.util.List;
 
 public class ReadOnlyModuleArtifactCache extends DefaultModuleArtifactCache {
-    public ReadOnlyModuleArtifactCache(String persistentCacheFile,
-                                       BuildCommencedTimeProvider timeProvider,
-                                       ArtifactCacheLockingManager artifactCacheLockingManager,
-                                       FileAccessTracker fileAccessTracker,
-                                       Path commonRootPath) {
-        super(persistentCacheFile, timeProvider, artifactCacheLockingManager, fileAccessTracker,
-                commonRootPath);
+    public ReadOnlyModuleArtifactCache(String persistentCacheFile, BuildCommencedTimeProvider timeProvider, ArtifactCacheLockingManager artifactCacheLockingManager, FileAccessTracker fileAccessTracker, Path commonRootPath) {
+        super(persistentCacheFile, timeProvider, artifactCacheLockingManager, fileAccessTracker, commonRootPath);
     }
 
     @Override
-    public void store(ArtifactAtRepositoryKey key,
-                      File artifactFile,
-                      HashCode moduleDescriptorHash) {
+    public void store(ArtifactAtRepositoryKey key, File artifactFile, HashCode moduleDescriptorHash) {
         operationShouldNotHaveBeenCalled();
     }
 
     @Override
-    public void storeMissing(ArtifactAtRepositoryKey key,
-                             List<String> attemptedLocations,
-                             HashCode descriptorHash) {
+    public void storeMissing(ArtifactAtRepositoryKey key, List<String> attemptedLocations, HashCode descriptorHash) {
         operationShouldNotHaveBeenCalled();
     }
 
@@ -55,13 +46,11 @@ public class ReadOnlyModuleArtifactCache extends DefaultModuleArtifactCache {
 
     @Override
     public void clear(ArtifactAtRepositoryKey key) {
-        // clear is actually called from org.gradle.internal.resource.cached
-        // .AbstractCachedIndex.lookup which
+        // clear is actually called from org.gradle.internal.resource.cached.AbstractCachedIndex.lookup which
         // is a read operation, in case of missing entry, so we can't fail here, but should be a no-op only
     }
 
     private static void operationShouldNotHaveBeenCalled() {
-        throw new UnsupportedOperationException(
-                "A write operation shouldn't have been called in a read-only cache");
+        throw new UnsupportedOperationException("A write operation shouldn't have been called in a read-only cache");
     }
 }

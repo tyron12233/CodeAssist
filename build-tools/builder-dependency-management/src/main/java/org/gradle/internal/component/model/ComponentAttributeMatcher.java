@@ -130,10 +130,8 @@ public class ComponentAttributeMatcher {
                 return CachedQuery.select(index, candidates);
             }
         }
-
-
         List<T> matches = new MultipleCandidateMatcher<T>(schema, candidates, requestedAttributes, explanationBuilder).getMatches();
-            if (query != null) {
+        if (query != null) {
             LOGGER.debug("Selected matches {} from candidates {} for {}", matches, candidates, requested);
             cacheMatchingResult(candidates, query, matches);
         }

@@ -15,8 +15,8 @@
  */
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
-import com.google.common.hash.Hasher;
 import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
+import com.google.common.hash.Hasher;
 
 import java.nio.charset.StandardCharsets;
 

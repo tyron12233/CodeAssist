@@ -16,7 +16,6 @@
 package org.gradle.api.internal.artifacts.verification.verifier;
 
 import org.gradle.api.internal.artifacts.verification.model.ChecksumKind;
-
 import org.gradle.internal.logging.text.TreeFormatter;
 
 import java.io.File;

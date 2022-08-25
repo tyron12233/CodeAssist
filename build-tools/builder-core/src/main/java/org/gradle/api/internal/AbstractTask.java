@@ -242,10 +242,11 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return Cast.uncheckedNonnullCast(observableActionList);
     }
 
+    @Internal
     @Override
     public List<InputChangesAwareTaskAction> getTaskActions() {
         if (actions == null) {
-            actions = new ArrayList<InputChangesAwareTaskAction>(3);
+            actions = new ArrayList<>(3);
         }
         return actions;
     }
@@ -1020,6 +1021,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
 //        });
 //    }
 
+    @Internal
     public Set<Provider<? extends BuildService<?>>> getRequiredServices() {
         if (requiredServices == null) {
             return Collections.emptySet();

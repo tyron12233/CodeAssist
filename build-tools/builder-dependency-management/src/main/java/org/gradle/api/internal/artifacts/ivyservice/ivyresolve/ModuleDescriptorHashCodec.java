@@ -15,8 +15,8 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import com.google.common.hash.HashCode;
 import org.gradle.internal.component.model.PersistentModuleSource;
+import com.google.common.hash.HashCode;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
 

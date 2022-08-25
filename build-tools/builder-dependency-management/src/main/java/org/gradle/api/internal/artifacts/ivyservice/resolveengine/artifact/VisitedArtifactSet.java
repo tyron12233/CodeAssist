@@ -19,8 +19,7 @@ package org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
-
-import java.util.function.Predicate;
+import org.gradle.api.specs.Spec;
 
 /**
  * A container of the artifacts visited during graph traversal.
@@ -36,5 +35,5 @@ public interface VisitedArtifactSet {
      * @param componentSpec Select only those artifacts source from components matching the given spec.
      * @param allowNoMatchingVariant When true, ignore those components which have no matching variants. When false, fail when any component has no matching variant.
      */
-    SelectedArtifactSet select(Predicate<? super Dependency> dependencySpec, AttributeContainerInternal requestedAttributes, Predicate<? super ComponentIdentifier> componentSpec, boolean allowNoMatchingVariant);
+    SelectedArtifactSet select(Spec<? super Dependency> dependencySpec, AttributeContainerInternal requestedAttributes, Spec<? super ComponentIdentifier> componentSpec, boolean allowNoMatchingVariant);
 }

@@ -20,10 +20,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.gradle.api.internal.catalog.AliasNormalizer.normalize;
+
 public class DefaultVersionCatalog implements Serializable {
     private final String name;
     private final String description;
-    private final Map<String, DependencyModel> aliasToDependency;
+    private final Map<String, DependencyModel> libraries;
     private final Map<String, BundleModel> bundles;
     private final Map<String, VersionModel> versions;
     private final Map<String, PluginModel> plugins;
@@ -32,13 +34,13 @@ public class DefaultVersionCatalog implements Serializable {
 
     public DefaultVersionCatalog(String name,
                                  String description,
-                                 Map<String, DependencyModel> aliasToDependency,
+                                 Map<String, DependencyModel> libraries,
                                  Map<String, BundleModel> bundles,
                                  Map<String, VersionModel> versions,
                                  Map<String, PluginModel> plugins) {
         this.name = name;
         this.description = description;
-        this.aliasToDependency = aliasToDependency;
+        this.libraries = libraries;
         this.bundles = bundles;
         this.versions = versions;
         this.plugins = plugins;
@@ -54,8 +56,8 @@ public class DefaultVersionCatalog implements Serializable {
         return description;
     }
 
-    public List<String> getDependencyAliases() {
-        return aliasToDependency.keySet()
+    public List<String> getLibraryAliases() {
+        return libraries.keySet()
             .stream()
             .sorted()
             .collect(Collectors.toList());
@@ -69,7 +71,7 @@ public class DefaultVersionCatalog implements Serializable {
     }
 
     public DependencyModel getDependencyData(String alias) {
-        return aliasToDependency.get(AliasNormalizer.normalize(alias));
+        return libraries.get(normalize(alias));
     }
 
     public List<String> getVersionAliases() {
@@ -87,15 +89,15 @@ public class DefaultVersionCatalog implements Serializable {
     }
 
     public BundleModel getBundle(String name) {
-        return bundles.get(AliasNormalizer.normalize(name));
+        return bundles.get(normalize(name));
     }
 
     public VersionModel getVersion(String name) {
-        return versions.get(AliasNormalizer.normalize(name));
+        return versions.get(normalize(name));
     }
 
     public PluginModel getPlugin(String name) {
-        return plugins.get(AliasNormalizer.normalize(name));
+        return plugins.get(normalize(name));
     }
 
     @Override
@@ -109,7 +111,7 @@ public class DefaultVersionCatalog implements Serializable {
 
         DefaultVersionCatalog that = (DefaultVersionCatalog) o;
 
-        if (!aliasToDependency.equals(that.aliasToDependency)) {
+        if (!libraries.equals(that.libraries)) {
             return false;
         }
         if (!bundles.equals(that.bundles)) {
@@ -127,7 +129,7 @@ public class DefaultVersionCatalog implements Serializable {
     }
 
     private int doComputeHashCode() {
-        int result = aliasToDependency.hashCode();
+        int result = libraries.hashCode();
         result = 31 * result + bundles.hashCode();
         result = 31 * result + versions.hashCode();
         result = 31 * result + plugins.hashCode();
@@ -135,6 +137,6 @@ public class DefaultVersionCatalog implements Serializable {
     }
 
     public boolean isNotEmpty() {
-        return !(aliasToDependency.isEmpty() && bundles.isEmpty() && versions.isEmpty() && plugins.isEmpty());
+        return !(libraries.isEmpty() && bundles.isEmpty() && versions.isEmpty() && plugins.isEmpty());
     }
 }

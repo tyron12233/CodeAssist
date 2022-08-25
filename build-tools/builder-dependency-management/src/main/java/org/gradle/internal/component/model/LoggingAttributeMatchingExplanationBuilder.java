@@ -32,7 +32,7 @@ public class LoggingAttributeMatchingExplanationBuilder implements AttributeMatc
         if (LOGGER.isDebugEnabled()) {
             return INSTANCE;
         }
-        return NO_OP;
+        return AttributeMatchingExplanationBuilder.NO_OP;
     }
 
     @Override

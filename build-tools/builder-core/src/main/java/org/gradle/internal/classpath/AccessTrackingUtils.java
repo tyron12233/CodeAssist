@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.gradle.internal.classpath;
 
 import com.google.common.collect.Maps;
@@ -28,10 +44,10 @@ class AccessTrackingUtils {
      */
     @Nullable
     public static Map.Entry<String, String> tryConvertingToTrackableEntry(Object o) {
-        if (!(o instanceof Map.Entry)) {
+        Map.Entry<?, ?> entry = tryConvertingToEntry(o);
+        if (entry == null) {
             return null;
         }
-        Map.Entry<?, ?> entry = (Map.Entry<?, ?>) o;
         // Return a copy to make sure that the results of getKey() and getValue() do not change.
         Object key = entry.getKey();
         Object value = entry.getValue();
@@ -41,4 +57,11 @@ class AccessTrackingUtils {
         return null;
     }
 
+    @Nullable
+    public static Map.Entry<?, ?> tryConvertingToEntry(Object o) {
+        if (!(o instanceof Map.Entry)) {
+            return null;
+        }
+        return (Map.Entry<?, ?>) o;
+    }
 }

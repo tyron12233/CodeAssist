@@ -12,6 +12,7 @@ import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.build.IncludedBuildFactory;
 import org.gradle.internal.service.scopes.AbstractPluginServiceRegistry;
+import org.gradle.internal.snapshot.impl.ValueSnapshotterSerializerRegistry;
 import org.gradle.internal.typeconversion.NotationParser;
 
 public class CompositeBuildServices extends AbstractPluginServiceRegistry {
@@ -27,9 +28,9 @@ public class CompositeBuildServices extends AbstractPluginServiceRegistry {
     }
 
     private static class CompositeBuildSessionScopeServices {
-//        public ValueSnapshotterSerializerRegistry createCompositeBuildsValueSnapshotterSerializerRegistry() {
-//            return new CompositeBuildsValueSnapshotterSerializerRegistry();
-//        }
+        public ValueSnapshotterSerializerRegistry createCompositeBuildsValueSnapshotterSerializerRegistry() {
+            return new CompositeBuildsValueSnapshotterSerializerRegistry();
+        }
     }
 
     private static class CompositeBuildTreeScopeServices {

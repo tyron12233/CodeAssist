@@ -18,9 +18,8 @@ package org.gradle.api.internal.artifacts.repositories.maven;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.gradle.api.internal.artifacts.repositories.resolver.ResourcePattern;
-
 import org.gradle.api.artifacts.ModuleIdentifier;
+import org.gradle.api.internal.artifacts.repositories.resolver.ResourcePattern;
 import org.gradle.api.resources.MissingResourceException;
 import org.gradle.internal.resolve.result.BuildableModuleVersionListingResolveResult;
 import org.gradle.internal.resource.ExternalResourceName;

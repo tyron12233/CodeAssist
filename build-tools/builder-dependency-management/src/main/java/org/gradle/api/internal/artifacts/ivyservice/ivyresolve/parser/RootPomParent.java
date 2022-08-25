@@ -16,6 +16,7 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser;
 
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.PomReader.PomDependencyData;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.data.MavenDependencyKey;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.data.PomDependencyMgt;
 
@@ -33,7 +34,7 @@ public class RootPomParent implements PomParent {
     }
 
     @Override
-    public Map<MavenDependencyKey, PomReader.PomDependencyData> getDependencies() {
+    public Map<MavenDependencyKey, PomDependencyData> getDependencies() {
         return dependencies;
     }
 

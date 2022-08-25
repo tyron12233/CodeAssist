@@ -16,9 +16,8 @@
 
 package org.gradle.api.internal.artifacts.configurations;
 
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor;
-
 import org.gradle.api.artifacts.ArtifactCollection;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor;
 
 public interface ArtifactCollectionInternal extends ArtifactCollection {
     void visitArtifacts(ArtifactVisitor visitor);

@@ -18,16 +18,15 @@ package org.gradle.api.internal.artifacts.dsl;
 
 import org.gradle.api.artifacts.ComponentMetadataContext;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
+import org.gradle.api.specs.Spec;
 import org.gradle.internal.action.ConfigurableRule;
-
-import java.util.function.Predicate;
 
 class SpecConfigurableRule {
 
     private final ConfigurableRule<ComponentMetadataContext> configurableRule;
-    private final Predicate<ModuleVersionIdentifier> spec;
+    private final Spec<ModuleVersionIdentifier> spec;
 
-    SpecConfigurableRule(ConfigurableRule<ComponentMetadataContext> configurableRule, Predicate<ModuleVersionIdentifier> spec) {
+    SpecConfigurableRule(ConfigurableRule<ComponentMetadataContext> configurableRule, Spec<ModuleVersionIdentifier> spec) {
 
         this.configurableRule = configurableRule;
         this.spec = spec;
@@ -37,7 +36,7 @@ class SpecConfigurableRule {
         return configurableRule;
     }
 
-    public Predicate<ModuleVersionIdentifier> getSpec() {
+    public Spec<ModuleVersionIdentifier> getSpec() {
         return spec;
     }
 }

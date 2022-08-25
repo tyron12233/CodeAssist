@@ -182,11 +182,11 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
         private final CalculatedValueContainer<TransformationSubject, TransformPreviousArtifacts> result;
 
         public ChainedTransformationNode(
-                TransformationStep transformationStep,
-                TransformationNode previousTransformationNode,
-                TransformUpstreamDependencies upstreamDependencies,
-                BuildOperationExecutor buildOperationExecutor,
-                CalculatedValueContainerFactory calculatedValueContainerFactory
+            TransformationStep transformationStep,
+            TransformationNode previousTransformationNode,
+            TransformUpstreamDependencies upstreamDependencies,
+            BuildOperationExecutor buildOperationExecutor,
+            CalculatedValueContainerFactory calculatedValueContainerFactory
         ) {
             super(transformationStep, previousTransformationNode.artifact, upstreamDependencies);
             this.previousTransformationNode = previousTransformationNode;
@@ -229,14 +229,14 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
                     @Override
                     protected TransformationSubject transform() {
                         return previousTransformationNode.getTransformedSubject().flatMap(transformedSubject ->
-                                transformationStep.createInvocation(transformedSubject, upstreamDependencies, context).invoke()).get();
+                            transformationStep.createInvocation(transformedSubject, upstreamDependencies, context).invoke()).get();
                     }
 
                     @Override
                     protected String describeSubject() {
                         return previousTransformationNode.getTransformedSubject()
-                                .map(Describable::getDisplayName)
-                                .getOrMapFailure(Throwable::getMessage);
+                            .map(Describable::getDisplayName)
+                            .getOrMapFailure(Throwable::getMessage);
                     }
                 });
             }
@@ -254,9 +254,9 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
             String subjectName = describeSubject();
             String basicName = subjectName + " with " + transformerName;
             return BuildOperationDescriptor.displayName("Transform " + basicName)
-                    .progressDisplayName(TRANSFORMING_PROGRESS_PREFIX + basicName)
-                    .metadata(BuildOperationCategory.TRANSFORM)
-                    .details(new ExecuteScheduledTransformationStepBuildOperationDetails(TransformationNode.this, transformerName, subjectName));
+                .progressDisplayName(TRANSFORMING_PROGRESS_PREFIX + basicName)
+                .metadata(BuildOperationCategory.TRANSFORM)
+                .details(new ExecuteScheduledTransformationStepBuildOperationDetails(TransformationNode.this, transformerName, subjectName));
         }
 
         protected abstract String describeSubject();

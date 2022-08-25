@@ -16,9 +16,8 @@
 
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.internal.component.external.model.maven.MavenModuleResolveMetadata;
-
 import org.gradle.api.artifacts.maven.PomModuleDescriptor;
+import org.gradle.internal.component.external.model.maven.MavenModuleResolveMetadata;
 
 public class DefaultPomModuleDescriptor implements PomModuleDescriptor {
 

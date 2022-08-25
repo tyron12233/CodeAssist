@@ -15,9 +15,8 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy;
 
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.CapabilitiesConflictHandler;
-
 import org.gradle.api.artifacts.CapabilitiesResolution;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.CapabilitiesConflictHandler;
 
 public interface CapabilitiesResolutionInternal extends CapabilitiesResolution {
     void apply(CapabilitiesConflictHandler.ResolutionDetails details);

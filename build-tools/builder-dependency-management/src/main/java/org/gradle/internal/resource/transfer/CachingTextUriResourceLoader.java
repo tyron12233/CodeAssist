@@ -17,7 +17,6 @@
 package org.gradle.internal.resource.transfer;
 
 import org.gradle.api.internal.artifacts.repositories.resolver.ExternalResourceAccessor;
-
 import org.gradle.internal.file.RelativeFilePathResolver;
 import org.gradle.internal.resource.DownloadedUriTextResource;
 import org.gradle.internal.resource.ResourceExceptions;

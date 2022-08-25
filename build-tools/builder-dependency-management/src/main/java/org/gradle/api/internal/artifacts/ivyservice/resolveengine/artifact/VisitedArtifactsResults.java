@@ -18,12 +18,11 @@ package org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact;
 
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.transform.VariantSelector;
-
-import java.util.function.Predicate;
+import org.gradle.api.specs.Spec;
 
 public interface VisitedArtifactsResults {
     /**
      * Selects the artifacts for the matching variant of each node seen during traversal. The implementation should attempt to select artifacts eagerly, but may be lazy where the selection cannot happen until the results are queried.
      */
-    SelectedArtifactResults select(Predicate<? super ComponentIdentifier> componentFilter, VariantSelector selector);
+    SelectedArtifactResults select(Spec<? super ComponentIdentifier> componentFilter, VariantSelector selector);
 }

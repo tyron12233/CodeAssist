@@ -16,19 +16,7 @@
 package org.gradle.api.internal.artifacts.dsl;
 
 import com.google.common.collect.Interner;
-import org.gradle.api.internal.artifacts.dsl.dependencies.PlatformSupport;
-import org.gradle.api.internal.artifacts.repositories.resolver.DependencyConstraintMetadataImpl;
-import org.gradle.api.internal.artifacts.repositories.resolver.DirectDependencyMetadataImpl;
-import org.gradle.internal.component.external.model.VariantDerivationStrategy;
-import org.gradle.internal.rules.DefaultRuleActionAdapter;
-import org.gradle.internal.rules.DefaultRuleActionValidator;
-import org.gradle.internal.rules.RuleAction;
-import org.gradle.internal.rules.RuleActionAdapter;
-import org.gradle.internal.rules.RuleActionValidator;
-import org.gradle.internal.rules.SpecRuleAction;
-
 import groovy.lang.Closure;
-
 import org.gradle.api.Action;
 import org.gradle.api.ActionConfiguration;
 import org.gradle.api.InvalidUserCodeException;
@@ -45,7 +33,9 @@ import org.gradle.api.internal.artifacts.ComponentMetadataProcessor;
 import org.gradle.api.internal.artifacts.ComponentMetadataProcessorFactory;
 import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
 import org.gradle.api.internal.artifacts.MetadataResolutionContext;
-
+import org.gradle.api.internal.artifacts.dsl.dependencies.PlatformSupport;
+import org.gradle.api.internal.artifacts.repositories.resolver.DependencyConstraintMetadataImpl;
+import org.gradle.api.internal.artifacts.repositories.resolver.DirectDependencyMetadataImpl;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.api.internal.notations.ComponentIdentifierParserFactory;
 import org.gradle.api.internal.notations.DependencyMetadataNotationParser;
@@ -55,18 +45,22 @@ import org.gradle.api.specs.Specs;
 import org.gradle.internal.DisplayName;
 import org.gradle.internal.action.ConfigurableRule;
 import org.gradle.internal.action.DefaultConfigurableRule;
+import org.gradle.internal.component.external.model.VariantDerivationStrategy;
 import org.gradle.internal.isolation.IsolatableFactory;
 import org.gradle.internal.management.DependencyResolutionManagementInternal;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.resolve.caching.ComponentMetadataRuleExecutor;
-
+import org.gradle.internal.rules.DefaultRuleActionAdapter;
+import org.gradle.internal.rules.DefaultRuleActionValidator;
+import org.gradle.internal.rules.RuleAction;
+import org.gradle.internal.rules.RuleActionAdapter;
+import org.gradle.internal.rules.RuleActionValidator;
+import org.gradle.internal.rules.SpecRuleAction;
 import org.gradle.internal.typeconversion.NotationParser;
 import org.gradle.internal.typeconversion.NotationParserBuilder;
 import org.gradle.internal.typeconversion.UnsupportedNotationException;
-import org.gradle.util.Predicates;
 
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public class DefaultComponentMetadataHandler implements ComponentMetadataHandler, ComponentMetadataHandlerInternal {
@@ -152,7 +146,7 @@ public class DefaultComponentMetadataHandler implements ComponentMetadataHandler
     }
 
     private <U> SpecRuleAction<? super U> createAllSpecRuleAction(RuleAction<? super U> ruleAction) {
-        return new SpecRuleAction<>(ruleAction, Predicates.satisfyAll());
+        return new SpecRuleAction<>(ruleAction, Specs.satisfyAll());
     }
 
     private SpecRuleAction<? super ComponentMetadataDetails> createSpecRuleActionForModule(Object id, RuleAction<? super ComponentMetadataDetails> ruleAction) {
@@ -164,7 +158,7 @@ public class DefaultComponentMetadataHandler implements ComponentMetadataHandler
             throw new InvalidUserCodeException(String.format(INVALID_SPEC_ERROR, id == null ? "null" : id.toString()), e);
         }
 
-        Predicate<ComponentMetadataDetails> spec = new ComponentMetadataDetailsMatchingSpec(moduleIdentifier);
+        Spec<ComponentMetadataDetails> spec = new ComponentMetadataDetailsMatchingSpec(moduleIdentifier);
         return new SpecRuleAction<>(ruleAction, spec);
     }
 
@@ -227,12 +221,12 @@ public class DefaultComponentMetadataHandler implements ComponentMetadataHandler
             throw new InvalidUserCodeException(String.format(INVALID_SPEC_ERROR, id == null ? "null" : id.toString()), e);
         }
 
-        Predicate<ModuleVersionIdentifier> spec = new ModuleVersionIdentifierSpec(moduleIdentifier);
+        Spec<ModuleVersionIdentifier> spec = new ModuleVersionIdentifierSpec(moduleIdentifier);
         return new SpecConfigurableRule(instantiatingAction, spec);
     }
 
     private SpecConfigurableRule createAllSpecConfigurableRule(ConfigurableRule<ComponentMetadataContext> instantiatingAction) {
-        return new SpecConfigurableRule(instantiatingAction, Predicates.satisfyAll());
+        return new SpecConfigurableRule(instantiatingAction, Specs.satisfyAll());
     }
 
     @Override
@@ -278,7 +272,7 @@ public class DefaultComponentMetadataHandler implements ComponentMetadataHandler
         return resolutionContext -> actualHandler.get().createComponentMetadataProcessor(resolutionContext);
     }
 
-    static class ComponentMetadataDetailsMatchingSpec implements Predicate<ComponentMetadataDetails> {
+    static class ComponentMetadataDetailsMatchingSpec implements Spec<ComponentMetadataDetails> {
         private final ModuleIdentifier target;
 
         ComponentMetadataDetailsMatchingSpec(ModuleIdentifier target) {
@@ -286,13 +280,13 @@ public class DefaultComponentMetadataHandler implements ComponentMetadataHandler
         }
 
         @Override
-        public boolean test(ComponentMetadataDetails componentMetadataDetails) {
+        public boolean isSatisfiedBy(ComponentMetadataDetails componentMetadataDetails) {
             ModuleVersionIdentifier identifier = componentMetadataDetails.getId();
             return identifier.getGroup().equals(target.getGroup()) && identifier.getName().equals(target.getName());
         }
     }
 
-    static class ModuleVersionIdentifierSpec implements Predicate<ModuleVersionIdentifier> {
+    static class ModuleVersionIdentifierSpec implements Spec<ModuleVersionIdentifier> {
         private final ModuleIdentifier target;
 
         ModuleVersionIdentifierSpec(ModuleIdentifier target) {
@@ -300,7 +294,7 @@ public class DefaultComponentMetadataHandler implements ComponentMetadataHandler
         }
 
         @Override
-        public boolean test(ModuleVersionIdentifier identifier) {
+        public boolean isSatisfiedBy(ModuleVersionIdentifier identifier) {
             return identifier.getGroup().equals(target.getGroup()) && identifier.getName().equals(target.getName());
         }
     }

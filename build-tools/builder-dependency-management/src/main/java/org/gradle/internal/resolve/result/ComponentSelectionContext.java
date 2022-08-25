@@ -16,15 +16,14 @@
 
 package org.gradle.internal.resolve.result;
 
+import org.gradle.api.Action;
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
 import org.gradle.api.internal.artifacts.repositories.ArtifactResolutionDetails;
+import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.internal.resolve.ModuleVersionResolveException;
 import org.gradle.internal.resolve.RejectedByAttributesVersion;
 import org.gradle.internal.resolve.RejectedByRuleVersion;
-
-import org.gradle.api.Action;
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
-import org.gradle.api.internal.attributes.ImmutableAttributes;
 
 import javax.annotation.Nullable;
 

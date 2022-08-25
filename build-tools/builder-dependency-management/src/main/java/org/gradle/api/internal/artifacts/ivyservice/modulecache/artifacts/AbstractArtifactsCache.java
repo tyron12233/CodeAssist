@@ -16,10 +16,10 @@
 package org.gradle.api.internal.artifacts.ivyservice.modulecache.artifacts;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.hash.HashCode;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ModuleComponentRepository;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
+import com.google.common.hash.HashCode;
 import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import java.util.Collection;

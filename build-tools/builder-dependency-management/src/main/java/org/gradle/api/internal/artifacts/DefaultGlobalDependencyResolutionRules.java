@@ -16,10 +16,9 @@
 
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRules;
-
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.DependencySubstitution;
+import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRules;
 import org.gradle.internal.Actions;
 import org.gradle.util.internal.CollectionUtils;
 

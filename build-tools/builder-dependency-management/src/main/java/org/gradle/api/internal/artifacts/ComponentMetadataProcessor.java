@@ -15,9 +15,8 @@
  */
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
-
 import org.gradle.api.artifacts.ComponentMetadata;
+import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
 
 public interface ComponentMetadataProcessor {
     ComponentMetadataProcessor NO_OP = new ComponentMetadataProcessor() {

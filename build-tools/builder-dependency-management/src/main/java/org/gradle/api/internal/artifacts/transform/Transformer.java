@@ -17,7 +17,7 @@
 package org.gradle.api.internal.artifacts.transform;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.hash.HashCode;
+
 import org.gradle.api.Describable;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
@@ -26,6 +26,7 @@ import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.FileNormalizer;
 import org.gradle.internal.fingerprint.DirectorySensitivity;
 import org.gradle.internal.fingerprint.LineEndingSensitivity;
+import com.google.common.hash.HashCode;
 import org.gradle.work.InputChanges;
 
 import javax.annotation.Nullable;

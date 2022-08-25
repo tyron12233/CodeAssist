@@ -16,15 +16,14 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import org.gradle.internal.rules.SpecRuleAction;
-
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.artifacts.ComponentMetadata;
 import org.gradle.api.artifacts.ComponentSelection;
 import org.gradle.api.artifacts.ivy.IvyModuleDescriptor;
 import org.gradle.api.internal.artifacts.ComponentSelectionInternal;
-import org.gradle.util.Predicates;
-
+import org.gradle.api.specs.Spec;
+import org.gradle.api.specs.Specs;
+import org.gradle.internal.rules.SpecRuleAction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,13 +31,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Predicate;
 
 public class ComponentSelectionRulesProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(ComponentSelectionRulesProcessor.class);
 
-    private final Predicate<SpecRuleAction<? super ComponentSelection>> withNoInputs = element -> element.getAction().getInputTypes().isEmpty();
-    private final Predicate<SpecRuleAction<? super ComponentSelection>> withInputs = Predicates.negate(withNoInputs);
+    private final Spec<SpecRuleAction<? super ComponentSelection>> withNoInputs = element -> element.getAction().getInputTypes().isEmpty();
+    private final Spec<SpecRuleAction<? super ComponentSelection>> withInputs = Specs.negate(withNoInputs);
 
     void apply(ComponentSelectionInternal selection, Collection<SpecRuleAction<? super ComponentSelection>> specRuleActions, MetadataProvider metadataProvider) {
         if (processRules(specRuleActions, withNoInputs, selection, metadataProvider)) {
@@ -46,9 +44,9 @@ public class ComponentSelectionRulesProcessor {
         }
     }
 
-    private boolean processRules(Collection<SpecRuleAction<? super ComponentSelection>> specRuleActions, Predicate<SpecRuleAction<? super ComponentSelection>> filter, ComponentSelectionInternal selection, MetadataProvider metadataProvider) {
+    private boolean processRules(Collection<SpecRuleAction<? super ComponentSelection>> specRuleActions, Spec<SpecRuleAction<? super ComponentSelection>> filter, ComponentSelectionInternal selection, MetadataProvider metadataProvider) {
         for (SpecRuleAction<? super ComponentSelection> rule : specRuleActions) {
-            if (filter.test(rule)) {
+            if (filter.isSatisfiedBy(rule)) {
                 processRule(rule, selection, metadataProvider);
 
                 if (selection.isRejected()) {
@@ -61,7 +59,7 @@ public class ComponentSelectionRulesProcessor {
     }
 
     private void processRule(SpecRuleAction<? super ComponentSelection> rule, ComponentSelection selection, MetadataProvider metadataProvider) {
-        if (!rule.getSpec().test(selection)) {
+        if (!rule.getSpec().isSatisfiedBy(selection)) {
             return;
         }
 

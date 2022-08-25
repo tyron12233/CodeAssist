@@ -16,18 +16,16 @@
 package org.gradle.api.internal.artifacts.repositories.metadata;
 
 import com.google.common.collect.ImmutableMap;
-import org.gradle.api.internal.artifacts.repositories.resolver.MavenResolver;
-import org.gradle.internal.component.external.model.maven.DefaultMutableMavenModuleResolveMetadata;
-import org.gradle.internal.component.external.model.maven.MavenDependencyDescriptor;
-import org.gradle.internal.component.external.model.maven.MutableMavenModuleResolveMetadata;
-
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
-
+import org.gradle.api.internal.artifacts.repositories.resolver.MavenResolver;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.api.internal.model.NamedObjectInstantiator;
 import org.gradle.internal.component.external.model.PreferJavaRuntimeVariant;
+import org.gradle.internal.component.external.model.maven.DefaultMutableMavenModuleResolveMetadata;
+import org.gradle.internal.component.external.model.maven.MavenDependencyDescriptor;
+import org.gradle.internal.component.external.model.maven.MutableMavenModuleResolveMetadata;
 
 import java.util.Collections;
 import java.util.List;

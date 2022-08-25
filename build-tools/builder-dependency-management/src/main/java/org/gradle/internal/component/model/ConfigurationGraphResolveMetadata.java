@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 the original author or authors.
+ * Copyright 2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,9 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.gradle.internal.component.model;
 
-public interface WrappedComponentResolveMetadata extends ComponentResolveMetadata {
-    // TODO: Remove when we get rid of client module resolve metadata
-    ComponentResolveMetadata unwrap();
+import org.gradle.internal.deprecation.DeprecationMessageBuilder;
+
+import javax.annotation.Nullable;
+import java.util.Set;
+
+/**
+ * Immutable metadata for a configuration of a component instance that is used to perform dependency graph resolution.
+ */
+public interface ConfigurationGraphResolveMetadata extends VariantGraphResolveMetadata {
+    Set<String> getHierarchy();
+
+    boolean isCanBeConsumed();
+
+    boolean isVisible();
+
+    @Nullable
+    DeprecationMessageBuilder.WithDocumentation getConsumptionDeprecation();
 }

@@ -81,7 +81,7 @@ class TomlWriter {
     }
 
     private void writeLibraries(DefaultVersionCatalog model) {
-        List<String> aliases = model.getDependencyAliases();
+        List<String> aliases = model.getLibraryAliases();
         if (aliases.isEmpty()) {
             return;
         }
@@ -94,11 +94,11 @@ class TomlWriter {
             ImmutableVersionConstraint version = data.getVersion();
             StringBuilder sb = new StringBuilder();
             sb.append(normalizeForToml(alias))
-                .append(" = {")
-                .append(keyValuePair("group", group))
-                .append(", ")
-                .append(keyValuePair("name", name))
-                .append(", ");
+                    .append(" = {")
+                    .append(keyValuePair("group", group))
+                    .append(", ")
+                    .append(keyValuePair("name", name))
+                    .append(", ");
             if (versionRef != null) {
                 sb.append(keyValuePair("version.ref", normalizeForToml(versionRef)));
             } else {
@@ -119,9 +119,9 @@ class TomlWriter {
         for (String alias : aliases) {
             List<String> bundle = model.getBundle(alias).getComponents();
             writeLn(normalizeForToml(alias) + " = [" + bundle.stream()
-                .map(TomlWriter::normalizeForToml)
-                .map(TomlWriter::quoted)
-                .collect(Collectors.joining(", ")) + "]");
+                    .map(TomlWriter::normalizeForToml)
+                    .map(TomlWriter::quoted)
+                    .collect(Collectors.joining(", ")) + "]");
         }
         writeLn();
     }
@@ -139,9 +139,9 @@ class TomlWriter {
             ImmutableVersionConstraint version = data.getVersion();
             StringBuilder sb = new StringBuilder();
             sb.append(normalizeForToml(alias))
-                .append(" = {")
-                .append(keyValuePair("id", id))
-                .append(", ");
+                    .append(" = {")
+                    .append(keyValuePair("id", id))
+                    .append(", ");
             if (versionRef != null) {
                 sb.append(keyValuePair("version.ref", normalizeForToml(versionRef)));
             } else {

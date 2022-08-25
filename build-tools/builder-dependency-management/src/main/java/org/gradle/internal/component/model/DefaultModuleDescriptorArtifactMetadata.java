@@ -16,9 +16,8 @@
 
 package org.gradle.internal.component.model;
 
-import org.gradle.internal.component.external.model.DefaultModuleComponentArtifactMetadata;
-
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
+import org.gradle.internal.component.external.model.DefaultModuleComponentArtifactMetadata;
 
 /**
  * Subtype to provide `ModuleDescriptorArtifactMetadata` marker interface.

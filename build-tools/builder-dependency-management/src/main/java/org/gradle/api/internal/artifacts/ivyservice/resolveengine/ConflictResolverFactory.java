@@ -16,10 +16,10 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine;
 
+import org.gradle.api.internal.artifacts.configurations.ConflictResolution;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionComparator;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.builder.ComponentState;
-import org.gradle.api.internal.artifacts.configurations.ConflictResolution;
 
 public class ConflictResolverFactory {
     private final VersionComparator versionComparator;

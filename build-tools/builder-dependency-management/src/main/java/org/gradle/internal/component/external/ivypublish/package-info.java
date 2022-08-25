@@ -19,7 +19,7 @@
  * We first convert a `Configuration` into these types, and then use the
  * {@link org.gradle.internal.component.external.ivypublish.DefaultIvyModuleDescriptorWriter}
  * to generate the Ivy module descriptor.
- * The {@link org.gradle.api.internal.artifacts.ModuleVersionPublisher#publish(IvyModulePublishMetadata)}
+ * The {@link org.gradle.api.internal.artifacts.ModuleVersionPublisher#publish(org.gradle.internal.component.external.ivypublish.IvyModulePublishMetadata)}
  * methods are then used to upload the actual files.
  *
  * Note that this is all slated for replacement by the `ivy-publish` and `maven-publish` plugins.

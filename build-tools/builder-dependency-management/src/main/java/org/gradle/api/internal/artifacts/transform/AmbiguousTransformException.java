@@ -18,17 +18,17 @@ package org.gradle.api.internal.artifacts.transform;
 
 import com.google.common.collect.Lists;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedVariant;
-import org.gradle.internal.component.AmbiguousVariantSelectionException;
-import org.gradle.internal.component.VariantSelectionException;
-
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.internal.Pair;
+import org.gradle.internal.component.VariantSelectionException;
 import org.gradle.internal.logging.text.TreeFormatter;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static org.gradle.internal.component.AmbiguousVariantSelectionException.formatAttributes;
 
 public class AmbiguousTransformException extends VariantSelectionException {
     public AmbiguousTransformException(String producerDisplayName, AttributeContainerInternal requested, List<Pair<ResolvedVariant, ConsumerVariantMatchResult.ConsumerVariant>> candidates) {
@@ -38,7 +38,7 @@ public class AmbiguousTransformException extends VariantSelectionException {
     private static String format(String producerDisplayName, AttributeContainerInternal requested, List<Pair<ResolvedVariant, ConsumerVariantMatchResult.ConsumerVariant>> candidates) {
         TreeFormatter formatter = new TreeFormatter();
         formatter.node("Found multiple transforms that can produce a variant of " + producerDisplayName + " with requested attributes");
-        AmbiguousVariantSelectionException.formatAttributes(formatter, requested);
+        formatAttributes(formatter, requested);
         formatter.node("Found the following transforms");
         Map<ResolvedVariant, List<ConsumerVariantMatchResult.ConsumerVariant>> variantToTransforms = candidates.stream()
             .collect(Collectors.toMap(Pair::getLeft,
@@ -53,12 +53,12 @@ public class AmbiguousTransformException extends VariantSelectionException {
             formatter.node("From '" + entry.getKey().asDescribable().getDisplayName() + "'");
             formatter.startChildren();
             formatter.node("With source attributes");
-            AmbiguousVariantSelectionException.formatAttributes(formatter, entry.getKey().getAttributes());
+            formatAttributes(formatter, entry.getKey().getAttributes());
             formatter.node("Candidate transform(s)");
             formatter.startChildren();
             for (ConsumerVariantMatchResult.ConsumerVariant transform : entry.getValue()) {
                 formatter.node("Transform '" + transform.transformation.getDisplayName() + "' producing attributes:");
-                AmbiguousVariantSelectionException.formatAttributes(formatter, transform.attributes);
+                formatAttributes(formatter, transform.attributes);
             }
             formatter.endChildren();
             formatter.endChildren();

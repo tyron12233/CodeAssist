@@ -19,11 +19,6 @@ package org.gradle.internal.component.local.model;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider;
-import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingState;
-import org.gradle.internal.component.external.model.DefaultModuleComponentSelector;
-import org.gradle.internal.component.external.model.ImmutableCapabilities;
-
 import org.gradle.api.artifacts.DependencyConstraint;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.VersionConstraint;
@@ -32,9 +27,12 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier;
 import org.gradle.api.internal.artifacts.dependencies.DefaultMutableVersionConstraint;
+import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider;
+import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingState;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
-
+import org.gradle.internal.component.external.model.DefaultModuleComponentSelector;
+import org.gradle.internal.component.external.model.ImmutableCapabilities;
 import org.gradle.internal.component.model.DependencyMetadata;
 import org.gradle.internal.component.model.LocalComponentDependencyMetadata;
 import org.gradle.internal.component.model.LocalOriginDependencyMetadata;
@@ -65,15 +63,7 @@ public class RootLocalComponentMetadata extends DefaultLocalComponentMetadata {
         return conf;
     }
 
-    /**
-     * Returns the synthetic dependencies for the root configuration with the supplied name.
-     * Synthetic dependencies are dependencies which are an internal implementation detail of Gradle,
-     * used for example in dependency locking or consistent resolution. They are not "real" dependencies
-     * in the sense that they are not added by users, and they are not always used during resolution
-     * based on which phase of execution we are (task dependencies, execution, ...)
-     * @param configuration the name of the configuration for which to get the synthetic dependencies
-     * @return the synthetic dependencies of the requested configuration
-     */
+    @Override
     public List<? extends DependencyMetadata> getSyntheticDependencies(String configuration) {
         return rootConfigs.get(configuration).getSyntheticDependencies();
     }

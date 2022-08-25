@@ -23,8 +23,10 @@ import org.gradle.api.artifacts.VersionConstraint;
 import org.gradle.api.internal.catalog.AbstractExternalDependencyFactory.BundleFactory;
 import org.gradle.api.internal.catalog.AbstractExternalDependencyFactory.PluginFactory;
 import org.gradle.api.internal.catalog.AbstractExternalDependencyFactory.VersionFactory;
+import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
+import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.plugin.use.PluginDependency;
 
 import javax.inject.Inject;
@@ -38,35 +40,48 @@ public class VersionCatalogView implements VersionCatalog {
     private final DefaultVersionCatalog config;
     private final ProviderFactory providerFactory;
     private final ExternalModuleDependencyFactory dependencyFactory;
+    private final ObjectFactory objects;
 
     @Inject
-    public VersionCatalogView(DefaultVersionCatalog config, ProviderFactory providerFactory) {
+    public VersionCatalogView(DefaultVersionCatalog config, ProviderFactory providerFactory, ObjectFactory objects) {
         this.config = config;
         this.providerFactory = providerFactory;
-        this.dependencyFactory = new DefaultExternalDependencyFactory(config, providerFactory);
+        this.objects = objects;
+        this.dependencyFactory = new DefaultExternalDependencyFactory(config, providerFactory, objects);
     }
 
     @Override
-    public final Optional<Provider<MinimalExternalModuleDependency>> findDependency(String alias) {
+    @Deprecated
+    public Optional<Provider<MinimalExternalModuleDependency>> findDependency(String alias) {
+        DeprecationLogger.deprecateMethod(VersionCatalog.class, "findDependency(String)")
+            .replaceWith("findLibrary(String)")
+            .willBeRemovedInGradle8()
+            .withUpgradeGuideSection(7, "version_catalog_deprecations")
+            .nagUser();
+        return findLibrary(alias);
+    }
+
+    @Override
+    public final Optional<Provider<MinimalExternalModuleDependency>> findLibrary(String alias) {
         String normalizedAlias = normalize(alias);
-        if (config.getDependencyAliases().contains(normalizedAlias)) {
+        if (config.getLibraryAliases().contains(normalizedAlias)) {
             return Optional.of(dependencyFactory.create(normalizedAlias));
         }
         return Optional.empty();
     }
 
     @Override
-    public final Optional<Provider<ExternalModuleDependencyBundle>> findBundle(String bundle) {
-        String normalizedBundle = normalize(bundle);
+    public final Optional<Provider<ExternalModuleDependencyBundle>> findBundle(String alias) {
+        String normalizedBundle = normalize(alias);
         if (config.getBundleAliases().contains(normalizedBundle)) {
-            return Optional.of(new BundleFactory(providerFactory, config).createBundle(normalizedBundle));
+            return Optional.of(new BundleFactory(objects, providerFactory, config).createBundle(normalizedBundle));
         }
         return Optional.empty();
     }
 
     @Override
-    public final Optional<VersionConstraint> findVersion(String name) {
-        String normalizedName = normalize(name);
+    public final Optional<VersionConstraint> findVersion(String alias) {
+        String normalizedName = normalize(alias);
         if (config.getVersionAliases().contains(normalizedName)) {
             return Optional.of(new VersionFactory(providerFactory, config).findVersionConstraint(normalizedName));
         }
@@ -88,8 +103,19 @@ public class VersionCatalogView implements VersionCatalog {
     }
 
     @Override
+    @Deprecated
     public List<String> getDependencyAliases() {
-        return config.getDependencyAliases();
+        DeprecationLogger.deprecateMethod(VersionCatalog.class, "getDependencyAliases()")
+            .replaceWith("getLibraryAliases()")
+            .willBeRemovedInGradle8()
+            .withUpgradeGuideSection(7, "version_catalog_deprecations")
+            .nagUser();
+        return getLibraryAliases();
+    }
+
+    @Override
+    public List<String> getLibraryAliases() {
+        return config.getLibraryAliases();
     }
 
     @Override

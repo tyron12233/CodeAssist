@@ -21,8 +21,6 @@ import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.PatternMatchers;
-
 import org.apache.ivy.core.module.descriptor.DefaultDependencyDescriptor;
 import org.apache.ivy.core.module.descriptor.DependencyArtifactDescriptor;
 import org.apache.ivy.core.module.descriptor.DependencyDescriptor;
@@ -35,7 +33,7 @@ import org.gradle.api.internal.artifacts.DefaultModuleIdentifier;
 import org.gradle.api.internal.artifacts.ImmutableModuleIdentifierFactory;
 import org.gradle.api.internal.artifacts.dependencies.DefaultImmutableVersionConstraint;
 import org.gradle.api.internal.artifacts.ivyservice.NamespaceId;
-
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.PatternMatchers;
 import org.gradle.internal.Cast;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.component.external.descriptor.Artifact;
@@ -53,8 +51,6 @@ import java.util.List;
 import java.util.Map;
 
 public class IvyModuleDescriptorConverter {
-    private static final IvyArtifactName WILDARD_ARTIFACT = new DefaultIvyArtifactName(
-            PatternMatchers.ANY_EXPRESSION, PatternMatchers.ANY_EXPRESSION, PatternMatchers.ANY_EXPRESSION);
 
     private static final String CLASSIFIER = "classifier";
     private static final Field DEPENDENCY_CONFIG_FIELD;

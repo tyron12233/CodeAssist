@@ -1,12 +1,27 @@
+/*
+ * Copyright 2017 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.gradle.api.artifacts;
 
+import org.gradle.api.Incubating;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.attributes.HasAttributes;
 import org.gradle.api.attributes.HasConfigurableAttributes;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.specs.Spec;
-
-import java.util.function.Predicate;
 
 /**
  * A view over the artifacts resolved for this set of dependencies.
@@ -71,5 +86,15 @@ public interface ArtifactView extends HasAttributes {
          */
         ViewConfiguration lenient(boolean lenient);
 
+        /**
+         * When invoked, this view will disregard existing attributes of its parent configuration and re-resolve the artifacts
+         * using only the attributes in the view's attribute container.
+         *
+         * <p>This behavior cannot be unset on a particular view once this method is invoked.
+         *
+         * @since 7.5
+         */
+        @Incubating
+        ViewConfiguration withVariantReselection();
     }
 }

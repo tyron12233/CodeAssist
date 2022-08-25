@@ -18,13 +18,6 @@ package org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.builder
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.selectors.ResolvableSelectorState;
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-import org.gradle.internal.resolve.RejectedByAttributesVersion;
-import org.gradle.internal.resolve.RejectedByRuleVersion;
-import org.gradle.internal.resolve.RejectedBySelectorVersion;
-import org.gradle.internal.resolve.RejectedVersion;
-
 import org.gradle.api.Describable;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.artifacts.ClientModule;
@@ -36,6 +29,7 @@ import org.gradle.api.internal.artifacts.ResolvedVersionConstraint;
 import org.gradle.api.internal.artifacts.dependencies.DefaultImmutableVersionConstraint;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphSelector;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.selectors.ResolvableSelectorState;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ComponentSelectionDescriptorInternal;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ComponentSelectionReasonInternal;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ComponentSelectionReasons;
@@ -44,7 +38,11 @@ import org.gradle.internal.component.model.DefaultComponentOverrideMetadata;
 import org.gradle.internal.component.model.DependencyMetadata;
 import org.gradle.internal.component.model.IvyArtifactName;
 import org.gradle.internal.logging.text.TreeFormatter;
-
+import org.gradle.internal.resolve.ModuleVersionResolveException;
+import org.gradle.internal.resolve.RejectedByAttributesVersion;
+import org.gradle.internal.resolve.RejectedByRuleVersion;
+import org.gradle.internal.resolve.RejectedBySelectorVersion;
+import org.gradle.internal.resolve.RejectedVersion;
 import org.gradle.internal.resolve.resolver.DependencyToComponentIdResolver;
 import org.gradle.internal.resolve.result.BuildableComponentIdResolveResult;
 import org.gradle.internal.resolve.result.ComponentIdResolveResult;
@@ -123,16 +121,16 @@ class SelectorState implements DependencyGraphSelector, ResolvableSelectorState 
         }
     }
 
-    public void release() {
+    public void release(ResolutionConflictTracker conflictTracker) {
         outgoingEdgeCount--;
         assert outgoingEdgeCount >= 0 : "Inconsistent selector state detected: outgoing edge count cannot be negative";
         if (outgoingEdgeCount == 0) {
-            removeAndMarkSelectorForReuse();
+            removeAndMarkSelectorForReuse(conflictTracker);
         }
     }
 
-    private void removeAndMarkSelectorForReuse() {
-        targetModule.removeSelector(this);
+    private void removeAndMarkSelectorForReuse(ResolutionConflictTracker conflictTracker) {
+        targetModule.removeSelector(this, conflictTracker);
         resolved = false;
     }
 

@@ -15,9 +15,8 @@
  */
 package org.gradle.internal.resolve.caching;
 
-import org.gradle.api.internal.artifacts.configurations.dynamicversion.CachePolicy;
-
 import org.gradle.api.Transformer;
+import org.gradle.api.internal.artifacts.configurations.dynamicversion.CachePolicy;
 import org.gradle.internal.action.InstantiatingAction;
 
 /**

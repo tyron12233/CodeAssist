@@ -15,13 +15,6 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionComparator;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
-import org.gradle.internal.resolve.RejectedByAttributesVersion;
-import org.gradle.internal.resolve.RejectedByRuleVersion;
-import org.gradle.internal.rules.SpecRuleAction;
-
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.ComponentMetadata;
 import org.gradle.api.artifacts.ComponentSelection;
@@ -32,14 +25,19 @@ import org.gradle.api.attributes.AttributesSchema;
 import org.gradle.api.internal.artifacts.ComponentSelectionInternal;
 import org.gradle.api.internal.artifacts.ComponentSelectionRulesInternal;
 import org.gradle.api.internal.artifacts.DefaultComponentSelection;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionComparator;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
 import org.gradle.api.internal.artifacts.repositories.ArtifactResolutionDetails;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.internal.component.model.ComponentResolveMetadata;
+import org.gradle.internal.resolve.RejectedByAttributesVersion;
+import org.gradle.internal.resolve.RejectedByRuleVersion;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
 import org.gradle.internal.resolve.result.ComponentSelectionContext;
-
+import org.gradle.internal.rules.SpecRuleAction;
 import org.gradle.util.internal.CollectionUtils;
 
 import javax.annotation.Nullable;
@@ -111,16 +109,14 @@ class DefaultVersionedComponentChooser implements VersionedComponentChooser {
                 continue;
             }
 
-            RejectedByAttributesVersion
-                    maybeRejectByAttributes = tryRejectByAttributes(candidateId, metadataProvider, consumerAttributes);
+            RejectedByAttributesVersion maybeRejectByAttributes = tryRejectByAttributes(candidateId, metadataProvider, consumerAttributes);
             if (maybeRejectByAttributes != null) {
                 result.doesNotMatchConsumerAttributes(maybeRejectByAttributes);
             } else if (isRejectedBySelector(candidateId, rejectedVersionSelector)) {
                 // Mark this version as rejected
                 result.rejectedBySelector(candidateId, rejectedVersionSelector);
             } else {
-                RejectedByRuleVersion
-                        rejectedByRules = isRejectedByRule(candidateId, rules, metadataProvider);
+                RejectedByRuleVersion rejectedByRules = isRejectedByRule(candidateId, rules, metadataProvider);
                 if (rejectedByRules != null) {
                     // Mark this version as rejected
                     result.rejectedByRule(rejectedByRules);

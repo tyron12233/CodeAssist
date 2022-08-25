@@ -18,16 +18,14 @@ package org.gradle.api.internal.artifacts;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import org.gradle.api.internal.artifacts.dependencies.DefaultImmutableVersionConstraint;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.AttributeContainerSerializer;
-import org.gradle.internal.component.external.model.DefaultModuleComponentSelector;
-import org.gradle.internal.component.external.model.ImmutableCapability;
-
 import org.gradle.api.artifacts.VersionConstraint;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.capabilities.Capability;
+import org.gradle.api.internal.artifacts.dependencies.DefaultImmutableVersionConstraint;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.AttributeContainerSerializer;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
+import org.gradle.internal.component.external.model.ImmutableCapability;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
 import org.gradle.internal.serialize.Serializer;
@@ -53,8 +51,7 @@ public class ModuleComponentSelectorSerializer implements Serializer<ModuleCompo
         VersionConstraint versionConstraint = readVersionConstraint(decoder);
         ImmutableAttributes attributes = readAttributes(decoder);
         List<Capability> capabilities = readCapabilities(decoder);
-        return DefaultModuleComponentSelector
-                .newSelector(DefaultModuleIdentifier.newId(group, name), versionConstraint, attributes, capabilities);
+        return newSelector(DefaultModuleIdentifier.newId(group, name), versionConstraint, attributes, capabilities);
     }
 
     public VersionConstraint readVersionConstraint(Decoder decoder) throws IOException {

@@ -16,12 +16,11 @@
 
 package org.gradle.api.internal.artifacts.result;
 
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-
 import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.artifacts.result.ComponentSelectionReason;
 import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.artifacts.result.UnresolvedDependencyResult;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 
 public class DefaultUnresolvedDependencyResult extends AbstractDependencyResult implements UnresolvedDependencyResult {
     private final ComponentSelectionReason reason;

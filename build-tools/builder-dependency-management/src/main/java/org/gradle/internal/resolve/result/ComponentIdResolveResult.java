@@ -16,19 +16,18 @@
 
 package org.gradle.internal.resolve.result;
 
-import org.gradle.internal.component.model.ComponentResolveMetadata;
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-import org.gradle.internal.resolve.RejectedVersion;
-
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
+import org.gradle.internal.component.model.ComponentGraphResolveState;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
+import org.gradle.internal.resolve.RejectedVersion;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
 
 /**
  * The result of resolving a module version selector to a particular component id.
- * The result may optionally include the meta-data for the selected component, if it is cheaply available (for example, it was used to select the component).
+ * The result may optionally include the graph resolution state for the selected component, if it is cheaply available (for example, it was used to select the component).
  */
 public interface ComponentIdResolveResult extends ResolveResult {
     /**
@@ -41,24 +40,24 @@ public interface ComponentIdResolveResult extends ResolveResult {
     /**
      * Returns the identifier of the component.
      *
-     * @throws ModuleVersionResolveException If resolution was unsuccessful and the id is unknown.
+     * @throws org.gradle.internal.resolve.ModuleVersionResolveException If resolution was unsuccessful and the id is unknown.
      */
     ComponentIdentifier getId();
 
     /**
      * Returns the module version id of the component.
      *
-     * @throws ModuleVersionResolveException If resolution was unsuccessful and the id is unknown.
+     * @throws org.gradle.internal.resolve.ModuleVersionResolveException If resolution was unsuccessful and the id is unknown.
      */
     ModuleVersionIdentifier getModuleVersionId();
 
     /**
-     * Returns the meta-data for the component, if it was available at resolve time.
+     * Returns the graph resolution state for the component, if it was available at resolve time.
      *
      * @throws ModuleVersionResolveException If resolution was unsuccessful and the descriptor is not available.
      */
     @Nullable
-    ComponentResolveMetadata getMetadata();
+    ComponentGraphResolveState getState();
 
     /**
      * Returns true if the component id was resolved, but it was rejected by constraint.

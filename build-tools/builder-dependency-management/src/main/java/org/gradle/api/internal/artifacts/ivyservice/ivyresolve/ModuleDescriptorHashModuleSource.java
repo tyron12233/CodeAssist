@@ -15,8 +15,9 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import com.google.common.hash.HashCode;
 import org.gradle.internal.component.model.PersistentModuleSource;
+import com.google.common.hash.HashCode;
+
 public class ModuleDescriptorHashModuleSource implements PersistentModuleSource {
     public static final int CODEC_ID = 2;
     private final HashCode descriptorHash;

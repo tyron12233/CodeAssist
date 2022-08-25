@@ -20,7 +20,6 @@ import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.Descriptor
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.MetaDataParseException;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.MetaDataParser;
 import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
-
 import org.gradle.internal.resource.local.LocallyAvailableExternalResource;
 
 import java.io.File;

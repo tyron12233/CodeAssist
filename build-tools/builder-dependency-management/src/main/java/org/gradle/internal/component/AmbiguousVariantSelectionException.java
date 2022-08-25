@@ -29,6 +29,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+import static org.gradle.internal.component.AmbiguousConfigurationSelectionException.*;
+
 public class AmbiguousVariantSelectionException extends VariantSelectionException {
 
     public AmbiguousVariantSelectionException(AttributeDescriber describer, String producerDisplayName, AttributeContainerInternal requested, List<? extends ResolvedVariant> matches, AttributeMatcher matcher, Set<ResolvedVariant> discarded) {
@@ -45,8 +47,7 @@ public class AmbiguousVariantSelectionException extends VariantSelectionExceptio
         formatter.startChildren();
         for (ResolvedVariant variant : variants) {
             formatter.node(variant.asDescribable().getCapitalizedDisplayName());
-            AmbiguousConfigurationSelectionException
-                    .formatAttributeMatchesForAmbiguity(formatter, consumer.asImmutable(), matcher, variant.getAttributes().asImmutable(), describer);
+            formatAttributeMatchesForAmbiguity(formatter, consumer.asImmutable(), matcher, variant.getAttributes().asImmutable(), describer);
         }
         formatter.endChildren();
         if (!discarded.isEmpty()) {
@@ -56,8 +57,7 @@ public class AmbiguousVariantSelectionException extends VariantSelectionExceptio
                 .sorted(Comparator.comparing(v -> v.asDescribable().getCapitalizedDisplayName()))
                 .forEach(discardedVariant -> {
                     formatter.node(discardedVariant.asDescribable().getCapitalizedDisplayName());
-                    AmbiguousConfigurationSelectionException
-                            .formatAttributeMatchesForIncompatibility(formatter, consumer.asImmutable(), matcher, discardedVariant.getAttributes().asImmutable(), describer);
+                    formatAttributeMatchesForIncompatibility(formatter, consumer.asImmutable(), matcher, discardedVariant.getAttributes().asImmutable(), describer);
                 });
             formatter.endChildren();
         }

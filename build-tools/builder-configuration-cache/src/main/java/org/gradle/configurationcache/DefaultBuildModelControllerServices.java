@@ -136,8 +136,8 @@ public class DefaultBuildModelControllerServices implements BuildModelController
                 LocalComponentProvider provider,
                 LocalComponentInAnotherBuildProvider anotherBuildProvider
         ) {
-            return new DefaultLocalComponentRegistry(
-                    currentBuild.getBuildIdentifier(),
+            return new VintageModelProvider().createLocalComponentRegistry(
+                    currentBuild,
                     projectStateRegistry,
                     calculatedValueContainerFactory,
                     provider,

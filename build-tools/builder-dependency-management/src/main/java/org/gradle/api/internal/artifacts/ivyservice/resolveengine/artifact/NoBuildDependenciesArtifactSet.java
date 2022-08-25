@@ -20,8 +20,7 @@ import org.gradle.api.Action;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.transform.VariantSelector;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
-
-import java.util.function.Predicate;
+import org.gradle.api.specs.Spec;
 
 public class NoBuildDependenciesArtifactSet implements ArtifactSet {
     private final ArtifactSet set;
@@ -31,7 +30,7 @@ public class NoBuildDependenciesArtifactSet implements ArtifactSet {
     }
 
     @Override
-    public ResolvedArtifactSet select(Predicate<? super ComponentIdentifier> componentFilter, VariantSelector selector) {
+    public ResolvedArtifactSet select(Spec<? super ComponentIdentifier> componentFilter, VariantSelector selector) {
         final ResolvedArtifactSet selectedArtifacts = set.select(componentFilter, selector);
         if (selectedArtifacts == ResolvedArtifactSet.EMPTY) {
             return selectedArtifacts;

@@ -17,7 +17,6 @@
 package org.gradle.api.internal.artifacts.configurations;
 
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedProjectConfiguration;
-
 import org.gradle.api.internal.project.ProjectState;
 import org.gradle.internal.service.scopes.Scope;
 import org.gradle.internal.service.scopes.ServiceScope;

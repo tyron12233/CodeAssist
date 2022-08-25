@@ -17,8 +17,6 @@
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.result;
 
 import com.google.common.collect.Lists;
-import org.gradle.internal.resolve.ModuleVersionResolveException;
-
 import org.gradle.api.artifacts.UnresolvedDependency;
 import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.artifacts.result.ResolutionResult;
@@ -40,6 +38,7 @@ import org.gradle.api.logging.Logging;
 import org.gradle.cache.internal.BinaryStore;
 import org.gradle.cache.internal.Store;
 import org.gradle.internal.Factory;
+import org.gradle.internal.resolve.ModuleVersionResolveException;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
@@ -79,11 +78,12 @@ public class StreamingResolutionResultBuilder implements DependencyGraphVisitor 
                                             ImmutableModuleIdentifierFactory moduleIdentifierFactory,
                                             AttributeContainerSerializer attributeContainerSerializer,
                                             AttributeDesugaring desugaring,
-                                            ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory) {
+                                            ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory,
+                                            boolean returnAllVariants) {
         ComponentIdentifierSerializer componentIdentifierSerializer = new ComponentIdentifierSerializer();
         ResolvedVariantResultSerializer resolvedVariantResultSerializer = new ResolvedVariantResultSerializer(componentIdentifierSerializer, attributeContainerSerializer);
         this.dependencyResultSerializer = new DependencyResultSerializer(resolvedVariantResultSerializer, componentSelectionDescriptorFactory);
-        this.componentResultSerializer = new ComponentResultSerializer(moduleIdentifierFactory, resolvedVariantResultSerializer, componentSelectionDescriptorFactory, componentIdentifierSerializer);
+        this.componentResultSerializer = new ComponentResultSerializer(moduleIdentifierFactory, resolvedVariantResultSerializer, componentSelectionDescriptorFactory, componentIdentifierSerializer, returnAllVariants);
         this.store = store;
         this.cache = cache;
         this.componentSelectorSerializer = new ComponentSelectorSerializer(attributeContainerSerializer);

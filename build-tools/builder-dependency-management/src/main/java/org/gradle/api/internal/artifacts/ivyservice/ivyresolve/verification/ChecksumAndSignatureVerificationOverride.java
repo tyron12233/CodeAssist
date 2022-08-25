@@ -19,9 +19,6 @@ import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.report.DependencyVerificationReportWriter;
-import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.report.VerificationReport;
-
 import org.gradle.api.artifacts.component.ComponentArtifactIdentifier;
 import org.gradle.api.artifacts.result.ResolvedArtifactResult;
 import org.gradle.api.artifacts.result.ResolvedVariantResult;
@@ -31,6 +28,8 @@ import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.artifacts.configurations.ResolutionStrategyInternal;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.DependencyVerifyingModuleComponentRepository;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ModuleComponentRepository;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.report.DependencyVerificationReportWriter;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.verification.report.VerificationReport;
 import org.gradle.api.internal.artifacts.verification.DependencyVerificationException;
 import org.gradle.api.internal.artifacts.verification.serializer.DependencyVerificationsXmlReader;
 import org.gradle.api.internal.artifacts.verification.signatures.BuildTreeDefinedKeys;
@@ -173,8 +172,7 @@ public class ChecksumAndSignatureVerificationOverride implements DependencyVerif
                     Collection<RepositoryAwareVerificationFailure> value = entry.getValue();
                     return value.stream().noneMatch(wrapper -> wrapper.getFailure().isFatal());
                 });
-                VerificationReport
-                        report = reportWriter.generateReport(displayName, failures, verifier.getConfiguration().isUseKeyServers());
+                VerificationReport report = reportWriter.generateReport(displayName, failures, verifier.getConfiguration().isUseKeyServers());
                 String errorMessage = buildConsoleErrorMessage(report);
                 if (verificationMode == DependencyVerificationMode.LENIENT) {
                     LOGGER.error(errorMessage);
