@@ -4,6 +4,8 @@ import org.gradle.api.internal.artifacts.ivyservice.projectmodule.DefaultLocalCo
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentInAnotherBuildProvider;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentProvider;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentRegistry;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.ProjectArtifactResolver;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.ProjectArtifactSetResolver;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.configuration.project.ProjectEvaluator;
@@ -134,14 +136,16 @@ public class DefaultBuildModelControllerServices implements BuildModelController
                 ProjectStateRegistry projectStateRegistry,
                 CalculatedValueContainerFactory calculatedValueContainerFactory,
                 LocalComponentProvider provider,
-                LocalComponentInAnotherBuildProvider anotherBuildProvider
+                LocalComponentInAnotherBuildProvider anotherBuildProvider,
+                ProjectArtifactSetResolver artifactResolver
         ) {
-            return new VintageModelProvider().createLocalComponentRegistry(
-                    currentBuild,
+            return new DefaultLocalComponentRegistry(
+                    currentBuild.getBuildIdentifier(),
                     projectStateRegistry,
                     calculatedValueContainerFactory,
                     provider,
-                    anotherBuildProvider
+                    anotherBuildProvider,
+                    artifactResolver
             );
         }
     }
