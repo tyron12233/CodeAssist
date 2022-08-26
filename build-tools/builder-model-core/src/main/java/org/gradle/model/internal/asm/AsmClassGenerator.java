@@ -42,10 +42,6 @@ public class AsmClassGenerator {
     }
 
     public <T> Class<T> define(ClassLoader targetClassLoader) {
-//        if (TestUtil.isDalvik()) {
-//            //noinspection unchecked
-//            return (Class<T>) new ScriptFactory(targetClassLoader).defineClass(visitor.toByteArray());
-//        }
         return ClassLoaderUtils.defineDecorator(targetType, targetClassLoader, generatedTypeName, visitor.toByteArray());
     }
 }

@@ -101,6 +101,8 @@ dependencies {
     implementation projects.buildTools.builderJava
     implementation projects.buildTools.builderNative
     implementation projects.buildTools.codeassistBuilderPlugin
+    implementation projects.buildTools.builderIde
+    implementation projects.buildTools.builderToolingApi
     // emulating console
     implementation 'org.fusesource.jansi:jansi:2.4.0'
 
@@ -180,10 +182,12 @@ dependencies {
 }
 
 afterEvaluate {
-    tasks.getByName("packageDebug").doLast {
+    tasks.getByName("dexBuilderDebug").doLast {
         println "====================="
         println it.class
-        inputs.files.each{println it}
+        println it.externalLibClasses.files
+
+        com.android.build.gradle.internal.tasks.ClassesClasspathUtils.
     }
 }
 

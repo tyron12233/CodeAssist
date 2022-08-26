@@ -143,20 +143,20 @@ public class DaemonServices extends DefaultServiceRegistry {
         File daemonLog = getDaemonLogFile();
         DaemonDiagnostics daemonDiagnostics = new DaemonDiagnostics(daemonLog, daemonContext.getPid());
         return ImmutableList.of(
-            new HandleStop(get(ListenerManager.class)),
-            new HandleInvalidateVirtualFileSystem(get(GradleUserHomeScopeServiceRegistry.class)),
-            new HandleCancel(),
-            new HandleReportStatus(),
-            new ReturnResult(),
-            new StartBuildOrRespondWithBusy(daemonDiagnostics), // from this point down, the daemon is 'busy'
-            new EstablishBuildEnvironment(processEnvironment),
-            new LogToClient(loggingManager, daemonDiagnostics), // from this point down, logging is sent back to the client
-            new LogAndCheckHealth(healthStats, healthCheck),
-            new ForwardClientInput(),
-            new RequestStopIfSingleUsedDaemon(),
-            new ResetDeprecationLogger(),
-            new WatchForDisconnection(),
-            new ExecuteBuild(buildActionExecuter, runningStats)
+                new HandleStop(get(ListenerManager.class)),
+                new HandleInvalidateVirtualFileSystem(get(GradleUserHomeScopeServiceRegistry.class)),
+                new HandleCancel(),
+                new HandleReportStatus(),
+                new ReturnResult(),
+                new StartBuildOrRespondWithBusy(daemonDiagnostics), // from this point down, the daemon is 'busy'
+                new EstablishBuildEnvironment(processEnvironment),
+                new LogToClient(loggingManager, daemonDiagnostics), // from this point down, logging is sent back to the client
+                new LogAndCheckHealth(healthStats, healthCheck),
+                new ForwardClientInput(),
+                new RequestStopIfSingleUsedDaemon(),
+                new ResetDeprecationLogger(),
+                new WatchForDisconnection(),
+                new ExecuteBuild(buildActionExecuter, runningStats)
         );
 
     }
@@ -167,16 +167,16 @@ public class DaemonServices extends DefaultServiceRegistry {
 
     protected Daemon createDaemon(ImmutableList<DaemonCommandAction> actions, Serializer<BuildAction> buildActionSerializer) {
         return new Daemon(
-            new DaemonTcpServerConnector(
+                new DaemonTcpServerConnector(
+                        get(ExecutorFactory.class),
+                        get(InetAddressFactory.class),
+                        DaemonMessageSerializer.create(buildActionSerializer)
+                ),
+                get(DaemonRegistry.class),
+                get(DaemonContext.class),
+                new DaemonCommandExecuter(configuration, actions),
                 get(ExecutorFactory.class),
-                get(InetAddressFactory.class),
-                DaemonMessageSerializer.create(buildActionSerializer)
-            ),
-            get(DaemonRegistry.class),
-            get(DaemonContext.class),
-            new DaemonCommandExecuter(configuration, actions),
-            get(ExecutorFactory.class),
-            get(ListenerManager.class)
+                get(ListenerManager.class)
         );
     }
 }

@@ -60,7 +60,8 @@ public class ProjectLauncher {
                     .forProjectDirectory(startParameter.getProjectDir())
                     .useDistribution(URI.create("codeAssist"));
             ProjectConnection projectConnection = gradleConnector.connect();
-            projectConnection.newBuild().forTasks("assemble").run();
+            projectConnection.newBuild().forTasks("assemble")
+                    .run();
             return;
         }
         BuildExecuter buildExecuter = globalServices.get(BuildExecuter.class);

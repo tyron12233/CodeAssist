@@ -1,6 +1,8 @@
 package org.gradle.internal.classloader;
 
 import com.google.common.io.ByteStreams;
+import com.tyron.common.TestUtil;
+
 import org.gradle.api.GradleException;
 import org.gradle.internal.classpath.ClassPath;
 
@@ -33,6 +35,13 @@ public abstract class TransformingClassLoader extends VisitableURLClassLoader {
 
     @Override
     protected Class<?> findClass(String name) throws ClassNotFoundException {
+        if (TestUtil.isDalvik()) {
+            try {
+                return Class.forName(name);
+            } catch (Throwable t) {
+                // ignored
+            }
+        }
         if (!shouldTransform(name)) {
             return super.findClass(name);
         }

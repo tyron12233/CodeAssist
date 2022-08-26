@@ -1,12 +1,16 @@
 package com.tyron.code;
 
 import android.app.Application;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.os.Build;
-import android.os.StrictMode;
+import android.os.IBinder;
 import android.widget.Toast;
 
+import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -15,6 +19,8 @@ import androidx.preference.PreferenceManager;
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.actions.ActionManager;
 import com.tyron.builder.BuildModule;
+import com.tyron.code.event.Event;
+import com.tyron.code.service.GradleDaemonService;
 import com.tyron.code.ui.editor.action.CloseAllEditorAction;
 import com.tyron.code.ui.editor.action.CloseFileEditorAction;
 import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
@@ -54,6 +60,10 @@ import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
 import com.tyron.code.event.EventManager;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
+
 public class ApplicationLoader extends Application {
 
     private static ApplicationLoader sInstance;
@@ -92,6 +102,9 @@ public class ApplicationLoader extends Application {
                 .apply();
 
         runStartup();
+
+        File userDir = new File(getFilesDir(), "user_dir");
+        System.setProperty("codeassist.user.dir", userDir.getAbsolutePath());
     }
 
     /**
@@ -190,5 +203,21 @@ public class ApplicationLoader extends Application {
     @VisibleForTesting
     public static void setApplicationContext(Context context) {
         applicationContext = context;
+    }
+
+    /**
+     * Starts a new gradle daemon on a separate process.
+     *
+     * Accessed reflectively via {@link org.gradle.launcher.daemon.client.DefaultDaemonStarter}
+     */
+    @Keep
+    private static void startDaemonProcess(File dir) throws IOException {
+        assert applicationContext != null;
+
+
+        Intent intent = new Intent(applicationContext, GradleDaemonService.class);
+        intent.putExtra("dir", dir.toString());
+
+        applicationContext.startService(intent);
     }
 }

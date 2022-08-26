@@ -1,3 +1,19 @@
+/*
+ * Copyright 2019 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.gradle.internal.instantiation.generator;
 
 import com.google.common.collect.ImmutableCollection;
@@ -10,34 +26,37 @@ import com.google.common.collect.Ordering;
 import com.google.common.collect.SetMultimap;
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
+import groovy.lang.Closure;
+import groovy.lang.GroovyObject;
+import groovy.lang.MetaClass;
 import org.gradle.api.Action;
 import org.gradle.api.Describable;
 import org.gradle.api.DomainObjectSet;
 import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.NonExtensible;
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.ConfigurableFileTree;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.internal.DynamicObjectAware;
 import org.gradle.api.internal.IConventionAware;
 import org.gradle.api.plugins.ExtensionAware;
-import org.gradle.api.reflect.InjectionPointQualifier;
-import org.gradle.api.tasks.Nested;
-import org.gradle.cache.internal.CrossBuildInMemoryCache;
-import org.gradle.internal.Cast;
-import org.gradle.api.file.ConfigurableFileCollection;
-import org.gradle.internal.extensibility.NoConventionMapping;
-import org.gradle.internal.instantiation.ClassGenerationException;
-import org.gradle.internal.instantiation.InjectAnnotationHandler;
-import org.gradle.internal.instantiation.InstanceGenerator;
-import org.gradle.internal.instantiation.PropertyRoleAnnotationHandler;
-import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.api.provider.HasMultipleValues;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
+import org.gradle.api.reflect.InjectionPointQualifier;
+import org.gradle.api.tasks.Nested;
+import org.gradle.cache.internal.CrossBuildInMemoryCache;
+import org.gradle.internal.Cast;
+import org.gradle.internal.extensibility.NoConventionMapping;
+import org.gradle.internal.instantiation.ClassGenerationException;
+import org.gradle.internal.instantiation.InjectAnnotationHandler;
+import org.gradle.internal.instantiation.InstanceGenerator;
+import org.gradle.internal.instantiation.PropertyRoleAnnotationHandler;
+import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.internal.reflect.ClassDetails;
 import org.gradle.internal.reflect.ClassInspector;
 import org.gradle.internal.reflect.JavaPropertyReflectionUtil;
@@ -66,10 +85,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import groovy.lang.Closure;
-import groovy.lang.GroovyObject;
-import groovy.lang.MetaClass;
-
 /**
  * Generates a subclass of the target class to mix-in some DSL behaviour.
  *
@@ -77,7 +92,7 @@ import groovy.lang.MetaClass;
  * <li>For each property, a convention mapping is applied. These properties may have a setter method.</li>
  * <li>For each property whose getter is annotated with {@link Inject}, service instance will be injected instead. These properties may have a setter method and may be abstract.</li>
  * <li>For each mutable property as set method is generated.</li>
- * <li>For each method whose last parameter is an {@link Action}, an override is generated that accepts a {@link groovy.lang.Closure} instead.</li>
+ * <li>For each method whose last parameter is an {@link org.gradle.api.Action}, an override is generated that accepts a {@link groovy.lang.Closure} instead.</li>
  * <li>Coercion from string to enum property is mixed in.</li>
  * <li>{@link groovy.lang.GroovyObject} and {@link DynamicObjectAware} is mixed in to the class.</li>
  * <li>An {@link ExtensionAware} implementation is added, unless {@link NonExtensible} is attached to the class.</li>

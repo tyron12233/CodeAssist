@@ -16,7 +16,9 @@
 package org.gradle.launcher.daemon.client;
 
 import com.tyron.common.TestUtil;
+import com.tyron.common.util.FileUtilsEx;
 
+import org.apache.commons.io.IOUtils;
 import org.gradle.api.GradleException;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.internal.classpath.DefaultModuleRegistry;
@@ -37,6 +39,7 @@ import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
 import org.gradle.launcher.daemon.DaemonExecHandleBuilder;
 import org.gradle.launcher.daemon.bootstrap.DaemonOutputConsumer;
+import org.gradle.launcher.daemon.bootstrap.DaemonStartupCommunication;
 import org.gradle.launcher.daemon.bootstrap.GradleDaemon;
 import org.gradle.launcher.daemon.configuration.DaemonParameters;
 import org.gradle.launcher.daemon.diagnostics.DaemonStartupInfo;
@@ -48,16 +51,19 @@ import org.gradle.util.internal.GFileUtils;
 import org.gradle.util.GradleVersion;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class DefaultDaemonStarter implements DaemonStarter {
     private static final Logger LOGGER = Logging.getLogger(DefaultDaemonStarter.class);
@@ -91,9 +97,9 @@ public class DefaultDaemonStarter implements DaemonStarter {
             classpath = registry.getModule("gradle-launcher").getImplementationClasspath();
             searchClassPath = Collections.emptyList();
         }
-//        if (classpath.isEmpty()) {
-//            throw new IllegalStateException("Unable to construct a bootstrap classpath when starting the daemon");
-//        }
+        if (classpath.isEmpty() && !TestUtil.isDalvik()) {
+            throw new IllegalStateException("Unable to construct a bootstrap classpath when starting the daemon");
+        }
 
         ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
         List<File> dexElements = new ArrayList<>();
@@ -138,6 +144,8 @@ public class DefaultDaemonStarter implements DaemonStarter {
 
         List<String> daemonOpts = daemonParameters.getEffectiveJvmArgs();
         daemonOpts.add("-Dcodeassist.user.dir=" + System.getProperty("codeassist.user.dir"));
+        daemonOpts.add("-Djava.library.path=" + System.getProperty("java.library.path"));
+
 //        daemonArgs.addAll(daemonOpts);
         daemonArgs.add("-cp");
         daemonArgs.add(CollectionUtils.join(File.pathSeparator, classpath.getAsFiles()));
@@ -210,12 +218,40 @@ public class DefaultDaemonStarter implements DaemonStarter {
             @SuppressWarnings("deprecation")
             DefaultExecActionFactory execActionFactory = DefaultExecActionFactory.root(gradleUserHome);
             try {
-                ExecHandle handle = new DaemonExecHandleBuilder().build(args, workingDir, outputConsumer, stdInput, execActionFactory.newExec());
 
-                handle.start();
-                LOGGER.debug("Gradle daemon process is starting. Waiting for the daemon to detach...");
-                handle.waitForFinish();
-                LOGGER.debug("Gradle daemon process is now detached.");
+                if (true) {
+                    Path daemon = Files.createTempDirectory("daemon");
+                    File file = daemon.toFile();
+
+
+                    File daemonInput = new File(file, "daemonInput");
+                    FileUtilsEx.createFile(daemonInput);
+
+                    try (FileOutputStream os = new FileOutputStream(daemonInput)) {
+                        IOUtils.copy(stdInput, os);
+                    }
+
+                    startProcessAndroid(file);
+
+                    Thread.sleep(5000);
+
+                    File daemonOutput = new File(file,"daemonOutput");
+                    FileUtilsEx.createFile(daemonOutput);
+                    try (FileInputStream is = new FileInputStream(daemonOutput)) {
+                        outputConsumer.connectStream(is);
+                        outputConsumer.start();
+                    }
+
+                    return daemonGreeter.parseDaemonOutput(outputConsumer.getProcessOutput(), args);
+                } else {
+                    ExecHandle handle = new DaemonExecHandleBuilder().build(args, workingDir, outputConsumer, stdInput, execActionFactory.newExec());
+
+                    handle.start();
+                    LOGGER.debug("Gradle daemon process is starting. Waiting for the daemon to detach...");
+                    handle.waitForFinish();
+                    LOGGER.debug("Gradle daemon process is now detached.");
+                }
+
             } finally {
                 CompositeStoppable.stoppable(execActionFactory).stop();
             }
@@ -228,6 +264,13 @@ public class DefaultDaemonStarter implements DaemonStarter {
         } finally {
             LOGGER.info("An attempt to start the daemon took {}.", clock.getElapsed());
         }
+    }
+
+    private void startProcessAndroid(File file) throws Exception {
+        Class<?> aClass = Class.forName("com.tyron.code.ApplicationLoader");
+        Method startDaemonProcess = aClass.getDeclaredMethod("startDaemonProcess", File.class);
+        startDaemonProcess.setAccessible(true);
+        startDaemonProcess.invoke(null, file);
     }
 
 }

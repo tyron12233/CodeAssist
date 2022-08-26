@@ -1,5 +1,7 @@
 package org.gradle.api.artifacts.transform;
 
+import java.io.Serializable;
+
 /**
  * Marker interface for parameter objects to {@link TransformAction}s.
  *

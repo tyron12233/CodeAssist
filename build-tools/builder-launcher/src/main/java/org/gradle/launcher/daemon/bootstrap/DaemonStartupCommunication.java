@@ -1,5 +1,6 @@
 package org.gradle.launcher.daemon.bootstrap;
 
+import org.apache.commons.io.FileUtils;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
@@ -14,6 +15,7 @@ import org.gradle.internal.stream.EncodedStream;
 import org.gradle.launcher.daemon.diagnostics.DaemonDiagnostics;
 import org.gradle.launcher.daemon.diagnostics.DaemonStartupInfo;
 import org.gradle.launcher.daemon.logging.DaemonMessages;
+import org.gradle.util.internal.GUtil;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -22,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.Method;
 
 public class DaemonStartupCommunication {
 
@@ -44,6 +47,12 @@ public class DaemonStartupCommunication {
             throw new UncheckedIOException(e);
         }
         target.println(byteArrayOutputStream);
+
+        try {
+            FileUtils.writeByteArrayToFile(new File("/data/data/com.tyron.code/cache/Test.file"), byteArrayOutputStream.toByteArray());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
         //ibm vm 1.6 + windows XP gotchas:
         //we need to print something else to the stream after we print the daemon greeting.

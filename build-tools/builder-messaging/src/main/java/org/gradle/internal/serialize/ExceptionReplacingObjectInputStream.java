@@ -2,8 +2,7 @@ package org.gradle.internal.serialize;
 
 import org.gradle.api.Transformer;
 import org.gradle.internal.UncheckedException;
-
-import org.apache.commons.io.input.ClassLoaderObjectInputStream;
+import org.gradle.internal.io.ClassLoaderObjectInputStream;
 
 import java.io.InputStream;
 
@@ -25,7 +24,7 @@ public class ExceptionReplacingObjectInputStream extends ClassLoaderObjectInputS
     };
 
     public ExceptionReplacingObjectInputStream(InputStream inputSteam, ClassLoader classLoader) throws IOException {
-        super(classLoader, inputSteam);
+        super(inputSteam, classLoader);
         this.classLoader = classLoader;
         enableResolveObject(true);
     }

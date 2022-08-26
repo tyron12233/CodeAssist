@@ -44,6 +44,7 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
+import org.gradle.StartParameter;
 import org.gradle.api.GradleException;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.logging.LogLevel;
@@ -59,9 +60,13 @@ import org.gradle.internal.nativeintegration.console.ConsoleMetaData;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import org.gradle.launcher.ProjectLauncher;
+import org.gradle.tooling.BuildLauncher;
+import org.gradle.tooling.GradleConnector;
+import org.gradle.tooling.ProjectConnection;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
+import java.net.URI;
 import java.util.Collections;
 
 public class CompilerService extends Service {
@@ -253,66 +258,69 @@ public class CompilerService extends Service {
     private static boolean consoleAttached = false;
 
     private void compileWithBuilderApi(Project project, BuildType type) {
-        StartParameterInternal startParameter = new StartParameterInternal();
-        startParameter.setVfsVerboseLogging(getVerboseVfsLogging());
-        startParameter.setShowStacktrace(getShowStacktrace());
-        startParameter.setParallelProjectExecutionEnabled(true);
-        startParameter.setConfigurationCache(BuildOption.Value.value(false));
-        startParameter.setConfigurationCacheDebug(true);
-        startParameter.setWarningMode(WarningMode.All);
-        startParameter.setBuildCacheEnabled(false);
-        File rootFile = project.getRootFile();
-        startParameter.setProjectDir(rootFile);
-        startParameter.setLogLevel(getLogLevel());
-        startParameter.setConsoleOutput(ConsoleOutput.Rich);
-        startParameter.setGradleUserHomeDir(new File(getCacheDir(), ".gradle"));
-        startParameter.setTaskNames(Collections.singletonList(":app:assembleDebug"));
-
-        ProjectLauncher projectLauncher = new ProjectLauncher(startParameter, null);;
-
-        LoggingManagerInternal loggingManagerInternal =
-                projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
-        loggingManagerInternal.captureSystemSources();
-       if (!consoleAttached) {
-           loggingManagerInternal.attachConsole(AppLogFragment.outputStream, AppLogFragment.errorOutputStream, ConsoleOutput.Verbose, new ConsoleMetaData() {
-               @Override
-               public boolean isStdOut() {
-                   return true;
-               }
-
-               @Override
-               public boolean isStdErr() {
-                   return true;
-               }
-
-               @Override
-               public int getCols() {
-                   return 60;
-               }
-
-               @Override
-               public int getRows() {
-                   return 20;
-               }
-
-               @Override
-               public boolean isWrapStreams() {
-                   return false;
-               }
-           });
-
-           consoleAttached = true;
-       }
-
-        GradleUserHomeScopeServiceRegistry gradleUserHomeServices =
-                projectLauncher.getGlobalServices().get(GradleUserHomeScopeServiceRegistry.class);
-        ServiceRegistry servicesFor =
-                gradleUserHomeServices.getServicesFor(startParameter.getGradleUserHomeDir());
-
-
         try {
-            projectLauncher.execute();
-            mMainHandler.post(() -> onResultListener.onComplete(true, "Success"));
+            GradleConnector gradleConnector = GradleConnector.newConnector()
+                    .useDistribution(URI.create("codeAssist"))
+                    .forProjectDirectory(project.getRootFile());
+
+            try (ProjectConnection projectConnection = gradleConnector.connect()) {
+                BuildLauncher buildLauncher = projectConnection.newBuild()
+                        .setStandardError(AppLogFragment.outputStream)
+                        .setStandardOutput(AppLogFragment.outputStream);
+                buildLauncher.withArguments("--stacktrace");
+                buildLauncher.forTasks("assembleDebug").run();
+            }
+
+            if (false) {
+                StartParameterInternal startParameter = new StartParameterInternal();
+                startParameter.setVfsVerboseLogging(getVerboseVfsLogging());
+                startParameter.setShowStacktrace(getShowStacktrace());
+                startParameter.setParallelProjectExecutionEnabled(true);
+                startParameter.setConfigurationCache(BuildOption.Value.value(false));
+                startParameter.setConfigurationCacheDebug(false);
+                startParameter.setWarningMode(WarningMode.All);
+                startParameter.setBuildCacheEnabled(false);
+                File rootFile = project.getRootFile();
+                startParameter.setProjectDir(rootFile);
+                startParameter.setLogLevel(getLogLevel());
+                startParameter.setConsoleOutput(ConsoleOutput.Rich);
+                startParameter.setGradleUserHomeDir(new File(getCacheDir(), ".gradle"));
+                startParameter.setTaskNames(Collections.singletonList(":app:assembleDebug"));
+                startParameter.setCurrentDir(project.getRootFile());
+                ProjectLauncher projectLauncher = new ProjectLauncher(startParameter);
+
+                LoggingManagerInternal logger =
+                        projectLauncher.getGlobalServices().get(LoggingManagerInternal.class);
+                logger.captureSystemSources();
+                logger.attachConsole(AppLogFragment.outputStream, AppLogFragment.errorOutputStream, ConsoleOutput.Verbose, new ConsoleMetaData() {
+                    @Override
+                    public boolean isStdOut() {
+                        return true;
+                    }
+
+                    @Override
+                    public boolean isStdErr() {
+                        return true;
+                    }
+
+                    @Override
+                    public int getCols() {
+                        return 60;
+                    }
+
+                    @Override
+                    public int getRows() {
+                        return 20;
+                    }
+
+                    @Override
+                    public boolean isWrapStreams() {
+                        return false;
+                    }
+                });
+                projectLauncher.execute();
+            }
+
         } catch (Throwable t) {
             String message;
             if (t instanceof MultipleBuildFailures) {
@@ -324,8 +332,6 @@ public class CompilerService extends Service {
             }
             mMainHandler.post(() -> onResultListener.onComplete(false, message));
         }
-
-        loggingManagerInternal.stop();
 
         stopSelf();
         stopForeground(true);

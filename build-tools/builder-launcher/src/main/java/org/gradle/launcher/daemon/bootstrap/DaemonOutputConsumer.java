@@ -23,6 +23,14 @@ public class DaemonOutputConsumer implements StreamsHandler {
         processStdOutput = process.getInputStream();
     }
 
+    public void connectStandardStreams() {
+        processStdOutput = System.in;
+    }
+
+    public void connectStream(InputStream inputStream) {
+        processStdOutput = inputStream;
+    }
+
     @Override
     public void start() {
         if (processStdOutput == null) {
@@ -32,19 +40,17 @@ public class DaemonOutputConsumer implements StreamsHandler {
 
         // Wait for the process' stdout to indicate that the process has been started successfully
         StringWriter output = new StringWriter();
-        Scanner scanner = new Scanner(processStdOutput);
-        PrintWriter printer = new PrintWriter(output);
-        try {
-            while (scanner.hasNext()) {
-                String line = scanner.nextLine();
-                LOGGER.debug("daemon out: {}", line);
-                printer.println(line);
-                if (startupCommunication.containsGreeting(line)) {
-                    break;
+        try (Scanner scanner = new Scanner(processStdOutput)) {
+            try (PrintWriter printer = new PrintWriter(output)) {
+                while (scanner.hasNext()) {
+                    String line = scanner.nextLine();
+                    LOGGER.debug("daemon out: {}", line);
+                    printer.println(line);
+                    if (startupCommunication.containsGreeting(line)) {
+                        break;
+                    }
                 }
             }
-        } finally {
-            scanner.close();
         }
         processOutput = output.toString();
     }

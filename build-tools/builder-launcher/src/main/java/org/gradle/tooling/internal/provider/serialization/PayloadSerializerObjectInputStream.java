@@ -1,7 +1,6 @@
 package org.gradle.tooling.internal.provider.serialization;
 
 import static org.gradle.tooling.internal.provider.serialization.PayloadSerializerObjectOutputStream.SAME_CLASSLOADER_TOKEN;
-import static jdk.xml.internal.SecuritySupport.getClassLoader;
 
 import org.gradle.internal.serialize.ExceptionReplacingObjectInputStream;
 

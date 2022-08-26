@@ -1,5 +1,6 @@
 package java.lang.management;
 
+import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
 
 import java.io.FilePermission;
@@ -330,12 +331,12 @@ public class ManagementFactory {
 
             @Override
             public String getClassPath() {
-                return null;
+                return "";
             }
 
             @Override
             public String getLibraryPath() {
-                return null;
+                return "";
             }
 
             @Override
@@ -350,7 +351,7 @@ public class ManagementFactory {
 
             @Override
             public List<String> getInputArguments() {
-                return null;
+                return emptyList();
             }
 
             @Override

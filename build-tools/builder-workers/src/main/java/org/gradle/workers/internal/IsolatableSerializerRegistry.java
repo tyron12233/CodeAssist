@@ -1,3 +1,19 @@
+/*
+ * Copyright 2019 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.gradle.workers.internal;
 
 import com.google.common.collect.ImmutableCollection;
@@ -5,6 +21,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.hash.HashCode;
+
 import org.gradle.api.attributes.Attribute;
 import org.gradle.internal.Cast;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
@@ -25,7 +42,7 @@ import org.gradle.internal.snapshot.impl.IsolatedList;
 import org.gradle.internal.snapshot.impl.IsolatedManagedValue;
 import org.gradle.internal.snapshot.impl.IsolatedMap;
 import org.gradle.internal.snapshot.impl.IsolatedProperties;
-import org.gradle.internal.snapshot.impl.IsolatedSerializedValueSnapshot;
+import org.gradle.internal.snapshot.impl.IsolatedJavaSerializedValueSnapshot;
 import org.gradle.internal.snapshot.impl.IsolatedSet;
 import org.gradle.internal.snapshot.impl.LongValueSnapshot;
 import org.gradle.internal.snapshot.impl.MapEntrySnapshot;
@@ -85,7 +102,7 @@ public class IsolatableSerializerRegistry extends DefaultSerializerRegistry {
         isolatableSerializers.put(MANAGED_VALUE, new IsolatedManagedValueSerializer());
         isolatableSerializers.put(IMMUTABLE_MANAGED_VALUE, new IsolatedImmutableManagedValueSerializer());
         isolatableSerializers.put(FILE_VALUE, new FileValueSnapshotSerializer());
-        isolatableSerializers.put(SERIALIZED_VALUE, new IsolatedSerializedValueSnapshotSerializer());
+        isolatableSerializers.put(SERIALIZED_VALUE, new IsolatedJavaSerializedValueSnapshotSerializer());
         isolatableSerializers.put(NULL_VALUE, new NullValueSnapshotSerializer());
         isolatableSerializers.put(ENUM_VALUE, new IsolatedEnumValueSnapshotSerializer());
         isolatableSerializers.put(ISOLATED_MAP, new IsolatedMapSerializer());
@@ -364,27 +381,36 @@ public class IsolatableSerializerRegistry extends DefaultSerializerRegistry {
         }
     }
 
-    private class IsolatedSerializedValueSnapshotSerializer implements IsolatableSerializer<IsolatedSerializedValueSnapshot> {
+    private class IsolatedJavaSerializedValueSnapshotSerializer implements IsolatableSerializer<IsolatedJavaSerializedValueSnapshot> {
         @Override
-        public void write(Encoder encoder, IsolatedSerializedValueSnapshot value) throws Exception {
+        public void write(Encoder encoder, IsolatedJavaSerializedValueSnapshot value) throws Exception {
             encoder.writeByte(SERIALIZED_VALUE);
             encoder.writeString(value.getOriginalClass().getName());
-            encoder.writeBinary(value.getImplementationHash().asBytes());
+            HashCode implementationHash = value.getImplementationHash();
+            if (implementationHash == null) {
+                encoder.writeBoolean(false);
+            } else {
+                encoder.writeBoolean(true);
+                encoder.writeBinary(implementationHash.asBytes());
+            }
             encoder.writeBinary(value.getValue());
         }
 
         @Override
-        public IsolatedSerializedValueSnapshot read(Decoder decoder) throws Exception {
+        public IsolatedJavaSerializedValueSnapshot read(Decoder decoder) throws Exception {
             String originalClassName = decoder.readString();
             Class<?> originalClass = fromClassName(originalClassName);
-            byte[] hashBytes = decoder.readBinary();
+            HashCode implementationHash = null;
+            if (decoder.readBoolean()) {
+                implementationHash = HashCode.fromBytes(decoder.readBinary());
+            }
             byte[] serializedBytes = decoder.readBinary();
-            return new IsolatedSerializedValueSnapshot(HashCode.fromBytes(hashBytes), serializedBytes, originalClass);
+            return new IsolatedJavaSerializedValueSnapshot(implementationHash, serializedBytes, originalClass);
         }
 
         @Override
-        public Class<IsolatedSerializedValueSnapshot> getIsolatableClass() {
-            return IsolatedSerializedValueSnapshot.class;
+        public Class<IsolatedJavaSerializedValueSnapshot> getIsolatableClass() {
+            return IsolatedJavaSerializedValueSnapshot.class;
         }
     }
 
