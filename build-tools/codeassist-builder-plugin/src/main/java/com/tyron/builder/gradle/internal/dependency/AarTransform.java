@@ -19,7 +19,7 @@ import static com.tyron.builder.plugin.SdkConstants.FN_RESOURCE_TEXT;
 import static com.tyron.builder.plugin.SdkConstants.FN_SHARED_LIBRARY_ANDROID_MANIFEST_XML;
 
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts.ArtifactType;
-import com.tyron.builder.internal.tasks.AarMetadataTask;
+import com.tyron.builder.gradle.internal.tasks.AarMetadataTask;
 import com.tyron.builder.plugin.SdkConstants;
 
 import java.io.File;
