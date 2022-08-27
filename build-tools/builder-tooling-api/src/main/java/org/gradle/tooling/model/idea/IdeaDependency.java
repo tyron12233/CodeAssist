@@ -19,6 +19,8 @@ package org.gradle.tooling.model.idea;
 import org.gradle.tooling.model.Dependency;
 import org.gradle.tooling.model.idea.IdeaDependencyScope;
 
+import java.io.File;
+
 /**
  * IDEA dependency.
  *
@@ -26,6 +28,9 @@ import org.gradle.tooling.model.idea.IdeaDependencyScope;
  */
 public interface IdeaDependency extends Dependency {
 
+    default File getFile() {
+        return null;
+    }
     /**
      * scope of the current dependency. Not-<code>null</code> all the time
      *

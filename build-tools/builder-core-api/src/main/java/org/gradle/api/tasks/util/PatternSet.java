@@ -134,11 +134,11 @@ public class PatternSet implements PatternFilterable {
         return patternSpecFactory.createSpec(this);
     }
 
-    public Predicate<FileTreeElement> getAsIncludeSpec() {
+    public Spec<FileTreeElement> getAsIncludeSpec() {
         return patternSpecFactory.createIncludeSpec(this);
     }
 
-    public Predicate<FileTreeElement> getAsExcludeSpec() {
+    public Spec<FileTreeElement> getAsExcludeSpec() {
         return patternSpecFactory.createExcludeSpec(this);
     }
 

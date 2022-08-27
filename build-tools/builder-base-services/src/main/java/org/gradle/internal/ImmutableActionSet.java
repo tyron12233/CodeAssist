@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.gradle.internal;
 
 
@@ -23,8 +38,7 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
      * Creates an empty action set.
      */
     public static <T> ImmutableActionSet<T> empty() {
-        //noinspection unchecked
-        return (ImmutableActionSet<T>) EMPTY;
+        return Cast.uncheckedNonnullCast(EMPTY);
     }
 
     /**
@@ -48,8 +62,7 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
 
     private static <T> void unpackAction(Action<? super T> action, ImmutableSet.Builder<Action<? super T>> builder) {
         if (action instanceof ImmutableActionSet) {
-            //noinspection unchecked
-            ImmutableActionSet<T> immutableSet = (ImmutableActionSet<T>) action;
+            ImmutableActionSet<T> immutableSet = Cast.uncheckedNonnullCast(action);
             immutableSet.unpackInto(builder);
         } else {
             builder.add(action);
@@ -66,18 +79,15 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
             return this;
         }
         if (action instanceof SingletonSet) {
-            //noinspection unchecked
-            SingletonSet<T> singletonSet = (SingletonSet<T>) action;
+            SingletonSet<T> singletonSet = Cast.uncheckedNonnullCast(action);
             return addOne(singletonSet.singleAction);
         }
         if (action instanceof SetWithFewActions) {
-            //noinspection unchecked
-            SetWithFewActions<T> compositeSet = (SetWithFewActions<T>) action;
+            SetWithFewActions<T> compositeSet = Cast.uncheckedNonnullCast(action);
             return addAll(compositeSet);
         }
         if (action instanceof SetWithManyActions) {
-            //noinspection unchecked
-            SetWithManyActions<T> compositeSet = (SetWithManyActions<T>) action;
+            SetWithManyActions<T> compositeSet = Cast.uncheckedNonnullCast(action);
             return addAll(compositeSet);
         }
         return addOne(action);
@@ -123,8 +133,7 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
             return this;
         }
         if (isEmpty()) {
-            //noinspection unchecked
-            return ((ImmutableActionSet<T>) sibling);
+            return Cast.uncheckedNonnullCast(sibling);
         }
         return add(sibling);
     }
@@ -182,9 +191,7 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
             if (action.equals(singleAction)) {
                 return this;
             }
-            //noinspection unchecked
-            return new SetWithFewActions<T>(
-                    (Action<? super T>[]) new Action<?>[]{singleAction, action});
+            return new SetWithFewActions<T>(Cast.<Action<? super T>[]>uncheckedNonnullCast(new Action<?>[]{singleAction, action}));
         }
 
         @Override
@@ -195,9 +202,7 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
             }
             if (source.actions.length < FEW_VALUES && !source.contains(singleAction)) {
                 // Adding a small set with no duplicates
-                //noinspection unchecked
-                Action<? super T>[] newActions =
-                        (Action<? super T>[]) new Action<?>[source.actions.length + 1];
+                Action<? super T>[] newActions = Cast.uncheckedNonnullCast(new Action<?>[source.actions.length + 1]);
                 newActions[0] = singleAction;
                 System.arraycopy(source.actions, 0, newActions, 1, source.actions.length);
                 return new SetWithFewActions<T>(newActions);
@@ -230,8 +235,7 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
         private final Action<? super T>[] actions;
 
         SetWithFewActions(ImmutableSet<Action<? super T>> set) {
-            //noinspection unchecked
-            actions = (Action<? super T>[]) set.toArray(new Action<?>[set.size()]);
+            actions = Cast.uncheckedNonnullCast(set.toArray(new Action<?>[0]));
         }
 
         SetWithFewActions(Action<? super T>[] actions) {
@@ -251,9 +255,7 @@ public abstract class ImmutableActionSet<T> implements Action<T>, InternalListen
             }
             if (actions.length < FEW_VALUES) {
                 // Adding an action that is not a duplicate
-                //noinspection unchecked
-                Action<? super T>[] newActions =
-                        (Action<? super T>[]) new Action<?>[actions.length + 1];
+                Action<? super T>[] newActions = Cast.uncheckedNonnullCast(new Action<?>[actions.length + 1]);
                 System.arraycopy(actions, 0, newActions, 0, actions.length);
                 newActions[actions.length] = action;
                 return new SetWithFewActions<T>(newActions);

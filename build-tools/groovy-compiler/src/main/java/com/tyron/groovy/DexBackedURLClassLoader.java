@@ -191,12 +191,12 @@ public class DexBackedURLClassLoader extends DexClassLoader {
     }
 
     public void addDexPathPublic(String path) {
-       addDexPathPublic(path, false);
+       addDexPathPublic(path, true);
     }
 
     public void addDexPathPublic(String path, boolean trusted) {
         try {
-            ADD_DEX_PATH_METHOD.invoke(this, path, false);
+            ADD_DEX_PATH_METHOD.invoke(this, path, trusted);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         } catch (InvocationTargetException e) {

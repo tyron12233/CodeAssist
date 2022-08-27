@@ -18,6 +18,7 @@ package org.gradle.launcher.daemon.client;
 import com.tyron.common.TestUtil;
 import com.tyron.common.util.FileUtilsEx;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.gradle.api.GradleException;
 import org.gradle.api.UncheckedIOException;
@@ -50,18 +51,23 @@ import org.gradle.util.internal.CollectionUtils;
 import org.gradle.util.internal.GFileUtils;
 import org.gradle.util.GradleVersion;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Scanner;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -233,16 +239,19 @@ public class DefaultDaemonStarter implements DaemonStarter {
 
                     startProcessAndroid(file);
 
-                    Thread.sleep(5000);
-
                     File daemonOutput = new File(file,"daemonOutput");
                     FileUtilsEx.createFile(daemonOutput);
-                    try (FileInputStream is = new FileInputStream(daemonOutput)) {
-                        outputConsumer.connectStream(is);
-                        outputConsumer.start();
-                    }
 
-                    return daemonGreeter.parseDaemonOutput(outputConsumer.getProcessOutput(), args);
+                    long start = System.currentTimeMillis();
+
+                    String current = "";
+                    while ((current = FileUtils.readFileToString(daemonOutput, StandardCharsets.UTF_8)).isEmpty()) {
+                        long currentTime = System.currentTimeMillis();
+                        if (currentTime - start > 20000) {
+                            throw new RuntimeException("Time out waiting for daemon output");
+                        }
+                    }
+                    return daemonGreeter.parseDaemonOutput(current, args);
                 } else {
                     ExecHandle handle = new DaemonExecHandleBuilder().build(args, workingDir, outputConsumer, stdInput, execActionFactory.newExec());
 

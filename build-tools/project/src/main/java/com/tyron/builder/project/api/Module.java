@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 
 public interface Module extends UserDataHolderEx, CacheHolder {
 
@@ -38,4 +39,19 @@ public interface Module extends UserDataHolderEx, CacheHolder {
      * @return The directory that this project can use to compile files
      */
     File getBuildDirectory();
+
+    default void addChildModule(Module module) {
+
+    }
+
+    default boolean containsFile(File file) {
+        try {
+            File rootFile = getRootFile().getCanonicalFile();
+            File absoluteFile = file.getCanonicalFile();
+
+            return absoluteFile.exists() && absoluteFile.getAbsolutePath().startsWith(rootFile.getAbsolutePath());
+        } catch (IOException e) {
+            return false;
+        }
+    }
 }
