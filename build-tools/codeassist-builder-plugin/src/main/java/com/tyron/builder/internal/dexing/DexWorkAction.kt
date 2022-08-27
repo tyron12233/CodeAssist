@@ -3,7 +3,7 @@ package com.tyron.builder.internal.dexing
 import com.google.common.io.Closer
 import com.tyron.builder.common.blame.MessageReceiver
 import com.tyron.builder.dexing.*
-import com.tyron.builder.internal.errors.MessageReceiverImpl
+import com.tyron.builder.gradle.errors.MessageReceiverImpl
 import com.tyron.builder.internal.tasks.DexArchiveBuilderTaskDelegate
 import org.gradle.api.GradleException
 import org.gradle.api.logging.Logging

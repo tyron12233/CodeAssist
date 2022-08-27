@@ -5,13 +5,12 @@ import com.google.common.base.Throwables
 import com.tyron.builder.dexing.*
 import com.tyron.builder.dexing.DexingType.*
 import com.tyron.builder.files.SerializableFileChanges
-import com.tyron.builder.internal.component.ApkCreationConfig
-import com.tyron.builder.internal.dependency.AndroidAttributes
-import com.tyron.builder.internal.dependency.getDexingArtifactConfiguration
-import com.tyron.builder.internal.errors.MessageReceiverImpl
-import com.tyron.builder.internal.publishing.AndroidArtifacts
-import com.tyron.builder.internal.scope.InternalArtifactType
-import com.tyron.builder.internal.scope.InternalMultipleArtifactType
+import com.tyron.builder.gradle.internal.component.ApkCreationConfig
+import com.tyron.builder.gradle.internal.dependency.getDexingArtifactConfiguration
+import com.tyron.builder.gradle.errors.MessageReceiverImpl
+import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
+import com.tyron.builder.gradle.internal.scope.InternalArtifactType
+import com.tyron.builder.gradle.internal.scope.InternalMultipleArtifactType
 import com.tyron.builder.internal.tasks.DexMergingAction.*
 import com.tyron.builder.internal.tasks.factory.VariantTaskCreationAction
 import com.tyron.builder.internal.utils.setDisallowChanges
@@ -24,10 +23,6 @@ import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ArtifactView
 import org.gradle.api.artifacts.ProjectDependency
-import org.gradle.api.artifacts.component.ComponentIdentifier
-import org.gradle.api.artifacts.component.LibraryBinaryIdentifier
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.file.*
@@ -213,15 +208,14 @@ abstract class DexMergingTask : IncrementalTask() {
         override val name = internalName
 
         override fun handleProvider(taskProvider: TaskProvider<DexMergingTask>) {
-            val artifacts = creationConfig.artifacts
-
-            artifacts
+            super.handleProvider(taskProvider)
+            creationConfig.artifacts
                 .use(taskProvider)
                 .wiredWith(DexMergingTask::outputDir)
                 .toAppendTo(outputType)
 
             if (dexingType === LEGACY_MULTIDEX) {
-                artifacts
+                creationConfig.artifacts
                     .setInitialProvider(taskProvider, DexMergingTask::mainDexListOutput)
                     .withName("mainDexList.txt")
                     .on(InternalArtifactType.LEGACY_MULTIDEX_MAIN_DEX_LIST)

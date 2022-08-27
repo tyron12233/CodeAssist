@@ -1,15 +1,14 @@
 package com.tyron.builder.internal.tasks
 
-import com.tyron.builder.internal.component.ApkCreationConfig
-import com.tyron.builder.internal.dependency.BaseDexingTransform
+import com.tyron.builder.gradle.internal.component.ApkCreationConfig
+import com.tyron.builder.gradle.internal.dependency.BaseDexingTransform
+import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
 import com.tyron.builder.internal.dexing.DexParameters
-import com.tyron.builder.internal.scope.InternalArtifactType
+import com.tyron.builder.gradle.internal.scope.InternalArtifactType
 import com.tyron.builder.internal.tasks.factory.VariantTaskCreationAction
 import com.tyron.builder.plugin.SdkConstants
 import com.tyron.builder.plugin.options.SyncOptions
 import com.tyron.builder.tasks.IncrementalTask
-import org.gradle.api.artifacts.ArtifactView
-import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.transform.CacheableTransform
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition
@@ -261,6 +260,7 @@ abstract class DexArchiveBuilderTask : IncrementalTask() {
             task: DexArchiveBuilderTask,
             inputType: String
         ): FileCollection? {
+
             val runtimeClasspath = task.project.configurations
                 .getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)
             task.project.dependencies.registerTransform(
@@ -288,11 +288,11 @@ abstract class DexArchiveBuilderTask : IncrementalTask() {
                 // task-specific.
                 spec.to.attribute(
                     ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
-                    "ext-dex-debug"
+                    "ext-dex-$name"
                 )
             }
             val externalLibraryDependencies = runtimeClasspath.allDependencies.stream()
-                .filter { it: Dependency? -> it !is ProjectDependency }
+                .filter { it !is ProjectDependency }
                 .collect(Collectors.toList())
             val dex = task.project.configurations.detachedConfiguration()
             dex.dependencies.addAll(
@@ -301,9 +301,10 @@ abstract class DexArchiveBuilderTask : IncrementalTask() {
                 }.collect(Collectors.toList())
             )
             return dex.incoming.artifactView {
+                it.attributes.attribute(AndroidArtifacts.ARTIFACT_TYPE, AndroidArtifacts.ArtifactType.CLASSES_JAR.type)
                 it.attributes.attribute(
                     ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
-                    "ext-dex-debug"
+                    "ext-dex-$name"
                 )
             }.artifacts.artifactFiles
         }

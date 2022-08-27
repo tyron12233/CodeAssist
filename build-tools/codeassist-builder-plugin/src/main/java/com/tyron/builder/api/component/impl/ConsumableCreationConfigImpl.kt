@@ -1,6 +1,6 @@
 package com.tyron.builder.api.component.impl
 
-import com.tyron.builder.internal.component.ConsumableCreationConfig
+import com.tyron.builder.gradle.internal.component.ConsumableCreationConfig
 
 /**
  * This class and subclasses are implementing methods defined in the CreationConfig

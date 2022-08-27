@@ -2,8 +2,8 @@ package com.tyron.builder.internal.api.artifact
 
 import com.tyron.builder.api.artifact.Artifact
 import com.tyron.builder.api.artifact.SingleArtifact
-import com.tyron.builder.internal.scope.BuildArtifactType
-import com.tyron.builder.internal.scope.InternalArtifactType
+import com.tyron.builder.gradle.internal.scope.BuildArtifactType
+import com.tyron.builder.gradle.internal.scope.InternalArtifactType
 import java.lang.RuntimeException
 import kotlin.reflect.KClass
 

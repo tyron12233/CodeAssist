@@ -3,7 +3,7 @@ package com.tyron.builder.api.variant.impl
 import com.tyron.builder.api.variant.FilterConfiguration
 import com.tyron.builder.api.variant.VariantOutputConfiguration
 import com.tyron.builder.api.variant.VariantOutputConfiguration.*
-import com.tyron.builder.internal.component.ComponentCreationConfig
+import com.tyron.builder.gradle.internal.component.ComponentCreationConfig
 import com.tyron.builder.internal.utils.appendCamelCase
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Nested

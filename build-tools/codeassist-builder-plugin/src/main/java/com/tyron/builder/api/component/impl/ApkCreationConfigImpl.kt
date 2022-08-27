@@ -1,6 +1,6 @@
 package com.tyron.builder.api.component.impl
 
-import com.tyron.builder.internal.component.ApkCreationConfig
+import com.tyron.builder.gradle.internal.component.ApkCreationConfig
 
 open class ApkCreationConfigImpl<T: ApkCreationConfig>(
     config: T,

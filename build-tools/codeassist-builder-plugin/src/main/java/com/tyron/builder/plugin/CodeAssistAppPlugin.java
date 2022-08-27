@@ -1,23 +1,30 @@
 package com.tyron.builder.plugin;
 
-import static com.tyron.builder.internal.dependency.DexingTransformKt.getDexingArtifactConfigurations;
-
 import com.tyron.builder.BuildModule;
-import com.tyron.builder.api.artifact.Artifacts;
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl;
+import com.tyron.builder.api.dsl.DependenciesInfo;
+import com.tyron.builder.api.variant.AndroidVersion;
+import com.tyron.builder.api.variant.JavaCompilation;
+import com.tyron.builder.api.variant.VariantOutputConfiguration;
+import com.tyron.builder.api.variant.impl.GlobalVariantBuilderConfig;
+import com.tyron.builder.api.variant.impl.GlobalVariantBuilderConfigImpl;
+import com.tyron.builder.api.variant.impl.VariantBuilderImpl;
+import com.tyron.builder.core.ComponentType;
 import com.tyron.builder.dexing.DexingType;
+import com.tyron.builder.gradle.internal.dependency.VariantDependencies;
+import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts;
+import com.tyron.builder.gradle.internal.scope.BuildFeatureValues;
+import com.tyron.builder.gradle.internal.scope.InternalMultipleArtifactType;
+import com.tyron.builder.gradle.internal.scope.MutableTaskContainer;
+import com.tyron.builder.gradle.internal.services.TaskCreationServices;
 import com.tyron.builder.internal.DependencyConfigurator;
-import com.tyron.builder.internal.component.ApkCreationConfig;
-import com.tyron.builder.internal.dependency.DexingArtifactConfiguration;
-import com.tyron.builder.internal.dependency.DexingTransformKt;
-import com.tyron.builder.internal.publishing.AndroidArtifacts;
-import com.tyron.builder.internal.scope.InternalArtifactType;
-import com.tyron.builder.internal.scope.InternalMultipleArtifactType;
+import com.tyron.builder.gradle.internal.component.ApkCreationConfig;
+import com.tyron.builder.gradle.internal.dependency.DexingArtifactConfiguration;
+import com.tyron.builder.gradle.internal.dependency.DexingTransformKt;
 import com.tyron.builder.internal.tasks.DexArchiveBuilderTask;
-import com.tyron.builder.internal.tasks.DexArchiveBuilderTaskKt;
 import com.tyron.builder.internal.tasks.DexMergingAction;
 import com.tyron.builder.internal.tasks.DexMergingTask;
-import com.tyron.builder.internal.tasks.DexingExternalLibArtifactTransform;
+import com.tyron.builder.internal.tasks.factory.GlobalTaskCreationConfig;
 import com.tyron.builder.internal.tasks.factory.TaskFactory;
 import com.tyron.builder.internal.tasks.factory.TaskFactoryImpl;
 import com.tyron.builder.internal.variant.VariantPathHelper;
@@ -28,38 +35,18 @@ import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
-import org.gradle.api.artifacts.Configuration;
-import org.gradle.api.artifacts.Dependency;
-import org.gradle.api.artifacts.DependencySet;
-import org.gradle.api.artifacts.ProjectDependency;
-import org.gradle.api.artifacts.transform.InputArtifact;
-import org.gradle.api.artifacts.transform.TransformAction;
-import org.gradle.api.artifacts.transform.TransformOutputs;
-import org.gradle.api.artifacts.transform.TransformParameters;
-import org.gradle.api.artifacts.transform.TransformSpec;
-import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
-import org.gradle.api.attributes.Attribute;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.file.FileSystemLocation;
-import org.gradle.api.file.FileSystemLocationProperty;
-import org.gradle.api.logging.Logger;
-import org.gradle.api.logging.Logging;
-import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.provider.Provider;
-import org.gradle.api.specs.Specs;
-import org.gradle.api.tasks.TaskContainer;
-import org.gradle.api.tasks.TaskProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.function.Predicate;
 
 import kotlin.Pair;
-import kotlin.jvm.functions.Function1;
 
 public class CodeAssistAppPlugin implements Plugin<Project> {
 
@@ -77,7 +64,146 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
 
         ArtifactsImpl artifacts = new ArtifactsImpl(project, "debug");
         project.getExtensions().add("artifacts", artifacts);
+
+
         apkCreationConfig = new ApkCreationConfig() {
+            @Override
+            public boolean getNeedsJavaResStreams() {
+                return false;
+            }
+
+            @NotNull
+            @Override
+            public String getArtifactName(@NotNull String name) {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public FileCollection computeLocalPackagedJars() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public FileCollection computeLocalFileDependencies(@NotNull Predicate<File> filePredicate) {
+                return null;
+            }
+
+            @Override
+            public void addVariantOutput(@NotNull VariantOutputConfiguration variantOutputConfiguration,
+                                         @Nullable String outputFileName) {
+
+            }
+
+            @NotNull
+            @Override
+            public JavaCompilation getJavaCompilation() {
+                return null;
+            }
+
+            @Override
+            public boolean getPackageJacocoRuntime() {
+                return false;
+            }
+
+            @NotNull
+            @Override
+            public FileCollection getProvidedOnlyClasspath() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public FileCollection getCompileClasspath() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public FileCollection getJavaClasspath(@NotNull AndroidArtifacts.ConsumedConfigType configType,
+                                                   @NotNull AndroidArtifacts.ArtifactType classesType,
+                                                   @Nullable Object generatedBytecodeKey) {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public TaskCreationServices getServices() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public MutableTaskContainer getTaskContainer() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public BuildFeatureValues getBuildFeatures() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public VariantDependencies getVariantDependencies() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public GlobalTaskCreationConfig getGlobal() {
+                return null;
+            }
+
+            @Nullable
+            @Override
+            public AndroidVersion getTargetSdkVersionOverride() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public AndroidVersion getTargetSdkVersion() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public AndroidVersion getMinSdkVersion() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public Set<String> getSupportedAbis() {
+                return null;
+            }
+
+            @Override
+            public boolean getDebuggable() {
+                return false;
+            }
+
+            @NotNull
+            @Override
+            public Provider<String> getNamespace() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public Provider<String> getApplicationId() {
+                return null;
+            }
+
+            @NotNull
+            @Override
+            public ComponentType getComponentType() {
+                return null;
+            }
+
             @Override
             public boolean getEmbedsMicroApp() {
                 return false;
@@ -213,6 +339,17 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
 
         taskFactory.configure("mergeProjectDexDebug", it -> {
             it.dependsOn("dexBuilderDebug");
+
+            it.doLast(new Action<Task>() {
+                @Override
+                public void execute(@NotNull Task task) {
+                    System.out.println("PRINTING ALL OUTPUTSs");
+                    Provider<List<Directory>> all =
+                            artifacts.getAll(InternalMultipleArtifactType.DEX.INSTANCE);
+                    List<Directory> directories = all.get();
+                    directories.forEach(it -> System.out.println(it.getAsFile()));
+                }
+            });
         });
         taskFactory.configure("dexBuilderDebug", it -> {
             it.dependsOn("compileJava");

@@ -1,7 +1,8 @@
 package com.tyron.builder.internal.tasks.factory
 
-import com.tyron.builder.internal.component.ComponentCreationConfig
+import com.tyron.builder.gradle.internal.component.ComponentCreationConfig
 import com.tyron.builder.internal.tasks.VariantAwareTask
+import com.tyron.builder.internal.tasks.configureVariantProperties
 import com.tyron.builder.tasks.BaseTask
 import org.gradle.api.Task
 import org.gradle.api.tasks.TaskProvider

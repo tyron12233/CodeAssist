@@ -1,7 +1,7 @@
 package com.tyron.builder.plugin.tasks
 
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl
-import com.tyron.builder.internal.scope.InternalMultipleArtifactType
+import com.tyron.builder.gradle.internal.scope.InternalMultipleArtifactType
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.FileCollection
 import org.gradle.api.tasks.Classpath

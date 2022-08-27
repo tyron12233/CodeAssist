@@ -4,9 +4,9 @@ import com.tyron.builder.api.artifact.Artifact
 import com.tyron.builder.api.artifact.ScopedArtifact
 import com.tyron.builder.api.variant.ScopedArtifacts
 import com.tyron.builder.api.variant.ScopedArtifactsOperation
-import com.tyron.builder.internal.scope.getDirectories
-import com.tyron.builder.internal.scope.getIntermediateOutputPath
-import com.tyron.builder.internal.scope.getRegularFiles
+import com.tyron.builder.gradle.internal.scope.getDirectories
+import com.tyron.builder.gradle.internal.scope.getIntermediateOutputPath
+import com.tyron.builder.gradle.internal.scope.getRegularFiles
 import org.gradle.api.Task
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.Directory
@@ -18,7 +18,6 @@ import org.gradle.api.file.RegularFile
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
-import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.TaskProvider
 import java.util.concurrent.atomic.AtomicBoolean
 

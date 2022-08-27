@@ -5,8 +5,8 @@ import com.tyron.builder.api.artifact.Artifact.*
 import com.tyron.builder.api.variant.BuiltArtifactsLoader
 import com.tyron.builder.api.variant.ScopedArtifacts
 import com.tyron.builder.api.variant.impl.BuiltArtifactsLoaderImpl
-import com.tyron.builder.internal.scope.getIntermediateOutputPath
-import com.tyron.builder.internal.scope.getOutputPath
+import com.tyron.builder.gradle.internal.scope.getIntermediateOutputPath
+import com.tyron.builder.gradle.internal.scope.getOutputPath
 import com.tyron.builder.internal.utils.setDisallowChanges
 import org.gradle.api.Project
 import org.gradle.api.Task

@@ -3,8 +3,8 @@ package com.tyron.builder.api.artifact.impl
 import com.tyron.builder.api.artifact.*
 import com.tyron.builder.api.artifact.Artifact.*
 import com.tyron.builder.api.variant.impl.BuiltArtifactsImpl
-import com.tyron.builder.internal.scope.InternalArtifactType
-import com.tyron.builder.internal.scope.getOutputPath
+import com.tyron.builder.gradle.internal.scope.InternalArtifactType
+import com.tyron.builder.gradle.internal.scope.getOutputPath
 import org.gradle.api.Task
 import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty
