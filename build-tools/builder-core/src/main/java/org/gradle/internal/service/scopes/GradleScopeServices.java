@@ -10,6 +10,7 @@ import org.gradle.api.internal.plugins.PluginManagerInternal;
 import org.gradle.api.internal.plugins.PluginRegistry;
 import org.gradle.api.internal.plugins.PluginTarget;
 import org.gradle.api.internal.project.ProjectStateRegistry;
+import org.gradle.api.services.internal.BuildServiceProvider;
 import org.gradle.api.services.internal.BuildServiceRegistryInternal;
 import org.gradle.api.services.internal.DefaultBuildServicesRegistry;
 import org.gradle.cache.GlobalCacheLocations;
@@ -108,7 +109,7 @@ public class GradleScopeServices extends DefaultServiceRegistry {
                 services,
                 listenerManager,
                 isolatableFactory,
-                sharedResourceLeaseRegistry
+                sharedResourceLeaseRegistry, BuildServiceProvider.Listener.EMPTY
         );
     }
 
