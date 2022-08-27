@@ -8,6 +8,8 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Collections;
+import java.util.Set;
 
 public interface Module extends UserDataHolderEx, CacheHolder {
 
@@ -53,5 +55,9 @@ public interface Module extends UserDataHolderEx, CacheHolder {
         } catch (IOException e) {
             return false;
         }
+    }
+
+    default Set<String> getModuleDependencies() {
+        return Collections.emptySet();
     }
 }

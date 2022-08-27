@@ -10,8 +10,6 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.system.ErrnoException;
-import android.system.Os;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.CharacterStyle;
@@ -29,23 +27,18 @@ import com.tyron.builder.compiler.AndroidAppBundleBuilder;
 import com.tyron.builder.compiler.ApkBuilder;
 import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Builder;
-import com.tyron.builder.compiler.ProjectBuilder;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
-import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ApkInstaller;
 import com.tyron.common.SharedPreferenceKeys;
-import com.tyron.completion.progress.ProgressIndicator;
 import com.tyron.completion.progress.ProgressManager;
 
-import org.gradle.StartParameter;
-import org.gradle.api.GradleException;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.configuration.ConsoleOutput;
@@ -57,8 +50,6 @@ import org.gradle.internal.buildoption.BuildOption;
 import org.gradle.internal.logging.LoggingManagerInternal;
 import org.gradle.internal.logging.text.StyledTextOutput;
 import org.gradle.internal.nativeintegration.console.ConsoleMetaData;
-import org.gradle.internal.service.ServiceRegistry;
-import org.gradle.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import org.gradle.launcher.ProjectLauncher;
 import org.gradle.tooling.BuildLauncher;
 import org.gradle.tooling.GradleConnector;
@@ -193,44 +184,11 @@ public class CompilerService extends Service {
     }
 
     public void compile(Project project, BuildType type) {
-
         if (true) {
             ProgressManager.getInstance()
                     .runNonCancelableAsync(() -> compileWithBuilderApi(project, type));
             return;
         }
-
-        mProject = project;
-
-
-        if (mProject == null) {
-            if (onResultListener != null) {
-                mMainHandler.post(() -> onResultListener.onComplete(false,
-                        "Failed to open " + "project  (Have you opened a project?)"));
-            }
-
-            if (shouldShowNotification) {
-                updateNotification("Compilation failed", "Unable to open project", -1,
-                        NotificationCompat.PRIORITY_HIGH);
-            }
-            return;
-        }
-
-        project.setCompiling(true);
-        ProgressIndicator indicator = new ProgressIndicator();
-        ProgressManager.getInstance().runAsync(() -> {
-            try {
-                if (true) {
-                    buildProject(project, type);
-                } else {
-                    buildMainModule(project, type);
-                }
-            } finally {
-                project.setCompiling(false);
-            }
-        }, i -> {
-
-        }, indicator);
     }
 
     private void log(LogLevel logLevel, CharSequence contents) {
@@ -259,17 +217,7 @@ public class CompilerService extends Service {
 
     private void compileWithBuilderApi(Project project, BuildType type) {
         try {
-            GradleConnector gradleConnector = GradleConnector.newConnector()
-                    .useDistribution(URI.create("codeAssist"))
-                    .forProjectDirectory(project.getRootFile());
 
-            try (ProjectConnection projectConnection = gradleConnector.connect()) {
-                BuildLauncher buildLauncher = projectConnection.newBuild()
-                        .setStandardError(AppLogFragment.outputStream)
-                        .setStandardOutput(AppLogFragment.outputStream);
-                buildLauncher.withArguments("--stacktrace");
-                buildLauncher.forTasks("assembleDebug").run();
-            }
 
             if (false) {
                 StartParameterInternal startParameter = new StartParameterInternal();
@@ -366,53 +314,6 @@ public class CompilerService extends Service {
         }
     }
 
-    private void buildProject(Project project, BuildType type) {
-        boolean success = true;
-
-        try {
-            ProjectBuilder projectBuilder = new ProjectBuilder(project, logger);
-            projectBuilder.setTaskListener(this::updateNotification);
-            projectBuilder.build(type);
-        } catch (Throwable e) {
-            String message;
-            if (BuildConfig.DEBUG) {
-                message = Log.getStackTraceString(e);
-            } else {
-                message = e.getMessage();
-            }
-            mMainHandler.post(() -> onResultListener.onComplete(false, message));
-            success = false;
-        }
-
-        report(success, type, project.getMainModule());
-    }
-
-    private void buildMainModule(Project project, BuildType type) {
-        Module module = project.getMainModule();
-        Builder<? extends Module> projectBuilder = getBuilderForProject(module, type);
-
-        module.clear();
-        module.index();
-
-        boolean success = true;
-
-        projectBuilder.setTaskListener(this::updateNotification);
-
-        try {
-            projectBuilder.build(type);
-        } catch (Exception e) {
-            String message;
-            if (BuildConfig.DEBUG) {
-                message = Log.getStackTraceString(e);
-            } else {
-                message = e.getMessage();
-            }
-            mMainHandler.post(() -> onResultListener.onComplete(false, message));
-            success = false;
-        }
-
-        report(success, type, module);
-    }
 
     private void report(boolean success, BuildType type, Module module) {
         if (success) {

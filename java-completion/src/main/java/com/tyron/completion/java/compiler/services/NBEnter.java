@@ -69,15 +69,22 @@ public class NBEnter extends Enter {
     private static final Field COMPILATION_UNITS_FIELD;
 
     static {
+        Field COMPILATION_UNITS_FIELD1;
         try {
-            COMPILATION_UNITS_FIELD = Enter.class.getDeclaredField("compilationUnits");
-            COMPILATION_UNITS_FIELD.setAccessible(true);
+            COMPILATION_UNITS_FIELD1 = Enter.class.getDeclaredField("compilationUnits");
+            if (COMPILATION_UNITS_FIELD1 != null) {
+                COMPILATION_UNITS_FIELD1.setAccessible(true);
+            }
         } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
+            COMPILATION_UNITS_FIELD1 = null;
         }
+        COMPILATION_UNITS_FIELD = COMPILATION_UNITS_FIELD1;
     }
 
     public void removeCompilationUnit(JavaFileObject file) {
+        if (COMPILATION_UNITS_FIELD == null) {
+            return;
+        }
         try {
             Object o = COMPILATION_UNITS_FIELD.get(this);
             ((Map) o).remove(file.toUri());

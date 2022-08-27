@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,6 +31,8 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     private ManifestData mManifestData;
     private final Map<String, File> mKotlinFiles;
     private Map<String, File> mResourceClasses;
+
+    private final Set<String> moduleDependencies = new HashSet<>();
 
     public AndroidModuleImpl(File root) {
         super(root);
@@ -203,5 +206,14 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         } catch (Throwable e) {
             throw new Error(e);
         }
+    }
+
+    public void addModuleDependency(String targetModuleName) {
+        moduleDependencies.add(targetModuleName);
+    }
+
+    @Override
+    public Set<String> getModuleDependencies() {
+        return moduleDependencies;
     }
 }

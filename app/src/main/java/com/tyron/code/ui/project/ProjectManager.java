@@ -21,8 +21,10 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.template.CodeTemplate;
+import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.index.CompilerService;
@@ -40,10 +42,26 @@ import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.io.FileUtils;
+import org.gradle.plugins.ide.idea.model.SingleEntryModuleLibrary;
+import org.gradle.tooling.GradleConnector;
+import org.gradle.tooling.ProgressEvent;
+import org.gradle.tooling.ProgressListener;
+import org.gradle.tooling.ProjectConnection;
+import org.gradle.tooling.model.DomainObjectSet;
+import org.gradle.tooling.model.ExternalDependency;
+import org.gradle.tooling.model.HierarchicalElement;
+import org.gradle.tooling.model.idea.IdeaDependency;
+import org.gradle.tooling.model.idea.IdeaDependencyScope;
+import org.gradle.tooling.model.idea.IdeaModule;
+import org.gradle.tooling.model.idea.IdeaModuleDependency;
+import org.gradle.tooling.model.idea.IdeaProject;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -123,7 +141,6 @@ public class ProjectManager {
             logger.warning("Failed to open project: " + exception.getMessage());
             shouldReturn = true;
         }
-        mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
 
         if (shouldReturn) {
             mListener.onComplete(project, false, "Failed to open project.");
@@ -137,33 +154,31 @@ public class ProjectManager {
             logger.warning("Failed to open project: " + exception.getMessage());
         }
 
+        GradleConnector gradleConnector = GradleConnector.newConnector();
+        gradleConnector.forProjectDirectory(mCurrentProject.getRootFile());
+        gradleConnector.useDistribution(URI.create("codeAssist"));
 
-        CompilationInfo compilationInfo = new CompilationInfo(
-                new CompilationInfoImpl(new JavacParser(), null,
-                        null, null, null));
-        logger.info("Compilation info created");
-        project.getMainModule().putUserData(CompilationInfo.COMPILATION_INFO_KEY, compilationInfo);
+        try (ProjectConnection projectConnection = gradleConnector.connect()) {
+            mListener.onTaskStarted("Build model");
 
-        if (mCurrentProject.getMainModule() instanceof JavaModule) {
-            JavaModule javaModule = (JavaModule) mCurrentProject.getMainModule();
+            AppLogFragment.outputStream.write("\033[H\033[2J".getBytes());
 
-            JavacTaskImpl javacTask = compilationInfo.impl.getJavacTask();
-            Context context = javacTask.getContext();
-            Symtab symtab = Symtab.instance(context);
-            Names names = Names.instance(context);
-            BaseFileManager fileManager = (BaseFileManager) context.get(JavaFileManager.class);
-            for (File library : javaModule.getLibraries()) {
-                try (JarFile libraryJar = new JarFile(library)) {
-                    Enumeration<JarEntry> entries = libraryJar.entries();
-                    while (entries.hasMoreElements()) {
-                        JarEntry entry = entries.nextElement();
+            ProgressListener listener = event -> mListener.onTaskStarted(event.getDescription());
+            IdeaProject ideaProject = projectConnection.model(IdeaProject.class)
+                    .setStandardError(AppLogFragment.outputStream)
+                    .setStandardOutput(AppLogFragment.outputStream)
+                    .addProgressListener(listener)
+                    .get();
 
-                        String name = entry.getName();
-                    }
-                } catch (IOException ignored) {
-                }
-            }
+            mListener.onTaskStarted("Index model");
+            buildModel(ideaProject, mCurrentProject);
+        } catch (Throwable t) {
+            mListener.onComplete(mCurrentProject, false, t.getMessage());
+            return;
         }
+
+        mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
+
 
 //        Module module = mCurrentProject.getMainModule();
 //
@@ -234,13 +249,32 @@ public class ProjectManager {
         mListener.onComplete(project, true, "Index successful");
     }
 
-    private void downloadLibraries(JavaModule project,
-                                   TaskListener listener,
-                                   ILogger logger) throws IOException {
-        DependencyManager manager = new DependencyManager(project,
-                                                          ApplicationLoader.applicationContext.getExternalFilesDir(
-                                                                  "cache"));
-        manager.resolve(project, listener, logger);
+    private void buildModel(IdeaProject project, Project currentProject) {
+        List<? extends IdeaModule> allModules = project.getModules().getAll();
+        for (IdeaModule ideaModule : allModules) {
+            Module module = buildModule(ideaModule);
+            currentProject.addModule(module);
+        }
+    }
+
+    private Module buildModule(IdeaModule module) {
+        String projectPath = module.getProjectIdentifier().getProjectPath();
+        AndroidModuleImpl impl = new AndroidModuleImpl(new File(projectPath));
+
+        for (IdeaDependency dependency : module.getDependencies()) {
+            if (!"COMPILE".equals(dependency.getScope().getScope())) {
+                continue;
+            }
+            if (dependency instanceof ExternalDependency) {
+                impl.addLibrary(((ExternalDependency) dependency).getFile());
+            } else if (dependency instanceof IdeaModuleDependency) {
+                impl.addModuleDependency(((IdeaModuleDependency) dependency).getTargetModuleName());
+            }
+        }
+        // TODO: add child modules
+        DomainObjectSet<? extends HierarchicalElement> children = module.getChildren();
+
+        return impl;
     }
 
     public void closeProject(@NonNull Project project) {

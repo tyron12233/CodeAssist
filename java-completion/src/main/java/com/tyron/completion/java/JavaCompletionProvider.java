@@ -6,13 +6,18 @@ import android.util.Log;
 
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.code.Symbol;
+import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.comp.AttrContext;
 import com.sun.tools.javac.comp.Env;
+import com.sun.tools.javac.jvm.ClassReader;
 import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.parser.JavacParser;
 import com.sun.tools.javac.parser.ParserFactory;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.Name;
+import com.sun.tools.javac.util.Names;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.completion.CompletionParameters;
@@ -40,10 +45,14 @@ import com.tyron.completion.progress.ProcessCanceledException;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
@@ -53,6 +62,7 @@ public class JavaCompletionProvider extends CompletionProvider {
 
     private CachedCompletion mCachedCompletion;
 
+    @SuppressWarnings("ALL")
     public JavaCompletionProvider() {
 
     }
@@ -100,8 +110,7 @@ public class JavaCompletionProvider extends CompletionProvider {
     }
 
     public CompletionList.Builder completeV2(CompletionParameters parameters) {
-        CompilationInfo compilationInfo =
-                parameters.getModule().getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+        CompilationInfo compilationInfo = CompilationInfo.get(parameters.getProject(), parameters.getFile());
         if (compilationInfo == null) {
             return null;
         }
@@ -147,44 +156,12 @@ public class JavaCompletionProvider extends CompletionProvider {
     }
 
 
-    public CompletionList.Builder complete(Project project,
-                                           JavaModule module,
-                                           File file,
-                                           String contents,
-                                           long cursor) {
-        JavaCompilerProvider compilerProvider =
-                CompilerService.getInstance().getIndex(JavaCompilerProvider.KEY);
-        JavaCompilerService service = compilerProvider.getCompiler(project, module);
-
-        try {
-            return new Completions(service).complete(file, contents, cursor);
-        } catch (Throwable e) {
-            if (e instanceof ProcessCanceledException) {
-                service.invalidate(file.toPath());
-                throw e;
-            }
-            if (BuildConfig.DEBUG) {
-                Log.e("JavaCompletionProvider", "Unable to get completions", e);
-            }
-            service.destroy();
-        }
-        return null;
-    }
-
     private String partialIdentifier(String contents, int end) {
         int start = end;
         while (start > 0 && Character.isJavaIdentifierPart(contents.charAt(start - 1))) {
             start--;
         }
         return contents.substring(start, end);
-    }
-
-    private String getLabel(CompletionItem item) {
-        String label = item.label;
-        if (label.contains("(")) {
-            label = label.substring(0, label.indexOf('('));
-        }
-        return label;
     }
 
     private boolean isIncrementalCompletion(CachedCompletion cachedCompletion,

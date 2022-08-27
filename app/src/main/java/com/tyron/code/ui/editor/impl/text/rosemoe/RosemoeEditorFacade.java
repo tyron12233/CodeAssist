@@ -124,7 +124,7 @@ public class RosemoeEditorFacade {
             InjectViewBindingTask.inject(project);
         } else if (language instanceof JavaLanguage) {
 
-            CompilationInfo compilationInfo = project.getMainModule().getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+            CompilationInfo compilationInfo = CompilationInfo.get(project, editor.getCurrentFile());
             if (compilationInfo == null) {
                 return;
             }

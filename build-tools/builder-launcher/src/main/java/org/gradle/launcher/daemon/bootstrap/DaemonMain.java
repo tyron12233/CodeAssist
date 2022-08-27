@@ -1,8 +1,6 @@
 package org.gradle.launcher.daemon.bootstrap;
 
-import com.google.common.base.Throwables;
 import com.google.common.io.Files;
-import com.tyron.builder.internal.tasks.DexMergingTaskDelegate;
 
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.logging.LogLevel;
@@ -14,7 +12,6 @@ import org.gradle.internal.logging.LoggingManagerInternal;
 import org.gradle.internal.logging.services.LoggingServiceRegistry;
 import org.gradle.internal.nativeintegration.ProcessEnvironment;
 import org.gradle.internal.nativeintegration.services.NativeServices;
-import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.remote.Address;
 import org.gradle.internal.serialize.kryo.KryoBackedDecoder;
 import org.gradle.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
@@ -33,12 +30,9 @@ import org.gradle.launcher.daemon.server.expiry.DaemonExpirationStrategy;
 import org.gradle.process.internal.shutdown.ShutdownHooks;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.NotSerializableException;
-import java.io.ObjectOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;

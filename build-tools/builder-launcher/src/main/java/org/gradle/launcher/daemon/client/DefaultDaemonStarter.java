@@ -244,7 +244,7 @@ public class DefaultDaemonStarter implements DaemonStarter {
 
                     long start = System.currentTimeMillis();
 
-                    String current = "";
+                    String current;
                     while ((current = FileUtils.readFileToString(daemonOutput, StandardCharsets.UTF_8)).isEmpty()) {
                         long currentTime = System.currentTimeMillis();
                         if (currentTime - start > 20000) {

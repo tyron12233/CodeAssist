@@ -186,8 +186,6 @@ afterEvaluate {
         println "====================="
         println it.class
         println it.externalLibClasses.files
-
-        com.android.build.gradle.internal.tasks.ClassesClasspathUtils.
     }
 }
 

@@ -27,8 +27,7 @@ public class JavaDataContextUtil {
     public static void addEditorKeys(DataContext context, Project project, File file, int cursor) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         if (project != null && preferences.getBoolean(SharedPreferenceKeys.JAVA_ERROR_HIGHLIGHTING, true)) {
-            Module module = project.getModule(file);
-            CompilationInfo compilationInfo = module.getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+            CompilationInfo compilationInfo = CompilationInfo.get(project, file);
             if (compilationInfo != null) {
                 context.putData(CompilationInfo.COMPILATION_INFO_KEY, compilationInfo);
             }

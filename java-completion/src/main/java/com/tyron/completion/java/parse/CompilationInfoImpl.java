@@ -1,5 +1,6 @@
 package com.tyron.completion.java.parse;
 
+import com.sun.source.tree.CompilationUnitTree;
 import com.sun.tools.javac.api.JavacTaskImpl;
 
 import java.io.File;
@@ -19,6 +20,10 @@ import javax.tools.JavaFileObject;
 
 public class CompilationInfoImpl {
 
+    private CompilationUnitTree compilationUnit;
+
+    private final List<File> classpath;
+    private final List<File> sourcepath;
     private JavacTaskImpl javacTask;
     private DiagnosticListener<? super JavaFileObject> diagnosticListener;
 
@@ -30,12 +35,16 @@ public class CompilationInfoImpl {
             JavacParser parser,
             File file,
             File root,
+            List<File> classpath,
+            List<File> sourcepath,
             final JavacTaskImpl javacTask,
             final DiagnosticListener<JavaFileObject> diagnosticListener
     ) {
         this.parser = parser;
         this.file = file;
         this.root = root;
+        this.classpath = classpath;
+        this.sourcepath = sourcepath;
         this.javacTask = javacTask;
         this.diagnosticListener = diagnosticListener;
     }
@@ -62,10 +71,14 @@ public class CompilationInfoImpl {
     public synchronized JavacTaskImpl getJavacTask(List<FileObject> forcedSources) throws IOException {
         if (javacTask == null) {
             diagnosticListener = new DiagnosticListenerImpl();
-            javacTask = JavacParser.createJavacTask(this.file, Collections.emptyList(), this.root, Collections.emptyList(),
+            javacTask = JavacParser.createJavacTask(this.file, Collections.emptyList(), this.root, classpath, sourcepath,
                     this.parser, diagnosticListener, false);
         }
         return javacTask;
+    }
+
+    public CompilationUnitTree getCompilationUnit() {
+        return compilationUnit;
     }
 
     public static class DiagnosticListenerImpl implements DiagnosticListener<JavaFileObject> {

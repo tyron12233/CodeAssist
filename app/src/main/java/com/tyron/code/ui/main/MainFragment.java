@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -16,63 +15,59 @@ import android.view.ViewGroup;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.Toolbar;
-import androidx.appcompat.widget.ViewUtils;
 import androidx.core.view.GravityCompat;
-import androidx.core.view.OnApplyWindowInsetsListener;
 import androidx.core.view.ViewCompat;
-import androidx.core.view.ViewKt;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.transition.MaterialSharedAxis;
-import com.google.gson.Gson;
+import com.google.common.base.Throwables;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
+import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.R;
+import com.tyron.code.service.CompilerServiceConnection;
+import com.tyron.code.service.IndexServiceConnection;
+import com.tyron.code.ui.editor.log.AppLogFragment;
+import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.logging.IdeLog;
+import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.fileeditor.api.FileEditor;
-import com.tyron.fileeditor.api.FileEditorSavedState;
-import com.tyron.code.ui.project.ProjectManager;
-import com.tyron.builder.compiler.BuildType;
-import com.tyron.builder.log.LogViewModel;
-import com.tyron.builder.model.ProjectSettings;
-import com.tyron.builder.project.Project;
-import com.tyron.code.R;
-import com.tyron.code.service.CompilerService;
-import com.tyron.code.service.CompilerServiceConnection;
-import com.tyron.code.service.IndexService;
-import com.tyron.code.service.IndexServiceConnection;
-import com.tyron.code.ui.editor.EditorContainerFragment;
-import com.tyron.code.ui.file.FileViewModel;
-import com.tyron.completion.java.provider.CompletionEngine;
 
+import org.gradle.tooling.BuildLauncher;
+import org.gradle.tooling.GradleConnector;
+import org.gradle.tooling.ProgressListener;
+import org.gradle.tooling.ProjectConnection;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
-import javax.tools.Diagnostic;
 
 import java.io.File;
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
+
+import javax.tools.Diagnostic;
 
 public class MainFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
@@ -135,7 +130,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
 
         requireActivity().getOnBackPressedDispatcher()
-                .addCallback(this, onBackPressedCallback);
+                .addCallback((LifecycleOwner) this, onBackPressedCallback);
 
         String projectPath = requireArguments().getString("project_path");
         mProject = new Project(new File(projectPath));
@@ -227,25 +222,21 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mMainViewModel.setFiles(new ArrayList<>());
             mLogViewModel.clear(LogViewModel.BUILD_LOG);
         }
-        mMainViewModel.isIndexing()
-                .observe(getViewLifecycleOwner(), indexing -> {
-                    mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
-                    CompletionEngine.setIndexing(indexing);
-                    refreshToolbar();
-                });
-        mMainViewModel.getCurrentState()
-                .observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
-        mMainViewModel.getToolbarTitle()
-                .observe(getViewLifecycleOwner(), mToolbar::setTitle);
+        mMainViewModel.isIndexing().observe(getViewLifecycleOwner(), indexing -> {
+            mProgressBar.setVisibility(indexing ? View.VISIBLE : View.GONE);
+            CompletionEngine.setIndexing(indexing);
+            refreshToolbar();
+        });
+        mMainViewModel.getCurrentState().observe(getViewLifecycleOwner(), mToolbar::setSubtitle);
+        mMainViewModel.getToolbarTitle().observe(getViewLifecycleOwner(), mToolbar::setTitle);
         if (mRoot instanceof DrawerLayout) {
-            mMainViewModel.getDrawerState()
-                    .observe(getViewLifecycleOwner(), isOpen -> {
-                        if (isOpen) {
-                            ((DrawerLayout) mRoot).open();
-                        } else {
-                            ((DrawerLayout) mRoot).close();
-                        }
-                    });
+            mMainViewModel.getDrawerState().observe(getViewLifecycleOwner(), isOpen -> {
+                if (isOpen) {
+                    ((DrawerLayout) mRoot).open();
+                } else {
+                    ((DrawerLayout) mRoot).close();
+                }
+            });
         }
 
         mHandler = new Handler() {
@@ -378,13 +369,47 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         RefreshRootEvent event = new RefreshRootEvent(project.getRootFile());
         ApplicationLoader.getInstance().getEventManager().dispatchEvent(event);
 
-        Intent intent = new Intent(requireContext(), IndexService.class);
-        requireActivity().startService(intent);
-        requireActivity().bindService(intent, mIndexServiceConnection, Context.BIND_IMPORTANT);
+        ProgressManager.getInstance().runNonCancelableAsync(() -> ProjectManager.getInstance().openProject(project, false, new TaskListener(), ILogger.wrap(mLogViewModel)));
+    }
+
+    private class TaskListener implements ProjectManager.TaskListener {
+
+        @Override
+        public void onTaskStarted(String message) {
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> mMainViewModel.setCurrentState(message));
+            }
+        }
+
+        @SuppressWarnings("ConstantConditions")
+        @Override
+        public void onComplete(Project project, boolean success, String message) {
+            if (getActivity() == null) {
+                return;
+            }
+            requireActivity().runOnUiThread(() -> {
+                mMainViewModel.setIndexing(false);
+                mMainViewModel.setCurrentState(null);
+                if (success) {
+                    Project currentProject = ProjectManager.getInstance()
+                            .getCurrentProject();
+                    if (project.equals(currentProject)) {
+                        mMainViewModel.setToolbarTitle(project.getRootFile()
+                                .getName());
+                    }
+                } else {
+                    if (mMainViewModel.getBottomSheetState()
+                                .getValue() != BottomSheetBehavior.STATE_EXPANDED) {
+                        mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                    }
+                    mLogViewModel.e(LogViewModel.BUILD_LOG, message);
+                }
+            });
+        }
     }
 
     private void compile(BuildType type) {
-        if (mServiceConnection.isCompiling() || CompletionEngine.isIndexing()) {
+        if (Boolean.TRUE.equals(mMainViewModel.isIndexing().getValue()) || CompletionEngine.isIndexing()) {
             return;
         }
         mServiceConnection.setBuildType(type);
@@ -393,9 +418,43 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mMainViewModel.setIndexing(true);
         mLogViewModel.clear(LogViewModel.BUILD_LOG);
 
-        requireActivity().startService(new Intent(requireContext(), CompilerService.class));
-        requireActivity().bindService(new Intent(requireContext(), CompilerService.class),
-                                      mServiceConnection, Context.BIND_IMPORTANT);
+        Runnable compileRunnable = () -> {
+            try {
+                GradleConnector gradleConnector = GradleConnector.newConnector()
+                        .useDistribution(URI.create("codeAssist"))
+                        .forProjectDirectory(mProject.getRootFile());
+
+                try (ProjectConnection projectConnection = gradleConnector.connect()) {
+                    BuildLauncher buildLauncher = projectConnection.newBuild()
+                            .setStandardError(AppLogFragment.outputStream)
+                            .setStandardOutput(AppLogFragment.outputStream);
+                    buildLauncher.addProgressListener((ProgressListener) desc -> {
+                        if (getActivity() != null) {
+                            requireActivity().runOnUiThread(() -> mMainViewModel.setCurrentState(desc.getDescription()));
+                        }
+                    });
+                    buildLauncher.withArguments("--stacktrace");
+                    buildLauncher.withArguments("--build-cache");
+                    buildLauncher.forTasks("run");
+                    buildLauncher.run();
+                }
+            } catch (Throwable t) {
+                if (getActivity() != null) {
+                    requireActivity().runOnUiThread(() -> {
+                        mLogViewModel.e(LogViewModel.IDE, Throwables.getStackTraceAsString(t));
+                        mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
+                    });
+                }
+            } finally {
+                if (getActivity() != null) {
+                    requireActivity().runOnUiThread(() -> {
+                        mMainViewModel.setCurrentState(null);
+                        mMainViewModel.setIndexing(false);
+                    });
+                }
+            }
+        };
+        ProgressManager.getInstance().runNonCancelableAsync(compileRunnable);
     }
 
     @Override

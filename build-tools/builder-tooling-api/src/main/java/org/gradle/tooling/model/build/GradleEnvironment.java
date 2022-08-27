@@ -14,30 +14,31 @@
  * limitations under the License.
  */
 
-package org.gradle.tooling.model.idea;
-
-import org.gradle.tooling.model.Dependency;
-import org.gradle.tooling.model.idea.IdeaDependencyScope;
+package org.gradle.tooling.model.build;
 
 import java.io.File;
 
 /**
- * IDEA dependency.
+ * Informs about the Gradle environment, for example the Gradle version.
+ * <p>
+ * See example in {@link BuildEnvironment}
  *
- * @since 1.0-milestone-5
+ * @since 1.0-milestone-8
  */
-public interface IdeaDependency extends Dependency {
-    /**
-     * scope of the current dependency. Not-<code>null</code> all the time
-     *
-     * @return scope
-     */
-    IdeaDependencyScope getScope();
+public interface GradleEnvironment {
 
     /**
-     * Allows to check if current dependency is transitive, i.e.<!-- --> is visible to the module which depends on module that has current dependency.
+     * Informs about the Gradle user home.
      *
-     * @return <code>true</code> if current dependency is transitive; <code>false</code> otherwise
+     * @since 2.4
      */
-    boolean getExported();
+    File getGradleUserHome();
+
+    /**
+     * Informs about the Gradle version.
+     *
+     * @since 1.0-milestone-8
+     */
+    String getGradleVersion();
+
 }
