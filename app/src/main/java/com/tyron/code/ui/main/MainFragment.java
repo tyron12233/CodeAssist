@@ -40,7 +40,6 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.service.CompilerServiceConnection;
 import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.file.FileViewModel;
@@ -112,7 +111,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         }
     };
     private Project mProject;
-    private CompilerServiceConnection mServiceConnection;
     private IndexServiceConnection mIndexServiceConnection;
 
     private final CompileCallback mCompileCallback = this::compile;
@@ -140,7 +138,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
         mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
-        mServiceConnection = new CompilerServiceConnection(mMainViewModel, mLogViewModel);
     }
 
     @Override
@@ -308,8 +305,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     @Override
     public void onPause() {
         super.onPause();
-
-        mServiceConnection.setShouldShowNotification(true);
     }
 
     @Override
@@ -412,7 +407,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         if (Boolean.TRUE.equals(mMainViewModel.isIndexing().getValue()) || CompletionEngine.isIndexing()) {
             return;
         }
-        mServiceConnection.setBuildType(type);
 
         mMainViewModel.setCurrentState(getString(R.string.compilation_state_compiling));
         mMainViewModel.setIndexing(true);
