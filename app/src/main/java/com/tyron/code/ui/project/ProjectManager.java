@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
+import com.tyron.builder.BuildModule;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.ContentRoot;
@@ -14,7 +15,6 @@ import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.logging.IdeLog;
-import com.tyron.completion.java.compiler.ParseTask;
 import com.tyron.completion.java.compiler.Parser;
 import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -23,9 +23,8 @@ import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
 import org.gradle.tooling.GradleConnector;
-import org.gradle.tooling.ProgressListener;
 import org.gradle.tooling.ProjectConnection;
-import org.gradle.tooling.events.ProgressEvent;
+import org.gradle.tooling.events.ProgressListener;
 import org.gradle.tooling.model.DomainObjectSet;
 import org.gradle.tooling.model.ExternalDependency;
 import org.gradle.tooling.model.HierarchicalElement;
@@ -47,8 +46,6 @@ import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 
 public class ProjectManager {
-
-    private static final Logger LOG = IdeLog.getCurrentLogger(ProjectManager.class);
 
     public interface TaskListener {
         void onTaskStarted(String message);
@@ -92,8 +89,10 @@ public class ProjectManager {
                             TaskListener listener,
                             ILogger logger) {
         ProgressManager.getInstance()
-                .runNonCancelableAsync(
-                        () -> doOpenProject(project, downloadLibs, listener, logger));
+                .runNonCancelableAsync(() -> doOpenProject(project,
+                        downloadLibs,
+                        listener,
+                        logger));
     }
 
     private void doOpenProject(Project project,
@@ -103,7 +102,7 @@ public class ProjectManager {
         mCurrentProject = project;
 
         boolean shouldReturn = false;
-        // Index the project after downloading dependencies so it will get added to classpath
+
         try {
             mCurrentProject.open();
         } catch (IOException exception) {
@@ -123,6 +122,10 @@ public class ProjectManager {
             logger.warning("Failed to open project: " + exception.getMessage());
         }
 
+        // the following will extract the jar files if it does not exist
+        BuildModule.getAndroidJar();
+        BuildModule.getLambdaStubs();
+
         GradleConnector gradleConnector = GradleConnector.newConnector();
         gradleConnector.forProjectDirectory(mCurrentProject.getRootFile());
         gradleConnector.useDistribution(URI.create("codeAssist"));
@@ -130,12 +133,15 @@ public class ProjectManager {
         try (ProjectConnection projectConnection = gradleConnector.connect()) {
             mListener.onTaskStarted("Build model");
 
+            // clears the logs
             AppLogFragment.outputStream.write("\033[H\033[2J".getBytes());
 
+            ProgressListener progressListener =
+                    event -> mListener.onTaskStarted(event.getDisplayName());
             IdeaProject ideaProject = projectConnection.model(IdeaProject.class)
                     .setStandardError(AppLogFragment.outputStream)
                     .setStandardOutput(AppLogFragment.outputStream)
-                    .addProgressListener((org.gradle.tooling.events.ProgressListener) event -> mListener.onTaskStarted(event.getDisplayName()))
+                    .addProgressListener(progressListener)
                     .get();
 
             mListener.onTaskStarted("Index model");
@@ -149,72 +155,6 @@ public class ProjectManager {
         }
 
         mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
-
-
-//        Module module = mCurrentProject.getMainModule();
-//
-//        if (module instanceof AndroidModule) {
-//            mListener.onTaskStarted("Generating resource files.");
-//
-//            ManifestMergeTask manifestMergeTask =
-//                    new ManifestMergeTask(project, (AndroidModule) module, logger);
-//            IncrementalAapt2Task task =
-//                    new IncrementalAapt2Task(project, (AndroidModule) module, logger, false);
-//            try {
-//                manifestMergeTask.prepare(BuildType.DEBUG);
-//                manifestMergeTask.run();
-//
-//                task.prepare(BuildType.DEBUG);
-//                task.run();
-//            } catch (IOException | CompilationFailedException e) {
-//                logger.warning("Unable to generate resource classes " + e.getMessage());
-//            }
-//        }
-//
-//        if (module instanceof JavaModule) {
-//            if (module instanceof AndroidModule) {
-//                mListener.onTaskStarted("Indexing XML files.");
-//
-//                XmlIndexProvider index = CompilerService.getInstance()
-//                        .getIndex(XmlIndexProvider.KEY);
-//                index.clear();
-//
-//                XmlRepository xmlRepository = index.get(project, module);
-//                try {
-//                    xmlRepository.initialize((AndroidModule) module);
-//                } catch (IOException e) {
-//                    String message = "Unable to initialize resource repository. " +
-//                                     "Resource code completion might be incomplete or unavailable. \n" +
-//                                     "Reason: " + e.getMessage();
-//                    LOG.warning(message);
-//                }
-//            }
-//
-//            mListener.onTaskStarted("Indexing");
-//            try {
-//                JavaCompilerProvider provider = CompilerService.getInstance()
-//                        .getIndex(JavaCompilerProvider.KEY);
-//                JavaCompilerService service = provider.get(project, module);
-//
-//                if (module instanceof AndroidModule) {
-//                    InjectResourcesTask.inject(project, (AndroidModule) module);
-//                    InjectViewBindingTask.inject(project, (AndroidModule) module);
-//                }
-//
-//                JavaModule javaModule = ((JavaModule) module);
-//                Collection<File> files = javaModule.getJavaFiles().values();
-//                File first = CollectionsKt.firstOrNull(files);
-//                if (first != null) {
-//                    service.compile(first.toPath());
-//                }
-//            } catch (Throwable e) {
-//                String message =
-//                        "Failure indexing project.\n" + Throwables.getStackTraceAsString(e);
-//
-//            }
-
-//            mListener.onComplete(project, false, message);
-//        }
 
         mCurrentProject.setIndexing(false);
         mListener.onComplete(project, true, "Index successful");
@@ -231,7 +171,7 @@ public class ProjectManager {
 
     /**
      * Indexes each module so completion would work immediately
-     *
+     * <p>
      * In-order to keep indexing as fast as possible, method bodies of each classes are removed.
      * When the file is opened in the editor, its contents will be re-parsed with method bodies
      * included.
@@ -246,12 +186,12 @@ public class ProjectManager {
             if (info == null) {
                 continue;
             }
-            info.updateImmediately(new SimpleJavaFileObject(value.toURI(), JavaFileObject.Kind.SOURCE) {
+            info.updateImmediately(new SimpleJavaFileObject(value.toURI(),
+                    JavaFileObject.Kind.SOURCE) {
                 @Override
                 public CharSequence getCharContent(boolean ignoreEncodingErrors) {
                     Parser parser = Parser.parseFile(module.getProject(), value.toPath());
-                    return new PruneMethodBodies(info.impl.getJavacTask())
-                            .scan(parser.root, 0L);
+                    return new PruneMethodBodies(info.impl.getJavacTask()).scan(parser.root, 0L);
                 }
             });
         }
@@ -306,8 +246,7 @@ public class ProjectManager {
             return null;
         }
 
-        String code = template.get()
-                .replace(CodeTemplate.CLASS_NAME, name);
+        String code = template.get().replace(CodeTemplate.CLASS_NAME, name);
 
         File classFile = new File(directory, name + template.getExtension());
         if (classFile.exists()) {
