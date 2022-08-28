@@ -16,7 +16,6 @@ public class LayoutEditor extends RosemoeCodeEditor {
         super(context, file, provider);
     }
 
-    @Override
     protected CodeEditorFragment createFragment(File file) {
         return LayoutTextEditorFragment.newInstance(file);
     }

@@ -24,7 +24,12 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.project.Project;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.event.EventManager;
+import com.tyron.code.event.EventReceiver;
+import com.tyron.code.event.PerformShortcutEvent;
+import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.code.language.java.JavaLanguage;
 import com.tyron.code.language.xml.LanguageXML;
@@ -109,6 +114,13 @@ public class RosemoeEditorFacade {
                         }
                     });
                 });
+            }
+        });
+
+        EventManager eventManager = ApplicationLoader.getInstance().getEventManager();
+        eventManager.subscribeEvent(PerformShortcutEvent.class, (event, unsubscribe) -> {
+            if (event.getEditor() == rosemoeCodeEditor) {
+                event.getItem().actions.forEach(it -> it.apply(editor, event.getItem()));
             }
         });
     }

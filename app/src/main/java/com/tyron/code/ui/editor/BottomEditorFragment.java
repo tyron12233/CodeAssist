@@ -18,8 +18,10 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.common.base.Strings;
 import com.tyron.builder.log.LogViewModel;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
+import com.tyron.code.event.EventManager;
+import com.tyron.code.event.PerformShortcutEvent;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
@@ -65,15 +67,16 @@ public class BottomEditorFragment extends Fragment {
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(LayoutInflater inflater,
+                             ViewGroup container,
+                             Bundle savedInstanceState) {
         mRoot = inflater.inflate(R.layout.bottom_editor_fragment, container, false);
         mRowLayout = mRoot.findViewById(R.id.row_layout);
         mShortcutsRecyclerView = mRoot.findViewById(R.id.recyclerview_shortcuts);
         mPager = mRoot.findViewById(R.id.viewpager);
         mTabLayout = mRoot.findViewById(R.id.tablayout);
 
-        mFilesViewModel = new ViewModelProvider(requireActivity())
-                .get(MainViewModel.class);
+        mFilesViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         return mRoot;
     }
 
@@ -103,24 +106,22 @@ public class BottomEditorFragment extends Fragment {
         }).attach();
 
         ShortcutsAdapter adapter = new ShortcutsAdapter(getShortcuts());
-        LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext(),
-                LinearLayoutManager.HORIZONTAL, false);
+        LinearLayoutManager layoutManager =
+                new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false);
         mShortcutsRecyclerView.setLayoutManager(layoutManager);
         mShortcutsRecyclerView.setAdapter(adapter);
 
         adapter.setOnShortcutSelectedListener((item, pos) -> {
             FileEditor currentFile = mFilesViewModel.getCurrentFileEditor();
             if (currentFile != null) {
-//                if (currentFile.getFragment() instanceof CodeEditorFragment) {
-//                    ((CodeEditorFragment) currentFile.getFragment()).performShortcut(item);
-//                }
+                EventManager eventManager = ApplicationLoader.getInstance().getEventManager();
+                eventManager.dispatchEvent(new PerformShortcutEvent(item, currentFile));
             }
         });
 
-        getParentFragmentManager().setFragmentResultListener(OFFSET_KEY, getViewLifecycleOwner(),
-                ((requestKey, result) -> {
-            setOffset(result.getFloat("offset", 0f));
-        }));
+        getParentFragmentManager().setFragmentResultListener(OFFSET_KEY,
+                getViewLifecycleOwner(),
+                ((requestKey, result) -> setOffset(result.getFloat("offset", 0f))));
     }
 
     private void setOffset(float offset) {
@@ -139,8 +140,7 @@ public class BottomEditorFragment extends Fragment {
     }
 
     private void setRowOffset(float offset) {
-        mRowLayout.getLayoutParams()
-                .height = Math.round(AndroidUtilities.dp(38) * offset);
+        mRowLayout.getLayoutParams().height = Math.round(AndroidUtilities.dp(38) * offset);
         mRowLayout.requestLayout();
     }
 
@@ -160,32 +160,34 @@ public class BottomEditorFragment extends Fragment {
                 if (editor.useTab()) {
                     editor.insert(cursor.getStartLine(), cursor.getStartColumn(), "\t");
                 } else {
-                    editor.insert(cursor.getStartLine(), cursor.getStartColumn(),
+                    editor.insert(cursor.getStartLine(),
+                            cursor.getStartColumn(),
                             Strings.repeat(" ", editor.getTabCount()));
                 }
             }
         }), "->", "tab"));
-        items.addAll(strings.stream()
-                .map(item -> {
-                    ShortcutItem it = new ShortcutItem();
-                    it.label = item;
-                    it.kind = TextInsertAction.KIND;
-                    it.actions = Collections.singletonList(new TextInsertAction());
-                    return it;
-                }).collect(Collectors.toList()));
+        items.addAll(strings.stream().map(item -> {
+            ShortcutItem it = new ShortcutItem();
+            it.label = item;
+            it.kind = TextInsertAction.KIND;
+            it.actions = Collections.singletonList(new TextInsertAction());
+            return it;
+        }).collect(Collectors.toList()));
         Collections.addAll(items,
                 new ShortcutItem(Collections.singletonList(new UndoAction()), "⬿", UndoAction.KIND),
                 new ShortcutItem(Collections.singletonList(new RedoAction()), "⤳", RedoAction.KIND),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.UP, 1)), "↑", CursorMoveAction.KIND),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.DOWN, 1)), "↓", CursorMoveAction.KIND),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.LEFT, 1)), "←", CursorMoveAction.KIND),
-                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.RIGHT, 1)), "→", CursorMoveAction.KIND)
-        );
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.UP,
+                        1)), "↑", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.DOWN,
+                        1)), "↓", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.LEFT,
+                        1)), "←", CursorMoveAction.KIND),
+                new ShortcutItem(Collections.singletonList(new CursorMoveAction(CursorMoveAction.Direction.RIGHT,
+                        1)), "→", CursorMoveAction.KIND));
 
         return items;
     }
 
-    @SuppressWarnings("deprecation")
     private static class PageAdapter extends FragmentStateAdapter {
 
         public PageAdapter(@NonNull Fragment fragment) {

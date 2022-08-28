@@ -39,9 +39,6 @@ public class RosemoeCodeEditor implements TextEditor {
         return mEditor.getContent();
     }
 
-    protected CodeEditorFragment createFragment(File file) {
-        return CodeEditorFragment.newInstance(file);
-    }
 
     @Override
     public View getView() {
