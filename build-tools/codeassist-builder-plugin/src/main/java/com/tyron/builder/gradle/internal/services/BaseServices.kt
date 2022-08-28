@@ -1,7 +1,9 @@
 package com.tyron.builder.gradle.internal.services
 
 import com.tyron.builder.errors.IssueReporter
+import com.tyron.builder.gradle.errors.DeprecationReporter
 import com.tyron.builder.gradle.internal.scope.ProjectInfo
+import com.tyron.builder.gradle.options.ProjectOptions
 import org.gradle.api.services.BuildServiceRegistry
 import java.io.File
 
@@ -11,8 +13,8 @@ import java.io.File
 interface BaseServices {
 
     val issueReporter: IssueReporter
-//    val deprecationReporter: DeprecationReporter
-//    val projectOptions: ProjectOptions
+    val deprecationReporter: DeprecationReporter
+    val projectOptions: ProjectOptions
     val buildServiceRegistry: BuildServiceRegistry
 //    val gradleEnvironmentProvider: GradleEnvironmentProvider
     val projectInfo: ProjectInfo

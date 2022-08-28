@@ -1,6 +1,6 @@
 package com.tyron.builder.internal.dexing
 
-import com.tyron.builder.internal.tasks.DexArchiveBuilderTaskDelegate
+import com.tyron.builder.gradle.internal.tasks.DexArchiveBuilderTaskDelegate
 import com.tyron.builder.plugin.options.SyncOptions
 import java.io.File
 import java.io.Serializable

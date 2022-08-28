@@ -33,7 +33,10 @@ class FileBasedDirectoryEntryImpl(
 
     override val isGenerated: Boolean = false
 
-    override fun asFileTree(fileTreeCreator: () -> ConfigurableFileTree): ConfigurableFileTree =
+    override fun asFileTree(
+        fileTreeCreator: () -> ConfigurableFileTree,
+        directoryPropertyCreator: () -> DirectoryProperty
+    ): ConfigurableFileTree =
         fileTreeCreator().setDir(directory).also {
             if (filter != null) {
                 it.include((filter as PatternSet).asIncludeSpec)

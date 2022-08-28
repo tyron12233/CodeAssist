@@ -3,7 +3,7 @@ package com.tyron.builder.plugin.tasks
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import com.tyron.builder.compiler.manifest.MergingReport
-import com.tyron.builder.internal.tasks.NonIncrementalTask
+import com.tyron.builder.gradle.internal.tasks.NonIncrementalTask
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputFile

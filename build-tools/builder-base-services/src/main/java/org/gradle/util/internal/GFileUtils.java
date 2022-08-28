@@ -458,6 +458,14 @@ public class GFileUtils {
                 .collect(Collectors.toList());
     }
 
+    @NotNull
+    public static String toSystemDependentPath(@NotNull String path) {
+        if (File.separatorChar != '/') {
+            path = path.replace('/', File.separatorChar);
+        }
+        return path;
+    }
+
     public static class TailReadingException extends RuntimeException {
         public TailReadingException(Throwable throwable) {
             super(throwable);

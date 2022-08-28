@@ -1,6 +1,7 @@
 package com.tyron.builder.internal
 
 import com.tyron.builder.gradle.internal.dependency.*
+import com.tyron.builder.gradle.internal.dependency.ModelArtifactCompatibilityRule.Companion.setUp
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
 import com.tyron.builder.internal.utils.setDisallowChanges
 import org.gradle.api.Project
@@ -8,12 +9,13 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.transform.TransformAction
 import org.gradle.api.artifacts.transform.TransformSpec
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.attributes.AttributesSchema
 import org.gradle.api.attributes.Usage
 import org.gradle.api.internal.artifacts.ArtifactAttributes
 
 class DependencyConfigurator(
     private val project: Project
-){
+) {
     fun configureGeneralTransforms(
         namespacedAndroidResources: Boolean,
     ): DependencyConfigurator {
@@ -22,7 +24,7 @@ class DependencyConfigurator(
         // The aars/jars may need to be processed (e.g., jetified to AndroidX) before they can be
         // used
         val autoNamespaceDependencies =
-            namespacedAndroidResources &&  true//projectOptions[BooleanOption.CONVERT_NON_NAMESPACED_DEPENDENCIES]
+            namespacedAndroidResources && false//projectOptions[BooleanOption.CONVERT_NON_NAMESPACED_DEPENDENCIES]
 
         val jetifiedAarOutputType = if (autoNamespaceDependencies) {
             AndroidArtifacts.ArtifactType.MAYBE_NON_NAMESPACED_PROCESSED_AAR
@@ -48,6 +50,12 @@ class DependencyConfigurator(
         }
 
         registerTransform(
+            IdentityTransform::class.java,
+            AndroidArtifacts.ArtifactType.JAR,
+            AndroidArtifacts.ArtifactType.CLASSES_JAR
+        )
+
+        registerTransform(
             ExtractAarTransform::class.java,
             AndroidArtifacts.ArtifactType.PROCESSED_AAR,
             AndroidArtifacts.ArtifactType.EXPLODED_AAR
@@ -58,7 +66,8 @@ class DependencyConfigurator(
             AndroidArtifacts.ArtifactType.LOCAL_EXPLODED_AAR_FOR_LINT
         )
 
-        val sharedLibSupport = true //projectOptions[BooleanOption.CONSUME_DEPENDENCIES_AS_SHARED_LIBRARIES]
+        val sharedLibSupport =
+            true //projectOptions[BooleanOption.CONSUME_DEPENDENCIES_AS_SHARED_LIBRARIES]
 
         for (transformTarget in AarTransform.getTransformTargets()) {
             registerTransform(
@@ -100,7 +109,7 @@ class DependencyConfigurator(
 //                        projectOptions.get(
 //                            BooleanOption.COMPILE_CLASSPATH_LIBRARY_R_CLASSES
 //                        )
-                    true
+                        true
                     )
             }
         }
@@ -160,6 +169,7 @@ class DependencyConfigurator(
             }
         }
 
+
         // From an Android library subproject, there are 2 transform flows to CLASSES:
         //     1. CLASSES_DIR -> CLASSES
         //     2. CLASSES_JAR -> CLASSES
@@ -183,7 +193,18 @@ class DependencyConfigurator(
         ) { params ->
             params.acceptNonExistentInputFile.setDisallowChanges(true)
         }
+
         return this
+    }
+
+    fun configureAttributeMatchingStrategies(): DependencyConfigurator {
+        val schema = project.dependencies.attributesSchema
+        setupModelStrategy(schema)
+        return this
+    }
+
+    private fun setupModelStrategy(attributesSchema: AttributesSchema) {
+        setUp(attributesSchema)
     }
 
     private fun <T : GenericTransformParameters> registerTransform(

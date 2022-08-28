@@ -2,6 +2,7 @@ package com.tyron.builder.gradle.internal.dependency
 
 import com.google.common.io.Closer
 import com.google.common.io.Files
+import com.tyron.builder.api.variant.impl.getFeatureLevel
 import com.tyron.builder.common.AndroidVersion
 import com.tyron.builder.dexing.*
 import com.tyron.builder.dexing.r8.ClassFileProviderFactory
@@ -12,6 +13,7 @@ import com.tyron.builder.internal.dexing.readDesugarGraph
 import com.tyron.builder.internal.dexing.writeDesugarGraph
 import com.tyron.builder.gradle.errors.MessageReceiverImpl
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
+import com.tyron.builder.gradle.internal.scope.Java8LangSupport
 import com.tyron.builder.plugin.options.SyncOptions
 import com.tyron.builder.tasks.toSerializable
 import org.gradle.api.artifacts.dsl.DependencyHandler
@@ -301,31 +303,15 @@ fun getDexingArtifactConfigurations(components: Collection<ComponentCreationConf
         .map { getDexingArtifactConfiguration(it) }.toSet()
 }
 
-fun getDexingArtifactConfiguration(creationConfig: ApkCreationConfig?): DexingArtifactConfiguration {
-//    return DexingArtifactConfiguration(
-//        minSdk = creationConfig.minSdkVersionForDexing.getFeatureLevel(),
-//        isDebuggable = creationConfig.debuggable,
-//        enableDesugaring =
-//        creationConfig.getJava8LangSupportType() == Java8LangSupport.D8,
-//        enableCoreLibraryDesugaring = creationConfig.isCoreLibraryDesugaringEnabled,
-//        needsShrinkDesugarLibrary = creationConfig.needsShrinkDesugarLibrary,
-//        asmTransformedVariant =
-//        if (creationConfig.instrumentationCreationConfig?.dependenciesClassesAreInstrumented == true) {
-//            creationConfig.name
-//        } else {
-//            null
-//        },
-//        useJacocoTransformInstrumentation = creationConfig.useJacocoTransformInstrumentation
-//    )
-
+fun getDexingArtifactConfiguration(creationConfig: ApkCreationConfig): DexingArtifactConfiguration {
     return DexingArtifactConfiguration(
-        minSdk = 21,
-        isDebuggable = true,
-        enableDesugaring = false,
-        enableCoreLibraryDesugaring = false,
-        needsShrinkDesugarLibrary = false,
+        minSdk = creationConfig.minSdkVersionForDexing.getFeatureLevel(),
+        isDebuggable = creationConfig.debuggable,
+        enableDesugaring = creationConfig.getJava8LangSupportType() == Java8LangSupport.D8,
+        enableCoreLibraryDesugaring = creationConfig.isCoreLibraryDesugaringEnabled,
+        needsShrinkDesugarLibrary = creationConfig.needsShrinkDesugarLibrary,
         asmTransformedVariant = null,
-        useJacocoTransformInstrumentation = false
+        useJacocoTransformInstrumentation = creationConfig.useJacocoTransformInstrumentation
     )
 }
 

@@ -1,7 +1,7 @@
 package com.tyron.builder.plugin.tasks
 
 import com.tyron.builder.gradle.internal.component.ApkCreationConfig
-import com.tyron.builder.internal.tasks.factory.VariantTaskCreationAction
+import com.tyron.builder.gradle.internal.tasks.factory.VariantTaskCreationAction
 import com.tyron.builder.tasks.IncrementalTask
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.OutputFile

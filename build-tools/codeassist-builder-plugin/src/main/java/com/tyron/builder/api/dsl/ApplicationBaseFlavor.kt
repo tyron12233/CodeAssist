@@ -10,7 +10,7 @@ interface ApplicationBaseFlavor :
      *
      * See [Set the Application ID](https://developer.android.com/studio/build/application-id.html)
      */
-    var applicationId: String?
+    override var applicationId: String?
 
     /**
      * Version code.

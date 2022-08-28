@@ -22,6 +22,7 @@ dependencies {
     implementation projects.buildTools.builderToolingApi
     implementation projects.buildTools.project
     implementation projects.buildTools.logging
+    implementation projects.buildTools.builderBuildEvents
 
     implementation projects.buildTools.manifmerger
 

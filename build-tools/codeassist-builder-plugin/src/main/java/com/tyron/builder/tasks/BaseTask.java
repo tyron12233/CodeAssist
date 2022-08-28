@@ -1,6 +1,6 @@
 package com.tyron.builder.tasks;
 
-import com.tyron.builder.internal.tasks.VariantAwareTask;
+import com.tyron.builder.gradle.internal.tasks.VariantAwareTask;
 import com.tyron.builder.plugin.builder.AndroidBuilder;
 
 import org.gradle.api.DefaultTask;

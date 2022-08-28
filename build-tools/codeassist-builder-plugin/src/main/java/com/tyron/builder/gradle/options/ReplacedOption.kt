@@ -109,7 +109,7 @@ enum class ReplacedOption(
     ENABLE_STABLE_IDS(
         "android.experimental.enableStableIds",
         VERSION_4_1,
-        "This property has been replaced by ${ENABLE_STABLE_IDS.propertyName}"
+        "This property has been replaced by ${BooleanOption.ENABLE_STABLE_IDS.propertyName}"
     ),
 
     @Suppress("unused")

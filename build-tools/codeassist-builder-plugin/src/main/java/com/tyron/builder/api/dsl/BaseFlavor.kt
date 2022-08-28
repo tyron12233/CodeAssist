@@ -18,6 +18,8 @@ interface BaseFlavor : VariantDimension, HasInitWith<BaseFlavor> {
      */
     var testApplicationId: String?
 
+    var applicationId: String?
+
     /**
      * The minimum SDK version.
      * Setting this it will override previous calls of [minSdk] and [minSdkPreview] setters. Only

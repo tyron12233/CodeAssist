@@ -37,7 +37,7 @@ enum class BooleanOption(
 //    IDE_DEPLOY_AS_INSTANT_APP(PROPERTY_DEPLOY_AS_INSTANT_APP, false, ApiStage.Stable),
 //
 //    ENABLE_STUDIO_VERSION_CHECK("android.injected.studio.version.check", true, ApiStage.Stable),
-//    ENABLE_STABLE_IDS(PROPERTY_BUILD_WITH_STABLE_IDS, false, ApiStage.Stable),
+    ENABLE_STABLE_IDS("android.injected.enableStableIds", false, ApiStage.Stable),
 
     // Features' default values
     BUILD_FEATURE_AIDL("android.defaults.buildfeatures.aidl", true, ApiStage.Stable),

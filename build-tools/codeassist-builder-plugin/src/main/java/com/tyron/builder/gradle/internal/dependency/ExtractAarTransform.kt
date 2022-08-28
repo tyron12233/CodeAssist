@@ -1,6 +1,7 @@
 package com.tyron.builder.gradle.internal.dependency
 
 import com.google.common.io.Files
+import com.tyron.builder.aar.AarExtractor
 import com.tyron.builder.plugin.SdkConstants.FD_JARS
 import com.tyron.builder.plugin.SdkConstants.FN_CLASSES_JAR
 import org.gradle.api.artifacts.transform.InputArtifact
@@ -33,8 +34,8 @@ abstract class ExtractAarTransform: TransformAction<GenericTransformParameters> 
         val name = Files.getNameWithoutExtension(inputFile.name)
         val outputDir = outputs.dir(name)
         GFileUtils.mkdirs(outputDir)
-//        val aarExtractor = AarExtractor()
-//        aarExtractor.extract(inputFile, outputDir)
+        val aarExtractor = AarExtractor()
+        aarExtractor.extract(inputFile, outputDir)
 
         // Verify that we have a classes.jar, if we don't just create an empty one.
         val classesJar = File(File(outputDir, FD_JARS), FN_CLASSES_JAR)

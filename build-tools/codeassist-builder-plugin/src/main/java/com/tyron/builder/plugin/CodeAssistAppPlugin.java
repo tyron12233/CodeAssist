@@ -1,35 +1,47 @@
 package com.tyron.builder.plugin;
 
+import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl;
-import com.tyron.builder.api.dsl.DependenciesInfo;
+import com.tyron.builder.api.dsl.ApplicationExtension;
 import com.tyron.builder.api.variant.AndroidVersion;
 import com.tyron.builder.api.variant.JavaCompilation;
 import com.tyron.builder.api.variant.VariantOutputConfiguration;
-import com.tyron.builder.api.variant.impl.GlobalVariantBuilderConfig;
-import com.tyron.builder.api.variant.impl.GlobalVariantBuilderConfigImpl;
-import com.tyron.builder.api.variant.impl.VariantBuilderImpl;
+import com.tyron.builder.api.variant.impl.AndroidVersionImpl;
 import com.tyron.builder.core.ComponentType;
+import com.tyron.builder.core.ComponentTypeImpl;
 import com.tyron.builder.dexing.DexingType;
+import com.tyron.builder.gradle.AndroidConfig;
+import com.tyron.builder.gradle.BaseExtension;
+import com.tyron.builder.gradle.errors.NoOpDeprecationReporter;
+import com.tyron.builder.gradle.errors.NoOpSyncIssueReporter;
+import com.tyron.builder.gradle.internal.component.ApkCreationConfig;
+import com.tyron.builder.gradle.internal.dependency.DexingArtifactConfiguration;
+import com.tyron.builder.gradle.internal.dependency.DexingTransformKt;
 import com.tyron.builder.gradle.internal.dependency.VariantDependencies;
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts;
 import com.tyron.builder.gradle.internal.scope.BuildFeatureValues;
 import com.tyron.builder.gradle.internal.scope.InternalMultipleArtifactType;
+import com.tyron.builder.gradle.internal.scope.Java8LangSupport;
 import com.tyron.builder.gradle.internal.scope.MutableTaskContainer;
+import com.tyron.builder.gradle.internal.scope.ProjectInfo;
+import com.tyron.builder.gradle.internal.services.DslServices;
+import com.tyron.builder.gradle.internal.services.DslServicesImpl;
+import com.tyron.builder.gradle.internal.services.ProjectServices;
 import com.tyron.builder.gradle.internal.services.TaskCreationServices;
+import com.tyron.builder.gradle.internal.tasks.DexArchiveBuilderTask;
+import com.tyron.builder.gradle.internal.tasks.DexMergingAction;
+import com.tyron.builder.gradle.internal.tasks.DexMergingTask;
+import com.tyron.builder.gradle.options.ProjectOptions;
+import com.tyron.builder.gradle.tasks.JavaCompileCreationAction;
 import com.tyron.builder.internal.DependencyConfigurator;
-import com.tyron.builder.gradle.internal.component.ApkCreationConfig;
-import com.tyron.builder.gradle.internal.dependency.DexingArtifactConfiguration;
-import com.tyron.builder.gradle.internal.dependency.DexingTransformKt;
-import com.tyron.builder.internal.tasks.DexArchiveBuilderTask;
-import com.tyron.builder.internal.tasks.DexMergingAction;
-import com.tyron.builder.internal.tasks.DexMergingTask;
 import com.tyron.builder.internal.tasks.factory.GlobalTaskCreationConfig;
 import com.tyron.builder.internal.tasks.factory.TaskFactory;
 import com.tyron.builder.internal.tasks.factory.TaskFactoryImpl;
 import com.tyron.builder.internal.variant.VariantPathHelper;
 import com.tyron.builder.plugin.builder.ProductFlavor;
 import com.tyron.builder.plugin.options.SyncOptions;
+import com.tyron.builder.plugin.tasks.RunAction;
 
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
@@ -38,6 +50,9 @@ import org.gradle.api.Task;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.reflect.TypeOf;
+import org.gradle.api.tasks.compile.JavaCompile;
+import org.gradle.internal.extensibility.DefaultExtraPropertiesExtension;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -62,11 +77,53 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
         }
 
 
+        DslServices dslServices;
+        dslServices = new DslServicesImpl(new ProjectServices(new NoOpSyncIssueReporter(),
+                new NoOpDeprecationReporter(),
+                project.getObjects(),
+                project.getLogger(),
+                project.getProviders(),
+                project.getLayout(),
+                new ProjectOptions(ImmutableMap.of(), project.getProviders()),
+                project.getGradle().getSharedServices(),
+                8,
+                new ProjectInfo(project),
+                (o) -> project.file(o),
+                project.getConfigurations(),
+                project.getDependencies(),
+                new DefaultExtraPropertiesExtension()));
         ArtifactsImpl artifacts = new ArtifactsImpl(project, "debug");
         project.getExtensions().add("artifacts", artifacts);
 
-
         apkCreationConfig = new ApkCreationConfig() {
+            @NotNull
+            @Override
+            public Java8LangSupport getJava8LangSupportType() {
+                return Java8LangSupport.D8;
+            }
+
+            @Override
+            public boolean getNeedsShrinkDesugarLibrary() {
+                return false;
+            }
+
+            @Override
+            public boolean isCoreLibraryDesugaringEnabled() {
+                return false;
+            }
+
+            @Override
+            public boolean isMultiDexEnabled() {
+                return false;
+            }
+
+
+            @NotNull
+            @Override
+            public AndroidVersion getMinSdkVersionForDexing() {
+                return new AndroidVersionImpl(26, null);
+            }
+
             @Override
             public boolean getNeedsJavaResStreams() {
                 return false;
@@ -172,7 +229,7 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
             @NotNull
             @Override
             public AndroidVersion getMinSdkVersion() {
-                return null;
+                return new AndroidVersionImpl(26, null);
             }
 
             @NotNull
@@ -183,7 +240,7 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
 
             @Override
             public boolean getDebuggable() {
-                return false;
+                return true;
             }
 
             @NotNull
@@ -195,13 +252,13 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
             @NotNull
             @Override
             public Provider<String> getApplicationId() {
-                return null;
+                return project.provider(() -> "test");
             }
 
             @NotNull
             @Override
             public ComponentType getComponentType() {
-                return null;
+                return ComponentTypeImpl.BASE_APK;
             }
 
             @Override
@@ -316,16 +373,18 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
         taskFactory = new TaskFactoryImpl(project.getTasks());
 
         DexingArtifactConfiguration artifactConfiguration =
-                DexingTransformKt.getDexingArtifactConfiguration(null);
-        artifactConfiguration.registerTransform(project.getName(), project.getDependencies(),
-                project.files(BuildModule.getAndroidJar()), project.provider(() -> ""),
-                SyncOptions.ErrorFormatMode.HUMAN_READABLE
-        );
+                DexingTransformKt.getDexingArtifactConfiguration(apkCreationConfig);
+        artifactConfiguration.registerTransform(project.getName(),
+                project.getDependencies(),
+                project.files(BuildModule.getAndroidJar()),
+                project.provider(() -> ""),
+                SyncOptions.ErrorFormatMode.HUMAN_READABLE);
 
         DependencyConfigurator configurator = new DependencyConfigurator(project);
         configurator.configureGeneralTransforms(true);
 
         AppExtension codeAssist = project.getExtensions().create("codeAssist", AppExtension.class);
+
 
         createDexTasks();
         createDexMergingTasks();
@@ -339,22 +398,24 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
 
         taskFactory.configure("mergeProjectDexDebug", it -> {
             it.dependsOn("dexBuilderDebug");
-
-            it.doLast(new Action<Task>() {
-                @Override
-                public void execute(@NotNull Task task) {
-                    System.out.println("PRINTING ALL OUTPUTSs");
-                    Provider<List<Directory>> all =
-                            artifacts.getAll(InternalMultipleArtifactType.DEX.INSTANCE);
-                    List<Directory> directories = all.get();
-                    directories.forEach(it -> System.out.println(it.getAsFile()));
-                }
-            });
         });
         taskFactory.configure("dexBuilderDebug", it -> {
-            it.dependsOn("compileJava");
+            it.dependsOn("compileDebugJavaWithJavac");
         });
 
+        taskFactory.register("run", RunAction.class, new Action<RunAction>() {
+            @Override
+            public void execute(@NotNull RunAction runAction) {
+                runAction.getOutputs().upToDateWhen(o -> false);
+                runAction.dependsOn("assembleDebug");
+            }
+        });
+
+        taskFactory.register(new JavaCompileCreationAction(
+                apkCreationConfig,
+                project.getObjects(),
+                false
+        ));
     }
 
     private void createDexTasks() {
@@ -366,31 +427,24 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
         final boolean separateFileDependenciesDexingTask = false;
 
 
-        taskFactory.register(new DexMergingTask.CreationAction(
-                apkCreationConfig,
+        taskFactory.register(new DexMergingTask.CreationAction(apkCreationConfig,
                 DexMergingAction.MERGE_EXTERNAL_LIBS,
                 DexingType.NATIVE_MULTIDEX,
                 dexingUsingArtifactTransforms,
-                separateFileDependenciesDexingTask
-        ));
+                separateFileDependenciesDexingTask));
 
-        taskFactory.register(new DexMergingTask.CreationAction(
-                apkCreationConfig,
+        taskFactory.register(new DexMergingTask.CreationAction(apkCreationConfig,
                 DexMergingAction.MERGE_PROJECT,
                 DexingType.NATIVE_MULTIDEX,
                 dexingUsingArtifactTransforms,
-                separateFileDependenciesDexingTask
-        ));
+                separateFileDependenciesDexingTask));
 
-        taskFactory.register(new DexMergingTask.CreationAction(
-                apkCreationConfig,
+        taskFactory.register(new DexMergingTask.CreationAction(apkCreationConfig,
                 DexMergingAction.MERGE_LIBRARY_PROJECTS,
                 DexingType.NATIVE_MULTIDEX,
                 dexingUsingArtifactTransforms,
-                separateFileDependenciesDexingTask
-        ));
+                separateFileDependenciesDexingTask));
     }
-
 
 
     private boolean hasJavaPlugin(Project project) {

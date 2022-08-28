@@ -10,7 +10,7 @@ import com.tyron.builder.api.variant.FilterConfiguration
 import com.tyron.builder.api.variant.VariantOutputConfiguration
 import com.tyron.builder.common.build.CommonBuiltArtifact
 import com.tyron.builder.common.build.CommonBuiltArtifactTypeAdapter
-import com.tyron.builder.internal.api.artifact.toArtifactType
+import com.tyron.builder.gradle.internal.api.artifact.toArtifactType
 import org.gradle.util.internal.GFileUtils
 import java.io.IOException
 import java.io.Serializable
