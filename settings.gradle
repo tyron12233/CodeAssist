@@ -47,6 +47,7 @@ include ':build-tools:build-cache'
 include ':build-tools:builder-execution'
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+include ':build-tools:builder-ide'
 include ':build-tools:builder-core-api'
 include ':build-tools:builder-core'
 include ':build-tools:builder-enterprise-operations'
@@ -98,3 +99,4 @@ include ':build-tools:builder-reporting'
 include ':build-tools:builder-testing-jvm'
 include ':build-tools:builder-diagnostics'
 include ':terminalview'
+include ':build-tools:builder-tooling-api-builders'
