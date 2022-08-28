@@ -40,7 +40,6 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.service.IndexServiceConnection;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
@@ -103,15 +102,13 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         public void handleOnBackPressed() {
             if (mRoot instanceof DrawerLayout) {
                 //noinspection ConstantConditions
-                if (mMainViewModel.getDrawerState()
-                        .getValue()) {
+                if (mMainViewModel.getDrawerState().getValue()) {
                     mMainViewModel.setDrawerState(false);
                 }
             }
         }
     };
     private Project mProject;
-    private IndexServiceConnection mIndexServiceConnection;
 
     private final CompileCallback mCompileCallback = this::compile;
     private final IndexCallback mIndexCallback = this::openProject;
@@ -137,7 +134,6 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mLogViewModel = new ViewModelProvider(requireActivity()).get(LogViewModel.class);
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
-        mIndexServiceConnection = new IndexServiceConnection(mMainViewModel, mLogViewModel);
     }
 
     @Override
@@ -155,8 +151,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         UiUtilsKt.addSystemWindowInsetToPadding(mToolbar, false, true, false, false);
 
         getChildFragmentManager().setFragmentResultListener(REFRESH_TOOLBAR_KEY,
-                                                            getViewLifecycleOwner(),
-                                                            (key, __) -> refreshToolbar());
+                getViewLifecycleOwner(),
+                (key, __) -> refreshToolbar());
 
         refreshToolbar();
 
@@ -354,17 +350,20 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
 //        IndexServiceConnection.restoreFileEditors(project, mMainViewModel);
 
         mProject = project;
-        mIndexServiceConnection.setProject(project);
 
-        mMainViewModel.setToolbarTitle(project.getRootFile()
-                                               .getName());
+        mMainViewModel.setToolbarTitle(project.getRootFile().getName());
         mMainViewModel.setIndexing(true);
         CompletionEngine.setIndexing(true);
 
         RefreshRootEvent event = new RefreshRootEvent(project.getRootFile());
         ApplicationLoader.getInstance().getEventManager().dispatchEvent(event);
 
-        ProgressManager.getInstance().runNonCancelableAsync(() -> ProjectManager.getInstance().openProject(project, false, new TaskListener(), ILogger.wrap(mLogViewModel)));
+        ProgressManager.getInstance()
+                .runNonCancelableAsync(() -> ProjectManager.getInstance()
+                        .openProject(project,
+                                false,
+                                new TaskListener(),
+                                ILogger.wrap(mLogViewModel)));
     }
 
     private class TaskListener implements ProjectManager.TaskListener {
@@ -386,15 +385,13 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                 mMainViewModel.setIndexing(false);
                 mMainViewModel.setCurrentState(null);
                 if (success) {
-                    Project currentProject = ProjectManager.getInstance()
-                            .getCurrentProject();
+                    Project currentProject = ProjectManager.getInstance().getCurrentProject();
                     if (project.equals(currentProject)) {
-                        mMainViewModel.setToolbarTitle(project.getRootFile()
-                                .getName());
+                        mMainViewModel.setToolbarTitle(project.getRootFile().getName());
                     }
                 } else {
-                    if (mMainViewModel.getBottomSheetState()
-                                .getValue() != BottomSheetBehavior.STATE_EXPANDED) {
+                    if (mMainViewModel.getBottomSheetState().getValue() !=
+                        BottomSheetBehavior.STATE_EXPANDED) {
                         mMainViewModel.setBottomSheetState(BottomSheetBehavior.STATE_HALF_EXPANDED);
                     }
                     mLogViewModel.e(LogViewModel.BUILD_LOG, message);
@@ -404,7 +401,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     }
 
     private void compile(BuildType type) {
-        if (Boolean.TRUE.equals(mMainViewModel.isIndexing().getValue()) || CompletionEngine.isIndexing()) {
+        if (Boolean.TRUE.equals(mMainViewModel.isIndexing().getValue()) ||
+            CompletionEngine.isIndexing()) {
             return;
         }
 
@@ -424,7 +422,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                             .setStandardOutput(AppLogFragment.outputStream);
                     buildLauncher.addProgressListener((ProgressListener) desc -> {
                         if (getActivity() != null) {
-                            requireActivity().runOnUiThread(() -> mMainViewModel.setCurrentState(desc.getDescription()));
+                            requireActivity().runOnUiThread(() -> mMainViewModel.setCurrentState(
+                                    desc.getDescription()));
                         }
                     });
                     buildLauncher.withArguments("--stacktrace");
@@ -458,10 +457,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             mLogReceiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context context, Intent intent) {
-                    String type = intent.getExtras()
-                            .getString("type", "DEBUG");
-                    String message = intent.getExtras()
-                            .getString("message", "No message provided");
+                    String type = intent.getExtras().getString("type", "DEBUG");
+                    String message = intent.getExtras().getString("message", "No message provided");
                     DiagnosticWrapper wrapped = ILogger.wrap(message);
 
                     switch (type) {
@@ -484,7 +481,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             String packageName = ((AndroidModule) module).getPackageName();
             if (packageName != null) {
                 requireActivity().registerReceiver(mLogReceiver,
-                                                   new IntentFilter(packageName + ".LOG"));
+                        new IntentFilter(packageName + ".LOG"));
             } else {
                 mLogReceiver = null;
             }
@@ -505,7 +502,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
             indexing = true;
         }
         if (!indexing) {
-            context.putData(CommonDataKeys.PROJECT, ProjectManager.getInstance().getCurrentProject());
+            context.putData(CommonDataKeys.PROJECT,
+                    ProjectManager.getInstance().getCurrentProject());
         }
         context.putData(CommonDataKeys.ACTIVITY, getActivity());
         context.putData(MAIN_VIEW_MODEL_KEY, mMainViewModel);
@@ -515,8 +513,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
     }
 
     public void refreshToolbar() {
-        mToolbar.getMenu()
-                .clear();
+        mToolbar.getMenu().clear();
 
         DataContext context = DataContextUtils.getDataContext(mToolbar);
         injectData(context);
@@ -524,8 +521,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         Instant now = Instant.now();
         ActionManager.getInstance()
                 .fillMenu(context, mToolbar.getMenu(), ActionPlaces.MAIN_TOOLBAR, false, true);
-        Log.d("ActionManager", "fillMenu() took " +
-                               Duration.between(now, Instant.now())
-                                       .toMillis());
+        Log.d("ActionManager",
+                "fillMenu() took " + Duration.between(now, Instant.now()).toMillis());
     }
 }

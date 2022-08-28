@@ -43,4 +43,5 @@ dependencies {
     testImplementation project(path: ':build-tools:manifmerger')
     testImplementation project(path: ':build-tools:project')
     testImplementation project(path: ':build-tools:viewbinding-lib')
+
 }

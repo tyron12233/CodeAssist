@@ -27,10 +27,6 @@
             android:enabled="true"
             android:exported="false">
         </service>
-        <service
-            android:name=".service.IndexService"
-            android:enabled="true"
-            android:exported="false" />
 
         <activity
             android:name=".ui.settings.SettingsActivity"
