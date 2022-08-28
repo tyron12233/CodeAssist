@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -28,6 +29,7 @@ import com.tyron.code.language.LanguageManager;
 import com.tyron.code.language.java.JavaLanguage;
 import com.tyron.code.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
+import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.CoordinatePopupMenu;
 import com.tyron.code.util.PopupMenuHelper;
@@ -46,10 +48,13 @@ import com.tyron.language.xml.XmlLanguage;
 import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.vfs2.FileObject;
+import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
+import org.jetbrains.kotlin.utils.ReflectionUtilKt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
@@ -57,12 +62,15 @@ import javax.tools.SimpleJavaFileObject;
 
 import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.EditorKeyEvent;
+import io.github.rosemoe.sora.event.Event;
+import io.github.rosemoe.sora.event.InterceptTarget;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.diagnostic.DiagnosticsContainer;
 import io.github.rosemoe.sora.text.Cursor;
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class RosemoeEditorFacade {
@@ -162,6 +170,7 @@ public class RosemoeEditorFacade {
         editor.setTypefaceText(
                 ResourcesCompat.getFont(editor.getContext(), R.font.jetbrains_mono_regular));
 
+        editor.replaceComponent(EditorAutoCompletion.class, new CodeAssistCompletionWindow(editor));
         editor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
         editor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         editor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
@@ -215,6 +224,23 @@ public class RosemoeEditorFacade {
                     index <= cursorRight) {
                     editor.showSoftInput();
                     event.intercept();
+                }
+            }
+        });
+
+        editor.subscribeEvent(EditorKeyEvent.class, (event, unsubscribe) -> {
+            CodeAssistCompletionWindow window = (CodeAssistCompletionWindow) editor.getComponent(EditorAutoCompletion.class);
+            if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_TAB) {
+                if (window.isShowing() && window.trySelect()) {
+                    // KeyEvent cannot be intercepted???
+                    // workaround
+                    Field mInterceptTargets = ReflectionUtil.getDeclaredField(Event.class, "mInterceptTargets");
+                    mInterceptTargets.setAccessible(true);
+                    try {
+                        mInterceptTargets.set(event, InterceptTarget.TARGET_EDITOR);
+                    } catch (IllegalAccessException e) {
+                        throw new RuntimeException("REFLECTION FAILED");
+                    }
                 }
             }
         });
