@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.lifecycle.ViewModelProviderKt;
 import androidx.lifecycle.ViewModelStoreOwner;
@@ -34,6 +35,7 @@ import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.main.action.project.SaveEvent;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.Listeners;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.Content;
@@ -90,7 +92,7 @@ public class EditorContainerFragment extends Fragment implements
         pref = ApplicationLoader.getDefaultPreferences();
         mMainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         mEditorContainerViewModel = new ViewModelProvider((ViewModelStoreOwner) this).get(EditorContainerViewModel.class);
-        requireActivity().getOnBackPressedDispatcher().addCallback(this, mOnBackPressedCallback);
+        requireActivity().getOnBackPressedDispatcher().addCallback((LifecycleOwner) this, mOnBackPressedCallback);
     }
 
     @Override
@@ -252,6 +254,8 @@ public class EditorContainerFragment extends Fragment implements
             MaterialFadeThrough transition = new MaterialFadeThrough();
             transition.setDuration(150L);
             TransitionManager.beginDelayedTransition(mContainer, transition);
+
+            UiUtilsKt.removeFromParent(currentFileEditor.getView());
             mContainer.addView(currentFileEditor.getView());
 
             try {
