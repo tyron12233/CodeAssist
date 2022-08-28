@@ -1,6 +1,7 @@
 package com.tyron.builder.project.api;
 
 import com.tyron.builder.model.ModuleSettings;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.cache.CacheHolder;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
@@ -13,6 +14,7 @@ import java.util.Set;
 
 public interface Module extends UserDataHolderEx, CacheHolder {
 
+    @Deprecated
     ModuleSettings getSettings();
 
     FileManager getFileManager();
@@ -40,24 +42,41 @@ public interface Module extends UserDataHolderEx, CacheHolder {
     /**
      * @return The directory that this project can use to compile files
      */
+    @Deprecated
     File getBuildDirectory();
+
+
+
+
+
+    // NEW API
 
     default void addChildModule(Module module) {
 
     }
 
-    default boolean containsFile(File file) {
-        try {
-            File rootFile = getRootFile().getCanonicalFile();
-            File absoluteFile = file.getCanonicalFile();
-
-            return absoluteFile.exists() && absoluteFile.getAbsolutePath().startsWith(rootFile.getAbsolutePath());
-        } catch (IOException e) {
-            return false;
-        }
-    }
 
     default Set<String> getModuleDependencies() {
         return Collections.emptySet();
+    }
+
+    default void addContentRoot(ContentRoot contentRoot) {
+
+    }
+
+    default Set<ContentRoot> getContentRoots() {
+        return Collections.emptySet();
+    }
+
+    /**
+     *
+     * @return The project that this module is part of
+     */
+    default Project getProject() {
+        throw new UnsupportedOperationException();
+    }
+
+    default void setProject(Project project) {
+        throw new UnsupportedOperationException();
     }
 }

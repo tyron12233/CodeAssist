@@ -11,6 +11,7 @@ import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.Graphs;
 import com.google.common.graph.MutableGraph;
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.builder.project.mock.MockAndroidModule;
@@ -50,6 +51,10 @@ public class Project {
         mRoot = root;
         mModules = new LinkedHashMap<>();
         mSettings = new ProjectSettings(new File(root, "settings.json"));
+    }
+
+    public void clear() {
+        mModules.clear();
     }
 
     public void addModule(Module module) {
@@ -104,11 +109,30 @@ public class Project {
 
     public Module getModule(File file) {
         for (Module value : mModules.values()) {
-            if (value.containsFile(file)) {
-                return value;
+            for (ContentRoot contentRoot : value.getContentRoots()) {
+                for (File sourceDirectory : contentRoot.getSourceDirectories()) {
+                    if (directoryContainsFile(sourceDirectory, file)) {
+                        return value;
+                    }
+                }
             }
         }
         return getMainModule();
+    }
+
+    public Module getModuleByName(String name) {
+        return mModules.get(name);
+    }
+
+    private boolean directoryContainsFile(File dir, File file) {
+        try {
+            File rootFile = dir.getCanonicalFile();
+            File absoluteFile = file.getCanonicalFile();
+
+            return absoluteFile.exists() && absoluteFile.getAbsolutePath().startsWith(rootFile.getAbsolutePath());
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     public List<Module> getDependencies(Module module) {

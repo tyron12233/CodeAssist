@@ -135,6 +135,9 @@ public class PackageTrie {
         if (current.isLeaf) {
             return Collections.singleton(currentPackage);
         } else {
+            if (current.getChildren() == null || current.getChildren().isEmpty()) {
+                return Collections.emptySet();
+            }
             Set<String> leafNodes = new HashSet<>();
             for (Node value : current.getChildren().values()) {
                 String newPackage = currentPackage.isEmpty()

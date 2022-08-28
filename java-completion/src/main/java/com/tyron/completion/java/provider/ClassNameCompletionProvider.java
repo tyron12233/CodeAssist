@@ -8,6 +8,7 @@ import android.preference.PreferenceManager;
 
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.util.TreePath;
+import com.tyron.builder.project.api.Module;
 import com.tyron.common.ApplicationProvider;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.StringSearch;
@@ -66,7 +67,9 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
 //            uniques.add(className);
 //        }
 
-        ShortNamesCache cache = ShortNamesCache.getInstance(task.getProject());
+        File fileToComplete = new File(root.getSourceFile().toUri());
+        final Module module = task.getProject().getModule(fileToComplete);
+        ShortNamesCache cache = ShortNamesCache.getInstance(module);
 
         for (String className : cache.getAllClassNames()) {
             // more strict on matching class names

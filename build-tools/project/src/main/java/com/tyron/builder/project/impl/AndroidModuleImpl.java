@@ -9,6 +9,8 @@ import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.ContentRoot;
+import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
@@ -33,6 +35,8 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     private Map<String, File> mResourceClasses;
 
     private final Set<String> moduleDependencies = new HashSet<>();
+    private final Set<ContentRoot> contentRoots = new HashSet<>(3);
+    private String name;
 
     public AndroidModuleImpl(File root) {
         super(root);
@@ -215,5 +219,28 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     @Override
     public Set<String> getModuleDependencies() {
         return moduleDependencies;
+    }
+
+    @Override
+    public void addContentRoot(ContentRoot contentRoot) {
+        contentRoots.add(contentRoot);
+    }
+
+    @Override
+    public Set<ContentRoot> getContentRoots() {
+        return contentRoots;
+    }
+
+    /**
+     * Sets the name of this module
+     * @param name Typically the gradle path of the module e.g. :app
+     */
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public String getName() {
+        return name;
     }
 }

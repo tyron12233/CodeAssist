@@ -1,11 +1,13 @@
 package com.tyron.completion.java;
 
-import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
-import com.tyron.builder.project.util.PackageTrie;
 
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
@@ -13,33 +15,55 @@ import java.util.WeakHashMap;
  */
 public class ShortNamesCache {
 
-    private static final Map<Project, ShortNamesCache> map = new WeakHashMap<>();
+    private static final Map<Module, ShortNamesCache> map = new WeakHashMap<>();
 
-    public static ShortNamesCache getInstance(Project project) {
-        ShortNamesCache cache = map.get(project);
+    public static ShortNamesCache getInstance(Module module) {
+        ShortNamesCache cache = map.get(module);
         if (cache == null) {
-            cache = new ShortNamesCache(project);
-            map.put(project, cache);
+            cache = new ShortNamesCache(module);
+            map.put(module, cache);
         }
         return cache;
     }
 
-    private final Project project;
+    private final Module module;
 
-    public ShortNamesCache(Project project) {
-        this.project = project;
+    public ShortNamesCache(Module module) {
+        this.module = module;
     }
 
     /**
-     * Returns the list of fully qualified names of all classes in the project and (optionally) libraries.
+     * Returns the list of fully qualified names of all classes in the project and (optionally)
+     * libraries.
      */
     public String[] getAllClassNames() {
-        Module mainModule = project.getMainModule();
-        if (!(mainModule instanceof JavaModule)) {
+        if (!(module instanceof JavaModule)) {
             return new String[0];
         }
-        JavaModule javaModule = (JavaModule) mainModule;
-        PackageTrie classIndex = javaModule.getClassIndex();
-        return classIndex.getLeafNodes().toArray(new String[0]);
+
+        Set<String> classNames = new HashSet<>();
+
+        Deque<Module> queue = new LinkedList<>();
+        Set<Module> visitedModules = new HashSet<>();
+        queue.addLast(module);
+
+        while (!queue.isEmpty()) {
+            Module current = queue.removeFirst();
+
+            if (current instanceof JavaModule) {
+                JavaModule javaModule = (JavaModule) current;
+                classNames.addAll(javaModule.getClassIndex().getLeafNodes());
+            }
+
+            visitedModules.add(current);
+            for (String path : current.getModuleDependencies()) {
+                Module dependingModule = current.getProject().getModuleByName(path);
+                if (dependingModule != null && !visitedModules.contains(dependingModule)) {
+                    queue.addLast(dependingModule);
+                }
+            }
+        }
+
+        return classNames.toArray(new String[0]);
     }
 }
