@@ -157,6 +157,7 @@ public class RosemoeEditorFacade {
         bundle.putBoolean("loaded", true);
         bundle.putBoolean("bg", true);
         editor.setText(content, bundle);
+        editor.setHighlightBracketPair(false);
         editor.setDiagnostics(new DiagnosticsContainer());
         editor.setTypefaceText(
                 ResourcesCompat.getFont(editor.getContext(), R.font.jetbrains_mono_regular));
