@@ -19,13 +19,9 @@ import org.gradle.launcher.daemon.bootstrap.DaemonMain;
 import org.gradle.util.GradleVersion;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
-import java.net.ServerSocket;
-import java.net.Socket;
 
 /**
  * A service that runs the {@link org.gradle.launcher.daemon.bootstrap.GradleDaemon} in a
@@ -43,6 +39,14 @@ public class GradleDaemonService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
+        Notification notification = setupNotification();
+        startForeground(201, notification);
     }
 
     @Override
@@ -81,7 +85,7 @@ public class GradleDaemonService extends Service {
                 daemonStarted = true;
 
                 DaemonMain daemonMain = new DaemonMain();
-                daemonMain.run(new String[]{GradleVersion.current().getVersion()});
+                daemonMain.run(new String[]{GradleVersion.current().getVersion()});;
             }, "GradleDaemonThread").start();
         }
 
