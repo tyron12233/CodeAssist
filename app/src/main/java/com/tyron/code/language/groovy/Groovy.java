@@ -10,9 +10,7 @@ import java.io.File;
 
 public class Groovy implements Language {
 
-    private static final String GRAMMAR_NAME = "groovy.tmLanguage";
-    private static final String LANGUAGE_PATH = "textmate/groovy/syntaxes/groovy.tmLanguage";
-    private static final String CONFIG_PATH = "textmate/groovy/language-configuration.json";
+
 
     @Override
     public boolean isApplicable(File ext) {
@@ -27,12 +25,7 @@ public class Groovy implements Language {
 
     @Override
     public io.github.rosemoe.sora.lang.Language get(Editor editor) {
-        return LanguageManager.createTextMateLanguage(
-                GRAMMAR_NAME,
-                LANGUAGE_PATH,
-                CONFIG_PATH,
-                editor
-        );
+        return new GroovyLanguage(editor);
     }
 
 }
