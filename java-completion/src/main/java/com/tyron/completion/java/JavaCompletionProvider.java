@@ -20,6 +20,7 @@ import com.sun.tools.javac.util.Name;
 import com.sun.tools.javac.util.Names;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
@@ -92,7 +93,12 @@ public class JavaCompletionProvider extends CompletionProvider {
             }
         }
 
-        CompletionList.Builder complete = completeV2(params);
+        CompletionList.Builder complete = null;
+        try {
+            complete = completeV2(params);
+        } catch (Throwable t) {
+            IdeLog.getCurrentLogger(getClass()).severe("Failed to complete: " + t);
+        }
         if (complete == null) {
             return CompletionList.EMPTY;
         }

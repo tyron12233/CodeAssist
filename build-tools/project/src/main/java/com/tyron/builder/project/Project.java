@@ -58,6 +58,9 @@ public class Project {
     }
 
     public void addModule(Module module) {
+        assert module.getProject() == null;
+        module.setProject(this);
+
         mModules.put(module.getName(), module);
     }
 

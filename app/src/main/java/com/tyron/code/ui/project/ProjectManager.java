@@ -7,13 +7,18 @@ import com.google.common.base.Charsets;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.ContentRoot;
+import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.logging.IdeLog;
+import com.tyron.completion.java.compiler.ParseTask;
+import com.tyron.completion.java.compiler.Parser;
+import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.provider.CompletionEngine;
+import com.tyron.completion.java.provider.PruneMethodBodies;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
@@ -37,6 +42,9 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
+
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
 
 public class ProjectManager {
 
@@ -212,11 +220,40 @@ public class ProjectManager {
         mListener.onComplete(project, true, "Index successful");
     }
 
-    private void buildModel(IdeaProject project, Project currentProject) {
+    private void buildModel(IdeaProject project, Project currentProject) throws IOException {
         List<? extends IdeaModule> allModules = project.getModules().getAll();
         for (IdeaModule ideaModule : allModules) {
             Module module = buildModule(ideaModule);
             currentProject.addModule(module);
+            indexModule(module);
+        }
+    }
+
+    /**
+     * Indexes each module so completion would work immediately
+     *
+     * In-order to keep indexing as fast as possible, method bodies of each classes are removed.
+     * When the file is opened in the editor, its contents will be re-parsed with method bodies
+     * included.
+     */
+    private void indexModule(Module module) throws IOException {
+        module.open();
+        module.index();
+
+        JavaModule javaModule = (JavaModule) module;
+        for (File value : javaModule.getJavaFiles().values()) {
+            CompilationInfo info = CompilationInfo.get(module.getProject(), value);
+            if (info == null) {
+                continue;
+            }
+            info.updateImmediately(new SimpleJavaFileObject(value.toURI(), JavaFileObject.Kind.SOURCE) {
+                @Override
+                public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                    Parser parser = Parser.parseFile(module.getProject(), value.toPath());
+                    return new PruneMethodBodies(info.impl.getJavacTask())
+                            .scan(parser.root, 0L);
+                }
+            });
         }
     }
 

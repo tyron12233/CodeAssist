@@ -46,6 +46,7 @@ import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.logging.IdeLog;
+import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.fileeditor.api.FileEditor;
@@ -382,6 +383,12 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                 return;
             }
             requireActivity().runOnUiThread(() -> {
+                if (!success) {
+                    AndroidUtilities.showSimpleAlert(requireActivity(),
+                            "Index failed.",
+                            "Error message: " + message + "\n" +
+                            "Code completions may not work properly.");
+                }
                 mMainViewModel.setIndexing(false);
                 mMainViewModel.setCurrentState(null);
                 if (success) {

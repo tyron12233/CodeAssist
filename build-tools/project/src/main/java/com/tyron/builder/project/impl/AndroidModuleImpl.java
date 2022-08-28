@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.model.ModuleSettings;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.util.PackageTrie;
@@ -37,6 +38,7 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     private final Set<String> moduleDependencies = new HashSet<>();
     private final Set<ContentRoot> contentRoots = new HashSet<>(3);
     private String name;
+    private Project project;
 
     public AndroidModuleImpl(File root) {
         super(root);
@@ -48,13 +50,6 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     @Override
     public void open() throws IOException {
         super.open();
-
-        try {
-            mManifestData = AndroidManifestParser.parse(getManifestFile());
-        } catch (IOException e) {
-            throw new IOException("Unable to parse manifest. Fix manifest errors and then refresh the module." +
-                                  "\nError: " + e.getMessage());
-        }
     }
 
     @Override
@@ -63,19 +58,24 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
         Consumer<File> kotlinConsumer = this::addKotlinFile;
 
-        if (getJavaDirectory().exists()) {
-            FileUtils.iterateFiles(getJavaDirectory(),
-                    FileFilterUtils.suffixFileFilter(".kt"),
-                    TrueFileFilter.INSTANCE
-            ).forEachRemaining(kotlinConsumer);
+        for (ContentRoot contentRoot : getContentRoots()) {
+            Set<File> sourceDirectories = contentRoot.getSourceDirectories();
+            for (File sourceDirectory : sourceDirectories) {
+                FileUtils.iterateFiles(sourceDirectory,
+                        FileFilterUtils.suffixFileFilter(".kt"),
+                        TrueFileFilter.INSTANCE
+                ).forEachRemaining(kotlinConsumer);
+                FileUtils.iterateFiles(sourceDirectory,
+                        FileFilterUtils.suffixFileFilter(".kt"),
+                        TrueFileFilter.INSTANCE
+                ).forEachRemaining(kotlinConsumer);
+                FileUtils.iterateFiles(sourceDirectory,
+                        FileFilterUtils.suffixFileFilter(".java"),
+                        TrueFileFilter.INSTANCE
+                ).forEachRemaining(this::addJavaFile);
+            }
         }
 
-        if (getKotlinDirectory().exists()) {
-            FileUtils.iterateFiles(getKotlinDirectory(),
-                    FileFilterUtils.suffixFileFilter(".kt"),
-                    TrueFileFilter.INSTANCE
-            ).forEachRemaining(kotlinConsumer);
-        }
 
         // R.java files
 //        File gen = new File(getBuildDirectory(), "gen");
@@ -210,6 +210,16 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         } catch (Throwable e) {
             throw new Error(e);
         }
+    }
+
+    @Override
+    public void setProject(Project project) {
+        this.project = project;
+    }
+
+    @Override
+    public Project getProject() {
+        return project;
     }
 
     public void addModuleDependency(String targetModuleName) {

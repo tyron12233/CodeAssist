@@ -243,29 +243,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
     @Override
     public void index() {
-        try {
-            putJar(getBootstrapJarFile());
-        } catch (IOException e) {
-            // ignored
-        }
 
-        if (getJavaDirectory().exists()) {
-            FileUtils.iterateFiles(getJavaDirectory(),
-                    FileFilterUtils.suffixFileFilter(".java"),
-                    TrueFileFilter.INSTANCE
-            ).forEachRemaining(this::addJavaFile);
-        }
-
-        File[] libraryDirectories = new File(getBuildDirectory(), "libs")
-                .listFiles(File::isDirectory);
-        if (libraryDirectories != null) {
-            for (File directory : libraryDirectories) {
-                File check = new File(directory, "classes.jar");
-                if (check.exists()) {
-                    addLibrary(check);
-                }
-            }
-        }
     }
 
     @Override
