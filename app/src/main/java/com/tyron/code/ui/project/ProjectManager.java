@@ -4,78 +4,39 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
-import com.google.common.base.Throwables;
-import com.sun.tools.javac.api.JavacTaskImpl;
-import com.sun.tools.javac.code.Symtab;
-import com.sun.tools.javac.file.BaseFileManager;
-import com.sun.tools.javac.file.PathFileObject;
-import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.Names;
-import com.tyron.builder.compiler.BuildType;
-import com.tyron.builder.compiler.incremental.resource.IncrementalAapt2Task;
-import com.tyron.builder.compiler.manifest.ManifestMergeTask;
-import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.builder.project.api.JavaModule;
+import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.logging.IdeLog;
-import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.compiler.CompilerContainer;
-import com.tyron.completion.java.JavaCompilerProvider;
-import com.tyron.completion.java.compiler.JavaCompilerService;
-import com.tyron.completion.java.parse.CompilationInfo;
-import com.tyron.completion.java.parse.CompilationInfoImpl;
-import com.tyron.completion.java.parse.JavacParser;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.completion.xml.XmlIndexProvider;
-import com.tyron.completion.xml.XmlRepository;
-import com.tyron.completion.xml.task.InjectResourcesTask;
-import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.io.FileUtils;
-import org.gradle.plugins.ide.idea.model.SingleEntryModuleLibrary;
 import org.gradle.tooling.GradleConnector;
-import org.gradle.tooling.ProgressEvent;
 import org.gradle.tooling.ProgressListener;
 import org.gradle.tooling.ProjectConnection;
+import org.gradle.tooling.events.ProgressEvent;
 import org.gradle.tooling.model.DomainObjectSet;
 import org.gradle.tooling.model.ExternalDependency;
 import org.gradle.tooling.model.HierarchicalElement;
+import org.gradle.tooling.model.idea.IdeaContentRoot;
 import org.gradle.tooling.model.idea.IdeaDependency;
-import org.gradle.tooling.model.idea.IdeaDependencyScope;
 import org.gradle.tooling.model.idea.IdeaModule;
 import org.gradle.tooling.model.idea.IdeaModuleDependency;
 import org.gradle.tooling.model.idea.IdeaProject;
-import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.gradle.tooling.model.idea.IdeaSourceDirectory;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.net.URI;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Enumeration;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
 import java.util.logging.Logger;
-
-import javax.tools.JavaFileManager;
-
-import kotlin.collections.CollectionsKt;
 
 public class ProjectManager {
 
@@ -163,14 +124,16 @@ public class ProjectManager {
 
             AppLogFragment.outputStream.write("\033[H\033[2J".getBytes());
 
-            ProgressListener listener = event -> mListener.onTaskStarted(event.getDescription());
             IdeaProject ideaProject = projectConnection.model(IdeaProject.class)
                     .setStandardError(AppLogFragment.outputStream)
                     .setStandardOutput(AppLogFragment.outputStream)
-                    .addProgressListener(listener)
+                    .addProgressListener((org.gradle.tooling.events.ProgressListener) event -> mListener.onTaskStarted(event.getDisplayName()))
                     .get();
 
             mListener.onTaskStarted("Index model");
+
+            // remove the previous models
+            mCurrentProject.clear();
             buildModel(ideaProject, mCurrentProject);
         } catch (Throwable t) {
             mListener.onComplete(mCurrentProject, false, t.getMessage());
@@ -258,8 +221,20 @@ public class ProjectManager {
     }
 
     private Module buildModule(IdeaModule module) {
-        String projectPath = module.getProjectIdentifier().getProjectPath();
-        AndroidModuleImpl impl = new AndroidModuleImpl(new File(projectPath));
+        File projectDirectory = module.getGradleProject().getProjectDirectory();
+        AndroidModuleImpl impl = new AndroidModuleImpl(projectDirectory);
+        impl.setName(module.getProjectIdentifier().getProjectPath());
+
+        final DomainObjectSet<? extends IdeaContentRoot> contentRoots = module.getContentRoots();
+        for (IdeaContentRoot contentRoot : contentRoots) {
+            ContentRoot implContentRoot = new ContentRoot(contentRoot.getRootDirectory());
+
+            for (IdeaSourceDirectory sourceDirectory : contentRoot.getSourceDirectories()) {
+                implContentRoot.addSourceDirectory(sourceDirectory.getDirectory());
+            }
+
+            impl.addContentRoot(implContentRoot);
+        }
 
         for (IdeaDependency dependency : module.getDependencies()) {
             if (!"COMPILE".equals(dependency.getScope().getScope())) {

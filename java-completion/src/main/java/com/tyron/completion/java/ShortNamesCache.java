@@ -2,11 +2,13 @@ package com.tyron.completion.java;
 
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.impl.JavaModuleImpl;
 
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
 
@@ -16,7 +18,6 @@ import java.util.WeakHashMap;
 public class ShortNamesCache {
 
     private static final Map<Module, ShortNamesCache> map = new WeakHashMap<>();
-
     public static ShortNamesCache getInstance(Module module) {
         ShortNamesCache cache = map.get(module);
         if (cache == null) {
@@ -24,6 +25,15 @@ public class ShortNamesCache {
             map.put(module, cache);
         }
         return cache;
+    }
+
+    /**
+     * module used to store JDK indexes
+     */
+    private static final JavaModule JDK_MODULE = new JavaModuleImpl(null);
+
+    static {
+        JDK_MODULE.addLibrary(Objects.requireNonNull(CompletionModule.getAndroidJar()));
     }
 
     private final Module module;
@@ -64,6 +74,7 @@ public class ShortNamesCache {
             }
         }
 
+        classNames.addAll(JDK_MODULE.getClassIndex().getLeafNodes());
         return classNames.toArray(new String[0]);
     }
 }
