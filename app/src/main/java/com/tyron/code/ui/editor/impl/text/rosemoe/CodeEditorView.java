@@ -12,7 +12,6 @@ import com.google.common.collect.ImmutableSet;
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
-import com.tyron.code.analyzer.DiagnosticTextmateAnalyzer;
 import com.tyron.code.language.HighlightUtil;
 import com.tyron.code.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
@@ -137,20 +136,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
         mDiagnostics = diagnostics;
-
-        AnalyzeManager manager = getEditorLanguage().getAnalyzeManager();
-        if (manager instanceof DiagnosticTextmateAnalyzer) {
-            ((DiagnosticTextmateAnalyzer) manager).setDiagnostics(this, diagnostics);
-        }
-
-        if (mDiagnosticsListener != null) {
-            mDiagnosticsListener.accept(mDiagnostics);
-        }
-
-        Styles styles = getStyles();
-        if (styles != null) {
-            setStyles(styles);
-        }
     }
 
     public void setDiagnosticsListener(Consumer<List<DiagnosticWrapper>> listener) {
@@ -375,25 +360,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
      */
     public void setBackgroundAnalysisEnabled(boolean enabled) {
         mIsBackgroundAnalysisEnabled = enabled;
-    }
-
-    @Override
-    public void rerunAnalysis() {
-        //noinspection ConstantConditions
-        if (getEditorLanguage() != null) {
-            AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
-            Project project = ProjectManager.getInstance().getCurrentProject();
-
-            if (analyzeManager instanceof DiagnosticTextmateAnalyzer) {
-                if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
-                    ((DiagnosticTextmateAnalyzer) analyzeManager).rerunWithBg();
-                } else {
-                    ((DiagnosticTextmateAnalyzer) analyzeManager).rerunWithoutBg();
-                }
-            } else {
-                analyzeManager.rerun();
-            }
-        }
     }
 
     @Override
