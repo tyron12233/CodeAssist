@@ -6,6 +6,8 @@ import com.tyron.builder.api.variant.ComponentIdentity
 import com.tyron.builder.api.variant.JavaCompilation
 import com.tyron.builder.api.variant.VariantOutputConfiguration
 import com.tyron.builder.core.ComponentType
+import com.tyron.builder.gradle.internal.component.features.BuildConfigCreationConfig
+import com.tyron.builder.gradle.internal.component.features.ResValuesCreationConfig
 import com.tyron.builder.gradle.internal.dependency.VariantDependencies
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
 import com.tyron.builder.gradle.internal.scope.BuildFeatureValues
@@ -57,8 +59,8 @@ interface ComponentCreationConfig : ComponentIdentity {
 
 //    val assetsCreationConfig: AssetsCreationConfig?
 //    val androidResourcesCreationConfig: AndroidResourcesCreationConfig?
-//    val resValuesCreationConfig: ResValuesCreationConfig?
-//    val buildConfigCreationConfig: BuildConfigCreationConfig?
+    val resValuesCreationConfig: ResValuesCreationConfig?
+    val buildConfigCreationConfig: BuildConfigCreationConfig?
 //    val instrumentationCreationConfig: InstrumentationCreationConfig?
 //    val manifestPlaceholdersCreationConfig: ManifestPlaceholdersCreationConfig?
 //

@@ -44,6 +44,7 @@ import org.gradle.api.internal.resources.DefaultResourceHandler;
 import org.gradle.api.internal.tasks.TaskStatistics;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.cache.CacheRepository;
+import org.gradle.cache.FileLockManager;
 import org.gradle.cache.internal.BuildScopeCacheDir;
 import org.gradle.cache.internal.scopes.DefaultBuildScopedCache;
 import org.gradle.cache.scopes.BuildScopedCache;
@@ -61,6 +62,7 @@ import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.configuration.ScriptPluginFactorySelector;
 import org.gradle.configuration.internal.UserCodeApplicationContext;
 import org.gradle.configuration.project.DefaultCompileOperationFactory;
+import org.gradle.configuration.project.PluginsProjectConfigureActions;
 import org.gradle.execution.CompositeAwareTaskSelector;
 import org.gradle.execution.ProjectConfigurer;
 import org.gradle.execution.TaskNameResolver;
@@ -103,6 +105,9 @@ import org.gradle.initialization.SettingsFactory;
 import org.gradle.initialization.SettingsLoaderFactory;
 import org.gradle.initialization.SettingsPreparer;
 import org.gradle.initialization.SettingsProcessor;
+import org.gradle.initialization.buildsrc.BuildSourceBuilder;
+import org.gradle.initialization.buildsrc.BuildSrcBuildListenerFactory;
+import org.gradle.initialization.buildsrc.BuildSrcProjectConfigurationAction;
 import org.gradle.initialization.layout.BuildLayout;
 import org.gradle.initialization.layout.BuildLayoutConfiguration;
 import org.gradle.initialization.layout.BuildLayoutFactory;
@@ -127,6 +132,7 @@ import org.gradle.internal.event.DefaultListenerManager;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.file.Deleter;
 import org.gradle.internal.file.FileException;
+import org.gradle.internal.file.RelativeFilePathResolver;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.isolation.IsolatableFactory;
@@ -138,7 +144,9 @@ import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.BuildOperationQueueFactory;
 import org.gradle.internal.operations.DefaultBuildOperationQueueFactory;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.internal.resource.UriTextResource;
 import org.gradle.internal.resources.ResourceLockCoordinationService;
+import org.gradle.internal.service.CachingServiceLocator;
 import org.gradle.internal.service.DefaultServiceRegistry;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.resource.StringTextResource;
@@ -180,7 +188,6 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             registration.add(DefaultBuildWorkGraphController.class);
             registration.add(TaskPathProjectEvaluator.class);
 
-//            registration.add(DefaultResourceLockCoordinationService.class);
             registration.add(DefaultSettingsLoaderFactory.class);
             registration.add(ResolvedBuildLayout.class);
             registration.add(DefaultBuildIncluder.class);
@@ -193,8 +200,16 @@ public class BuildScopeServices extends DefaultServiceRegistry {
     }
 
 
-    TextFileResourceLoader createTextFileResourceLoader() {
-        return (description, sourceFile) -> new StringTextResource(description, GFileUtils.readFileToString(sourceFile));
+    TextFileResourceLoader createTextFileResourceLoader(RelativeFilePathResolver relativeFilePathResolver) {
+        return (description, sourceFile) -> {
+            if (sourceFile == null) {
+                return new StringTextResource(description, "");
+            }
+            if (sourceFile.exists()) {
+                return new UriTextResource(description, sourceFile, relativeFilePathResolver);
+            }
+            return new StringTextResource(description, "");
+        };
     }
 
     protected DefaultResourceHandler.Factory createResourceHandlerFactory(FileResolver fileResolver, FileSystem fileSystem, TemporaryFileProvider temporaryFileProvider, ApiTextResourceAdapter.Factory textResourceAdapterFactory) {
@@ -316,7 +331,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected ProjectsPreparer createBuildConfigurer(
             ProjectConfigurer projectConfigurer,
-//            BuildSourceBuilder buildSourceBuilder,
+            BuildSourceBuilder buildSourceBuilder,
             BuildStateRegistry buildStateRegistry,
             BuildInclusionCoordinator inclusionCoordinator,
             BuildLoader buildLoader,
@@ -335,7 +350,8 @@ public class BuildScopeServices extends DefaultServiceRegistry {
                                 buildOperationExecutor,
                                 buildStateRegistry),
                         buildLoader,
-                        inclusionCoordinator),
+                        inclusionCoordinator,
+                        buildSourceBuilder),
                 buildOperationExecutor);
     }
 
@@ -401,6 +417,20 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         ScriptPluginFactorySelector scriptPluginFactorySelector = new ScriptPluginFactorySelector(defaultScriptPluginFactory, instantiator, buildOperationExecutor, userCodeApplicationContext);
         defaultScriptPluginFactory.setScriptPluginFactory(scriptPluginFactorySelector);
         return scriptPluginFactorySelector;
+    }
+
+    protected BuildSourceBuilder createBuildSourceBuilder(BuildState currentBuild, FileLockManager fileLockManager, BuildOperationExecutor buildOperationExecutor, CachedClasspathTransformer cachedClasspathTransformer, CachingServiceLocator cachingServiceLocator, BuildStateRegistry buildRegistry, PublicBuildPath publicBuildPath) {
+        return new BuildSourceBuilder(
+                currentBuild,
+                fileLockManager,
+                buildOperationExecutor,
+                cachedClasspathTransformer,
+                new BuildSrcBuildListenerFactory(
+                        PluginsProjectConfigureActions.of(
+                                BuildSrcProjectConfigurationAction.class,
+                                cachingServiceLocator)),
+                buildRegistry,
+                publicBuildPath);
     }
 
     protected ScriptRunnerFactory createScriptRunnerFactory(ListenerManager listenerManager, InstantiatorFactory instantiatorFactory) {

@@ -16,6 +16,8 @@ import com.tyron.builder.gradle.BaseExtension;
 import com.tyron.builder.gradle.errors.NoOpDeprecationReporter;
 import com.tyron.builder.gradle.errors.NoOpSyncIssueReporter;
 import com.tyron.builder.gradle.internal.component.ApkCreationConfig;
+import com.tyron.builder.gradle.internal.component.features.BuildConfigCreationConfig;
+import com.tyron.builder.gradle.internal.component.features.ResValuesCreationConfig;
 import com.tyron.builder.gradle.internal.dependency.DexingArtifactConfiguration;
 import com.tyron.builder.gradle.internal.dependency.DexingTransformKt;
 import com.tyron.builder.gradle.internal.dependency.VariantDependencies;
@@ -96,6 +98,18 @@ public class CodeAssistAppPlugin implements Plugin<Project> {
         project.getExtensions().add("artifacts", artifacts);
 
         apkCreationConfig = new ApkCreationConfig() {
+            @Nullable
+            @Override
+            public BuildConfigCreationConfig getBuildConfigCreationConfig() {
+                return null;
+            }
+
+            @Nullable
+            @Override
+            public ResValuesCreationConfig getResValuesCreationConfig() {
+                return null;
+            }
+
             @NotNull
             @Override
             public Java8LangSupport getJava8LangSupportType() {

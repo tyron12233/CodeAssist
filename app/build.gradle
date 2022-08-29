@@ -51,8 +51,8 @@ android {
         exclude "META-INF/DEPENDENCIES"
         exclude "META-INF/LGPL2.1"
         exclude "META-INF/groovy-release-info.properties"
+        exclude "META-INF/AL2.0"
         pickFirst "META-INF/sisu/*"
-        pickFirst "META-INF/*"
     }
 }
 

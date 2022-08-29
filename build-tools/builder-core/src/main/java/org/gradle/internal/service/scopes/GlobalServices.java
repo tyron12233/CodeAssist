@@ -57,6 +57,7 @@ import org.gradle.internal.operations.CurrentBuildOperationRef;
 import org.gradle.internal.operations.DefaultBuildOperationListenerManager;
 import org.gradle.api.internal.provider.PropertyFactory;
 import org.gradle.internal.reflect.DirectInstantiator;
+import org.gradle.internal.service.CachingServiceLocator;
 import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.resource.TextUriResourceLoader;
@@ -173,6 +174,13 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
     ) {
         return listenerManager.getBroadcaster(BuildOperationListener.class);
     }
+
+    CachingServiceLocator createPluginsServiceLocator(ClassLoaderRegistry registry) {
+        return CachingServiceLocator.of(
+                new DefaultServiceLocator(registry.getPluginsClassLoader())
+        );
+    }
+
 
     JdkToolsInitializer createJdkToolsInitializer() {
         return new DefaultJdkToolsInitializer(new DefaultClassLoaderFactory());
@@ -302,11 +310,11 @@ public class GlobalServices extends WorkerSharedGlobalScopeServices {
         return new DefaultClassLoaderRegistry(classPathRegistry, legacyTypesSupport, DirectInstantiator.INSTANCE);
     }
 
-    DefaultWorkValidationWarningRecorder createValidationWarningReporter() {
-        return new DefaultWorkValidationWarningRecorder();
-    }
-
     OverlappingOutputDetector createOverlappingOutputDetector() {
         return new DefaultOverlappingOutputDetector();
+    }
+
+    DefaultWorkValidationWarningRecorder createValidationWarningReporter() {
+        return new DefaultWorkValidationWarningRecorder();
     }
 }

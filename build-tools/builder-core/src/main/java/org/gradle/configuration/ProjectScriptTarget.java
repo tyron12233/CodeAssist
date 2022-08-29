@@ -67,8 +67,7 @@ public class ProjectScriptTarget implements ScriptTarget {
 
     @Override
     public Permits getPluginsBlockPermits() {
-        VersionCatalogsExtension versionCatalogs = target.getExtensions().findByType(
-                VersionCatalogsExtension.class);
+        VersionCatalogsExtension versionCatalogs = target.getExtensions().findByType(VersionCatalogsExtension.class);
         if (versionCatalogs != null) {
             return new Permits(versionCatalogs.getCatalogNames());
         }

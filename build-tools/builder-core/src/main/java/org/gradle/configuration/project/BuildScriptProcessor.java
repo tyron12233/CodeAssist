@@ -5,19 +5,11 @@ import org.gradle.configuration.ScriptPlugin;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
-import java.util.Arrays;
-import java.util.stream.Collectors;
-
 public class BuildScriptProcessor implements ProjectConfigureAction {
     private static final Logger LOGGER = LoggerFactory.getLogger(BuildScriptProcessor.class);
-
-
     private final ScriptPluginFactory configurerFactory;
 
     public BuildScriptProcessor(ScriptPluginFactory configurerFactory) {
@@ -38,10 +30,5 @@ public class BuildScriptProcessor implements ProjectConfigureAction {
                 LOGGER.debug("Timing: Running the build script took {}", clock.getElapsed());
             }
         }
-    }
-
-    private String printParameters(Method method) {
-        return Arrays.stream(method.getParameters()).map(Parameter::getName)
-                .collect(Collectors.joining(", "));
     }
 }
