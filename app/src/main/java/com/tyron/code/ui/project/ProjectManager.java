@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Throwables;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.project.Project;
@@ -11,10 +12,10 @@ import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
+import com.tyron.code.gradle.util.GradleLaunchUtil;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
-import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.java.compiler.Parser;
 import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -23,6 +24,7 @@ import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
 import org.gradle.tooling.GradleConnector;
+import org.gradle.tooling.ModelBuilder;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.events.ProgressListener;
 import org.gradle.tooling.model.DomainObjectSet;
@@ -40,7 +42,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Logger;
 
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
@@ -138,7 +139,11 @@ public class ProjectManager {
 
             ProgressListener progressListener =
                     event -> mListener.onTaskStarted(event.getDisplayName());
-            IdeaProject ideaProject = projectConnection.model(IdeaProject.class)
+
+            ModelBuilder<IdeaProject> model = projectConnection.model(IdeaProject.class);
+            GradleLaunchUtil.configureLauncher(model);
+
+            IdeaProject ideaProject = model
                     .setStandardError(AppLogFragment.outputStream)
                     .setStandardOutput(AppLogFragment.outputStream)
                     .addProgressListener(progressListener)
@@ -150,7 +155,7 @@ public class ProjectManager {
             mCurrentProject.clear();
             buildModel(ideaProject, mCurrentProject);
         } catch (Throwable t) {
-            mListener.onComplete(mCurrentProject, false, t.getMessage());
+            mListener.onComplete(mCurrentProject, false, Throwables.getStackTraceAsString(t) + "\n");
             return;
         }
 

@@ -40,6 +40,7 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.gradle.util.GradleLaunchUtil;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
@@ -433,7 +434,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                                     desc.getDescription()));
                         }
                     });
-                    buildLauncher.withArguments("--stacktrace");
+                    GradleLaunchUtil.configureLauncher(buildLauncher);
                     buildLauncher.withArguments("--build-cache");
                     buildLauncher.forTasks("run");
                     buildLauncher.run();
