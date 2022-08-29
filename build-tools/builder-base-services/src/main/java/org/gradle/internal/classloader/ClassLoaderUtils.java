@@ -1,5 +1,7 @@
 package org.gradle.internal.classloader;
 
+import static org.gradle.util.GUtil.unchecked;
+
 import com.google.common.hash.HashCode;
 import org.gradle.api.JavaVersion;
 import org.gradle.internal.Factory;
@@ -23,6 +25,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
@@ -190,7 +193,7 @@ public abstract class ClassLoaderUtils {
         private File getDexDir() {
             File dataDir = getAppDataDir();
             File dexDir = new File(dataDir, "dex");
-            GUtil.unchecked(() -> {
+            unchecked(() -> {
                 if (!dexDir.exists() && !dexDir.mkdirs()) {
                     throw new IOException("Failed to create dex directory");
                 }
@@ -204,7 +207,7 @@ public abstract class ClassLoaderUtils {
                                         byte[] classBytes) {
             HashCode hashCode = Hashes.hashBytes(classBytes);
             File classFolder = new File(getDexDir(), hashCode.toString());
-            GUtil.unchecked(() -> {
+            unchecked(() -> {
                 List<String> individualPaths = new ArrayList<>(3);
 
                 File[] dexFiles = classFolder.listFiles(c -> c.getName().endsWith(".dex"));
@@ -226,9 +229,8 @@ public abstract class ClassLoaderUtils {
                     }
                 }
 
-                Method addDexPath = classLoader.getClass().getMethod("addDexPath", String.class, Boolean.TYPE);
                 for (String path : individualPaths) {
-                    addDexPath.invoke(classLoader, path, true);
+                    addDexToClasspath(new File(path), classLoader);
                 }
             });
 
@@ -246,6 +248,19 @@ public abstract class ClassLoaderUtils {
                                                  String className,
                                                  byte[] classBytes) {
             return defineClass(classLoader, className, classBytes);
+        }
+
+        private static final String BASE_DEX_CLASS_LOADER_CLASS = "dalvik.system.BaseDexClassLoader";
+
+        @SuppressWarnings("DiscouragedPrivateApi")
+        private void addDexToClasspath(File dex, ClassLoader classLoader) throws Exception {
+            Class<?> dexClassLoaderClass = Class.forName(BASE_DEX_CLASS_LOADER_CLASS);
+            Field pathListField = dexClassLoaderClass.getDeclaredField("pathList");
+            pathListField.setAccessible(true);
+            Object pathList = pathListField.get(classLoader);
+            Method addDexPath = pathList.getClass().getDeclaredMethod("addDexPath", String.class, File.class);
+            addDexPath.setAccessible(true);
+            addDexPath.invoke(pathList, dex.getAbsolutePath(), null);
         }
     }
 

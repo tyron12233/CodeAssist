@@ -22,6 +22,7 @@ import java.io.File;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryManagerMXBean;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -196,11 +197,20 @@ public class DexBackedURLClassLoader extends DexClassLoader {
 
     public void addDexPathPublic(String path, boolean trusted) {
         try {
-            ADD_DEX_PATH_METHOD.invoke(this, path, trusted);
-        } catch (IllegalAccessException e) {
+            addDexToClasspath(new File(path), this);
+        } catch (Exception e) {
             throw new RuntimeException(e);
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
         }
+    }
+
+    @SuppressWarnings("DiscouragedPrivateApi")
+    private void addDexToClasspath(File dex, ClassLoader classLoader) throws Exception {
+        Class<?> dexClassLoaderClass = Class.forName(BaseDexClassLoader.class.getName());
+        Field pathListField = dexClassLoaderClass.getDeclaredField("pathList");
+        pathListField.setAccessible(true);
+        Object pathList = pathListField.get(classLoader);
+        Method addDexPath = pathList.getClass().getDeclaredMethod("addDexPath", String.class, File.class);
+        addDexPath.setAccessible(true);
+        addDexPath.invoke(pathList, dex.getAbsolutePath(), null);
     }
 }
