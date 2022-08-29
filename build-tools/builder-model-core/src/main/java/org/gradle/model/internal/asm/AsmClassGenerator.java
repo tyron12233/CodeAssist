@@ -1,9 +1,6 @@
 package org.gradle.model.internal.asm;
 
 import org.gradle.internal.classloader.ClassLoaderUtils;
-import com.tyron.common.TestUtil;
-import com.tyron.groovy.ScriptFactory;
-
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Type;
 

@@ -1,7 +1,7 @@
 package com.tyron.builder.common.resources;
 
+import com.android.resources.ResourceType;
 import com.tyron.builder.compiler.manifest.MergingException;
-import com.tyron.builder.compiler.manifest.resources.ResourceType;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;

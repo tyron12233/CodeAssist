@@ -2,14 +2,14 @@ package com.tyron.builder.common.symbols;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import com.android.resources.ResourceType;
+import com.android.resources.ResourceVisibility;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Interner;
 import com.google.common.collect.Interners;
 import com.tyron.builder.common.io.NonClosingStreams;
-import com.tyron.builder.compiler.manifest.resources.ResourceType;
-import com.tyron.builder.compiler.manifest.resources.ResourceVisibility;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.android.SdkConstants;
 

@@ -1,11 +1,11 @@
 package com.tyron.builder.common.symbols
 
+import com.android.resources.ResourceType
+import com.android.resources.ResourceVisibility
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
 import com.tyron.builder.common.resources.ValueResourceNameValidator
 import com.tyron.builder.compiler.manifest.MergingException
-import com.tyron.builder.compiler.manifest.resources.ResourceType
-import com.tyron.builder.compiler.manifest.resources.ResourceVisibility
 import javax.annotation.concurrent.Immutable
 
 /**
@@ -88,11 +88,11 @@ sealed class Symbol {
          * @param value the value of the symbol
          */
         @JvmStatic @JvmOverloads fun createSymbol(
-                resourceType: ResourceType,
-                name: String,
-                value: Int,
-                isMaybeDefinition: Boolean = false,
-                validation: Boolean = true): Symbol {
+            resourceType: ResourceType,
+            name: String,
+            value: Int,
+            isMaybeDefinition: Boolean = false,
+            validation: Boolean = true): Symbol {
             if (validation) {
                 validateSymbol(name, resourceType)
             }

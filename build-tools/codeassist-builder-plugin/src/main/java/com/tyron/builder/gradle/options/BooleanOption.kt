@@ -5,7 +5,7 @@ import com.tyron.builder.gradle.errors.DeprecationReporter.DeprecationTarget
 import com.tyron.builder.gradle.errors.DeprecationReporter.DeprecationTarget.VERSION_8_0
 import com.tyron.builder.gradle.errors.parseBoolean
 import com.tyron.builder.gradle.options.Version.*
-import com.tyron.builder.model.AndroidProject
+import com.tyron.builder.model.*
 import com.tyron.builder.model.AndroidProject.PROPERTY_BUILD_MODEL_ONLY
 
 enum class BooleanOption(
@@ -19,7 +19,7 @@ enum class BooleanOption(
      */
 
 //    // IDE properties
-//    IDE_INVOKED_FROM_IDE(PROPERTY_INVOKED_FROM_IDE, false, ApiStage.Stable),
+    IDE_INVOKED_FROM_IDE(PROPERTY_INVOKED_FROM_IDE, false, ApiStage.Stable),
     IDE_BUILD_MODEL_ONLY_V2("android.injected.build.model.v2", false, ApiStage.Stable),
     @Deprecated("This is for model v1 only. Please also use IDE_BUILD_MODEL_ONLY_V2")
     IDE_BUILD_MODEL_ONLY(PROPERTY_BUILD_MODEL_ONLY, false, ApiStage.Stable),
@@ -27,14 +27,14 @@ enum class BooleanOption(
     IDE_BUILD_MODEL_ONLY_ADVANCED(AndroidProject.PROPERTY_BUILD_MODEL_ONLY_ADVANCED, false, ApiStage.Stable),
     @Deprecated("Use IDE_BUILD_MODEL_ONLY_V2")
     IDE_BUILD_MODEL_FEATURE_FULL_DEPENDENCIES(AndroidProject.PROPERTY_BUILD_MODEL_FEATURE_FULL_DEPENDENCIES, false, ApiStage.Stable),
-//    IDE_REFRESH_EXTERNAL_NATIVE_MODEL(PROPERTY_REFRESH_EXTERNAL_NATIVE_MODEL, false, ApiStage.Stable),
-    //IDE_GENERATE_SOURCES_ONLY(AndroidProject.PROPERTY_GENERATE_SOURCES_ONLY, false, ApiStage.Stable),
+    IDE_REFRESH_EXTERNAL_NATIVE_MODEL(PROPERTY_REFRESH_EXTERNAL_NATIVE_MODEL, false, ApiStage.Stable),
+    IDE_GENERATE_SOURCES_ONLY(AndroidProject.PROPERTY_GENERATE_SOURCES_ONLY, false, ApiStage.Stable),
 
-//    // tell bundletool to only extract instant APKs.
-//    IDE_EXTRACT_INSTANT(PROPERTY_EXTRACT_INSTANT_APK, false, ApiStage.Stable),
-//
-//    // Flag used to indicate a "deploy as instant" run configuration.
-//    IDE_DEPLOY_AS_INSTANT_APP(PROPERTY_DEPLOY_AS_INSTANT_APP, false, ApiStage.Stable),
+    // tell bundletool to only extract instant APKs.
+    IDE_EXTRACT_INSTANT(PROPERTY_EXTRACT_INSTANT_APK, false, ApiStage.Stable),
+
+    // Flag used to indicate a "deploy as instant" run configuration.
+    IDE_DEPLOY_AS_INSTANT_APP(PROPERTY_DEPLOY_AS_INSTANT_APP, false, ApiStage.Stable),
 //
 //    ENABLE_STUDIO_VERSION_CHECK("android.injected.studio.version.check", true, ApiStage.Stable),
     ENABLE_STABLE_IDS("android.injected.enableStableIds", false, ApiStage.Stable),

@@ -20,7 +20,7 @@ import com.android.tools.r8.Version
 import com.android.tools.r8.origin.Origin
 import com.android.tools.r8.utils.ArchiveResourceProvider
 import com.google.common.io.ByteStreams
-import com.tyron.builder.common.blame.MessageReceiver
+import com.tyron.builder.ide.common.blame.MessageReceiver
 import com.tyron.builder.dexing.r8.ClassFileProviderFactory
 import com.android.SdkConstants.*
 import java.io.BufferedOutputStream

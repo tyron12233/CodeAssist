@@ -1,6 +1,6 @@
 package com.tyron.builder.dexing
 
-import com.tyron.builder.common.blame.MessageReceiver
+import com.tyron.builder.ide.common.blame.MessageReceiver
 import com.tyron.builder.dexing.r8.ClassFileProviderFactory
 import java.io.File
 

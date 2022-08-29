@@ -1,13 +1,13 @@
 package com.tyron.builder.gradle.errors
 
+import com.android.ide.common.blame.Message
+import com.android.ide.common.blame.SourceFilePosition
 import com.google.common.base.Joiner
 import com.google.common.collect.Iterables
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.tyron.builder.common.blame.Message
-import com.tyron.builder.common.blame.MessageJsonSerializer
-import com.tyron.builder.common.blame.MessageReceiver
-import com.tyron.builder.common.blame.SourceFilePosition
+import com.tyron.builder.ide.common.blame.MessageJsonSerializer
+import com.tyron.builder.ide.common.blame.MessageReceiver
 import com.tyron.builder.plugin.options.SyncOptions.ErrorFormatMode
 import org.slf4j.Logger
 

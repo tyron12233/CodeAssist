@@ -8,7 +8,7 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.OutputMode;
 import com.android.tools.r8.StringConsumer.FileConsumer;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.tyron.builder.common.blame.Message;
+import com.android.ide.common.blame.Message;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;

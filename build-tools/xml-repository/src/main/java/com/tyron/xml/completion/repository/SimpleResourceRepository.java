@@ -41,8 +41,6 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.logging.Logger;
 
-import jdk.internal.org.jline.utils.Colors;
-
 public class SimpleResourceRepository implements Repository {
 
     private static final ImmutableMap<ResourceFolderType, ResourceParser> sParsers;

@@ -2,10 +2,10 @@
 
 package com.tyron.builder.common.symbols
 
+import com.android.resources.ResourceType
 import com.google.common.base.CharMatcher
 import com.google.common.base.Splitter
 import com.google.common.collect.ImmutableList
-import com.tyron.builder.compiler.manifest.resources.ResourceType
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream

@@ -1,15 +1,11 @@
 package org.gradle.initialization;
 
+import com.tyron.groovy.DexBackedURLClassLoader;
+
+import org.codehaus.groovy.reflection.android.AndroidSupport;
 import org.gradle.api.internal.ClassPathRegistry;
 import org.gradle.internal.classloader.FilteringClassLoader;
 import org.gradle.internal.reflect.Instantiator;
-import com.tyron.groovy.DexBackedURLClassLoader;
-import com.tyron.groovy.ScriptFactory;
-
-import org.codehaus.groovy.reflection.android.AndroidSupport;
-
-import java.net.URL;
-import java.net.URLClassLoader;
 
 public class DefaultClassLoaderRegistry implements ClassLoaderRegistry {
     private final ClassLoader apiOnlyClassLoader;

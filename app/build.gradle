@@ -16,8 +16,8 @@ android {
     }
     compileOptions {
         coreLibraryDesugaringEnabled = true
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     testOptions {
@@ -49,8 +49,10 @@ android {
         exclude "META-INF/eclipse.inf"
         exclude "META-INF/INDEX.LIST"
         exclude "META-INF/DEPENDENCIES"
+        exclude "META-INF/LGPL2.1"
         exclude "META-INF/groovy-release-info.properties"
         pickFirst "META-INF/sisu/*"
+        pickFirst "META-INF/*"
     }
 }
 
@@ -164,6 +166,8 @@ dependencies {
     implementation project(path: ':eclipse-formatter')
     implementation project(path: ':build-tools:builder-core')
 
+
+    runtimeOnly projects.javaStubs
     //debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.7'
 
     // testing

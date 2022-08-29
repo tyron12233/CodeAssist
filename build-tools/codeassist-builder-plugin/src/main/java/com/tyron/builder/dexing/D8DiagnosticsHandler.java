@@ -10,10 +10,10 @@ import com.android.tools.r8.origin.PathOrigin;
 import com.android.tools.r8.position.Position;
 import com.android.tools.r8.position.TextPosition;
 import com.android.tools.r8.position.TextRange;
-import com.tyron.builder.common.blame.Message;
-import com.tyron.builder.common.blame.MessageReceiver;
-import com.tyron.builder.common.blame.SourceFilePosition;
-import com.tyron.builder.common.blame.SourcePosition;
+import com.android.ide.common.blame.Message;
+import com.tyron.builder.ide.common.blame.MessageReceiver;
+import com.android.ide.common.blame.SourceFilePosition;
+import com.android.ide.common.blame.SourcePosition;
 
 import java.io.File;
 import java.nio.file.Files;

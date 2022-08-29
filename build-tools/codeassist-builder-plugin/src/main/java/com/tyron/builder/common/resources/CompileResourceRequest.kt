@@ -1,7 +1,7 @@
 package com.tyron.builder.common.resources
 
-import com.tyron.builder.common.blame.SourceFilePosition
-import com.tyron.builder.common.blame.SourcePosition
+import com.android.ide.common.blame.SourceFilePosition
+import com.android.ide.common.blame.SourcePosition
 import java.io.File
 import java.io.Serializable
 

@@ -1,3 +1,5 @@
+@file:JvmName("RelativeResourceUtils")
+
 package com.tyron.builder.common.resources
 
 
@@ -29,4 +31,60 @@ fun getRelativeSourceSetPath(resourceFile: File, moduleSourceSets: Map<String, S
 
     throw IllegalArgumentException(
         "Unable to locate resourceFile ($absoluteResFilePath) in source-sets.")
+}
+
+/**
+ * Converts a source set identified relative resource path to an absolute path.
+ *
+ * The source set identifier before the separator is replaced with the absolute source set
+ * path and then concatenated with the path after the separator.
+ */
+fun relativeResourcePathToAbsolutePath(
+    relativePath: String,
+    sourceSetPathMap: Map<String, String>,
+    fileSystem: FileSystem = FileSystems.getDefault()): String {
+    return relativeResourcePathToAbsolutePath(sourceSetPathMap, fileSystem)(relativePath)
+}
+
+fun relativeResourcePathToAbsolutePath(
+    sourceSetPathMap: Map<String, String>,
+    fileSystem: FileSystem = FileSystems.getDefault()
+): (String) -> String {
+    return { relativePath: String ->
+        if (sourceSetPathMap.none()) {
+            throw IllegalStateException(
+                """Unable to get absolute path from $relativePath
+                   because no relative root paths are present."""
+            )
+        }
+        val separatorIndex = relativePath.indexOf(separator)
+        if (separatorIndex == -1) {
+            throw IllegalArgumentException(
+                """Source set identifier and relative path must be separated by a "$separator".
+                   Relative path: $relativePath"""
+            )
+        }
+        val sourceSetPrefix = relativePath.substring(0, separatorIndex)
+        val resourcePathFromSourceSet =
+            relativePath.substring(separatorIndex + separator.lastIndex, relativePath.length)
+        val systemRelativePath = if ("/" != fileSystem.separator) {
+            resourcePathFromSourceSet.replace("/", fileSystem.separator)
+        } else {
+            resourcePathFromSourceSet
+        }
+        val absolutePath = sourceSetPathMap[sourceSetPrefix]
+            ?: throw NoSuchElementException(
+                """Unable to get absolute path from $relativePath
+                       because $sourceSetPrefix is not key in sourceSetPathMap."""
+            )
+        "$absolutePath$systemRelativePath"
+    }
+}
+
+/**
+ * Verifies if a string is relative resource sourceset filepath. This is for cases where it is
+ * not possible to determine if relative resource filepaths are enabled by default.
+ */
+fun isRelativeSourceSetResource(filepath: String) : Boolean {
+    return filepath.contains(separator)
 }

@@ -1,6 +1,6 @@
 package com.tyron.builder.common.symbols
 
-import com.tyron.builder.compiler.manifest.resources.ResourceType
+import com.android.resources.ResourceType
 
 /**
  * Provides IDs for resource assignment.

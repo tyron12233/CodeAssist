@@ -3,8 +3,8 @@ package com.tyron.builder.dexing
 import com.android.tools.r8.Diagnostic
 import com.android.tools.r8.diagnostic.MissingDefinitionsDiagnostic
 import com.android.tools.r8.errors.UnsupportedMainDexListUsageDiagnostic
-import com.tyron.builder.common.blame.Message
-import com.tyron.builder.common.blame.MessageReceiver
+import com.android.ide.common.blame.Message
+import com.tyron.builder.ide.common.blame.MessageReceiver
 import java.nio.file.Path
 
 /** Handle R8-specific warning/errors and capture additional information. */

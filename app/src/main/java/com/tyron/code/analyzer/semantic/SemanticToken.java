@@ -2,8 +2,6 @@ package com.tyron.code.analyzer.semantic;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.code.language.java.JavaSemanticHighlighter;
-
 public class SemanticToken {
     private final TokenType tokenType;
     private final int tokenModifiers;

@@ -11,12 +11,12 @@ import static com.android.SdkConstants.FN_ANDROID_MANIFEST_XML;
 import static com.android.SdkConstants.FN_ANNOTATIONS_ZIP;
 import static com.android.SdkConstants.FN_CLASSES_JAR;
 import static com.android.SdkConstants.FN_LINT_JAR;
-import static com.android.SdkConstants.FN_NAVIGATION_JSON;
 import static com.android.SdkConstants.FN_PROGUARD_TXT;
 import static com.android.SdkConstants.FN_PUBLIC_TXT;
 import static com.android.SdkConstants.FN_RESOURCE_STATIC_LIBRARY;
 import static com.android.SdkConstants.FN_RESOURCE_TEXT;
 import static com.android.SdkConstants.FN_SHARED_LIBRARY_ANDROID_MANIFEST_XML;
+import static com.tyron.builder.plugin.SdkConstants.FN_NAVIGATION_JSON;
 
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts.ArtifactType;
 import com.tyron.builder.gradle.internal.tasks.AarMetadataTask;

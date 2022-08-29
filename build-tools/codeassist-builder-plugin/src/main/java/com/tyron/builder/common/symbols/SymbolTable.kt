@@ -8,9 +8,9 @@ import com.google.common.collect.Lists
 import com.google.common.collect.Maps
 import com.google.common.collect.Table
 import com.google.common.collect.Tables
-import com.tyron.builder.compiler.manifest.resources.ResourceType
-import com.tyron.builder.compiler.manifest.resources.ResourceVisibility
 import com.android.SdkConstants
+import com.android.resources.ResourceType
+import com.android.resources.ResourceVisibility
 import java.io.File
 import java.util.Collections
 import java.util.HashMap

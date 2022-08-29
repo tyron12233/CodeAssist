@@ -11,8 +11,8 @@ import com.android.tools.r8.OutputMode;
 import com.android.tools.r8.errors.DuplicateTypesDiagnostic;
 import com.android.tools.r8.origin.Origin;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.tyron.builder.common.blame.Message;
-import com.tyron.builder.common.blame.MessageReceiver;
+import com.android.ide.common.blame.Message;
+import com.tyron.builder.ide.common.blame.MessageReceiver;
 
 import java.nio.file.Path;
 import java.util.Collection;

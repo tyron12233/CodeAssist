@@ -1,32 +1,23 @@
 package com.tyron.builder.symbols
 
+import com.android.SdkConstants
+import com.android.resources.ResourceType
 import com.tyron.builder.common.symbols.Symbol
 import com.tyron.builder.common.symbols.SymbolTable
 import com.tyron.builder.common.symbols.canonicalizeValueResourceName
-import com.tyron.builder.compiler.manifest.resources.ResourceType
 import com.tyron.builder.packaging.JarCreator
 import com.tyron.builder.packaging.JarFlinger
-import com.android.SdkConstants
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.ClassWriter.COMPUTE_MAXS
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
-import org.objectweb.asm.Opcodes.ACC_FINAL
-import org.objectweb.asm.Opcodes.ACC_PRIVATE
-import org.objectweb.asm.Opcodes.ACC_PUBLIC
-import org.objectweb.asm.Opcodes.ACC_STATIC
-import org.objectweb.asm.Opcodes.ACC_SUPER
-import org.objectweb.asm.Opcodes.ALOAD
-import org.objectweb.asm.Opcodes.GETSTATIC
-import org.objectweb.asm.Opcodes.INVOKESPECIAL
-import org.objectweb.asm.Opcodes.PUTSTATIC
-import org.objectweb.asm.Opcodes.RETURN
+import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.Type.INT_TYPE
 import org.objectweb.asm.commons.GeneratorAdapter
 import org.objectweb.asm.commons.Method
 import java.io.IOException
 import java.nio.file.Path
-import java.util.EnumSet
+import java.util.*
 import java.util.zip.Deflater.NO_COMPRESSION
 
 @Throws(IOException::class)
