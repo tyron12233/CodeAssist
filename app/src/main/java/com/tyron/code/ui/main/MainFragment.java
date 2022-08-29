@@ -2,6 +2,7 @@ package com.tyron.code.ui.main;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
@@ -388,7 +389,15 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                     AndroidUtilities.showSimpleAlert(requireActivity(),
                             "Index failed.",
                             "Error message: " + message + "\n" +
-                            "Code completions may not work properly.");
+                            "Code completions may not work properly.",
+
+                            "Close",
+                            null,
+                            "Copy stacktrace", (dialog, which) -> {
+                                if (which == DialogInterface.BUTTON_NEUTRAL) {
+                                    AndroidUtilities.copyToClipboard(message);
+                                }
+                            });
                 }
                 mMainViewModel.setIndexing(false);
                 mMainViewModel.setCurrentState(null);
