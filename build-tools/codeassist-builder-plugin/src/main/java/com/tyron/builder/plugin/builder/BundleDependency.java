@@ -1,6 +1,6 @@
 package com.tyron.builder.plugin.builder;
 
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import java.io.File;
 

@@ -1,7 +1,7 @@
 package com.tyron.builder.packaging;
 
 import com.google.common.collect.ImmutableSortedMap;
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import org.gradle.util.internal.GFileUtils;
 import org.jetbrains.annotations.NotNull;

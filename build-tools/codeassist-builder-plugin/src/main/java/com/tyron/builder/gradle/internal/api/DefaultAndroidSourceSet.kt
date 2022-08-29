@@ -18,7 +18,7 @@ import com.tyron.builder.gradle.internal.ide.CustomSourceDirectoryImpl
 import com.tyron.builder.internal.utils.appendCapitalized
 import com.tyron.builder.model.SourceProvider
 import com.tyron.builder.model.v2.CustomSourceDirectory
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import groovy.lang.Closure
 import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer

@@ -1,6 +1,6 @@
 package com.tyron.builder.common;
 
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;

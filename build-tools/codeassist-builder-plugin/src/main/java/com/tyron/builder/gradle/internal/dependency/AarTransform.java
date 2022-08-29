@@ -1,26 +1,26 @@
 package com.tyron.builder.gradle.internal.dependency;
 
-import static com.tyron.builder.plugin.SdkConstants.FD_AIDL;
-import static com.tyron.builder.plugin.SdkConstants.FD_ASSETS;
-import static com.tyron.builder.plugin.SdkConstants.FD_JARS;
-import static com.tyron.builder.plugin.SdkConstants.FD_JNI;
-import static com.tyron.builder.plugin.SdkConstants.FD_PREFAB_PACKAGE;
-import static com.tyron.builder.plugin.SdkConstants.FD_RENDERSCRIPT;
-import static com.tyron.builder.plugin.SdkConstants.FD_RES;
-import static com.tyron.builder.plugin.SdkConstants.FN_ANDROID_MANIFEST_XML;
-import static com.tyron.builder.plugin.SdkConstants.FN_ANNOTATIONS_ZIP;
-import static com.tyron.builder.plugin.SdkConstants.FN_CLASSES_JAR;
-import static com.tyron.builder.plugin.SdkConstants.FN_LINT_JAR;
-import static com.tyron.builder.plugin.SdkConstants.FN_NAVIGATION_JSON;
-import static com.tyron.builder.plugin.SdkConstants.FN_PROGUARD_TXT;
-import static com.tyron.builder.plugin.SdkConstants.FN_PUBLIC_TXT;
-import static com.tyron.builder.plugin.SdkConstants.FN_RESOURCE_STATIC_LIBRARY;
-import static com.tyron.builder.plugin.SdkConstants.FN_RESOURCE_TEXT;
-import static com.tyron.builder.plugin.SdkConstants.FN_SHARED_LIBRARY_ANDROID_MANIFEST_XML;
+import static com.android.SdkConstants.FD_AIDL;
+import static com.android.SdkConstants.FD_ASSETS;
+import static com.android.SdkConstants.FD_JARS;
+import static com.android.SdkConstants.FD_JNI;
+import static com.android.SdkConstants.FD_PREFAB_PACKAGE;
+import static com.android.SdkConstants.FD_RENDERSCRIPT;
+import static com.android.SdkConstants.FD_RES;
+import static com.android.SdkConstants.FN_ANDROID_MANIFEST_XML;
+import static com.android.SdkConstants.FN_ANNOTATIONS_ZIP;
+import static com.android.SdkConstants.FN_CLASSES_JAR;
+import static com.android.SdkConstants.FN_LINT_JAR;
+import static com.android.SdkConstants.FN_NAVIGATION_JSON;
+import static com.android.SdkConstants.FN_PROGUARD_TXT;
+import static com.android.SdkConstants.FN_PUBLIC_TXT;
+import static com.android.SdkConstants.FN_RESOURCE_STATIC_LIBRARY;
+import static com.android.SdkConstants.FN_RESOURCE_TEXT;
+import static com.android.SdkConstants.FN_SHARED_LIBRARY_ANDROID_MANIFEST_XML;
 
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts.ArtifactType;
 import com.tyron.builder.gradle.internal.tasks.AarMetadataTask;
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import java.io.File;
 import org.gradle.api.artifacts.transform.InputArtifact;

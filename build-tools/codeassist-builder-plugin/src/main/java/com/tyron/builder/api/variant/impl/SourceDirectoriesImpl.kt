@@ -2,7 +2,7 @@ package com.tyron.builder.api.variant.impl
 
 import com.tyron.builder.api.variant.SourceDirectories
 import com.tyron.builder.gradle.internal.services.VariantServices
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import org.gradle.api.Task
 import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty

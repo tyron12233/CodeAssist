@@ -3,7 +3,7 @@ package com.tyron.builder.dexing;
 import static com.tyron.builder.dexing.ClassFileInput.CLASS_MATCHER;
 
 import com.google.common.base.Preconditions;
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import org.jetbrains.annotations.NotNull;
 

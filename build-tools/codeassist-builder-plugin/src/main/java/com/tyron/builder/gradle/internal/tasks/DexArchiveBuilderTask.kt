@@ -6,7 +6,7 @@ import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
 import com.tyron.builder.internal.dexing.DexParameters
 import com.tyron.builder.gradle.internal.scope.InternalArtifactType
 import com.tyron.builder.gradle.internal.tasks.factory.VariantTaskCreationAction
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import com.tyron.builder.plugin.options.SyncOptions
 import com.tyron.builder.tasks.IncrementalTask
 import org.gradle.api.artifacts.ProjectDependency

@@ -6,6 +6,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
+import org.apache.commons.lang3.StringUtils;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.internal.IoActions;
 import org.gradle.util.GUtil;
@@ -23,6 +24,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -464,6 +467,40 @@ public class GFileUtils {
             path = path.replace('/', File.separatorChar);
         }
         return path;
+    }
+
+    /**
+     * Returns the path of target relative to base.
+     *
+     * @param target target file or directory
+     * @param base base directory
+     * @return the path of target relative to base.
+     */
+    public static String relativePathOf(File target, File base) {
+        String separatorChars = "/" + File.separator;
+        List<String> basePath = splitAbsolutePathOf(base, separatorChars);
+        List<String> targetPath = new ArrayList<String>(splitAbsolutePathOf(target, separatorChars));
+
+        // Find and remove common prefix
+        int maxDepth = Math.min(basePath.size(), targetPath.size());
+        int prefixLen = 0;
+        while (prefixLen < maxDepth && basePath.get(prefixLen).equals(targetPath.get(prefixLen))) {
+            prefixLen++;
+        }
+        basePath = basePath.subList(prefixLen, basePath.size());
+        targetPath = targetPath.subList(prefixLen, targetPath.size());
+
+        for (int i = 0; i < basePath.size(); i++) {
+            targetPath.add(0, "..");
+        }
+        if (targetPath.isEmpty()) {
+            return ".";
+        }
+        return CollectionUtils.join(File.separator, targetPath);
+    }
+
+    private static List<String> splitAbsolutePathOf(File baseDir, String separatorChars) {
+        return Arrays.asList(StringUtils.split(baseDir.getAbsolutePath(), separatorChars));
     }
 
     public static class TailReadingException extends RuntimeException {

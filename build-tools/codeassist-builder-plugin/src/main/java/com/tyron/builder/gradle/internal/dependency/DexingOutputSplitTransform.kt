@@ -1,7 +1,7 @@
 package com.tyron.builder.gradle.internal.dependency
 
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.artifacts.transform.InputArtifact
 import org.gradle.api.artifacts.transform.TransformAction

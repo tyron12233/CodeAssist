@@ -1,10 +1,10 @@
 package com.tyron.builder.common.resources;
 
-import static com.tyron.builder.plugin.SdkConstants.AMP_ENTITY;
-import static com.tyron.builder.plugin.SdkConstants.APOS_ENTITY;
-import static com.tyron.builder.plugin.SdkConstants.GT_ENTITY;
-import static com.tyron.builder.plugin.SdkConstants.LT_ENTITY;
-import static com.tyron.builder.plugin.SdkConstants.QUOT_ENTITY;
+import static com.android.SdkConstants.AMP_ENTITY;
+import static com.android.SdkConstants.APOS_ENTITY;
+import static com.android.SdkConstants.GT_ENTITY;
+import static com.android.SdkConstants.LT_ENTITY;
+import static com.android.SdkConstants.QUOT_ENTITY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.tyron.builder.common.resources.escape.string.StringResourceEscaper;

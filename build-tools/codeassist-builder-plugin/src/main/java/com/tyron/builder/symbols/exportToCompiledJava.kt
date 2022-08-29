@@ -6,7 +6,7 @@ import com.tyron.builder.common.symbols.canonicalizeValueResourceName
 import com.tyron.builder.compiler.manifest.resources.ResourceType
 import com.tyron.builder.packaging.JarCreator
 import com.tyron.builder.packaging.JarFlinger
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.ClassWriter.COMPUTE_MAXS
 import org.objectweb.asm.MethodVisitor

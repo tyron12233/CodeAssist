@@ -3,7 +3,7 @@ package com.tyron.builder.common.resources;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import java.util.List;
 

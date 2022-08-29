@@ -1,11 +1,11 @@
 package com.tyron.builder.gradle.internal.dependency;
 
-import static com.tyron.builder.plugin.SdkConstants.FD_JARS;
-import static com.tyron.builder.plugin.SdkConstants.FN_CLASSES_JAR;
-import static com.tyron.builder.plugin.SdkConstants.LIBS_FOLDER;
+import static com.android.SdkConstants.FD_JARS;
+import static com.android.SdkConstants.FN_CLASSES_JAR;
+import static com.android.SdkConstants.LIBS_FOLDER;
 
 import com.google.common.collect.Lists;
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import org.gradle.util.internal.GFileUtils;
 import org.jetbrains.annotations.NotNull;

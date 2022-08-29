@@ -1,8 +1,8 @@
 package com.tyron.builder.aar
 
 import com.google.common.io.Files
-import com.tyron.builder.plugin.SdkConstants
-import com.tyron.builder.plugin.SdkConstants.*
+import com.android.SdkConstants
+import com.android.SdkConstants.*
 import com.tyron.builder.utils.isValidZipEntryName
 import org.gradle.util.internal.GFileUtils
 import java.io.File
@@ -11,6 +11,7 @@ import java.util.zip.ZipInputStream
 private const val LIBS_PREFIX = SdkConstants.LIBS_FOLDER + '/'
 private const val LIBS_PREFIX_LENGTH = LIBS_PREFIX.length
 private const val JARS_PREFIX_LENGTH = FD_JARS.length + 1
+
 
 class AarExtractor {
     /**

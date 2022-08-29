@@ -11,7 +11,7 @@ import com.tyron.builder.common.io.NonClosingStreams;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.compiler.manifest.resources.ResourceVisibility;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;

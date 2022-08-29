@@ -2,8 +2,8 @@ package com.tyron.builder.gradle.internal.dependency
 
 import com.google.common.io.Files
 import com.tyron.builder.aar.AarExtractor
-import com.tyron.builder.plugin.SdkConstants.FD_JARS
-import com.tyron.builder.plugin.SdkConstants.FN_CLASSES_JAR
+import com.android.SdkConstants.FD_JARS
+import com.android.SdkConstants.FN_CLASSES_JAR
 import org.gradle.api.artifacts.transform.InputArtifact
 import org.gradle.api.artifacts.transform.TransformAction
 import org.gradle.api.artifacts.transform.TransformOutputs

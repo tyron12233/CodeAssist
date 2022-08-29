@@ -4,7 +4,7 @@ import com.google.common.base.Preconditions
 import com.tyron.builder.core.BuilderConstants
 import com.tyron.builder.internal.ide.dependencies.BuildMapping
 import com.tyron.builder.internal.ide.dependencies.computeBuildMapping
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import org.gradle.api.Project
 import org.gradle.api.capabilities.Capability
 import org.gradle.api.file.Directory

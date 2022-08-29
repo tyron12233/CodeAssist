@@ -10,7 +10,7 @@ import com.google.common.collect.Table
 import com.google.common.collect.Tables
 import com.tyron.builder.compiler.manifest.resources.ResourceType
 import com.tyron.builder.compiler.manifest.resources.ResourceVisibility
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import java.io.File
 import java.util.Collections
 import java.util.HashMap

@@ -1,6 +1,6 @@
 package com.tyron.builder.dexing;
 
-import com.tyron.builder.plugin.SdkConstants;
+import com.android.SdkConstants;
 
 import org.gradle.util.internal.GFileUtils;
 

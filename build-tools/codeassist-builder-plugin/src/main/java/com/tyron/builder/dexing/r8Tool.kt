@@ -22,7 +22,7 @@ import com.android.tools.r8.utils.ArchiveResourceProvider
 import com.google.common.io.ByteStreams
 import com.tyron.builder.common.blame.MessageReceiver
 import com.tyron.builder.dexing.r8.ClassFileProviderFactory
-import com.tyron.builder.plugin.SdkConstants.*
+import com.android.SdkConstants.*
 import java.io.BufferedOutputStream
 import java.io.IOException
 import java.nio.file.Files

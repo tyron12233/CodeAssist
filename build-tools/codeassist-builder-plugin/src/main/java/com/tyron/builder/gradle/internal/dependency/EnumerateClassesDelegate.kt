@@ -1,7 +1,7 @@
 package com.tyron.builder.gradle.internal.dependency
 
 import com.tyron.builder.dexing.ClassFileInput
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import org.gradle.util.internal.GFileUtils
 import java.io.File
 import java.util.zip.ZipFile

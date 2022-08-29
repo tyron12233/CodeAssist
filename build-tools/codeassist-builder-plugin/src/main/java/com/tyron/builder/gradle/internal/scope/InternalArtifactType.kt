@@ -3,7 +3,7 @@ package com.tyron.builder.gradle.internal.scope
 import com.tyron.builder.api.artifact.Artifact
 import com.tyron.builder.api.artifact.ArtifactKind
 import com.tyron.builder.api.artifact.SingleArtifact
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import org.gradle.api.file.Directory
 import org.gradle.api.file.FileSystemLocation
 import org.gradle.api.file.RegularFile

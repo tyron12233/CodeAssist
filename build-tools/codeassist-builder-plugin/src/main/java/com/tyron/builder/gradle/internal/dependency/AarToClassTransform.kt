@@ -5,7 +5,7 @@ import com.tyron.builder.common.symbols.rTxtToSymbolTable
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser
 import com.tyron.builder.packaging.JarCreator
 import com.tyron.builder.packaging.JarMerger
-import com.tyron.builder.plugin.SdkConstants.*
+import com.android.SdkConstants.*
 import com.tyron.builder.symbols.exportToCompiledJava
 import org.gradle.api.artifacts.transform.CacheableTransform
 import org.gradle.api.artifacts.transform.InputArtifact

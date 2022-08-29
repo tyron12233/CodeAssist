@@ -8,7 +8,7 @@ import com.tyron.builder.core.ComponentType
 import com.tyron.builder.internal.utils.appendCapitalized
 import com.tyron.builder.internal.utils.combineAsCamelCase
 import com.tyron.builder.internal.utils.toStrings
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import com.tyron.builder.plugin.builder.ProductFlavor
 import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty

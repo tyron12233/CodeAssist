@@ -14,7 +14,7 @@ import com.tyron.builder.gradle.internal.scope.InternalMultipleArtifactType
 import com.tyron.builder.gradle.internal.tasks.DexMergingAction.*
 import com.tyron.builder.gradle.internal.tasks.factory.VariantTaskCreationAction
 import com.tyron.builder.internal.utils.setDisallowChanges
-import com.tyron.builder.plugin.SdkConstants
+import com.android.SdkConstants
 import com.tyron.builder.plugin.options.SyncOptions
 import com.tyron.builder.tasks.IncrementalTask
 import com.tyron.builder.tasks.toSerializable
