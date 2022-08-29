@@ -394,7 +394,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                             "Close",
                             null,
                             "Copy stacktrace", (dialog, which) -> {
-                                if (which == DialogInterface.BUTTON_NEUTRAL) {
+                                if (which == DialogInterface.BUTTON_NEGATIVE) {
                                     AndroidUtilities.copyToClipboard(message);
                                 }
                             });
