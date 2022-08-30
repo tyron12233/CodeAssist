@@ -19,16 +19,16 @@ public class GradleLaunchUtil {
         String logLevel = preferences.getString(SharedPreferenceKeys.GRADLE_LOG_LEVEL, "LIFECYCLE");
         switch (logLevel) {
             case "QUIET":
-                launcher.withArguments("--quiet");
+                launcher.addArguments("--quiet");
                 break;
             case "WARN":
-                launcher.withArguments("--warn");
+                launcher.addArguments("--warn");
                 break;
             case "INFO":
-                launcher.withArguments("--info");
+                launcher.addArguments("--info");
                 break;
             case "DEBUG":
-                launcher.withArguments("--debug");
+                launcher.addArguments("--debug");
                 break;
             default:
             case "LIFECYCLE":
@@ -38,10 +38,10 @@ public class GradleLaunchUtil {
         String stacktrace = preferences.getString(SharedPreferenceKeys.GRADLE_STACKTRACE_MODE, "INTERNAL_EXCEPTIONS");
         switch (stacktrace) {
             case "ALWAYS":
-                launcher.withArguments("--stacktrace");
+                launcher.addArguments("--stacktrace");
                 break;
             case "ALWAYS_FULL":
-                launcher.withArguments("--full-stacktrace");
+                launcher.addArguments("--full-stacktrace");
                 break;
             default:
             case "INTERNAL_EXCEPTIONS":
