@@ -25,6 +25,7 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collection;
@@ -42,8 +43,12 @@ import java.util.stream.Collectors;
  */
 public class InjectResourcesTask {
 
-    public static void inject(@NonNull Project project) throws IOException {
-        inject(project, (AndroidModule) project.getMainModule());
+    public static void inject(@NonNull Project project) {
+        try {
+            inject(project, (AndroidModule) project.getMainModule());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     public static void inject(@NonNull Project project, @NonNull AndroidModule module) throws IOException {

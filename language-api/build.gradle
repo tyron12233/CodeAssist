@@ -9,6 +9,7 @@ java {
 
 dependencies {
     implementation 'org.jetbrains:annotations:23.0.0'
+    implementation projects.buildTools.project
 
     compileOnly project(path: ':android-stubs')
 }

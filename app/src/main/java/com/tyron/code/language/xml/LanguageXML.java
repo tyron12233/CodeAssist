@@ -10,7 +10,10 @@ import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.xml.lexer.XMLLexer;
+import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.editor.Editor;
+import com.tyron.language.api.CodeAssistLanguage;
+import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import java.io.File;
 import java.util.List;
@@ -32,7 +35,7 @@ import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
-public class LanguageXML implements Language {
+public class LanguageXML implements Language, CodeAssistLanguage {
 
     private final Editor mEditor;
     private final TextMateLanguage delegate;
@@ -170,6 +173,15 @@ public class LanguageXML implements Language {
 
     public int getFormatIndent(String line) {
         return getIndentAdvance(line, XMLLexer.DEFAULT_MODE, false);
+    }
+
+    @Override
+    public void onContentChange(File file, CharSequence contents) {
+        if (mEditor.getProject() == null) {
+            return;
+        }
+        InjectResourcesTask.inject(mEditor.getProject());
+        InjectViewBindingTask.inject(mEditor.getProject());
     }
 
     private class EndTagHandler implements NewlineHandler {

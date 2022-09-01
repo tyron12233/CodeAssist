@@ -103,7 +103,6 @@ public class CompilationInfo {
 
                     NBLog log = NBLog.instance(javacTask.getContext());
                     log.useSource(fileObject);
-                    log.startPartialReparse(fileObject);
 
                     Set<Pair<JavaFileObject, Integer>> toRemove = new HashSet<>();
                     for (Pair<JavaFileObject, Integer> pair : log.getRecorded()) {
@@ -112,6 +111,7 @@ public class CompilationInfo {
                         }
                     }
                     log.getRecorded().removeAll(toRemove);
+                    log.removeDiagnostics(fileObject.toUri());
 
                     if (compiledMap.containsKey(fileObject.toUri())) {
                         JCCompilationUnit tree = compiledMap.get(fileObject.toUri());
@@ -133,11 +133,11 @@ public class CompilationInfo {
                     }
                     javacTask.analyze();
 
-                    log.endPartialReparse(fileObject);
                     compiledMap.put(fileObject.toUri(), (JCCompilationUnit) units.iterator().next());
 
                     treeConsumer.accept((JCCompilationUnit) units.iterator().next());
                 } catch (Throwable t) {
+                    System.out.println(t);
                     treeConsumer.accept(null);
                 }
             }

@@ -78,11 +78,7 @@ public class CreateFileAction extends FileAction {
                     refreshTreeView(context);
                     dialog.dismiss();
 
-                    try {
-                        InjectResourcesTask.inject(ProjectManager.getInstance().getCurrentProject());
-                    } catch (IOException e) {
-                        // ignored
-                    }
+                    InjectResourcesTask.inject(ProjectManager.getInstance().getCurrentProject());
                 }
             });
             editText.addTextChangedListener(new SingleTextWatcher() {

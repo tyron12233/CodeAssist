@@ -9,27 +9,23 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.ForwardingListener;
 import androidx.core.content.res.ResourcesCompat;
 
-import com.sun.source.util.TreePath;
-import com.sun.source.util.Trees;
-import com.sun.tools.javac.tree.JCTree;
+import com.sun.tools.javac.util.JCDiagnostic;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.event.EventManager;
-import com.tyron.code.event.EventReceiver;
 import com.tyron.code.event.PerformShortcutEvent;
-import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.code.language.java.JavaLanguage;
 import com.tyron.code.language.xml.LanguageXML;
@@ -40,28 +36,33 @@ import com.tyron.code.util.CoordinatePopupMenu;
 import com.tyron.code.util.PopupMenuHelper;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.common.util.DebouncerStore;
-import com.tyron.completion.java.action.FindCurrentPath;
+import com.tyron.completion.java.compiler.services.NBLog;
 import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.task.InjectResourcesTask;
+import com.tyron.diagnostics.DiagnosticProvider;
 import com.tyron.editor.Content;
 import com.tyron.editor.event.ContentEvent;
 import com.tyron.editor.event.ContentListener;
 import com.tyron.fileeditor.api.FileEditor;
-import com.tyron.language.xml.XmlLanguage;
+import com.tyron.language.api.CodeAssistLanguage;
 import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.vfs2.FileObject;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
-import org.jetbrains.kotlin.utils.ReflectionUtilKt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.List;
+import java.util.Objects;
+import java.util.ServiceLoader;
+import java.util.function.Function;
 
-import javax.lang.model.element.Element;
+import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 
@@ -70,9 +71,9 @@ import io.github.rosemoe.sora.event.EditorKeyEvent;
 import io.github.rosemoe.sora.event.Event;
 import io.github.rosemoe.sora.event.InterceptTarget;
 import io.github.rosemoe.sora.event.LongPressEvent;
-import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
+import io.github.rosemoe.sora.lang.diagnostic.DiagnosticRegion;
 import io.github.rosemoe.sora.lang.diagnostic.DiagnosticsContainer;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
@@ -130,36 +131,44 @@ public class RosemoeEditorFacade {
      *
      * @param content the current content when the update is called
      */
-    private void onContentChange(Content content) throws IOException {
+    private void onContentChange(Content content) {
         Language language = editor.getEditorLanguage();
+        File currentFile = editor.getCurrentFile();
         Project project = editor.getProject();
-
         if (project == null) {
             return;
         }
+        Module module = project.getModule(currentFile);
+        if (module == null) {
+            return;
+        }
 
-        // TODO: Move implementation to each language
-        if (language instanceof LanguageXML) {
-            InjectResourcesTask.inject(project);
-            InjectViewBindingTask.inject(project);
-        } else if (language instanceof JavaLanguage) {
+        if (language instanceof CodeAssistLanguage) {
+            ((CodeAssistLanguage) language).onContentChange(currentFile, content);
+        }
 
-            CompilationInfo compilationInfo = CompilationInfo.get(project, editor.getCurrentFile());
-            if (compilationInfo == null) {
-                return;
-            }
-            JavaFileObject fileObject = new SimpleJavaFileObject(editor.getCurrentFile().toURI(),
-                    JavaFileObject.Kind.SOURCE) {
-                @Override
-                public CharSequence getCharContent(boolean ignoreEncodingErrors) {
-                    return content;
+        Objects.requireNonNull(editor.getDiagnostics()).reset();
+
+        ServiceLoader<DiagnosticProvider> providers = ServiceLoader.load(DiagnosticProvider.class);
+        for (DiagnosticProvider provider : providers) {
+            List<? extends Diagnostic<?>> diagnostics =
+                    provider.getDiagnostics(module, currentFile);
+            Function<Diagnostic.Kind, Short> severitySupplier = it -> {
+                switch (it) {
+                    case ERROR: return DiagnosticRegion.SEVERITY_ERROR;
+                    case MANDATORY_WARNING:
+                    case WARNING: return DiagnosticRegion.SEVERITY_WARNING;
+                    default:
+                    case OTHER:
+                    case NOTE: return DiagnosticRegion.SEVERITY_NONE;
                 }
             };
-            try {
-                compilationInfo.update(fileObject);
-            } catch (Throwable t) {
-                LOGGER.error("Failed to update compilation unit", t);
-            }
+            diagnostics.stream().map(it ->
+                    new DiagnosticRegion(
+                            (int) it.getStartPosition(),
+                            (int) it.getEndPosition(),
+                            severitySupplier.apply(it.getKind()))
+            ).forEach(Objects.requireNonNull(editor.getDiagnostics())::addDiagnostic);
         }
     }
 

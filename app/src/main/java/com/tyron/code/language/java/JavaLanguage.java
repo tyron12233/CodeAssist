@@ -5,15 +5,31 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.sun.tools.javac.util.JCDiagnostic;
+import com.tyron.builder.project.Project;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.EditorFormatter;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.java.JavaCompletionProvider;
+import com.tyron.completion.java.compiler.services.NBLog;
+import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
+import com.tyron.language.api.CodeAssistLanguage;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
 
 import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.editor.langs.java.Tokens;
@@ -23,6 +39,7 @@ import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
+import io.github.rosemoe.sora.lang.diagnostic.DiagnosticRegion;
 import io.github.rosemoe.sora.lang.format.Formatter;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
@@ -33,7 +50,9 @@ import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
-public class JavaLanguage  implements Language, EditorFormatter {
+public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLanguage {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JavaLanguage.class);
 
     private static final String GRAMMAR_NAME = "java.tmLanguage.json";
     private static final String LANGUAGE_PATH = "textmate/java/syntaxes/java.tmLanguage.json";
@@ -168,6 +187,30 @@ public class JavaLanguage  implements Language, EditorFormatter {
     @Override
     public void destroy() {
         delegate.destroy();
+    }
+
+    @Override
+    public void onContentChange(File file, CharSequence content) {
+        Project project = editor.getProject();
+        if (project == null) {
+            return;
+        }
+        CompilationInfo compilationInfo = CompilationInfo.get(project, editor.getCurrentFile());
+        if (compilationInfo == null) {
+            return;
+        }
+        JavaFileObject fileObject = new SimpleJavaFileObject(editor.getCurrentFile().toURI(),
+                JavaFileObject.Kind.SOURCE) {
+            @Override
+            public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                return content;
+            }
+        };
+        try {
+            compilationInfo.update(fileObject);
+        } catch (Throwable t) {
+            LOGGER.error("Failed to update compilation unit", t);
+        }
     }
 
     class TwoIndentHandler implements NewlineHandler {
