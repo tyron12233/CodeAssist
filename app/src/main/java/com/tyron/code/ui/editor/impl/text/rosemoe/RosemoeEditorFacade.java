@@ -253,6 +253,8 @@ public class RosemoeEditorFacade {
             CodeAssistCompletionWindow window = (CodeAssistCompletionWindow) editor.getComponent(EditorAutoCompletion.class);
             if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_TAB) {
                 if (window.isShowing() && window.trySelect()) {
+                    event.setResult(true);
+
                     // KeyEvent cannot be intercepted???
                     // workaround
                     Field mInterceptTargets = ReflectionUtil.getDeclaredField(Event.class, "mInterceptTargets");
@@ -262,6 +264,8 @@ public class RosemoeEditorFacade {
                     } catch (IllegalAccessException e) {
                         throw new RuntimeException("REFLECTION FAILED");
                     }
+
+                    editor.requestFocus();
                 }
             }
         });

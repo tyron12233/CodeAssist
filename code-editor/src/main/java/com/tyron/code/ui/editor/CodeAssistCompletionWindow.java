@@ -19,6 +19,11 @@ public class CodeAssistCompletionWindow extends EditorAutoCompletion {
     }
 
     @Override
+    public void show() {
+        super.show();
+    }
+
+    @Override
     public void setAdapter(EditorCompletionAdapter adapter) {
         this.adapter = adapter;
         super.setAdapter(adapter);
