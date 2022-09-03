@@ -1,5 +1,6 @@
-package com.tyron.builder.core.dsl
+package com.tyron.builder.gradle.internal.core.dsl
 
+import com.tyron.builder.api.dsl.Lint
 import com.tyron.builder.api.dsl.PackagingOptions
 import org.gradle.api.file.RegularFile
 import org.gradle.api.provider.ListProperty
@@ -28,7 +29,7 @@ interface VariantDslInfo: ComponentDslInfo, ConsumableComponentDslInfo {
 
     val isJniDebuggable: Boolean
 
-//    val lintOptions: Lint
+    val lintOptions: Lint
 
     val packaging: PackagingOptions
 

@@ -2,18 +2,15 @@ package com.tyron.builder.api.variant.impl
 
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.api.component.impl.ComponentImpl
-import com.tyron.builder.api.component.impl.warnAboutAccessingVariantApiValueForDisabledFeature
 import com.tyron.builder.api.variant.*
-import com.tyron.builder.core.ComponentType
-import com.tyron.builder.core.dsl.VariantDslInfo
+import com.tyron.builder.gradle.internal.core.dsl.VariantDslInfo
 import com.tyron.builder.gradle.internal.component.VariantCreationConfig
-import com.tyron.builder.gradle.internal.component.features.FeatureNames
 import com.tyron.builder.gradle.internal.dependency.VariantDependencies
 import com.tyron.builder.gradle.internal.scope.BuildFeatureValues
 import com.tyron.builder.gradle.internal.services.TaskCreationServices
 import com.tyron.builder.gradle.internal.services.VariantServices
 import com.tyron.builder.gradle.internal.scope.MutableTaskContainer
-import com.tyron.builder.internal.tasks.factory.GlobalTaskCreationConfig
+import com.tyron.builder.gradle.internal.tasks.factory.GlobalTaskCreationConfig
 import com.tyron.builder.internal.utils.appendCapitalized
 import com.tyron.builder.internal.utils.capitalizeAndAppend
 import com.tyron.builder.internal.variant.VariantPathHelper

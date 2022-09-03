@@ -1,12 +1,10 @@
-package com.tyron.builder.core.dsl
+package com.tyron.builder.gradle.internal.core.dsl
 
-import com.google.common.collect.ImmutableMap
 import com.tyron.builder.api.variant.ComponentIdentity
 import com.tyron.builder.api.variant.impl.MutableAndroidVersion
 import com.tyron.builder.core.ComponentType
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
-import java.io.File
 
 /**
  * Contains the final dsl info computed from the DSL object model (extension, default config,

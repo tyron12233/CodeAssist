@@ -1,4 +1,4 @@
-package com.tyron.builder.core.dsl
+package com.tyron.builder.gradle.internal.core.dsl
 
 import com.tyron.builder.api.variant.BuildConfigField
 import java.io.File

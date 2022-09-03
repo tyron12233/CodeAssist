@@ -1,8 +1,7 @@
 package com.tyron.builder.gradle.internal.tasks.factory
 
+import com.tyron.builder.gradle.BaseExtension
 import com.tyron.builder.gradle.internal.dsl.CommonExtensionImpl
-import com.tyron.builder.gradle.internal.services.BaseServices
-import com.tyron.builder.plugin.BaseExtension
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 

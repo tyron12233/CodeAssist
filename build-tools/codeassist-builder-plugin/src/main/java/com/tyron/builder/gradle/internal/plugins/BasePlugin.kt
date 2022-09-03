@@ -5,11 +5,9 @@ import com.tyron.builder.api.dsl.CommonExtension
 import com.tyron.builder.api.variant.AndroidComponentsExtension
 import com.tyron.builder.api.variant.Variant
 import com.tyron.builder.api.variant.VariantBuilder
-import com.tyron.builder.core.dsl.VariantDslInfo
+import com.tyron.builder.gradle.internal.core.dsl.VariantDslInfo
 import com.tyron.builder.gradle.api.AndroidBasePlugin
 import com.tyron.builder.gradle.internal.component.VariantCreationConfig
-import com.tyron.builder.gradle.internal.dsl.CommonExtensionImpl
-import com.tyron.builder.gradle.internal.tasks.factory.GlobalTaskCreationConfigImpl
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.component.SoftwareComponentFactory

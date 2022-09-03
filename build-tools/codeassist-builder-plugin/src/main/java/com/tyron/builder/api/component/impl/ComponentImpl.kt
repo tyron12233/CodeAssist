@@ -4,14 +4,14 @@ import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.api.variant.Component
 import com.tyron.builder.api.variant.ComponentIdentity
 import com.tyron.builder.api.variant.JavaCompilation
-import com.tyron.builder.core.dsl.ComponentDslInfo
+import com.tyron.builder.gradle.internal.core.dsl.ComponentDslInfo
 import com.tyron.builder.gradle.internal.component.ComponentCreationConfig
 import com.tyron.builder.gradle.internal.dependency.VariantDependencies
 import com.tyron.builder.gradle.internal.scope.BuildFeatureValues
 import com.tyron.builder.gradle.internal.services.TaskCreationServices
 import com.tyron.builder.gradle.internal.services.VariantServices
 import com.tyron.builder.gradle.internal.scope.MutableTaskContainer
-import com.tyron.builder.internal.tasks.factory.GlobalTaskCreationConfig
+import com.tyron.builder.gradle.internal.tasks.factory.GlobalTaskCreationConfig
 import com.tyron.builder.internal.variant.VariantPathHelper
 import org.gradle.api.provider.Provider
 

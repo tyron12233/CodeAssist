@@ -1,5 +1,6 @@
 package com.tyron.builder.gradle.internal.services
 
+import com.tyron.builder.gradle.internal.dsl.decorator.androidPluginDslDecorator
 import org.gradle.api.DomainObjectSet
 import org.gradle.api.ExtensiblePolymorphicDomainObjectContainer
 import org.gradle.api.NamedDomainObjectContainer
@@ -49,6 +50,6 @@ class DslServicesImpl constructor(
         get() = projectServices.logger
 
     override fun <T: Any> newDecoratedInstance(dslClass: Class<T>, vararg args: Any) : T {
-        return newInstance(dslClass, *args)
+        return newInstance(androidPluginDslDecorator.decorate(dslClass), *args)
     }
 }

@@ -13,7 +13,7 @@ import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
 import com.tyron.builder.gradle.internal.scope.BuildFeatureValues
 import com.tyron.builder.gradle.internal.scope.MutableTaskContainer
 import com.tyron.builder.gradle.internal.services.TaskCreationServices
-import com.tyron.builder.internal.tasks.factory.GlobalTaskCreationConfig
+import com.tyron.builder.gradle.internal.tasks.factory.GlobalTaskCreationConfig
 import com.tyron.builder.internal.variant.VariantPathHelper
 import com.tyron.builder.plugin.builder.ProductFlavor
 import org.gradle.api.file.FileCollection
