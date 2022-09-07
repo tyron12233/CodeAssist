@@ -103,7 +103,7 @@ public class XmlElement extends OrphanXmlElement {
 
                             String errorMessage =
                                     String.format("Invalid instruction '%1$s', "
-                                                    + "valid instructions are : %2$s",
+                                                  + "valid instructions are : %2$s",
                                             instruction,
                                             Joiner.on(',').join(AttributeOperationType.values())
                                     );
@@ -235,14 +235,14 @@ public class XmlElement extends OrphanXmlElement {
             mergingReport.addMessage(getSourceFilePosition(),
                     MergingReport.Record.Severity.ERROR,
                     String.format("'tools:selector=\"%1$s\"' is not a valid library identifier, "
-                                    + "valid identifiers are : %2$s",
+                                  + "valid identifiers are : %2$s",
                             mSelector.toString(),
                             Joiner.on(',').join(mDocument.getSelectors().getKeys())));
             return;
 
         }
         mergingReport.getLogger().verbose("Merging " + getId()
-                + " with lower " + lowerPriorityNode.printPosition());
+                                          + " with lower " + lowerPriorityNode.printPosition());
 
         // workaround for 0.12 release and overlay treatment of manifest entries. This will
         // need to be expressed in the model instead.
@@ -251,7 +251,7 @@ public class XmlElement extends OrphanXmlElement {
         // always merge the <manifest> attributes otherwise, we do not merge the libraries
         // <manifest> attributes.
         if (isA(ManifestModel.NodeTypes.MANIFEST)
-                && lowerPriorityNode.getDocument().getFileType() != XmlDocument.Type.LIBRARY) {
+            && lowerPriorityNode.getDocument().getFileType() != XmlDocument.Type.LIBRARY) {
             mergeType = MergeType.MERGE;
         }
 
@@ -313,7 +313,7 @@ public class XmlElement extends OrphanXmlElement {
 
         for (XmlElement xmlElement : mMergeableChildren) {
             if (xmlElement.isA(type) &&
-                    (keyValue == null || keyValue.equals(xmlElement.getKey()))) {
+                (keyValue == null || keyValue.equals(xmlElement.getKey()))) {
                 return Optional.of(xmlElement);
             }
         }
@@ -386,7 +386,7 @@ public class XmlElement extends OrphanXmlElement {
             case CONFLICT:
                 addMessage(mergingReport, MergingReport.Record.Severity.ERROR, String.format(
                         "Node %1$s cannot be present in more than one input file and it's "
-                                + "present at %2$s and %3$s",
+                        + "present at %2$s and %3$s",
                         thisChild.getType(),
                         thisChild.printPosition(),
                         lowerPriorityChild.printPosition()
@@ -401,7 +401,7 @@ public class XmlElement extends OrphanXmlElement {
                 NodeOperationType operationType =
                         calculateNodeOperationType(thisChild, lowerPriorityChild);
                 if (operationType == NodeOperationType.REMOVE ||
-                        operationType == NodeOperationType.REPLACE) {
+                    operationType == NodeOperationType.REPLACE) {
                     mergingReport.getActionRecorder().recordNodeAction(thisChild,
                             Actions.ActionType.REJECTED, lowerPriorityChild);
                     break;
@@ -466,7 +466,7 @@ public class XmlElement extends OrphanXmlElement {
         if (lowerPriorityChild.getType().areMultipleDeclarationAllowed()) {
             for (XmlElement sameTypeChild : getAllNodesByType(lowerPriorityChild.getType())) {
                 if (sameTypeChild.getId().equals(lowerPriorityChild.getId()) &&
-                        sameTypeChild.isEquals(lowerPriorityChild)) {
+                    sameTypeChild.isEquals(lowerPriorityChild)) {
                     return;
                 }
             }
@@ -509,8 +509,8 @@ public class XmlElement extends OrphanXmlElement {
         // are we supposed to delete all occurrences and if yes, is there a selector defined to
         // filter which elements should be deleted.
         boolean shouldDelete = thisChild.mNodeOperationType == NodeOperationType.REMOVE_ALL
-                && (thisChild.mSelector == null
-                || thisChild.mSelector.appliesTo(lowerPriorityChild));
+                               && (thisChild.mSelector == null
+                                   || thisChild.mSelector.appliesTo(lowerPriorityChild));
         // if we should discard this child element, record the action.
         if (shouldDelete) {
             mergingReport.getActionRecorder().recordNodeAction(thisChildElementOptional.get(),
@@ -564,7 +564,7 @@ public class XmlElement extends OrphanXmlElement {
                     // flag error.
                     addMessage(mergingReport, MergingReport.Record.Severity.ERROR, String.format(
                             "Node %1$s at %2$s is tagged with tools:node=\"strict\", yet "
-                                    + "%3$s at %4$s is different : %5$s",
+                            + "%3$s at %4$s is different : %5$s",
                             higherPriority.getId(),
                             higherPriority.printPosition(),
                             lowerPriority.getId(),
@@ -598,8 +598,8 @@ public class XmlElement extends OrphanXmlElement {
         // if the operation's selector exists and the lower priority node is not selected,
         // we revert to default operation type which is merge.
         if (higherPriority.supportsSelector()
-                && higherPriority.mSelector != null
-                && !higherPriority.mSelector.appliesTo(lowerPriority)) {
+            && higherPriority.mSelector != null
+            && !higherPriority.mSelector.appliesTo(lowerPriority)) {
             operationType = NodeOperationType.MERGE;
         }
         return operationType;
@@ -669,7 +669,7 @@ public class XmlElement extends OrphanXmlElement {
             String thisNS = getXml().getNamespaceURI();
             String otherNS = otherNode.getXml().getNamespaceURI();
             if ((thisNS == null && otherNS != null)
-                    || (thisNS != null && !thisNS.equals(otherNS))) {
+                || (thisNS != null && !thisNS.equals(otherNS))) {
                 return Optional.of(
                         String.format("Element namespaces names do not match: %1$s versus %2$s",
                                 thisNS, otherNS));
@@ -704,7 +704,7 @@ public class XmlElement extends OrphanXmlElement {
                 missingChildrenNames.removeAll(Lists.transform(actualChildren, NODE_TO_NAME));
                 return Optional.of(String.format(
                         "%1$s: Number of children do not match up: "
-                                + "expected %2$d versus %3$d at %4$s, missing %5$s",
+                        + "expected %2$d versus %3$d at %4$s, missing %5$s",
                         getId(),
                         expectedChildren.size(),
                         actualChildren.size(),
@@ -716,7 +716,7 @@ public class XmlElement extends OrphanXmlElement {
                 extraChildrenNames.removeAll(Lists.transform(expectedChildren, NODE_TO_NAME));
                 return Optional.of(String.format(
                         "%1$s: Number of children do not match up: "
-                                + "expected %2$d versus %3$d at %4$s, extra elements found : %5$s",
+                        + "expected %2$d versus %3$d at %4$s, extra elements found : %5$s",
                         getId(),
                         expectedChildren.size(),
                         actualChildren.size(),
@@ -842,8 +842,8 @@ public class XmlElement extends OrphanXmlElement {
         ImmutableList.Builder<Node> nodesToAdopt = new ImmutableList.Builder<Node>();
         Node previousSibling = nodeToBeAdopted.getPreviousSibling();
         while (previousSibling != null
-                && (previousSibling.getNodeType() == Node.COMMENT_NODE
-                || previousSibling.getNodeType() == Node.TEXT_NODE)) {
+               && (previousSibling.getNodeType() == Node.COMMENT_NODE
+                   || previousSibling.getNodeType() == Node.TEXT_NODE)) {
             // we really only care about comments.
             if (previousSibling.getNodeType() == Node.COMMENT_NODE) {
                 nodesToAdopt.add(previousSibling);

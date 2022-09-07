@@ -1,17 +1,13 @@
 package com.tyron.builder.gradle.internal.dependency
 
+import com.android.SdkConstants.*
+import com.android.ide.common.xml.AndroidManifestParser
 import com.google.common.annotations.VisibleForTesting
 import com.tyron.builder.common.symbols.rTxtToSymbolTable
-import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser
 import com.tyron.builder.packaging.JarCreator
 import com.tyron.builder.packaging.JarMerger
-import com.android.SdkConstants.*
 import com.tyron.builder.symbols.exportToCompiledJava
-import org.gradle.api.artifacts.transform.CacheableTransform
-import org.gradle.api.artifacts.transform.InputArtifact
-import org.gradle.api.artifacts.transform.TransformAction
-import org.gradle.api.artifacts.transform.TransformOutputs
-import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.artifacts.transform.*
 import org.gradle.api.file.FileSystemLocation
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider

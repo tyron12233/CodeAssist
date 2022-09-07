@@ -2,9 +2,7 @@ package com.tyron.builder.gradle.internal.services
 
 import com.android.aaptcompiler.ResourceCompilerOptions
 import com.android.aaptcompiler.canCompileResourceInJvm
-import com.android.aaptcompiler.compileResource
 import com.android.utils.ILogger
-import com.tyron.builder.common.resources.CompileResourceRequest
 import com.tyron.builder.gradle.internal.LoggerWrapper
 import com.tyron.builder.gradle.internal.res.blameLoggerFor
 import com.tyron.builder.internal.aapt.AaptConvertConfig
@@ -16,7 +14,7 @@ import javax.annotation.concurrent.ThreadSafe
 @ThreadSafe
 class PartialInProcessResourceProcessor (val delegate: Aapt2):
     Aapt2 {
-    override fun compile(request: CompileResourceRequest, logger: ILogger) {
+    override fun compile(request: com.android.ide.common.resources.CompileResourceRequest, logger: ILogger) {
         if (canCompileResourceInJvm(request.inputFile, request.isPngCrunching)) {
             val options = ResourceCompilerOptions(
                     pseudolocalize = request.isPseudoLocalize,
@@ -26,7 +24,7 @@ class PartialInProcessResourceProcessor (val delegate: Aapt2):
             )
 
             val blameLogger = blameLoggerFor(request, LoggerWrapper.getLogger(this::class.java))
-            compileResource(request.inputFile, request.outputDirectory, options, blameLogger)
+            ResourceCompilerUtils.test(request.inputFile, request.outputDirectory, options, blameLogger)
         } else {
             delegate.compile(request, logger)
         }

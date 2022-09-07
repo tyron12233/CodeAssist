@@ -1,13 +1,11 @@
 package com.tyron.builder.gradle.tasks
 
-import com.android.tools.r8.internal.it
 import com.tyron.builder.gradle.internal.component.ComponentCreationConfig
 import com.tyron.builder.gradle.internal.scope.InternalArtifactType
 import com.tyron.builder.gradle.internal.tasks.factory.TaskCreationAction
 import org.gradle.api.Project
 import org.gradle.api.file.FileTree
 import org.gradle.api.model.ObjectFactory
-import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.util.PatternSet
@@ -30,8 +28,7 @@ class JavaCompileCreationAction(
     private val dataBindingExportClassListFile = objectFactory.fileProperty()
 
     override val name: String
-    get() = "compileDebugJavaWithJavac"
-//        get() = creationConfig.computeTaskName("compile", "JavaWithJavac")
+    get() = creationConfig.computeTaskName("compile", "JavaWithJavac")
 
     override val type: Class<JavaCompile>
         get() = JavaCompile::class.java
@@ -39,7 +36,7 @@ class JavaCompileCreationAction(
     override fun handleProvider(taskProvider: TaskProvider<JavaCompile>) {
         super.handleProvider(taskProvider)
 
-//        creationConfig.taskContainer.javacTask = taskProvider
+        creationConfig.taskContainer.javacTask = taskProvider
 
         val artifacts = creationConfig.artifacts
 
@@ -55,7 +52,7 @@ class JavaCompileCreationAction(
             .withName(AP_GENERATED_SOURCES_DIR_NAME)
             .on(InternalArtifactType.AP_GENERATED_SOURCES)
 
-//        if (creationConfig.buildFeatures.dataBinding) {
+        if (creationConfig.buildFeatures.dataBinding) {
 //            // Register data binding artifacts as outputs. There are 2 ways to do this:
 //            //    (1) Register with JavaCompile when Kapt is not used, and register with Kapt when
 //            //        Kapt is used.
@@ -72,13 +69,13 @@ class JavaCompileCreationAction(
 //                artifacts,
 //                forJavaCompile = true
 //            )
-//        }
+        }
     }
 
 
     override fun configure(task: JavaCompile) {
-//        task.dependsOn(creationConfig.taskContainer.preBuildTask)
-//        task.extensions.add(PROPERTY_VARIANT_NAME_KEY, creationConfig.name)
+        task.dependsOn(creationConfig.taskContainer.preBuildTask)
+        task.extensions.add("AGP_VARIANT_NAME", creationConfig.name)
 
         task.configureProperties(creationConfig, task)
         task.source = computeJavaSource(creationConfig, task.project)
@@ -87,10 +84,7 @@ class JavaCompileCreationAction(
 
     fun computeJavaSource(creationConfig: ComponentCreationConfig, project: Project): FileTree {
         // do not resolve the provider before execution phase, b/117161463.
-        val sourcesToCompile = project.extensions.getByType(JavaPluginExtension::class.java)
-            .sourceSets
-            .getByName("main").allJava.asFileTree
-        // creationConfig.sources.java.getAsFileTrees()
+        val sourcesToCompile = creationConfig.sources.java.getAsFileTrees()
         // Include only java sources, otherwise we hit b/144249620.
         val javaSourcesFilter = PatternSet().include("**/*.java")
         return project.files(sourcesToCompile).asFileTree.matching(javaSourcesFilter)

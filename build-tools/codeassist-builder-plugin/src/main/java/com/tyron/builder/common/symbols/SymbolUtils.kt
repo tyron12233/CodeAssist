@@ -2,6 +2,9 @@
 
 package com.tyron.builder.common.symbols
 
+import com.android.ide.common.symbols.Symbol
+import com.android.ide.common.symbols.SymbolTable
+import com.android.ide.common.symbols.SymbolTableBuilder
 import com.android.resources.ResourceType
 import com.google.common.base.CharMatcher
 import com.google.common.base.Splitter
@@ -98,7 +101,7 @@ interface SymbolListVisitor {
  * Read a symbol table from [lines] and generate events for the given [visitor].
  */
 @Throws(IOException::class)
-fun readAarRTxt(lines: Iterator<String>, visitor: SymbolListVisitor) {
+fun readAarRTxt(lines: Iterator<String>, visitor: com.android.ide.common.symbols.SymbolListVisitor) {
 
     visitor.visit()
     // When a styleable parent is encountered,
@@ -256,7 +259,7 @@ class SymbolTableBuilder(packageName: String) : SymbolListVisitor {
 }
 
 
-fun rTxtToSymbolTable(inputStream: InputStream, packageName: String): SymbolTable {
+fun rTxtToSymbolTable(inputStream: InputStream, packageName: String): com.android.ide.common.symbols.SymbolTable {
     val symbolTableBuilder = SymbolTableBuilder(packageName)
     inputStream.bufferedReader().use {
         readAarRTxt(it.lines().iterator(), symbolTableBuilder)

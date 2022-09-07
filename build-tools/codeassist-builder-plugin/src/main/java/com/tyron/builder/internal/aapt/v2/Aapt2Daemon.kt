@@ -1,11 +1,10 @@
 package com.tyron.builder.internal.aapt.v2
 
 import com.android.SdkConstants
+import com.android.ide.common.resources.CompileResourceRequest
 import com.android.utils.ILogger
-import com.tyron.builder.common.resources.CompileResourceRequest
 import com.tyron.builder.internal.aapt.AaptConvertConfig
 import com.tyron.builder.internal.aapt.AaptPackageConfig
-import java.lang.IllegalStateException
 import java.util.concurrent.TimeoutException
 import javax.annotation.concurrent.NotThreadSafe
 
@@ -80,7 +79,7 @@ abstract class Aapt2Daemon(
      */
     protected abstract fun startProcess()
 
-    override fun compile(request: CompileResourceRequest, logger: ILogger) {
+    override fun compile(request: com.android.ide.common.resources.CompileResourceRequest, logger: ILogger) {
         checkStarted()
         try {
             doCompile(request, logger)

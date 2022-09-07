@@ -11,7 +11,7 @@ import com.android.tools.r8.position.Position;
 import com.android.tools.r8.position.TextPosition;
 import com.android.tools.r8.position.TextRange;
 import com.android.ide.common.blame.Message;
-import com.tyron.builder.ide.common.blame.MessageReceiver;
+import com.android.ide.common.blame.MessageReceiver;
 import com.android.ide.common.blame.SourceFilePosition;
 import com.android.ide.common.blame.SourcePosition;
 

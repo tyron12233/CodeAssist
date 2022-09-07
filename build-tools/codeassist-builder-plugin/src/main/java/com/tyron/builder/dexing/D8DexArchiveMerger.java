@@ -12,7 +12,7 @@ import com.android.tools.r8.errors.DuplicateTypesDiagnostic;
 import com.android.tools.r8.origin.Origin;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.android.ide.common.blame.Message;
-import com.tyron.builder.ide.common.blame.MessageReceiver;
+import com.android.ide.common.blame.MessageReceiver;
 
 import java.nio.file.Path;
 import java.util.Collection;
@@ -40,7 +40,7 @@ final class D8DexArchiveMerger implements DexArchiveMerger {
     private volatile boolean hintForMultidex = false;
 
     public D8DexArchiveMerger(
-            @NotNull MessageReceiver messageReceiver,
+            @NotNull com.android.ide.common.blame.MessageReceiver messageReceiver,
             int minSdkVersion,
             @NotNull CompilationMode compilationMode,
             @Nullable ForkJoinPool forkJoinPool) {

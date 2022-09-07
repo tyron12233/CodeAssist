@@ -1,5 +1,6 @@
 package com.tyron.builder.gradle.internal.services
 
+import com.tyron.builder.gradle.internal.SdkComponentsBuildService
 import org.gradle.api.DomainObjectSet
 import org.gradle.api.ExtensiblePolymorphicDomainObjectContainer
 import org.gradle.api.NamedDomainObjectContainer
@@ -23,10 +24,10 @@ interface DslServices : BaseServices {
     val logger: Logger
     val buildDirectory: DirectoryProperty
 
-//    @Deprecated("Should not be used in new DSL object. Only for older DSL objects.")
-//    val sdkComponents: Provider<SdkComponentsBuildService>
-//    @Deprecated("Should not be used in new DSL object. Only for older DSL objects.")
-//    val versionedSdkLoaderService: VersionedSdkLoaderService
+    @Deprecated("Should not be used in new DSL object. Only for older DSL objects.")
+    val sdkComponents: Provider<SdkComponentsBuildService>
+    @Deprecated("Should not be used in new DSL object. Only for older DSL objects.")
+    val versionedSdkLoaderService: VersionedSdkLoaderService
 
     fun <T> domainObjectSet(type: Class<T>): DomainObjectSet<T>
     fun <T> domainObjectContainer(

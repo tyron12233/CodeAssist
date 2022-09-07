@@ -1,6 +1,9 @@
 package com.tyron.builder.gradle.internal.dependency;
 
 import com.google.common.collect.Maps;
+import com.tyron.builder.api.attributes.BuildTypeAttr;
+import com.tyron.builder.api.attributes.ProductFlavorAttr;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,19 +70,19 @@ public class AlternateDisambiguationRule<T extends Named>
         }
     }
 
-//    public static class BuildTypeRule extends AlternateDisambiguationRule<BuildTypeAttr> {
-//
-//        @Inject
-//        public BuildTypeRule(@NotNull Map<String, List<String>> alternates) {
-//            super(alternates);
-//        }
-//    }
-//
-//    public static class ProductFlavorRule extends AlternateDisambiguationRule<ProductFlavorAttr> {
-//
-//        @Inject
-//        public ProductFlavorRule(@NotNull Map<String, List<String>> alternates) {
-//            super(alternates);
-//        }
-//    }
+    public static class BuildTypeRule extends AlternateDisambiguationRule<BuildTypeAttr> {
+
+        @Inject
+        public BuildTypeRule(@NotNull Map<String, List<String>> alternates) {
+            super(alternates);
+        }
+    }
+
+    public static class ProductFlavorRule extends AlternateDisambiguationRule<ProductFlavorAttr> {
+
+        @Inject
+        public ProductFlavorRule(@NotNull Map<String, List<String>> alternates) {
+            super(alternates);
+        }
+    }
 }

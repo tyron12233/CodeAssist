@@ -1,5 +1,7 @@
 package com.android.tools.aapt2;
 
+import android.system.ErrnoException;
+import android.system.Os;
 import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
@@ -9,12 +11,15 @@ import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.common.util.BinaryExecutor;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.tools.Diagnostic;
+
+import kotlin.io.FilesKt;
 
 public class Aapt2Jni {
 
@@ -149,7 +154,31 @@ public class Aapt2Jni {
         sAapt2Binary = file;
     }
 
-    private static String getBinary() {
+    public static File getSymlinkedAapt2Directory()  {
+        try {
+            File filesDir = BuildModule.getContext().getFilesDir();
+            File aapt2Dir = new File(filesDir, "aapt2");
+            FilesKt.deleteRecursively(aapt2Dir);
+
+            if (!aapt2Dir.exists() && !aapt2Dir.mkdirs()) {
+                throw new IOException("Failed to create aapt2 dir");
+            }
+            File aapt2File = new File(aapt2Dir, "aapt2");
+            if (!aapt2File.exists()) {
+                String binary = getBinary();
+                try {
+                    Os.symlink(binary, aapt2File.getAbsolutePath());
+                } catch (ErrnoException e) {
+                    // ignored, if this throws then the symlink already exists
+                }
+            }
+            return aapt2Dir;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static String getBinary() {
         if (sAapt2Binary != null) {
             return sAapt2Binary.getAbsolutePath();
         }

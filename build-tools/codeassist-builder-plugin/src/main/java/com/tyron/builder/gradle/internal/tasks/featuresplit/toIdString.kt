@@ -7,6 +7,10 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
 
+/** Returns the feature name based on the module path. */
+fun getFeatureName(modulePath: String): String =
+    if (modulePath == ":") modulePath else modulePath.substring(modulePath.lastIndexOf(':') + 1)
+
 fun ResolvedArtifactResult.toIdString(): String {
     return id.componentIdentifier.toIdString(
         variantProvider = { variant.attributes.getAttribute(VariantAttr.ATTRIBUTE)?.name },

@@ -445,11 +445,11 @@ public final class SdkConstants {
     public static final String OS_PLATFORM_ANT_FOLDER = FD_ANT + File.separator;
     /** Path of the attrs.xml file relative to a platform folder. */
     public static final String OS_PLATFORM_ATTRS_XML =
-            OS_PLATFORM_RESOURCES_FOLDER + com.tyron.builder.compiler.manifest.SdkConstants.FD_RES_VALUES + File.separator +
+            OS_PLATFORM_RESOURCES_FOLDER + com.android.SdkConstants.FD_RES_VALUES + File.separator +
             FN_ATTRS_XML;
     /** Path of the attrs_manifest.xml file relative to a platform folder. */
     public static final String OS_PLATFORM_ATTRS_MANIFEST_XML =
-            OS_PLATFORM_RESOURCES_FOLDER + com.tyron.builder.compiler.manifest.SdkConstants.FD_RES_VALUES + File.separator +
+            OS_PLATFORM_RESOURCES_FOLDER + com.android.SdkConstants.FD_RES_VALUES + File.separator +
             FN_ATTRS_MANIFEST_XML;
     /** Path of the layoutlib.jar file relative to a platform folder. */
     public static final String OS_PLATFORM_LAYOUTLIB_JAR =

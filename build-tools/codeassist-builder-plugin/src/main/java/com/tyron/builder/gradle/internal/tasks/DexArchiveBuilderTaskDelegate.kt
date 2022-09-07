@@ -9,7 +9,7 @@ import com.tyron.builder.dexing.r8.ClassFileProviderFactory
 import com.tyron.builder.internal.dexing.DexParameters
 import com.tyron.builder.internal.dexing.DexWorkAction
 import com.tyron.builder.internal.dexing.IncrementalDexSpec
-import com.tyron.builder.internal.workeractions.WorkerActionServiceRegistry
+import com.tyron.builder.gradle.internal.workeractions.WorkerActionServiceRegistry
 import com.android.SdkConstants
 import org.gradle.api.file.FileType
 import org.gradle.api.logging.Logging

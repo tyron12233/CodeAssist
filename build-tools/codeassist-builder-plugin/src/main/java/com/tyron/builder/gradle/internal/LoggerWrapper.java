@@ -1,8 +1,8 @@
 package com.tyron.builder.gradle.internal;
 
 import com.android.annotations.NonNull;
+import com.android.ide.common.resources.MergingException;
 import com.android.utils.ILogger;
-import com.tyron.builder.compiler.manifest.MergingException;
 
 import java.io.Serializable;
 import java.util.function.Supplier;

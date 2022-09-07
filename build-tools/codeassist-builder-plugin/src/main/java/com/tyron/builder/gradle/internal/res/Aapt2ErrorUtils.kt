@@ -3,11 +3,10 @@ package com.tyron.builder.gradle.internal.res
 import com.android.aaptcompiler.BlameLogger
 import com.android.ide.common.blame.Message
 import com.android.ide.common.blame.SourceFilePosition
-import com.android.ide.common.blame.SourcePosition
+import com.android.ide.common.resources.CompileResourceRequest
 import com.android.utils.StdLogger
 import com.google.common.base.Charsets
 import com.google.common.collect.ImmutableList
-import com.tyron.builder.common.resources.CompileResourceRequest
 import com.tyron.builder.common.resources.relativeResourcePathToAbsolutePath
 import com.tyron.builder.gradle.errors.MessageReceiverImpl
 import com.tyron.builder.gradle.errors.humanReadableMessage
@@ -139,7 +138,7 @@ fun rewriteLinkException(
  * @return A Blame Logger that can rewrite sources, to their correct locations pre-merge.
  */
 fun blameLoggerFor(
-    request: CompileResourceRequest, logger: LoggerWrapper
+    request: com.android.ide.common.resources.CompileResourceRequest, logger: LoggerWrapper
 ): BlameLogger {
     val sourcePathFunc = if (request.identifiedSourceSetMap.any()) {
         relativeResourcePathToAbsolutePath(

@@ -2,7 +2,7 @@ package com.tyron.builder.internal.aapt.v2;
 
 import com.android.annotations.NonNull;
 import com.google.common.collect.ImmutableList;
-import com.tyron.builder.common.resources.CompileResourceRequest;
+import com.android.ide.common.resources.CompileResourceRequest;
 import com.tyron.builder.internal.aapt.AaptConvertConfig;
 import com.tyron.builder.internal.aapt.AaptException;
 import com.tyron.builder.internal.aapt.AaptPackageConfig;

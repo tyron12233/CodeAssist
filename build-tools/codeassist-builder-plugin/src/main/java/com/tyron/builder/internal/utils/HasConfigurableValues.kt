@@ -1,18 +1,14 @@
 package com.tyron.builder.internal.utils
 
 import org.gradle.api.file.ConfigurableFileCollection
-import org.gradle.api.provider.ListProperty
-import org.gradle.api.provider.MapProperty
-import org.gradle.api.provider.Property
-import org.gradle.api.provider.Provider
-import org.gradle.api.provider.SetProperty
+import org.gradle.api.provider.*
 
 fun ConfigurableFileCollection.fromDisallowChanges(vararg arg: Any) {
     from(*arg)
     disallowChanges()
 }
 
-fun <T> Property<T>.setDisallowChanges(value: T) {
+fun <T> Property<T>.setDisallowChanges(value: T?) {
     set(value)
     disallowChanges()
 }

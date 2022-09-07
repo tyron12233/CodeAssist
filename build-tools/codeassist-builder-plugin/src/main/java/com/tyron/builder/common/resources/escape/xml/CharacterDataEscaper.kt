@@ -1,17 +1,17 @@
 package com.tyron.builder.common.resources.escape.xml
 
 import com.google.common.escape.Escapers
+import com.tyron.builder.common.resources.escape.xml.CharacterDataEscaper.escape
 import com.tyron.builder.common.resources.escape.xml.StringResourceContentHandler.STRING_ELEMENT_NAME
-import com.tyron.builder.util.XmlUtils
-import java.io.IOException
-import java.io.StringReader
-import java.util.regex.Pattern
+import com.tyron.builder.common.utils.XmlUtilsWorkaround
 import org.openjdk.javax.xml.parsers.ParserConfigurationException
-import org.openjdk.javax.xml.parsers.SAXParserFactory
 import org.xml.sax.ContentHandler
 import org.xml.sax.InputSource
 import org.xml.sax.SAXException
 import org.xml.sax.XMLReader
+import java.io.IOException
+import java.io.StringReader
+import java.util.regex.Pattern
 
 /**
  * Static singleton responsible for escaping character data in XML. See the [escape] method for more
@@ -26,8 +26,8 @@ object CharacterDataEscaper {
   private val ESCAPED_HEXADECIMAL_REFERENCE =
       Pattern.compile("""$HEXADECIMAL_ESCAPE(\p{XDigit}+);""")
   private val saxParserFactory =
-      XmlUtils.configureSaxFactory(
-          SAXParserFactory.newInstance(), /* namespaceAware= */ false, /* checkDtd= */ false)
+      XmlUtilsWorkaround.configureSaxFactory(
+          org.openjdk.javax.xml.parsers.SAXParserFactory.newInstance(), /* namespaceAware= */ false, /* checkDtd= */ false)
 
   /**
    * Map from characters that need unescaping to what we replace them with when we unescape them,
@@ -205,7 +205,7 @@ object CharacterDataEscaper {
 
     try {
       reader =
-          XmlUtils.createSaxParser(saxParserFactory).xmlReader.apply {
+          XmlUtilsWorkaround.createSaxParser(saxParserFactory).xmlReader.apply {
             contentHandler = this@parse
             setProperty("http://xml.org/sax/properties/lexical-handler", this@parse)
           }

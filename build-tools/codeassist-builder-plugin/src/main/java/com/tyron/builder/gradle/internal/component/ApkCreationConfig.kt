@@ -1,5 +1,8 @@
 package com.tyron.builder.gradle.internal.component
 
+import com.tyron.builder.api.variant.ApkPackaging
+import com.tyron.builder.api.variant.impl.BundleConfigImpl
+import com.tyron.builder.api.variant.impl.SigningConfigImpl
 import java.io.File
 
 /**
@@ -24,17 +27,19 @@ interface ApkCreationConfig: ConsumableCreationConfig {
     /** List of transforms for profilers support in the IDE. */
     val advancedProfilingTransforms: List<String>
 
-//    override val packaging: ApkPackaging
+    override val packaging: ApkPackaging
 
     /**
      * Variant's signing information of null if signing is not configured for this variant.
      */
-//    val signingConfigImpl: SigningConfigImpl?
+    val signingConfigImpl: SigningConfigImpl?
 
     val multiDexKeepFile: File?
 
-//    val bundleConfig: BundleConfigImpl?
-//        get() = null
+    val bundleConfig: BundleConfigImpl?
+        get() = null
 
     val useJacocoTransformInstrumentation: Boolean
+
+    val packageJacocoRuntime: Boolean
 }

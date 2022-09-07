@@ -1,17 +1,24 @@
 package com.tyron.builder.gradle.internal
 
+import com.android.sdklib.AndroidVersion
+import com.android.sdklib.IAndroidTarget.OptionalLibrary
+import com.tyron.builder.gradle.internal.services.AndroidLocationsBuildService
 import com.tyron.builder.gradle.internal.services.ServiceRegistrationAction
+import com.tyron.builder.gradle.internal.services.getBuildService
 import com.tyron.builder.gradle.options.BooleanOption
 import com.tyron.builder.gradle.options.IntegerOption
 import com.tyron.builder.gradle.options.ProjectOptions
 import com.tyron.builder.gradle.options.StringOption
 import org.gradle.api.Project
+import org.gradle.api.file.RegularFile
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
 import org.gradle.api.provider.ProviderFactory
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
+import java.io.File
 import javax.inject.Inject
 
 /**
@@ -29,7 +36,7 @@ abstract class SdkComponentsBuildService @Inject constructor(
         val projectRootDir: RegularFileProperty
         val offlineMode: Property<Boolean>
 //        val issueReporter: Property<SyncIssueReporterImpl.GlobalSyncIssueService>
-//        val androidLocationsServices: Property<AndroidLocationsBuildService>
+        val androidLocationsServices: Property<AndroidLocationsBuildService>
 
         val enableSdkDownload: Property<Boolean>
         val androidSdkChannel: Property<Int>
@@ -49,13 +56,36 @@ abstract class SdkComponentsBuildService @Inject constructor(
             parameters.projectRootDir.set(project.rootDir)
             parameters.offlineMode.set(project.gradle.startParameter.isOffline)
 //            parameters.issueReporter.set(getBuildService(project.gradle.sharedServices))
-//            parameters.androidLocationsServices.set(getBuildService(project.gradle.sharedServices))
+            parameters.androidLocationsServices.set(getBuildService(project.gradle.sharedServices))
 
             parameters.enableSdkDownload.set(projectOptions.get(BooleanOption.ENABLE_SDK_DOWNLOAD))
             parameters.androidSdkChannel.set(projectOptions.get(IntegerOption.ANDROID_SDK_CHANNEL))
             parameters.useAndroidX.set(projectOptions.get(BooleanOption.USE_ANDROID_X))
             parameters.suppressWarningUnsupportedCompileSdk.set(projectOptions.get(StringOption.SUPPRESS_UNSUPPORTED_COMPILE_SDK))
         }
+    }
+
+    /**
+     * Lightweight class that cannot be cached since its parameters are not known at construction
+     * time (provided as Provider). However, once the [SdkLoadingStrategy] is initialized lazily,
+     * those instances are cached and closed at the end of the build.
+     *
+     * So creating as many instances of VersionedSdkLoader as necessary is fine but instances
+     * of [SdkLoadingStrategy] should be allocated wisely and closed once finished.
+     *
+     * Do not create instances of [VersionedSdkLoader] to store in [org.gradle.api.Task]'s input
+     * parameters or [org.gradle.workers.WorkParameters] as it is not serializable. Instead
+     * inject the [SdkComponentsBuildService] along with compileSdkVersion and buildToolsRevision
+     * for the module and call [SdkComponentsBuildService.sdkLoader] at execution time.
+     */
+    open class VersionedSdkLoader {
+        open val targetBootClasspathProvider: Provider<List<File>> by lazy {TODO()};
+        open val targetAndroidVersionProvider: Provider<AndroidVersion> by lazy {TODO()}
+        open val adbExecutableProvider: Provider<RegularFile> by lazy {TODO()}
+        open val additionalLibrariesProvider: Provider<List<OptionalLibrary>> by lazy {TODO()}
+        open val optionalLibrariesProvider: Provider<List<OptionalLibrary>> by lazy {TODO()}
+        open val annotationsJarProvider: Provider<File> by lazy {TODO()}
+        open val coreLambdaStubsProvider: Provider<RegularFile> by lazy {TODO()}
     }
 }
 

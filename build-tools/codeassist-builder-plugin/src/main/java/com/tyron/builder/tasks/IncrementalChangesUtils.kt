@@ -1,7 +1,7 @@
 package com.tyron.builder.tasks
 
+import com.android.ide.common.resources.FileStatus
 import com.google.common.collect.ImmutableList
-import com.tyron.builder.files.FileStatus
 import com.tyron.builder.files.SerializableChange
 import com.tyron.builder.files.SerializableFileChanges
 import com.tyron.builder.files.SerializableInputChanges
@@ -13,7 +13,6 @@ import org.gradle.work.ChangeType
 import org.gradle.work.FileChange
 import org.gradle.work.InputChanges
 import java.util.*
-import kotlin.collections.ArrayList
 
 
 /**

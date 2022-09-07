@@ -14,13 +14,13 @@ import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.FileSystemLocation
 import org.gradle.api.file.FileSystemLocationProperty
+import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
-import org.gradle.api.tasks.TaskProvider
-import java.io.File
-import java.util.Collections
-import  org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.util.internal.GFileUtils
+import java.io.File
+import java.util.*
 
 /**
  * Implementation of the [Artifacts] Variant API interface.
@@ -372,6 +372,20 @@ internal class SingleInitialProviderRequestImpl<TASK: Task, FILE_TYPE: FileSyste
      */
     fun atLocation(location: String?): SingleInitialProviderRequestImpl<TASK, FILE_TYPE> {
         absoluteOutputLocation = location
+        return this
+    }
+
+    fun atLocation(
+        finalLocation: Provider<Directory>
+    ): SingleInitialProviderRequestImpl<TASK, FILE_TYPE> {
+        buildOutputLocation.set(finalLocation)
+        return this
+    }
+
+    fun atLocation(
+        finalLocation: File
+    ): SingleInitialProviderRequestImpl<TASK, FILE_TYPE> {
+        buildOutputLocation.set(finalLocation)
         return this
     }
 

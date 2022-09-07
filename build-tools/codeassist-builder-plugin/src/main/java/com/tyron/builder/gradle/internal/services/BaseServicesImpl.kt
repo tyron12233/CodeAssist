@@ -3,10 +3,9 @@ package com.tyron.builder.gradle.internal.services
 import com.tyron.builder.errors.IssueReporter
 import com.tyron.builder.gradle.errors.DeprecationReporter
 import com.tyron.builder.gradle.internal.scope.ProjectInfo
+import com.tyron.builder.gradle.internal.utils.GradleEnvironmentProvider
+import com.tyron.builder.gradle.internal.utils.GradleEnvironmentProviderImpl
 import com.tyron.builder.gradle.options.ProjectOptions
-import org.gradle.api.file.ConfigurableFileTree
-import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.provider.Provider
 import org.gradle.api.services.BuildServiceRegistry
 import java.io.File
 
@@ -29,8 +28,8 @@ open class BaseServicesImpl(protected val projectServices: ProjectServices):
     final override val buildServiceRegistry: BuildServiceRegistry
         get() = projectServices.buildServiceRegistry
 
-//    final override val gradleEnvironmentProvider: GradleEnvironmentProvider =
-//        GradleEnvironmentProviderImpl(projectServices.providerFactory)
+    final override val gradleEnvironmentProvider: GradleEnvironmentProvider =
+        GradleEnvironmentProviderImpl(projectServices.providerFactory)
 
     final override val projectInfo: ProjectInfo
         get() = projectServices.projectInfo

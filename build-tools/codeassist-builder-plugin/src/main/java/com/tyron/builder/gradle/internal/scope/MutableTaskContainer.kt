@@ -1,6 +1,6 @@
 package com.tyron.builder.gradle.internal.scope
 
-import com.tyron.builder.plugin.tasks.ManifestProcessorTask
+import com.tyron.builder.gradle.tasks.*
 import org.gradle.api.DefaultTask
 import org.gradle.api.Task
 import org.gradle.api.tasks.Sync
@@ -32,16 +32,16 @@ class MutableTaskContainer : TaskContainer {
     override lateinit var javacTask: TaskProvider<out JavaCompile>
     override lateinit var compileTask: TaskProvider<out Task>
     override lateinit var preBuildTask: TaskProvider<out Task>
-//    override var checkManifestTask: TaskProvider<out CheckManifest>? = null
-//    override var aidlCompileTask: TaskProvider<out AidlCompile>? = null
+    override var checkManifestTask: TaskProvider<out Task>? = null
+    override var aidlCompileTask: TaskProvider<out AidlCompile>? = null
 //    override var renderscriptCompileTask: TaskProvider<out RenderscriptCompile>? = null
-//    override lateinit var mergeResourcesTask: TaskProvider<out MergeResources>
-//    override lateinit var mergeAssetsTask: TaskProvider<out MergeSourceSetFolders>
+    override lateinit var mergeResourcesTask: TaskProvider<out MergeResources>
+    override lateinit var mergeAssetsTask: TaskProvider<out MergeSourceSetFolders>
     override lateinit var processJavaResourcesTask: TaskProvider<out Sync>
-//    override var generateBuildConfigTask: TaskProvider<out GenerateBuildConfig>? = null
-//    override var processAndroidResTask: TaskProvider<out ProcessAndroidResources>? = null
+    override var generateBuildConfigTask: TaskProvider<out GenerateBuildConfig>? = null
+    override var processAndroidResTask: TaskProvider<out ProcessAndroidResources>? = null
     override var processManifestTask: TaskProvider<out ManifestProcessorTask>? = null
-//    override var packageAndroidTask: TaskProvider<out PackageAndroidArtifact>? = null
+    override var packageAndroidTask: TaskProvider<out Task>? = null
     override var bundleLibraryTask: TaskProvider<out Zip>? = null
 
     override var installTask: TaskProvider<out DefaultTask>? = null

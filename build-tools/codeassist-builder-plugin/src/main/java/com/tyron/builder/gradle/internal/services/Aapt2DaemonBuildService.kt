@@ -5,13 +5,13 @@ import com.android.annotations.concurrency.GuardedBy
 import com.android.utils.ILogger
 import com.google.common.io.Closer
 import com.tyron.builder.gradle.internal.LoggerWrapper
+import com.tyron.builder.gradle.internal.workeractions.WorkerActionServiceRegistry
 import com.tyron.builder.gradle.options.ProjectOptions
 import com.tyron.builder.ide.common.ProcessException
 import com.tyron.builder.internal.aapt.v2.Aapt2
 import com.tyron.builder.internal.aapt.v2.Aapt2DaemonImpl
 import com.tyron.builder.internal.aapt.v2.Aapt2DaemonManager
 import com.tyron.builder.internal.aapt.v2.Aapt2DaemonTimeouts
-import com.tyron.builder.internal.workeractions.WorkerActionServiceRegistry
 import com.tyron.builder.plugin.options.SyncOptions
 import org.gradle.api.InvalidUserDataException
 import org.gradle.api.Project
@@ -111,7 +111,7 @@ abstract class Aapt2DaemonBuildService : BuildService<Aapt2DaemonBuildService.Pa
 
     fun getAapt2ExecutablePath(aapt2: Aapt2Input): Path {
         return aapt2.binaryDirectory.singleFile.toPath().resolve(SdkConstants.FN_AAPT2).also {
-            if (!Files.exists(it)) {
+            if (!Files.exists(it) && !Files.isSymbolicLink(it)) {
                 throw InvalidUserDataException(
                     "Specified AAPT2 executable does not exist: $it. "
                             + "Must supply one of aapt2 from maven or custom location."

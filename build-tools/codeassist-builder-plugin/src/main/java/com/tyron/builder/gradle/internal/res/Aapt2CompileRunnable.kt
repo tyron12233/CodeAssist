@@ -1,6 +1,6 @@
 package com.tyron.builder.gradle.internal.res
 
-import com.tyron.builder.common.resources.CompileResourceRequest
+import com.android.ide.common.resources.CompileResourceRequest
 import com.tyron.builder.gradle.internal.LoggerWrapper
 import com.tyron.builder.gradle.internal.services.Aapt2Input
 import com.tyron.builder.gradle.internal.services.getLeasingAapt2

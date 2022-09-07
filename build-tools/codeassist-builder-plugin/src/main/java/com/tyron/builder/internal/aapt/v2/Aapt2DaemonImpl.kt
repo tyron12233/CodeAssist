@@ -4,7 +4,7 @@ import com.android.utils.GrabProcessOutput
 import com.android.utils.ILogger
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.SettableFuture
-import com.tyron.builder.common.resources.CompileResourceRequest
+import com.android.ide.common.resources.CompileResourceRequest
 import com.tyron.builder.internal.aapt.AaptConvertConfig
 import com.tyron.builder.internal.aapt.AaptPackageConfig
 import java.io.IOException

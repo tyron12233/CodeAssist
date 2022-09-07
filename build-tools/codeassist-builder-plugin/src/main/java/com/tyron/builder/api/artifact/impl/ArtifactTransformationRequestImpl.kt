@@ -6,7 +6,7 @@ import com.tyron.builder.api.variant.BuiltArtifact
 import com.tyron.builder.api.variant.BuiltArtifacts
 import com.tyron.builder.api.variant.impl.BuiltArtifactsImpl
 import com.tyron.builder.api.variant.impl.BuiltArtifactsLoaderImpl
-import com.tyron.builder.internal.workeractions.DecoratedWorkParameters
+import com.tyron.builder.gradle.internal.workeractions.DecoratedWorkParameters
 import com.tyron.builder.tasks.BaseTask
 import org.gradle.api.Task
 import org.gradle.api.file.Directory

@@ -1,23 +1,21 @@
 package com.tyron.builder.gradle.internal.dsl;
 
-import com.tyron.builder.api.dsl.AndroidSourceSet;
+import com.android.annotations.NonNull;
+import com.tyron.builder.gradle.api.AndroidSourceSet;
 import com.tyron.builder.gradle.internal.api.DefaultAndroidSourceSet;
 import com.tyron.builder.gradle.internal.services.DslServices;
-
 import org.gradle.api.NamedDomainObjectFactory;
 import org.gradle.api.Project;
 import org.gradle.api.model.ObjectFactory;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Factory to create AndroidSourceSet object using an {@link ObjectFactory} to add the DSL methods.
  */
 public class AndroidSourceSetFactory implements NamedDomainObjectFactory<AndroidSourceSet> {
 
-    @NotNull
-    private final Project project;
+    @NonNull private final Project project;
     private final boolean publishPackage;
-    @NotNull private final DslServices dslServices;
+    @NonNull private final DslServices dslServices;
 
     /**
      * Constructor for this AndroidSourceSetFactory.
@@ -27,15 +25,15 @@ public class AndroidSourceSetFactory implements NamedDomainObjectFactory<Android
      * @param dslServices dslServices of the project.
      */
     public AndroidSourceSetFactory(
-            @NotNull Project project, boolean publishPackage, @NotNull DslServices dslServices) {
+            @NonNull Project project, boolean publishPackage, @NonNull DslServices dslServices) {
         this.publishPackage = publishPackage;
         this.project = project;
         this.dslServices = dslServices;
     }
 
-    @NotNull
+    @NonNull
     @Override
-    public AndroidSourceSet create(@NotNull String name) {
+    public AndroidSourceSet create(@NonNull String name) {
         return dslServices.newInstance(
                 DefaultAndroidSourceSet.class, name, project, publishPackage);
     }

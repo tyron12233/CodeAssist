@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.dexing
 
 import com.google.common.io.Closer
-import com.tyron.builder.ide.common.blame.MessageReceiver
+import com.android.ide.common.blame.MessageReceiver
 import com.tyron.builder.dexing.*
 import com.tyron.builder.gradle.errors.MessageReceiverImpl
 import com.tyron.builder.gradle.internal.tasks.DexArchiveBuilderTaskDelegate

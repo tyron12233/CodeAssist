@@ -1,3 +1,4 @@
+@file:JvmName("ZipEntryUtils")
 package com.tyron.builder.utils
 
 import java.io.File

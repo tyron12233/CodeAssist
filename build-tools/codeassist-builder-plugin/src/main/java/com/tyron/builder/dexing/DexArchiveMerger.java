@@ -1,7 +1,7 @@
 package com.tyron.builder.dexing;
 
+import com.android.ide.common.blame.MessageReceiver;
 import com.android.tools.r8.CompilationMode;
-import com.tyron.builder.ide.common.blame.MessageReceiver;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;

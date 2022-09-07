@@ -3,8 +3,8 @@ package com.tyron.builder.gradle.internal.dependency
 import com.android.SdkConstants
 import com.android.SdkConstants.FD_RES
 import com.android.SdkConstants.FD_RES_VALUES
-import com.tyron.builder.common.resources.CompileResourceRequest
-import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser
+import com.android.ide.common.resources.CompileResourceRequest
+import com.android.ide.common.xml.AndroidManifestParser
 import com.tyron.builder.gradle.internal.res.runAapt2Compile
 import com.tyron.builder.gradle.internal.services.Aapt2Input
 import com.tyron.builder.gradle.internal.services.registerAaptService

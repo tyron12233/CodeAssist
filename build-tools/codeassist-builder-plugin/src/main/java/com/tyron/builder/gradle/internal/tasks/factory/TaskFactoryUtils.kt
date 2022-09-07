@@ -1,9 +1,6 @@
-package com.tyron.builder.internal.tasks.factory
+@file:JvmName("TaskFactoryUtils")
+package com.tyron.builder.gradle.internal.tasks.factory
 
-import com.tyron.builder.gradle.internal.tasks.factory.PreConfigAction
-import com.tyron.builder.gradle.internal.tasks.factory.TaskConfigAction
-import com.tyron.builder.gradle.internal.tasks.factory.TaskCreationAction
-import com.tyron.builder.gradle.internal.tasks.factory.TaskProviderCallback
 import org.gradle.api.Action
 import org.gradle.api.Buildable
 import org.gradle.api.Task

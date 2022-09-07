@@ -2,9 +2,16 @@ package com.tyron.builder.gradle.internal.core.dsl
 
 import com.tyron.builder.api.variant.ComponentIdentity
 import com.tyron.builder.api.variant.impl.MutableAndroidVersion
+import com.tyron.builder.gradle.api.JavaCompileOptions
+import com.tyron.builder.gradle.internal.ProguardFileType
+import com.tyron.builder.gradle.internal.core.PostProcessingOptions
+import com.tyron.builder.gradle.internal.core.dsl.features.AndroidResourcesDslInfo
+import com.tyron.builder.core.AbstractProductFlavor
 import com.tyron.builder.core.ComponentType
+import com.google.common.collect.ImmutableMap
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
+import java.io.File
 
 /**
  * Contains the final dsl info computed from the DSL object model (extension, default config,
@@ -15,7 +22,7 @@ interface ComponentDslInfo {
 
     val componentType: ComponentType
 
-//    val missingDimensionStrategies: ImmutableMap<String, AbstractProductFlavor.DimensionRequest>
+    val missingDimensionStrategies: ImmutableMap<String, AbstractProductFlavor.DimensionRequest>
 
     /**
      * Returns the application ID for this variant. This could be coming from the manifest or could
@@ -63,16 +70,11 @@ interface ComponentDslInfo {
      */
     val targetSdkVersion: MutableAndroidVersion?
 
-//    val javaCompileOptionsSetInDSL: JavaCompileOptions
+    val javaCompileOptionsSetInDSL: JavaCompileOptions
 
-//    val androidResourcesDsl: AndroidResourcesDslInfo?
+    val androidResourcesDsl: AndroidResourcesDslInfo?
 
-//    val postProcessingOptions: PostProcessingOptions
+    val postProcessingOptions: PostProcessingOptions
 
-    /**
-     * TODO(b/242515559): Clean this up
-     */
-    val isAndroidTestCoverageEnabled: Boolean
-
-//    fun gatherProguardFiles(type: ProguardFileType): Collection<File>
+    fun gatherProguardFiles(type: ProguardFileType): Collection<File>
 }

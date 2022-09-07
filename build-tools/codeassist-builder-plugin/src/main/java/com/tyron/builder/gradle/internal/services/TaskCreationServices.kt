@@ -31,7 +31,7 @@ interface TaskCreationServices: BaseServices {
     fun directoryProperty(): DirectoryProperty
     fun fileCollection(): ConfigurableFileCollection
     fun fileCollection(vararg files: Any): ConfigurableFileCollection
-//    fun initializeAapt2Input(aapt2Input: Aapt2Input)
+    fun initializeAapt2Input(aapt2Input: Aapt2Input)
 
     fun <T> provider(callable: () -> T?): Provider<T>
 

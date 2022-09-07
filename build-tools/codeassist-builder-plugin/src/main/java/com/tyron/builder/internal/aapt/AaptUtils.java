@@ -1,8 +1,8 @@
 package com.tyron.builder.internal.aapt;
 
 import com.android.annotations.NonNull;
+import com.android.resources.Density;
 import com.google.common.collect.Iterables;
-import com.tyron.builder.compiler.manifest.resources.Density;
 
 import java.util.function.Predicate;
 

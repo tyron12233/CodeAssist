@@ -3,15 +3,18 @@ package com.tyron.builder.gradle.options
 import com.tyron.builder.gradle.errors.DeprecationReporter
 import com.tyron.builder.gradle.errors.parseBoolean
 import com.tyron.builder.gradle.options.Version.VERSION_BEFORE_4_0
+import com.tyron.builder.model.PROPERTY_SIGNING_V1_ENABLED
+import com.tyron.builder.model.PROPERTY_SIGNING_V2_ENABLED
+import com.tyron.builder.model.PROPERTY_TEST_ONLY
 
 enum class OptionalBooleanOption(
     override val propertyName: String,
     val stage: Stage,
     val recommendedValue: Boolean? = null
 ) : Option<Boolean> {
-//    SIGNING_V1_ENABLED(PROPERTY_SIGNING_V1_ENABLED, ApiStage.Stable),
-//    SIGNING_V2_ENABLED(PROPERTY_SIGNING_V2_ENABLED, ApiStage.Stable),
-//    IDE_TEST_ONLY(PROPERTY_TEST_ONLY, ApiStage.Stable),
+    SIGNING_V1_ENABLED(PROPERTY_SIGNING_V1_ENABLED, ApiStage.Stable),
+    SIGNING_V2_ENABLED(PROPERTY_SIGNING_V2_ENABLED, ApiStage.Stable),
+    IDE_TEST_ONLY(PROPERTY_TEST_ONLY, ApiStage.Stable),
 
     /**
      * This project property is read by the firebase plugin, and has no direct impact on AGP behavior.

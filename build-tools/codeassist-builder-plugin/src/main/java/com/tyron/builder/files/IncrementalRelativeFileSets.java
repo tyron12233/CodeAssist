@@ -1,5 +1,6 @@
 package com.tyron.builder.files;
 
+import com.android.ide.common.resources.FileStatus;
 import com.google.common.base.Functions;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;

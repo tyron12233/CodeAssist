@@ -1,21 +1,24 @@
 package com.tyron.builder.gradle.internal.dsl
 
 import com.tyron.builder.api.dsl.*
+import com.tyron.builder.core.LibraryRequest
 import com.tyron.builder.errors.IssueReporter
+import com.tyron.builder.gradle.ProguardFiles
+import com.tyron.builder.gradle.api.AndroidSourceSet
 import com.tyron.builder.gradle.internal.plugins.DslContainerProvider
 import com.tyron.builder.gradle.internal.services.DslServices
+import com.tyron.builder.gradle.internal.utils.parseTargetHash
 import com.tyron.builder.gradle.internal.utils.validatePreviewTargetValue
-import com.tyron.builder.model.LintOptions
-import com.tyron.builder.model.TestOptions
 import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer
+import java.io.File
 import java.util.function.Supplier
 
 /** Internal implementation of the 'new' DSL interface */
 abstract class CommonExtensionImpl<
         BuildFeaturesT : BuildFeatures,
         BuildTypeT : com.tyron.builder.api.dsl.BuildType,
-        DefaultConfigT : DefaultConfig,
+        DefaultConfigT : com.tyron.builder.api.dsl.DefaultConfig,
         ProductFlavorT : com.tyron.builder.api.dsl.ProductFlavor>(
     protected val dslServices: DslServices,
     dslContainers: DslContainerProvider<DefaultConfigT, BuildTypeT, ProductFlavorT, SigningConfig>
@@ -24,6 +27,10 @@ abstract class CommonExtensionImpl<
         BuildTypeT,
         DefaultConfigT,
         ProductFlavorT> {
+
+    // This is exposed only to support AndroidConfig.libraryRequests
+    // TODO: Make private when AndroidConfig is removed
+    abstract val libraryRequests: MutableList<LibraryRequest>
 
     private val sourceSetManager = dslContainers.sourceSetManager
 
@@ -44,9 +51,9 @@ abstract class CommonExtensionImpl<
         action.invoke(aaptOptions)
     }
 
-//    override fun aaptOptions(action: Action<AaptOptions>) {
-//        action.execute(aaptOptions)
-//    }
+    override fun aaptOptions(action: Action<AaptOptions>) {
+        action.execute(aaptOptions)
+    }
 
     override val installation: Installation = dslServices.newInstance(AdbOptions::class.java)
 
@@ -64,46 +71,48 @@ abstract class CommonExtensionImpl<
         action.invoke(adbOptions)
     }
 
-//    override fun adbOptions(action: Action<AdbOptions>) {
-//        action.execute(adbOptions)
-//    }
-//
-//    override fun buildFeatures(action: Action<BuildFeaturesT>) {
-//        action.execute(buildFeatures)
-//    }
+    override fun adbOptions(action: Action<AdbOptions>) {
+        action.execute(adbOptions)
+    }
+
+    override fun buildFeatures(action: Action<BuildFeaturesT>) {
+        action.execute(buildFeatures)
+    }
 
     override fun buildFeatures(action: BuildFeaturesT.() -> Unit) {
         action(buildFeatures)
     }
 
+
+
     protected abstract var _compileSdkVersion: String?
 
-//    override var compileSdkVersion: String?
-//        get() = _compileSdkVersion
-//
-//        set(value) {
-//            // set this first to enforce lockdown with right name
-//            _compileSdkVersion = value
-//
-//            // then set the other values
-//            _compileSdk = null
-//            _compileSdkPreview = null
-//            _compileSdkAddon = null
-//
-//            if (value == null) {
-//                return
-//            }
-//
-//            val compileData = parseTargetHash(value)
-//
-//            if (compileData.isAddon()) {
-//                _compileSdkAddon = "${compileData.vendorName}:${compileData.addonName}:${compileData.apiLevel}"
-//            } else {
-//                _compileSdk = compileData.apiLevel
-//                _compileSdkExtension = compileData.sdkExtension
-//                _compileSdkPreview = compileData.codeName
-//            }
-//        }
+    override var compileSdkVersion: String?
+        get() = _compileSdkVersion
+
+        set(value) {
+            // set this first to enforce lockdown with right name
+            _compileSdkVersion = value
+
+            // then set the other values
+            _compileSdk = null
+            _compileSdkPreview = null
+            _compileSdkAddon = null
+
+            if (value == null) {
+                return
+            }
+
+            val compileData = parseTargetHash(value)
+
+            if (compileData.isAddon()) {
+                _compileSdkAddon = "${compileData.vendorName}:${compileData.addonName}:${compileData.apiLevel}"
+            } else {
+                _compileSdk = compileData.apiLevel
+                _compileSdkExtension = compileData.sdkExtension
+                _compileSdkPreview = compileData.codeName
+            }
+        }
 
     protected abstract var _compileSdk: Int?
 
@@ -194,28 +203,28 @@ abstract class CommonExtensionImpl<
         _compileSdkPreview = null
     }
 
-//    override fun compileSdkVersion(apiLevel: Int) {
-//        compileSdk = apiLevel
-//    }
-//
-//    override fun compileSdkVersion(version: String) {
-//        compileSdkVersion = version
-//    }
+    override fun compileSdkVersion(apiLevel: Int) {
+        compileSdk = apiLevel
+    }
 
-//    override val composeOptions: ComposeOptionsImpl =
-//        dslServices.newInstance(ComposeOptionsImpl::class.java, dslServices)
+    override fun compileSdkVersion(version: String) {
+        compileSdkVersion = version
+    }
+
+    override val composeOptions: ComposeOptionsImpl =
+        dslServices.newInstance(ComposeOptionsImpl::class.java, dslServices)
 
     override fun composeOptions(action: ComposeOptions.() -> Unit) {
         action.invoke(composeOptions)
     }
 
-//    override fun composeOptions(action: Action<ComposeOptions>) {
-//        action.execute(composeOptions)
-//    }
-//
-//    override fun buildTypes(action: Action<in NamedDomainObjectContainer<BuildType>>) {
-//        action.execute(buildTypes as NamedDomainObjectContainer<BuildType>)
-//    }
+    override fun composeOptions(action: Action<ComposeOptions>) {
+        action.execute(composeOptions)
+    }
+
+    override fun buildTypes(action: Action<in NamedDomainObjectContainer<BuildType>>) {
+        action.execute(buildTypes as NamedDomainObjectContainer<BuildType>)
+    }
 
     override fun buildTypes(action: NamedDomainObjectContainer<BuildTypeT>.() -> Unit) {
         action.invoke(buildTypes)
@@ -229,39 +238,39 @@ abstract class CommonExtensionImpl<
         getByName("release", action)
     }
 
-//    override val dataBinding: DataBindingOptions =
-//        dslServices.newDecoratedInstance(
-//            DataBindingOptions::class.java,
-//            Supplier { buildFeatures },
-//            dslServices
-//        )
+    override val dataBinding: DataBindingOptions =
+        dslServices.newDecoratedInstance(
+            DataBindingOptions::class.java,
+            Supplier { buildFeatures },
+            dslServices
+        )
 
     override fun dataBinding(action: com.tyron.builder.api.dsl.DataBinding.() -> Unit) {
         action.invoke(dataBinding)
     }
 
-//    override fun dataBinding(action: Action<DataBindingOptions>) {
-//        action.execute(dataBinding)
-//    }
+    override fun dataBinding(action: Action<DataBindingOptions>) {
+        action.execute(dataBinding)
+    }
 
-//    override val viewBinding: ViewBindingOptionsImpl
-//        get() = dslServices.newDecoratedInstance(
-//            ViewBindingOptionsImpl::class.java,
-//            Supplier { buildFeatures },
-//            dslServices
-//        )
+    override val viewBinding: ViewBindingOptionsImpl
+        get() = dslServices.newDecoratedInstance(
+            ViewBindingOptionsImpl::class.java,
+            Supplier { buildFeatures },
+            dslServices
+        )
 
-//    override fun viewBinding(action: Action<ViewBindingOptionsImpl>) {
-//        action.execute(viewBinding)
-//    }
+    override fun viewBinding(action: Action<ViewBindingOptionsImpl>) {
+        action.execute(viewBinding)
+    }
 
     override fun viewBinding(action: ViewBinding.() -> Unit) {
         action.invoke(viewBinding)
     }
 
-//    override fun defaultConfig(action: Action<com.tyron.builder.gradle.internal.dsl.DefaultConfig>) {
-//        action.execute(defaultConfig as com.tyron.builder.gradle.internal.dsl.DefaultConfig)
-//    }
+    override fun defaultConfig(action: Action<DefaultConfig>) {
+        action.execute(defaultConfig as DefaultConfig)
+    }
 
     override fun defaultConfig(action: DefaultConfigT.() -> Unit) {
         action.invoke(defaultConfig)
@@ -273,12 +282,12 @@ abstract class CommonExtensionImpl<
         action.invoke(testCoverage)
     }
 
-//    override fun testCoverage(action: Action<TestCoverage>) {
-//        action.execute(testCoverage)
-//    }
+    override fun testCoverage(action: Action<TestCoverage>) {
+        action.execute(testCoverage)
+    }
 
-    override val jacoco: JacocoOptions
-        get() = testCoverage as JacocoOptions
+//    override val jacoco: JacocoOptions
+//        get() = testCoverage as JacocoOptions
 
     override fun jacoco(action: com.tyron.builder.api.dsl.JacocoOptions.() -> Unit) {
         action.invoke(jacoco)
@@ -293,40 +302,40 @@ abstract class CommonExtensionImpl<
 //    }
 
 
-//    override fun lintOptions(action: com.tyron.builder.api.dsl.LintOptions.() -> Unit) {
-//        action.invoke(lintOptions)
-//    }
-//
+    override fun lintOptions(action: com.tyron.builder.api.dsl.LintOptions.() -> Unit) {
+        action.invoke(lintOptions)
+    }
+
 //    override fun lintOptions(action: Action<LintOptions>) {
 //        action.execute(lintOptions)
 //    }
 //
-//    override fun productFlavors(action: Action<NamedDomainObjectContainer<ProductFlavor>>) {
-//        action.execute(productFlavors as NamedDomainObjectContainer<ProductFlavor>)
-//    }
+    override fun productFlavors(action: Action<NamedDomainObjectContainer<ProductFlavor>>) {
+        action.execute(productFlavors as NamedDomainObjectContainer<ProductFlavor>)
+    }
 
     override fun productFlavors(action: NamedDomainObjectContainer<ProductFlavorT>.() -> Unit) {
         action.invoke(productFlavors)
     }
 
-//    override fun signingConfigs(action: Action<NamedDomainObjectContainer<SigningConfig>>) {
-//        action.execute(signingConfigs)
-//    }
+    override fun signingConfigs(action: Action<NamedDomainObjectContainer<SigningConfig>>) {
+        action.execute(signingConfigs)
+    }
 
     override fun signingConfigs(action: NamedDomainObjectContainer<out ApkSigningConfig>.() -> Unit) {
         action.invoke(signingConfigs)
     }
 
-    override val sourceSets: NamedDomainObjectContainer<AndroidSourceSet>
+    override val    sourceSets: NamedDomainObjectContainer<AndroidSourceSet>
         get() = sourceSetManager.sourceSetsContainer
 
     override fun sourceSets(action: NamedDomainObjectContainer<out com.tyron.builder.api.dsl.AndroidSourceSet>.() -> Unit) {
         sourceSetManager.executeAction(action)
     }
 //
-//    override fun sourceSets(action: Action<NamedDomainObjectContainer<AndroidSourceSet>>) {
-//        action.execute(sourceSets)
-//    }
+    override fun sourceSets(action: Action<NamedDomainObjectContainer<AndroidSourceSet>>) {
+        action.execute(sourceSets)
+    }
 
 //    override val testOptions: TestOptions =
 //        dslServices.newInstance(TestOptions::class.java, dslServices)
@@ -361,20 +370,20 @@ abstract class CommonExtensionImpl<
         useLibrary(name, true)
     }
 
-//    override fun useLibrary(name: String, required: Boolean) {
-//        libraryRequests.add(LibraryRequest(name, required))
-//    }
+    override fun useLibrary(name: String, required: Boolean) {
+        libraryRequests.add(LibraryRequest(name, required))
+    }
 
-//    override fun getDefaultProguardFile(name: String): File {
-//        if (!ProguardFiles.KNOWN_FILE_NAMES.contains(name)) {
-//            dslServices
-//                .issueReporter
-//                .reportError(
-//                    IssueReporter.Type.GENERIC, ProguardFiles.UNKNOWN_FILENAME_MESSAGE
-//                )
-//        }
-//        return ProguardFiles.getDefaultProguardFile(name, dslServices.buildDirectory)
-//    }
+    override fun getDefaultProguardFile(name: String): File {
+        if (!ProguardFiles.KNOWN_FILE_NAMES.contains(name)) {
+            dslServices
+                .issueReporter
+                .reportError(
+                    IssueReporter.Type.GENERIC, ProguardFiles.UNKNOWN_FILENAME_MESSAGE
+                )
+        }
+        return ProguardFiles.getDefaultProguardFile(name, dslServices.buildDirectory)
+    }
 
     override val experimentalProperties: MutableMap<String, Any> = mutableMapOf()
 }

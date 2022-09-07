@@ -1,13 +1,13 @@
 package com.tyron.builder.gradle.internal.generators
 
 import com.android.SdkConstants
+import com.android.ide.common.xml.XmlPrettyPrinter
 import com.android.resources.ResourceType
 import com.android.utils.XmlUtils
 import com.google.common.base.Charsets
 import com.google.common.collect.ImmutableList
 import com.google.common.io.Files
 import com.tyron.builder.api.variant.ResValue
-import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter
 import org.w3c.dom.Node
 import java.io.File
 import java.io.IOException

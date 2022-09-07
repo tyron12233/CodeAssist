@@ -3,7 +3,7 @@ package com.tyron.builder.internal.aapt.v2
 import com.android.utils.ILogger
 import com.google.common.base.Preconditions
 import com.google.common.base.Ticker
-import com.tyron.builder.common.resources.CompileResourceRequest
+import com.android.ide.common.resources.CompileResourceRequest
 import com.tyron.builder.internal.aapt.AaptConvertConfig
 import com.tyron.builder.internal.aapt.AaptPackageConfig
 import java.io.Closeable

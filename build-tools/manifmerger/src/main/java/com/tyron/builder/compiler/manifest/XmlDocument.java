@@ -361,7 +361,7 @@ public class XmlDocument {
                 mergingReport.addMessage(getSourceFile(), MergingReport.Record.Severity.ERROR,
                         String.format(
                                 "uses-sdk:targetSdkVersion %1$s cannot be different than version "
-                                        + "%2$s declared in library %3$s",
+                                + "%2$s declared in library %3$s",
                                 getTargetSdkVersion(),
                                 libraryTargetSdkVersion,
                                 lowerPriorityDocument.getSourceFile().print(false)
@@ -379,7 +379,7 @@ public class XmlDocument {
                 mergingReport.addMessage(getSourceFile(), MergingReport.Record.Severity.ERROR,
                         String.format(
                                 "uses-sdk:minSdkVersion %1$s cannot be different than version "
-                                        + "%2$s declared in library %3$s",
+                                + "%2$s declared in library %3$s",
                                 getMinSdkVersion(),
                                 libraryMinSdkVersion,
                                 lowerPriorityDocument.getSourceFile().print(false)
@@ -392,8 +392,8 @@ public class XmlDocument {
         if (!checkUsesSdkMinVersion(lowerPriorityDocument, mergingReport)) {
             String error = String.format(
                     "uses-sdk:minSdkVersion %1$s cannot be smaller than version "
-                            + "%2$s declared in library %3$s\n"
-                            + "\tSuggestion: use tools:overrideLibrary=\"%4$s\" to force usage",
+                    + "%2$s declared in library %3$s\n"
+                    + "\tSuggestion: use tools:overrideLibrary=\"%4$s\" to force usage",
                     getMinSdkVersion(),
                     lowerPriorityDocument.getRawMinSdkVersion(),
                     lowerPriorityDocument.getSourceFile().print(false),
@@ -422,7 +422,7 @@ public class XmlDocument {
 
         boolean hasWriteToExternalStoragePermission =
                 lowerPriorityDocument.getByTypeAndKey(
-                         ManifestModel.NodeTypes.USES_PERMISSION, permission("WRITE_EXTERNAL_STORAGE")).isPresent();
+                        ManifestModel.NodeTypes.USES_PERMISSION, permission("WRITE_EXTERNAL_STORAGE")).isPresent();
 
         if (libraryTargetSdk < 4) {
             addIfAbsent(mergingReport.getActionRecorder(),
@@ -456,14 +456,14 @@ public class XmlDocument {
                 addIfAbsent(mergingReport.getActionRecorder(),
                         ManifestModel.NodeTypes.USES_PERMISSION, permission("READ_CALL_LOG"),
                         lowerPriorityDocument.getPackageName()
-                                + " has targetSdkVersion < 16 and requested READ_CONTACTS");
+                        + " has targetSdkVersion < 16 and requested READ_CONTACTS");
             }
             if (lowerPriorityDocument.getByTypeAndKey(
                     ManifestModel.NodeTypes.USES_PERMISSION, permission("WRITE_CONTACTS")).isPresent()) {
                 addIfAbsent(mergingReport.getActionRecorder(),
                         ManifestModel.NodeTypes.USES_PERMISSION, permission("WRITE_CALL_LOG"),
                         lowerPriorityDocument.getPackageName()
-                                + " has targetSdkVersion < 16 and requested WRITE_CONTACTS");
+                        + " has targetSdkVersion < 16 and requested WRITE_CONTACTS");
             }
         }
     }

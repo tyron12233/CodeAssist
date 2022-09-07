@@ -1,6 +1,6 @@
 package com.tyron.builder.gradle.options
 
-import com.tyron.builder.model.AndroidProject
+import com.tyron.builder.model.*
 
 enum class StringOption(
     override val propertyName: String,
@@ -11,28 +11,28 @@ enum class StringOption(
      * STABLE APIs
      */
 
-//    IDE_BUILD_TARGET_DENSITY(PROPERTY_BUILD_DENSITY, ApiStage.Stable),
-//    IDE_BUILD_TARGET_ABI(PROPERTY_BUILD_ABI, ApiStage.Stable),
+    IDE_BUILD_TARGET_DENSITY(PROPERTY_BUILD_DENSITY, ApiStage.Stable),
+    IDE_BUILD_TARGET_ABI(PROPERTY_BUILD_ABI, ApiStage.Stable),
 
-//    IDE_ATTRIBUTION_FILE_LOCATION(PROPERTY_ATTRIBUTION_FILE_LOCATION, ApiStage.Stable),
+    IDE_ATTRIBUTION_FILE_LOCATION(PROPERTY_ATTRIBUTION_FILE_LOCATION, ApiStage.Stable),
 
     /** Absolute path to a file containing the result of the `CheckJetifier` task. */
-//    IDE_CHECK_JETIFIER_RESULT_FILE(PROPERTY_CHECK_JETIFIER_RESULT_FILE, ApiStage.Stable),
+    IDE_CHECK_JETIFIER_RESULT_FILE(PROPERTY_CHECK_JETIFIER_RESULT_FILE, ApiStage.Stable),
 
     // Signing options
-//    IDE_SIGNING_STORE_TYPE(PROPERTY_SIGNING_STORE_TYPE, ApiStage.Stable),
-//    IDE_SIGNING_STORE_FILE(PROPERTY_SIGNING_STORE_FILE, ApiStage.Stable),
-//    IDE_SIGNING_STORE_PASSWORD(PROPERTY_SIGNING_STORE_PASSWORD, ApiStage.Stable),
-//    IDE_SIGNING_KEY_ALIAS(PROPERTY_SIGNING_KEY_ALIAS, ApiStage.Stable),
-//    IDE_SIGNING_KEY_PASSWORD(PROPERTY_SIGNING_KEY_PASSWORD, ApiStage.Stable),
+    IDE_SIGNING_STORE_TYPE(PROPERTY_SIGNING_STORE_TYPE, ApiStage.Stable),
+    IDE_SIGNING_STORE_FILE(PROPERTY_SIGNING_STORE_FILE, ApiStage.Stable),
+    IDE_SIGNING_STORE_PASSWORD(PROPERTY_SIGNING_STORE_PASSWORD, ApiStage.Stable),
+    IDE_SIGNING_KEY_ALIAS(PROPERTY_SIGNING_KEY_ALIAS, ApiStage.Stable),
+    IDE_SIGNING_KEY_PASSWORD(PROPERTY_SIGNING_KEY_PASSWORD, ApiStage.Stable),
 
     // device config for ApkSelect
-//    IDE_APK_SELECT_CONFIG(PROPERTY_APK_SELECT_CONFIG, ApiStage.Stable),
+    IDE_APK_SELECT_CONFIG(PROPERTY_APK_SELECT_CONFIG, ApiStage.Stable),
 
     // location where to write the APK/BUNDLE
-//    IDE_APK_LOCATION(PROPERTY_APK_LOCATION, ApiStage.Stable),
+    IDE_APK_LOCATION(PROPERTY_APK_LOCATION, ApiStage.Stable),
 
-//    IDE_TARGET_DEVICE_CODENAME(PROPERTY_BUILD_API_CODENAME, ApiStage.Stable),
+    IDE_TARGET_DEVICE_CODENAME(PROPERTY_BUILD_API_CODENAME, ApiStage.Stable),
 
     // Profiler plugin
     IDE_ANDROID_CUSTOM_CLASS_TRANSFORMS("android.advanced.profiling.transforms", ApiStage.Stable),

@@ -1,33 +1,16 @@
 package com.tyron.builder.dexing
 
-import com.android.tools.r8.ArchiveProgramResourceProvider
-import com.android.tools.r8.AssertionsConfiguration
-import com.android.tools.r8.ClassFileConsumer
-import com.android.tools.r8.CompilationMode
-import com.android.tools.r8.DataDirectoryResource
-import com.android.tools.r8.DataEntryResource
-import com.android.tools.r8.DataResourceConsumer
-import com.android.tools.r8.DataResourceProvider
-import com.android.tools.r8.DexIndexedConsumer
-import com.android.tools.r8.DiagnosticsHandler
-import com.android.tools.r8.ProgramResource
-import com.android.tools.r8.ProgramResourceProvider
-import com.android.tools.r8.R8
-import com.android.tools.r8.R8Command
-import com.android.tools.r8.R8Command.Builder
-import com.android.tools.r8.StringConsumer
-import com.android.tools.r8.Version
+import com.android.SdkConstants.*
+import com.android.tools.r8.*
 import com.android.tools.r8.origin.Origin
 import com.android.tools.r8.utils.ArchiveResourceProvider
 import com.google.common.io.ByteStreams
-import com.tyron.builder.ide.common.blame.MessageReceiver
 import com.tyron.builder.dexing.r8.ClassFileProviderFactory
-import com.android.SdkConstants.*
 import java.io.BufferedOutputStream
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.Locale
+import java.util.*
 import java.util.logging.Level
 import java.util.logging.Logger
 import java.util.zip.ZipEntry
@@ -61,7 +44,7 @@ fun runR8(
     toolConfig: ToolConfig,
     proguardConfig: ProguardConfig,
     mainDexListConfig: MainDexListConfig,
-    messageReceiver: MessageReceiver,
+    messageReceiver: com.android.ide.common.blame.MessageReceiver,
     useFullR8: Boolean = false,
     featureClassJars: Collection<Path>,
     featureJavaResourceJars: Collection<Path>,

@@ -10,7 +10,7 @@ import com.google.common.base.Strings
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.Iterables
 import com.google.common.collect.Lists
-import com.tyron.builder.common.resources.CompileResourceRequest
+import com.android.ide.common.resources.CompileResourceRequest
 import com.tyron.builder.internal.aapt.AaptConvertConfig
 import com.tyron.builder.internal.aapt.AaptException
 import com.tyron.builder.internal.aapt.AaptPackageConfig

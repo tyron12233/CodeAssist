@@ -1,7 +1,7 @@
 package com.tyron.builder.internal.aapt.v2
 
+import com.android.ide.common.resources.CompileResourceRequest
 import com.android.utils.ILogger
-import com.tyron.builder.common.resources.CompileResourceRequest
 import com.tyron.builder.internal.aapt.AaptConvertConfig
 import com.tyron.builder.internal.aapt.AaptPackageConfig
 

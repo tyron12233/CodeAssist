@@ -15,7 +15,7 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
-        coreLibraryDesugaringEnabled = true
+        coreLibraryDesugaringEnabled = false
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -52,12 +52,15 @@ android {
         exclude "META-INF/LGPL2.1"
         exclude "META-INF/groovy-release-info.properties"
         exclude "META-INF/AL2.0"
+        exclude "README.md"
         pickFirst "META-INF/sisu/*"
     }
 }
 
 configurations.implementation {
     exclude group: "org.jetbrains", module: "annotations"
+    exclude group: 'com.android.tools', module: 'common'
+    exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
 }
 
 dependencies {
@@ -102,7 +105,7 @@ dependencies {
     implementation projects.buildTools.builderPlugins
     implementation projects.buildTools.builderJava
     implementation projects.buildTools.builderNative
-    implementation projects.buildTools.codeassistBuilderPlugin
+    implementation project(path: ":build-tools:codeassist-builder-plugin")
     implementation projects.buildTools.builderIde
     implementation projects.buildTools.builderToolingApi
     // emulating console

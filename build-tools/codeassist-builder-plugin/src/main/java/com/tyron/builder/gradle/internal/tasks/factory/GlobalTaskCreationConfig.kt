@@ -2,9 +2,12 @@ package com.tyron.builder.gradle.internal.tasks.factory
 
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.api.dsl.*
+import com.tyron.builder.core.LibraryRequest
 import com.tyron.builder.gradle.internal.dsl.LanguageSplitOptions
+import com.tyron.builder.gradle.internal.packaging.JarCreatorType
 import com.tyron.builder.gradle.internal.scope.InternalArtifactType
 import com.tyron.builder.gradle.internal.services.BaseServices
+import com.tyron.builder.internal.packaging.ApkCreatorType
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.Directory
 import org.gradle.api.file.FileCollection
@@ -46,16 +49,16 @@ interface GlobalTaskCreationConfig: BootClasspathConfig {
 //    val deviceProviders: List<DeviceProvider>
     val externalNativeBuild: ExternalNativeBuild
     val installationOptions: Installation
-//    val libraryRequests: Collection<LibraryRequest>
+    val libraryRequests: Collection<LibraryRequest>
     val lintOptions: Lint
-//    val prefab: Set<PrefabPackagingOptions>
+    val prefab: Set<PrefabPackagingOptions>
     val resourcePrefix: String?
     val splits: Splits
     val testCoverage: TestCoverage
 //    val testOptions: TestOptions
 //    val testServers: List<TestServer>
 //    val transforms: List<Transform>
-    val transformsDependencies: List<List<Any>>
+//    val transformsDependencies: List<List<Any>>
 
     // processed access to some DSL values
 
@@ -64,7 +67,7 @@ interface GlobalTaskCreationConfig: BootClasspathConfig {
     val legacyLanguageSplitOptions: LanguageSplitOptions
 
     /** the same as [prefab] but returns an empty set on unsupported variants */
-//    val prefabOrEmpty: Set<PrefabPackagingOptions>
+    val prefabOrEmpty: Set<PrefabPackagingOptions>
 
     val hasNoBuildTypeMinified: Boolean
 
@@ -97,9 +100,9 @@ interface GlobalTaskCreationConfig: BootClasspathConfig {
     val lintPublish: Configuration
     val lintChecks: Configuration
 
-//    val jarCreatorType: JarCreatorType
+    val jarCreatorType: JarCreatorType
 
-//    val apkCreatorType: ApkCreatorType
+    val apkCreatorType: ApkCreatorType
 
     // Options from the settings plugin
 //    val settingsOptions: SettingsOptions

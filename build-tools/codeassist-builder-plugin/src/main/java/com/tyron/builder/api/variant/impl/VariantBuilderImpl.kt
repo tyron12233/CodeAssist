@@ -4,8 +4,8 @@ import com.tyron.builder.api.component.impl.ComponentBuilderImpl
 import com.tyron.builder.api.variant.AndroidVersion
 import com.tyron.builder.api.variant.ComponentIdentity
 import com.tyron.builder.api.variant.VariantBuilder
-import com.tyron.builder.gradle.internal.core.dsl.VariantDslInfo
 import com.tyron.builder.errors.IssueReporter
+import com.tyron.builder.gradle.internal.core.dsl.VariantDslInfo
 import com.tyron.builder.gradle.internal.services.VariantBuilderServices
 
 abstract class VariantBuilderImpl(
@@ -136,7 +136,7 @@ abstract class VariantBuilderImpl(
         newValue: Boolean,
         setter: (Boolean) -> Unit
     ) {
-        if (false) //dslInfo.postProcessingOptions.hasPostProcessingConfiguration())
+        if (dslInfo.postProcessingOptions.hasPostProcessingConfiguration())
             variantBuilderServices.issueReporter.reportWarning(
                 IssueReporter.Type.GENERIC,
                 "You cannot set $varName via Variant API as build uses postprocessing{...} " +

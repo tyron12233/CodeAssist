@@ -15,8 +15,8 @@ interface ApplicationExtension :
             ApplicationBuildType,
             ApplicationDefaultConfig,
             ApplicationProductFlavor>,
-    ApkExtension
-//    TestedExtension
+    ApkExtension,
+    TestedExtension
 {
     // TODO(b/140406102)
 

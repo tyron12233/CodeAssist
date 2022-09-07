@@ -19,6 +19,7 @@ import com.android.utils.XmlUtils;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.tyron.builder.common.utils.XmlUtilsWorkaround;
 import com.tyron.builder.ide.common.blame.parser.ParsingFailedException;
 import com.tyron.builder.ide.common.blame.parser.PatternAwareOutputParser;
 import com.tyron.builder.ide.common.blame.parser.util.OutputLineReader;
@@ -30,8 +31,8 @@ import java.net.MalformedURLException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
+import org.openjdk.javax.xml.parsers.SAXParser;
+import org.openjdk.javax.xml.parsers.SAXParserFactory;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.Locator;
@@ -389,8 +390,8 @@ public abstract class AbstractAaptOutputParser implements PatternAwareOutputPars
         SAXParserFactory factory = SAXParserFactory.newInstance();
         try {
             // Parse the input
-            XmlUtils.configureSaxFactory(factory, false, false);
-            SAXParser saxParser = XmlUtils.createSaxParser(factory);
+            XmlUtilsWorkaround.configureSaxFactory(factory, false, false);
+            SAXParser saxParser = XmlUtilsWorkaround.createSaxParser(factory);
             saxParser.parse(new InputSource(new StringReader(document.getContents())), handler);
         } catch (Throwable t) {
             // Ignore parser errors; we might have found the error position earlier than the parse

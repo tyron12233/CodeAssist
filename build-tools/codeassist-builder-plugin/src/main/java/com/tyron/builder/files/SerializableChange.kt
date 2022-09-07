@@ -1,9 +1,12 @@
+@file:JvmName("IncrementalChanges")
 package com.tyron.builder.files
 
+import com.android.ide.common.resources.FileStatus
+import com.android.tools.build.apkzlib.zip.compress.Zip64NotSupportedException
 import com.tyron.builder.files.IncrementalRelativeFileSets.fromZip
 import java.io.File
 import java.io.Serializable
-import java.util.Collections
+import java.util.*
 
 data class SerializableChange(
     val file: File,

@@ -1,33 +1,35 @@
 package com.tyron.builder.gradle.internal.tasks
 
+import com.android.SdkConstants
 import com.google.common.annotations.VisibleForTesting
 import com.google.common.base.Throwables
+import com.tyron.builder.api.artifact.MultipleArtifact
+import com.tyron.builder.api.transform.QualifiedContent
+import com.tyron.builder.api.variant.impl.getFeatureLevel
 import com.tyron.builder.dexing.*
-import com.tyron.builder.dexing.DexingType.*
+import com.tyron.builder.dexing.DexingType.LEGACY_MULTIDEX
+import com.tyron.builder.dexing.DexingType.NATIVE_MULTIDEX
 import com.tyron.builder.files.SerializableFileChanges
-import com.tyron.builder.gradle.internal.component.ApkCreationConfig
-import com.tyron.builder.gradle.internal.dependency.getDexingArtifactConfiguration
 import com.tyron.builder.gradle.errors.MessageReceiverImpl
+import com.tyron.builder.gradle.internal.component.ApkCreationConfig
+import com.tyron.builder.gradle.internal.dependency.AndroidAttributes
+import com.tyron.builder.gradle.internal.dependency.getDexingArtifactConfiguration
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
 import com.tyron.builder.gradle.internal.scope.InternalArtifactType
 import com.tyron.builder.gradle.internal.scope.InternalMultipleArtifactType
 import com.tyron.builder.gradle.internal.tasks.DexMergingAction.*
 import com.tyron.builder.gradle.internal.tasks.factory.VariantTaskCreationAction
+import com.tyron.builder.gradle.options.BooleanOption
+import com.tyron.builder.gradle.options.IntegerOption
+import com.tyron.builder.gradle.options.ProjectOptions
 import com.tyron.builder.internal.utils.setDisallowChanges
-import com.android.SdkConstants
 import com.tyron.builder.plugin.options.SyncOptions
 import com.tyron.builder.tasks.IncrementalTask
 import com.tyron.builder.tasks.toSerializable
-import org.gradle.api.Action
 import org.gradle.api.GradleException
-import org.gradle.api.Project
-import org.gradle.api.artifacts.ArtifactView
-import org.gradle.api.artifacts.ProjectDependency
-import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.file.*
 import org.gradle.api.logging.Logging
-import org.gradle.api.plugins.JavaPlugin
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
@@ -38,6 +40,7 @@ import org.gradle.workers.WorkAction
 import org.gradle.workers.WorkParameters
 import org.gradle.workers.WorkerExecutor
 import java.io.File
+import java.lang.Integer.max
 import java.lang.Integer.min
 import java.nio.file.Path
 import java.util.concurrent.ForkJoinPool
@@ -180,33 +183,24 @@ abstract class DexMergingTask : IncrementalTask() {
     }
 
     class CreationAction @JvmOverloads constructor(
-        c: ApkCreationConfig,
+        creationConfig: ApkCreationConfig,
         private val action: DexMergingAction,
         private val dexingType: DexingType,
         private val dexingUsingArtifactTransforms: Boolean = true,
         private val separateFileDependenciesDexingTask: Boolean = false,
         private val outputType: InternalMultipleArtifactType<Directory> = InternalMultipleArtifactType.DEX
-    ) : VariantTaskCreationAction<DexMergingTask, ApkCreationConfig>(c){
-
-        private class Test {
-            fun computeTaskName(name: String): String {
-                return name + "Debug"
-            }
-        }
-        private val config = Test()
-
-        override val type: Class<DexMergingTask>
-            get() = DexMergingTask::class.java
+    ) : VariantTaskCreationAction<DexMergingTask, ApkCreationConfig>(creationConfig) {
 
         private val internalName: String = when (action) {
-            MERGE_LIBRARY_PROJECTS -> config.computeTaskName("mergeLibDex")
-            MERGE_EXTERNAL_LIBS -> config.computeTaskName("mergeExtDex")
-            MERGE_PROJECT -> config.computeTaskName("mergeProjectDex")
-            MERGE_ALL -> config.computeTaskName("mergeDex")
-            MERGE_TRANSFORMED_CLASSES -> config.computeTaskName("mergeDex")
+            MERGE_LIBRARY_PROJECTS -> creationConfig.computeTaskName("mergeLibDex")
+            MERGE_EXTERNAL_LIBS -> creationConfig.computeTaskName("mergeExtDex")
+            MERGE_PROJECT -> creationConfig.computeTaskName("mergeProjectDex")
+            MERGE_ALL -> creationConfig.computeTaskName("mergeDex")
+            MERGE_TRANSFORMED_CLASSES -> creationConfig.computeTaskName("mergeDex")
         }
 
         override val name = internalName
+        override val type = DexMergingTask::class.java
 
         override fun handleProvider(taskProvider: TaskProvider<DexMergingTask>) {
             super.handleProvider(taskProvider)
@@ -216,7 +210,8 @@ abstract class DexMergingTask : IncrementalTask() {
                 .toAppendTo(outputType)
 
             if (dexingType === LEGACY_MULTIDEX) {
-                creationConfig.artifacts
+                creationConfig
+                    .artifacts
                     .setInitialProvider(taskProvider, DexMergingTask::mainDexListOutput)
                     .withName("mainDexList.txt")
                     .on(InternalArtifactType.LEGACY_MULTIDEX_MAIN_DEX_LIST)
@@ -226,25 +221,188 @@ abstract class DexMergingTask : IncrementalTask() {
         override fun configure(task: DexMergingTask) {
             super.configure(task)
 
+            val projectOptions = creationConfig.services.projectOptions
+
             // Shared parameters
             task.sharedParams.dexingType.setDisallowChanges(dexingType)
-            task.sharedParams.minSdkVersion.setDisallowChanges(creationConfig.minSdkVersion.apiLevel)
-            task.sharedParams.debuggable.setDisallowChanges(true)
-            task.sharedParams.errorFormatMode.setDisallowChanges(SyncOptions.ErrorFormatMode.HUMAN_READABLE)
+            task.sharedParams.minSdkVersion.setDisallowChanges(
+                creationConfig.minSdkVersionForDexing.getFeatureLevel()
+            )
+            task.sharedParams.debuggable.setDisallowChanges(creationConfig.debuggable)
+            task.sharedParams.errorFormatMode.setDisallowChanges(
+                SyncOptions.getErrorFormatMode(projectOptions)
+            )
+            if (dexingType === LEGACY_MULTIDEX) {
+                creationConfig.artifacts.setTaskInputToFinalProduct(
+                    InternalArtifactType.LEGACY_MULTIDEX_AAPT_DERIVED_PROGUARD_RULES,
+                    task.sharedParams.mainDexListConfig.aaptGeneratedRules
+                )
 
+                task.sharedParams.mainDexListConfig.userMultidexProguardRules.setDisallowChanges(
+                    creationConfig.artifacts.getAll(MultipleArtifact.MULTIDEX_KEEP_PROGUARD)
+                )
+
+                creationConfig.multiDexKeepFile?.let {
+                    task.sharedParams.mainDexListConfig.userMultidexKeepFile.setDisallowChanges(it)
+                }
+
+                task.sharedParams.mainDexListConfig.platformMultidexProguardRules
+                    .setDisallowChanges(getPlatformRules())
+
+                val libraryScopes = setOf(
+                    QualifiedContent.Scope.PROVIDED_ONLY,
+                    QualifiedContent.Scope.TESTED_CODE
+                )
+                val libraryClasses = creationConfig.transformManager
+                    .getPipelineOutputAsFileCollection { contentTypes, scopes ->
+                        contentTypes.contains(
+                            QualifiedContent.DefaultContentType.CLASSES
+                        ) && libraryScopes.intersect(scopes).isNotEmpty()
+                    }
+
+                val bootClasspath = creationConfig.global.bootClasspath
+                task.sharedParams.mainDexListConfig.libraryClasses
+                    .from(bootClasspath, libraryClasses).disallowChanges()
+            }
 
             // Input properties
             task.numberOfBuckets.setDisallowChanges(
-                task.project.providers.provider { getNumberOfBuckets(creationConfig.minSdkVersion.apiLevel) }
+                task.project.providers.provider { getNumberOfBuckets(projectOptions) }
             )
 
             // Input files
-            task.dexDirs = getDexDirs(task.project, action)
+            task.dexDirs = getDexDirs(creationConfig, action)
             if (separateFileDependenciesDexingTask) {
                 creationConfig.artifacts.setTaskInputToFinalProduct(
-                        InternalArtifactType.EXTERNAL_FILE_LIB_DEX_ARCHIVES,
-                        task.fileDependencyDexDir
-                    )
+                    InternalArtifactType.EXTERNAL_FILE_LIB_DEX_ARCHIVES,
+                    task.fileDependencyDexDir
+                )
+            }
+            if (projectOptions[BooleanOption.ENABLE_DUPLICATE_CLASSES_CHECK]) {
+                creationConfig.artifacts.setTaskInputToFinalProduct(
+                    InternalArtifactType.DUPLICATE_CLASSES_CHECK,
+                    task.duplicateClassesCheck
+                )
+            }
+        }
+
+        private fun getDexDirs(
+            creationConfig: ApkCreationConfig,
+            action: DexMergingAction
+        ): FileCollection {
+            val attributes = getDexingArtifactConfiguration(creationConfig).getAttributes()
+
+            fun forAction(action: DexMergingAction): FileCollection {
+                when (action) {
+                    MERGE_EXTERNAL_LIBS -> {
+                        return if (dexingUsingArtifactTransforms) {
+                            // If the file dependencies are being dexed in a task, don't also include them here
+                            val artifactScope: AndroidArtifacts.ArtifactScope =
+                                if (separateFileDependenciesDexingTask) {
+                                    AndroidArtifacts.ArtifactScope.REPOSITORY_MODULE
+                                } else {
+                                    AndroidArtifacts.ArtifactScope.EXTERNAL
+                                }
+                            creationConfig.variantDependencies.getArtifactFileCollection(
+                                AndroidArtifacts.ConsumedConfigType.RUNTIME_CLASSPATH,
+                                artifactScope,
+                                AndroidArtifacts.ArtifactType.DEX,
+                                attributes
+                            )
+                        } else {
+                            creationConfig.services.fileCollection(
+                                creationConfig.artifacts.get(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE),
+                                creationConfig.artifacts.get(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE_WITH_ARTIFACT_TRANSFORMS)
+                            )
+                        }
+                    }
+                    MERGE_LIBRARY_PROJECTS -> {
+                        return if (dexingUsingArtifactTransforms) {
+                            // For incremental dexing, when requesting DEX we will need to indicate
+                            // a preference for CLASSES_DIR over CLASSES_JAR, otherwise Gradle will
+                            // select CLASSES_JAR by default. We do that by adding the
+                            // LibraryElements.CLASSES attribute to the query.
+                            val classesLibraryElements =
+                                creationConfig.services.named(
+                                    LibraryElements::class.java,
+                                    LibraryElements.CLASSES
+                                )
+                            check(attributes.libraryElementsAttribute == null)
+                            val updatedAttributes = AndroidAttributes(
+                                attributes.stringAttributes, classesLibraryElements
+                            )
+                            creationConfig.variantDependencies.getArtifactFileCollection(
+                                AndroidArtifacts.ConsumedConfigType.RUNTIME_CLASSPATH,
+                                AndroidArtifacts.ArtifactScope.PROJECT,
+                                AndroidArtifacts.ArtifactType.DEX,
+                                updatedAttributes
+                            )
+                        } else {
+                            creationConfig.services.fileCollection(
+                                creationConfig.artifacts.get(InternalArtifactType.SUB_PROJECT_DEX_ARCHIVE)
+                            )
+                        }
+                    }
+                    MERGE_PROJECT -> {
+                        return creationConfig.services.fileCollection(
+                            creationConfig.artifacts.get(InternalArtifactType.PROJECT_DEX_ARCHIVE),
+                            creationConfig.artifacts.get(InternalArtifactType.MIXED_SCOPE_DEX_ARCHIVE)
+                        )
+                    }
+                    MERGE_ALL -> {
+                        // technically, the Provider<> may not be needed, but the code would
+                        // then assume that EXTERNAL_LIBS_DEX has already been registered by a
+                        // Producer. Better to execute as late as possible.
+                        return creationConfig.services.fileCollection(
+                            forAction(MERGE_PROJECT),
+                            forAction(MERGE_LIBRARY_PROJECTS),
+                            if (dexingType == LEGACY_MULTIDEX) {
+                                // we have to dex it
+                                forAction(MERGE_EXTERNAL_LIBS)
+                            } else {
+                                // we merge external dex in a separate task
+                                creationConfig.artifacts.getAll(InternalMultipleArtifactType.EXTERNAL_LIBS_DEX)
+                            }
+                        )
+                    }
+                    MERGE_TRANSFORMED_CLASSES -> {
+                        // when the variant API is used to transform ALL scoped classes, the
+                        // result transformed content is a single project scoped jar file that gets
+                        // dexed individually and registered under the project scope, while all
+                        // other sources like mixed scope and external scope are empty.
+                        return creationConfig.services.fileCollection(
+                            creationConfig.artifacts.get(InternalArtifactType.PROJECT_DEX_ARCHIVE),
+                        )
+                    }
+                }
+            }
+
+            return forAction(action)
+        }
+
+        private fun getNumberOfBuckets(projectOptions: ProjectOptions): Int {
+            return when (action) {
+                MERGE_ALL, MERGE_EXTERNAL_LIBS, MERGE_TRANSFORMED_CLASSES -> 1 // No bucketing
+                MERGE_PROJECT, MERGE_LIBRARY_PROJECTS -> {
+                    check(dexingType == NATIVE_MULTIDEX)
+
+                    val customNumberOfBuckets =
+                        projectOptions.getProvider(IntegerOption.DEXING_NUMBER_OF_BUCKETS).orNull
+                    if (customNumberOfBuckets != null) {
+                        check(customNumberOfBuckets >= 1) {
+                            "The value of ${IntegerOption.DEXING_NUMBER_OF_BUCKETS.propertyName}" +
+                                    " is invalid (must be >= 1): $customNumberOfBuckets"
+                        }
+                        return customNumberOfBuckets
+                    }
+
+                    // Deploy API is either the minSdkVersion or if deploying from the IDE, the API level of
+                    // the device we're deploying too.
+                    val targetDeployApi = creationConfig.minSdkVersionForDexing.getFeatureLevel()
+                    // We can be in native multidex mode while using 20- value for dexing
+                    val overrideMinSdkVersion = max(21, targetDeployApi)
+                    getNumberOfBuckets(minSdkVersion = overrideMinSdkVersion)
+                }
             }
         }
 
@@ -263,120 +421,6 @@ abstract class DexMergingTask : IncrementalTask() {
                 getMaxNumberOfBucketsBasedOnDexFileLimit(minSdkVersion),
                 getRecommendedNumberOfBucketsBasedOnWorkers()
             )
-        }
-
-        private fun getDexDirs(
-            project: Project,
-            action: DexMergingAction
-        ): FileCollection {
-            val attributes = getDexingArtifactConfiguration(creationConfig).getAttributes()
-
-            val artifacts = creationConfig.artifacts
-
-            fun forAction(action: DexMergingAction): FileCollection {
-                when (action) {
-                    MERGE_EXTERNAL_LIBS -> {
-                        return if (dexingUsingArtifactTransforms) {
-                            // If the file dependencies are being dexed in a task, don't also include them here
-                            val artifactScope: AndroidArtifacts.ArtifactScope =
-                                if (separateFileDependenciesDexingTask) {
-                                    AndroidArtifacts.ArtifactScope.REPOSITORY_MODULE
-                                } else {
-                                    AndroidArtifacts.ArtifactScope.EXTERNAL
-                                }
-
-                            val attributesAction =
-                                Action { container: AttributeContainer ->
-                                    container.attribute(AndroidArtifacts.ARTIFACT_TYPE, AndroidArtifacts.ArtifactType.DEX.type)
-                                    attributes.addAttributesToContainer(container)
-                                }
-                            val runtimeConfiguration = project.configurations.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)
-                            val detachedConfiguration = project.configurations.detachedConfiguration()
-                            val projectDependencies = runtimeConfiguration.allDependencies.filter{ it !is ProjectDependency}
-                            detachedConfiguration.dependencies.addAll(
-                                projectDependencies.map { project.dependencies.create(it) }
-                            )
-                            detachedConfiguration.incoming
-                                .artifactView{config: ArtifactView.ViewConfiguration ->
-                                    config.attributes(attributesAction)
-                                }.artifacts
-                                .artifactFiles
-                        } else {
-                            project.files(
-                                artifacts.get(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE),
-                                artifacts.get(InternalArtifactType.EXTERNAL_LIBS_DEX_ARCHIVE_WITH_ARTIFACT_TRANSFORMS)
-                            )
-                        }
-                    }
-                    MERGE_LIBRARY_PROJECTS -> {
-                        return if (dexingUsingArtifactTransforms) {
-                            // For incremental dexing, when requesting DEX we will need to indicate
-                            // a preference for CLASSES_DIR over CLASSES_JAR, otherwise Gradle will
-                            // select CLASSES_JAR by default. We do that by adding the
-                            // LibraryElements.CLASSES attribute to the query.
-                            val classesLibraryElements =
-                                project.objects.named(
-                                    LibraryElements::class.java,
-                                    LibraryElements.CLASSES
-                                )
-
-                            val runtimeConfiguration = project.configurations.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)
-                            val detachedConfiguration = project.configurations.detachedConfiguration()
-                            val projectDependencies = runtimeConfiguration.allDependencies.filterIsInstance<ProjectDependency>()
-                            detachedConfiguration.dependencies.addAll(
-                                projectDependencies.map { project.dependencies.create(it) }
-                            )
-                            detachedConfiguration.incoming
-                                .artifactView{config: ArtifactView.ViewConfiguration ->
-                                    config.attributes
-                                        .attribute(AndroidArtifacts.ARTIFACT_TYPE, AndroidArtifacts.ArtifactType.DEX.type)
-                                        .attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, classesLibraryElements)
-
-                                }.artifacts
-                                .artifactFiles
-                        } else {
-                            project.files(
-                                artifacts.get(InternalArtifactType.SUB_PROJECT_DEX_ARCHIVE)
-                            )
-                        }
-                    }
-                    MERGE_PROJECT -> {
-                        return project.files(
-                            artifacts.get(InternalArtifactType.PROJECT_DEX_ARCHIVE),
-                            artifacts.get(InternalArtifactType.MIXED_SCOPE_DEX_ARCHIVE)
-                        )
-                    }
-                    MERGE_ALL -> {
-                        // technically, the Provider<> may not be needed, but the code would
-                        // then assume that EXTERNAL_LIBS_DEX has already been registered by a
-                        // Producer. Better to execute as late as possible.
-                        val p = project
-                        return project.objects.fileCollection().from(
-                            forAction(MERGE_PROJECT),
-                            forAction(MERGE_LIBRARY_PROJECTS),
-//                            if (dexingType == LEGACY_MULTIDEX) {
-//                                // we have to dex it
-//                                forAction(MERGE_EXTERNAL_LIBS)
-//                            } else {
-//                                // we merge external dex in a separate task
-//                                artifacts.getAll(InternalMultipleArtifactType.EXTERNAL_LIBS_DEX)
-//                            }
-                            forAction(MERGE_EXTERNAL_LIBS)
-                        )
-                    }
-                    MERGE_TRANSFORMED_CLASSES -> {
-                        // when the variant API is used to transform ALL scoped classes, the
-                        // result transformed content is a single project scoped jar file that gets
-                        // dexed individually and registered under the project scope, while all
-                        // other sources like mixed scope and external scope are empty.
-                        return project.files(
-                            artifacts.get(InternalArtifactType.PROJECT_DEX_ARCHIVE),
-                        )
-                    }
-                }
-            }
-
-            return forAction(action)
         }
 
         /**

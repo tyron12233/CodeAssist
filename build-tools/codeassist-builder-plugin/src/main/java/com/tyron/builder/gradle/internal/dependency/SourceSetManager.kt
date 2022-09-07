@@ -1,7 +1,7 @@
 package com.tyron.builder.gradle.internal.dependency
 
-import com.tyron.builder.api.dsl.AndroidSourceSet
 import com.tyron.builder.errors.IssueReporter
+import com.tyron.builder.gradle.api.AndroidSourceSet
 import com.tyron.builder.gradle.internal.dsl.AndroidSourceSetFactory
 import com.tyron.builder.gradle.internal.scope.DelayedActionsExecutor
 import com.tyron.builder.gradle.internal.services.DslServices
@@ -17,12 +17,10 @@ class SourceSetManager(
     project: Project,
     private val publishPackage: Boolean,
     private val dslServices : DslServices,
-    private val buildArtifactActions: DelayedActionsExecutor
-) {
+    private val buildArtifactActions: DelayedActionsExecutor) {
     val sourceSetsContainer: NamedDomainObjectContainer<AndroidSourceSet> = project.container(
-            AndroidSourceSet::class.java,
-            AndroidSourceSetFactory(project, publishPackage, dslServices)
-    )
+        AndroidSourceSet::class.java,
+        AndroidSourceSetFactory(project, publishPackage, dslServices))
     private val configurations: ConfigurationContainer = project.configurations
     private val logger: Logger = Logging.getLogger(this.javaClass)
 
@@ -43,7 +41,7 @@ class SourceSetManager(
     }
 
     private fun createConfigurationsForSourceSet(
-            sourceSet: AndroidSourceSet, isTestComponent: Boolean) {
+        sourceSet: AndroidSourceSet, isTestComponent: Boolean) {
         val apiName = sourceSet.apiConfigurationName
         val implementationName = sourceSet.implementationConfigurationName
         val runtimeOnlyName = sourceSet.runtimeOnlyConfigurationName
@@ -56,8 +54,8 @@ class SourceSetManager(
         }
 
         val implementation = createConfiguration(
-                implementationName,
-                getConfigDesc("Implementation only", sourceSet.name))
+            implementationName,
+            getConfigDesc("Implementation only", sourceSet.name))
         api?.let {
             implementation.extendsFrom(it)
         }
@@ -67,12 +65,12 @@ class SourceSetManager(
 
         // then the secondary configurations.
         createConfiguration(
-                sourceSet.wearAppConfigurationName,
-                "Link to a wear app to embed for object '" + sourceSet.name + "'.")
+            sourceSet.wearAppConfigurationName,
+            "Link to a wear app to embed for object '" + sourceSet.name + "'.")
 
         createConfiguration(
-                sourceSet.annotationProcessorConfigurationName,
-                "Classpath for the annotation processor for '" + sourceSet.name + "'.")
+            sourceSet.annotationProcessorConfigurationName,
+            "Classpath for the annotation processor for '" + sourceSet.name + "'.")
     }
 
     /**
@@ -85,7 +83,7 @@ class SourceSetManager(
      * @see Configuration.isCanBeResolved
      */
     private fun createConfiguration(
-            name: String, description: String, canBeResolved: Boolean = false): Configuration {
+        name: String, description: String, canBeResolved: Boolean = false): Configuration {
         logger.debug("Creating configuration {}", name)
 
         val configuration = configurations.maybeCreate(name)

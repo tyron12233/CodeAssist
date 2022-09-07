@@ -1,7 +1,10 @@
 package com.tyron.builder.gradle.internal.tasks.factory
 
 import com.tyron.builder.gradle.internal.component.ComponentCreationConfig
+import com.tyron.builder.gradle.internal.scope.MutableTaskContainer
 import com.tyron.builder.gradle.internal.tasks.VariantAwareTask
+import com.tyron.builder.gradle.internal.tasks.configureVariantProperties
+import com.tyron.builder.internal.utils.setDisallowChanges
 import com.tyron.builder.tasks.BaseTask
 import org.gradle.api.Task
 import org.gradle.api.tasks.TaskProvider
@@ -63,18 +66,18 @@ abstract class VariantTaskCreationAction<TaskT, CreationConfigT: ComponentCreati
     }
 
     override fun configure(task: TaskT) {
-//        if (dependsOnPreBuildTask) {
-//            val taskContainer: MutableTaskContainer = creationConfig.taskContainer
-//            task.dependsOn(taskContainer.preBuildTask)
-//        }
-//
-//        task.configureVariantProperties(
-//            creationConfig.name,
-//            creationConfig.services.buildServiceRegistry
-//        )
-//        if (task is BaseTask) {
-//            task.projectPath.setDisallowChanges(creationConfig.services.projectInfo.path)
-//        }
+        if (dependsOnPreBuildTask) {
+            val taskContainer: MutableTaskContainer = creationConfig.taskContainer
+            task.dependsOn(taskContainer.preBuildTask)
+        }
+
+        task.configureVariantProperties(
+            creationConfig.name,
+            creationConfig.services.buildServiceRegistry
+        )
+        if (task is BaseTask) {
+            task.projectPath.setDisallowChanges(creationConfig.services.projectInfo.path)
+        }
     }
 }
 
