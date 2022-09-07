@@ -110,7 +110,6 @@ abstract class TaskManager<VariantBuilderT : VariantBuilder, VariantT : VariantC
         // Create tasks to manage test devices.
         createTestDevicesTasks()
 
-        println("Variants: " + variants)
         // Create tasks for all variants (main, testFixtures and tests)
         for (variant in variants) {
             createTasksForVariant(variant)
