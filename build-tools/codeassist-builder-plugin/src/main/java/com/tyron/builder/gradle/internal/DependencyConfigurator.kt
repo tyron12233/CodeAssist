@@ -12,6 +12,8 @@ import com.tyron.builder.gradle.internal.dependency.*
 import com.tyron.builder.gradle.internal.dependency.ModelArtifactCompatibilityRule.Companion.setUp
 import com.tyron.builder.gradle.internal.dsl.*
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts
+import com.tyron.builder.gradle.internal.res.namespaced.AutoNamespacePreProcessTransform
+import com.tyron.builder.gradle.internal.res.namespaced.AutoNamespaceTransform
 import com.tyron.builder.gradle.internal.services.ProjectServices
 import com.tyron.builder.gradle.internal.tasks.factory.BootClasspathConfig
 import com.tyron.builder.gradle.internal.utils.getDesugarLibConfig
@@ -287,35 +289,35 @@ class DependencyConfigurator(
                 AndroidArtifacts.ArtifactType.UNFILTERED_PROGUARD_RULES
             )
         }
-//        registerTransform(
-//            LibrarySymbolTableTransform::class.java,
-//            AndroidArtifacts.ArtifactType.EXPLODED_AAR,
-//            AndroidArtifacts.ArtifactType.SYMBOL_LIST_WITH_PACKAGE_NAME
-//        )
-//        if (autoNamespaceDependencies) {
-//            registerTransform(
-//                AutoNamespacePreProcessTransform::class.java,
-//                AndroidArtifacts.ArtifactType.MAYBE_NON_NAMESPACED_PROCESSED_AAR,
-//                AndroidArtifacts.ArtifactType.PREPROCESSED_AAR_FOR_AUTO_NAMESPACE
-//            ) { params ->
-//                projectServices.initializeAapt2Input(params.aapt2)
-//            }
-//            registerTransform(
-//                AutoNamespacePreProcessTransform::class.java,
-//                AndroidArtifacts.ArtifactType.JAR,
-//                AndroidArtifacts.ArtifactType.PREPROCESSED_AAR_FOR_AUTO_NAMESPACE
-//            ) { params ->
-//                projectServices.initializeAapt2Input(params.aapt2)
-//            }
-//
-//            registerTransform(
-//                AutoNamespaceTransform::class.java,
-//                AndroidArtifacts.ArtifactType.PREPROCESSED_AAR_FOR_AUTO_NAMESPACE,
-//                AndroidArtifacts.ArtifactType.PROCESSED_AAR
-//            ) { params ->
-//                projectServices.initializeAapt2Input(params.aapt2)
-//            }
-//        }
+        registerTransform(
+            LibrarySymbolTableTransform::class.java,
+            AndroidArtifacts.ArtifactType.EXPLODED_AAR,
+            AndroidArtifacts.ArtifactType.SYMBOL_LIST_WITH_PACKAGE_NAME
+        )
+        if (autoNamespaceDependencies) {
+            registerTransform(
+                AutoNamespacePreProcessTransform::class.java,
+                AndroidArtifacts.ArtifactType.MAYBE_NON_NAMESPACED_PROCESSED_AAR,
+                AndroidArtifacts.ArtifactType.PREPROCESSED_AAR_FOR_AUTO_NAMESPACE
+            ) { params ->
+                projectServices.initializeAapt2Input(params.aapt2)
+            }
+            registerTransform(
+                AutoNamespacePreProcessTransform::class.java,
+                AndroidArtifacts.ArtifactType.JAR,
+                AndroidArtifacts.ArtifactType.PREPROCESSED_AAR_FOR_AUTO_NAMESPACE
+            ) { params ->
+                projectServices.initializeAapt2Input(params.aapt2)
+            }
+
+            registerTransform(
+                AutoNamespaceTransform::class.java,
+                AndroidArtifacts.ArtifactType.PREPROCESSED_AAR_FOR_AUTO_NAMESPACE,
+                AndroidArtifacts.ArtifactType.PROCESSED_AAR
+            ) { params ->
+                projectServices.initializeAapt2Input(params.aapt2)
+            }
+        }
         // Transform to go from external jars to CLASSES and JAVA_RES artifacts. This returns the
         // same exact file but with different types, since a jar file can contain both.
         for (classesOrResources in arrayOf(
@@ -328,11 +330,11 @@ class DependencyConfigurator(
                 classesOrResources
             )
         }
-//        registerTransform(
-//            ExtractJniTransform::class.java,
-//            AndroidArtifacts.ArtifactType.PROCESSED_JAR,
-//            AndroidArtifacts.ArtifactType.JNI
-//        )
+        registerTransform(
+            ExtractJniTransform::class.java,
+            AndroidArtifacts.ArtifactType.PROCESSED_JAR,
+            AndroidArtifacts.ArtifactType.JNI
+        )
         // The Kotlin Kapt plugin should query for PROCESSED_JAR, but it is currently querying for
         // JAR, so we need to have the workaround below to make it get PROCESSED_JAR. See
         // http://issuetracker.google.com/111009645.
@@ -371,16 +373,16 @@ class DependencyConfigurator(
             params.acceptNonExistentInputFile.setDisallowChanges(true)
         }
 
-//        registerTransform(
-//            CollectResourceSymbolsTransform::class.java,
-//            AndroidArtifacts.ArtifactType.ANDROID_RES.type,
-//            AndroidArtifacts.ArtifactType.ANDROID_RES_SYMBOLS.type
-//        )
-//        registerTransform(
-//            CollectClassesTransform::class.java,
-//            AndroidArtifacts.ArtifactType.CLASSES_JAR,
-//            AndroidArtifacts.ArtifactType.JAR_CLASS_LIST
-//        )
+        registerTransform(
+            CollectResourceSymbolsTransform::class.java,
+            AndroidArtifacts.ArtifactType.ANDROID_RES.type,
+            AndroidArtifacts.ArtifactType.ANDROID_RES_SYMBOLS.type
+        )
+        registerTransform(
+            CollectClassesTransform::class.java,
+            AndroidArtifacts.ArtifactType.CLASSES_JAR,
+            AndroidArtifacts.ArtifactType.JAR_CLASS_LIST
+        )
 
 
         if (projectOptions.get(BooleanOption.PRIVACY_SANDBOX_SDK_SUPPORT)) {
@@ -644,24 +646,24 @@ class DependencyConfigurator(
         }
         if (projectOptions[BooleanOption.ENABLE_PROGUARD_RULES_EXTRACTION]
             && allComponents.any { it is ConsumableCreationConfig && it.minifiedEnabled }) {
-//            dependencies.registerTransform(
-//                FilterShrinkerRulesTransform::class.java
-//            ) { reg: TransformSpec<FilterShrinkerRulesTransform.Parameters> ->
-//                reg.from
-//                    .attribute(
-//                        ArtifactAttributes.ARTIFACT_FORMAT,
-//                        AndroidArtifacts.ArtifactType.UNFILTERED_PROGUARD_RULES.type
-//                    )
-//                reg.to
-//                    .attribute(
-//                        ArtifactAttributes.ARTIFACT_FORMAT,
-//                        AndroidArtifacts.ArtifactType.FILTERED_PROGUARD_RULES.type
-//                    )
-//                reg.parameters { params: FilterShrinkerRulesTransform.Parameters ->
-//                    params.shrinker.set(VersionedCodeShrinker.create())
-//                    params.projectName.set(project.name)
-//                }
-//            }
+            dependencies.registerTransform(
+                FilterShrinkerRulesTransform::class.java
+            ) { reg: TransformSpec<FilterShrinkerRulesTransform.Parameters> ->
+                reg.from
+                    .attribute(
+                        ArtifactAttributes.ARTIFACT_FORMAT,
+                        AndroidArtifacts.ArtifactType.UNFILTERED_PROGUARD_RULES.type
+                    )
+                reg.to
+                    .attribute(
+                        ArtifactAttributes.ARTIFACT_FORMAT,
+                        AndroidArtifacts.ArtifactType.FILTERED_PROGUARD_RULES.type
+                    )
+                reg.parameters { params: FilterShrinkerRulesTransform.Parameters ->
+                    params.shrinker.set(VersionedCodeShrinker.create())
+                    params.projectName.set(project.name)
+                }
+            }
         }
 
         if (projectOptions[BooleanOption.ENABLE_DUPLICATE_CLASSES_CHECK]) {
