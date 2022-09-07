@@ -34,6 +34,7 @@ public class GradleDaemonService extends Service {
     private boolean daemonStarted = false;
 
     public GradleDaemonService() {
+
     }
 
     @Override
@@ -51,6 +52,9 @@ public class GradleDaemonService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Notification notification = setupNotification();
+        startForeground(201, notification);
+
         if (ACTION_STOP_DAEMON.equals(intent.getAction())) {
             System.out.println("User has requested to stop the daemon service.");
             System.exit(0);
@@ -76,9 +80,6 @@ public class GradleDaemonService extends Service {
                                Throwables.getStackTraceAsString(e));
             System.exit(1);
         }
-
-        Notification notification = setupNotification();
-        startForeground(201, notification);
 
         if (!daemonStarted) {
             new Thread(() -> {

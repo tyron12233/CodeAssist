@@ -218,6 +218,6 @@ public class ApplicationLoader extends Application {
         Intent intent = new Intent(applicationContext, GradleDaemonService.class);
         intent.putExtra("dir", dir.toString());
 
-        applicationContext.startForegroundService(intent);
+        applicationContext.startService(intent);
     }
 }
