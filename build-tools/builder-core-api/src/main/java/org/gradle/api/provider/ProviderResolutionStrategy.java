@@ -1,5 +1,6 @@
 package org.gradle.api.provider;
 
+import org.gradle.api.GradleException;
 import org.jetbrains.annotations.Nullable;
 
 public enum ProviderResolutionStrategy {
@@ -12,6 +13,9 @@ public enum ProviderResolutionStrategy {
     REQUIRE_PRESENT {
         @Override
         public <T> T resolve(Provider<T> provider) {
+            if (!provider.isPresent()) {
+                throw new GradleException("Provider is empty: " + provider + " " + provider.getClass());
+            }
             return provider.get();
         }
     };

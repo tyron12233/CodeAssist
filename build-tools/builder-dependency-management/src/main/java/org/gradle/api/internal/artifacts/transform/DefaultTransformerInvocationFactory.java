@@ -17,6 +17,9 @@
 package org.gradle.api.internal.artifacts.transform;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.hash.HashCode;
+import com.google.common.hash.Hasher;
+
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.file.FileSystemLocation;
@@ -40,8 +43,6 @@ import org.gradle.internal.execution.history.changes.InputChangesInternal;
 import org.gradle.internal.execution.workspace.WorkspaceProvider;
 import org.gradle.internal.fingerprint.AbsolutePathInputNormalizer;
 import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
-import com.google.common.hash.HashCode;
-import com.google.common.hash.Hasher;
 import org.gradle.internal.hash.Hashes;
 import org.gradle.internal.operations.BuildOperationContext;
 import org.gradle.internal.operations.BuildOperationDescriptor;
@@ -86,13 +87,13 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
     private final BuildOperationExecutor buildOperationExecutor;
 
     public DefaultTransformerInvocationFactory(
-        ExecutionEngine executionEngine,
-        FileSystemAccess fileSystemAccess,
-        ArtifactTransformListener artifactTransformListener,
-        TransformationWorkspaceServices immutableWorkspaceProvider,
-        FileCollectionFactory fileCollectionFactory,
-        ProjectStateRegistry projectStateRegistry,
-        BuildOperationExecutor buildOperationExecutor
+            ExecutionEngine executionEngine,
+            FileSystemAccess fileSystemAccess,
+            ArtifactTransformListener artifactTransformListener,
+            TransformationWorkspaceServices immutableWorkspaceProvider,
+            FileCollectionFactory fileCollectionFactory,
+            ProjectStateRegistry projectStateRegistry,
+            BuildOperationExecutor buildOperationExecutor
     ) {
         this.executionEngine = executionEngine;
         this.fileSystemAccess = fileSystemAccess;
@@ -105,11 +106,11 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
 
     @Override
     public CacheableInvocation<ImmutableList<File>> createInvocation(
-        Transformer transformer,
-        File inputArtifact,
-        ArtifactTransformDependencies dependencies,
-        TransformationSubject subject,
-        InputFingerprinter inputFingerprinter
+            Transformer transformer,
+            File inputArtifact,
+            ArtifactTransformDependencies dependencies,
+            TransformationSubject subject,
+            InputFingerprinter inputFingerprinter
     ) {
         ProjectInternal producerProject = determineProducerProject(subject);
         TransformationWorkspaceServices workspaceServices = determineWorkspaceServices(producerProject);
@@ -117,49 +118,49 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
         UnitOfWork execution;
         if (producerProject == null) {
             execution = new ImmutableTransformerExecution(
-                transformer,
-                inputArtifact,
-                dependencies,
-                buildOperationExecutor,
-                fileCollectionFactory,
-                inputFingerprinter,
-                fileSystemAccess,
-                workspaceServices
+                    transformer,
+                    inputArtifact,
+                    dependencies,
+                    buildOperationExecutor,
+                    fileCollectionFactory,
+                    inputFingerprinter,
+                    fileSystemAccess,
+                    workspaceServices
             );
         } else {
             execution = new MutableTransformerExecution(
-                transformer,
-                inputArtifact,
-                dependencies,
-                buildOperationExecutor,
-                fileCollectionFactory,
-                inputFingerprinter,
-                workspaceServices
+                    transformer,
+                    inputArtifact,
+                    dependencies,
+                    buildOperationExecutor,
+                    fileCollectionFactory,
+                    inputFingerprinter,
+                    workspaceServices
             );
         }
 
         return executionEngine.createRequest(execution)
-            .withIdentityCache(workspaceServices.getIdentityCache())
-            .getOrDeferExecution(new DeferredExecutionHandler<TransformationResult, CacheableInvocation<ImmutableList<File>>>() {
-                @Override
-                public CacheableInvocation<ImmutableList<File>> processCachedOutput(Try<TransformationResult> cachedOutput) {
-                    return CacheableInvocation.cached(mapResult(cachedOutput));
-                }
+                .withIdentityCache(workspaceServices.getIdentityCache())
+                .getOrDeferExecution(new DeferredExecutionHandler<TransformationResult, CacheableInvocation<ImmutableList<File>>>() {
+                    @Override
+                    public CacheableInvocation<ImmutableList<File>> processCachedOutput(Try<TransformationResult> cachedOutput) {
+                        return CacheableInvocation.cached(mapResult(cachedOutput));
+                    }
 
-                @Override
-                public CacheableInvocation<ImmutableList<File>> processDeferredOutput(Supplier<Try<TransformationResult>> deferredExecution) {
-                    return CacheableInvocation.nonCached(() ->
-                        fireTransformListeners(transformer, subject, () ->
-                            mapResult(deferredExecution.get())));
-                }
+                    @Override
+                    public CacheableInvocation<ImmutableList<File>> processDeferredOutput(Supplier<Try<TransformationResult>> deferredExecution) {
+                        return CacheableInvocation.nonCached(() ->
+                                fireTransformListeners(transformer, subject, () ->
+                                        mapResult(deferredExecution.get())));
+                    }
 
-                @Nonnull
-                private Try<ImmutableList<File>> mapResult(Try<TransformationResult> cachedOutput) {
-                    return cachedOutput
-                        .map(result -> result.resolveOutputsForInputArtifact(inputArtifact))
-                        .mapFailure(failure -> new TransformException(String.format("Execution failed for %s.", execution.getDisplayName()), failure));
-                }
-            });
+                    @Nonnull
+                    private Try<ImmutableList<File>> mapResult(Try<TransformationResult> cachedOutput) {
+                        return cachedOutput
+                                .map(result -> result.resolveOutputsForInputArtifact(inputArtifact))
+                                .mapFailure(failure -> new TransformException(String.format("Execution failed for %s.", execution.getDisplayName()), failure));
+                    }
+                });
     }
 
     private TransformationWorkspaceServices determineWorkspaceServices(@Nullable ProjectInternal producerProject) {
@@ -192,14 +193,14 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
         private final FileSystemAccess fileSystemAccess;
 
         public ImmutableTransformerExecution(
-            Transformer transformer,
-            File inputArtifact,
-            ArtifactTransformDependencies dependencies,
-            BuildOperationExecutor buildOperationExecutor,
-            FileCollectionFactory fileCollectionFactory,
-            InputFingerprinter inputFingerprinter,
-            FileSystemAccess fileSystemAccess,
-            TransformationWorkspaceServices workspaceServices
+                Transformer transformer,
+                File inputArtifact,
+                ArtifactTransformDependencies dependencies,
+                BuildOperationExecutor buildOperationExecutor,
+                FileCollectionFactory fileCollectionFactory,
+                InputFingerprinter inputFingerprinter,
+                FileSystemAccess fileSystemAccess,
+                TransformationWorkspaceServices workspaceServices
         ) {
             super(transformer, inputArtifact, dependencies, buildOperationExecutor, fileCollectionFactory, inputFingerprinter, workspaceServices);
             this.fileSystemAccess = fileSystemAccess;
@@ -217,23 +218,23 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
         @Override
         public Identity identify(Map<String, ValueSnapshot> identityInputs, Map<String, CurrentFileCollectionFingerprint> identityFileInputs) {
             return new ImmutableTransformationWorkspaceIdentity(
-                identityInputs.get(INPUT_ARTIFACT_PATH_PROPERTY_NAME),
-                identityInputs.get(INPUT_ARTIFACT_SNAPSHOT_PROPERTY_NAME),
-                identityInputs.get(SECONDARY_INPUTS_HASH_PROPERTY_NAME),
-                identityFileInputs.get(DEPENDENCIES_PROPERTY_NAME).getHash()
+                    identityInputs.get(INPUT_ARTIFACT_PATH_PROPERTY_NAME),
+                    identityInputs.get(INPUT_ARTIFACT_SNAPSHOT_PROPERTY_NAME),
+                    identityInputs.get(SECONDARY_INPUTS_HASH_PROPERTY_NAME),
+                    identityFileInputs.get(DEPENDENCIES_PROPERTY_NAME).getHash()
             );
         }
     }
 
     private static class MutableTransformerExecution extends AbstractTransformerExecution {
         public MutableTransformerExecution(
-            Transformer transformer,
-            File inputArtifact,
-            ArtifactTransformDependencies dependencies,
-            BuildOperationExecutor buildOperationExecutor,
-            FileCollectionFactory fileCollectionFactory,
-            InputFingerprinter inputFingerprinter,
-            TransformationWorkspaceServices workspaceServices
+                Transformer transformer,
+                File inputArtifact,
+                ArtifactTransformDependencies dependencies,
+                BuildOperationExecutor buildOperationExecutor,
+                FileCollectionFactory fileCollectionFactory,
+                InputFingerprinter inputFingerprinter,
+                TransformationWorkspaceServices workspaceServices
         ) {
             super(transformer, inputArtifact, dependencies, buildOperationExecutor, fileCollectionFactory, inputFingerprinter, workspaceServices);
         }
@@ -241,9 +242,9 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
         @Override
         public Identity identify(Map<String, ValueSnapshot> identityInputs, Map<String, CurrentFileCollectionFingerprint> identityFileInputs) {
             return new MutableTransformationWorkspaceIdentity(
-                inputArtifact.getAbsolutePath(),
-                identityInputs.get(SECONDARY_INPUTS_HASH_PROPERTY_NAME),
-                identityFileInputs.get(DEPENDENCIES_PROPERTY_NAME).getHash()
+                    inputArtifact.getAbsolutePath(),
+                    identityInputs.get(SECONDARY_INPUTS_HASH_PROPERTY_NAME),
+                    identityFileInputs.get(DEPENDENCIES_PROPERTY_NAME).getHash()
             );
         }
     }
@@ -261,14 +262,14 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
         private final TransformationWorkspaceServices workspaceServices;
 
         public AbstractTransformerExecution(
-            Transformer transformer,
-            File inputArtifact,
-            ArtifactTransformDependencies dependencies,
+                Transformer transformer,
+                File inputArtifact,
+                ArtifactTransformDependencies dependencies,
 
-            BuildOperationExecutor buildOperationExecutor,
-            FileCollectionFactory fileCollectionFactory,
-            InputFingerprinter inputFingerprinter,
-            TransformationWorkspaceServices workspaceServices
+                BuildOperationExecutor buildOperationExecutor,
+                FileCollectionFactory fileCollectionFactory,
+                InputFingerprinter inputFingerprinter,
+                TransformationWorkspaceServices workspaceServices
         ) {
             this.transformer = transformer;
             this.inputArtifact = inputArtifact;
@@ -288,16 +289,17 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
                 public TransformationResult call(BuildOperationContext context) {
                     File workspace = executionRequest.getWorkspace();
                     InputChangesInternal inputChanges = executionRequest.getInputChanges().orElse(null);
-                    ImmutableList<File> result = transformer.transform(inputArtifactProvider, getOutputDir(workspace), dependencies, inputChanges);
-                    TransformationResultSerializer resultSerializer = new TransformationResultSerializer(inputArtifact, getOutputDir(workspace));
-                    return resultSerializer.writeToFile(getResultsFile(workspace), result);
+                    TransformationResult result = transformer.transform(inputArtifactProvider, getOutputDir(workspace), dependencies, inputChanges);
+                    TransformationResultSerializer resultSerializer = new TransformationResultSerializer(getOutputDir(workspace));
+                    resultSerializer.writeToFile(getResultsFile(workspace), result);
+                    return result;
                 }
 
                 @Override
                 public BuildOperationDescriptor.Builder description() {
                     String displayName = transformer.getDisplayName() + " " + inputArtifact.getName();
                     return BuildOperationDescriptor.displayName(displayName)
-                        .progressDisplayName(displayName);
+                            .progressDisplayName(displayName);
                 }
             });
 
@@ -316,7 +318,7 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
 
         @Override
         public Object loadRestoredOutput(File workspace) {
-            TransformationResultSerializer resultSerializer = new TransformationResultSerializer(inputArtifact, getOutputDir(workspace));
+            TransformationResultSerializer resultSerializer = new TransformationResultSerializer(getOutputDir(workspace));
             return resultSerializer.readResultsFile(getResultsFile(workspace));
         }
 
@@ -359,33 +361,33 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
             // Emulate secondary inputs as a single property for now
             visitor.visitInputProperty(SECONDARY_INPUTS_HASH_PROPERTY_NAME, transformer::getSecondaryInputHash);
             visitor.visitInputProperty(INPUT_ARTIFACT_PATH_PROPERTY_NAME, () ->
-                // We always need the name as an input to the artifact transform,
-                // since it is part of the ComponentArtifactIdentifier returned by the transform.
-                // For absolute paths, the name is already part of the normalized path,
-                // and for all the other normalization strategies we use the name directly.
-                transformer.getInputArtifactNormalizer().equals(AbsolutePathInputNormalizer.class)
-                    ? inputArtifact.getAbsolutePath()
-                    : inputArtifact.getName());
+                    // We always need the name as an input to the artifact transform,
+                    // since it is part of the ComponentArtifactIdentifier returned by the transform.
+                    // For absolute paths, the name is already part of the normalized path,
+                    // and for all the other normalization strategies we use the name directly.
+                    transformer.getInputArtifactNormalizer().equals(AbsolutePathInputNormalizer.class)
+                            ? inputArtifact.getAbsolutePath()
+                            : inputArtifact.getName());
             visitor.visitInputFileProperty(DEPENDENCIES_PROPERTY_NAME, NON_INCREMENTAL,
-                new FileValueSupplier(
-                    dependencies,
-                    transformer.getInputArtifactDependenciesNormalizer(),
-                    transformer.getInputArtifactDependenciesDirectorySensitivity(),
-                    transformer.getInputArtifactDependenciesLineEndingNormalization(),
-                    () -> dependencies.getFiles()
-                        .orElse(fileCollectionFactory.empty())));
+                    new FileValueSupplier(
+                            dependencies,
+                            transformer.getInputArtifactDependenciesNormalizer(),
+                            transformer.getInputArtifactDependenciesDirectorySensitivity(),
+                            transformer.getInputArtifactDependenciesLineEndingNormalization(),
+                            () -> dependencies.getFiles()
+                                    .orElse(fileCollectionFactory.empty())));
         }
 
         @Override
         @OverridingMethodsMustInvokeSuper
         public void visitRegularInputs(InputVisitor visitor) {
             visitor.visitInputFileProperty(INPUT_ARTIFACT_PROPERTY_NAME, INCREMENTAL,
-                new FileValueSupplier(
-                    inputArtifactProvider,
-                    transformer.getInputArtifactNormalizer(),
-                    transformer.getInputArtifactDirectorySensitivity(),
-                    transformer.getInputArtifactLineEndingNormalization(),
-                    () -> fileCollectionFactory.fixed(inputArtifact)));
+                    new FileValueSupplier(
+                            inputArtifactProvider,
+                            transformer.getInputArtifactNormalizer(),
+                            transformer.getInputArtifactDirectorySensitivity(),
+                            transformer.getInputArtifactLineEndingNormalization(),
+                            () -> fileCollectionFactory.fixed(inputArtifact)));
         }
 
         @Override
@@ -393,18 +395,18 @@ public class DefaultTransformerInvocationFactory implements TransformerInvocatio
             File outputDir = getOutputDir(workspace);
             File resultsFile = getResultsFile(workspace);
             visitor.visitOutputProperty(OUTPUT_DIRECTORY_PROPERTY_NAME, DIRECTORY,
-                outputDir,
-                fileCollectionFactory.fixed(outputDir));
+                    outputDir,
+                    fileCollectionFactory.fixed(outputDir));
             visitor.visitOutputProperty(RESULTS_FILE_PROPERTY_NAME, FILE,
-                resultsFile,
-                fileCollectionFactory.fixed(resultsFile));
+                    resultsFile,
+                    fileCollectionFactory.fixed(resultsFile));
         }
 
         @Override
         public Optional<CachingDisabledReason> shouldDisableCaching(@Nullable OverlappingOutputs detectedOverlappingOutputs) {
             return transformer.isCacheable()
-                ? Optional.empty()
-                : Optional.of(NOT_CACHEABLE);
+                    ? Optional.empty()
+                    : Optional.of(NOT_CACHEABLE);
         }
 
         @Override

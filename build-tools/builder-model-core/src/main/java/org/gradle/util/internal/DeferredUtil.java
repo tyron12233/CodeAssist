@@ -1,13 +1,13 @@
 package org.gradle.util.internal;
 
-import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderResolutionStrategy;
+import org.gradle.api.provider.Provider;
 import org.gradle.internal.Factory;
-import org.gradle.util.GUtil;
 
-import org.jetbrains.annotations.Nullable;
-
+import javax.annotation.Nullable;
 import java.util.concurrent.Callable;
+
+import static org.gradle.util.GUtil.uncheckedCall;
 
 public class DeferredUtil {
 
@@ -64,7 +64,7 @@ public class DeferredUtil {
         Object current = deferred;
         while (isNestableDeferred(current)) {
             if (current instanceof Callable) {
-                current = GUtil.uncheckedCall((Callable<?>) current);
+                current = uncheckedCall((Callable<?>) current);
             } else {
                 current = unpackKotlinFunction0(current);
             }

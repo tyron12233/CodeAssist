@@ -72,23 +72,22 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
     private final CalculatedValueContainerFactory calculatedValueContainerFactory;
     private final DomainObjectContext owner;
     private final InstantiationScheme actionInstantiationScheme;
-    private final InstantiationScheme legacyActionInstantiationScheme;
     private final DocumentationRegistry documentationRegistry;
 
     public DefaultTransformationRegistrationFactory(
-        BuildOperationExecutor buildOperationExecutor,
-        IsolatableFactory isolatableFactory,
-        ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
-        TransformerInvocationFactory transformerInvocationFactory,
-        FileCollectionFactory fileCollectionFactory,
-        FileLookup fileLookup,
-        InputFingerprinter inputFingerprinter,
-        CalculatedValueContainerFactory calculatedValueContainerFactory,
-        DomainObjectContext owner,
-        ArtifactTransformParameterScheme parameterScheme,
-        ArtifactTransformActionScheme actionScheme,
-        ServiceLookup internalServices,
-        DocumentationRegistry documentationRegistry
+            BuildOperationExecutor buildOperationExecutor,
+            IsolatableFactory isolatableFactory,
+            ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
+            TransformerInvocationFactory transformerInvocationFactory,
+            FileCollectionFactory fileCollectionFactory,
+            FileLookup fileLookup,
+            InputFingerprinter inputFingerprinter,
+            CalculatedValueContainerFactory calculatedValueContainerFactory,
+            DomainObjectContext owner,
+            ArtifactTransformParameterScheme parameterScheme,
+            ArtifactTransformActionScheme actionScheme,
+            ServiceLookup internalServices,
+            DocumentationRegistry documentationRegistry
     ) {
         this.buildOperationExecutor = buildOperationExecutor;
         this.isolatableFactory = isolatableFactory;
@@ -101,7 +100,6 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
         this.owner = owner;
         this.actionInstantiationScheme = actionScheme.getInstantiationScheme();
         this.actionMetadataStore = actionScheme.getInspectionScheme().getMetadataStore();
-        this.legacyActionInstantiationScheme = actionScheme.getLegacyInstantiationScheme();
         this.parametersPropertyWalker = parameterScheme.getInspectionScheme().getPropertyWalker();
         this.internalServices = internalServices;
         this.documentationRegistry = documentationRegistry;
@@ -143,46 +141,39 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
         ImmutableMap<String, Severity> validationMessages = validationContext.getProblems();
         if (!validationMessages.isEmpty()) {
             String formatString = validationMessages.size() == 1
-                ? "A problem was found with the configuration of %s."
-                : "Some problems were found with the configuration of %s.";
+                    ? "A problem was found with the configuration of %s."
+                    : "Some problems were found with the configuration of %s.";
             throw new DefaultMultiCauseException(
-                String.format(formatString, ModelType.of(implementation).getDisplayName()),
-                validationMessages.keySet().stream()
-                    .sorted()
-                    .map(InvalidUserDataException::new)
-                    .collect(Collectors.toList())
+                    String.format(formatString, ModelType.of(implementation).getDisplayName()),
+                    validationMessages.keySet().stream()
+                            .sorted()
+                            .map(InvalidUserDataException::new)
+                            .collect(Collectors.toList())
             );
         }
         Transformer transformer = new DefaultTransformer(
-            implementation,
-            parameterObject,
-            from,
-            FileParameterUtils.normalizerOrDefault(inputArtifactNormalizer),
-            FileParameterUtils.normalizerOrDefault(dependenciesNormalizer),
-            cacheable,
-            artifactDirectorySensitivity,
-            dependenciesDirectorySensitivity,
-            artifactLineEndingSensitivity,
-            dependenciesLineEndingSensitivity,
-            buildOperationExecutor,
-            classLoaderHierarchyHasher,
-            isolatableFactory,
-            fileCollectionFactory,
-            fileLookup,
-            parametersPropertyWalker,
-            actionInstantiationScheme,
-            owner,
-            calculatedValueContainerFactory,
-            internalServices,
-            documentationRegistry);
+                implementation,
+                parameterObject,
+                from,
+                FileParameterUtils.normalizerOrDefault(inputArtifactNormalizer),
+                FileParameterUtils.normalizerOrDefault(dependenciesNormalizer),
+                cacheable,
+                artifactDirectorySensitivity,
+                dependenciesDirectorySensitivity,
+                artifactLineEndingSensitivity,
+                dependenciesLineEndingSensitivity,
+                buildOperationExecutor,
+                classLoaderHierarchyHasher,
+                isolatableFactory,
+                fileCollectionFactory,
+                fileLookup,
+                parametersPropertyWalker,
+                actionInstantiationScheme,
+                owner,
+                calculatedValueContainerFactory,
+                internalServices,
+                documentationRegistry);
 
-        return new DefaultArtifactTransformRegistration(from, to, new TransformationStep(transformer, transformerInvocationFactory, owner, inputFingerprinter));
-    }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public ArtifactTransformRegistration create(ImmutableAttributes from, ImmutableAttributes to, Class<? extends org.gradle.api.artifacts.transform.ArtifactTransform> implementation, Object[] params) {
-        Transformer transformer = new LegacyTransformer(implementation, params, legacyActionInstantiationScheme, from, classLoaderHierarchyHasher, isolatableFactory);
         return new DefaultArtifactTransformRegistration(from, to, new TransformationStep(transformer, transformerInvocationFactory, owner, inputFingerprinter));
     }
 
@@ -223,23 +214,20 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
         private DirectorySensitivity directorySensitivity = DirectorySensitivity.DEFAULT;
         private LineEndingSensitivity lineEndingSensitivity = LineEndingSensitivity.DEFAULT;
 
-        @SuppressWarnings("deprecation")
         @Override
         public void visitInputFileProperty(
-            String propertyName,
-            boolean optional,
-            boolean skipWhenEmpty,
-            DirectorySensitivity directorySensitivity,
-            LineEndingSensitivity lineEndingSensitivity,
-            boolean incremental,
-            @Nullable Class<? extends FileNormalizer> fileNormalizer,
-            PropertyValue value,
-            InputFilePropertyType filePropertyType
+                String propertyName,
+                boolean optional,
+                boolean skipWhenEmpty,
+                DirectorySensitivity directorySensitivity,
+                LineEndingSensitivity lineEndingSensitivity,
+                boolean incremental,
+                @Nullable Class<? extends FileNormalizer> fileNormalizer,
+                PropertyValue value,
+                InputFilePropertyType filePropertyType
         ) {
             this.normalizer = fileNormalizer;
-            this.directorySensitivity = directorySensitivity == DirectorySensitivity.UNSPECIFIED
-                ? DirectorySensitivity.DEFAULT
-                : directorySensitivity;
+            this.directorySensitivity = directorySensitivity;
             this.lineEndingSensitivity = lineEndingSensitivity;
         }
     }

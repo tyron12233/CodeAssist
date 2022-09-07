@@ -7,6 +7,7 @@ import static org.gradle.util.GUtil.uncheckedCall;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import org.gradle.api.Buildable;
+import org.gradle.api.GradleException;
 import org.gradle.api.Task;
 import org.gradle.api.internal.provider.ProviderInternal;
 import org.gradle.api.internal.provider.ValueSupplier;
@@ -81,6 +82,9 @@ public class DefaultTaskDependency extends AbstractTaskDependency {
                     producer.visitProducerTasks(context);
                 } else {
                     // The provider does not know how to produce the value, so use the value instead
+                    if(!provider.isPresent()){
+                        throw new GradleException("Empty provider. " + provider);
+                    }
                     queue.addFirst(provider.get());
                 }
             } else if (dependency instanceof TaskDependencyContainer) {

@@ -1,5 +1,7 @@
 package org.gradle.api.internal.file;
 
+import com.google.common.base.Throwables;
+
 import org.gradle.api.Transformer;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.DirectoryProperty;
@@ -213,12 +215,7 @@ public class DefaultFilePropertyFactory implements FilePropertyFactory, FileFact
 
         @Override
         public THIS fileProvider(Provider<File> provider) {
-            set(provider.map(new Transformer<T, File>() {
-                @Override
-                public T transform(File file) {
-                    return fromFile(file);
-                }
-            }));
+            set(provider.map(this::fromFile));
             return Cast.uncheckedNonnullCast(this);
         }
 
@@ -251,12 +248,20 @@ public class DefaultFilePropertyFactory implements FilePropertyFactory, FileFact
         }
     }
 
-    public static class DefaultRegularFileVar extends AbstractFileVar<RegularFile, RegularFileProperty> implements RegularFileProperty, Managed {
+    public static class
+    DefaultRegularFileVar extends AbstractFileVar<RegularFile, RegularFileProperty> implements RegularFileProperty, Managed {
         private final PathToFileResolver fileResolver;
+
+        private Object extra;
 
         DefaultRegularFileVar(PropertyHost host, PathToFileResolver fileResolver) {
             super(host, RegularFile.class);
             this.fileResolver = fileResolver;
+        }
+
+        @Override
+        protected String describeContents() {
+            return extra != null ? extra.toString() : super.describeContents();
         }
 
         @Override
@@ -272,6 +277,14 @@ public class DefaultFilePropertyFactory implements FilePropertyFactory, FileFact
         @Override
         protected RegularFile fromFile(File file) {
             return new FixedFile(fileResolver.resolve(file));
+        }
+
+        public Object getExtra() {
+            return extra;
+        }
+
+        public void setExtra(Object extra) {
+            this.extra = extra;
         }
     }
 
@@ -293,6 +306,9 @@ public class DefaultFilePropertyFactory implements FilePropertyFactory, FileFact
     }
 
     public static class DefaultDirectoryVar extends AbstractFileVar<Directory, DirectoryProperty> implements DirectoryProperty, Managed {
+
+        public String stackTrace;
+
         private final FileResolver resolver;
         private final FileCollectionFactory fileCollectionFactory;
 
@@ -300,6 +316,13 @@ public class DefaultFilePropertyFactory implements FilePropertyFactory, FileFact
             super(host, Directory.class);
             this.resolver = resolver;
             this.fileCollectionFactory = fileCollectionFactory;
+
+            stackTrace = Throwables.getStackTraceAsString(new Exception());
+        }
+
+        @Override
+        protected String describeContents() {
+            return stackTrace;
         }
 
         @Override

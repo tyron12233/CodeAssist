@@ -404,18 +404,18 @@ public class DefaultDependencyManagementServices implements DependencyManagement
                                                   ObjectFactory objects,
                                                   PlatformSupport platformSupport) {
             return instantiator.newInstance(DefaultDependencyHandler.class,
-                configurationContainer,
-                dependencyFactory,
-                projectFinder,
-                dependencyConstraintHandler,
-                componentMetadataHandler,
-                componentModuleMetadataHandler,
-                resolutionQueryFactory,
-                attributesSchema,
-                artifactTransformRegistrations,
-                artifactTypeRegistry,
-                objects,
-                platformSupport);
+                    configurationContainer,
+                    dependencyFactory,
+                    projectFinder,
+                    dependencyConstraintHandler,
+                    componentMetadataHandler,
+                    componentModuleMetadataHandler,
+                    resolutionQueryFactory,
+                    attributesSchema,
+                    artifactTransformRegistrations,
+                    artifactTypeRegistry,
+                    objects,
+                    platformSupport);
         }
 
         DependencyLockingHandler createDependencyLockingHandler(Instantiator instantiator, ConfigurationContainerInternal configurationContainer, DependencyLockingProvider dependencyLockingProvider) {

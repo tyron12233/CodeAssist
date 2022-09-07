@@ -1,10 +1,10 @@
 package org.gradle.api.internal.tasks.properties;
 
 import org.gradle.api.internal.tasks.TaskValidationContext;
-import org.gradle.util.internal.DeferredUtil;
 import org.gradle.internal.reflect.problems.ValidationProblemId;
 import org.gradle.internal.reflect.validation.Severity;
 import org.gradle.internal.reflect.validation.TypeValidationContext;
+import org.gradle.util.internal.DeferredUtil;
 
 public abstract class AbstractValidatingProperty implements ValidatingProperty {
     private final String propertyName;
