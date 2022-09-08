@@ -32,6 +32,7 @@ import org.gradle.tooling.internal.consumer.Distribution;
 import org.gradle.tooling.internal.consumer.DistributionFactory;
 import org.gradle.tooling.internal.consumer.connection.AbstractConsumerConnection;
 import org.gradle.tooling.internal.consumer.connection.ConsumerConnection;
+import org.gradle.tooling.internal.consumer.connection.InternalBuildActionAdapter;
 import org.gradle.tooling.internal.consumer.connection.NoToolingApiConnection;
 import org.gradle.tooling.internal.consumer.connection.NotifyDaemonsAboutChangedPathsConsumerConnection;
 import org.gradle.tooling.internal.consumer.connection.ParameterAcceptingConsumerConnection;
@@ -118,6 +119,7 @@ public class DefaultToolingImplementationLoader implements ToolingImplementation
         FilteringClassLoader.Spec filterSpec = new FilteringClassLoader.Spec();
         filterSpec.allowPackage("org.gradle.tooling.internal.protocol");
         filterSpec.allowClass(JavaVersion.class);
+        filterSpec.allowClass(InternalBuildActionAdapter.class);
         FilteringClassLoader filteringClassLoader = new FilteringClassLoader(classLoader, filterSpec);
         return new VisitableURLClassLoader("tooling-implementation-loader", filteringClassLoader, implementationClasspath);
     }

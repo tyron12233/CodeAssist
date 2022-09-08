@@ -47,7 +47,7 @@ public class DefaultClassLoaderFactory implements ClassLoaderFactory {
         // Note that in practise, this is only triggered when running in our tests
 
         if (needJaxpImpl()) {
-            classPath = addToClassPath(classPath, getClasspathForResource(getSystemClassLoader(), "META-INF/services/javax.xml.parsers.SAXParserFactory"));
+            classPath = addToClassPath(classPath, getClasspathForResource(getSystemClassLoader(), "META-INF/services/org.openjdk.javax.xml.parsers.SAXParserFactory"));
             classPath = addToClassPath(classPath, getClasspathForClass("org.w3c.dom.ElementTraversal"));
         }
 
@@ -96,7 +96,7 @@ public class DefaultClassLoaderFactory implements ClassLoaderFactory {
     }
 
     private static boolean needJaxpImpl() {
-        return ClassLoader.getSystemResource("META-INF/services/javax.xml.parsers.SAXParserFactory") != null;
+        return ClassLoader.getSystemResource("META-INF/services/org.openjdk.javax.xml.parsers.SAXParserFactory") != null;
     }
 
 }

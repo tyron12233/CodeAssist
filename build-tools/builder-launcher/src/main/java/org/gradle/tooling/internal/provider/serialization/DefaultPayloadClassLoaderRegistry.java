@@ -2,6 +2,8 @@ package org.gradle.tooling.internal.provider.serialization;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.tyron.common.TestUtil;
+
 import org.gradle.api.Transformer;
 import org.gradle.internal.classloader.ClassLoaderSpec;
 import org.gradle.internal.classloader.ClassLoaderVisitor;
@@ -75,6 +77,9 @@ public class DefaultPayloadClassLoaderRegistry implements PayloadClassLoaderRegi
             @Override
             public Class<?> resolveClass(ClassLoaderDetails classLoaderDetails, String className) throws ClassNotFoundException {
                 ClassLoader classLoader = getClassLoader(classLoaderDetails);
+                if (TestUtil.isDalvik()) {
+                    classLoader = getClass().getClassLoader();
+                }
                 return Class.forName(className, false, classLoader);
             }
         };
