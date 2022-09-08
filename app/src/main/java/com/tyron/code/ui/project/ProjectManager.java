@@ -57,8 +57,13 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import javax.tools.JavaFileObject;
@@ -207,7 +212,14 @@ public class ProjectManager {
         Map<String, Library> libraries = variantDependencies.getLibraries();
         ArtifactDependencies mainArtifact = variantDependencies.getMainArtifact();
         List<GraphItem> compileDependencies = mainArtifact.getCompileDependencies();
-        for (GraphItem compileDependency : compileDependencies) {
+
+
+        Deque<GraphItem> queue = new LinkedList<>(compileDependencies);
+        Set<GraphItem> visitedDependencies = new HashSet<>();
+
+        while (!queue.isEmpty()) {
+            GraphItem compileDependency = queue.removeFirst();
+
             Library library = libraries.get(compileDependency.getKey());
             if (library == null) {
                 continue;
@@ -231,8 +243,19 @@ public class ProjectManager {
                     androidLibraryData.getCompileJarFiles().stream()
                             .filter(File::exists)
                             .forEach(impl::addLibrary);
+
+                    // TODO: add res index support
                     break;
-                // TODO: add res support
+            }
+
+            // remember this dependency so that there will be no circular dependencies
+            visitedDependencies.add(compileDependency);
+
+            // now add its dependencies to the queue if it hasn't been visited before
+            for (GraphItem dependency : compileDependency.getDependencies()) {
+                if (!visitedDependencies.contains(dependency)) {
+                    queue.addLast(dependency);
+                }
             }
         }
 
@@ -268,38 +291,6 @@ public class ProjectManager {
                 }
             });
         }
-    }
-
-    private Module buildModule(IdeaModule module) {
-        File projectDirectory = module.getGradleProject().getProjectDirectory();
-        AndroidModuleImpl impl = new AndroidModuleImpl(projectDirectory);
-        impl.setName(module.getProjectIdentifier().getProjectPath());
-
-        final DomainObjectSet<? extends IdeaContentRoot> contentRoots = module.getContentRoots();
-        for (IdeaContentRoot contentRoot : contentRoots) {
-            ContentRoot implContentRoot = new ContentRoot(contentRoot.getRootDirectory());
-
-            for (IdeaSourceDirectory sourceDirectory : contentRoot.getSourceDirectories()) {
-                implContentRoot.addSourceDirectory(sourceDirectory.getDirectory());
-            }
-
-            impl.addContentRoot(implContentRoot);
-        }
-
-        for (IdeaDependency dependency : module.getDependencies()) {
-            if (!"COMPILE".equals(dependency.getScope().getScope())) {
-                continue;
-            }
-            if (dependency instanceof ExternalDependency) {
-                impl.addLibrary(((ExternalDependency) dependency).getFile());
-            } else if (dependency instanceof IdeaModuleDependency) {
-                impl.addModuleDependency(((IdeaModuleDependency) dependency).getTargetModuleName());
-            }
-        }
-        // TODO: add child modules
-        DomainObjectSet<? extends HierarchicalElement> children = module.getChildren();
-
-        return impl;
     }
 
     public void closeProject(@NonNull Project project) {
