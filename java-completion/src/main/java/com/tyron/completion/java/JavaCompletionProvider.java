@@ -21,6 +21,7 @@ import com.sun.tools.javac.util.Names;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.logging.IdeLog;
+import com.tyron.common.util.StringSearch;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
@@ -126,7 +127,11 @@ public class JavaCompletionProvider extends CompletionProvider {
         SimpleJavaFileObject fileObject = new SimpleJavaFileObject(parameters.getFile().toURI(), JavaFileObject.Kind.SOURCE) {
                     @Override
                     public CharSequence getCharContent(boolean ignoreEncodingErrors) {
-                        return new FileContentFixer(context).fixFileContent(parameters.getContents());
+                        StringBuilder pruned = new StringBuilder(
+                                new FileContentFixer(context).fixFileContent(parameters.getContents())
+                        );
+                        int toInsert = StringSearch.endOfLine(pruned, (int) parameters.getIndex());
+                        return pruned.insert(toInsert, ';');
                     }
                 };
 
