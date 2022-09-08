@@ -244,13 +244,17 @@ public class DefaultDaemonStarter implements DaemonStarter {
 
                     long start = System.currentTimeMillis();
 
-                    String current;
+                    String current = "";
                     while ((current = FileUtils.readFileToString(daemonOutput, StandardCharsets.UTF_8)).isEmpty()) {
                         long currentTime = System.currentTimeMillis();
-                        if (currentTime - start > 20000) {
+                        if (currentTime - start > 60000) {
                             throw new RuntimeException("Time out waiting for daemon output");
                         }
+
+                        Thread.sleep(300);
                     }
+
+                    LOGGER.debug("Daemon has started in " + (System.currentTimeMillis() - start) + " ms.");
                     return daemonGreeter.parseDaemonOutput(current, args);
                 } else {
                     ExecHandle handle = new DaemonExecHandleBuilder().build(args, workingDir, outputConsumer, stdInput, execActionFactory.newExec());
