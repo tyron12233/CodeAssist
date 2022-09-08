@@ -39,6 +39,7 @@ import com.tyron.completion.progress.ProgressManager;
 import org.apache.commons.io.FileUtils;
 import org.gradle.api.GradleException;
 import org.gradle.tooling.BuildActionExecuter;
+import org.gradle.tooling.BuildException;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ModelBuilder;
 import org.gradle.tooling.ProjectConnection;
@@ -178,9 +179,16 @@ public class ProjectManager {
             mCurrentProject.clear();
             buildModel(appProject, project);
         } catch (Throwable t) {
+            Throwable throwable = t;
+            if (throwable instanceof BuildException) {
+                BuildException buildException = (BuildException) throwable;
+                if (buildException.getCause() != null) {
+                    throwable = buildException.getCause();
+                }
+            }
             mListener.onComplete(mCurrentProject,
                     false,
-                    Throwables.getStackTraceAsString(t) + "\n");
+                    Throwables.getStackTraceAsString(throwable) + "\n");
             return;
         }
 

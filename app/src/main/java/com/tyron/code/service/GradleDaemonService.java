@@ -76,7 +76,7 @@ public class GradleDaemonService extends Service {
             System.setIn(FileUtils.openInputStream(daemonInput));
             System.setOut(new PrintStream(FileUtils.openOutputStream(daemonOutput, true)));
         } catch (IOException e) {
-            originalOut.println("Failed to connect to DaemonClient" +
+            System.out.println("Failed to connect to DaemonClient" +
                                Throwables.getStackTraceAsString(e));
             System.exit(1);
         }
