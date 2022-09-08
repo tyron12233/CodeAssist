@@ -22,12 +22,16 @@ public class ContentWrapper extends Content implements com.tyron.editor.Content 
 
     private AtomicInteger sequence;
 
+    private boolean hasCalledSuper = false;
+
     public ContentWrapper() {
 
     }
 
     public ContentWrapper(CharSequence text) {
         super(text, true);
+
+        hasCalledSuper = true;
     }
 
     private long modificationStamp = 0;
@@ -44,6 +48,9 @@ public class ContentWrapper extends Content implements com.tyron.editor.Content 
     public void insert(int line, int column, CharSequence text) {
         super.insert(line, column, text);
 
+        if (!hasCalledSuper) {
+            return;
+        }
         int offset = getCharIndex(line, column);
         Content newText = this;
         CharSequence newString = newText.subSequence(offset, offset + text.length());
@@ -74,6 +81,10 @@ public class ContentWrapper extends Content implements com.tyron.editor.Content 
         CharSequence oldString = subSequence(startOffset, endOffset);
 
         super.delete(startLine, columnOnStartLine, endLine, columnOnEndLine);
+
+        if (!hasCalledSuper) {
+            return;
+        }
 
         Content newText = this;
         updateText(newText, startOffset, oldString, "", false, System.currentTimeMillis(),

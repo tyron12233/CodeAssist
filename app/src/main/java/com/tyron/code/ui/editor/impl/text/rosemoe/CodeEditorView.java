@@ -12,9 +12,7 @@ import com.google.common.collect.ImmutableSet;
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
-import com.tyron.code.language.HighlightUtil;
 import com.tyron.code.language.xml.LanguageXML;
-import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
@@ -33,15 +31,12 @@ import org.eclipse.lemminx.dom.DOMParser;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
 import io.github.rosemoe.sora.lang.Language;
-import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
-import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -53,9 +48,14 @@ import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
-    private final Set<Character> IGNORED_PAIR_ENDS =
-            ImmutableSet.<Character>builder().add(')').add(']').add('"').add('>').add('\'').add(';')
-                    .build();
+    private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder()
+            .add(')')
+            .add(']')
+            .add('"')
+            .add('>')
+            .add('\'')
+            .add(';')
+            .build();
 
     private boolean mIsBackgroundAnalysisEnabled;
 
@@ -320,7 +320,9 @@ public class CodeEditorView extends CodeEditor implements Editor {
     public void setSelectionRegion(int startIndex, int endIndex) {
         CharPosition start = getCharPosition(startIndex);
         CharPosition end = getCharPosition(endIndex);
-        CodeEditorView.super.setSelectionRegion(start.getLine(), start.getColumn(), end.getLine(),
+        CodeEditorView.super.setSelectionRegion(start.getLine(),
+                start.getColumn(),
+                end.getLine(),
                 end.getColumn());
     }
 
