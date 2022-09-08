@@ -166,6 +166,9 @@ public class ProjectManager {
             BuildActionExecuter<ModelContainerV2> executer =
                     projectConnection.action(new GetAndroidModelV2Action("debug"));
             executer.addProgressListener(progressListener);
+            executer.setColorOutput(false);
+            executer.setStandardError(AppLogFragment.outputStream);
+            executer.setStandardOutput(AppLogFragment.outputStream);
             GradleLaunchUtil.configureLauncher(executer);
 
             ModelContainerV2 modelContainer = executer.run();
