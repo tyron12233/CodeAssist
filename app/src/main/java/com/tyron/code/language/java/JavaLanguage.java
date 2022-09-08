@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.sun.tools.javac.util.JCDiagnostic;
 import com.tyron.builder.project.Project;
@@ -40,12 +41,15 @@ import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.diagnostic.DiagnosticRegion;
+import io.github.rosemoe.sora.lang.format.AsyncFormatter;
 import io.github.rosemoe.sora.lang.format.Formatter;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentReference;
+import io.github.rosemoe.sora.text.TextRange;
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
@@ -60,6 +64,28 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
 
     private final Editor editor;
     private final TextMateLanguage delegate;
+    private final Formatter formatter = new AsyncFormatter() {
+        @Nullable
+        @Override
+        public TextRange formatAsync(@NonNull Content text, @NonNull TextRange cursorRange) {
+            String format = com.tyron.eclipse.formatter.Formatter.format(text.toString(),
+                    cursorRange.getStartIndex(),
+                    cursorRange.getEndIndex() - cursorRange.getStartIndex());
+            if (!text.toString().equals(format)) {
+                text.delete(0, text.getLineCount() - 1);
+                text.insert(0, 0, format);
+            }
+            return cursorRange;
+        }
+
+        @Nullable
+        @Override
+        public TextRange formatRegionAsync(@NonNull Content text,
+                                           @NonNull TextRange rangeToFormat,
+                                           @NonNull TextRange cursorRange) {
+            return null;
+        }
+    };
 
 
     public JavaLanguage(Editor editor) {
@@ -152,7 +178,7 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
     @NonNull
     @Override
     public Formatter getFormatter() {
-        return EmptyLanguage.EmptyFormatter.INSTANCE;
+        return formatter;
     }
 
     public int getTabWidth() {

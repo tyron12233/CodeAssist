@@ -46,6 +46,7 @@ public class RefreshProjectAction extends AnAction {
             indexing = false;
         }
         if (project != null && !project.isCompiling() && !indexing) {
+            SaveAction.doSave();
             callback.index(project);
         }
     }
