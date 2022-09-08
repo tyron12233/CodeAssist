@@ -159,8 +159,13 @@ public class JavaCompletionProvider extends CompletionProvider {
                 new MemberReferenceCompletionProvider(null).complete(builder, javacUtilities,
                         scanned, parameters.getPrefix(), false);
             case VARIABLE:
-                new VariableNameCompletionProvider(null).complete(builder, javacUtilities,
-                        scanned, parameters.getPrefix(), false);
+                if (!parameters.getPrefix().isEmpty()) {
+                    new VariableNameCompletionProvider(null).complete(builder,
+                            javacUtilities,
+                            scanned,
+                            parameters.getPrefix(),
+                            false);
+                }
                 break;
         }
         return builder;

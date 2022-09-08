@@ -2,6 +2,7 @@ package com.tyron.completion.java.action;
 
 import android.util.Pair;
 
+import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.CaseTree;
 import com.sun.source.tree.ClassTree;
@@ -271,6 +272,20 @@ public class FindCurrentPath extends TreePathScanner<TreePath, Pair<Long, Long>>
                 return scan;
             }
         }
+        return null;
+    }
+
+    @Override
+    public TreePath visitAssignment(AssignmentTree node, Pair<Long, Long> longLongPair) {
+        TreePath smaller = super.visitAssignment(node, longLongPair);
+        if (smaller != null) {
+            return smaller;
+        }
+
+        if (isInside(node, longLongPair)) {
+            return getCurrentPath();
+        }
+
         return null;
     }
 
