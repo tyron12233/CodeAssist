@@ -39,13 +39,13 @@ import com.tyron.builder.model.v2.models.*
 import org.gradle.api.Project
 import org.gradle.api.invocation.Gradle
 import org.gradle.tooling.provider.model.ParameterizedToolingModelBuilder
+import org.openjdk.javax.xml.namespace.QName
+import org.openjdk.javax.xml.stream.XMLInputFactory
+import org.openjdk.javax.xml.stream.XMLStreamException
+import org.openjdk.javax.xml.stream.events.EndElement
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
-import javax.xml.namespace.QName
-import javax.xml.stream.XMLInputFactory
-import javax.xml.stream.XMLStreamException
-import javax.xml.stream.events.EndElement
 
 class ModelBuilder<
         BuildFeaturesT : BuildFeatures,
@@ -408,7 +408,7 @@ class ModelBuilder<
         val compileSdkVersion = extensionImpl.compileSdkVersion ?: "unknown"
 
         return AndroidDslImpl(
-            buildToolsVersion = extension.buildToolsVersion,
+            buildToolsVersion = "CodeAssist build tools",
 
             groupId = project.group.toString(),
             compileTarget = compileSdkVersion,
@@ -837,6 +837,11 @@ class ModelBuilder<
         // FIXME need to find a better way for this.
         val taskContainer: MutableTaskContainer = component.taskContainer
         val artifacts = component.artifacts
+
+        if (taskContainer.bundleTask == null) {
+            // CodeAssist FIXME investigate this
+            return null
+        }
 
         return BundleInfoImpl(
             bundleTaskName = taskContainer.bundleTask?.name ?: error("failed to find bundle task name for ${component.name}"),

@@ -18,10 +18,14 @@ import com.tyron.builder.gradle.internal.component.TestComponentCreationConfig
 import com.tyron.builder.gradle.internal.component.TestFixturesCreationConfig
 import com.tyron.builder.gradle.internal.component.VariantCreationConfig
 import com.tyron.builder.gradle.internal.core.dsl.VariantDslInfo
+import com.tyron.builder.gradle.internal.dependency.CONFIG_NAME_ANDROID_JDK_IMAGE
 import com.tyron.builder.gradle.internal.dependency.SourceSetManager
 import com.tyron.builder.gradle.internal.dependency.VariantDependencies
 import com.tyron.builder.gradle.internal.dsl.*
 import com.tyron.builder.gradle.internal.ide.ModelBuilder
+import com.tyron.builder.gradle.internal.ide.dependencies.LibraryDependencyCacheBuildService
+import com.tyron.builder.gradle.internal.ide.dependencies.MavenCoordinatesCacheBuildService
+import com.tyron.builder.gradle.internal.ide.v2.GlobalSyncService
 import com.tyron.builder.gradle.internal.scope.DelayedActionsExecutor
 import com.tyron.builder.gradle.internal.services.*
 import com.tyron.builder.gradle.internal.tasks.factory.*
@@ -38,6 +42,7 @@ import org.gradle.api.artifacts.repositories.FlatDirectoryArtifactRepository
 import org.gradle.api.component.SoftwareComponentFactory
 import org.gradle.api.plugins.JavaBasePlugin
 import org.gradle.api.plugins.JavaPlugin
+import org.gradle.api.provider.Provider
 import org.gradle.build.event.BuildEventsListenerRegistry
 import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry
 import java.util.concurrent.atomic.AtomicBoolean
@@ -246,7 +251,21 @@ abstract class BasePlugin<
     override fun configureProject(project: Project) {
         val gradle = project.gradle
 
+        val stringCachingService: Provider<StringCachingBuildService> =
+            StringCachingBuildService.RegistrationAction(project).execute()
+        val mavenCoordinatesCacheBuildService =
+            MavenCoordinatesCacheBuildService.RegistrationAction(project, stringCachingService)
+                .execute()
+
+        LibraryDependencyCacheBuildService.RegistrationAction(
+            project, mavenCoordinatesCacheBuildService
+        ).execute()
+
+        GlobalSyncService.RegistrationAction(project, mavenCoordinatesCacheBuildService)
+            .execute()
+
         val projectOptions = projectServices.projectOptions
+        val issueReporter = projectServices.issueReporter
 
         Aapt2ThreadPoolBuildService.RegistrationAction(project, projectOptions).execute()
         Aapt2DaemonBuildService.RegistrationAction(project, projectOptions).execute()
@@ -261,6 +280,11 @@ abstract class BasePlugin<
 //        LintClassLoaderBuildService.RegistrationAction(project).execute()
 //        JacocoInstrumentationService.RegistrationAction(project).execute()
 
+//        projectOptions
+//            .allOptions
+//            .forEach(projectServices.deprecationReporter::reportOptionIssuesIfAny)
+//        IncompatibleProjectOptionsReporter.check(projectOptions, issueReporter)
+
         // Apply the Java plugin
         project.plugins.apply(JavaBasePlugin::class.java)
 
@@ -269,6 +293,28 @@ abstract class BasePlugin<
             .configure { task ->
                 task.description = "Assembles all variants of all applications and secondary packages."
             }
+        // As soon as project is evaluated we can clear the shared state for deprecation reporting.
+//        gradle.projectsEvaluated { DeprecationReporterImpl.clean() }
+
+        createAndroidJdkImageConfiguration(project)
+    }
+
+    /** Creates the androidJdkImage configuration */
+    private fun createAndroidJdkImageConfiguration(project: Project) {
+        val config = project.configurations.create(CONFIG_NAME_ANDROID_JDK_IMAGE)
+        config.isVisible = false
+        config.isCanBeConsumed = false
+        config.description = "Configuration providing JDK image for compiling Java 9+ sources"
+
+//        project.dependencies
+//            .add(
+//                CONFIG_NAME_ANDROID_JDK_IMAGE,
+//                project.files(
+//                    versionedSdkLoaderService
+//                        .versionedSdkLoader
+//                        .flatMap { it.coreForSystemModulesProvider }
+//                )
+//            )
     }
 
     override fun configureExtension(project: Project) {

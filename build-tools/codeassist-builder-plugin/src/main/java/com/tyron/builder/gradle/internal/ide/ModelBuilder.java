@@ -116,14 +116,14 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import javax.xml.namespace.QName;
-import javax.xml.stream.XMLEventReader;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.events.Attribute;
-import javax.xml.stream.events.EndElement;
-import javax.xml.stream.events.StartElement;
-import javax.xml.stream.events.XMLEvent;
+import org.openjdk.javax.xml.namespace.QName;
+import org.openjdk.javax.xml.stream.XMLEventReader;
+import org.openjdk.javax.xml.stream.XMLInputFactory;
+import org.openjdk.javax.xml.stream.XMLStreamException;
+import org.openjdk.javax.xml.stream.events.Attribute;
+import org.openjdk.javax.xml.stream.events.EndElement;
+import org.openjdk.javax.xml.stream.events.StartElement;
+import org.openjdk.javax.xml.stream.events.XMLEvent;
 import org.gradle.StartParameter;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ArtifactCollection;
@@ -146,7 +146,7 @@ public class ModelBuilder<Extension extends BaseExtension>
     @NonNull protected final Extension extension;
     @NonNull private final ExtraModelInfo extraModelInfo;
     @NonNull private final VariantModel variantModel;
-    private int modelLevel = AndroidProject.MODEL_LEVEL_0_ORIGINAL;
+    private int modelLevel = AndroidProject.MODEL_LEVEL_LATEST;
     private boolean modelWithFullDependency = false;
 
     /**
@@ -337,157 +337,7 @@ public class ModelBuilder<Extension extends BaseExtension>
                             componentType.getArtifactType()));
         }
 
-        LintOptions lintOptions = new LintOptions() {
-            @NotNull
-            @Override
-            public Set<String> getDisable() {
-                return null;
-            }
-
-            @NotNull
-            @Override
-            public Set<String> getEnable() {
-                return null;
-            }
-
-            @NotNull
-            @Override
-            public Set<String> getCheck() {
-                return null;
-            }
-
-            @Override
-            public boolean isAbortOnError() {
-                return false;
-            }
-
-            @Override
-            public boolean isAbsolutePaths() {
-                return false;
-            }
-
-            @Override
-            public boolean isNoLines() {
-                return false;
-            }
-
-            @Override
-            public boolean isQuiet() {
-                return false;
-            }
-
-            @Override
-            public boolean isCheckAllWarnings() {
-                return false;
-            }
-
-            @Override
-            public boolean isIgnoreWarnings() {
-                return false;
-            }
-
-            @Override
-            public boolean isWarningsAsErrors() {
-                return false;
-            }
-
-            @Override
-            public boolean isCheckTestSources() {
-                return false;
-            }
-
-            @Override
-            public boolean isIgnoreTestSources() {
-                return false;
-            }
-
-            @Override
-            public boolean isCheckGeneratedSources() {
-                return false;
-            }
-
-            @Override
-            public boolean isExplainIssues() {
-                return false;
-            }
-
-            @Override
-            public boolean isShowAll() {
-                return false;
-            }
-
-            @org.jetbrains.annotations.Nullable
-            @Override
-            public File getLintConfig() {
-                return null;
-            }
-
-            @Override
-            public boolean getTextReport() {
-                return false;
-            }
-
-            @org.jetbrains.annotations.Nullable
-            @Override
-            public File getTextOutput() {
-                return null;
-            }
-
-            @Override
-            public boolean getHtmlReport() {
-                return false;
-            }
-
-            @org.jetbrains.annotations.Nullable
-            @Override
-            public File getHtmlOutput() {
-                return null;
-            }
-
-            @Override
-            public boolean getXmlReport() {
-                return false;
-            }
-
-            @org.jetbrains.annotations.Nullable
-            @Override
-            public File getXmlOutput() {
-                return null;
-            }
-
-            @Override
-            public boolean getSarifReport() {
-                return false;
-            }
-
-            @org.jetbrains.annotations.Nullable
-            @Override
-            public File getSarifOutput() {
-                return null;
-            }
-
-            @Override
-            public boolean isCheckReleaseBuilds() {
-                return false;
-            }
-
-            @Override
-            public boolean isCheckDependencies() {
-                return false;
-            }
-
-            @org.jetbrains.annotations.Nullable
-            @Override
-            public File getBaselineFile() {
-                return null;
-            }
-
-            @org.jetbrains.annotations.Nullable
-            @Override
-            public Map<String, Integer> getSeverityOverrides() {
-                return null;
-            }
-        };
+        LintOptions lintOptions = new LintOptionsImpl();
 //                ConvertersKt.convertLintOptions(extension.getLintOptions());
 
         AaptOptions aaptOptions = AaptOptionsImpl.create(extension.getAaptOptions());
@@ -1202,23 +1052,7 @@ public class ModelBuilder<Extension extends BaseExtension>
             codeShrinker = null;
         }
 
-        InstantRun instantRun = new InstantRun() {
-            @NotNull
-            @Override
-            public File getInfoFile() {
-                return null;
-            }
-
-            @Override
-            public boolean isSupportedByArtifact() {
-                return false;
-            }
-
-            @Override
-            public int getSupportStatus() {
-                return 0;
-            }
-        };
+        InstantRun instantRun = new InstantRunImpl(new File("instantRun.info"), 0);
 
         TestOptions testOptions = null;
 
