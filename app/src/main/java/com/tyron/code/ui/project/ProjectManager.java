@@ -165,6 +165,7 @@ public class ProjectManager {
 
             BuildActionExecuter<ModelContainerV2> executer =
                     projectConnection.action(new GetAndroidModelV2Action("debug"));
+            executer.addProgressListener(progressListener);
             GradleLaunchUtil.configureLauncher(executer);
 
             ModelContainerV2 modelContainer = executer.run();
