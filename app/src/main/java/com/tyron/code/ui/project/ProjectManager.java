@@ -7,7 +7,21 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.model.AndroidArtifact;
+import com.tyron.builder.model.Dependencies;
+import com.tyron.builder.model.Variant;
+import com.tyron.builder.model.v2.ide.AndroidLibraryData;
+import com.tyron.builder.model.v2.ide.ArtifactDependencies;
+import com.tyron.builder.model.v2.ide.GraphItem;
+import com.tyron.builder.model.v2.ide.Library;
+import com.tyron.builder.model.v2.ide.LibraryType;
+import com.tyron.builder.model.v2.ide.SourceProvider;
+import com.tyron.builder.model.v2.ide.SourceSetContainer;
+import com.tyron.builder.model.v2.models.AndroidProject;
+import com.tyron.builder.model.v2.models.BasicAndroidProject;
+import com.tyron.builder.model.v2.models.VariantDependencies;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidContentRoot;
 import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
@@ -23,6 +37,8 @@ import com.tyron.completion.java.provider.PruneMethodBodies;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
+import org.gradle.api.GradleException;
+import org.gradle.tooling.BuildActionExecuter;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ModelBuilder;
 import org.gradle.tooling.ProjectConnection;
@@ -42,6 +58,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
@@ -140,22 +158,20 @@ public class ProjectManager {
             ProgressListener progressListener =
                     event -> mListener.onTaskStarted(event.getDisplayName());
 
-            ModelBuilder<IdeaProject> model = projectConnection.model(IdeaProject.class);
-            GradleLaunchUtil.configureLauncher(model);
+            BuildActionExecuter<ModelContainerV2> executer =
+                    projectConnection.action(new GetAndroidModelV2Action("debug"));
+            GradleLaunchUtil.configureLauncher(executer);
 
-            IdeaProject ideaProject = model
-                    .setStandardError(AppLogFragment.outputStream)
-                    .setStandardOutput(AppLogFragment.outputStream)
-                    .addProgressListener(progressListener)
-                    .get();
-
-            mListener.onTaskStarted("Index model");
+            ModelContainerV2 modelContainer = executer.run();
+            ModelContainerV2.ModelInfo appProject = modelContainer.getProject(":app", ":");
 
             // remove the previous models
             mCurrentProject.clear();
-            buildModel(ideaProject, mCurrentProject);
+            buildModel(appProject, project);
         } catch (Throwable t) {
-            mListener.onComplete(mCurrentProject, false, Throwables.getStackTraceAsString(t) + "\n");
+            mListener.onComplete(mCurrentProject,
+                    false,
+                    Throwables.getStackTraceAsString(t) + "\n");
             return;
         }
 
@@ -165,13 +181,63 @@ public class ProjectManager {
         mListener.onComplete(project, true, "Index successful");
     }
 
-    private void buildModel(IdeaProject project, Project currentProject) throws IOException {
-        List<? extends IdeaModule> allModules = project.getModules().getAll();
-        for (IdeaModule ideaModule : allModules) {
-            Module module = buildModule(ideaModule);
-            currentProject.addModule(module);
-            indexModule(module);
+    private void buildModel(ModelContainerV2.ModelInfo modelInfo, Project currentProject) throws IOException {
+        AndroidModuleImpl impl = new AndroidModuleImpl(modelInfo.getProjectDir());
+
+        // de-structure model info fields
+        AndroidProject androidProject = modelInfo.getAndroidProject();
+        BasicAndroidProject basicAndroidProject = modelInfo.getBasicAndroidProject();
+        VariantDependencies variantDependencies = modelInfo.getVariantDependencies();
+
+        assert androidProject != null;
+        assert basicAndroidProject != null;
+        assert variantDependencies != null;
+
+        // add main source set
+        SourceSetContainer mainSourceSet = basicAndroidProject.getMainSourceSet();
+        if (mainSourceSet != null) {
+            SourceProvider sourceProvider = mainSourceSet.getSourceProvider();
+
+            File contentRootDirectory = new File(impl.getRootFile(), "src/" + sourceProvider.getName());
+            AndroidContentRoot contentRoot = new AndroidContentRoot(contentRootDirectory);
+            contentRoot.setJavaDirectories(sourceProvider.getJavaDirectories());
+            impl.addContentRoot(contentRoot);
         }
+
+        Map<String, Library> libraries = variantDependencies.getLibraries();
+        ArtifactDependencies mainArtifact = variantDependencies.getMainArtifact();
+        List<GraphItem> compileDependencies = mainArtifact.getCompileDependencies();
+        for (GraphItem compileDependency : compileDependencies) {
+            Library library = libraries.get(compileDependency.getKey());
+            if (library == null) {
+                continue;
+            }
+
+            File artifact = library.getArtifact();
+
+            LibraryType type = library.getType();
+            switch (type) {
+                case PROJECT:
+                    // TODO: support project dependencies
+                    break;
+                case JAVA_LIBRARY:
+                    if (artifact != null && artifact.exists()) {
+                        impl.addLibrary(artifact);
+                    }
+                    break;
+                case ANDROID_LIBRARY:
+                    AndroidLibraryData androidLibraryData = library.getAndroidLibraryData();
+                    assert androidLibraryData != null;
+                    androidLibraryData.getCompileJarFiles().stream()
+                            .filter(File::exists)
+                            .forEach(impl::addLibrary);
+                    break;
+                // TODO: add res support
+            }
+        }
+
+        currentProject.addModule(impl);
+        indexModule(impl);
     }
 
     /**
@@ -196,6 +262,8 @@ public class ProjectManager {
                 @Override
                 public CharSequence getCharContent(boolean ignoreEncodingErrors) {
                     Parser parser = Parser.parseFile(module.getProject(), value.toPath());
+                    // During indexing, statements inside methods are not needed so
+                    // it is stripped to speed up the index process
                     return new PruneMethodBodies(info.impl.getJavacTask()).scan(parser.root, 0L);
                 }
             });

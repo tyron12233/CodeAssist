@@ -9,6 +9,7 @@ import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
 import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidContentRoot;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.util.PackageTrie;
@@ -59,20 +60,19 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         Consumer<File> kotlinConsumer = this::addKotlinFile;
 
         for (ContentRoot contentRoot : getContentRoots()) {
-            Set<File> sourceDirectories = contentRoot.getSourceDirectories();
-            for (File sourceDirectory : sourceDirectories) {
-                FileUtils.iterateFiles(sourceDirectory,
-                        FileFilterUtils.suffixFileFilter(".kt"),
-                        TrueFileFilter.INSTANCE
-                ).forEachRemaining(kotlinConsumer);
-                FileUtils.iterateFiles(sourceDirectory,
-                        FileFilterUtils.suffixFileFilter(".kt"),
-                        TrueFileFilter.INSTANCE
-                ).forEachRemaining(kotlinConsumer);
-                FileUtils.iterateFiles(sourceDirectory,
-                        FileFilterUtils.suffixFileFilter(".java"),
-                        TrueFileFilter.INSTANCE
-                ).forEachRemaining(this::addJavaFile);
+            if (contentRoot instanceof AndroidContentRoot) {
+                AndroidContentRoot androidContentRoot = ((AndroidContentRoot) contentRoot);
+                for (File javaDirectory : androidContentRoot.getJavaDirectories()) {
+                    // java source root may contain kotlin files aswell
+                    FileUtils.iterateFiles(javaDirectory,
+                            FileFilterUtils.suffixFileFilter(".kt"),
+                            TrueFileFilter.INSTANCE
+                    ).forEachRemaining(kotlinConsumer);
+                    FileUtils.iterateFiles(javaDirectory,
+                            FileFilterUtils.suffixFileFilter(".java"),
+                            TrueFileFilter.INSTANCE
+                    ).forEachRemaining(this::addJavaFile);
+                }
             }
         }
 
