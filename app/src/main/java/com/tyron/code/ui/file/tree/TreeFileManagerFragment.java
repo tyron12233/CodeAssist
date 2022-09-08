@@ -31,6 +31,7 @@ import com.tyron.code.event.EventReceiver;
 import com.tyron.code.event.SubscriptionReceipt;
 import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
+import com.tyron.code.util.ApkInstaller;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
@@ -126,8 +127,14 @@ public class TreeFileManagerFragment extends Fragment {
             @Override
             public void onNodeToggled(TreeNode<TreeFile> treeNode, boolean expanded) {
                 if (treeNode.isLeaf()) {
-                    if (treeNode.getValue().getFile().isFile()) {
-                        FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), true);
+                    File file = treeNode.getValue().getFile();
+                    if (file.isFile()) {
+                        // TODO: cleaner api to do this
+                        if (file.getName().endsWith(".apk")) {
+                            ApkInstaller.installApplication(requireContext(), file.getAbsolutePath());
+                        } else {
+                            FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), true);
+                        }
                     }
                 }
             }

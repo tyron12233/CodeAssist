@@ -35,7 +35,6 @@ public class FileEditorProviderManagerImpl implements FileEditorProviderManager 
 
     private void registerBuiltInProviders() {
         registerProvider(new RosemoeEditorProvider());
-        registerProvider(new LayoutTextEditorProvider());
         registerProvider(new ImageEditorProvider());
     }
 
