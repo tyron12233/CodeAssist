@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.errors.IssueReporter
 import com.tyron.builder.gradle.errors.SyncIssueReporter
+import com.tyron.builder.gradle.internal.SdkComponentsBuildService
 import com.tyron.builder.gradle.internal.component.ComponentCreationConfig
 import com.tyron.builder.gradle.internal.component.TestComponentCreationConfig
 import com.tyron.builder.gradle.internal.component.VariantCreationConfig
@@ -49,8 +50,8 @@ class VariantModelImpl(
     override val buildFeatures: BuildFeatureValues
         get() = buildFeaturesProvider()
 
-//    override val versionedSdkLoader: Provider<SdkComponentsBuildService.VersionedSdkLoader>
-//        get() = globalConfig.versionedSdkLoader
+    override val versionedSdkLoader: Provider<SdkComponentsBuildService.VersionedSdkLoader>
+        get() = globalConfig.versionedSdkLoader
 
     override val mockableJarArtifact: FileCollection
         get() = globalConfig.mockableJarArtifact

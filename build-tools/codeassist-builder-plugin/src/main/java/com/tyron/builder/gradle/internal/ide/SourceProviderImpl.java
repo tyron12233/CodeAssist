@@ -85,7 +85,7 @@ final class SourceProviderImpl implements SourceProvider, Serializable {
     }
 
     private Collection<File> getSourcesForIdeModel(SourceDirectoriesImpl sourceDirectories) {
-        return sourceDirectories.variantSourcesForModel$codeassist_builder_plugin(DirectoryEntry::getShouldBeAddedToIdeModel);
+        return sourceDirectories.variantSourcesForModel(DirectoryEntry::getShouldBeAddedToIdeModel);
     }
 
     @NonNull

@@ -3,10 +3,13 @@ package com.tyron.builder.gradle.internal.plugins
 import com.tyron.builder.gradle.errors.NoOpDeprecationReporter
 import com.tyron.builder.gradle.errors.NoOpSyncIssueReporter
 import com.tyron.builder.gradle.errors.SyncIssueReporter
+import com.tyron.builder.gradle.internal.errors.SyncIssueReporterImpl
 import com.tyron.builder.gradle.internal.scope.ProjectInfo
 import com.tyron.builder.gradle.internal.services.AndroidLocationsBuildService
 import com.tyron.builder.gradle.internal.services.ProjectServices
 import com.tyron.builder.gradle.options.ProjectOptionService
+import com.tyron.builder.gradle.options.ProjectOptions
+import com.tyron.builder.plugin.options.SyncOptions
 import org.gradle.api.Project
 import org.gradle.build.event.BuildEventsListenerRegistry
 
@@ -60,6 +63,14 @@ abstract class AndroidPluginBaseServices(
         System.setProperty("java.awt.headless", "true")
 
         this.project = project
+        val projectOptions: ProjectOptions = projectServices.projectOptions
+
+        SyncIssueReporterImpl.GlobalSyncIssueService.RegistrationAction(
+            project,
+            SyncOptions.getModelQueryMode(projectOptions),
+            SyncOptions.getErrorFormatMode(projectOptions)
+        ).execute()
+
         AndroidLocationsBuildService.RegistrationAction(project).execute()
 
         configureProject(project);

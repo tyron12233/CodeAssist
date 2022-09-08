@@ -2,6 +2,7 @@ package com.tyron.builder.gradle.internal.variant
 
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.gradle.errors.SyncIssueReporter
+import com.tyron.builder.gradle.internal.SdkComponentsBuildService
 import com.tyron.builder.gradle.internal.component.TestComponentCreationConfig
 import com.tyron.builder.gradle.internal.component.VariantCreationConfig
 import com.tyron.builder.gradle.internal.dsl.BuildType
@@ -57,7 +58,7 @@ interface VariantModel {
 
     val filteredBootClasspath: Provider<List<RegularFile>>
 
-//    val versionedSdkLoader: Provider<VersionedSdkLoader>
+    val versionedSdkLoader: Provider<SdkComponentsBuildService.VersionedSdkLoader>
 
     val globalArtifacts: ArtifactsImpl
 }

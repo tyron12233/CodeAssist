@@ -89,15 +89,14 @@ public class DefaultModelBuilder<T> extends AbstractLongRunningOperation<Default
 
     private class ResultHandlerAdapter<T> extends org.gradle.tooling.internal.consumer.ResultHandlerAdapter<T> {
         public ResultHandlerAdapter(ResultHandler<? super T> handler) {
-            super(handler, new ExceptionTransformer(new Transformer<String, Throwable>() {
-                @Override
-                public String transform(Throwable failure) {
-                    String message = String.format("Could not fetch model of type '%s' using %s.", modelType.getSimpleName(), connection.getDisplayName());
-                    if (!(failure instanceof UnsupportedMethodException) && failure instanceof UnsupportedOperationException) {
-                        message += "\n" + Exceptions.INCOMPATIBLE_VERSION_HINT;
-                    }
-                    return message;
+            super(handler, new ExceptionTransformer(failure -> {
+                String message = String.format("Could not fetch model of type '%s' using %s.",
+                        modelType.getSimpleName(),
+                        connection.getDisplayName());
+                if (!(failure instanceof UnsupportedMethodException) && failure instanceof UnsupportedOperationException) {
+                    message += "\n" + Exceptions.INCOMPATIBLE_VERSION_HINT;
                 }
+                return message;
             }));
         }
     }

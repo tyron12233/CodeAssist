@@ -3,6 +3,7 @@ package com.tyron.builder.gradle.internal.tasks.factory
 import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.api.dsl.*
 import com.tyron.builder.core.LibraryRequest
+import com.tyron.builder.gradle.internal.SdkComponentsBuildService
 import com.tyron.builder.gradle.internal.dsl.LanguageSplitOptions
 import com.tyron.builder.gradle.internal.packaging.JarCreatorType
 import com.tyron.builder.gradle.internal.scope.InternalArtifactType
@@ -11,6 +12,7 @@ import com.tyron.builder.internal.packaging.ApkCreatorType
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.Directory
 import org.gradle.api.file.FileCollection
+import org.gradle.api.provider.Provider
 
 /**
  * Creation config for global tasks that are not variant-based.
@@ -92,7 +94,7 @@ interface GlobalTaskCreationConfig: BootClasspathConfig {
 
     val localCustomLintChecks: FileCollection
 
-//    val versionedSdkLoader: Provider<SdkComponentsBuildService.VersionedSdkLoader>
+    val versionedSdkLoader: Provider<SdkComponentsBuildService.VersionedSdkLoader>
 
 //    val versionedNdkHandler: SdkComponentsBuildService.VersionedNdkHandler
 

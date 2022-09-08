@@ -39,6 +39,8 @@ class VersionedSdkLoaderService(
                 get() = project.provider { AndroidVersion(31) }
             override val additionalLibrariesProvider: Provider<List<IAndroidTarget.OptionalLibrary>>
                 get() = project.provider { emptyList() }
+            override val sdkSetupCorrectly: Provider<Boolean>
+                get() = project.provider { true }
         }
     }
 

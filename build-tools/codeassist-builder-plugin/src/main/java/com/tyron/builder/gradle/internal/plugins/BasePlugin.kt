@@ -21,6 +21,7 @@ import com.tyron.builder.gradle.internal.core.dsl.VariantDslInfo
 import com.tyron.builder.gradle.internal.dependency.SourceSetManager
 import com.tyron.builder.gradle.internal.dependency.VariantDependencies
 import com.tyron.builder.gradle.internal.dsl.*
+import com.tyron.builder.gradle.internal.ide.ModelBuilder
 import com.tyron.builder.gradle.internal.scope.DelayedActionsExecutor
 import com.tyron.builder.gradle.internal.services.*
 import com.tyron.builder.gradle.internal.tasks.factory.*
@@ -271,14 +272,20 @@ abstract class BasePlugin<
     }
 
     override fun configureExtension(project: Project) {
+        // Create components extension
+//        createComponentExtension(
+//            dslServices,
+//            variantApiOperations,
+//            bootClasspathConfig
+//        )
         project.extensions.add("buildOutputs", buildOutputs)
-//        registerModels(
-//            project,
-//            registry,
-//            variantInputModel,
-//            extensionData,
-//            extraModelInfo,
-//            globalConfig)
+        registerModels(
+            project,
+            registry,
+            variantInputModel,
+            extensionData,
+            extraModelInfo,
+            globalConfig)
 
         val unused = extensionData.newExtension
 
@@ -446,6 +453,24 @@ To learn more, go to https://d.android.com/r/tools/java-8-support-message.html
         variantManager.finalizeAllVariants()
     }
 
+    protected open fun registerModels(
+        project: Project,
+        registry: ToolingModelBuilderRegistry,
+        variantInputModel: VariantInputModel<DefaultConfig, BuildType, ProductFlavor, SigningConfig>,
+        extensionData: ExtensionData<BuildFeaturesT, BuildTypeT, DefaultConfigT, ProductFlavorT, AndroidT>,
+        extraModelInfo: ExtraModelInfo,
+        globalConfig: GlobalTaskCreationConfig
+    ) {
+        // Register a builder for the custom tooling model
+        val variantModel: VariantModel = createVariantModel(globalConfig)
+        registerModelBuilder(project, registry, variantModel, extensionData.oldExtension, extraModelInfo)
+        registry.register(
+            com.tyron.builder.gradle.internal.ide.v2.ModelBuilder(
+                project, variantModel, extensionData.newExtension
+            )
+        )
+    }
+
     private fun createVariantModel(globalConfig: GlobalTaskCreationConfig): VariantModel {
         return VariantModelImpl(
             variantInputModel as VariantInputModel<DefaultConfig, BuildType, ProductFlavor, SigningConfig>,
@@ -459,6 +484,21 @@ To learn more, go to https://d.android.com/r/tools/java-8-support-message.html
             getProjectType(),
             getProjectTypeV2(),
             globalConfig)
+    }
+
+    /** Registers a builder for the custom tooling model.  */
+    protected open fun registerModelBuilder(
+        project: Project,
+        registry: ToolingModelBuilderRegistry,
+        variantModel: VariantModel,
+        extension: BaseExtension,
+        extraModelInfo: ExtraModelInfo
+    ) {
+        registry.register(
+            ModelBuilder(
+                project, variantModel, extension, extraModelInfo
+            )
+        )
     }
 
     protected abstract fun getProjectType(): Int

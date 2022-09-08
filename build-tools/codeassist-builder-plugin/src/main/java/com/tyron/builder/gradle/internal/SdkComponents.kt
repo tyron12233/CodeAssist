@@ -86,6 +86,7 @@ abstract class SdkComponentsBuildService @Inject constructor(
         open val optionalLibrariesProvider: Provider<List<OptionalLibrary>> by lazy {TODO()}
         open val annotationsJarProvider: Provider<File> by lazy {TODO()}
         open val coreLambdaStubsProvider: Provider<RegularFile> by lazy {TODO()}
+        open val sdkSetupCorrectly: Provider<Boolean> by lazy { TODO() }
     }
 }
 

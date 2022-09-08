@@ -337,26 +337,30 @@ public class ResourceSet extends DataSet<ResourceMergerItem, ResourceFile> {
             handleRemovedFile(changedFile);
             mGeneratedSet.handleNewFile(sourceFolder, changedFile, logger, factory);
         } else if (resourceFile == null
-                && generatedSetResourceFile != null
-                && !needsPreprocessing) {
+                   && generatedSetResourceFile != null
+                   && !needsPreprocessing) {
             // It used to need preprocessing, but not anymore.
             mGeneratedSet.handleRemovedFile(changedFile);
             handleNewFile(sourceFolder, changedFile, logger, factory);
         } else if (resourceFile == null
-                && generatedSetResourceFile != null
-                && needsPreprocessing) {
+                   && generatedSetResourceFile != null
+                   && needsPreprocessing) {
             // Delegate to the generated set.
             mGeneratedSet.handleChangedFile(sourceFolder, changedFile, logger, factory);
         } else if (resourceFile != null
-                && !needsPreprocessing
-                && generatedSetResourceFile == null) {
+                   && !needsPreprocessing
+                   && generatedSetResourceFile == null) {
             // The "normal" case, handle it here.
             doHandleChangedFile(changedFile, resourceFile, factory);
+        } else if (resourceFile != null
+                   && !needsPreprocessing
+            && generatedSetResourceFile != null) {
+            mGeneratedSet.handleChangedFile(sourceFolder, changedFile, logger, factory);
         } else {
             // Something strange happened.
             throw MergingException.withMessage("In DataSet '%s', no data file for changedFile. "
-                            + "This is an internal error in the incremental builds code; "
-                            + "to work around it, try doing a full clean build.",
+                                               + "This is an internal error in the incremental builds code; "
+                                               + "to work around it, try doing a full clean build.",
                     getConfigName()).withFile(changedFile).build();
         }
 

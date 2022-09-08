@@ -6,6 +6,7 @@ import com.tyron.builder.api.artifact.impl.ArtifactsImpl
 import com.tyron.builder.api.dsl.*
 import com.tyron.builder.core.LibraryRequest
 import com.tyron.builder.gradle.BaseExtension
+import com.tyron.builder.gradle.internal.SdkComponentsBuildService
 import com.tyron.builder.gradle.internal.dsl.CommonExtensionImpl
 import com.tyron.builder.gradle.internal.dsl.LanguageSplitOptions
 import com.tyron.builder.gradle.internal.packaging.JarCreatorType
@@ -21,6 +22,7 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.file.Directory
 import org.gradle.api.file.FileCollection
+import org.gradle.api.provider.Provider
 
 class GlobalTaskCreationConfigImpl(
     project: Project,
@@ -187,9 +189,9 @@ class GlobalTaskCreationConfigImpl(
     override val localCustomLintChecks: FileCollection by lazy {
         project.files()
     }
-//
-//    override val versionedSdkLoader: Provider<SdkComponentsBuildService.VersionedSdkLoader>
-//        get() = versionedSdkLoaderService.versionedSdkLoader
+
+    override val versionedSdkLoader: Provider<SdkComponentsBuildService.VersionedSdkLoader>
+        get() = versionedSdkLoaderService.versionedSdkLoader
 //
 //    override val versionedNdkHandler: SdkComponentsBuildService.VersionedNdkHandler by lazy {
 //        getBuildService(services.buildServiceRegistry, SdkComponentsBuildService::class.java)
