@@ -183,12 +183,15 @@ public class CompletionItemFactory {
         List<CompletionItem> items = new ArrayList<>();
         Types types = task.getTypes();
         for (ExecutableElement overload : overloads) {
-            TypeMirror typeMirror = types.asMemberOf(type, overload);
-            if (!(typeMirror instanceof ExecutableType)) {
-                continue;
+            try {
+                TypeMirror typeMirror = types.asMemberOf(type, overload);
+                if (!(typeMirror instanceof ExecutableType)) {
+                    continue;
+                }
+                ExecutableType executableType = (ExecutableType) typeMirror;
+                items.add(method(overload, endsWithParen, methodRef, executableType));
+            } catch (IllegalArgumentException ignored) {
             }
-            ExecutableType executableType = (ExecutableType) typeMirror;
-            items.add(method(overload, endsWithParen, methodRef, executableType));
         }
         return items;
     }

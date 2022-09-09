@@ -4,6 +4,7 @@ import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
 import android.util.Log;
 
+import com.google.common.base.Throwables;
 import com.sun.source.tree.IdentifierTree;
 import com.sun.source.tree.NewClassTree;
 import com.sun.source.util.TreePath;
@@ -101,7 +102,8 @@ public class JavaCompletionProvider extends CompletionProvider {
         try {
             complete = completeV2(params);
         } catch (Throwable t) {
-            IdeLog.getCurrentLogger(getClass()).severe("Failed to complete: " + t);
+            IdeLog.getCurrentLogger(getClass()).severe("Failed to complete: " +
+                                                       Throwables.getStackTraceAsString(t));
         }
         if (complete == null) {
             return CompletionList.EMPTY;

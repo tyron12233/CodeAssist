@@ -73,6 +73,4 @@ public class ScopeHelper {
         }
         return list;
     }
-
-
 }

@@ -3,9 +3,12 @@ package com.tyron.completion.java.parse;
 import androidx.annotation.NonNull;
 
 import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.Scope;
 import com.sun.source.util.Trees;
 import com.sun.tools.javac.api.JavacTaskImpl;
 import com.sun.tools.javac.api.JavacTrees;
+import com.sun.tools.javac.code.Symbol;
+import com.sun.tools.javac.comp.MemberEnter;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.Pair;
 import com.tyron.builder.project.Project;
@@ -113,12 +116,14 @@ public class CompilationInfo {
                     log.getRecorded().removeAll(toRemove);
                     log.removeDiagnostics(fileObject.toUri());
 
-                    if (compiledMap.containsKey(fileObject.toUri())) {
-                        JCCompilationUnit tree = compiledMap.get(fileObject.toUri());
+
+                    JCCompilationUnit previous = compiledMap.get(fileObject.toUri());
+                    if (previous != null) {
                         NBEnter enter = (NBEnter) NBEnter.instance(javacTask.getContext());
-                        enter.unenter(tree, tree);
+                        enter.unenter(previous, previous);
                         enter.removeCompilationUnit(fileObject);
                     }
+
 
                     // reparse the whole file
                     Iterable<? extends CompilationUnitTree> units;
@@ -128,12 +133,17 @@ public class CompilationInfo {
                         throw new RuntimeException(e);
                     }
 
+                    if (previous != null) {
+                        ((JCCompilationUnit) units.iterator().next()).toplevelScope = previous.toplevelScope;
+                    }
+
                     if (!units.iterator().hasNext()) {
                         return;
                     }
                     javacTask.analyze();
 
-                    compiledMap.put(fileObject.toUri(), (JCCompilationUnit) units.iterator().next());
+                    JCCompilationUnit newUnit = (JCCompilationUnit) units.iterator().next();
+                    compiledMap.put(fileObject.toUri(), newUnit);
 
                     treeConsumer.accept((JCCompilationUnit) units.iterator().next());
                 } catch (Throwable t) {

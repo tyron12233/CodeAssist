@@ -6,16 +6,21 @@ import static com.tyron.completion.java.util.CompletionItemFactory.method;
 import static com.tyron.completion.java.util.CompletionItemFactory.overridableMethod;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
-import com.tyron.completion.java.compiler.CompileTask;
+import com.sun.source.tree.NewClassTree;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.util.ElementUtil;
+import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeMirror;
+
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.Scope;
@@ -61,7 +66,8 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
                 .getParentPath();
         Tree parentLeaf = parentPath.getLeaf();
 
-        for (Element element : ScopeHelper.scopeMembers(task, scope, filter)) {
+        List<Element> elements = ScopeHelper.scopeMembers(task, scope, filter);
+        for (Element element : elements) {
             checkCanceled();
 
             if (element.getKind() == ElementKind.METHOD) {
@@ -72,8 +78,8 @@ public class ScopeCompletionProvider extends BaseCompletionProvider {
                 } else {
                     sortText = JavaSortCategory.ACCESSIBLE_SYMBOL.toString();
                 }
-                if (parentLeaf.getKind() == Tree.Kind.CLASS &&
-                    !ElementUtil.isFinal(executableElement)) {
+                if (parentLeaf.getKind() == Tree.Kind.CLASS
+                    && !ElementUtil.isFinal(executableElement)) {
                     builder.addItems(overridableMethod(task, parentPath,
                                                        Collections.singletonList(executableElement),
                                                        endsWithParen), sortText);

@@ -1,5 +1,6 @@
 package com.tyron.completion.java.util;
 
+import com.sun.source.tree.NewClassTree;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.action.FindCurrentPath;
 
@@ -146,5 +147,16 @@ public class TreeUtil {
             methods.add((MethodTree) member);
         }
         return methods;
+    }
+
+    public static String extractClassFromAnonymousString(String string) {
+        String className = string;
+        if (className.contains("<anonymous")) {
+            className = className.substring("<anonymous ".length(), className.length() - 1);
+            if (className.contains("$")) {
+                className = className.substring(0, className.indexOf('$'));
+            }
+        }
+        return className;
     }
 }
