@@ -256,6 +256,7 @@ public class ProjectManager {
                             .filter(File::exists)
                             .forEach(impl::addLibrary);
 
+
                     // TODO: add res index support
                     break;
             }

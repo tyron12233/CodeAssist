@@ -33,6 +33,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.4.1'
     implementation 'com.google.android.material:material:1.5.0'
 
+
     // bytecode analysis
     implementation 'org.apache.bcel:bcel:6.5.0'
     implementation 'org.antlr:antlr4-runtime:4.9.2'
