@@ -352,10 +352,6 @@ public class ResourceSet extends DataSet<ResourceMergerItem, ResourceFile> {
                    && generatedSetResourceFile == null) {
             // The "normal" case, handle it here.
             doHandleChangedFile(changedFile, resourceFile, factory);
-        } else if (resourceFile != null
-                   && !needsPreprocessing
-            && generatedSetResourceFile != null) {
-            mGeneratedSet.handleChangedFile(sourceFolder, changedFile, logger, factory);
         } else {
             // Something strange happened.
             throw MergingException.withMessage("In DataSet '%s', no data file for changedFile. "

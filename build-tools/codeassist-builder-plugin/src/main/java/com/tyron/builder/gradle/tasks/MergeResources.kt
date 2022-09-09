@@ -52,12 +52,12 @@ import org.gradle.api.tasks.*
 import org.gradle.api.tasks.Optional
 import org.gradle.work.FileChange
 import org.gradle.work.InputChanges
+import org.openjdk.javax.xml.parsers.DocumentBuilderFactory
 import java.io.File
 import java.io.IOException
 import java.util.Locale
 import java.util.function.Supplier
 import java.util.stream.Collectors
-import org.openjdk.javax.xml.parsers.DocumentBuilderFactory
 
 @CacheableTask
 @BuildAnalyzer(primaryTaskCategory = TaskCategory.ANDROID_RESOURCES, secondaryTaskCategories = [TaskCategory.MERGING])
@@ -493,8 +493,8 @@ abstract class MergeResources : IncrementalTask() {
                     )
                 }
             },
-            fileLookup
-//            useAndroidX.get()
+            fileLookup,
+            useAndroidX.get()
         )
         return object : SingleFileProcessor {
 
@@ -550,10 +550,13 @@ abstract class MergeResources : IncrementalTask() {
                 }
                 return processor
                     .processSingleFile(
-                        normalizedInputFile.absoluteFile,
-                        outputFile
-//                        viewBindingEnabled.get(),
-//                        dataBindingEnabled.get()
+                        android.databinding.tool.util.RelativizableFile.fromAbsoluteFile(
+                            inputFile.canonicalFile,
+                            null
+                        ),
+                        outputFile,
+                        viewBindingEnabled.get(),
+                        dataBindingEnabled.get()
                     )
             }
 
@@ -577,8 +580,7 @@ abstract class MergeResources : IncrementalTask() {
             }
 
             override fun processFileWithNoDataBinding(file: File) {
-                TODO()
-//                processor.processSingleFile(inputfile)
+                processor.processFileWithNoDataBinding(file)
             }
 
 //            @Throws(JAXBException::class)
