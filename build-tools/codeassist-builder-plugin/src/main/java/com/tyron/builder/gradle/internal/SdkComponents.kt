@@ -87,6 +87,19 @@ abstract class SdkComponentsBuildService @Inject constructor(
         open val annotationsJarProvider: Provider<File> by lazy {TODO()}
         open val coreLambdaStubsProvider: Provider<RegularFile> by lazy {TODO()}
         open val sdkSetupCorrectly: Provider<Boolean> by lazy { TODO() }
+
+        /**
+         * The API versions file from the platform being compiled against.
+         *
+         * Historically this was distributed in platform-tools. It has been moved to platforms, so it
+         * is versioned now. (There was some overlap, so this is available in platforms since platform
+         * api 26, and was removed in the platform-tools several years later in 31.x)
+         *
+         * This will not be present if the compile-sdk version is less than 26 (a fallback to
+         * platform-tools would not help for users that update their SDK, as it is removed in recent
+         * platform-tools)
+         */
+        open val apiVersionsFile: Provider<RegularFile> by lazy { TODO() }
     }
 }
 

@@ -20,7 +20,9 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -48,6 +50,24 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
                                      CompletionList.Builder list,
                                      JavacUtilitiesProvider task,
                                      boolean caseSensitive) {
+
+        List<String> fullyQualifiedNames =
+                getFullyQualifiedNames(root, partial, task, caseSensitive);
+        for (String className : fullyQualifiedNames) {
+            CompletionItem item = classItem(className);
+            item.data = className;
+            item.setInsertHandler(
+                    new ClassImportInsertHandler(task, new File(root.getSourceFile().toUri()),
+                            item));
+            item.setSortText(JavaSortCategory.TO_IMPORT.toString());
+            list.addItem(item);
+        }
+    }
+
+    public static List<String> getFullyQualifiedNames(CompilationUnitTree root,
+                                                      String partial,
+                                                      JavacUtilitiesProvider task,
+                                                      boolean caseSensitive) {
         checkCanceled();
 
         Predicate<String> predicate;
@@ -58,15 +78,6 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
         }
 
         Set<String> uniques = new HashSet<>();
-//        String packageName = Objects.toString(root.getPackageName(), "");
-//        for (String className : task.packagePrivateTopLevelTypes(packageName)) {
-//            if (!predicate.test(className)) {
-//                continue;
-//            }
-//            list.addItem(classItem(className));
-//            uniques.add(className);
-//        }
-
         File fileToComplete = new File(root.getSourceFile().toUri());
         final Module module = task.getProject().getModule(fileToComplete);
         ShortNamesCache cache = ShortNamesCache.getInstance(module);
@@ -80,18 +91,10 @@ public class ClassNameCompletionProvider extends BaseCompletionProvider {
             if (uniques.contains(className)) {
                 continue;
             }
-            if (list.getItemCount() >= Completions.MAX_COMPLETION_ITEMS) {
-                list.incomplete();
-                break;
-            }
-            CompletionItem item = classItem(className);
-            item.data = className;
-            item.setInsertHandler(
-                    new ClassImportInsertHandler(task, new File(root.getSourceFile().toUri()),
-                            item));
-            item.setSortText(JavaSortCategory.TO_IMPORT.toString());
-            list.addItem(item);
+
             uniques.add(className);
         }
+
+        return new ArrayList<>(uniques);
     }
 }

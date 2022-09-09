@@ -67,10 +67,13 @@ import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 
 import io.github.rosemoe.sora.event.ClickEvent;
+import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.EditorKeyEvent;
 import io.github.rosemoe.sora.event.Event;
+import io.github.rosemoe.sora.event.EventReceiver;
 import io.github.rosemoe.sora.event.InterceptTarget;
 import io.github.rosemoe.sora.event.LongPressEvent;
+import io.github.rosemoe.sora.event.Unsubscribe;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.diagnostic.DiagnosticRegion;
@@ -103,20 +106,6 @@ public class RosemoeEditorFacade {
         configureEditor(editor, file);
         container.addView(editor);
 
-        content.addContentListener(new ContentListener() {
-            @Override
-            public void contentChanged(@NonNull ContentEvent event) {
-                ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                    DebouncerStore.DEFAULT.registerOrGetDebouncer("contentChange").debounce(300, () -> {
-                        try {
-                            onContentChange(event.getContent());
-                        } catch (Throwable t) {
-                            LOGGER.error("Error in onContentChange", t);
-                        }
-                    });
-                });
-            }
-        });
 
         EventManager eventManager = ApplicationLoader.getInstance().getEventManager();
         eventManager.subscribeEvent(PerformShortcutEvent.class, (event, unsubscribe) -> {
@@ -268,6 +257,17 @@ public class RosemoeEditorFacade {
                     editor.requestFocus();
                 }
             }
+        });
+        editor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
+            ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                DebouncerStore.DEFAULT.registerOrGetDebouncer("contentChange").debounce(300, () -> {
+                    try {
+                        onContentChange(editor.getContent());
+                    } catch (Throwable t) {
+                        LOGGER.error("Error in onContentChange", t);
+                    }
+                });
+            });
         });
     }
 

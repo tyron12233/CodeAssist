@@ -4,6 +4,8 @@ import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
 import android.util.Log;
 
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.NewClassTree;
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.api.JavacTaskImpl;
 import com.sun.tools.javac.code.Symbol;
@@ -38,6 +40,7 @@ import com.tyron.completion.java.provider.IdentifierCompletionProvider;
 import com.tyron.completion.java.provider.JavacUtilitiesProvider;
 import com.tyron.completion.java.provider.MemberReferenceCompletionProvider;
 import com.tyron.completion.java.provider.MemberSelectCompletionProvider;
+import com.tyron.completion.java.provider.SmartClassNameCompletionProvider;
 import com.tyron.completion.java.provider.VariableNameCompletionProvider;
 import com.tyron.completion.java.util.FileContentFixer;
 import com.tyron.completion.model.CachedCompletion;
@@ -148,6 +151,19 @@ public class JavaCompletionProvider extends CompletionProvider {
 
         switch (scanned.getLeaf().getKind()) {
             case IDENTIFIER:
+//                IdentifierTree identifierTree = (IdentifierTree) scanned.getLeaf();
+//                if ("<error>".equals(identifierTree.getName().toString())) {
+//                    // scan the tree before the current one, check if its a "new" expression
+//                    TreePath previousPath = new FindCurrentPath(javacTask).scan(unit, parameters.getIndex() - 1);
+//
+//                    // we are in a new expression
+//                    // e.g. List list = new ...
+//                    if (previousPath != null && previousPath.getLeaf() instanceof NewClassTree) {
+//                        // now suggest types that are applicable to the current type
+//                        new SmartClassNameCompletionProvider(null).complete(builder, javacUtilities,
+//                                scanned, parameters.getPrefix(), false);
+//                    }
+//                }
                 new IdentifierCompletionProvider(null).complete(builder, javacUtilities,
                         scanned, parameters.getPrefix(), false);
                 break;

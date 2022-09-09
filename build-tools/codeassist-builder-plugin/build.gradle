@@ -51,6 +51,7 @@ dependencies {
     implementation files('libs/manifest-merger.jar')
     implementation files('libs/aaptcompiler-7.4.0-alpha09.jar')
     implementation files('libs/converted-common-30.40.0-alpha09.jar')
+    implementation files('libs/converted-data-binding.jar')
     implementation 'com.android.tools:annotations:30.4.0-alpha09'
 
     def agpVersion = "7.4.0-alpha09"
@@ -72,9 +73,9 @@ dependencies {
     }
 
     // databinding
-    implementation('com.android.databinding:compilerCommon:3.2.0-alpha10') {
-        transitive = false
-    }
+//    implementation('com.android.databinding:compilerCommon:3.5.0') {
+//        transitive = false
+//    }
 
     // class generation
     implementation 'com.squareup:javawriter:2.5.1'

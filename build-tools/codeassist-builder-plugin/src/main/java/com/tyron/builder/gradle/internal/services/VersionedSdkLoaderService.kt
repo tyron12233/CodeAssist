@@ -41,6 +41,8 @@ class VersionedSdkLoaderService(
                 get() = project.provider { emptyList() }
             override val sdkSetupCorrectly: Provider<Boolean>
                 get() = project.provider { true }
+            override val apiVersionsFile: Provider<RegularFile>
+                get() = super.apiVersionsFile
         }
     }
 
