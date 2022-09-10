@@ -5,6 +5,10 @@ import com.android.ide.common.rendering.api.AttrResourceValue
 import com.android.ide.common.rendering.api.AttributeFormat.*
 import com.android.ide.common.rendering.api.ResourceNamespace
 import com.android.ide.common.rendering.api.ResourceReference
+import com.android.ide.common.resources.ResourceResolver
+import com.android.ide.common.resources.configuration.FolderConfiguration
+import com.android.ide.common.resources.getConfiguredResources
+import com.android.resources.ResourceType.REFERENCEABLE_TYPES
 import com.android.resources.ResourceType.STYLEABLE
 import com.tyron.builder.project.api.AndroidModule
 import com.tyron.completion.CompletionParameters
@@ -82,14 +86,26 @@ private fun addValueItems(
     val tagName = ownerElement.tagName ?: return
     val manifestStyleName = getManifestStyleName(tagName) ?: return
 
-    val result = frameworkResRepository.getResources(ResourceNamespace.ANDROID, STYLEABLE, manifestStyleName)
+    val result =
+        frameworkResRepository.getResources(ResourceNamespace.ANDROID, STYLEABLE, manifestStyleName)
     if (result.isEmpty()) {
         return
     }
 
+    val resourceResolver = ResourceResolver.create(
+        frameworkResRepository.getConfiguredResources(FolderConfiguration.createDefault()).rowMap(),
+        null
+    )
+
     val styleableResource = result.first().cast<BasicStyleableResourceItem>()
     styleableResource.allAttributes.filter {
-        FuzzySearch.partialRatio(it.name, attr.localName) >= 70
+        it.name.equals(attr.localName)
+    }.map {
+        // android styleable attributes can declare empty formats which means
+        // we should search for it in its parent
+        if (it.formats.isEmpty()) {
+            resourceResolver.getResolvedResource(it.asReference()) as? AttrResourceValue ?: it
+        } else it
     }.flatMap { attribute ->
         if (attribute.formats.contains(ENUM) || attribute.formats.contains(FLAGS)) {
             return@flatMap attribute.attributeValues.keys.map { flag ->
@@ -98,15 +114,28 @@ private fun addValueItems(
                     addFilterText(flag)
                 }
             }
-        }
-        if (attribute.formats.contains(BOOLEAN)) {
+        } else if (attribute.formats.contains(BOOLEAN)) {
             return@flatMap listOf("true", "false").map {
                 CompletionItem.create(it, "Value", it, DrawableKind.Snippet).apply {
                     setInsertHandler(ValueInsertHandler(attribute, this))
                     addFilterText(it)
                 }
             }
+        } else if (attribute.formats.contains(REFERENCE)) {
+            REFERENCEABLE_TYPES.flatMap { resourceType ->
+                frameworkResRepository.getResources(ResourceNamespace.ANDROID, resourceType) {
+                    FuzzySearch.partialRatio(it.name, completionBuilder!!.prefix) >= 90
+                }
+            }.map {
+                val selfReference = it.referenceToSelf.getRelativeResourceUrl(ResourceNamespace.ANDROID)
+                CompletionItem.create(selfReference.name, "Reference", selfReference.qualifiedName).apply {
+                    setInsertHandler(ValueInsertHandler(attribute, this))
+                    addFilterText(selfReference.name)
+                }
+            }
+
         }
+
         emptyList()
     }.forEach {
         completionBuilder?.addItem(it)
@@ -124,7 +153,8 @@ private fun addManifestAttributes(
     val styleName = getManifestStyleName(tagName) ?: tagName
 
     // find the style resource in the repository
-    val result = frameworkResRepository.getResources(ResourceNamespace.ANDROID, STYLEABLE, styleName)
+    val result =
+        frameworkResRepository.getResources(ResourceNamespace.ANDROID, STYLEABLE, styleName)
     if (result.isEmpty()) {
         return
     }
@@ -169,7 +199,7 @@ private fun addAttributes(
         }
         val commitText = when {
             TextUtils.isEmpty(prefix) -> reference.name
-            else ->   "$prefix:${reference.name}"
+            else -> "$prefix:${reference.name}"
         }
         if (uniques.contains(commitText)) {
             continue
