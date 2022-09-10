@@ -113,7 +113,7 @@ public abstract class DataSet<I extends DataItem<F>, F extends DataFile<I>>
      * Reads the content of a data folders and loads the DataItem.
      *
      * <p>This should generate DataFiles, and process them with {@link
-     * #processNewDataFile(java.io.File, DataFile, boolean)}.
+     * #processNewDataFile(File, DataFile, boolean)}.
      *
      * @param sourceFolder the source folder to load the resources from.
      * @param factory

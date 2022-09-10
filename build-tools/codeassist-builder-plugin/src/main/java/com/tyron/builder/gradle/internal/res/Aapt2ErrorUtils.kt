@@ -138,7 +138,7 @@ fun rewriteLinkException(
  * @return A Blame Logger that can rewrite sources, to their correct locations pre-merge.
  */
 fun blameLoggerFor(
-    request: com.android.ide.common.resources.CompileResourceRequest, logger: LoggerWrapper
+    request: CompileResourceRequest, logger: LoggerWrapper
 ): BlameLogger {
     val sourcePathFunc = if (request.identifiedSourceSetMap.any()) {
         relativeResourcePathToAbsolutePath(

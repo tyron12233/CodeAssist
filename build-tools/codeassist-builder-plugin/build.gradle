@@ -1,7 +1,7 @@
 plugins {
     id 'java-library'
 }
-apply plugin: 'kotlin'
+apply plugin: 'org.jetbrains.kotlin.jvm'
 
 
 
@@ -43,15 +43,13 @@ dependencies {
     implementation projects.buildTools.logging
     implementation projects.buildTools.builderBuildEvents
 
+    implementation projects.buildTools.androidCommonResources
+
     implementation common.slf4j
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.ow2.asm:asm:9.3'
     implementation 'org.ow2.asm:asm-commons:9.3'
     implementation 'com.android:zipflinger:7.2.2'
-    implementation files('libs/manifest-merger.jar')
-    implementation files('libs/aaptcompiler-7.4.0-alpha09.jar')
-    implementation files('libs/converted-common-30.40.0-alpha09.jar')
-    implementation files('libs/converted-data-binding.jar')
     implementation 'com.android.tools:annotations:30.4.0-alpha09'
 
     def agpVersion = "7.4.0-alpha09"

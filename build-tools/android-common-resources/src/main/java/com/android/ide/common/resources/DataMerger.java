@@ -474,7 +474,7 @@ abstract class DataMerger<I extends DataItem<F>, F extends DataFile<I>, S extend
      * <p>This will allow further updates with {@link #mergeData(MergeConsumer, boolean)} to ignore
      * the state at load time and only apply the new changes.
      *
-     * @see #loadFromBlob(java.io.File, boolean, String)
+     * @see #loadFromBlob(File, boolean, String)
      * @see DataItem#isWritten()
      */
     private void setPostBlobLoadStateToWritten() {
@@ -506,7 +506,7 @@ abstract class DataMerger<I extends DataItem<F>, F extends DataFile<I>, S extend
      * <p>This will allow the first use of {@link #mergeData(MergeConsumer, boolean)} to add these
      * to the consumer as if they were new items.
      *
-     * @see #loadFromBlob(java.io.File, boolean, String)
+     * @see #loadFromBlob(File, boolean, String)
      * @see DataItem#isTouched()
      */
     private void setPostBlobLoadStateToTouched() {

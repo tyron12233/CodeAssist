@@ -6,20 +6,20 @@ import com.android.utils.ILogger
 import org.openjdk.javax.xml.stream.Location
 import java.io.File
 
-internal fun blameSource(
+fun blameSource(
     source: Source,
     line: Int? = source.line,
     column: Int? = null
 ): BlameLogger.Source =
     BlameLogger.Source(source.path, line ?: -1, column ?: -1)
 
-internal fun blameSource(
+fun blameSource(
     source: Source,
     location: Location
 ): BlameLogger.Source =
     BlameLogger.Source(source.path, location.lineNumber, location.columnNumber)
 
-class BlameLogger(
+open class BlameLogger(
     val logger: ILogger,
     private val userVisibleSourceTransform: (String) -> String,
     val blameMap: (Source) -> Source = { it }

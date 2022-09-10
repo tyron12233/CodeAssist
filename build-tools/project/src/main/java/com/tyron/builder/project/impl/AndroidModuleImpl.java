@@ -32,14 +32,16 @@ import java.util.function.Consumer;
 
 public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
-    private ManifestData mManifestData;
     private final Map<String, File> mKotlinFiles;
     private Map<String, File> mResourceClasses;
 
     private final Set<String> moduleDependencies = new HashSet<>();
     private final Set<ContentRoot> contentRoots = new HashSet<>(3);
+
+    private String packageName;
     private String name;
     private Project project;
+    private String namespace;
 
     public AndroidModuleImpl(File root) {
         super(root);
@@ -66,25 +68,13 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
                     // java source root may contain kotlin files aswell
                     FileUtils.iterateFiles(javaDirectory,
                             FileFilterUtils.suffixFileFilter(".kt"),
-                            TrueFileFilter.INSTANCE
-                    ).forEachRemaining(kotlinConsumer);
+                            TrueFileFilter.INSTANCE).forEachRemaining(kotlinConsumer);
                     FileUtils.iterateFiles(javaDirectory,
                             FileFilterUtils.suffixFileFilter(".java"),
-                            TrueFileFilter.INSTANCE
-                    ).forEachRemaining(this::addJavaFile);
+                            TrueFileFilter.INSTANCE).forEachRemaining(this::addJavaFile);
                 }
             }
         }
-
-
-        // R.java files
-//        File gen = new File(getBuildDirectory(), "gen");
-//        if (gen.exists()) {
-//            FileUtils.iterateFiles(gen,
-//                    FileFilterUtils.suffixFileFilter(".java"),
-//                    TrueFileFilter.INSTANCE
-//            ).forEachRemaining(this::addJavaFile);
-//        }
     }
 
     @Override
@@ -121,12 +111,13 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         return new File(getRootFile(), "src/main/assets");
     }
 
+    public void setPackageName(String packageName) {
+        this.packageName = packageName;
+    }
+
     @Override
     public String getPackageName() {
-        if (mManifestData == null) {
-            return null;
-        }
-        return mManifestData.getPackage();
+        return packageName;
     }
 
     @Override
@@ -252,5 +243,14 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     @Override
     public String getName() {
         return name;
+    }
+
+    public void setNamespace(String namespace) {
+        this.namespace = namespace;
+    }
+
+    @Override
+    public String getNamespace() {
+        return namespace;
     }
 }
