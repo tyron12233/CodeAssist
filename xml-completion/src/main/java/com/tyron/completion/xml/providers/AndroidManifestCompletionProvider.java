@@ -41,7 +41,7 @@ public class AndroidManifestCompletionProvider extends LayoutXmlCompletionProvid
         CompletionList.Builder builder = CompletionList.builder(prefix);
         switch (completionType) {
             case TAG:
-                AndroidXmlTagUtils.addManifestTagItems(repository, prefix, builder);
+                AndroidXmlTagUtils.addManifestTagItems(prefix, builder);
                 break;
             case ATTRIBUTE:
                 AndroidAttributeUtils.addManifestAttributes(builder, repository.getRepository(),

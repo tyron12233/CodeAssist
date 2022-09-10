@@ -187,12 +187,3 @@ dependencies {
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:1.1.5")
 }
-
-afterEvaluate {
-    tasks.getByName("dexBuilderDebug").doLast {
-        println "====================="
-        println it.class
-        println it.externalLibClasses.files
-    }
-}
-

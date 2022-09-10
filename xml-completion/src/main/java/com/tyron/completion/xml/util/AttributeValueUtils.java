@@ -126,7 +126,7 @@ public class AttributeValueUtils {
             for (String flag : attributeValues.keySet()) {
                 CompletionItem item =
                         CompletionItem.create(flag, "Value", flag, DrawableKind.Snippet);
-                item.setInsertHandler(new ValueInsertHandler(attribute, item));
+//                item.setInsertHandler(new ValueInsertHandler(attribute, item));
                 item.addFilterText(flag);
                 list.addItem(item);
             }
@@ -173,7 +173,7 @@ public class AttributeValueUtils {
                             .toString();
                     CompletionItem item = CompletionItem.create(label, "Value", label);
                     item.iconKind = DrawableKind.LocalVariable;
-                    item.setInsertHandler(new ValueInsertHandler(attribute, item));
+//                    item.setInsertHandler(new ValueInsertHandler(attribute, item));
                     item.addFilterText(value.asReference().getRelativeResourceUrl(appNamespace).toString());
                     item.addFilterText(value.getName());
                     list.addItem(item);

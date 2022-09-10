@@ -7,10 +7,18 @@ import androidx.annotation.NonNull;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
 import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
+import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.Module;
+import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.LanguageManager;
+import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
+import com.tyron.completion.CompletionParameters;
+import com.tyron.completion.model.CompletionItem;
+import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.task.InjectResourcesTask;
+import com.tyron.completion.xml.v2.AndroidXmlCompletionProvider;
 import com.tyron.editor.Editor;
 import com.tyron.language.api.CodeAssistLanguage;
 import com.tyron.viewbinding.task.InjectViewBindingTask;
@@ -23,7 +31,6 @@ import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
-import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.format.Formatter;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
@@ -122,15 +129,31 @@ public class LanguageXML implements Language, CodeAssistLanguage {
                                     @NonNull CharPosition position,
                                     @NonNull CompletionPublisher publisher,
                                     @NonNull Bundle extraArguments) throws CompletionCancelledException {
+        if (mEditor.getProject() == null) {
+            return;
+        }
+        Module module = mEditor.getProject().getModule(mEditor.getCurrentFile());
+        if (!(module instanceof AndroidModule)) {
+            return;
+        }
         String prefix = CompletionHelper.computePrefix(content, position, this::isAutoCompleteChar);
-        List<CompletionItem> items =
-                new XMLAutoCompleteProvider(mEditor).getAutoCompleteItems(prefix,
-                        position.getLine(), position.getColumn());
+        CompletionParameters parameters = CompletionParameters.builder()
+                .setPrefix(prefix)
+                .setModule(module)
+                .setProject(mEditor.getProject())
+                .setFile(mEditor.getCurrentFile())
+                .setIndex(position.getIndex())
+                .setLine(position.getLine())
+                .setColumn(position.getColumn())
+                .setContents(content.getReference().toString())
+                .build();
+        CompletionList items =
+                new AndroidXmlCompletionProvider().complete(parameters);
         if (items == null) {
             return;
         }
-        for (CompletionItem item : items) {
-            publisher.addItem(item);
+        for (CompletionItem item : items.getItems()) {
+            publisher.addItem(new CompletionItemWrapper(item));
         }
     }
 

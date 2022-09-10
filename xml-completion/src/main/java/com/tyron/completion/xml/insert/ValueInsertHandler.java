@@ -1,8 +1,8 @@
 package com.tyron.completion.xml.insert;
 
+import com.android.ide.common.rendering.api.AttrResourceValue;
+import com.android.ide.common.rendering.api.AttributeFormat;
 import com.tyron.completion.model.CompletionItem;
-import com.tyron.xml.completion.repository.api.AttrResourceValue;
-import com.tyron.xml.completion.repository.api.AttributeFormat;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 

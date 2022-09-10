@@ -210,6 +210,9 @@ public class ProjectManager {
         assert basicAndroidProject != null;
         assert variantDependencies != null;
 
+        // basic info
+        impl.setNamespace(androidProject.getNamespace());
+
         // add main source set
         SourceSetContainer mainSourceSet = basicAndroidProject.getMainSourceSet();
         if (mainSourceSet != null) {
