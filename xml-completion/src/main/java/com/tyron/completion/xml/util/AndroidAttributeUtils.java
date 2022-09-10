@@ -30,22 +30,6 @@ import java.util.function.Function;
 
 public class AndroidAttributeUtils {
 
-    public static void addManifestAttributes(@NonNull CompletionList.Builder builder,
-                                             @NonNull ResourceRepository repository,
-                                             @NonNull DOMNode node,
-                                             @NonNull ResourceNamespace namespace) {
-        Function<String, Set<String>> provider = tag -> {
-            String manifestStyleName = AndroidXmlTagUtils.getManifestStyleName(tag);
-            if (manifestStyleName != null) {
-                return ImmutableSet.of(manifestStyleName);
-            }
-            return ImmutableSet.of(tag);
-        };
-        List<AttrResourceValue> tagAttributes =
-                getTagAttributes(repository, node, namespace, provider, ImmutableSet::of);
-        addAttributes(tagAttributes, node, builder);
-    }
-
     public static void addLayoutAttributes(@NonNull CompletionList.Builder builder,
                                            @NonNull ResourceRepository repository,
                                            @NonNull DOMNode node,
