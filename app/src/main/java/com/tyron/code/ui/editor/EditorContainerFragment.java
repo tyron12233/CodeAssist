@@ -34,6 +34,7 @@ import com.tyron.code.ui.main.MainFragment;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.main.action.project.SaveEvent;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.code.util.EventManagerUtilsKt;
 import com.tyron.code.util.Listeners;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.SharedPreferenceKeys;
@@ -276,7 +277,9 @@ public class EditorContainerFragment extends Fragment implements
             }
         });
 
-        ApplicationLoader.getInstance().getEventManager().subscribeEvent(
+
+        EventManagerUtilsKt.subscribeEvent(
+                ApplicationLoader.getInstance().getEventManager(),
                 getViewLifecycleOwner(),
                 SaveEvent.class,
                 (event, unsubscribe) -> updateTabs()

@@ -15,6 +15,7 @@ import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.builder.project.mock.MockAndroidModule;
+import com.tyron.code.event.EventManager;
 
 import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusConnection;
 import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusFactory;
@@ -47,10 +48,13 @@ public class Project {
     private volatile boolean mCompiling;
     private volatile boolean mIndexing;
 
+    private final EventManager eventManager;
+
     public Project(File root) {
         mRoot = root;
         mModules = new LinkedHashMap<>();
         mSettings = new ProjectSettings(new File(root, "settings.json"));
+        eventManager = new EventManager();
     }
 
     public void clear() {
@@ -154,5 +158,9 @@ public class Project {
     @Override
     public int hashCode() {
         return Objects.hash(mRoot);
+    }
+
+    public EventManager getEventManager() {
+        return eventManager;
     }
 }

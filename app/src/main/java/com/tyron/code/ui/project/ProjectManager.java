@@ -221,6 +221,7 @@ public class ProjectManager {
             File contentRootDirectory = new File(impl.getRootFile(), "src/" + sourceProvider.getName());
             AndroidContentRoot contentRoot = new AndroidContentRoot(contentRootDirectory);
             contentRoot.setJavaDirectories(sourceProvider.getJavaDirectories());
+            contentRoot.setResourceDirectories(sourceProvider.getResDirectories());
             impl.addContentRoot(contentRoot);
         }
 

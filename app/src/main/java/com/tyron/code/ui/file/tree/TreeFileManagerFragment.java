@@ -32,6 +32,7 @@ import com.tyron.code.event.SubscriptionReceipt;
 import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.util.ApkInstaller;
+import com.tyron.code.util.EventManagerUtilsKt;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
@@ -105,7 +106,8 @@ public class TreeFileManagerFragment extends Fragment {
 
         EventManager eventManager = ApplicationLoader.getInstance()
                 .getEventManager();
-        eventManager.subscribeEvent(getViewLifecycleOwner(), RefreshRootEvent.class, (event, unsubscribe) -> {
+
+        EventManagerUtilsKt.subscribeEvent(eventManager, getViewLifecycleOwner(), RefreshRootEvent.class, (event, unsubscribe) -> {
             File refreshRoot = event.getRoot();
             TreeNode<TreeFile> currentRoot = treeView.getRoot();
             if (currentRoot != null && refreshRoot.equals(currentRoot.getValue().getFile())) {

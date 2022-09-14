@@ -86,6 +86,7 @@ dependencies {
     implementation project(path: ':build-tools:viewbinding-inject')
     implementation project(path: ':build-tools:xml-repository')
     implementation project(path: ':java-completion')
+    implementation projects.eventManager
     // not used for compilation, but for analysis
     implementation project(path: ':build-tools:javac')
 
