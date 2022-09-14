@@ -2,8 +2,6 @@ package com.tyron.code.event;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.lifecycle.DefaultLifecycleObserver;
-import androidx.lifecycle.LifecycleOwner;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -174,19 +172,6 @@ public final class EventManager {
                     .unlock();
         }
         return new SubscriptionReceipt<>(eventType, receiver, this);
-    }
-
-    public <T extends Event> void subscribeEvent(@NonNull LifecycleOwner lifecycleOwner,
-                                                                   @NonNull Class<T> eventType,
-                                                                   @NonNull EventReceiver<T> receiver) {
-        SubscriptionReceipt<T> receipt = subscribeEvent(eventType, receiver);
-        lifecycleOwner.getLifecycle().addObserver(new DefaultLifecycleObserver() {
-            @Override
-            public void onDestroy(@NonNull LifecycleOwner owner) {
-                receipt.unsubscribe();
-                lifecycleOwner.getLifecycle().removeObserver(this);
-            }
-        });
     }
 
     /**
