@@ -2,6 +2,7 @@ package org.gradle.api.internal.tasks.compile;
 
 import static org.gradle.api.internal.tasks.compile.filter.AnnotationProcessorFilter.getFilteredClassLoader;
 
+import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.api.internal.tasks.compile.incremental.processing.AnnotationProcessingResult;
@@ -21,6 +22,7 @@ import org.codehaus.groovy.reflection.android.AndroidSupport;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import javax.tools.JavaCompiler;
@@ -92,7 +94,7 @@ class AnnotationProcessingCompileTask implements JavaCompiler.CompilationTask {
 
     private void setupProcessors() {
         processorClassloader = createProcessorClassLoader();
-        List<Processor> processors = new ArrayList<Processor>(processorDeclarations.size());
+        List<Processor> processors = new ArrayList<>(processorDeclarations.size());
         if (!processorDeclarations.isEmpty()) {
             SupportedOptionsCollectingProcessor supportedOptionsCollectingProcessor = new SupportedOptionsCollectingProcessor();
             for (AnnotationProcessorDeclaration declaredProcessor : processorDeclarations) {
@@ -113,19 +115,14 @@ class AnnotationProcessingCompileTask implements JavaCompiler.CompilationTask {
 
     ClassLoader createProcessorClassLoader() {
         if (AndroidSupport.isRunningAndroid()) {
-            return GUtil.uncheckedCall(() -> {
-                Class<?> dexClassLoader = Class.forName("dalvik.system.DexClassLoader");
-                Constructor<?> constructor = dexClassLoader.getConstructor(
-                        String.class,
-                        String.class,
-                        String.class,
-                        ClassLoader.class
-                );
+            return Objects.requireNonNull(GUtil.uncheckedCall(() -> {
+                Class<?> dexClassLoader = Class.forName("com.tyron.groovy.DexBackedURLClassLoader");
+                Constructor<?> constructor = dexClassLoader.getConstructor(String.class, ClassLoader.class,
+                        ClassPath.class);
 
-                String paths = annotationProcessorPath.stream().map(File::getAbsolutePath)
-                        .collect(Collectors.joining(File.pathSeparator));
-                return (ClassLoader) constructor.newInstance(paths, null, null, delegate.getClass().getClassLoader());
-            });
+                ClassPath of = DefaultClassPath.of(annotationProcessorPath);
+                return (ClassLoader) constructor.newInstance("", getFilteredClassLoader(delegate.getClass().getClassLoader()), of);
+            }));
         }
         return new URLClassLoader(
                 DefaultClassPath.of(annotationProcessorPath).getAsURLArray(),

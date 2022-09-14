@@ -129,11 +129,6 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
     protected void compile(InputChanges inputs) {
         DefaultJavaCompileSpec spec = createSpec();
 
-        // temporary fix
-        if (AndroidSupport.isRunningAndroid()) {
-            spec.getCompileOptions().setBootClasspath("/data/data/com.tyron.code/files/rt.jar");
-        }
-
         if (!compileOptions.isIncremental()) {
             performFullCompilation(spec);
         } else {
