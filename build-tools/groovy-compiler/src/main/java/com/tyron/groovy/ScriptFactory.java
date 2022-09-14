@@ -222,7 +222,7 @@ public class ScriptFactory {
     public static File dexJar(File inputJar, File outputDir) {
         D8Command.Builder builder = D8Command.builder();
         builder.setMode(CompilationMode.DEBUG);
-        builder.setMinApiLevel(24);
+        builder.setMinApiLevel(26);
         builder.addProgramFiles(inputJar.toPath());
         builder.addLibraryFiles(Paths.get("/data/data/com.tyron.code/files/core-lambda-stubs.jar"));
         builder.addLibraryFiles(Paths.get("/data/data/com.tyron.code/files/rt.jar"));
