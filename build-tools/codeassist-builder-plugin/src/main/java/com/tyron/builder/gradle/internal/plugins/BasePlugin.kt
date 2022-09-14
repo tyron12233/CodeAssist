@@ -457,6 +457,7 @@ To learn more, go to https://d.android.com/r/tools/java-8-support-message.html
             project,
             projectServices
         )
+            .configureCodeAssistTransformers()
             .configureDependencySubstitutions()
             .configureDependencyChecks()
             .configureGeneralTransforms(globalConfig.namespacedAndroidResources)

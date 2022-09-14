@@ -58,6 +58,10 @@ class DependencyConfigurator(
         return this
     }
 
+    fun configureCodeAssistTransformers(): DependencyConfigurator {
+        return this
+    }
+
     fun configureDependencyChecks(): DependencyConfigurator {
         val useAndroidX = projectServices.projectOptions.get(BooleanOption.USE_ANDROID_X)
         val enableJetifier = projectServices.projectOptions.get(BooleanOption.ENABLE_JETIFIER)

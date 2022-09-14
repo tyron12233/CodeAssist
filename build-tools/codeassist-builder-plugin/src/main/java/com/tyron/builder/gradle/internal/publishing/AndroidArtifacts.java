@@ -21,6 +21,7 @@ public class AndroidArtifacts {
     private static final String TYPE_PROCESSED_AAR = "processed-aar";
     private static final String TYPE_APK = "apk";
     private static final String TYPE_JAR = ArtifactTypeDefinition.JAR_TYPE;
+    private static final String TYPE_DEXED_JAR = "dexed-jar";
     private static final String TYPE_BUNDLE = "aab";
     // The apks produced from the android app bundle
     private static final String TYPE_APKS_FROM_BUNDLE = "bundle-apks";
@@ -30,6 +31,7 @@ public class AndroidArtifacts {
     // type for processed jars (the jars may need to be processed, e.g. jetified to AndroidX, before
     // they can be used)
     private static final String TYPE_PROCESSED_JAR = "processed-jar";
+    private static final String TYPE_DEXED_PROCESSED_JAR = "dexed-processed-jar";
 
     private static final String TYPE_INSTRUMENTED_CLASSES = "jacoco-instrumented-classes";
     private static final String TYPE_JACOCO_CLASSES_JAR = "jacoco-classes-jar";
@@ -301,6 +303,11 @@ public class AndroidArtifacts {
          */
         JAR(TYPE_JAR),
 
+        /**
+         * An unprocessed jar which can be run on android directly
+         */
+        DEXED_JAR(TYPE_DEXED_JAR),
+
         /** Jacoco instrumented versions of CLASSES and CLASSES_JAR produced by JacocoTransform. */
         JACOCO_CLASSES(TYPE_INSTRUMENTED_CLASSES),
         JACOCO_CLASSES_JAR(TYPE_JACOCO_CLASSES_JAR),
@@ -312,6 +319,8 @@ public class AndroidArtifacts {
          * <p>See {@link #JAR} for context on processed/unprocessed artifacts.
          */
         PROCESSED_JAR(TYPE_PROCESSED_JAR),
+
+        DEXED_PROCESSED_JAR(TYPE_DEXED_PROCESSED_JAR),
 
         // published dex folder for bundle
         DEX(TYPE_DEX),
