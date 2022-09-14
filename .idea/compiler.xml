@@ -10,8 +10,12 @@
         <module name="CodeAssist.google-java-format.main" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel target="1.7">
+    <bytecodeTargetLevel target="1.8">
+      <module name="CodeAssist.build-tools.android-builder" target="11" />
+      <module name="CodeAssist.build-tools.android-builder.main" target="11" />
+      <module name="CodeAssist.build-tools.android-builder.test" target="11" />
       <module name="CodeAssist.build-tools.asmdex" target="1.8" />
+      <module name="CodeAssist.build-tools.build-tests" target="11" />
       <module name="CodeAssist.lint" target="11" />
     </bytecodeTargetLevel>
   </component>
