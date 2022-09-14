@@ -67,6 +67,14 @@ public class DOMUtils {
         return prefix;
     }
 
+    @Nullable
+    public static String getNamespace(@NotNull DOMAttr attr) {
+        String prefix = getPrefix(attr);
+        ResourceNamespace.Resolver namespaceResolver =
+                getNamespaceResolver(attr.getOwnerDocument());
+        return namespaceResolver.prefixToUri(prefix);
+    }
+
     public static String getPrefix(@NotNull DOMAttr attr) {
         String name = attr.getName();
         if (!name.contains(":")) {
