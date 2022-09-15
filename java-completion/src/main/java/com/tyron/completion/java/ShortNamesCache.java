@@ -1,5 +1,6 @@
 package com.tyron.completion.java;
 
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.JavaModuleImpl;
@@ -33,7 +34,7 @@ public class ShortNamesCache {
     private static final JavaModule JDK_MODULE = new JavaModuleImpl(null);
 
     static {
-        JDK_MODULE.addLibrary(Objects.requireNonNull(CompletionModule.getAndroidJar()));
+        JDK_MODULE.addLibrary(CodeAssistLibrary.forJar(Objects.requireNonNull(CompletionModule.getAndroidJar())));
     }
 
     private final Module module;

@@ -9,6 +9,7 @@ import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
 import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.event.EventManager;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.code.ui.project.ProjectManager;
@@ -19,6 +20,7 @@ import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.completion.xml.v2.AndroidXmlCompletionProvider;
+import com.tyron.completion.xml.v2.events.XmlResourceChangeEvent;
 import com.tyron.editor.Editor;
 import com.tyron.language.api.CodeAssistLanguage;
 import com.tyron.viewbinding.task.InjectViewBindingTask;
@@ -203,8 +205,8 @@ public class LanguageXML implements Language, CodeAssistLanguage {
         if (mEditor.getProject() == null) {
             return;
         }
-        InjectResourcesTask.inject(mEditor.getProject());
-        InjectViewBindingTask.inject(mEditor.getProject());
+        EventManager eventManager = mEditor.getProject().getEventManager();
+        eventManager.dispatchEvent(new XmlResourceChangeEvent(mEditor.getCurrentFile(), mEditor.getContent()));
     }
 
     private class EndTagHandler implements NewlineHandler {

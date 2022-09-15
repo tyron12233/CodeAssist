@@ -7,9 +7,9 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
 import com.tyron.builder.BuildModule;
 import com.tyron.builder.log.ILogger;
-import com.tyron.builder.model.AndroidArtifact;
-import com.tyron.builder.model.Dependencies;
-import com.tyron.builder.model.Variant;
+import com.tyron.builder.model.CodeAssistAndroidLibrary;
+import com.tyron.builder.model.CodeAssistLibrary;
+import com.tyron.builder.model.v2.ide.AaptOptions;
 import com.tyron.builder.model.v2.ide.AndroidLibraryData;
 import com.tyron.builder.model.v2.ide.ArtifactDependencies;
 import com.tyron.builder.model.v2.ide.GraphItem;
@@ -22,7 +22,6 @@ import com.tyron.builder.model.v2.models.BasicAndroidProject;
 import com.tyron.builder.model.v2.models.VariantDependencies;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidContentRoot;
-import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
@@ -37,22 +36,11 @@ import com.tyron.completion.java.provider.PruneMethodBodies;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
-import org.gradle.api.GradleException;
 import org.gradle.tooling.BuildActionExecuter;
 import org.gradle.tooling.BuildException;
 import org.gradle.tooling.GradleConnector;
-import org.gradle.tooling.ModelBuilder;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.events.ProgressListener;
-import org.gradle.tooling.model.DomainObjectSet;
-import org.gradle.tooling.model.ExternalDependency;
-import org.gradle.tooling.model.HierarchicalElement;
-import org.gradle.tooling.model.idea.IdeaContentRoot;
-import org.gradle.tooling.model.idea.IdeaDependency;
-import org.gradle.tooling.model.idea.IdeaModule;
-import org.gradle.tooling.model.idea.IdeaModuleDependency;
-import org.gradle.tooling.model.idea.IdeaProject;
-import org.gradle.tooling.model.idea.IdeaSourceDirectory;
 
 import java.io.File;
 import java.io.IOException;
@@ -63,9 +51,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
-import java.util.function.Consumer;
 
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
@@ -211,7 +197,11 @@ public class ProjectManager {
         assert variantDependencies != null;
 
         // basic info
-        impl.setNamespace(androidProject.getNamespace());
+        AaptOptions.Namespacing namespacing =
+                modelInfo.getAndroidDsl().getAaptOptions().getNamespacing();
+        if (namespacing == AaptOptions.Namespacing.REQUIRED) {
+            impl.setNamespace(androidProject.getNamespace());
+        }
 
         // add main source set
         SourceSetContainer mainSourceSet = basicAndroidProject.getMainSourceSet();
@@ -250,16 +240,22 @@ public class ProjectManager {
                     break;
                 case JAVA_LIBRARY:
                     if (artifact != null && artifact.exists()) {
-                        impl.addLibrary(artifact);
+                        impl.addLibrary(CodeAssistLibrary.forJar(artifact));
                     }
                     break;
                 case ANDROID_LIBRARY:
                     AndroidLibraryData androidLibraryData = library.getAndroidLibraryData();
                     assert androidLibraryData != null;
-                    androidLibraryData.getCompileJarFiles().stream()
-                            .filter(File::exists)
-                            .forEach(impl::addLibrary);
 
+                    CodeAssistAndroidLibrary codeAssistAndroidLibrary = new CodeAssistAndroidLibrary();
+                    codeAssistAndroidLibrary.setDeclaration(library.getKey());
+                    codeAssistAndroidLibrary.setSourceFile(null);
+                    codeAssistAndroidLibrary.setCompileJarFiles(androidLibraryData.getCompileJarFiles());
+                    codeAssistAndroidLibrary.setPublicResources(androidLibraryData.getPublicResources());
+                    codeAssistAndroidLibrary.setSymbolFile(androidLibraryData.getSymbolFile());
+                    codeAssistAndroidLibrary.setResStaticLibrary(androidLibraryData.getResStaticLibrary());
+                    codeAssistAndroidLibrary.setResFolder(androidLibraryData.getResFolder());
+                    impl.addLibrary(codeAssistAndroidLibrary);
 
                     // TODO: add res index support
                     break;
