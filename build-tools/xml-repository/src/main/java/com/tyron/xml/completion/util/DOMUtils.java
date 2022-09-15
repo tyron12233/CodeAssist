@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -173,6 +174,25 @@ public class DOMUtils {
 
     public static void setNamespace(DOMDocument document, ResourceNamespace namespace) {
         putUserData(document, NAMESPACE_KEY, namespace);
+    }
+
+    public static List<String> getXmlnsAttributes(DOMDocument document) {
+        DOMElement rootElement = getRootElement(document);
+        if (rootElement == null) {
+            return Collections.emptyList();
+        }
+        List<DOMAttr> attributeNodes = rootElement.getAttributeNodes();
+        if (attributeNodes == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> namespaces = new ArrayList<>();
+        for (DOMAttr attributeNode : attributeNodes) {
+            if (attributeNode.isXmlns() || attributeNode.getName().startsWith("xmlns:")) {
+                namespaces.add(attributeNode.getValue());
+            }
+        }
+        return namespaces;
     }
 
     @Nullable

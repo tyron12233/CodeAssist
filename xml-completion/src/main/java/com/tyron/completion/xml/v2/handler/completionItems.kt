@@ -89,24 +89,21 @@ fun addValueItems(
 
 
     // first look for android resources
-    var foundStyles = styleNames.flatMap {
+    val foundStyles = styleNames.flatMap {
         frameworkResRepository.getResources(
             ResourceNamespace.ANDROID,
             ResourceType.STYLEABLE,
             it
         )
+    } + styleNames.flatMap {
+        projectResources?.getResources(
+            namespace,
+            ResourceType.STYLEABLE,
+            it
+        ) ?: listOf()
     }
 
-    // not found in framework resources, try in project resources
-    if (foundStyles.isEmpty() && projectResources != null) {
-        foundStyles = styleNames.flatMap {
-            projectResources.getResources(
-                namespace,
-                ResourceType.STYLEABLE,
-                it
-            )
-        }
-    }
+
 
     // resource not found
     if (foundStyles.isEmpty()) {
