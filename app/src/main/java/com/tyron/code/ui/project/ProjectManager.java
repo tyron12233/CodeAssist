@@ -28,6 +28,8 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
+import com.tyron.code.event.FileCreatedEvent;
+import com.tyron.code.event.FileDeletedEvent;
 import com.tyron.code.gradle.util.GradleLaunchUtil;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
@@ -41,6 +43,7 @@ import com.tyron.completion.java.provider.PruneMethodBodies;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.completion.xml.v2.events.XmlReparsedEvent;
+import com.tyron.completion.xml.v2.events.XmlResourceChangeEvent;
 import com.tyron.completion.xml.v2.project.ResourceRepositoryManager;
 
 import org.apache.commons.io.FileUtils;
@@ -60,6 +63,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
@@ -141,6 +145,25 @@ public class ProjectManager {
             logger.warning("Failed to open project: " + exception.getMessage());
         }
 
+        Consumer<File> modifiedEventConsumer = file -> {
+            // we only want xml files
+            if (!ProjectUtils.isResourceXMLFile(file)) {
+                return;
+            }
+            // this will cause an update to repository, causing reparse to the affected file
+            mCurrentProject.getEventManager().dispatchEvent(
+                    new XmlResourceChangeEvent(file, null)
+            );
+        };
+        mCurrentProject.getEventManager().subscribeEvent(FileDeletedEvent.class, (event, u) -> {
+            modifiedEventConsumer.accept(event.getDeletedFile());
+
+            mCurrentProject.getEventManager().dispatchEvent(new XmlReparsedEvent(event.getDeletedFile()));
+        });
+        // listen for newly created files and notify the resources repository
+        mCurrentProject.getEventManager().subscribeEvent(FileCreatedEvent.class, (event, u) -> {
+            modifiedEventConsumer.accept(event.getFile());
+        });
         mCurrentProject.getEventManager().subscribeEvent(XmlReparsedEvent.class,
                 (event, unsubscribe) -> DebouncerStore.DEFAULT.registerOrGetDebouncer("ResourceInjector").debounce(300, () -> ProgressManager.getInstance().runNonCancelableAsync(() -> {
                     File file = event.getFile();
