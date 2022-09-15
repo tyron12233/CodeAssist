@@ -11,14 +11,12 @@ import static com.android.ide.common.util.PathStringUtil.toPathString;
 import static com.android.resources.ResourceFolderType.VALUES;
 import static com.android.utils.TraceUtils.getSimpleId;
 import static com.tyron.completion.xml.v2.project.ResourceUpdateTracer.pathForLogging;
-
 import static org.jetbrains.kotlin.com.intellij.openapi.util.io.FileUtil.isAncestor;
 
 import androidx.annotation.GuardedBy;
 
 import com.android.ide.common.rendering.api.DensityBasedResourceValue;
 import com.android.ide.common.rendering.api.ResourceNamespace;
-import com.android.ide.common.resources.FileResourceNameValidator;
 import com.android.ide.common.resources.ResourceItem;
 import com.android.ide.common.resources.ResourceVisitor;
 import com.android.ide.common.resources.ValueResourceNameValidator;
@@ -50,7 +48,6 @@ import com.tyron.xml.completion.util.DOMUtils;
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
-import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.dom.DOMParser;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -78,7 +75,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
 
 import javax.lang.model.SourceVersion;
 
@@ -148,9 +144,11 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
     }
 
     private static void addToResult(@NotNull ResourceItem item,
-                                    @NotNull Map<ResourceType, ListMultimap<String, ResourceItem>> result) {
+                                    @NotNull Map<ResourceType,
+                                            ListMultimap<String, ResourceItem>> result) {
         // The insertion order matters, see AppResourceRepositoryTest.testStringOrder.
-        result.computeIfAbsent(item.getType(), t -> LinkedListMultimap.create()).put(item.getName(), item);
+        result.computeIfAbsent(item.getType(), t -> LinkedListMultimap.create())
+                .put(item.getName(), item);
     }
 
     /**
@@ -271,7 +269,7 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
      * resource type is known, it's preferable to validate the full filename (including extension)
      * first.
      */
-    public static String fileNameToResourceName( String fileName) {
+    public static String fileNameToResourceName(String fileName) {
         int lastExtension = fileName.lastIndexOf('.');
         if (lastExtension <= 0) {
             return fileName;
@@ -299,14 +297,16 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
             return;
         }
 
-        if (content == null) {
+        if (content == null && file.getName().endsWith(".xml")) {
             content = FilesKt.readText(file, StandardCharsets.UTF_8);
         }
         scan(file, content, folderType);
     }
 
     private void removeResourcesContainedInFileOrDirectory(@NotNull File file) {
-        ResourceUpdateTracer.log(() -> getSimpleId(this) + ".processRemovalOfFileOrDirectory " + pathForLogging(file));
+        ResourceUpdateTracer.log(() -> getSimpleId(this) +
+                                       ".processRemovalOfFileOrDirectory " +
+                                       pathForLogging(file));
         if (file.isDirectory()) {
             for (var iterator = mySources.entrySet().iterator(); iterator.hasNext(); ) {
                 var entry = iterator.next();
@@ -317,8 +317,7 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
                     removeSource(sourceFile, source);
                 }
             }
-        }
-        else {
+        } else {
             ResourceItemSource<?> source = mySources.remove(file);
             if (source != null) {
                 removeSource(file, source);
@@ -327,7 +326,9 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
     }
 
     private void removeSource(@NotNull File file, @NotNull ResourceItemSource<?> source) {
-        ResourceUpdateTracer.log(() -> getSimpleId(this) + ".onSourceRemoved " + pathForLogging(file));
+        ResourceUpdateTracer.log(() -> getSimpleId(this) +
+                                       ".onSourceRemoved " +
+                                       pathForLogging(file));
 
         boolean removed = removeItemsFromSource(source);
         if (removed) {
@@ -377,7 +378,9 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
     }
 
 
-    private void scan(@NotNull File file, CharSequence content, @NotNull ResourceFolderType folderType) {
+    private void scan(@NotNull File file,
+                      CharSequence content,
+                      @NotNull ResourceFolderType folderType) {
         if (!isResourceFile(file)) {
             return;
         }
@@ -397,7 +400,8 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
             boolean added = false;
             File parentFile = file.getParentFile();
             assert parentFile != null;
-            FolderConfiguration folderConfiguration = FolderConfiguration.getConfigForFolder(parentFile.getName());
+            FolderConfiguration folderConfiguration =
+                    FolderConfiguration.getConfigForFolder(parentFile.getName());
             if (folderConfiguration != null) {
                 added = scanValueFileAsPsi(result, file, content, folderConfiguration);
             }
@@ -411,9 +415,11 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
         } else if (checkResourceFilename(toPathString(file), folderType)) {
             ResourceItemSource<?> source = mySources.get(file);
             if (source instanceof DomResourceFile) {
-                // If the old file was a DomResourceFile for an XML file, we can update ID ResourceItems in place.
+                // If the old file was a DomResourceFile for an XML file, we can update ID
+                // ResourceItems in place.
                 DomResourceFile domResourceFile = ((DomResourceFile) source);
-                // Already seen this file; no need to do anything unless it's an XML file with generated ids;
+                // Already seen this file; no need to do anything unless it's an XML file with
+                // generated ids;
                 // in that case we may need to update the id's.
                 if (FolderTypeRelationship.isIdGeneratingFolderType(folderType)) {
 
@@ -422,7 +428,8 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
                     // to update the id's:
                     Set<String> idsBefore = new HashSet<>();
                     synchronized (ITEM_MAP_LOCK) {
-                        ListMultimap<String, ResourceItem> idMultimap = myResourceTable.get(ResourceType.ID);
+                        ListMultimap<String, ResourceItem> idMultimap =
+                                myResourceTable.get(ResourceType.ID);
                         if (idMultimap != null) {
                             List<DomResourceItem> idItems = new ArrayList<>();
                             for (DomResourceItem item : domResourceFile) {
@@ -432,15 +439,20 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
                                 }
                             }
                             for (String id : idsBefore) {
-                                // TODO(sprigogin): Simplify this code since the following comment is out of date.
-                                //  Note that ResourceFile has a flat map (not a multimap) so it doesn't
-                                //  record all items (unlike the myItems map) so we need to remove the map
+                                // TODO(sprigogin): Simplify this code since the following
+                                //  comment is out of date.
+                                //  Note that ResourceFile has a flat map (not a multimap) so it
+                                //  doesn't
+                                //  record all items (unlike the myItems map) so we need to
+                                //  remove the map
                                 //  items manually, can't just do map.remove(item.getName(), item)
                                 List<ResourceItem> mapItems = idMultimap.get(id);
                                 if (!mapItems.isEmpty()) {
                                     List<ResourceItem> toDelete = new ArrayList<>(mapItems.size());
                                     for (ResourceItem mapItem : mapItems) {
-                                        if (mapItem instanceof DomResourceItem && ((DomResourceItem)mapItem).getSourceFile() == domResourceFile) {
+                                        if (mapItem instanceof DomResourceItem &&
+                                            ((DomResourceItem) mapItem).getSourceFile() ==
+                                            domResourceFile) {
                                             toDelete.add(mapItem);
                                         }
                                     }
@@ -471,26 +483,35 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
                     invalidateParentCaches(this, ResourceType.ID);
                 }
             } else {
-                // Either we're switching to PSI or the file is not XML (image or font), which is not incremental.
-                // Remove old items first, rescan below to add back, but with a possibly different multimap list order.
+                // Either we're switching to PSI or the file is not XML (image or font), which is
+                // not incremental.
+                // Remove old items first, rescan below to add back, but with a possibly
+                // different multimap list order.
 
                 if (source != null) {
                     removeItemsFromSource(source);
                 }
 
                 ResourceType type = FolderTypeRelationship.getNonIdRelatedResourceType(folderType);
-                boolean idGeneratingFolder = FolderTypeRelationship.isIdGeneratingFolderType(folderType);
+                boolean idGeneratingFolder =
+                        FolderTypeRelationship.isIdGeneratingFolderType(folderType);
 
                 ProgressManager.checkCanceled();
                 clearLayoutlibCaches(file, folderType);
 
                 File parentFile = file.getParentFile();
                 if (parentFile != null) {
-                    FolderConfiguration folderConfiguration = FolderConfiguration.getConfigForFolder(parentFile.getName());
+                    FolderConfiguration folderConfiguration =
+                            FolderConfiguration.getConfigForFolder(parentFile.getName());
                     if (folderConfiguration != null) {
                         ProgressManager.checkCanceled();
-                        scanFileResourceFileAsPsi(file, content, folderType, folderConfiguration, type,
-                                idGeneratingFolder, result);
+                        scanFileResourceFileAsPsi(file,
+                                content,
+                                folderType,
+                                folderConfiguration,
+                                type,
+                                idGeneratingFolder,
+                                result);
                     }
                 }
                 setModificationCount(ourModificationCounter.incrementAndGet());
@@ -498,27 +519,30 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
             }
         }
 
-        myFacet.getProject().getEventManager().dispatchEvent(
-                new XmlReparsedEvent(file)
-        );
+        myFacet.getProject().getEventManager().dispatchEvent(new XmlReparsedEvent(file));
         commitToRepository(result);
     }
 
 
     private void scanFileResourceFileAsPsi(@NotNull File file,
-                                           @NotNull CharSequence content,
+                                           CharSequence content,
                                            @NotNull ResourceFolderType folderType,
                                            @NotNull FolderConfiguration folderConfiguration,
                                            @NotNull ResourceType type,
                                            boolean idGenerating,
-                                           @NotNull Map<ResourceType, ListMultimap<String, ResourceItem>> result) {
+                                           @NotNull Map<ResourceType, ListMultimap<String,
+                                                   ResourceItem>> result) {
         // XML or image.
         String resourceName = SdkUtils.fileNameToResourceName(file.getName());
-        if (!checkResourceFilename(toPathString(file), folderType)) {
+        if (!checkResourceFilename(toPathString(file), folderType)
+            || content == null
+            || !file.getName().endsWith(".xml")
+        ) {
             return; // Not a valid file resource name.
         }
 
-        RepositoryConfiguration configuration = new RepositoryConfiguration(this, folderConfiguration);
+        RepositoryConfiguration configuration =
+                new RepositoryConfiguration(this, folderConfiguration);
         DomResourceItem item = DomResourceItem.forFile(resourceName, type, this, file);
 
         if (idGenerating) {
@@ -527,21 +551,26 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
             addToResult(item, result);
             addIds(file, content, items, result);
 
-            DomResourceFile resourceFile = new DomResourceFile(file, items, folderType, configuration);
+            DomResourceFile resourceFile =
+                    new DomResourceFile(file, items, folderType, configuration);
             mySources.put(file, resourceFile);
         } else {
-            DomResourceFile resourceFile = new DomResourceFile(file, Collections.singletonList(item), folderType, configuration);
+            DomResourceFile resourceFile = new DomResourceFile(file,
+                    Collections.singletonList(item),
+                    folderType,
+                    configuration);
             mySources.put(file, resourceFile);
             addToResult(item, result);
         }
     }
 
-    private boolean scanValueFileAsPsi(@NotNull Map<ResourceType, ListMultimap<String, ResourceItem>> result,
-                                       @NotNull File file, CharSequence content,
+    private boolean scanValueFileAsPsi(@NotNull Map<ResourceType, ListMultimap<String,
+            ResourceItem>> result,
+                                       @NotNull File file,
+                                       CharSequence content,
                                        @NotNull FolderConfiguration folderConfiguration) {
         boolean added = false;
-        DOMDocument domDocument = DOMParser.getInstance()
-                .parse(content.toString(), "", null);
+        DOMDocument domDocument = DOMParser.getInstance().parse(content.toString(), "", null);
 
         System.out.println("Parsed XML File: " + file.getName());
 
@@ -568,18 +597,29 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
                     List<DOMElement> attrs = DOMUtils.getSubTags(tag);
                     for (DOMElement child : attrs) {
                         String attrName = child.getAttribute(ATTR_NAME);
-                        if (isValidValueResourceName(attrName) && !attrName.startsWith(ANDROID_NS_NAME_PREFIX)
-                            // Only add attr nodes for elements that specify a format or have flag/enum children; otherwise
+                        if (isValidValueResourceName(attrName) &&
+                            !attrName.startsWith(ANDROID_NS_NAME_PREFIX)
+                            // Only add attr nodes for elements that specify a format or have
+                            // flag/enum children; otherwise
                             // it's just a reference to an existing attr.
-                            && (child.getAttribute(ATTR_FORMAT) != null || DOMUtils.getSubTags(child).size() > 0)) {
-                            DomResourceItem attrItem = DomResourceItem.forXmlTag(attrName, ResourceType.ATTR, this, child, file);
+                            &&
+                            (child.getAttribute(ATTR_FORMAT) != null ||
+                             DOMUtils.getSubTags(child).size() > 0)) {
+                            DomResourceItem attrItem = DomResourceItem.forXmlTag(attrName,
+                                    ResourceType.ATTR,
+                                    this,
+                                    child,
+                                    file);
                             items.add(attrItem);
                             addToResult(attrItem, result);
                         }
                     }
                 }
 
-                DomResourceFile resourceFile = new DomResourceFile(file, items, VALUES, new RepositoryConfiguration(this, folderConfiguration));
+                DomResourceFile resourceFile = new DomResourceFile(file,
+                        items,
+                        VALUES,
+                        new RepositoryConfiguration(this, folderConfiguration));
                 mySources.put(file, resourceFile);
             }
         }
@@ -590,8 +630,7 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
                         @NotNull CharSequence content,
                         @NotNull List<DomResourceItem> items,
                         @NotNull Map<ResourceType, ListMultimap<String, ResourceItem>> result) {
-        DOMDocument element = DOMParser.getInstance()
-                .parse(content.toString(), "", null);
+        DOMDocument element = DOMParser.getInstance().parse(content.toString(), "", null);
 //        if (element instanceof DOMElement) {
 //            addIds((DOMElement)element, items, result);
 //        }
@@ -609,7 +648,8 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
     @Nullable
     private String createIdNameFromAttribute(@NotNull DOMAttr attribute) {
         String attributeValue = StringUtil.notNullize(attribute.getValue()).trim();
-        if (attributeValue.startsWith(NEW_ID_PREFIX) && !TOOLS_URI.equals(DOMUtils.getNamespace(attribute))) {
+        if (attributeValue.startsWith(NEW_ID_PREFIX) &&
+            !TOOLS_URI.equals(DOMUtils.getNamespace(attribute))) {
             String id = attributeValue.substring(NEW_ID_PREFIX.length());
             if (isValidValueResourceName(id)) {
                 return id;
@@ -627,7 +667,11 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
         for (DOMAttr attribute : tag.getAttributeNodes()) {
             String id = createIdNameFromAttribute(attribute);
             if (id != null) {
-                DomResourceItem item = DomResourceItem.forXmlTag(id, ResourceType.ID, this, attribute.getParentElement(), file);
+                DomResourceItem item = DomResourceItem.forXmlTag(id,
+                        ResourceType.ID,
+                        this,
+                        attribute.getParentElement(),
+                        file);
                 items.add(item);
                 addToResult(item, result);
             }
@@ -636,7 +680,8 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
 
     @Contract(value = "null -> false")
     private static boolean isValidValueResourceName(@Nullable String name) {
-        return !StringUtil.isEmpty(name) && ValueResourceNameValidator.getErrorText(name, null) == null;
+        return !StringUtil.isEmpty(name) &&
+               ValueResourceNameValidator.getErrorText(name, null) == null;
     }
 
     /**

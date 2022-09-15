@@ -24,7 +24,11 @@ fun handleManifest(
     val androidModule = params.module as AndroidModule
     val repositoryManager = ResourceRepositoryManager.getInstance(androidModule)
     val parsedNode = DOMParser.getInstance()
-        .parse(params.contents, repositoryManager.namespace.xmlNamespaceUri, URIResolverExtensionManager())
+        .parse(
+            params.contents,
+            repositoryManager.namespace.xmlNamespaceUri,
+            URIResolverExtensionManager()
+        )
     val completionType = XmlUtils.getCompletionType(parsedNode, params.index)
     if (completionType == XmlCompletionType.UNKNOWN) {
         return CompletionList.EMPTY
@@ -46,7 +50,13 @@ fun handleManifest(
         }
         XmlCompletionType.ATTRIBUTE_VALUE -> {
             val attr = parsedNode.findAttrAt(params.index.toInt())
-            addValueItems(completionBuilder, frameworkResRepository, null, attr, params) {
+            addValueItems(
+                completionBuilder,
+                frameworkResRepository,
+                repositoryManager.appResources,
+                attr,
+                params
+            ) {
                 listOf(getManifestStyleName(it) ?: it)
             }
         }
