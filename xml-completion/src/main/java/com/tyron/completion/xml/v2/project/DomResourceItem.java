@@ -430,7 +430,7 @@ public class DomResourceItem implements ResourceItem {
 
     @Nullable
     public DOMElement getTag() {
-        return myOriginalTag.get();
+        return myOriginalTag == null ? null : myOriginalTag.get();
     }
 
     private class DomTextResourceValue extends TextResourceValueImpl {

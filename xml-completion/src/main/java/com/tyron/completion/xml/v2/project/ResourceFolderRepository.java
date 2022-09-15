@@ -299,6 +299,9 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
             return;
         }
 
+        if (content == null) {
+            content = FilesKt.readText(file, StandardCharsets.UTF_8);
+        }
         scan(file, content, folderType);
     }
 
