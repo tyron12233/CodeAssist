@@ -64,6 +64,7 @@ public class ResourceMerger extends DataMerger<ResourceMergerItem, ResourceFile,
         mMinSdk = minSdk;
     }
 
+
     /**
      * Map of items that are purely results of merges (ie item that made up of several original
      * items). The first map key is the associated qualifier for the items, the second map key is

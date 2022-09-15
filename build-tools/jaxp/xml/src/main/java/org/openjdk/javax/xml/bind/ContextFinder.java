@@ -42,10 +42,10 @@ class ContextFinder {
      * <p>
      * For this reason, we have to hard-code the class name into the API.
      */
-    private static final String PLATFORM_DEFAULT_FACTORY_CLASS = "com.sun.xml.internal.bind.v2.ContextFactory";
+    private static final String PLATFORM_DEFAULT_FACTORY_CLASS = "org.openjdk.com.sun.xml.internal.bind.v2.ContextFactory";
 
     // previous value of JAXBContext.JAXB_CONTEXT_FACTORY, using also this to ensure backwards compatibility
-    private static final String JAXB_CONTEXT_FACTORY_DEPRECATED = "javax.xml.bind.context.factory";
+    private static final String JAXB_CONTEXT_FACTORY_DEPRECATED = "org.openjdk.javax.xml.bind.context.factory";
 
     private static final Logger logger;
 

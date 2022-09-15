@@ -18,6 +18,8 @@ dependencies {
     implementation 'javax.inject:javax.inject:1'
     implementation projects.common
     implementation projects.buildTools.jaxp.xml
+    implementation files('libs\\compilerCommon.antlr.shaded_jar.jar')
+    implementation files('libs\\compilerCommon.antlr_runtime.shaded_jar.jar')
 }
 
 java {

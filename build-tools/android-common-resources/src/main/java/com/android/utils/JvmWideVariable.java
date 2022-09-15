@@ -148,6 +148,8 @@ public final class JvmWideVariable<T> {
     /** Whether this variable has been unregistered. */
     private boolean unregistered;
 
+
+
     /**
      * Creates a {@code JvmWideVariable} instance that can access a JVM-wide variable. If the
      * JVM-wide variable does not yet exist, this constructor creates the variable and initializes
