@@ -80,9 +80,7 @@ public abstract class AbstractAarResourceRepository extends AbstractResourceRepo
    * Makes resource maps immutable.
    */
   protected void freezeResources() {
-    for (Map.Entry<ResourceType, ListMultimap<String, ResourceItem>> entry : myResources.entrySet()) {
-      myResources.put(entry.getKey(), ImmutableListMultimap.copyOf(entry.getValue()));
-    }
+    myResources.replaceAll((k, v) -> ImmutableListMultimap.copyOf(v));
   }
 
   @Override

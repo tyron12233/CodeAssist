@@ -1,22 +1,10 @@
 package com.tyron.completion.xml.v2.handler
 
-import android.text.TextUtils
-import com.android.ide.common.rendering.api.AttrResourceValue
-import com.android.ide.common.rendering.api.AttributeFormat.*
 import com.android.ide.common.rendering.api.ResourceNamespace
-import com.android.ide.common.rendering.api.ResourceReference
-import com.android.ide.common.resources.ResourceResolver
-import com.android.ide.common.resources.configuration.FolderConfiguration
-import com.android.ide.common.resources.getConfiguredResources
-import com.android.resources.ResourceType.REFERENCEABLE_TYPES
 import com.android.resources.ResourceType.STYLEABLE
 import com.tyron.builder.project.api.AndroidModule
 import com.tyron.completion.CompletionParameters
-import com.tyron.completion.model.CompletionItem
 import com.tyron.completion.model.CompletionList
-import com.tyron.completion.model.DrawableKind
-import com.tyron.completion.xml.insert.AttributeInsertHandler
-import com.tyron.completion.xml.insert.ValueInsertHandler
 import com.tyron.completion.xml.model.XmlCompletionType
 import com.tyron.completion.xml.util.AndroidXmlTagUtils.addManifestTagItems
 import com.tyron.completion.xml.util.AndroidXmlTagUtils.getManifestStyleName
@@ -24,24 +12,19 @@ import com.tyron.completion.xml.util.StyleUtils.getSimpleName
 import com.tyron.completion.xml.util.XmlUtils
 import com.tyron.completion.xml.v2.aar.FrameworkResourceRepository
 import com.tyron.completion.xml.v2.base.BasicStyleableResourceItem
-import com.tyron.xml.completion.util.DOMUtils
-import me.xdrop.fuzzywuzzy.FuzzySearch
-import org.eclipse.lemminx.dom.DOMAttr
+import com.tyron.completion.xml.v2.project.ResourceRepositoryManager
 import org.eclipse.lemminx.dom.DOMNode
 import org.eclipse.lemminx.dom.DOMParser
 import org.eclipse.lemminx.uriresolver.URIResolverExtensionManager
-import org.jetbrains.kotlin.utils.addToStdlib.cast
 
 fun handleManifest(
     frameworkResRepository: FrameworkResourceRepository,
     params: CompletionParameters
 ): CompletionList? {
     val androidModule = params.module as AndroidModule
-    val namespace = if (androidModule.namespace.isNotEmpty())
-        ResourceNamespace.fromPackageName(androidModule.namespace)
-    else ResourceNamespace.ANDROID
+    val repositoryManager = ResourceRepositoryManager.getInstance(androidModule)
     val parsedNode = DOMParser.getInstance()
-        .parse(params.contents, namespace.xmlNamespaceUri, URIResolverExtensionManager())
+        .parse(params.contents, repositoryManager.namespace.xmlNamespaceUri, URIResolverExtensionManager())
     val completionType = XmlUtils.getCompletionType(parsedNode, params.index)
     if (completionType == XmlCompletionType.UNKNOWN) {
         return CompletionList.EMPTY
@@ -56,90 +39,21 @@ fun handleManifest(
             addManifestAttributes(
                 completionBuilder,
                 frameworkResRepository,
-                namespace,
+                repositoryManager.namespace,
                 parsedNode.findNodeAt(params.index.toInt()),
                 params
             )
         }
         XmlCompletionType.ATTRIBUTE_VALUE -> {
             val attr = parsedNode.findAttrAt(params.index.toInt())
-            addValueItems(completionBuilder, frameworkResRepository, namespace, attr, params)
+            addValueItems(completionBuilder, frameworkResRepository, null, attr, params) {
+                listOf(getManifestStyleName(it) ?: it)
+            }
         }
         XmlCompletionType.UNKNOWN -> {}
         else -> throw IllegalArgumentException()
     }
     return completionBuilder.build()
-}
-
-private fun addValueItems(
-    completionBuilder: CompletionList.Builder?,
-    frameworkResRepository: FrameworkResourceRepository,
-    namespace: ResourceNamespace?,
-    attr: DOMAttr?,
-    params: CompletionParameters
-) {
-    if (attr == null) {
-        return
-    }
-
-    val ownerElement = attr.ownerElement ?: return
-    val tagName = ownerElement.tagName ?: return
-    val manifestStyleName = getManifestStyleName(tagName) ?: return
-
-    val result =
-        frameworkResRepository.getResources(ResourceNamespace.ANDROID, STYLEABLE, manifestStyleName)
-    if (result.isEmpty()) {
-        return
-    }
-
-    val resourceResolver = ResourceResolver.create(
-        frameworkResRepository.getConfiguredResources(FolderConfiguration.createDefault()).rowMap(),
-        null
-    )
-
-    val styleableResource = result.first().cast<BasicStyleableResourceItem>()
-    styleableResource.allAttributes.filter {
-        it.name.equals(attr.localName)
-    }.map {
-        // android styleable attributes can declare empty formats which means
-        // we should search for it in its parent
-        if (it.formats.isEmpty()) {
-            resourceResolver.getResolvedResource(it.asReference()) as? AttrResourceValue ?: it
-        } else it
-    }.flatMap { attribute ->
-        if (attribute.formats.contains(ENUM) || attribute.formats.contains(FLAGS)) {
-            return@flatMap attribute.attributeValues.keys.map { flag ->
-                CompletionItem.create(flag, "Value", flag, DrawableKind.Snippet).apply {
-                    setInsertHandler(ValueInsertHandler(attribute, this))
-                    addFilterText(flag)
-                }
-            }
-        } else if (attribute.formats.contains(BOOLEAN)) {
-            return@flatMap listOf("true", "false").map {
-                CompletionItem.create(it, "Value", it, DrawableKind.Snippet).apply {
-                    setInsertHandler(ValueInsertHandler(attribute, this))
-                    addFilterText(it)
-                }
-            }
-        } else if (attribute.formats.contains(REFERENCE)) {
-            REFERENCEABLE_TYPES.flatMap { resourceType ->
-                frameworkResRepository.getResources(ResourceNamespace.ANDROID, resourceType) {
-                    FuzzySearch.partialRatio(it.name, completionBuilder!!.prefix) >= 90
-                }
-            }.map {
-                val selfReference = it.referenceToSelf.getRelativeResourceUrl(ResourceNamespace.ANDROID)
-                CompletionItem.create(selfReference.name, "Reference", selfReference.qualifiedName).apply {
-                    setInsertHandler(ValueInsertHandler(attribute, this))
-                    addFilterText(selfReference.name)
-                }
-            }
-
-        }
-
-        emptyList()
-    }.forEach {
-        completionBuilder?.addItem(it)
-    }
 }
 
 private fun addManifestAttributes(
@@ -164,54 +78,4 @@ private fun addManifestAttributes(
         parsedNode,
         completionBuilder
     )
-}
-
-private fun addAttributes(
-    tagAttributes: List<AttrResourceValue>,
-    node: DOMNode,
-    builder: CompletionList.Builder
-) {
-    val resolver = DOMUtils.getNamespaceResolver(node.ownerDocument)
-    val uniques: MutableSet<String> = HashSet()
-    for (tagAttribute in tagAttributes) {
-        val name = tagAttribute.name
-        val reference: ResourceReference = if (name.contains(":")) {
-            val prefix = name.substring(0, name.indexOf(':'))
-            val fixedName = name.substring(name.indexOf(':') + 1)
-            val namespace = ResourceNamespace.fromNamespacePrefix(
-                prefix,
-                tagAttribute.namespace,
-                tagAttribute.namespaceResolver
-            )
-            ResourceReference(namespace!!, tagAttribute.resourceType, fixedName)
-        } else {
-            tagAttribute.asReference()
-        }
-        var prefix = resolver.uriToPrefix(
-            reference.namespace
-                .xmlNamespaceUri
-        )
-        if (TextUtils.isEmpty(prefix)) {
-            if (tagAttribute.libraryName != null) {
-                // default to res-auto namespace, commonly prefixed as 'app'
-                prefix = resolver.uriToPrefix(ResourceNamespace.RES_AUTO.xmlNamespaceUri)
-            }
-        }
-        val commitText = when {
-            TextUtils.isEmpty(prefix) -> reference.name
-            else -> "$prefix:${reference.name}"
-        }
-        if (uniques.contains(commitText)) {
-            continue
-        }
-        val attribute = CompletionItem.create(
-            commitText, "Attribute", commitText,
-            DrawableKind.Attribute
-        )
-        attribute.addFilterText(commitText)
-        attribute.addFilterText(reference.name)
-        attribute.setInsertHandler(AttributeInsertHandler(attribute))
-        builder.addItem(attribute)
-        uniques.add(commitText)
-    }
 }

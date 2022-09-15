@@ -28,8 +28,13 @@ android {
 }
 
 dependencies {
+
+    compileOnly 'com.android.tools.build:aapt2-proto'
+    implementation 'com.google.protobuf:protobuf-java:3.21.5'
+
     implementation project(path: ':actions-api')
     implementation project(path: ':editor-api')
+    implementation projects.eventManager
 
     implementation 'androidx.appcompat:appcompat:1.4.1'
     implementation 'com.google.android.material:material:1.5.0'
