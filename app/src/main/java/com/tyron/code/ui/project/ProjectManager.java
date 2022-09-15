@@ -28,8 +28,6 @@ import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
-import com.tyron.code.event.EventReceiver;
-import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.gradle.util.GradleLaunchUtil;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
@@ -43,6 +41,7 @@ import com.tyron.completion.java.provider.PruneMethodBodies;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.completion.xml.v2.events.XmlReparsedEvent;
+import com.tyron.completion.xml.v2.project.ResourceRepositoryManager;
 
 import org.apache.commons.io.FileUtils;
 import org.gradle.tooling.BuildActionExecuter;
@@ -142,6 +141,24 @@ public class ProjectManager {
             logger.warning("Failed to open project: " + exception.getMessage());
         }
 
+        mCurrentProject.getEventManager().subscribeEvent(XmlReparsedEvent.class,
+                (event, unsubscribe) -> DebouncerStore.DEFAULT.registerOrGetDebouncer("ResourceInjector").debounce(300, () -> ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                    File file = event.getFile();
+                    Module module;
+                    if (file == null) {
+                        module = mCurrentProject.getModuleByName(":app");
+                    } else {
+                        module = mCurrentProject.getModule(file);
+                    }
+                    if (module instanceof AndroidModule) {
+                        try {
+                            InjectResourcesTask.inject(mCurrentProject, (AndroidModule) module);
+                        } catch (IOException e) {
+                            IdeLog.getLogger().severe(e.getMessage());
+                        }
+                    }
+                })));
+
         // the following will extract the jar files if it does not exist
         BuildModule.getAndroidJar();
         BuildModule.getLambdaStubs();
@@ -165,7 +182,9 @@ public class ProjectManager {
             executer.setColorOutput(false);
             executer.setStandardError(AppLogFragment.outputStream);
             executer.setStandardOutput(AppLogFragment.outputStream);
+
             GradleLaunchUtil.configureLauncher(executer);
+            GradleLaunchUtil.addCodeAssistInitScript(executer);
 
             ModelContainerV2 modelContainer = executer.run();
             ModelContainerV2.ModelInfo appProject = modelContainer.getProject(":app", ":");
@@ -173,6 +192,14 @@ public class ProjectManager {
             // remove the previous models
             mCurrentProject.clear();
             buildModel(appProject, project);
+
+            project.getModuleByName("app");
+            mListener.onTaskStarted("Indexing resources");
+            ResourceRepositoryManager.getProjectResources(project.getModuleByName(":app"));
+
+            mListener.onTaskStarted("Inject resource classes");
+            mCurrentProject.getEventManager().dispatchEvent(new XmlReparsedEvent(null));
+
         } catch (Throwable t) {
             Throwable throwable = t;
             if (throwable instanceof BuildException) {
@@ -190,18 +217,6 @@ public class ProjectManager {
         mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
 
         mCurrentProject.setIndexing(false);
-        mCurrentProject.getEventManager().subscribeEvent(XmlReparsedEvent.class,
-                (event, unsubscribe) -> DebouncerStore.DEFAULT.registerOrGetDebouncer("ResourceInjector").debounce(300, () -> ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                    File file = event.getFile();
-                    Module module = mCurrentProject.getModule(file);
-                    if (module instanceof AndroidModule) {
-                        try {
-                            InjectResourcesTask.inject(mCurrentProject, (AndroidModule) module);
-                        } catch (IOException e) {
-                            IdeLog.getLogger().severe(e.getMessage());
-                        }
-                    }
-                })));
         mListener.onComplete(project, true, "Index successful");
     }
 
@@ -218,6 +233,8 @@ public class ProjectManager {
         assert variantDependencies != null;
 
         // basic info
+        impl.setName(basicAndroidProject.getPath());
+
         AaptOptions.Namespacing namespacing =
                 modelInfo.getAndroidDsl().getAaptOptions().getNamespacing();
         if (namespacing == AaptOptions.Namespacing.REQUIRED) {

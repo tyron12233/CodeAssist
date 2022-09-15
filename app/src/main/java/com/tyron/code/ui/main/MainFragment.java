@@ -444,6 +444,8 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                         }
                     });
                     GradleLaunchUtil.configureLauncher(buildLauncher);
+                    GradleLaunchUtil.addCodeAssistInitScript(buildLauncher);
+
                     buildLauncher.addArguments("--build-cache");
                     buildLauncher.forTasks("run");
                     buildLauncher.run();

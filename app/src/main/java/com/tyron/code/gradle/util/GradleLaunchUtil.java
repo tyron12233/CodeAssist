@@ -14,7 +14,13 @@ import androidx.annotation.NonNull;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.common.SharedPreferenceKeys;
 
+import org.apache.commons.io.FileUtils;
 import org.gradle.tooling.ConfigurableLauncher;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 public class GradleLaunchUtil {
 
@@ -71,6 +77,42 @@ public class GradleLaunchUtil {
             case "INTERNAL_EXCEPTIONS":
                 // intentionally empty
         }
+    }
+
+    public static void addCodeAssistInitScript(ConfigurableLauncher<?> launcher) {
+        try {
+            launcher.addArguments("--init-script", getOrCreateInitScript().getAbsolutePath());
+        } catch (IOException e) {
+            // this should not happen under normal circumstances.
+            // throw just in case
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static File getOrCreateInitScript() throws IOException {
+        File initScript = new File(ApplicationLoader.getInstance().getFilesDir(), "init_scripts/init_script.gradle");
+        //noinspection ResultOfMethodCallIgnored
+        Objects.requireNonNull(initScript.getParentFile()).mkdirs();
+        if (!initScript.exists() && !initScript.createNewFile()) {
+            throw new IOException();
+        }
+
+        //language=Groovy
+        String initScriptCode = "rootProject.buildscript.configurations.classpath {\n" +
+                                "    resolutionStrategy.eachDependency {\n" +
+                                "        if (it.requested.name == \"gradle\" && it.requested" +
+                                ".group == \"com.android.tools.build\") {\n" +
+                                "            throw new GradleException(\"The Android Gradle " +
+                                "Plugin has been applied but is not supported. CodeAssist " +
+                                "maintains its own\" +\n" +
+                                "                    \"version of the Android Gradle Plugin so " +
+                                "you don't have to include it in the build script's\" +\n" +
+                                "                    \"classpath.\")\n" +
+                                "        }\n" +
+                                "    }\n" +
+                                "}\n";
+        FileUtils.writeStringToFile(initScript, initScriptCode, StandardCharsets.UTF_8);
+        return initScript;
     }
 
     private static final String PROJECT_PROPERTY_FORMAT = "-P%1$s=%2$s";
