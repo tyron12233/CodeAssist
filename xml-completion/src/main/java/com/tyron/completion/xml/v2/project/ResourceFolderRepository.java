@@ -637,6 +637,9 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
 
         List<DOMElement> tags = DOMUtils.findChildrenOfType(element, DOMElement.class);
         for (DOMElement tag : tags) {
+            if (tag == null) {
+                continue;
+            }
             addIds(file, tag, items, result);
         }
     }
