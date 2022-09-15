@@ -10,11 +10,9 @@ import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.widget.ForwardingListener;
 import androidx.core.content.res.ResourcesCompat;
 
-import com.sun.tools.javac.util.JCDiagnostic;
 import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
@@ -28,7 +26,6 @@ import com.tyron.code.event.EventManager;
 import com.tyron.code.event.PerformShortcutEvent;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.code.language.java.JavaLanguage;
-import com.tyron.code.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.project.ProjectManager;
@@ -36,18 +33,12 @@ import com.tyron.code.util.CoordinatePopupMenu;
 import com.tyron.code.util.PopupMenuHelper;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.common.util.DebouncerStore;
-import com.tyron.completion.java.compiler.services.NBLog;
-import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.diagnostics.DiagnosticProvider;
 import com.tyron.editor.Content;
-import com.tyron.editor.event.ContentEvent;
-import com.tyron.editor.event.ContentListener;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.language.api.CodeAssistLanguage;
-import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import org.apache.commons.vfs2.FileObject;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
@@ -55,25 +46,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.function.Function;
 
 import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
 
 import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.EditorKeyEvent;
 import io.github.rosemoe.sora.event.Event;
-import io.github.rosemoe.sora.event.EventReceiver;
 import io.github.rosemoe.sora.event.InterceptTarget;
 import io.github.rosemoe.sora.event.LongPressEvent;
-import io.github.rosemoe.sora.event.Unsubscribe;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.diagnostic.DiagnosticRegion;
@@ -144,20 +131,22 @@ public class RosemoeEditorFacade {
                     provider.getDiagnostics(module, currentFile);
             Function<Diagnostic.Kind, Short> severitySupplier = it -> {
                 switch (it) {
-                    case ERROR: return DiagnosticRegion.SEVERITY_ERROR;
+                    case ERROR:
+                        return DiagnosticRegion.SEVERITY_ERROR;
                     case MANDATORY_WARNING:
-                    case WARNING: return DiagnosticRegion.SEVERITY_WARNING;
+                    case WARNING:
+                        return DiagnosticRegion.SEVERITY_WARNING;
                     default:
                     case OTHER:
-                    case NOTE: return DiagnosticRegion.SEVERITY_NONE;
+                    case NOTE:
+                        return DiagnosticRegion.SEVERITY_NONE;
                 }
             };
-            diagnostics.stream().map(it ->
-                    new DiagnosticRegion(
-                            (int) it.getStartPosition(),
+            diagnostics.stream()
+                    .map(it -> new DiagnosticRegion((int) it.getStartPosition(),
                             (int) it.getEndPosition(),
-                            severitySupplier.apply(it.getKind()))
-            ).forEach(Objects.requireNonNull(editor.getDiagnostics())::addDiagnostic);
+                            severitySupplier.apply(it.getKind())))
+                    .forEach(Objects.requireNonNull(editor.getDiagnostics())::addDiagnostic);
         }
     }
 
@@ -177,8 +166,8 @@ public class RosemoeEditorFacade {
         editor.setText(content, bundle);
         editor.setHighlightBracketPair(false);
         editor.setDiagnostics(new DiagnosticsContainer());
-        editor.setTypefaceText(
-                ResourcesCompat.getFont(editor.getContext(), R.font.jetbrains_mono_regular));
+        editor.setTypefaceText(ResourcesCompat.getFont(editor.getContext(),
+                R.font.jetbrains_mono_regular));
 
         editor.replaceComponent(EditorAutoCompletion.class, new CodeAssistCompletionWindow(editor));
         editor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
@@ -219,9 +208,7 @@ public class RosemoeEditorFacade {
                 }
             }
 
-            ProgressManager.getInstance().runLater(() -> {
-                showPopupMenu(event);
-            });
+            ProgressManager.getInstance().runLater(() -> showPopupMenu(event));
         });
         editor.subscribeEvent(ClickEvent.class, (event, unsubscribe) -> {
             Cursor cursor = editor.getCursor();
@@ -239,14 +226,17 @@ public class RosemoeEditorFacade {
         });
 
         editor.subscribeEvent(EditorKeyEvent.class, (event, unsubscribe) -> {
-            CodeAssistCompletionWindow window = (CodeAssistCompletionWindow) editor.getComponent(EditorAutoCompletion.class);
-            if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_TAB) {
+            CodeAssistCompletionWindow window =
+                    (CodeAssistCompletionWindow) editor.getComponent(EditorAutoCompletion.class);
+            if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER ||
+                event.getKeyCode() == KeyEvent.KEYCODE_TAB) {
                 if (window.isShowing() && window.trySelect()) {
                     event.setResult(true);
 
                     // KeyEvent cannot be intercepted???
                     // workaround
-                    Field mInterceptTargets = ReflectionUtil.getDeclaredField(Event.class, "mInterceptTargets");
+                    Field mInterceptTargets =
+                            ReflectionUtil.getDeclaredField(Event.class, "mInterceptTargets");
                     mInterceptTargets.setAccessible(true);
                     try {
                         mInterceptTargets.set(event, InterceptTarget.TARGET_EDITOR);
@@ -258,17 +248,16 @@ public class RosemoeEditorFacade {
                 }
             }
         });
-        editor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
-            ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                DebouncerStore.DEFAULT.registerOrGetDebouncer("contentChange").debounce(300, () -> {
-                    try {
-                        onContentChange(editor.getContent());
-                    } catch (Throwable t) {
-                        LOGGER.error("Error in onContentChange", t);
-                    }
-                });
-            });
-        });
+        editor.subscribeEvent(ContentChangeEvent.class,
+                (event, unsubscribe) -> ProgressManager.getInstance()
+                        .runNonCancelableAsync(() -> DebouncerStore.DEFAULT.registerOrGetDebouncer(
+                                "contentChange").debounce(300, () -> {
+                            try {
+                                onContentChange(editor.getContent());
+                            } catch (Throwable t) {
+                                LOGGER.error("Error in onContentChange", t);
+                            }
+                        })));
     }
 
     /**
@@ -307,7 +296,9 @@ public class RosemoeEditorFacade {
         dataContext.putData(CommonDataKeys.EDITOR, editor);
 
         if (currentProject != null && editor.getEditorLanguage() instanceof JavaLanguage) {
-            JavaDataContextUtil.addEditorKeys(dataContext, currentProject, editor.getCurrentFile(),
+            JavaDataContextUtil.addEditorKeys(dataContext,
+                    currentProject,
+                    editor.getCurrentFile(),
                     editor.getCursor().getLeft());
         }
         return dataContext;
