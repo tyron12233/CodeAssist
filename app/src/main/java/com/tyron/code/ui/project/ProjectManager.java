@@ -35,6 +35,7 @@ import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.logging.IdeLog;
+import com.tyron.common.util.DebouncerStore;
 import com.tyron.completion.java.compiler.Parser;
 import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.provider.CompletionEngine;
@@ -190,19 +191,17 @@ public class ProjectManager {
 
         mCurrentProject.setIndexing(false);
         mCurrentProject.getEventManager().subscribeEvent(XmlReparsedEvent.class,
-                (event, unsubscribe) -> {
-                    ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                        File file = event.getFile();
-                        Module module = mCurrentProject.getModule(file);
-                        if (module instanceof AndroidModule) {
-                            try {
-                                InjectResourcesTask.inject(mCurrentProject, (AndroidModule) module);
-                            } catch (IOException e) {
-                                IdeLog.getLogger().severe(e.getMessage());
-                            }
+                (event, unsubscribe) -> DebouncerStore.DEFAULT.registerOrGetDebouncer("ResourceInjector").debounce(300, () -> ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                    File file = event.getFile();
+                    Module module = mCurrentProject.getModule(file);
+                    if (module instanceof AndroidModule) {
+                        try {
+                            InjectResourcesTask.inject(mCurrentProject, (AndroidModule) module);
+                        } catch (IOException e) {
+                            IdeLog.getLogger().severe(e.getMessage());
                         }
-                    });
-                });
+                    }
+                })));
         mListener.onComplete(project, true, "Index successful");
     }
 
