@@ -54,6 +54,7 @@ fun handleManifest(
                 completionBuilder,
                 frameworkResRepository,
                 repositoryManager.appResources,
+                repositoryManager.namespace,
                 attr,
                 params
             ) {

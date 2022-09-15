@@ -48,7 +48,7 @@ fun serializeTableToPb(table: ResourceTable, logger: ILogger? = null): Resources
         .setVersion(ToolFingerprint.FINGERPRINT)
         .build())
     val overlayables = mutableListOf<Overlayable>()
-    for (resourcePackage in table.packages) {
+    for (resourcePackage in ResourceTableAcessor.getPackages(table)) {
         val packageBuilder = Resources.Package.newBuilder()
 
         val packageId = resourcePackage.id

@@ -52,7 +52,7 @@ fun handleLayout(
         }
         XmlCompletionType.ATTRIBUTE_VALUE -> {
             val attr = parsedNode.findAttrAt(params.index.toInt())
-            addValueItems(completionBuilder, frameworkResRepository, projectResources, attr, params) {
+            addValueItems(completionBuilder, frameworkResRepository, projectResources, repositoryManager.namespace, attr, params) {
                 val classes = StyleUtils.getClasses(it)
                 if (classes.isEmpty()) {
                     listOf("View", "ViewGroup", "ViewGroup_Layout")

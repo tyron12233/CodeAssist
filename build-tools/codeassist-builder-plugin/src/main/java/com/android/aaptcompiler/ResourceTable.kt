@@ -22,7 +22,7 @@ class ResourceTable(val validateResources: Boolean = false, val logger: BlameLog
   val stringPool = StringPool()
 
   /** The list of packages in this table. */
-  internal val packages = mutableListOf<ResourceTablePackage>()
+  val packages = mutableListOf<ResourceTablePackage>()
 
   /**
    * Set of dynamic packages that this table may reference. Their package names get encoded into the

@@ -2,6 +2,7 @@ package com.tyron.completion.xml.v2.handler
 
 import android.text.TextUtils
 import com.android.ide.common.rendering.api.*
+import com.android.ide.common.resources.ResourceRepository
 import com.android.ide.common.resources.ResourceResolver
 import com.android.ide.common.resources.ResourceValueMap
 import com.android.ide.common.resources.configuration.FolderConfiguration
@@ -73,6 +74,7 @@ fun addValueItems(
     completionBuilder: CompletionList.Builder?,
     frameworkResRepository: FrameworkResourceRepository,
     projectResources: LocalResourceRepository?,
+    namespace: ResourceNamespace,
     attr: DOMAttr?,
     params: CompletionParameters,
     styleTransformer: (String) -> List<String>?
@@ -80,9 +82,6 @@ fun addValueItems(
     if (attr == null) {
         return
     }
-
-    val namespace = DOMUtils.getNamespace(attr)?.let { ResourceNamespace.fromNamespaceUri(it) }
-        ?: ResourceNamespace.ANDROID
     val ownerElement = attr.ownerElement ?: return
     val parentAttributeNames = ownerElement.attributeNodes.map(DOMUtils::getNameWithoutPrefix)
     val tagName = ownerElement.tagName ?: return
@@ -154,9 +153,13 @@ fun addValueItems(
                 }
                 AttributeFormat.REFERENCE -> {
                     val resourceValues = ResourceType.REFERENCEABLE_TYPES.flatMap { resourceType ->
-                        getConfiguredResourceTypes(frameworkResRepository, projectResources, resourceType).values
+                        getConfiguredResourceTypes(
+                            frameworkResRepository,
+                            projectResources,
+                            resourceType
+                        ).values
                     }
-                    getReferenceItems(attribute, resourceValues)
+                    getReferenceItems(namespace, attribute, resourceValues)
                 }
                 else -> {
                     emptyList()
@@ -173,7 +176,7 @@ fun getConfiguredResourceTypes(
     projectResources: LocalResourceRepository?,
     resourceType: ResourceType
 ): ResourceValueMap {
-    val resourceValueMap = frameworkResRepository.getConfiguredResources(
+    val resourceValueMap = frameworkResRepository.getConfiguredPublicResources(
         ResourceNamespace.ANDROID,
         resourceType,
         FolderConfiguration.createDefault()
@@ -197,14 +200,13 @@ fun getItems(
     namespace: ResourceNamespace,
     resourceType: ResourceType
 ): List<CompletionItem> {
-
     val resourceValueMap = getConfiguredResourceTypes(frameworkResRepository, projectResources, resourceType)
-    return getReferenceItems(attribute, resourceValueMap.values)
+    return getReferenceItems(namespace, attribute, resourceValueMap.values)
 }
 
-fun getReferenceItems(attribute: AttrResourceValue, items: Collection<ResourceValue>): List<CompletionItem> {
+fun getReferenceItems(namespace: ResourceNamespace, attribute: AttrResourceValue, items: Collection<ResourceValue>): List<CompletionItem> {
     return items.map {
-        val selfReference = it.asReference().getRelativeResourceUrl(it.namespace)
+        val selfReference = it.asReference().getRelativeResourceUrl(namespace)
         CompletionItem.create(
             selfReference.name,
             "Reference",
@@ -225,4 +227,22 @@ fun createBooleanDefaultValues(attribute: AttrResourceValue): List<CompletionIte
             addFilterText(it)
         }
     }
+}
+
+fun ResourceRepository.getConfiguredPublicResources(
+    namespace: ResourceNamespace,
+    type: ResourceType,
+    referenceConfig: FolderConfiguration
+): ResourceValueMap {
+    val itemsByName = getPublicResources(namespace, type)
+    val result = ResourceValueMap.createWithExpectedSize(itemsByName.size)
+
+    for (resourceItem in itemsByName) {
+        val value = resourceItem.resourceValue
+        if (value != null) {
+            result[resourceItem.name] = value
+        }
+    }
+
+    return result
 }
