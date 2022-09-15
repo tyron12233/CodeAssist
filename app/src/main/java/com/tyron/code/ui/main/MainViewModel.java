@@ -173,8 +173,10 @@ public class MainViewModel extends ViewModel {
         if (files == null) {
             files = new ArrayList<>();
         }
-        files.add(file);
-        mFiles.setValue(files);
+        if (!files.contains(file)) {
+            files.add(file);
+            mFiles.setValue(files);
+        }
         setCurrentPosition(files.indexOf(file));
     }
 
