@@ -77,7 +77,7 @@ public class MockJavaModule extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void addLibrary(@NonNull File jar) {
+    public void addLibrary(@NonNull CodeAssistLibrary jar) {
         throw new UnsupportedOperationException();
     }
 

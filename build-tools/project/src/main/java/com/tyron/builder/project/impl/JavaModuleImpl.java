@@ -108,7 +108,11 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void addLibrary(@NonNull File jar) {
+    public void addLibrary(@NonNull CodeAssistLibrary library) {
+        File jar = library.getSourceFile();
+        if (jar == null) {
+            return;
+        }
         if (!jar.getName().endsWith(".jar")) {
             return;
         }
@@ -122,7 +126,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         }
     }
 
-    private void putJar(File file) throws IOException {
+    protected void putJar(File file) throws IOException {
         if (file == null) {
             return;
         }

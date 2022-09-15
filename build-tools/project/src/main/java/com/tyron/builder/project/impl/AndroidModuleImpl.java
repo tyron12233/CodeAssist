@@ -7,6 +7,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
+import com.tyron.builder.model.CodeAssistAndroidLibrary;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.model.ModuleSettings;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidContentRoot;
@@ -18,10 +20,12 @@ import com.tyron.common.util.StringSearch;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -33,7 +37,7 @@ import java.util.function.Consumer;
 public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
     private final Map<String, File> mKotlinFiles;
-    private Map<String, File> mResourceClasses;
+    private final Map<String, File> mResourceClasses;
 
     private final Set<String> moduleDependencies = new HashSet<>();
     private final Set<ContentRoot> contentRoots = new HashSet<>(3);
@@ -42,6 +46,8 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     private String name;
     private Project project;
     private String namespace;
+
+    private final List<CodeAssistLibrary> libraries = new ArrayList<>();
 
     public AndroidModuleImpl(File root) {
         super(root);
@@ -74,6 +80,29 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
                             TrueFileFilter.INSTANCE).forEachRemaining(this::addJavaFile);
                 }
             }
+        }
+    }
+
+    public List<CodeAssistLibrary> getCodeAssistLibraries() {
+        return libraries;
+    }
+
+    @Override
+    public void addLibrary(@NonNull @NotNull CodeAssistLibrary library) {
+        libraries.add(library);
+
+        if (library instanceof CodeAssistAndroidLibrary) {
+            CodeAssistAndroidLibrary androidLibrary = (CodeAssistAndroidLibrary) library;
+            List<File> compileJarFiles = androidLibrary.getCompileJarFiles();
+            for (File compileJarFile : compileJarFiles) {
+                try {
+                    putJar(compileJarFile);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+        } else {
+            super.addLibrary(library);
         }
     }
 

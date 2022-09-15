@@ -19,6 +19,13 @@ public class CodeAssistLibrary {
     @SerializedName("declaration")
     private String declaration;
 
+    public static CodeAssistLibrary forJar(File jar) {
+        CodeAssistLibrary codeAssistLibrary = new CodeAssistLibrary();
+        codeAssistLibrary.setDeclaration(null);
+        codeAssistLibrary.setSourceFile(jar);
+        return codeAssistLibrary;
+    }
+
     public File getSourceFile() {
         return new File(sourceFile);
     }
@@ -31,8 +38,10 @@ public class CodeAssistLibrary {
         return declaration != null;
     }
 
-    public void setSourceFile(File sourceFile) {
-        this.sourceFile = sourceFile.getAbsolutePath();
+    public void setSourceFile(@Nullable File sourceFile) {
+        if (sourceFile != null) {
+            this.sourceFile = sourceFile.getAbsolutePath();
+        }
     }
 
     @Override
