@@ -106,7 +106,7 @@ open class BlameLogger(
             logger.verbose(message)
     }
 
-    internal fun getOutputSource(source: Source) : Source {
+    fun getOutputSource(source: Source) : Source {
         return getOriginalSource(
                 source.copy(sourcePath = userVisibleSourceTransform(source.sourcePath))
             )
