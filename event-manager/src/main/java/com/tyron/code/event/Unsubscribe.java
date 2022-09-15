@@ -1,8 +1,5 @@
 package com.tyron.code.event;
 
-import io.github.rosemoe.sora.event.Event;
-import io.github.rosemoe.sora.event.EventReceiver;
-
 /**
  * Instance for unsubscribing for a receiver.
  *

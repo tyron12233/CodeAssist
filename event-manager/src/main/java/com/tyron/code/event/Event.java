@@ -1,15 +1,5 @@
 package com.tyron.code.event;
 
-import androidx.annotation.NonNull;
-
-import java.util.Objects;
-
-import io.github.rosemoe.sora.event.ClickEvent;
-import io.github.rosemoe.sora.event.DoubleClickEvent;
-import io.github.rosemoe.sora.event.EditorKeyEvent;
-import io.github.rosemoe.sora.event.LongPressEvent;
-import io.github.rosemoe.sora.widget.CodeEditor;
-
 /**
  * An Event object describes an event of editor.
  * It includes several attributes such as time and the editor object.
