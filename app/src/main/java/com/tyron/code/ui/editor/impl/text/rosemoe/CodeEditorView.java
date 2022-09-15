@@ -211,22 +211,26 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     private void handleAutoInsert(char c) {
         if (getEditorLanguage() instanceof LanguageXML) {
-            if (c != '>' && c != '/') {
-                return;
-            }
-            boolean full = c == '>';
-
-            DOMDocument document = DOMParser.getInstance().parse(getText().toString(), "", null);
-            DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
-            if (!DOMUtils.isClosed(nodeAt) && nodeAt.getNodeName() != null) {
-                if (XmlUtils.getCompletionType(document, getCursor().getLeft()) ==
-                    XmlCompletionType.ATTRIBUTE_VALUE) {
+            try {
+                if (c != '>' && c != '/') {
                     return;
                 }
-                String insertText = full ? "</" + nodeAt.getNodeName() + ">" : ">";
-                commitText(insertText);
-                setSelection(getCursor().getLeftLine(),
-                        getCursor().getLeftColumn() - (full ? insertText.length() : 0));
+                boolean full = c == '>';
+
+                DOMDocument document = DOMParser.getInstance().parse(getText().toString(), "", null);
+                DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
+                if (!DOMUtils.isClosed(nodeAt) && nodeAt.getNodeName() != null) {
+                    if (XmlUtils.getCompletionType(document, getCursor().getLeft()) ==
+                        XmlCompletionType.ATTRIBUTE_VALUE) {
+                        return;
+                    }
+                    String insertText = full ? "</" + nodeAt.getNodeName() + ">" : ">";
+                    commitText(insertText);
+                    setSelection(getCursor().getLeftLine(),
+                            getCursor().getLeftColumn() - (full ? insertText.length() : 0));
+                }
+            } catch (Exception e) {
+                // ignored, just dont auto insert
             }
         }
     }
