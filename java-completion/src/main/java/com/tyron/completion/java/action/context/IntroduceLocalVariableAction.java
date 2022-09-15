@@ -35,6 +35,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
 
 public class IntroduceLocalVariableAction extends AnAction {
 
@@ -121,6 +122,19 @@ public class IntroduceLocalVariableAction extends AnAction {
         if (element instanceof ExecutableElement) {
             TypeMirror returnType =
                     ActionUtil.getReturnType(task, path, (ExecutableElement) element);
+            if (returnType instanceof TypeVariable) {
+                TypeVariable typeVariable = (TypeVariable) returnType;
+
+                TypeMirror lowerBound = typeVariable.getLowerBound();
+                TypeMirror upperBound = typeVariable.getUpperBound();
+                if (lowerBound != null && lowerBound.getKind() != TypeKind.NULL) {
+                    returnType = lowerBound;
+                } else if (upperBound != null && upperBound.getKind() != TypeKind.NULL) {
+                    returnType = upperBound;
+                } else {
+                    returnType = task.getElements().getTypeElement("java.lang.Object").asType();
+                }
+            }
             if (returnType != null) {
                 return rewrite(returnType, trees, path, file, element.getSimpleName().toString());
             }
