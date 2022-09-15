@@ -136,6 +136,9 @@ public class IntroduceLocalVariableAction extends AnAction {
                 }
             }
             if (returnType != null) {
+                if (returnType.getKind() == TypeKind.VOID) {
+                    return null;
+                }
                 return rewrite(returnType, trees, path, file, element.getSimpleName().toString());
             }
         }
@@ -148,6 +151,9 @@ public class IntroduceLocalVariableAction extends AnAction {
         }
 
         if (typeMirror != null) {
+            if (typeMirror.getKind() == TypeKind.VOID) {
+                return null;
+            }
             if (typeMirror.getKind() == TypeKind.TYPEVAR) {
                 typeMirror = ((Type.TypeVar) typeMirror).getUpperBound();
             }
