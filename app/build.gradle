@@ -92,6 +92,9 @@ dependencies {
 
     implementation project(path: ':language-api')
 
+    // groovy support
+    implementation projects.buildTools.builderBaseServicesGroovy
+
     implementation projects.buildTools.builderLauncher
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderCore
