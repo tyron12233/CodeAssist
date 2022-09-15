@@ -428,6 +428,13 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         mLogViewModel.clear(LogViewModel.BUILD_LOG);
 
         Runnable compileRunnable = () -> {
+            String task;
+            switch (type) {
+                case RELEASE: task = "assembleRelease";
+                break;
+                default:
+                case DEBUG: task = "assembleDebug";
+            }
             try {
                 GradleConnector gradleConnector = GradleConnector.newConnector()
                         .useDistribution(URI.create("codeAssist"))
@@ -447,7 +454,7 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
                     GradleLaunchUtil.addCodeAssistInitScript(buildLauncher);
 
                     buildLauncher.addArguments("--build-cache");
-                    buildLauncher.forTasks("run");
+                    buildLauncher.forTasks(task);
                     buildLauncher.run();
                 }
             } catch (Throwable t) {

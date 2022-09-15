@@ -52,6 +52,7 @@ import org.gradle.tooling.BuildException;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.events.ProgressListener;
+import org.gradle.tooling.model.GradleProject;
 
 import java.io.File;
 import java.io.IOException;

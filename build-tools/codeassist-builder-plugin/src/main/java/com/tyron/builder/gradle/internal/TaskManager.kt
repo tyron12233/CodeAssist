@@ -882,7 +882,7 @@ abstract class TaskManager<VariantBuilderT : VariantBuilder, VariantT : VariantC
             OriginalStream.builder("all-classes") // Need both classes and resources because some annotation
                 // processors generate resources
                 .addContentTypes(setOf(QualifiedContent.DefaultContentType.CLASSES))
-                .addScope(com.tyron.builder.api.transform.QualifiedContent.Scope.PROJECT)
+                .addScope(QualifiedContent.Scope.PROJECT)
                 .setFileCollection(creationConfig
                     .artifacts
                     .forScope(ScopedArtifacts.Scope.PROJECT)
@@ -968,7 +968,7 @@ abstract class TaskManager<VariantBuilderT : VariantBuilder, VariantT : VariantC
                 .addStream(
                     OriginalStream.builder("final-r-classes")
                         .addContentTypes(setOf(QualifiedContent.DefaultContentType.CLASSES))
-                        .addScope(com.tyron.builder.api.transform.QualifiedContent.Scope.PROJECT)
+                        .addScope(QualifiedContent.Scope.PROJECT)
                         .setFileCollection(rFiles)
                         .build())
             creationConfig

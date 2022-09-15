@@ -10,6 +10,7 @@ import com.tyron.builder.gradle.internal.component.TestFixturesCreationConfig
 import com.tyron.builder.gradle.internal.dsl.AbstractPublishing
 import com.tyron.builder.gradle.internal.publishing.AndroidArtifacts.PublishedConfigType
 import com.tyron.builder.gradle.internal.publishing.PublishedConfigSpec
+import com.tyron.builder.gradle.internal.tasks.databinding.DataBindingExportFeatureNamespacesTask
 import com.tyron.builder.gradle.internal.tasks.factory.GlobalTaskCreationConfig
 import com.tyron.builder.gradle.internal.tasks.factory.TaskManagerConfig
 import com.tyron.builder.gradle.internal.tasks.factory.dependsOn
@@ -74,20 +75,20 @@ class ApplicationTaskManager(
 //            createAssetPackTasks(variant)
 //        }
 
-//        taskFactory.register(MergeArtProfileTask.CreationAction(variant))
-//        taskFactory.register(CompileArtProfileTask.CreationAction(variant))
-//
-//        if (variant.buildFeatures.dataBinding
-//            && globalConfig.hasDynamicFeatures) {
-//            // Create a task that will write the namespaces of all features into a file. This file's
-//            // path is passed into the Data Binding annotation processor which uses it to know about
-//            // all available features.
-//            //
-//            // <p>see: {@link TaskManager#setDataBindingAnnotationProcessorParams(ComponentCreationConfig)}
-//            taskFactory.register(
-//                DataBindingExportFeatureNamespacesTask.CreationAction(variant)
-//            )
-//        }
+        taskFactory.register(MergeArtProfileTask.CreationAction(variant))
+        taskFactory.register(CompileArtProfileTask.CreationAction(variant))
+
+        if (variant.buildFeatures.dataBinding
+            && globalConfig.hasDynamicFeatures) {
+            // Create a task that will write the namespaces of all features into a file. This file's
+            // path is passed into the Data Binding annotation processor which uses it to know about
+            // all available features.
+            //
+            // <p>see: {@link TaskManager#setDataBindingAnnotationProcessorParams(ComponentCreationConfig)}
+            taskFactory.register(
+                DataBindingExportFeatureNamespacesTask.CreationAction(variant)
+            )
+        }
 //
 //        createDynamicBundleTask(variantInfo)
 //
