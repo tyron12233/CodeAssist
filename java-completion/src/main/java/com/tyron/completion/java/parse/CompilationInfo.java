@@ -11,9 +11,11 @@ import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.comp.MemberEnter;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.Pair;
+import com.tyron.builder.model.CodeAssistAndroidLibrary;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.impl.AndroidModuleImpl;
 import com.tyron.common.util.DebouncerStore;
 import com.tyron.completion.java.compiler.services.NBEnter;
 import com.tyron.completion.java.compiler.services.NBLog;
@@ -23,6 +25,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,6 +35,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
@@ -41,19 +45,26 @@ public class CompilationInfo {
 
     public static final Key<CompilationInfo> COMPILATION_INFO_KEY = Key.create("compilationInfo");
 
-    public static CompilationInfo get(Project currentProject, File file) {
-        final Module module = currentProject.getModule(file);
+    public static CompilationInfo get(Module module) {
         if (!(module instanceof JavaModule)) {
             return null;
         }
         JavaModule javaModule = (JavaModule) module;
         CompilationInfo info = module.getUserData(COMPILATION_INFO_KEY);
         if (info == null) {
+            List<File> libraries = new ArrayList<>(javaModule.getLibraries());
+            if (module instanceof AndroidModuleImpl) {
+                libraries.addAll(((AndroidModuleImpl) module).getCodeAssistLibraries().stream()
+                        .filter(it -> it instanceof CodeAssistAndroidLibrary)
+                        .map(it -> (CodeAssistAndroidLibrary) it)
+                        .flatMap(it -> it.getCompileJarFiles().stream())
+                        .collect(Collectors.toList()));
+            }
             info = new CompilationInfo(new CompilationInfoImpl(
                     new JavacParser(),
-                    file,
-                    file,
-                    javaModule.getLibraries(),
+                    null,
+                    null,
+                    libraries,
                     Collections.emptyList(),
                     null,
                     null
@@ -61,6 +72,10 @@ public class CompilationInfo {
             module.putUserData(COMPILATION_INFO_KEY, info);
         }
         return info;
+    }
+    public static CompilationInfo get(Project currentProject, File file) {
+        final Module module = currentProject.getModule(file);
+        return get(module);
     }
 
     public final CompilationInfoImpl impl;

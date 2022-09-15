@@ -49,7 +49,7 @@ public class InjectResourcesTask {
 
     public static void inject(@NonNull Project project,
                               @NonNull AndroidModule module) throws IOException {
-        CompilationInfo compilationInfo = module.getUserData(CompilationInfo.COMPILATION_INFO_KEY);
+        CompilationInfo compilationInfo = CompilationInfo.get(module);
         if (compilationInfo == null) {
             return;
         }
