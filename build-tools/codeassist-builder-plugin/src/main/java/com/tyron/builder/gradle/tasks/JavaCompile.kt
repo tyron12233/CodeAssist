@@ -63,22 +63,22 @@ class JavaCompileCreationAction(
             .on(InternalArtifactType.AP_GENERATED_SOURCES)
 
         if (creationConfig.buildFeatures.dataBinding) {
-//            // Register data binding artifacts as outputs. There are 2 ways to do this:
-//            //    (1) Register with JavaCompile when Kapt is not used, and register with Kapt when
-//            //        Kapt is used.
-//            //    (2) Always register with JavaCompile, and when Kapt is used, replace them with
-//            //        Kapt.
-//            // The first way is simpler but unfortunately will break the publishing of the artifacts
-//            // because publishing takes place before the registration with Kapt (bug 161814391).
-//            // Therefore, we'll have to do it the second way.
-//            registerDataBindingOutputs(
-//                dataBindingArtifactDir,
-//                dataBindingExportClassListFile,
-//                creationConfig.componentType.isExportDataBindingClassList,
-//                taskProvider,
-//                artifacts,
-//                forJavaCompile = true
-//            )
+            // Register data binding artifacts as outputs. There are 2 ways to do this:
+            //    (1) Register with JavaCompile when Kapt is not used, and register with Kapt when
+            //        Kapt is used.
+            //    (2) Always register with JavaCompile, and when Kapt is used, replace them with
+            //        Kapt.
+            // The first way is simpler but unfortunately will break the publishing of the artifacts
+            // because publishing takes place before the registration with Kapt (bug 161814391).
+            // Therefore, we'll have to do it the second way.
+            registerDataBindingOutputs(
+                dataBindingArtifactDir,
+                dataBindingExportClassListFile,
+                creationConfig.componentType.isExportDataBindingClassList,
+                taskProvider,
+                artifacts,
+                forJavaCompile = true
+            )
         }
     }
 

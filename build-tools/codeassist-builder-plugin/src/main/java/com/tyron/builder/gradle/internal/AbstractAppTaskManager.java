@@ -128,7 +128,7 @@ public abstract class AbstractAppTaskManager<
         createMergeJniLibFoldersTasks(creationConfig);
 
         // Add data binding tasks if enabled
-//        createDataBindingTasksIfNecessary(creationConfig);
+        createDataBindingTasksIfNecessary(creationConfig);
 
 //        // Add a task to auto-generate classes for ML model files.
 //        createMlkitTask(creationConfig);

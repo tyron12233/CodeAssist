@@ -1,5 +1,6 @@
 package com.tyron.builder.gradle.internal
 
+import android.databinding.tool.DataBindingBuilder
 import com.google.common.base.Preconditions
 import com.google.common.base.Strings
 import com.tyron.builder.api.artifact.Artifact
@@ -9,6 +10,7 @@ import com.tyron.builder.api.artifact.SingleArtifact
 import com.tyron.builder.api.transform.QualifiedContent
 import com.tyron.builder.api.variant.ScopedArtifacts
 import com.tyron.builder.api.variant.VariantBuilder
+import com.tyron.builder.api.variant.impl.TaskProviderBasedDirectoryEntryImpl
 import com.tyron.builder.core.BuilderConstants
 import com.tyron.builder.core.ComponentType
 import com.tyron.builder.dexing.DexingType
@@ -33,8 +35,11 @@ import com.tyron.builder.gradle.internal.scope.*
 import com.tyron.builder.gradle.internal.services.AndroidLocationsBuildService
 import com.tyron.builder.gradle.internal.services.getBuildService
 import com.tyron.builder.gradle.internal.tasks.*
+import com.tyron.builder.gradle.internal.tasks.databinding.*
+import com.tyron.builder.gradle.internal.tasks.databinding.DataBindingCompilerArguments.Companion.createArguments
 import com.tyron.builder.gradle.internal.tasks.factory.*
 import com.tyron.builder.gradle.internal.tasks.featuresplit.getFeatureName
+import com.tyron.builder.gradle.internal.utils.getProjectKotlinPluginKotlinVersion
 import com.tyron.builder.gradle.internal.utils.isKotlinKaptPluginApplied
 import com.tyron.builder.gradle.internal.utils.isKspPluginApplied
 import com.tyron.builder.gradle.internal.variant.ApkVariantData
@@ -1269,57 +1274,57 @@ abstract class TaskManager<VariantBuilderT : VariantBuilder, VariantT : VariantC
         }
     }
 
-//    protected fun createDataBindingTasksIfNecessary(creationConfig: ComponentCreationConfig) {
-//        val dataBindingEnabled = creationConfig.buildFeatures.dataBinding
-//        val viewBindingEnabled = creationConfig.buildFeatures.viewBinding
-//        if (!dataBindingEnabled && !viewBindingEnabled) {
-//            return
-//        }
-//        taskFactory.register(
-//            DataBindingMergeDependencyArtifactsTask.CreationAction(creationConfig))
-//        DataBindingBuilder.setDebugLogEnabled(logger.isDebugEnabled)
-//        taskFactory.register(DataBindingGenBaseClassesTask.CreationAction(creationConfig))
-//
-//        // DATA_BINDING_TRIGGER artifact is created for data binding only (not view binding)
-//        if (dataBindingEnabled) {
-//            if (creationConfig.services.projectOptions.get(BooleanOption.NON_TRANSITIVE_R_CLASS)
-//                && isKotlinKaptPluginApplied(project)) {
-//                val kotlinVersion = getProjectKotlinPluginKotlinVersion(project)
-//                if (kotlinVersion != null && kotlinVersion < KAPT_FIX_KOTLIN_VERSION) {
-//                    // Before Kotlin version 1.5.20 there was an issue with KAPT resolving files
-//                    // at configuration time. We only need this task as a workaround for it, if the
-//                    // version is newer than 1.5.20 or KAPT isn't applied, we can skip it.
-//                    taskFactory.register(
-//                        MergeRFilesForDataBindingTask.CreationAction(creationConfig))
-//                }
-//            }
-//            taskFactory.register(DataBindingTriggerTask.CreationAction(creationConfig))
-//            creationConfig.sources.java.addSource(
-//                TaskProviderBasedDirectoryEntryImpl(
-//                    name = "databinding_generated",
-//                    directoryProvider = creationConfig.artifacts.get(
-//                        InternalArtifactType.DATA_BINDING_TRIGGER
-//                    ),
-//                )
-//            )
-//            setDataBindingAnnotationProcessorParams(creationConfig)
-//        }
-//    }
-//
-//    private fun setDataBindingAnnotationProcessorParams(
-//        creationConfig: ComponentCreationConfig) {
-//        val processorOptions = creationConfig.javaCompilation.annotationProcessor
-//
-//        val dataBindingArgs = createArguments(
-//            creationConfig,
-//            logger.isDebugEnabled,
-//            DataBindingBuilder.getPrintMachineReadableOutput(),
-//            isKotlinKaptPluginApplied(project),
-//            getProjectKotlinPluginKotlinVersion(project))
-//
-//        // add it the Variant API objects, this is what our tasks use
-//        processorOptions.argumentProviders.add(dataBindingArgs)
-//    }
+    protected fun createDataBindingTasksIfNecessary(creationConfig: ComponentCreationConfig) {
+        val dataBindingEnabled = creationConfig.buildFeatures.dataBinding
+        val viewBindingEnabled = creationConfig.buildFeatures.viewBinding
+        if (!dataBindingEnabled && !viewBindingEnabled) {
+            return
+        }
+        taskFactory.register(
+            DataBindingMergeDependencyArtifactsTask.CreationAction(creationConfig))
+        DataBindingBuilder.setDebugLogEnabled(logger.isDebugEnabled)
+        taskFactory.register(DataBindingGenBaseClassesTask.CreationAction(creationConfig))
+
+        // DATA_BINDING_TRIGGER artifact is created for data binding only (not view binding)
+        if (dataBindingEnabled) {
+            if (creationConfig.services.projectOptions.get(BooleanOption.NON_TRANSITIVE_R_CLASS)
+                && isKotlinKaptPluginApplied(project)) {
+                val kotlinVersion = getProjectKotlinPluginKotlinVersion(project)
+                if (kotlinVersion != null && kotlinVersion < KAPT_FIX_KOTLIN_VERSION) {
+                    // Before Kotlin version 1.5.20 there was an issue with KAPT resolving files
+                    // at configuration time. We only need this task as a workaround for it, if the
+                    // version is newer than 1.5.20 or KAPT isn't applied, we can skip it.
+                    taskFactory.register(
+                        MergeRFilesForDataBindingTask.CreationAction(creationConfig))
+                }
+            }
+            taskFactory.register(DataBindingTriggerTask.CreationAction(creationConfig))
+            creationConfig.sources.java.addSource(
+                TaskProviderBasedDirectoryEntryImpl(
+                    name = "databinding_generated",
+                    directoryProvider = creationConfig.artifacts.get(
+                        InternalArtifactType.DATA_BINDING_TRIGGER
+                    ),
+                )
+            )
+            setDataBindingAnnotationProcessorParams(creationConfig)
+        }
+    }
+
+    private fun setDataBindingAnnotationProcessorParams(
+        creationConfig: ComponentCreationConfig) {
+        val processorOptions = creationConfig.javaCompilation.annotationProcessor
+
+        val dataBindingArgs = createArguments(
+            creationConfig,
+            logger.isDebugEnabled,
+            DataBindingBuilder.getPrintMachineReadableOutput(),
+            isKotlinKaptPluginApplied(project),
+            getProjectKotlinPluginKotlinVersion(project))
+
+        // add it the Variant API objects, this is what our tasks use
+        processorOptions.argumentProviders.add(dataBindingArgs)
+    }
 
     /**
      * Creates the final packaging task, and optionally the zipalign task (if the variant is signed)
