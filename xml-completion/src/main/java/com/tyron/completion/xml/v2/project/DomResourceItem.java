@@ -26,6 +26,7 @@ import com.android.ide.common.rendering.api.StyleResourceValueImpl;
 import com.android.ide.common.rendering.api.StyleableResourceValueImpl;
 import com.android.ide.common.rendering.api.TextResourceValueImpl;
 import com.android.ide.common.resources.ResourceItem;
+import com.android.ide.common.resources.SingleNamespaceResourceRepository;
 import com.android.ide.common.resources.ValueXmlHelper;
 import com.android.ide.common.resources.configuration.DensityQualifier;
 import com.android.ide.common.resources.configuration.FolderConfiguration;
@@ -140,6 +141,10 @@ public class DomResourceItem implements ResourceItem {
         return new ResourceReference(getNamespace(), myType, myName);
     }
 
+    @Override
+    public SingleNamespaceResourceRepository getRepository() {
+        return myOwner;
+    }
 
     @Override
     public String getKey() {
