@@ -43,6 +43,7 @@ import com.tyron.completion.xml.v2.base.LoadableResourceRepository;
 import com.tyron.completion.xml.v2.base.RepositoryConfiguration;
 import com.tyron.completion.xml.v2.base.RepositoryLoader;
 import com.tyron.completion.xml.v2.base.ResourceSourceFile;
+import com.tyron.completion.xml.v2.events.XmlReparsedEvent;
 import com.tyron.completion.xml.v2.events.XmlResourceChangeEvent;
 import com.tyron.xml.completion.util.DOMUtils;
 
@@ -493,6 +494,10 @@ public final class ResourceFolderRepository extends LocalResourceRepository impl
                 invalidateParentCaches(this, ResourceType.values());
             }
         }
+
+        myFacet.getProject().getEventManager().dispatchEvent(
+                new XmlReparsedEvent(file)
+        );
         commitToRepository(result);
     }
 

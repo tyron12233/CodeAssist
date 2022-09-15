@@ -1,5 +1,7 @@
 package com.tyron.code.ui.project;
 
+import android.text.TextUtils;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -22,18 +24,24 @@ import com.tyron.builder.model.v2.models.BasicAndroidProject;
 import com.tyron.builder.model.v2.models.VariantDependencies;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidContentRoot;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
+import com.tyron.code.event.EventReceiver;
+import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.gradle.util.GradleLaunchUtil;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.ui.editor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
+import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.java.compiler.Parser;
 import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.provider.CompletionEngine;
 import com.tyron.completion.java.provider.PruneMethodBodies;
 import com.tyron.completion.progress.ProgressManager;
+import com.tyron.completion.xml.task.InjectResourcesTask;
+import com.tyron.completion.xml.v2.events.XmlReparsedEvent;
 
 import org.apache.commons.io.FileUtils;
 import org.gradle.tooling.BuildActionExecuter;
@@ -181,6 +189,20 @@ public class ProjectManager {
         mProjectOpenListeners.forEach(it -> it.onProjectOpen(mCurrentProject));
 
         mCurrentProject.setIndexing(false);
+        mCurrentProject.getEventManager().subscribeEvent(XmlReparsedEvent.class,
+                (event, unsubscribe) -> {
+                    ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                        File file = event.getFile();
+                        Module module = mCurrentProject.getModule(file);
+                        if (module instanceof AndroidModule) {
+                            try {
+                                InjectResourcesTask.inject(mCurrentProject, (AndroidModule) module);
+                            } catch (IOException e) {
+                                IdeLog.getLogger().severe(e.getMessage());
+                            }
+                        }
+                    });
+                });
         mListener.onComplete(project, true, "Index successful");
     }
 
@@ -202,6 +224,12 @@ public class ProjectManager {
         if (namespacing == AaptOptions.Namespacing.REQUIRED) {
             impl.setNamespace(androidProject.getNamespace());
         }
+        String applicationId = modelInfo.getAndroidDsl().getDefaultConfig().getApplicationId();
+        String namespace = androidProject.getNamespace();
+        if (TextUtils.isEmpty(namespace)) {
+            namespace = applicationId;
+        }
+        impl.setPackageName(namespace);
 
         // add main source set
         SourceSetContainer mainSourceSet = basicAndroidProject.getMainSourceSet();
