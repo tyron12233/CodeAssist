@@ -2,6 +2,7 @@ package com.tyron.completion.xml.v2.handler
 
 import com.android.ide.common.rendering.api.ResourceNamespace
 import com.android.ide.common.rendering.api.StyleableResourceValue
+import com.android.ide.common.resources.ResourceItem
 import com.android.resources.ResourceType
 import com.tyron.builder.project.api.AndroidModule
 import com.tyron.completion.CompletionParameters
@@ -11,11 +12,14 @@ import com.tyron.completion.xml.util.StyleUtils
 import com.tyron.completion.xml.util.XmlUtils
 import com.tyron.completion.xml.util.XmlUtils.getCompletionType
 import com.tyron.completion.xml.v2.aar.FrameworkResourceRepository
+import com.tyron.completion.xml.v2.project.LocalResourceRepository
 import com.tyron.completion.xml.v2.project.ResourceRepositoryManager
 import com.tyron.xml.completion.util.DOMUtils
 import org.eclipse.lemminx.dom.DOMElement
 import org.eclipse.lemminx.dom.DOMParser
 import org.eclipse.lemminx.uriresolver.URIResolverExtensionManager
+
+private const val UNKNOWN_TAG = "\$__UnknownTag__\$"
 
 fun handleLayout(
     frameworkResRepository: FrameworkResourceRepository,
@@ -54,7 +58,14 @@ fun handleLayout(
             val attr = parsedNode.findAttrAt(params.index.toInt())
             val ownerElement = attr.ownerElement
             val parentView = ownerElement.parentElement
-            addValueItems(completionBuilder, frameworkResRepository, projectResources, repositoryManager.namespace, attr, params) {
+            addValueItems(
+                completionBuilder,
+                frameworkResRepository,
+                projectResources,
+                repositoryManager.namespace,
+                attr,
+                params
+            ) {
                 val classes = StyleUtils.getClasses(it)
 
                 if (classes.isEmpty()) {
@@ -67,7 +78,7 @@ fun handleLayout(
                         if (layoutParams.isEmpty()) {
                             listOf(simpleName + "_Layout", "ViewGroup_Layout")
                         } else {
-                            layoutParams.map {name -> name + "_Layout" }
+                            layoutParams.map { name -> name + "_Layout" }
                         }
                     } ?: listOf("ViewGroup_Layout")
                     classes.toList() + parentLayoutParams
@@ -95,7 +106,7 @@ fun addLayoutAttributes(
 
     // TODO: Suggest NS
 
-    val simpleTagName  = StyleUtils.getSimpleName(node.tagName)
+    val simpleTagName = StyleUtils.getSimpleName(node.tagName)
     val styleNames = buildList {
         // try to search for the styleable of the tag
         add(simpleTagName)
@@ -104,44 +115,45 @@ fun addLayoutAttributes(
         // try to search for styleable names from the parent of the view
         // e.g the parent of TextView is View, so include that as well.
         if (currentViewClasses.isEmpty()) {
-            currentViewClasses.addAll(listOf("ViewGroup"))
+            add(UNKNOWN_TAG)
+        } else {
+            addAll(currentViewClasses)
         }
-        addAll(currentViewClasses)
+
 
         // now if there is a parent view, add it's layout parameters
         parentView?.apply {
             val classes = StyleUtils.getClasses(StyleUtils.getSimpleName(this.tagName))
-            // class hierarchy not found in cache, just suggest ViewGroup_Layout
-            if (classes.isEmpty()) {
-                add(StyleUtils.getSimpleName(this.tagName) + "_Layout")
-                add("ViewGroup_Layout")
-            } else {
+
+            if (classes.isNotEmpty()) {
                 // all layout params styles should end in _Layout by convention
                 addAll(classes.map { name -> name + "_Layout" })
+            } else {
+                // this class is not found so just suggest all view attributes
+                // this is based on android studio's behavior
+                add(UNKNOWN_TAG)
             }
         }
     }
 
+    var xmlnsAttributes = DOMUtils.getXmlnsAttributes(ownerDocument)
+    if (xmlnsAttributes.isEmpty()) {
+        xmlnsAttributes = listOf(ResourceNamespace.RES_AUTO.xmlNamespaceUri)
+    }
+
     val items = styleNames.flatMap { styleName ->
-        var xmlnsAttributes = DOMUtils.getXmlnsAttributes(ownerDocument)
-        if (xmlnsAttributes.isEmpty()) {
-            xmlnsAttributes = listOf(ResourceNamespace.RES_AUTO.xmlNamespaceUri)
+        getStyleables(
+            xmlnsAttributes,
+            frameworkResRepository,
+            resourceRepositoryManager.appResources
+        ) {
+            if (UNKNOWN_TAG == styleName) {
+                it.name == "ViewGroup" || it.name.endsWith("_Layout")
+                        || it.name == "View"
+            } else {
+                it.name == styleName
+            }
         }
-
-
-        frameworkResRepository.getPublicResources(
-            ResourceNamespace.ANDROID,
-            ResourceType.STYLEABLE
-        ).filter {
-            it.name == styleName
-        } + xmlnsAttributes.map(ResourceNamespace::fromNamespaceUri).flatMap {
-            resourceRepositoryManager.appResources.getResources(
-                it,
-                ResourceType.STYLEABLE,
-                styleName
-            )
-        }
-
     }.filter {
         it is StyleableResourceValue
     }.map {
@@ -155,4 +167,21 @@ fun addLayoutAttributes(
 
 
     addAttributes(items, node, builder)
+}
+
+fun getStyleables(
+    namespaces: List<String>,
+    frameworkResRepository: FrameworkResourceRepository,
+    appRepository: LocalResourceRepository,
+    predicate: (ResourceItem) -> Boolean
+): List<ResourceItem> {
+    return (frameworkResRepository.getPublicResources(
+        ResourceNamespace.ANDROID,
+        ResourceType.STYLEABLE
+    ) + namespaces.flatMap {
+        appRepository.getResources(
+            ResourceNamespace.fromNamespaceUri(it),
+            ResourceType.STYLEABLE
+        ).values()
+    }).filter(predicate)
 }
