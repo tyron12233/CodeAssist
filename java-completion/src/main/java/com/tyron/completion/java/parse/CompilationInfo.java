@@ -9,6 +9,7 @@ import com.sun.tools.javac.api.JavacTaskImpl;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.comp.MemberEnter;
+import com.sun.tools.javac.main.JavaCompiler;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.Pair;
 import com.tyron.builder.model.CodeAssistAndroidLibrary;
@@ -37,6 +38,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
 import javax.tools.JavaFileObject;
@@ -141,26 +143,25 @@ public class CompilationInfo {
 
 
                     // reparse the whole file
-                    Iterable<? extends CompilationUnitTree> units;
+                    JCCompilationUnit unit;
                     try {
-                        units = javacTask.parse(fileObject);
-                    } catch (IOException e) {
+                        unit = JavaCompiler.instance(javacTask.getContext()).parse(fileObject);
+                    } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
 
+                    Iterable<? extends Element> enter = javacTask.enter(List.of(unit));
+
                     if (previous != null) {
-                        ((JCCompilationUnit) units.iterator().next()).toplevelScope = previous.toplevelScope;
+                        unit.packge = previous.packge;
                     }
 
-                    if (!units.iterator().hasNext()) {
-                        return;
-                    }
-                    javacTask.analyze();
+                    Iterable<? extends Element> analyze = javacTask.analyze(enter);
 
-                    JCCompilationUnit newUnit = (JCCompilationUnit) units.iterator().next();
+                    JCCompilationUnit newUnit = unit;
                     compiledMap.put(fileObject.toUri(), newUnit);
 
-                    treeConsumer.accept((JCCompilationUnit) units.iterator().next());
+                    treeConsumer.accept(unit);
                 } catch (Throwable t) {
                     System.out.println(t);
                     treeConsumer.accept(null);
