@@ -3,6 +3,7 @@ package com.tyron.completion.java.compiler.services;
 import com.google.common.collect.ArrayListMultimap;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.DiagnosticSource;
 import com.sun.tools.javac.util.JCDiagnostic;
 import com.sun.tools.javac.util.Log;
 import com.sun.tools.javac.util.Pair;
@@ -49,7 +50,16 @@ public class NBLog extends Log {
         }
         return (NBLog) log;
     }
-    
+
+    @Override
+    public DiagnosticSource getSource(JavaFileObject file) {
+        return super.getSource(file);
+    }
+
+    public void removeFileObject(JavaFileObject fileObject) {
+        sourceMap.remove(fileObject);
+    }
+
     public static void preRegister(Context context,
                                    final PrintWriter errWriter,
                                    final PrintWriter warnWriter,

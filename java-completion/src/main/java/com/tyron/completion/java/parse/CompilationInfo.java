@@ -132,6 +132,7 @@ public class CompilationInfo {
                     }
                     log.getRecorded().removeAll(toRemove);
                     log.removeDiagnostics(fileObject.toUri());
+                    log.removeFileObject(fileObject);
 
 
                     JCCompilationUnit previous = compiledMap.get(fileObject.toUri());
@@ -141,11 +142,11 @@ public class CompilationInfo {
                         enter.removeCompilationUnit(fileObject);
                     }
 
-
                     // reparse the whole file
                     JCCompilationUnit unit;
                     try {
-                        unit = JavaCompiler.instance(javacTask.getContext()).parse(fileObject);
+                        JavaCompiler compiler = JavaCompiler.instance(javacTask.getContext());
+                        unit = compiler.parse(fileObject);
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
