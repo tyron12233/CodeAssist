@@ -104,7 +104,6 @@ fun addValueItems(
     }
 
 
-
     // resource not found
     if (foundStyles.isEmpty()) {
         return
@@ -146,7 +145,49 @@ fun addValueItems(
                     )
                 }
                 AttributeFormat.STRING -> {
-                    getItems(attribute, frameworkResRepository, projectResources, namespace, ResourceType.STRING)
+                    getItems(
+                        attribute,
+                        frameworkResRepository,
+                        projectResources,
+                        namespace,
+                        ResourceType.STRING
+                    )
+                }
+                AttributeFormat.DIMENSION -> {
+                    getItems(
+                        attribute,
+                        frameworkResRepository,
+                        projectResources,
+                        namespace,
+                        ResourceType.DIMEN
+                    )
+                }
+                AttributeFormat.COLOR -> {
+                    getItems(
+                        attribute,
+                        frameworkResRepository,
+                        projectResources,
+                        namespace,
+                        ResourceType.COLOR
+                    )
+                }
+                AttributeFormat.FRACTION -> {
+                    getItems(
+                        attribute,
+                        frameworkResRepository,
+                        projectResources,
+                        namespace,
+                        ResourceType.FRACTION
+                    )
+                }
+                AttributeFormat.INTEGER -> {
+                    getItems(
+                        attribute,
+                        frameworkResRepository,
+                        projectResources,
+                        namespace,
+                        ResourceType.INTEGER
+                    )
                 }
                 AttributeFormat.REFERENCE -> {
                     val resourceValues = ResourceType.REFERENCEABLE_TYPES.flatMap { resourceType ->
@@ -180,11 +221,13 @@ fun getConfiguredResourceTypes(
     )
 
     projectResources?.apply {
-        resourceValueMap.putAll(projectResources.getConfiguredResources(
-            ResourceNamespace.RES_AUTO,
-            resourceType,
-            FolderConfiguration.createDefault()
-        ))
+        resourceValueMap.putAll(
+            projectResources.getConfiguredResources(
+                ResourceNamespace.RES_AUTO,
+                resourceType,
+                FolderConfiguration.createDefault()
+            )
+        )
     }
 
     return resourceValueMap
@@ -197,11 +240,16 @@ fun getItems(
     namespace: ResourceNamespace,
     resourceType: ResourceType
 ): List<CompletionItem> {
-    val resourceValueMap = getConfiguredResourceTypes(frameworkResRepository, projectResources, resourceType)
+    val resourceValueMap =
+        getConfiguredResourceTypes(frameworkResRepository, projectResources, resourceType)
     return getReferenceItems(namespace, attribute, resourceValueMap.values)
 }
 
-fun getReferenceItems(namespace: ResourceNamespace, attribute: AttrResourceValue, items: Collection<ResourceValue>): List<CompletionItem> {
+fun getReferenceItems(
+    namespace: ResourceNamespace,
+    attribute: AttrResourceValue,
+    items: Collection<ResourceValue>
+): List<CompletionItem> {
     return items.map {
         val selfReference = it.asReference().getRelativeResourceUrl(namespace)
         CompletionItem.create(
