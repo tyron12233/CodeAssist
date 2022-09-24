@@ -16,6 +16,7 @@ import androidx.preference.PreferenceScreen;
 import androidx.preference.SwitchPreference;
 
 import com.tyron.code.R;
+import com.tyron.common.SharedPreferenceKeys;
 
 import java.util.function.Consumer;
 
@@ -61,6 +62,18 @@ public class EditorSettingsProvider implements SettingsProvider {
             caseInsensitiveMatch.setDefaultValue(true);
             caseInsensitiveMatch.setIconSpaceReserved(false);
             javaCategory.addPreference(caseInsensitiveMatch);
+        });
+
+        addCategory(preferenceScreen, category -> {
+            category.setTitle("Kotlin");
+            category.setIconSpaceReserved(false);
+
+            SwitchPreference codeCompletion = new SwitchPreference(context);
+            codeCompletion.setTitle(R.string.settings_code_completions);
+            codeCompletion.setKey(SharedPreferenceKeys.KOTLIN_COMPLETIONS);
+            codeCompletion.setDefaultValue(false);
+            codeCompletion.setIconSpaceReserved(false);
+            category.addPreference(codeCompletion);
         });
 
         addCategory(preferenceScreen, editor -> {

@@ -54,6 +54,9 @@ android {
         exclude "META-INF/AL2.0"
         exclude "README.md"
         pickFirst "META-INF/sisu/*"
+        pickFirst "*/*.kotlin_builtins"
+        pickFirst "*/*/*.kotlin_builtins"
+        pickFirst "*/*/*/*.kotlin_builtins"
     }
 }
 

@@ -45,6 +45,7 @@ import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.completion.xml.v2.events.XmlReparsedEvent;
 import com.tyron.completion.xml.v2.events.XmlResourceChangeEvent;
 import com.tyron.completion.xml.v2.project.ResourceRepositoryManager;
+import com.tyron.kotlin.completion.KotlinEnvironment;
 
 import org.apache.commons.io.FileUtils;
 import org.gradle.tooling.BuildActionExecuter;
@@ -372,6 +373,8 @@ public class ProjectManager {
                 }
             });
         }
+
+        KotlinEnvironment kotlinEnvironment = KotlinEnvironment.Companion.get(module);
     }
 
     public void closeProject(@NonNull Project project) {

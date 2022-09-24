@@ -125,19 +125,16 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
                             new File(getModule().getBuildDirectory(), "gen")),
                     args, mCollector, new ICReporterBase() {
                         @Override
-                        public void report(@NonNull Function0<String> function0) {
-                            getLogger().info(function0.invoke());
+                        public void reportCompileIteration(boolean b,
+                                                           @NotNull Collection<? extends File> collection,
+                                                           @NotNull ExitCode exitCode) {
+
                         }
 
                         @Override
-                        public void reportVerbose(@NonNull Function0<String> function0) {
-                            getLogger().verbose(function0.invoke());
-                        }
+                        public void report(@NotNull Function0<String> function0,
+                                           @NotNull ReportSeverity reportSeverity) {
 
-                        @Override
-                        public void reportCompileIteration(boolean incremental,
-                                                           @NonNull Collection<? extends File> sources,
-                                                           @NonNull ExitCode exitCode) {
                         }
                     });
         } catch (Exception e) {
