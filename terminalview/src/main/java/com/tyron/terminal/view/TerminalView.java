@@ -1303,9 +1303,9 @@ public final class TerminalView extends View {
     }
 
     public void startTextSelectionMode(MotionEvent event) {
-        if (!requestFocus()) {
-            return;
-        }
+//        if (!requestFocus()) {
+//            return;
+//        }
 
         showTextSelectionCursors(event);
         mClient.copyModeChanged(isSelectingText());

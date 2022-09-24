@@ -54,7 +54,7 @@ public class TerminalViewClientAdapter implements TerminalViewClient {
 
     @Override
     public boolean disableInput() {
-        return false;
+        return true;
     }
 
     @Override
