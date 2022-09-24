@@ -1,13 +1,10 @@
 package com.tyron.code;
 
 import android.app.Application;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.os.Build;
-import android.os.IBinder;
 import android.widget.Toast;
 
 import androidx.annotation.Keep;
@@ -19,7 +16,7 @@ import androidx.preference.PreferenceManager;
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.actions.ActionManager;
 import com.tyron.builder.BuildModule;
-import com.tyron.code.event.Event;
+import com.tyron.code.event.EventManager;
 import com.tyron.code.service.GradleDaemonService;
 import com.tyron.code.ui.editor.action.CloseAllEditorAction;
 import com.tyron.code.ui.editor.action.CloseFileEditorAction;
@@ -27,8 +24,8 @@ import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
 import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
 import com.tyron.code.ui.editor.action.PreviewLayoutAction;
 import com.tyron.code.ui.editor.action.text.TextActionGroup;
-import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.ImportFileActionGroup;
+import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.debug.DebugActionGroup;
@@ -42,7 +39,6 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
-import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.editor.selection.ExpandSelectionProvider;
@@ -55,11 +51,12 @@ import com.tyron.language.xml.XmlLanguage;
 import com.tyron.selection.java.JavaExpandSelectionProvider;
 import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
-import com.tyron.code.event.EventManager;
+import org.gradle.internal.time.Time;
+import org.gradle.internal.time.Timer;
+import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
 
 public class ApplicationLoader extends Application {
 
@@ -76,7 +73,14 @@ public class ApplicationLoader extends Application {
     
     @Override
     public void onCreate() {
+        Timer timer = Time.startTimer();
         super.onCreate();
+        System.out.println("onCreate took " + timer.getElapsed());
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            HiddenApiBypass.addHiddenApiExemptions("Lsun/misc/Unsafe");
+        }
+
         setupTheme();
 
         mEventManager = new EventManager();
@@ -133,7 +137,6 @@ public class ApplicationLoader extends Application {
                                                      new XmlExpandSelectionProvider());
         });
         startupManager.addStartupActivity(() -> {
-            CompletionEngine engine = CompletionEngine.getInstance();
             CompilerService index = CompilerService.getInstance();
             if (index.isEmpty()) {
                 index.registerIndexProvider(JavaCompilerProvider.KEY, new JavaCompilerProvider());

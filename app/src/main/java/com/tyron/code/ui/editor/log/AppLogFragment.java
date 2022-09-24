@@ -77,7 +77,7 @@ public class AppLogFragment extends Fragment
 
             mTerminalView = new TerminalView(requireContext(), null);
             mTerminalView.setTextSize(20);
-            mTerminalView.setTerminalViewClient(new TerminalViewClientAdapter());
+            mTerminalView.setTerminalViewClient(new TerminalViewClientAdapter(mTerminalView));
             mTerminalView.attachSession(session);
 
             outputStream = new OutputStream() {
@@ -108,7 +108,7 @@ public class AppLogFragment extends Fragment
 //                            bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
 //                            bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
 //                            it.getFragment().setArguments(bundle);
-//                            manager.openFileEditor(it);
+                            manager.openFileEditor(it);
 //                        }
                     });
                 }

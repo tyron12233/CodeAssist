@@ -6,9 +6,25 @@ import android.view.MotionEvent;
 import com.tyron.terminal.TerminalSession;
 
 public class TerminalViewClientAdapter implements TerminalViewClient {
+
+    private final TerminalView terminalView;
+
+    public TerminalViewClientAdapter(TerminalView terminalView) {
+        this.terminalView = terminalView;
+    }
+
     @Override
     public float onScale(float scale) {
-        return 0;
+        if (scale < 0.9f || scale > 1.1f) {
+            boolean increase = scale > 1.f;
+            changeFontSize(increase);
+            return 1.0f;
+        }
+        return scale;
+    }
+
+    public void changeFontSize(boolean increase) {
+
     }
 
     @Override

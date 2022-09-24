@@ -64,7 +64,7 @@ configurations.implementation {
 }
 
 dependencies {
-    implementation 'com.github.tiann:FreeReflection:3.1.0'
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
     implementation projects.terminalview
 
     // TODO: Removed these modules, the features that are using these modules
