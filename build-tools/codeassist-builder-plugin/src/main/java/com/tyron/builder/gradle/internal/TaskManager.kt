@@ -1409,7 +1409,7 @@ abstract class TaskManager<VariantBuilderT : VariantBuilder, VariantT : VariantC
     }
 
     protected open fun createInstallTask(creationConfig: ApkCreationConfig) {
-//            taskFactory.register(InstallVariantTask.CreationAction(creationConfig))
+            taskFactory.register(InstallVariantTask.CreationAction(creationConfig))
     }
 
     protected fun createValidateSigningTask(creationConfig: ApkCreationConfig) {

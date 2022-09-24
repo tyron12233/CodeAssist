@@ -25,6 +25,7 @@ import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 import com.tyron.code.event.EventManager;
 import com.tyron.code.event.EventReceiver;
@@ -133,7 +134,7 @@ public class TreeFileManagerFragment extends Fragment {
                     if (file.isFile()) {
                         // TODO: cleaner api to do this
                         if (file.getName().endsWith(".apk")) {
-                            ApkInstaller.installApplication(requireContext(), file.getAbsolutePath());
+                            ApkInstaller.installApplication(requireContext(), BuildConfig.APPLICATION_ID, file.getAbsolutePath());
                         } else {
                             FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), true);
                         }

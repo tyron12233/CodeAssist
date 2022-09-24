@@ -19,3 +19,11 @@ fun AndroidVersion.getFeatureLevel(): Int =
  * Returns a string representing the API level and/or the code name.
  */
 fun AndroidVersion.getApiString(): String = codename ?: apiLevel.toString()
+
+/**
+ * Convert public API [AndroidVersion] to one used by the model :
+ * [com.android.sdklib.AndroidVersion]
+ */
+fun AndroidVersion.toSharedAndroidVersion(): com.android.sdklib.AndroidVersion {
+    return com.android.sdklib.AndroidVersion(apiLevel, codename)
+}

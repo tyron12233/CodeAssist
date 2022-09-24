@@ -1,4 +1,4 @@
-package com.tyron.code.util;
+package com.tyron.common.util;
 
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
+
+import com.tyron.common.ApplicationProvider;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
@@ -15,7 +17,7 @@ public class ApkInstaller {
 
     private static final String TAG = ApkInstaller.class.getSimpleName();
 
-    private static final Method FILE_PROVIDER_METHOD;
+    private static Method FILE_PROVIDER_METHOD;
 
     static {
         try {
@@ -27,6 +29,10 @@ public class ApkInstaller {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static void installApplication(String applicationId, String filePath) {
+        installApplication(ApplicationProvider.getApplicationContext(), applicationId, filePath);
     }
 
     public static void installApplication(Context context, String applicationId, String filePath) {
@@ -45,7 +51,7 @@ public class ApkInstaller {
     public static Uri uriFromFile(Context context, String applicationId, File file) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
-                return (Uri) FILE_PROVIDER_METHOD.invoke(context, applicationId + ".provider", file);
+                return (Uri) FILE_PROVIDER_METHOD.invoke(null, context, applicationId + ".provider", file);
             } catch (IllegalAccessException | InvocationTargetException e) {
                 throw new RuntimeException(e);
             }

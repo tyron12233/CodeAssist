@@ -430,10 +430,10 @@ public class MainFragment extends Fragment implements ProjectManager.OnProjectOp
         Runnable compileRunnable = () -> {
             String task;
             switch (type) {
-                case RELEASE: task = "assembleRelease";
+                case RELEASE: task = "installRelease";
                 break;
                 default:
-                case DEBUG: task = "assembleDebug";
+                case DEBUG: task = "installDebug";
             }
             try {
                 GradleConnector gradleConnector = GradleConnector.newConnector()
