@@ -347,6 +347,10 @@ public class TerminalSession extends TerminalOutput {
         return result;
     }
 
+    public void onShareText(String transcriptText) {
+        mClient.onShareText(this, transcriptText);
+    }
+
     @SuppressLint("HandlerLeak")
     class MainThreadHandler extends Handler {
 

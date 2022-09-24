@@ -30,6 +30,7 @@ public class TextSelectionCursorController implements CursorController {
     private final int ACTION_COPY = 1;
     private final int ACTION_PASTE = 2;
     private final int ACTION_MORE = 3;
+    private final int ACTION_SHARE = 4;
 
     public TextSelectionCursorController(TerminalView terminalView) {
         this.terminalView = terminalView;
@@ -119,10 +120,11 @@ public class TextSelectionCursorController implements CursorController {
             public boolean onCreateActionMode(ActionMode mode, Menu menu) {
                 int show = MenuItem.SHOW_AS_ACTION_IF_ROOM | MenuItem.SHOW_AS_ACTION_WITH_TEXT;
 
-//                ClipboardManager clipboard = (ClipboardManager) terminalView.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipboardManager clipboard = (ClipboardManager) terminalView.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
                 menu.add(Menu.NONE, ACTION_COPY, Menu.NONE, android.R.string.copy).setShowAsAction(show);
-//                menu.add(Menu.NONE, ACTION_PASTE, Menu.NONE, R.string.paste_text).setEnabled(clipboard.hasPrimaryClip()).setShowAsAction(show);
-//                menu.add(Menu.NONE, ACTION_MORE, Menu.NONE, R.string.text_selection_more);
+                menu.add(Menu.NONE, ACTION_PASTE, Menu.NONE, android.R.string.paste).setEnabled(clipboard.hasPrimaryClip()).setShowAsAction(show);
+                menu.add(Menu.NONE, ACTION_MORE, Menu.NONE, android.R.string.selectAll);
+                menu.add(Menu.NONE, ACTION_SHARE, Menu.NONE, "Share").setShowAsAction(show);
                 return true;
             }
 
@@ -151,6 +153,10 @@ public class TextSelectionCursorController implements CursorController {
                     case ACTION_MORE:
                         terminalView.stopTextSelectionMode(); //we stop text selection first, otherwise handles will show above popup
                         terminalView.showContextMenu();
+                        break;
+                    case ACTION_SHARE:
+                        String transcriptText = terminalView.mEmulator.getScreen().getTranscriptText();
+                        terminalView.mTermSession.onShareText(transcriptText);
                         break;
                 }
 

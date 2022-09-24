@@ -19,6 +19,8 @@ import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.editor.log.adapter.LogAdapter;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.code.ui.project.ProjectManager;
+import com.tyron.common.util.AndroidUtilities;
+import com.tyron.common.util.ShareUtils;
 import com.tyron.fileeditor.api.FileEditorManager;
 import com.tyron.terminal.TerminalSession;
 import com.tyron.terminal.TerminalSessionClientAdapter;
@@ -73,7 +75,17 @@ public class AppLogFragment extends Fragment
 
         if (id == LogViewModel.BUILD_LOG) {
             TerminalSession session = new TerminalSession("", "", new String[0], new String[0],
-                    0, new TerminalSessionClientAdapter());
+                    0, new TerminalSessionClientAdapter() {
+                @Override
+                public void onCopyTextToClipboard(TerminalSession session, String text) {
+                    AndroidUtilities.copyToClipboard(text);
+                }
+
+                @Override
+                public void onShareText(TerminalSession terminalSession, String transcriptText) {
+                    ShareUtils.shareText(requireContext(), "Build Logs", transcriptText);
+                }
+            });
 
             mTerminalView = new TerminalView(requireContext(), null);
             mTerminalView.setTextSize(20);
@@ -108,7 +120,7 @@ public class AppLogFragment extends Fragment
 //                            bundle.putInt(CodeEditorFragment.KEY_LINE, (int) diagnostic.getLineNumber());
 //                            bundle.putInt(CodeEditorFragment.KEY_COLUMN, (int) diagnostic.getColumnNumber());
 //                            it.getFragment().setArguments(bundle);
-                            manager.openFileEditor(it);
+//                            manager.openFileEditor(it);
 //                        }
                     });
                 }
