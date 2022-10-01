@@ -4,7 +4,7 @@
     <string name="app_name">CodeAssist</string>
     <string name="hello_world">Hello world!</string>
     <item name="paste" type="string">Вставить</item>
-    <item name="copy" type="string">Скопировать</item>
+    <item name="copy" type="string">Копировать</item>
     <item name="selectAll" formatted="true" type="string">Выбрать все</item>
     <item name="saveToProject" translatable="false" type="string">Проект</item>
     <item name="cut" type="string">Вырезать</item>
@@ -69,21 +69,19 @@
     <string name="menu_library_manager">Библиотеки проекта</string>
     <string name="menu_format">Форматировать код</string>
     <string name="menu_settings">Настройки</string>
+    
+    <!-- preferences -->
+    <string name="settings_title_application">Приложение</string>
+    <string name="settings_desc_application">Общие настройки приложения</string>
+    <string name="settings_title_editor">Редактор</string>
+    <string name="settings_desc_editor">Настройки редактора кода</string>
+    <string name="title_activity_settings">Настройки</string>
 
-<!-- Application settings -->
+    <!-- Application settings -->
     <string name="settings_theme_title">Тема приложения</string>
     <string name="settings_theme_value_default">Системная тема (по умолчанию)</string>
     <string name="settings_theme_value_light">Светлая тема</string>
     <string name="settings_theme_value_dark">Темная тема</string>
-
-
-    <!-- preferences -->
-    <string name="settings_title_editor">Редактор кода</string>
-    <string name="title_activity_settings">Настройки</string>
-        <string name="settings_title_application">Приложение</string>
-    <string name="settings_desc_application">Общие настройки приложения</string>
-       <string name="settings_desc_editor">Настройки редактора кода</string>
-    
 
 
     <!-- Editor settings -->
@@ -96,10 +94,12 @@
     <string name="code_editor_error_highlight">Включить выделение ошибок</string>
     <string name="editor_scheme_title">Цветовая схема редактора</string>
     <string name="editor_scheme_desc">Нажмите, чтобы изменить цветовую схему редактора</string>
+    <string name="change_scheme_dialog_title">Вставьте путь к файлу темы</string>
     <string name="editor_delete_whitespaces">Автоматическое удаление пробелов</string>
-   <string name="settings_case_insensitive_match_title">Не учитывать регистр</string>
+    <string name="settings_case_insensitive_match_title">Не учитывать регистр</string>
     <string name="settings_case_insensitive_match_desc">Подсказывать имена классов с префиксом в нижнем регистре</string>
- <string name="save">Сохранить</string>
+    <string name="save">Сохранить</string>
+    <string name="defaultString">По умолчанию</string>
     <string name="editor_settings_title">Настройки редактора кода</string>
     <string name="editor_settings_wordwrap">Перенос по словам</string>
     <string name="font_size_title">Размер шрифта</string>
@@ -109,39 +109,38 @@
     <string name="keyboard_enable_suggestions_description">Включить подсказки клавиатуры</string>
     <string name="settings_build_run_title">Сборка и запуск</string>
     <string name="settings_build_run_desc">Настройки сборки и запуска</string>
-    <string name="run_title">Запуск приложения</string>
+    <string name="run_title">Запуск</string>
     <string name="settings_install_apk_title">Запрос на установку APK</string>
     <string name="settings_install_desc">Показ диалога об установке APK после успешной компиляции.</string>
+    <string name="completion_settings_kotlin_title">Kotlin</string>
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">Целевая версия</string>
+    <string name="completion_java_source_version_title">Исходная версия</string>
+    <string name="editor_tabs_settings_title">Вкладки редактора</string>
+    <string name="editor_tab_unique_file_name">Показывать директорию для неуникальных наименований файлов</string>
+    <string name="editor_tab_unique_file_name_summary">Делает отображаемые имена файлов уникальными, показывая родительские папки, если открыты файлы с одинаковыми именами файлов.</string>
 
     <!-- about page -->
     <string name="settings_about_us_title">Обратная связь</string>
     <string name="settings_about_us_desc">Информация о разработчиках приложения</string>
-    <string name="app_description">Мощная и легкая IDE для разработки приложений Android прямо у вас в кармане.</string>
-    <string name="app_version">Версия %1$s</string>
+    <string name="app_description">Мощная и легкая IDE для разработки Android-приложений прямо у вас в кармане.</string>
+    <string name="app_version">Версия</string>
     <string name="contact_group_title">Связь</string>
     <string name="app_source_title">Исходный код</string>
-    <string name="sketchub_team">Команда Sketchub</string>
+    <string name="sketchub_team">Sketchub Team</string>
     <string name="community">Сообщество</string>
     <string name="rate_us">Оценить нас</string>
 
 
     <!-- file manager menu -->
-    <string name="error">Error</string>
-    <string name="error_resource_name_restriction">Имена ресурсов должны содержать только строчные буквы a–z, 0–9 и знаки подчеркивания.</string>
-    <string name="menu_action_new_java_class">Java-класс</string>
-    <string name="menu_action_new_kotlin_class">Kotlin-класс</string>
-    <string name="menu_action_new_directory">Новая папка</string>
-    <string name="menu_action_new_file">Новый файл</string>
-    <string name="directory_name">Имя папки</string>
-    <string name="file_name">Имя файла</string>
-    <string name="menu_new">Создать</string>
-    <string name="menu_refactor">Рефакторинг</string>
-    <string name="item_project">Ваш проект</string>
+    <string name="error">Ошибка</string>
+    <string name="error_resource_name_restriction">Имена ресурсов должны содержать только строчные буквы (a–z), цифры (0–9) и символы подчеркивания.</string>
+    <string name="item_project">Проект</string>
     <string name="dialog_create_class_title">Создать класс</string>
-    <string name="create_class_dialog_class_name">Название класса</string>
+    <string name="create_class_dialog_class_name">Имя класса</string>
     <string name="create_class_dialog_positive">Создать</string>
     <string name="create_class_dialog_class_type">Тип класса</string>
-    <string name="create_class_dialog_invalid_name">Недействительное название класса</string>
+    <string name="create_class_dialog_invalid_name">Недопустимое имя класса</string>
 
     <string name="success">Успешно</string>
     <string name="delete_success">Успешно удалено.</string>
@@ -176,20 +175,11 @@
     <string name="project_manager_suggestions">Советы:\n\n  - Создайте новый проект\n  - Измените путь к текущему проекту</string>
     
     <!-- Compiler Service -->
-    <string name="compilation_state_compiling">Идет компиляция</string>
+    <string name="compilation_state_compiling">Компиляция...</string>
     <string name="compilation_button_install">Установить</string>
     <string name="compilation_result_success">Успешная компиляция</string>
     <string name="compilation_result_failed">Сбой компиляции</string>
-
-<!-- File Editor Manager -->
-    <string name="file_editor_selection_title">Выберите редактор кода, через который хотите открыть файл</string>
-
-<!-- Editor tabs -->
-    <string name="menu_close_file">Закрыть</string>
-    <string name="menu_close_others">Закрыть другое</string>
-    <string name="menu_close_all">Закрыть всё</string>
-
-
+    
     <!-- Library manager -->
     <string name="library_manager_title">Библиотек: %1s</string>
     <string name="group_id">Group ID</string>
@@ -198,6 +188,27 @@
     <string name="menu_display_dependencies">Список зависимостей</string>
     <string name="attributes_editor">Редактор атрибутов</string>
     <string name="attribute_value">Значение атрибута</string>
-<string name="menu_add_libs_gradle">Добавить из файла build.gradle</string>
+    <string name="menu_add_libs_gradle">Добавить из файла build.gradle</string>
+    
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">Ни один проект не открыт.</string>
+    <string name="dialog_confirm_save_title">Сохранить в XML</string>
+    <string name="dialog_confirm_save_msg">Хотите сохранить макет?</string>
+    <!-- File Editor Manager -->
+    <string name="file_editor_selection_title">Какой редактор вы хотите открыть?</string>
+
+    <!-- Editor tabs -->
+    <string name="menu_close_file">Закрыть</string>
+    <string name="menu_close_others">Закрыть другое</string>
+    <string name="menu_close_all">Закрыть всё</string>
+    
+    <!-- Editor -->
+    <string name="editor_error_file">При чтении файла произошла ошибка. Изменения не будут сохранены.</string>
+    
+    <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">Сборка</string>
+    <string name="tab_app_logs_title">Логи</string>
+    <string name="tab_ide_logs_title">Логи IDE</string>
+    <string name="tab_diagnostics_title">Диагностика</string>
 
 </resources>
