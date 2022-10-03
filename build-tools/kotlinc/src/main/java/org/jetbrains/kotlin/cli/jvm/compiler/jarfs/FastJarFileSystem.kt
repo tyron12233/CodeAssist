@@ -4,12 +4,12 @@
  */
 package org.jetbrains.kotlin.cli.jvm.compiler.jarfs
 
-import com.intellij.openapi.util.Couple
-import com.intellij.openapi.vfs.DeprecatedVirtualFileSystem
-import com.intellij.openapi.vfs.StandardFileSystems
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.util.containers.ConcurrentFactoryMap
-import com.intellij.util.io.FileAccessorCache
+import org.jetbrains.kotlin.com.intellij.openapi.util.Couple
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.DeprecatedVirtualFileSystem
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.kotlin.com.intellij.util.containers.ConcurrentFactoryMap
+import org.jetbrains.kotlin.com.intellij.util.io.FileAccessorCache
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
