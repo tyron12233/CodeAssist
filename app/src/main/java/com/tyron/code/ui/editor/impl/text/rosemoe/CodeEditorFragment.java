@@ -90,6 +90,7 @@ import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
+@Deprecated(forRemoval = true)
 @SuppressWarnings("FieldCanBeLocal")
 public class CodeEditorFragment extends Fragment implements Savable,
         SharedPreferences.OnSharedPreferenceChangeListener, FileListener,
