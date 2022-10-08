@@ -17,7 +17,7 @@ public class ApkInstaller {
 
     private static final String TAG = ApkInstaller.class.getSimpleName();
 
-    private static Method FILE_PROVIDER_METHOD;
+    private static final Method FILE_PROVIDER_METHOD;
 
     static {
         try {
