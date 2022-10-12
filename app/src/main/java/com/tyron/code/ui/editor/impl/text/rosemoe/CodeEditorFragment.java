@@ -300,8 +300,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
         editor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         editor.setInputType(EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS |
                             EditorInfo.TYPE_CLASS_TEXT |
-                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE |
-                            EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
 
         SharedPreferences pref = ApplicationLoader.getDefaultPreferences();
         editor.setWordwrap(pref.getBoolean(SharedPreferenceKeys.EDITOR_WORDWRAP, false));
