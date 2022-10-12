@@ -97,6 +97,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
             compiler.parseArguments(arguments.toArray(new String[0]), args);
 
             args.setUseJavac(false);
+            args.setUseFastJarFileSystem(true);
             args.setCompileJava(false);
             args.setIncludeRuntime(false);
             args.setNoJdk(true);

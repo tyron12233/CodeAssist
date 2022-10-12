@@ -385,6 +385,7 @@ data class KotlinEnvironment(
                         languageVersionSettings
                     )
                     put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true)
+                    put(JVMConfigurationKeys.USE_FAST_JAR_FILE_SYSTEM, true)
 
                     with(K2JVMCompilerArguments()) {
                         put(JVMConfigurationKeys.DISABLE_PARAM_ASSERTIONS, noParamAssertions)
