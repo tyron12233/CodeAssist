@@ -1,28 +1,12 @@
 package com.flipkart.android.proteus.value;
 
 import androidx.annotation.NonNull;
-import androidx.core.view.GravityCompat;
 
 import com.flipkart.android.proteus.parser.ParseHelper;
-
-import java.util.HashMap;
-import java.util.Map;
+import com.flipkart.android.proteus.util.GravityIntMapping;
 
 public class Gravity extends Value {
-
-    private static final Map<Integer, String> GRAVITY_VALUES = new HashMap<>();
-
-    static {
-        GRAVITY_VALUES.put(android.view.Gravity.LEFT, "left");
-        GRAVITY_VALUES.put(android.view.Gravity.RIGHT, "right");
-        GRAVITY_VALUES.put(android.view.Gravity.TOP, "top");
-        GRAVITY_VALUES.put(android.view.Gravity.BOTTOM, "bottom");
-        GRAVITY_VALUES.put(android.view.Gravity.START, "start");
-        GRAVITY_VALUES.put(android.view.Gravity.END, "end");
-        GRAVITY_VALUES.put(android.view.Gravity.CENTER, "center");
-        GRAVITY_VALUES.put(android.view.Gravity.CENTER_HORIZONTAL, "center_horizontal");
-        GRAVITY_VALUES.put(android.view.Gravity.CENTER_VERTICAL, "center_vertical");
-    }
+    private final GravityIntMapping gravityIntMapping = new GravityIntMapping();
 
     private final int gravity;
 
@@ -45,16 +29,7 @@ public class Gravity extends Value {
 
     @Override
     public String getAsString() {
-        StringBuilder sb = new StringBuilder();
-
-
-        GRAVITY_VALUES.forEach((k, v) -> {
-            if ((gravity & k) == k) {
-                sb.append(v);
-                sb.append("|");
-            }
-        });
-        return sb.substring(0, sb.length() - 1);
+        return String.join("|", gravityIntMapping.fromIntValue(gravity));
     }
 
     @Override
