@@ -1,7 +1,18 @@
 package com.tyron.code.ui.editor.impl.xml;
 
 import android.os.Bundle;
+import android.util.Pair;
+import android.view.View;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.os.BundleKt;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentResultListener;
+
+import com.tyron.builder.compiler.manifest.xml.XmlFormatPreferences;
+import com.tyron.builder.compiler.manifest.xml.XmlFormatStyle;
+import com.tyron.builder.compiler.manifest.xml.XmlPrettyPrinter;
 import com.tyron.code.R;
 import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 import com.tyron.code.ui.layoutEditor.LayoutEditorFragment;
@@ -20,6 +31,25 @@ public class LayoutTextEditorFragment extends CodeEditorFragment {
         LayoutTextEditorFragment fragment = new LayoutTextEditorFragment();
         fragment.setArguments(args);
         return fragment;
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+
+        FragmentManager fragmentManager = getChildFragmentManager();
+        FragmentResultListener listener = ((requestKey, result) -> {
+            String xml = result.getString("text", getEditor().getText()
+                    .toString());
+            xml = XmlPrettyPrinter.prettyPrint(xml, XmlFormatPreferences.defaults(),
+                                               XmlFormatStyle.LAYOUT, "\n");
+            Bundle bundle = new Bundle();
+            bundle.putBoolean("loaded", true);
+            bundle.putBoolean("bg", true);
+            getEditor().setText(xml, bundle);
+        });
+        fragmentManager.setFragmentResultListener(LayoutEditorFragment.KEY_SAVE,
+                                                  getViewLifecycleOwner(), listener);
     }
 
     public void preview() {

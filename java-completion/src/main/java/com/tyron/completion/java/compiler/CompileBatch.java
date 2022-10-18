@@ -2,22 +2,22 @@ package com.tyron.completion.java.compiler;
 
 import android.util.Log;
 
-import org.openjdk.source.tree.CompilationUnitTree;
+import com.sun.source.tree.CompilationUnitTree;
 
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.CompletionModule;
 
 import org.apache.commons.io.FileUtils;
-import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.javax.lang.model.util.Types;
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.source.util.JavacTask;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.api.ClientCodeWrapper;
-import org.openjdk.tools.javac.code.Kinds;
-import org.openjdk.tools.javac.util.JCDiagnostic;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.api.ClientCodeWrapper;
+import com.sun.tools.javac.code.Kinds;
+import com.sun.tools.javac.util.JCDiagnostic;
 
 import java.io.File;
 import java.io.IOException;
@@ -64,6 +64,7 @@ public class CompileBatch implements AutoCloseable {
             for (CompilationUnitTree t : borrow.task.parse()) {
                 roots.add(t);
             }
+
             // The results of borrow.task.analyze() are unreliable when errors are present
             // You can get at `Element` values using `Trees`
             task.analyze();
@@ -175,6 +176,8 @@ public class CompileBatch implements AutoCloseable {
 
         Collections.addAll(list, "-bootclasspath", joinPath(Arrays.asList(CompletionModule.getAndroidJar(), CompletionModule.getLambdaStubs())));
         Collections.addAll(list, "-cp", joinPath(classPath));
+
+        Collections.addAll(list, "-target", "1.8", "-source", "1.8");
 
 
 //        Collections.addAll(list, "--add-modules", "ALL-MODULE-PATH");

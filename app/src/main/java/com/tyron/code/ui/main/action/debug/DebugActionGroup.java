@@ -33,6 +33,7 @@ public class DebugActionGroup extends ActionGroup {
 
     @Override
     public AnAction[] getChildren(@Nullable AnActionEvent e) {
-        return new AnAction[]{new LoadActionJarAction(), new LoadFileEditorProviderAction()};
+        return new AnAction[]{new LoadActionJarAction(), new LoadFileEditorProviderAction(),
+                new CrashAction(), new LoadXmlRepositoryAction(), new RunLongRunningTaskAction(), new InjectClassesAction()};
     }
 }

@@ -1,17 +1,17 @@
 package com.tyron.builder.parser;
 
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.JavacTask;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.JavacTask;
 import com.tyron.builder.log.LogViewModel;
 
-import org.openjdk.tools.javac.util.Context;
+import com.sun.tools.javac.util.Context;
 
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 
 /**

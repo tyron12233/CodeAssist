@@ -10,8 +10,10 @@ import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.model.DiagnosticWrapper;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 
+import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.build.report.ICReporterBase;
 import org.jetbrains.kotlin.cli.common.ExitCode;
@@ -24,6 +26,7 @@ import org.jetbrains.kotlin.incremental.IncrementalJvmCompilerRunnerKt;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -44,8 +47,8 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
 
     private final MessageCollector mCollector = new Collector();
 
-    public IncrementalKotlinCompiler(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public IncrementalKotlinCompiler(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override
@@ -94,6 +97,7 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
             compiler.parseArguments(arguments.toArray(new String[0]), args);
 
             args.setUseJavac(false);
+            args.setUseFastJarFileSystem(true);
             args.setCompileJava(false);
             args.setIncludeRuntime(false);
             args.setNoJdk(true);
@@ -106,9 +110,15 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
                     .toArray(String[]::new));
            // args.setKotlinHome(mKotlinHome.getAbsolutePath());
             args.setDestination(mClassOutput.getAbsolutePath());
-            args.setPluginClasspaths(getPlugins().stream()
+
+            List<File> plugins = getPlugins();
+            getLogger().debug("Loading kotlin compiler plugins: " + plugins);
+
+            args.setPluginClasspaths(plugins.stream()
                     .map(File::getAbsolutePath)
                     .toArray(String[]::new));
+            args.setPluginOptions(getPluginOptions());
+
             File cacheDir = new File(getModule().getBuildDirectory(), "intermediate/kotlin");
 
             IncrementalJvmCompilerRunnerKt.makeIncrementally(cacheDir,
@@ -116,19 +126,16 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
                             new File(getModule().getBuildDirectory(), "gen")),
                     args, mCollector, new ICReporterBase() {
                         @Override
-                        public void report(@NonNull Function0<String> function0) {
-                            getLogger().info(function0.invoke());
+                        public void reportCompileIteration(boolean b,
+                                                           @NotNull Collection<? extends File> collection,
+                                                           @NotNull ExitCode exitCode) {
+
                         }
 
                         @Override
-                        public void reportVerbose(@NonNull Function0<String> function0) {
-                            getLogger().verbose(function0.invoke());
-                        }
+                        public void report(@NotNull Function0<String> function0,
+                                           @NotNull ReportSeverity reportSeverity) {
 
-                        @Override
-                        public void reportCompileIteration(boolean incremental,
-                                                           @NonNull Collection<? extends File> sources,
-                                                           @NonNull ExitCode exitCode) {
                         }
                     });
         } catch (Exception e) {
@@ -167,8 +174,19 @@ public class IncrementalKotlinCompiler extends Task<AndroidModule> {
             return Collections.emptyList();
         }
 
-        return new ArrayList<>(Arrays.asList(children));
+        return Arrays.stream(children)
+                .collect(Collectors.toList());
+    }
 
+    private String[] getPluginOptions() throws IOException {
+        File pluginDir = new File(getModule().getBuildDirectory(), "plugins");
+        File args = new File(pluginDir, "args.txt");
+        if (!args.exists()) {
+            return new String[0];
+        }
+
+        String string = FileUtils.readFileToString(args, StandardCharsets.UTF_8);
+        return string.split(" ");
     }
 
     private static class Diagnostic extends DiagnosticWrapper {

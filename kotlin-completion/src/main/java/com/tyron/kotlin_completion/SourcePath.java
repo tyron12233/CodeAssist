@@ -9,11 +9,15 @@ import com.tyron.kotlin_completion.util.UtilKt;
 
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.idea.KotlinLanguage;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,6 +40,7 @@ import kotlin.Pair;
 public class SourcePath {
 
     private static final String TAG = "SourcePath";
+    private static final Logger LOG = LoggerFactory.getLogger(SourcePath.class);
 
     private final CompilerClassPath cp;
     private final Map<URI, SourceFile> files = new HashMap<>();
@@ -112,13 +117,13 @@ public class SourcePath {
         }
 
         public void parse() {
-            Log.d(TAG, "Parsing file " + path);
+            LOG.debug("Parsing file " + path);
             parsed = cp.getCompiler().createKtFile(content, (path == null ? Paths.get("sourceFile.virtual" + extension) : path), kind);
         }
 
         public void parseIfChanged() {
             if (parsed == null || !content.equals(parsed.getText())) {
-                Log.d(TAG, "Parse has changed, parsing.");
+                LOG.debug("Parse has changed, parsing.");
                 parse();
             }
         }
@@ -186,9 +191,9 @@ public class SourcePath {
     public void put(File file, String content, boolean temp) {
         assert !content.contains("\r");
 
-        Log.d(TAG, "Putting contents of " + file.getName());
+        LOG.debug("Putting contents of " + file.getName());
         if (temp) {
-            Log.d(TAG, "Adding temporary file");
+            LOG.debug("Adding temporary file");
         }
 
         if (files.containsKey(file.toURI())) {
@@ -213,7 +218,12 @@ public class SourcePath {
 
     public BindingContext compileFiles(Collection<File> all) {
         Set<SourceFile> sources = all.stream().map(o -> files.get(o.toURI())).collect(Collectors.toSet());
-        Set<SourceFile> allChanged = sources.stream().filter(it -> !it.content.equals(it.compiledFile.getText()))
+        Set<SourceFile> allChanged = sources.stream().filter(it -> {
+            if (it.compiledFile == null) {
+                return true;
+            }
+            return !it.content.equals(it.compiledFile.getText());
+        })
                 .collect(Collectors.toSet());
         BindingContext sourcesContext = compileAndUpdate(allChanged);
         return UtilKt.util(sourcesContext, sources, allChanged);
@@ -237,7 +247,8 @@ public class SourcePath {
             return sourceFile.parsed;
         });
         Set<KtFile> all = all(false);
-        Pair<BindingContext, ComponentProvider> pair = cp.getCompiler().compileKtFiles(parse.values(), all, CompletionKind.DEFAULT);
+        Pair<BindingContext, ComponentProvider> pair = cp.getCompiler()
+                .compileKtFiles(parse.values(), all, CompletionKind.DEFAULT);
 
         parse.forEach((f, parsed) -> {
             parsedDataWriteLock.lock();
@@ -272,7 +283,6 @@ public class SourcePath {
             String string;
             try {
                 string = FileUtils.readFileToString(file, Charset.defaultCharset());
-                Log.d("STRING", string);
             } catch (IOException e) {
                 string = "";
             }

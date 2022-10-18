@@ -10,17 +10,14 @@ import com.tyron.completion.java.util.TreeUtil;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.source.tree.SwitchTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-
-import java.util.ArrayList;
-import java.util.List;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
+import com.sun.source.tree.SwitchTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 public class SwitchConstantCompletionProvider extends BaseCompletionProvider {
 
@@ -29,12 +26,13 @@ public class SwitchConstantCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public CompletionList complete(CompileTask task, TreePath path, String partial,
-                                   boolean endsWithParen) {
-        return completeSwitchConstant(task, path, partial);
+    public void complete(CompletionList.Builder builder, JavacUtilitiesProvider task, TreePath path,
+                         String partial, boolean endsWithParen) {
+        completeSwitchConstant(builder, task, path, partial);
     }
 
-    public static CompletionList completeSwitchConstant(CompileTask task, TreePath path, String partial) {
+    public static void completeSwitchConstant(CompletionList.Builder builder, JavacUtilitiesProvider task,
+                                              TreePath path, String partial) {
         checkCanceled();
 
         if (path.getLeaf() instanceof SwitchTree) {
@@ -43,7 +41,7 @@ public class SwitchConstantCompletionProvider extends BaseCompletionProvider {
         } else {
             TreePath parent = TreeUtil.findParentOfType(path, SwitchTree.class);
             if (parent == null) {
-                return CompletionList.EMPTY;
+                return;
             }
 
             if (parent.getLeaf() instanceof SwitchTree) {
@@ -51,23 +49,26 @@ public class SwitchConstantCompletionProvider extends BaseCompletionProvider {
             }
         }
 
-        TypeMirror type = Trees.instance(task.task).getTypeMirror(path);
+        TypeMirror type = task.getTrees()
+                .getTypeMirror(path);
 
         if (!(type instanceof DeclaredType)) {
-            return new CompletionList();
-        }
-        DeclaredType declared = (DeclaredType) type;
-        TypeElement element = (TypeElement) declared.asElement();
-        List<CompletionItem> list = new ArrayList<>();
-        for (Element member : task.task.getElements().getAllMembers(element)) {
-            if (member.getKind() != ElementKind.ENUM_CONSTANT) continue;
-            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) continue;
-            list.add(item(member));
+            return;
         }
 
-        CompletionList comp = new CompletionList();
-        comp.isIncomplete = false;
-        comp.items = list;
-        return comp;
+        DeclaredType declared = (DeclaredType) type;
+        TypeElement element = (TypeElement) declared.asElement();
+        for (Element member : task.getElements()
+                .getAllMembers(element)) {
+            if (member.getKind() != ElementKind.ENUM_CONSTANT) {
+                continue;
+            }
+            if (!StringSearch.matchesPartialName(member.getSimpleName(), partial)) {
+                continue;
+            }
+            CompletionItem item = item(member);
+            item.setSortText(JavaSortCategory.UNKNOWN.toString());
+            builder.addItem(item);
+        }
     }
 }

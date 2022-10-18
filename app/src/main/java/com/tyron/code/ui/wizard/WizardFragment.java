@@ -45,6 +45,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.ui.wizard.adapter.WizardTemplateAdapter;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.Decompress;
@@ -52,6 +53,7 @@ import com.tyron.common.util.SingleTextWatcher;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
+import javax.lang.model.SourceVersion;
 
 import java.io.File;
 import java.io.IOException;
@@ -144,6 +146,9 @@ public class WizardFragment extends Fragment {
         View view = inflater.inflate(R.layout.wizard_fragment, container, false);
         LinearLayout layout = view.findViewById(R.id.setup_wizard_layout);
 
+        View footer = view.findViewById(R.id.footer);
+        UiUtilsKt.addSystemWindowInsetToPadding(footer, false, true, false, true);
+
         mNavigateButton = layout.findViewById(R.id.wizard_next);
         mNavigateButton.setVisibility(View.GONE);
         mNavigateButton.setOnClickListener(this::onNavigateNext);
@@ -215,8 +220,6 @@ public class WizardFragment extends Fragment {
     private AutoCompleteTextView mMinSdkText;
 
     private void initDetailsView() {
-        List<String> languages = Arrays.asList("Java", "Kotlin");
-
         mNameLayout = mWizardDetailsView.findViewById(R.id.til_app_name);
         mNameLayout.getEditText().addTextChangedListener(new SingleTextWatcher() {
             @Override
@@ -249,8 +252,6 @@ public class WizardFragment extends Fragment {
 
         mLanguageLayout = mWizardDetailsView.findViewById(R.id.til_language);
         mLanguageText = mWizardDetailsView.findViewById(R.id.et_language);
-        mLanguageText.setAdapter(new ArrayAdapter<>(requireContext(),
-                android.R.layout.simple_list_item_1, languages));
 
         mMinSdkLayout = mWizardDetailsView.findViewById(R.id.til_min_sdk);
         mMinSdkText = mWizardDetailsView.findViewById(R.id.et_min_sdk);
@@ -442,7 +443,7 @@ public class WizardFragment extends Fragment {
         String packageName = editable.toString();
         String[] packages = packageName.split("\\.");
         for (String name : packages) {
-            if (name.isEmpty()) {
+            if (name.isEmpty() || !SourceVersion.isName(name)) {
                 mPackageNameLayout.setError(getString(R.string.wizard_package_illegal));
                 return;
             }
@@ -605,6 +606,18 @@ public class WizardFragment extends Fragment {
     }
 
     private void showDetailsView() {
+        List<String> languages = new ArrayList<>();
+        if (mCurrentTemplate != null) {
+            if (mCurrentTemplate.isSupportsJava()) {
+                languages.add("Java");
+            }
+            if (mCurrentTemplate.isSupportsKotlin()) {
+                languages.add("Kotlin");
+            }
+        }
+        mLanguageText.setAdapter(new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_list_item_1, languages));
+
         mLoadingLayout.setVisibility(View.GONE);
         mWizardDetailsView.setVisibility(View.GONE);
 

@@ -9,10 +9,10 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.TreeElementPattern;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 public interface JavacElementPattern {
     boolean accepts(Element element, ProcessingContext context);

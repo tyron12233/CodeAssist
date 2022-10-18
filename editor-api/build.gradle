@@ -3,10 +3,18 @@ plugins {
 }
 
 dependencies {
-    implementation project(path: ':build-tools:build-logic')
+
+    implementation projects.common
+    implementation projects.languageApi
+    implementation project(path: ':build-tools:logging')
+    implementation project(path: ':build-tools:project')
+
+    implementation 'it.unimi.dsi:fastutil:8.5.8'
+    implementation 'org.jetbrains:annotations:23.0.0'
+
     testImplementation 'junit:junit:4.+'
 }
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
 }

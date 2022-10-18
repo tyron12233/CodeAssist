@@ -1,9 +1,11 @@
 package com.tyron.code.ui.editor.action.text;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.res.ResourcesCompat;
 
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
+import com.tyron.actions.DataContext;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
 
@@ -14,7 +16,10 @@ public class CutAction extends CopyAction {
         super.update(event);
 
         if (event.getPresentation().isVisible()) {
-            event.getPresentation().setText("Cut");
+            DataContext context = event.getDataContext();
+            event.getPresentation().setText(context.getString(io.github.rosemoe.sora2.R.string.cut));
+            event.getPresentation().setIcon(ResourcesCompat.getDrawable(context.getResources(),
+                    io.github.rosemoe.sora2.R.drawable.round_content_cut_20, context.getTheme()));
         }
     }
 

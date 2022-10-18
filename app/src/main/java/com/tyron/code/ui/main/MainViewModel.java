@@ -37,7 +37,7 @@ public class MainViewModel extends ViewModel {
     /**
      * The current position of the CodeEditor
      */
-    private final CustomMutableLiveData<Integer> currentPosition = new CustomMutableLiveData<>(0);
+    private final CustomMutableLiveData<Integer> currentPosition = new CustomMutableLiveData<>(-1);
 
     private final MutableLiveData<Integer> mBottomSheetState =
             new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
@@ -115,13 +115,10 @@ public class MainViewModel extends ViewModel {
     }
 
     public void setCurrentPosition(int pos, boolean update) {
-        Integer value = currentPosition.getValue();
-        if (value != null && value.equals(pos)) {
-            return;
-        }
         currentPosition.setValue(pos, update);
     }
 
+    @Nullable
     public FileEditor getCurrentFileEditor() {
         List<FileEditor> files = getFiles().getValue();
         if (files == null) {
@@ -129,7 +126,7 @@ public class MainViewModel extends ViewModel {
         }
 
         Integer currentPos = currentPosition.getValue();
-        if (currentPos == null) {
+        if (currentPos == null || currentPos == -1) {
             return null;
         }
 
@@ -176,8 +173,10 @@ public class MainViewModel extends ViewModel {
         if (files == null) {
             files = new ArrayList<>();
         }
-        files.add(file);
-        mFiles.setValue(files);
+        if (!files.contains(file)) {
+            files.add(file);
+            mFiles.setValue(files);
+        }
         setCurrentPosition(files.indexOf(file));
     }
 

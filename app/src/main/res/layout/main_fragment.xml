@@ -1,11 +1,9 @@
-<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.tyron.code.util.AllowChildInterceptDrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground"
-    android:clickable="true"
-    android:fitsSystemWindows="true">
+    android:clickable="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -16,15 +14,12 @@
             android:id="@+id/app_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#212121"
-            android:theme="@style/CodeEditorActionBar"
             app:elevation="0dp">
 
             <com.tyron.actions.impl.ActionToolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:theme="@style/CodeEditorThemeOverlay" />
+                android:layout_height="wrap_content" />
         </com.google.android.material.appbar.AppBarLayout>
 
         <com.google.android.material.progressindicator.LinearProgressIndicator
@@ -32,15 +27,23 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
-        <androidx.fragment.app.FragmentContainerView
-            android:id="@+id/root"
-            android:name="com.tyron.code.ui.editor.EditorContainerFragment"
+        <!-- This extra parent is needed so window insets will still be dispatched to other views-->
+        <com.tyron.code.util.NoInsetFrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            tools:layout="@layout/editor_container_fragment">
+            android:fillViewport="true"
+            android:fitsSystemWindows="true"
+            android:layout_height="match_parent">
 
-        </androidx.fragment.app.FragmentContainerView>
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/root"
+                android:name="com.tyron.code.ui.editor.EditorContainerFragment"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                tools:layout="@layout/editor_container_fragment">
+
+            </androidx.fragment.app.FragmentContainerView>
+        </com.tyron.code.util.NoInsetFrameLayout>
     </LinearLayout>
 
     <androidx.fragment.app.FragmentContainerView
@@ -48,7 +51,7 @@
         android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment"
         android:layout_width="300dp"
         android:layout_height="match_parent"
-        android:layout_gravity="start"
-        android:background="#2b2b2b" />
+        android:background="?android:attr/colorBackground"
+        android:layout_gravity="start" />
 
-</androidx.drawerlayout.widget.DrawerLayout>
+</com.tyron.code.util.AllowChildInterceptDrawerLayout>

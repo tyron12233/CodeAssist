@@ -1,0 +1,101 @@
+plugins {
+    id 'java-library'
+}
+apply plugin: 'org.jetbrains.kotlin.jvm'
+
+
+
+configurations.all {
+    exclude group: 'org.glassfish.jaxb', module: 'jaxb-runtime'
+    exclude group: 'javax.xml.bind', module: 'jaxb-api'
+    exclude group: 'com.sun.activation', module: 'javax.activation'
+    exclude group: 'jakarta.activation', module: 'jakarta.activation-api'
+    exclude group: 'jakarta.xml.bind', module: 'jakarta.xml.bind-api'
+    exclude group: 'jakarta.activation', module: 'jakarta.activation-api'
+    exclude group: 'xerces', module: 'xercesImpl'
+    exclude group: 'org.jvnet.staxex', module: 'stax-ex'
+    exclude group: 'com.sun.istack', module: 'istack-commons-runtime'
+    exclude group: 'com.android.tools', module: 'common'
+}
+
+dependencies {
+    implementation projects.common
+
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderDiagnostics
+    implementation projects.buildTools.buildLogic
+    implementation projects.buildTools.builderPlugins
+    implementation projects.buildTools.builderWorkers
+    implementation projects.buildTools.builderJava
+    implementation projects.buildTools.builderLanguageJvm
+    implementation projects.buildTools.builderPlatformJvm
+    implementation projects.buildTools.builderProcessServices
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.builderLanguageJvm
+    implementation projects.buildTools.builderToolingApi
+    implementation projects.buildTools.project
+    implementation projects.buildTools.fileCollections
+    implementation projects.buildTools.logging
+    implementation projects.buildTools.builderBuildEvents
+
+    implementation projects.buildTools.androidCommonResources
+
+    implementation common.slf4j
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'org.ow2.asm:asm-commons:9.3'
+    implementation 'com.android:zipflinger:7.2.2'
+    implementation 'com.android.tools:annotations:30.4.0-alpha09'
+
+    def agpVersion = "7.4.0-alpha09"
+
+    implementation "com.android.tools.build:aapt2-proto:7.4.0-alpha09-8841542"
+
+    // for resources API
+    implementation("com.android.tools.layoutlib:layoutlib-api:30.4.0-alpha09") {
+        exclude group: 'com.android.tools', module: 'common'
+    }
+    implementation("com.android.tools:sdk-common:30.4.0-alpha09") {
+        transitive = false
+    }
+    implementation 'com.google.protobuf:protobuf-java:3.17.2'
+
+    // jetifier, remapping library
+    implementation('com.android.tools.build.jetifier:jetifier-processor:1.0.0-beta10') {
+        exclude group: 'com.android.tools', module: 'common'
+    }
+
+    // databinding
+//    implementation('com.android.databinding:compilerCommon:3.5.0') {
+//        transitive = false
+//    }
+
+    // class generation
+    implementation 'com.squareup:javawriter:2.5.1'
+
+    // signing
+    implementation 'org.bouncycastle:bcutil-jdk18on:1.71.1'
+    implementation "com.android.tools.build:apkzlib:$agpVersion"
+    implementation "com.android.tools.build:apksig:$agpVersion"
+    implementation "com.android:signflinger:$agpVersion"
+
+
+    compileOnly 'javax.xml.bind:jaxb-api:2.3.1'
+
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+compileKotlin {
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+}

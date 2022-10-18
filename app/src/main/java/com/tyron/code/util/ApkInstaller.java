@@ -7,19 +7,31 @@ import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
 
-import androidx.core.content.FileProvider;
-
-import com.tyron.code.BuildConfig;
-
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 public class ApkInstaller {
 
     private static final String TAG = ApkInstaller.class.getSimpleName();
 
-    public static void installApplication(Context context, String filePath) {
+    private static final Method FILE_PROVIDER_METHOD;
+
+    static {
+        try {
+            Class<?> aClass = Class.forName("androidx.core.content.FileProvider");
+            FILE_PROVIDER_METHOD = aClass.getDeclaredMethod("getUriForFile",
+                    Context.class,
+                    String.class,
+                    File.class);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void installApplication(Context context, String applicationId, String filePath) {
         Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setDataAndType(uriFromFile(context, new File(filePath)), "application/vnd.android.package-archive");
+        intent.setDataAndType(uriFromFile(context, applicationId, new File(filePath)), "application/vnd.android.package-archive");
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
@@ -30,9 +42,13 @@ public class ApkInstaller {
         }
     }
 
-    public static Uri uriFromFile(Context context, File file) {
+    public static Uri uriFromFile(Context context, String applicationId, File file) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return FileProvider.getUriForFile(context, BuildConfig.APPLICATION_ID + ".provider", file);
+            try {
+                return (Uri) FILE_PROVIDER_METHOD.invoke(context, applicationId + ".provider", file);
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                throw new RuntimeException(e);
+            }
         } else {
             return Uri.fromFile(file);
         }

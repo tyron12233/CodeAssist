@@ -24,14 +24,7 @@ public class DependencyUtils {
     private static final Pattern GRADLE_IMPL = Pattern.compile("\\s*(implementation)\\s*(')([a-zA-Z0-9.'/-:\\-]+)(')");
     private static final Pattern GRADLE_IMPL_QUOT = Pattern.compile("\\s*(implementation)\\s*(\")([a-zA-Z0-9.'/-:\\-]+)(\")");
 
-    /**
-     * Parses a build.gradle file and gets the dependencies out of it
-     *
-     * @param file input build.gradle file
-     * @return Library dependencies
-     */
-    public static List<Dependency> parseGradle(RepositoryManager repository, File file, ILogger logger) throws IOException {
-        String readString = FileUtils.readFileToString(file, Charset.defaultCharset());
+    public static List<Dependency> parseGradle(RepositoryManager repositoryManager, String readString, ILogger logger) throws IOException {
         // remove all comments
         readString = readString.replaceAll("\\s*//.*", "");
         Matcher matcher = GRADLE_IMPL.matcher(readString);
@@ -57,6 +50,17 @@ public class DependencyUtils {
             }
         }
         return deps;
+    }
+
+    /**
+     * Parses a build.gradle file and gets the dependencies out of it
+     *
+     * @param file input build.gradle file
+     * @return CodeAssistLibrary dependencies
+     */
+    public static List<Dependency> parseGradle(RepositoryManager repository, File file, ILogger logger) throws IOException {
+        String readString = FileUtils.readFileToString(file, Charset.defaultCharset());
+        return parseGradle(repository, readString, logger);
     }
 
     public static List<Dependency> parseLibraries(File libraries, ILogger logger) {

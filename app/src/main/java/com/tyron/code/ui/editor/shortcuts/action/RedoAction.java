@@ -2,8 +2,7 @@ package com.tyron.code.ui.editor.shortcuts.action;
 
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
-
-import io.github.rosemoe.sora2.widget.CodeEditor;
+import com.tyron.editor.Editor;
 
 public class RedoAction implements ShortcutAction {
 
@@ -15,9 +14,9 @@ public class RedoAction implements ShortcutAction {
     }
 
     @Override
-    public void apply(CodeEditor editor, ShortcutItem item) {
-        if (editor.canRedo()) {
-            editor.redo();
+    public void apply(Editor editor, ShortcutItem item) {
+        if (editor.getContent().canRedo()) {
+            editor.getContent().redo();
         }
     }
 }

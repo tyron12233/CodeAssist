@@ -1,5 +1,6 @@
 package com.tyron.completion.xml;
 
+import android.annotation.SuppressLint;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AbsoluteLayout;
@@ -21,13 +22,14 @@ import android.widget.TextView;
 import android.widget.ViewFlipper;
 import android.widget.ViewSwitcher;
 
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.common.ApplicationProvider;
-import com.tyron.common.util.Decompress;
+import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
 import com.tyron.completion.xml.util.StyleUtils;
+import com.tyron.xml.completion.repository.ResourceRepository;
 
 import org.apache.bcel.Repository;
 import org.apache.bcel.classfile.JavaClass;
@@ -38,6 +40,7 @@ import org.xmlpull.v1.XmlPullParserFactory;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -46,19 +49,24 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 public class XmlRepository {
-
-    private File mAttrsFile;
     private final Map<String, DeclareStyleable> mDeclareStyleables = new TreeMap<>();
     private final Map<String, DeclareStyleable> mManifestAttrs = new TreeMap<>();
     private final Map<String, AttributeInfo> mExtraAttributes = new TreeMap<>();
     private final Map<String, JavaClass> mJavaViewClasses = new TreeMap<>();
 
     private boolean mInitialized = false;
+    private ResourceRepository mRepository;
 
+    public XmlRepository() {
+
+    }
+
+    @Deprecated
     public Map<String, DeclareStyleable> getManifestAttrs() {
         return mManifestAttrs;
     }
 
+    @Deprecated
     public Map<String, DeclareStyleable> getDeclareStyleables() {
         return mDeclareStyleables;
     }
@@ -67,36 +75,25 @@ public class XmlRepository {
         return mJavaViewClasses;
     }
 
+    @Deprecated
     public AttributeInfo getExtraAttribute(String name) {
         return mExtraAttributes.get(name);
     }
 
-    public void initialize(AndroidModule module) {
+    public void initialize(AndroidModule module) throws IOException {
         if (mInitialized) {
             return;
         }
         BytecodeScanner.scanBootstrapIfNeeded();
 
-        mAttrsFile = getOrExtractFiles();
+        mRepository = new ResourceRepository(module);
+        mRepository.initialize();
 
         for (File library : module.getLibraries()) {
             File parent = library.getParentFile();
             if (parent == null) {
                 continue;
             }
-            File valuesDir = new File(parent, "res/values");
-            File[] children = valuesDir.listFiles(c -> c.getName().endsWith(".xml"));
-            if (children != null) {
-                for (File child : children) {
-                    try {
-                        Map<String, DeclareStyleable> app = parse(child, "app");
-                        mDeclareStyleables.putAll(app);
-                    } catch (XmlPullParserException | IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
             File classesFile = new File(parent, "classes.jar");
             if (classesFile.exists()) {
                 try {
@@ -105,20 +102,6 @@ public class XmlRepository {
 
                 }
             }
-        }
-
-        try {
-            Map<String, DeclareStyleable> android = parse(mAttrsFile, "android");
-            mDeclareStyleables.putAll(android);
-
-            File manifestAttrsFile = new File(mAttrsFile.getParentFile(), "attrs_manifest.xml");
-            if (manifestAttrsFile.exists()) {
-                Map<String, DeclareStyleable> android1 = parse(manifestAttrsFile, "android");
-                mManifestAttrs.putAll(android1);
-            }
-
-        } catch (XmlPullParserException | IOException e) {
-            e.printStackTrace();
         }
 
         for (File library : module.getLibraries()) {
@@ -135,6 +118,8 @@ public class XmlRepository {
         }
 
         addFrameworkViews();
+
+        Repository.clearCache();
 
         mInitialized = true;
     }
@@ -174,11 +159,11 @@ public class XmlRepository {
         }
     }
 
-
-    private Map<String, DeclareStyleable> parse(File file, String namespace) throws XmlPullParserException, IOException {
+    private Map<String, DeclareStyleable> parse(Reader reader, String namespace) throws XmlPullParserException, IOException {
         XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
         XmlPullParser parser = factory.newPullParser();
-        parser.setInput(new FileReader(file));
+
+        parser.setInput(reader);
 
         Map<String, DeclareStyleable> declareStyleables = new TreeMap<>();
 
@@ -203,6 +188,12 @@ public class XmlRepository {
         }
 
         return declareStyleables;
+    }
+
+    private Map<String, DeclareStyleable> parse(File file, String namespace) throws XmlPullParserException, IOException {
+        try (FileReader reader = new FileReader(file)) {
+            return parse(reader, namespace);
+        }
     }
 
     private DeclareStyleable parseDeclareStyleable(XmlPullParser parser, String namespace) throws IOException,
@@ -314,17 +305,14 @@ public class XmlRepository {
         }
     }
 
-    private static File getOrExtractFiles() {
-        File filesDir = ApplicationProvider.getApplicationContext().getFilesDir();
-        File check = new File(filesDir,
-                "sources/android-31/data/res/values/attrs.xml");
-        if (check.exists()) {
-            return check;
-        }
-        File dest = new File(filesDir, "sources");
-        Decompress.unzipFromAssets(ApplicationProvider.getApplicationContext(),
-                "android-xml.zip",
-                dest.getAbsolutePath());
-        return check;
+    public ResourceRepository getRepository() {
+        return mRepository;
+    }
+
+    public static XmlRepository getRepository(Project project, AndroidModule module) throws IOException {
+        XmlIndexProvider indexProvider = CompilerService.getInstance()
+                .getIndex(XmlIndexProvider.KEY);
+        XmlRepository repository = indexProvider.get(project, module);
+        return repository;
     }
 }

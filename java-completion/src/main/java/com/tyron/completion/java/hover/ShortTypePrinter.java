@@ -2,11 +2,11 @@ package com.tyron.completion.java.hover;
 
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.javax.lang.model.type.*;
-import org.openjdk.javax.lang.model.util.AbstractTypeVisitor8;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.*;
+import javax.lang.model.util.AbstractTypeVisitor8;
 
 
 public class ShortTypePrinter extends AbstractTypeVisitor8<String, Void> {

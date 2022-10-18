@@ -1,9 +1,15 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <Preference
+        app:fragment="com.tyron.code.ui.settings.ApplicationSettingsFragment"
+        app:iconSpaceReserved="false"
+        app:summary="@string/settings_desc_application"
+        app:title="@string/settings_title_application" />
+
+    <Preference
         app:fragment="com.tyron.code.ui.settings.EditorSettingsFragment"
         app:iconSpaceReserved="false"
-        app:summary="Configure the code editor"
+        app:summary="@string/settings_desc_editor"
         app:title="@string/settings_title_editor" />
 
     <Preference

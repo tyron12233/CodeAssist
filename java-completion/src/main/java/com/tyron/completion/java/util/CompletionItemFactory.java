@@ -4,29 +4,66 @@ import static com.tyron.completion.java.util.ElementUtil.simpleClassName;
 import static com.tyron.completion.java.util.ElementUtil.simpleType;
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.insert.MethodInsertHandler;
+import com.tyron.completion.java.provider.JavaSortCategory;
+import com.tyron.completion.java.provider.JavacUtilitiesProvider;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
+import org.jetbrains.kotlin.com.intellij.psi.PsiNamedElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
+import org.jetbrains.kotlin.com.intellij.psi.PsiParameterList;
+import org.jetbrains.kotlin.com.intellij.psi.PsiType;
 import org.openjdk.javax.annotation.processing.Completion;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.util.Types;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ErrorType;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class CompletionItemFactory {
+
+    /**
+     * Creates a completion item from a java psi element
+     * @param element The psi element
+     * @return the completion item instance
+     */
+    public static CompletionItem forPsiElement(PsiNamedElement element) {
+        if (element instanceof PsiMethod) {
+            return forPsiMethod(((PsiMethod) element));
+        }
+        return item(element.getName());
+    }
+
+    public static CompletionItem forPsiMethod(PsiMethod psiMethod) {
+        CompletionItem item = new CompletionItem();
+        item.label = getMethodLabel(psiMethod);
+        item.detail = psiMethod.getReturnType().getPresentableText();
+        item.commitText = psiMethod.getName();
+        item.cursorOffset = item.commitText.length();
+        item.iconKind = DrawableKind.Method;
+        return item;
+    }
+
+
+
 
     public static CompletionItem packageSnippet(Path file) {
         String name = "com.tyron.test";
@@ -40,7 +77,10 @@ public class CompletionItemFactory {
     }
 
     public static CompletionItem keyword(String keyword) {
-        return CompletionItem.create(keyword, keyword, keyword, DrawableKind.Keyword);
+        CompletionItem completionItem =
+                CompletionItem.create(keyword, keyword, keyword, DrawableKind.Keyword);
+        completionItem.setSortText(JavaSortCategory.KEYWORD.toString());
+        return completionItem;
     }
 
     public static CompletionItem packageItem(String name) {
@@ -52,6 +92,7 @@ public class CompletionItemFactory {
                 className, simpleClassName(className), DrawableKind.Class);
         item.data = className;
         item.action = CompletionItem.Kind.IMPORT;
+        item.setSortText(JavaSortCategory.TO_IMPORT.toString());
         return item;
     }
 
@@ -82,6 +123,17 @@ public class CompletionItemFactory {
         return item;
     }
 
+    public static CompletionItem item(String element) {
+        CompletionItem item = new CompletionItem();
+        item.label = element;
+        item.detail = "";
+        item.commitText = element;
+        item.cursorOffset = item.commitText.length();
+        item.iconKind = DrawableKind.Snippet;
+        item.setInsertHandler(new DefaultInsertHandler(item));
+        return item;
+    }
+
     private String getThrowsType(ExecutableElement e) {
         if (e.getThrownTypes() == null) {
             return "";
@@ -99,6 +151,19 @@ public class CompletionItemFactory {
         return " throws " + types;
     }
 
+    public static String getMethodLabel(@NonNull PsiMethod psiMethod) {
+        String name = psiMethod.getName();
+        String parameters = "";
+        if (psiMethod.hasParameters()) {
+            PsiParameterList parameterList = psiMethod.getParameterList();
+            parameters = Arrays.stream(parameterList.getParameters())
+                    .map(PsiParameter::getType)
+                    .map(PsiType::getPresentableText)
+                    .collect(Collectors.joining(", "));
+        }
+        return name + "(" + parameters + ")";
+    }
+
     public static String getMethodLabel(ExecutableElement element, ExecutableType type) {
         String name = element.getSimpleName().toString();
         String params = PrintHelper.printParameters(type, element);
@@ -111,15 +176,22 @@ public class CompletionItemFactory {
         return name + "(" + params + ")";
     }
 
-    public static List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads,
-                                        boolean endsWithParen, boolean methodRef,
-                                        DeclaredType type) {
+    public static List<CompletionItem> method(JavacUtilitiesProvider task, List<ExecutableElement> overloads,
+                                              boolean endsWithParen, boolean methodRef,
+                                              DeclaredType type) {
         checkCanceled();
         List<CompletionItem> items = new ArrayList<>();
-        Types types = task.task.getTypes();
+        Types types = task.getTypes();
         for (ExecutableElement overload : overloads) {
-            ExecutableType executableType = (ExecutableType) types.asMemberOf(type, overload);
-            items.add(method(overload, endsWithParen, methodRef, executableType));
+            try {
+                TypeMirror typeMirror = types.asMemberOf(type, overload);
+                if (!(typeMirror instanceof ExecutableType)) {
+                    continue;
+                }
+                ExecutableType executableType = (ExecutableType) typeMirror;
+                items.add(method(overload, endsWithParen, methodRef, executableType));
+            } catch (IllegalArgumentException ignored) {
+            }
         }
         return items;
     }
@@ -147,8 +219,7 @@ public class CompletionItemFactory {
                                   boolean methodRef, ExecutableType type) {
         CompletionItem item = new CompletionItem();
         item.label = getMethodLabel(first, type);
-        item.commitText = first.getSimpleName() + ((methodRef || endsWithParen) ? "" :
-                "()");
+        item.commitText = first.getSimpleName().toString();
         item.detail = type != null
                 ? PrintHelper.printType(type.getReturnType())
                 : PrintHelper.printType(first.getReturnType());
@@ -158,11 +229,12 @@ public class CompletionItemFactory {
             item.cursorOffset = item.commitText.length() -
                     ((methodRef || endsWithParen) ? 0 : 1);
         }
-        item.setInsertHandler(new MethodInsertHandler(first, item));
+        item.setInsertHandler(new MethodInsertHandler(first, item, !methodRef));
+        item.addFilterText(first.getSimpleName().toString());
         return item;
     }
 
-    public static List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads,
+    public static List<CompletionItem> method(JavacUtilitiesProvider task, List<ExecutableElement> overloads,
                                         boolean endsWithParen, boolean methodRef,
                                         ExecutableType type) {
         checkCanceled();
@@ -174,14 +246,14 @@ public class CompletionItemFactory {
         return items;
     }
 
-    public static List<CompletionItem> overridableMethod(CompileTask task, TreePath parentPath,
+    public static List<CompletionItem> overridableMethod(JavacUtilitiesProvider task, TreePath parentPath,
                                                    List<ExecutableElement> overloads,
                                                    boolean endsWithParen) {
         checkCanceled();
 
         List<CompletionItem> items = new ArrayList<>(overloads.size());
-        Types types = task.task.getTypes();
-        Element parentElement = Trees.instance(task.task).getElement(parentPath);
+        Types types = task.getTypes();
+        Element parentElement = task.getTrees().getElement(parentPath);
         DeclaredType type = (DeclaredType) parentElement.asType();
         for (ExecutableElement element : overloads) {
             checkCanceled();
@@ -193,7 +265,11 @@ public class CompletionItemFactory {
                 continue;
             }
 
-            ExecutableType executableType = (ExecutableType) types.asMemberOf(type, element);
+            TypeMirror typeMirror = types.asMemberOf(type, element);
+            if (!(typeMirror instanceof ExecutableType)) {
+                continue;
+            }
+            ExecutableType executableType = (ExecutableType) typeMirror;
             String text = PrintHelper.printMethod(element, executableType, element);
 
             CompletionItem item = new CompletionItem();

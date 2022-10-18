@@ -1,3 +1,4 @@
+
 package com.tyron.builder.compiler.dex;
 
 import com.android.tools.r8.CompilationMode;
@@ -8,6 +9,8 @@ import com.tyron.builder.compiler.BuildType;
 import com.tyron.builder.compiler.Task;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.JavaModule;
 
 import java.io.File;
@@ -26,8 +29,8 @@ public class D8Task extends Task<JavaModule> {
 
 	private static final String TAG = D8Task.class.getSimpleName();
 
-	public D8Task(JavaModule project, ILogger logger) {
-		super(project, logger);
+	public D8Task(Project project, AndroidModule module, ILogger logger) {
+		super(project, module, logger);
 	}
 
 	@Override

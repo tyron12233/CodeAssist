@@ -64,7 +64,6 @@ public class ShortcutsAdapter extends RecyclerView.Adapter<ShortcutsAdapter.View
             super(view);
 
             textView = view.findViewById(R.id.shortcut_label);
-            textView.setTextColor(0xffffffff);
         }
 
         public void bind(ShortcutItem item) {

@@ -28,6 +28,15 @@ public class Dependency {
 
     }
 
+    public Dependency(Dependency copy) {
+        this.artifactId = copy.artifactId;
+        this.groupId = copy.groupId;
+        this.versionName = copy.versionName;
+        this.scope = copy.scope;
+        this.type = copy.type;
+        this.excludes.addAll(copy.getExcludes());
+    }
+
     public Dependency(String groupId, String artifactId, String versionName) {
         this.groupId = groupId;
         this.artifactId = artifactId;

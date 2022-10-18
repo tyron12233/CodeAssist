@@ -1,23 +1,26 @@
 package com.tyron.completion.java.util;
 
+import com.sun.source.tree.NewClassTree;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.action.FindCurrentPath;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.LineMap;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.util.Elements;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.LineMap;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.PrimitiveTypeTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -34,6 +37,14 @@ public class TreeUtil {
            return findCallerPath((MethodInvocationTree) invocation.getLeaf());
         }
         return null;
+    }
+
+    public static boolean isVoid(MethodTree tree) {
+        Tree returnType = tree.getReturnType();
+        if (returnType.getKind() == Tree.Kind.PRIMITIVE_TYPE) {
+            return ((PrimitiveTypeTree) returnType).getPrimitiveTypeKind() == TypeKind.VOID;
+        }
+        return false;
     }
 
     private static Tree findCallerPath(MethodInvocationTree invocation) {
@@ -136,5 +147,16 @@ public class TreeUtil {
             methods.add((MethodTree) member);
         }
         return methods;
+    }
+
+    public static String extractClassFromAnonymousString(String string) {
+        String className = string;
+        if (className.contains("<anonymous")) {
+            className = className.substring("<anonymous ".length(), className.length() - 1);
+            if (className.contains("$")) {
+                className = className.substring(0, className.indexOf('$'));
+            }
+        }
+        return className;
     }
 }

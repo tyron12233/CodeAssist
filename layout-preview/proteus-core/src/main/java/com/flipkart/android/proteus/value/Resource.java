@@ -356,6 +356,13 @@ public class Resource extends Value {
 
     @Override
     public String toString() {
+        if (resId != -1) {
+            try {
+                return "@" + Resources.getSystem().getResourceName(resId);
+            } catch (Resources.NotFoundException ignored) {
+
+            }
+        }
         return name;
     }
 

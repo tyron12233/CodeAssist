@@ -1,0 +1,22 @@
+
+plugins {
+    id 'java'
+}
+
+apply plugin: org.gradle.plugin.CodeAssistPlugin
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(path: ':producer')
+
+    compileOnly 'org.projectlombok:lombok:1.18.24'
+    annotationProcessor 'org.projectlombok:lombok:1.18.24'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}

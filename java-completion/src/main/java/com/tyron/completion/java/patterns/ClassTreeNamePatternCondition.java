@@ -9,13 +9,13 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.code.Symbol;
-import org.openjdk.tools.javac.tree.JCTree;
+import javax.lang.model.element.Element;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.code.Symbol;
+import com.sun.tools.javac.tree.JCTree;
 
 public class ClassTreeNamePatternCondition extends PatternCondition<ClassTree> implements JavacElementPattern {
 

@@ -2,6 +2,7 @@ package com.tyron.completion.xml.util;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.WebView;
 import android.widget.AbsoluteLayout;
 import android.widget.Button;
 import android.widget.CalendarView;
@@ -21,15 +22,20 @@ import android.widget.TableLayout;
 import android.widget.TextView;
 import android.widget.ViewFlipper;
 import android.widget.ViewSwitcher;
+import android.widget.ZoomButton;
 
 import androidx.annotation.NonNull;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Multimap;
 import com.tyron.completion.xml.BytecodeScanner;
 import com.tyron.completion.xml.model.DeclareStyleable;
 
 import org.apache.bcel.classfile.JavaClass;
 
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -38,7 +44,7 @@ import java.util.TreeSet;
 
 public class StyleUtils {
 
-    private static final Map<String, ImmutableSet<String>> sViewStyleMap = new HashMap<>();
+    private static final Multimap<String, String> sViewStyleMap = ArrayListMultimap.create();
     private static final Map<String, ImmutableSet<String>> sLayoutParamsMap = new HashMap<>();
 
     static {
@@ -70,22 +76,41 @@ public class StyleUtils {
         putStyle(DatePicker.class);
         putStyle(ViewFlipper.class);
         putStyle(ViewSwitcher.class);
+        putStyle(AbsoluteLayout.class);
+        putStyle(ZoomButton.class);
+        putStyle(WebView.class);
+    }
+
+    public static Set<String> getClasses(String... classNames) {
+        Set<String> classes = new HashSet<>();
+        for (String className : classNames) {
+            Collection<String> strings = sViewStyleMap.get(className);
+            if (strings != null) {
+                classes.addAll(strings);
+                for (String string : strings) {
+                    if (ImmutableSet.copyOf(classNames).contains(string)) {
+                        continue;
+                    }
+
+                    classes.addAll(getClasses(string));
+                }
+            }
+        }
+        return classes;
     }
 
     public static void putStyles(JavaClass javaClass) {
-        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-        try {
-            JavaClass[] superClasses = javaClass.getSuperClasses();
-            for (JavaClass superClass : superClasses) {
-                if (Object.class.getName().equals(superClass.getClassName())) {
-                    continue;
-                }
-                builder.add(getSimpleName(superClass.getClassName()));
+        JavaClass[] superClasses = BytecodeScanner.getSuperClasses(javaClass);
+        String viewSimpleName = getSimpleName(javaClass.getClassName());
+        for (JavaClass superClass : superClasses) {
+            if (Object.class.getName().equals(superClass.getClassName())) {
+                continue;
             }
-        } catch (ClassNotFoundException e) {
-            // ignored
+            String simpleName = getSimpleName(superClass.getClassName());
+            sViewStyleMap.put(viewSimpleName, simpleName);
         }
-        sViewStyleMap.put(getSimpleName(javaClass.getClassName()), builder.build());
+
+        sViewStyleMap.put(viewSimpleName, viewSimpleName);
 
         if (BytecodeScanner.isViewGroup(javaClass)) {
             putLayoutParams(javaClass);
@@ -94,23 +119,13 @@ public class StyleUtils {
 
     public static void putLayoutParams(JavaClass javaClass) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-        try {
-            JavaClass[] superClasses = javaClass.getSuperClasses();
-            for (JavaClass superClass : superClasses) {
-                if (Object.class.getName().equals(superClass.getClassName())) {
-                    continue;
-                }
-
-                if (View.class.getName().equals(superClass.getClassName())) {
-                    continue;
-                }
-
-                builder.add(getSimpleName(superClass.getClassName()) + "_Layout");
-            }
-            sLayoutParamsMap.put(getSimpleName(javaClass.getClassName()) + "_Layout", builder.build());
-        } catch (ClassNotFoundException e) {
-            // ignored
-        }
+        JavaClass[] superClasses = BytecodeScanner.getSuperClasses(javaClass);
+        Arrays.stream(superClasses)
+                .map(JavaClass::getClassName)
+                .filter(it -> !Object.class.getName().equals(it))
+                .filter(it -> !View.class.getName().equals(it))
+                .forEach(it -> builder.add(getSimpleName(it) + "_Layout"));
+        sLayoutParamsMap.put(getSimpleName(javaClass.getClassName()) + "_Layout", builder.build());
     }
 
     public static void putLayoutParams(@NonNull Class<? extends ViewGroup> viewGroup) {
@@ -138,15 +153,21 @@ public class StyleUtils {
 
     private static void putStyle(@NonNull Class<? extends View> view) {
         Class<?> current = view;
-        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        boolean isViewGroup = false;
         while (current != null) {
             if ("java.lang.Object".equals(current.getName())) {
                 break;
             }
-            builder.add(current.getSimpleName());
+            if (ViewGroup.class.getName().equals(current.getName())) {
+                isViewGroup = true;
+            }
+            sViewStyleMap.put(view.getSimpleName(), current.getSimpleName());
             current = current.getSuperclass();
         }
-        sViewStyleMap.put(view.getSimpleName(), builder.build());
+
+        if (isViewGroup) {
+            sViewStyleMap.put(view.getSimpleName(), view.getSimpleName() + "_Layout");
+        }
     }
 
     /**
@@ -173,7 +194,7 @@ public class StyleUtils {
             styles.add(map.get(simpleName));
         }
 
-        ImmutableSet<String> strings = sViewStyleMap.get(simpleName);
+        Collection<String> strings = sViewStyleMap.get(simpleName);
         if (strings != null) {
             for (String string : strings) {
                 if (name.equals(string)) {
@@ -196,7 +217,7 @@ public class StyleUtils {
             return params;
         }
         params.add(map.get(simpleName));
-
+        params.add(map.get("ViewGroup_MarginLayout"));
         ImmutableSet<String> strings = sLayoutParamsMap.get(simpleName);
         if (strings != null) {
             for (String string : strings) {

@@ -1,7 +1,6 @@
 package com.tyron.completion.java.provider;
 
 import static com.tyron.completion.java.provider.MemberSelectCompletionProvider.putMethod;
-import static com.tyron.completion.java.util.CompletionItemFactory.classItem;
 import static com.tyron.completion.java.util.CompletionItemFactory.importClassItem;
 import static com.tyron.completion.java.util.CompletionItemFactory.item;
 import static com.tyron.completion.java.util.CompletionItemFactory.method;
@@ -15,23 +14,23 @@ import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.model.DrawableKind;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.Name;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.element.VariableElement;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.tree.ExpressionTree;
-import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.MemberSelectTree;
-import org.openjdk.source.tree.MethodInvocationTree;
-import org.openjdk.source.tree.NewClassTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.Name;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.DeclaredType;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,14 +47,10 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public CompletionList complete(CompileTask task,
-                                   TreePath treePath,
-                                   String path,
-                                   boolean endsWithParen) {
+    public void complete(CompletionList.Builder builder, JavacUtilitiesProvider task, TreePath treePath, String path, boolean endsWithParen) {
         checkCanceled();
 
         Set<String> names = new HashSet<>();
-        CompletionList list = new CompletionList();
         for (String className : getCompiler().publicTopLevelTypes()) {
             if (className.startsWith(path)) {
                 int start = path.lastIndexOf('.');
@@ -65,14 +60,21 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
                 if (names.contains(segment)) continue;
                 names.add(segment);
                 boolean isClass = className.endsWith(segment);
+
+                CompletionItem item;
                 if (isClass) {
-                    list.items.add(importClassItem(className));
+                    item = importClassItem(className);
                 } else {
-                    list.items.add(packageItem(segment));
+                    item = packageItem(segment);
                 }
+
+                item.addFilterText(segment);
+                if (path.contains(".")) {
+                    item.addFilterText(path.substring(0, path.lastIndexOf('.')) + "." + segment);
+                }
+                builder.addItem(item);
             }
         }
-        return list;
     }
 
     public List<CompletionItem> addAnonymous(CompileTask task, TreePath path, String partial) {
@@ -131,11 +133,11 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
         return items;
     }
 
-    public static void addStaticImports(CompileTask task, CompilationUnitTree root, String partial,
-                                  boolean endsWithParen, CompletionList list) {
+    public static void addStaticImports(JavacUtilitiesProvider task, CompilationUnitTree root, String partial,
+                                  boolean endsWithParen, CompletionList.Builder list) {
         checkCanceled();
 
-        Trees trees = Trees.instance(task.task);
+        Trees trees = task.getTrees();
         HashMap<String, List<ExecutableElement>> methods = new HashMap<>();
         for (ImportTree i : root.getImports()) {
             if (!i.isStatic()) continue;
@@ -151,11 +153,16 @@ public class ImportCompletionProvider extends BaseCompletionProvider {
                     methods.clear();
                     putMethod((ExecutableElement) member, methods);
                     for (List<ExecutableElement> overloads : methods.values()) {
-                        list.items.addAll(method(task, overloads, endsWithParen, false,
-                                (DeclaredType) type.asType()));
+                        for (CompletionItem item : method(task, overloads, endsWithParen, false,
+                                                          (DeclaredType) type.asType())) {
+                            item.setSortText(JavaSortCategory.ACCESSIBLE_SYMBOL.toString());
+                            list.addItem(item);
+                        }
                     }
                 } else {
-                    list.items.add(item(member));
+                    CompletionItem item = item(member);
+                    item.setSortText(JavaSortCategory.ACCESSIBLE_SYMBOL.toString());
+                    list.addItem(item);
                 }
             }
         }

@@ -1,10 +1,12 @@
 package com.tyron.completion.java.rewrite;
 
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.util.SourcePositions;
-import org.openjdk.source.util.Trees;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.Trees;
 
 import com.tyron.completion.java.CompilerProvider;
+import com.tyron.completion.java.provider.JavacUtilitiesProvider;
+import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.model.Position;
 import com.tyron.completion.java.compiler.ParseTask;
 
@@ -16,11 +18,11 @@ import java.util.Map;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
-import org.openjdk.source.tree.ImportTree;
+import com.sun.source.tree.ImportTree;
 
 import java.io.File;
 
-public class AddImport implements JavaRewrite {
+public class AddImport implements JavaRewrite2 {
     
     private final String className;
     private final File currentFile;
@@ -37,15 +39,29 @@ public class AddImport implements JavaRewrite {
     }
 
     @Override
-    public Map<Path, TextEdit[]> rewrite(CompilerProvider compiler) {
-        ParseTask task = compiler.parse(currentFile.toPath());
+    public Map<Path, TextEdit[]> rewrite(JavacUtilitiesProvider task) {
+        if (ActionUtil.hasImport(task.root(), className)) {
+            return CANCELLED;
+        }
         Position point = insertPosition(task);
         String text = "import " + className + ";\n";
         TextEdit[] edits = { new TextEdit(new Range(point, point), text)};
         return Collections.singletonMap(currentFile.toPath(), edits);
     }
 
-    public Map<File, TextEdit> getText(ParseTask task) {
+    public Map<File, TextEdit> getText(JavacUtilitiesProvider task) {
+        if (ActionUtil.hasImport(task.root(), className)) {
+            return Collections.emptyMap();
+        }
+
+        String packageName = className;
+        if (className.contains(".")) {
+            packageName = className.substring(0, className.lastIndexOf('.'));
+        }
+        if (packageName.equals(String.valueOf(task.root().getPackageName()))) {
+            return Collections.emptyMap();
+        }
+
         Position point = insertPosition(task);
 
         String text = "import " + className + ";\n";
@@ -56,8 +72,8 @@ public class AddImport implements JavaRewrite {
         return Collections.singletonMap(currentFile, edit);
     }
     
-    private Position insertPosition(ParseTask task) {
-        List<? extends ImportTree> imports = task.root.getImports();
+    private Position insertPosition(JavacUtilitiesProvider task) {
+        List<? extends ImportTree> imports = task.root().getImports();
         for (ImportTree i : imports) {
             String next = i.getQualifiedIdentifier().toString();
             if (className.compareTo(next) < 0) {
@@ -68,23 +84,23 @@ public class AddImport implements JavaRewrite {
             ImportTree last = imports.get(imports.size() - 1);
             return insertAfter(task, last);
         }
-        if (task.root.getPackageName() != null) {
-            return insertAfter(task, task.root.getPackageName());
+        if (task.root().getPackageName() != null) {
+            return insertAfter(task, task.root().getPackageName());
         }
         return new Position(0, 0);
     }
 
-    private Position insertBefore(ParseTask task, Tree i) {
-        SourcePositions pos = Trees.instance(task.task).getSourcePositions();
-        long offset = pos.getStartPosition(task.root, i);
-        int line = (int) task.root.getLineMap().getLineNumber(offset);
+    private Position insertBefore(JavacUtilitiesProvider task, Tree i) {
+        SourcePositions pos = task.getTrees().getSourcePositions();
+        long offset = pos.getStartPosition(task.root(), i);
+        int line = (int) task.root().getLineMap().getLineNumber(offset);
         return new Position(line - 1, 0);
     }
 
-    private Position insertAfter(ParseTask task, Tree i) {
-        SourcePositions pos = Trees.instance(task.task).getSourcePositions();
-        long offset = pos.getStartPosition(task.root, i);
-        int line = (int) task.root.getLineMap().getLineNumber(offset);
+    private Position insertAfter(JavacUtilitiesProvider task, Tree i) {
+        SourcePositions pos = task.getTrees().getSourcePositions();
+        long offset = pos.getStartPosition(task.root(), i);
+        int line = (int) task.root().getLineMap().getLineNumber(offset);
         return new Position(line, 0);
     }
 }

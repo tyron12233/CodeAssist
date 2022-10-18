@@ -1,10 +1,21 @@
 package com.tyron.completion.java.compiler;
 
+import android.util.Log;
+
 import androidx.annotation.GuardedBy;
+
+import com.sun.source.util.JavacTask;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.util.Context;
+import com.tyron.completion.java.BuildConfig;
+import com.tyron.completion.java.compiler.services.CancelService;
+import com.tyron.completion.progress.ProcessCanceledException;
+import com.tyron.completion.progress.ProgressManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
 
 import kotlin.jvm.functions.Function1;
@@ -24,25 +35,36 @@ import kotlin.jvm.functions.Function1;
  */
 public class CompilerContainer {
 
+    private static final String TAG = CompilerContainer.class.getSimpleName();
+
     private volatile boolean mIsWriting;
 
-    @GuardedBy("mLock")
+    private static final Semaphore semaphore = new Semaphore(1);
+
     private volatile CompileTask mCompileTask;
 
-    private final Object mLock = new Object();
-    private final List<Thread> mReaders = Collections.synchronizedList(new ArrayList<>());
-
-
     public CompilerContainer() {
-
+        System.out.println("New instance created - CompilerContainer");
     }
 
-    private void closeIfEmpty() {
-        if (mReaders.isEmpty()) {
-            if (mCompileTask != null) {
-                mCompileTask.close();
-            }
+    private void cancel() {
+        if (mCompileTask == null) {
+            return;
         }
+
+        JavacTask task = mCompileTask.task;
+        if (!(task instanceof JavacTaskImpl)) {
+            return;
+        }
+
+        JavacTaskImpl taskImpl = ((JavacTaskImpl) task);
+        Context context = taskImpl.getContext();
+        if (context == null) {
+            return;
+        }
+
+        ReusableCompiler.CancelServiceImpl cancelService =
+                (ReusableCompiler.CancelServiceImpl) ReusableCompiler.CancelServiceImpl.instance(context);
     }
 
     /**
@@ -51,63 +73,81 @@ public class CompilerContainer {
      * are synchronized
      */
     public void run(Consumer<CompileTask> consumer) {
-        waitForWriter();
-        mReaders.add(Thread.currentThread());
+        cancel();
+        semaphore.acquireUninterruptibly();
         try {
             consumer.accept(mCompileTask);
         } finally {
-            mReaders.remove(Thread.currentThread());
+            mCompileTask.close();
+            semaphore.release();
         }
     }
 
     public <T> T get(Function1<CompileTask, T> fun) {
-        waitForWriter();
-        mReaders.add(Thread.currentThread());
+        cancel();
+        try {
+            semaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new ProcessCanceledException();
+        }
+
         try {
             return fun.invoke(mCompileTask);
         } finally {
-            mReaders.remove(Thread.currentThread());
+            mCompileTask.close();
+            semaphore.release();
         }
+    }
+
+    public <T> T getWithLock(Function1<CompileTask, T> fun) {
+        try {
+            semaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new ProcessCanceledException();
+        }
+
+        try {
+            return fun.invoke(mCompileTask);
+        } finally {
+            mCompileTask.close();
+            semaphore.release();
+        }
+
+    }
+
+    public synchronized boolean isWriting() {
+        return mIsWriting || semaphore.hasQueuedThreads();
     }
 
     void initialize(Runnable runnable) {
-        synchronized (mLock) {
-            assertIsNotReader();
-            waitForReaders();
-            try {
-                mIsWriting = true;
-                runnable.run();
-            } finally {
-                mIsWriting = false;
+        try {
+            semaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new ProcessCanceledException();
+        }
+        mIsWriting = true;
+        try {
+            // ensure that compile task is closed
+            if (mCompileTask != null) {
+                mCompileTask.close();
             }
+
+            cancel();
+
+            runnable.run();
+        } finally {
+            mIsWriting = false;
+            semaphore.release();
         }
     }
-
-    private void waitForReaders() {
-        while (true) {
-            if (mReaders.isEmpty()) {
-                closeIfEmpty();
-                return;
-            }
-        }
-    }
-
-    private void waitForWriter() {
-        while (true) {
-            if (!mIsWriting) {
-                return;
-            }
-        }
-    }
-
-    private void assertIsNotReader() {
-        if (mReaders.contains(Thread.currentThread())) {
-            throw new RuntimeException("Cannot compile inside a container.");
-        }
-    }
-
 
     void setCompileTask(CompileTask task) {
         mCompileTask = task;
+    }
+
+    private static void assertNotClosed(CompileTask task) {
+        if (task.isClosed()) {
+            throw new RuntimeException("Compile task is already closed.");
+        }
     }
 }

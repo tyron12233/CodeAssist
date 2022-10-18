@@ -1,16 +1,21 @@
 package com.tyron.completion.java.compiler;
 
 import android.annotation.SuppressLint;
+import android.net.Uri;
 
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.source.util.JavacTask;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.util.JavacTask;
 
 
+import java.io.File;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.api.JavacTrees;
 
 public class CompileTask implements AutoCloseable {
 
@@ -19,11 +24,19 @@ public class CompileTask implements AutoCloseable {
     public final List<CompilationUnitTree> roots;
     public final List<Diagnostic<? extends JavaFileObject>> diagnostics;
 
+    private final Trees trees;
+
     public CompileTask(CompileBatch batch) {
         mCompileBatch = batch;
         this.task = batch.task;
+        this.trees = JavacTrees.instance(task);
+
         this.roots = batch.roots;
         this.diagnostics = batch.parent.getDiagnostics();
+    }
+
+    public Trees getTrees() {
+        return trees;
     }
 
     public CompilationUnitTree root() {
@@ -35,25 +48,36 @@ public class CompileTask implements AutoCloseable {
 
     @SuppressLint("NewApi")
     public CompilationUnitTree root(Path file) {
-        for (CompilationUnitTree root : roots) {
-            if (root.getSourceFile().toUri().equals(file.toUri())) {
-                return root;
-            }
-        }
-        throw new RuntimeException("not found");
+        return root(file.toUri());
+    }
+
+    public CompilationUnitTree root(File file) {
+        return root(file.toURI());
     }
 
     public CompilationUnitTree root(JavaFileObject file) {
+        return root(file.toUri());
+    }
+
+    public CompilationUnitTree root(URI uri) {
         for (CompilationUnitTree root : roots) {
-            if (root.getSourceFile().toUri().equals(file.toUri())) {
+            if (root.getSourceFile().toUri().equals(uri)) {
                 return root;
             }
         }
-        throw new RuntimeException("not found");
+        return null;
     }
 
     @Override
     public void close() {
         mCompileBatch.close();
+        ReusableCompiler.Borrow borrow = mCompileBatch.borrow;
+        if (borrow != null && !borrow.closed) {
+            borrow.close();
+        }
+    }
+
+    public boolean isClosed() {
+        return mCompileBatch.closed;
     }
 }

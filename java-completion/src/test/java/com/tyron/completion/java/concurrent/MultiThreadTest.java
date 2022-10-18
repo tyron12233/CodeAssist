@@ -25,10 +25,9 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
-import edu.emory.mathcs.backport.java.util.Collections;
 
 /**
  * The java language server is single threaded and requires threads that
@@ -72,32 +71,6 @@ public class MultiThreadTest {
         mService = provider.get(mProject, mModule);
     }
 
-    /**
-     * Test that writes should not be allowed inside a read thread
-     */
-    @Test
-    public void testWriteInsideRead() {
-        File file = mModule.getJavaFile("com.tyron.test.MemberSelect");
-        assert file != null;
-
-        try {
-            CompilerContainer compile = mService.compile(file.toPath());
-            compile.run(task -> {
-                Optional<CharSequence> fileContent = mModule.getFileManager().getFileContent(file);
-                String contents = fileContent.orElseThrow(RuntimeException::new).toString();
-
-                // simulate file changed
-                SourceFileObject sourceFileObject = new SourceFileObject(file.toPath(), contents, Instant.now());
-                CompilerContainer container = mService.compile(Collections.singletonList(sourceFileObject));
-                container.run(newTask -> {
-                    throw new AssertionError("Compilation was allowed inside a read thread.\n" + "This should not be allowed.");
-                });
-            });
-        } catch (RuntimeException expected) {
-
-        }
-    }
-
     @Test
     public void testMultipleReaders() throws InterruptedException {
         File file = mModule.getJavaFile("com.tyron.test.MemberSelect");
@@ -135,6 +108,31 @@ public class MultiThreadTest {
         for (Thread reader : readers) {
             reader.join();
         }
+    }
+
+    @Test
+    public void testClosedFileChannel() {
+        File file = mModule.getJavaFile("com.tyron.test.MemberSelect");
+        assert file != null;
+
+        new Thread(() -> {
+            CompilerContainer compile = mService.compile(file.toPath());
+            compile.run(task -> {
+                w(500);
+            });
+        }).start();
+
+        new Thread(() -> {
+            CompilerContainer compile = mService.compile(file.toPath());
+            compile.run(compileTask -> {
+               w(200);
+            });
+        }).start();
+
+        CompilerContainer compile = mService.compile(file.toPath());
+        compile.run(task -> {
+           assert task.diagnostics.isEmpty() : task.diagnostics;
+        });
     }
 
     @Test

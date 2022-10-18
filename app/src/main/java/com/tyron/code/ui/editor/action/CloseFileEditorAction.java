@@ -17,19 +17,19 @@ public class CloseFileEditorAction extends AnAction {
 
     @Override
     public void update(@NonNull AnActionEvent event) {
-        MainViewModel mainViewModel = event.getData(MainFragment.MAIN_VIEW_MODEL_KEY);
-        FileEditor fileEditor = event.getData(CommonDataKeys.FILE_EDITOR_KEY);
-
         event.getPresentation().setVisible(false);
+
+        MainViewModel mainViewModel = event.getData(MainFragment.MAIN_VIEW_MODEL_KEY);
+        if (mainViewModel == null) {
+            return;
+        }
+
         if (!ActionPlaces.EDITOR_TAB.equals(event.getPlace())) {
             return;
         }
 
+        FileEditor fileEditor = mainViewModel.getCurrentFileEditor();
         if (fileEditor == null) {
-            return;
-        }
-
-        if (mainViewModel == null) {
             return;
         }
 
@@ -40,7 +40,9 @@ public class CloseFileEditorAction extends AnAction {
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
         MainViewModel mainViewModel = e.getRequiredData(MainFragment.MAIN_VIEW_MODEL_KEY);
-        FileEditor fileEditor = e.getRequiredData(CommonDataKeys.FILE_EDITOR_KEY);
-        mainViewModel.removeFile(fileEditor.getFile());
+        FileEditor fileEditor = mainViewModel.getCurrentFileEditor();
+        if (fileEditor != null) {
+            mainViewModel.removeFile(fileEditor.getFile());
+        }
     }
 }

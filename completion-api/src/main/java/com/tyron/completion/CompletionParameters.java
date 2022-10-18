@@ -2,6 +2,7 @@ package com.tyron.completion;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
+import com.tyron.editor.Editor;
 
 import java.io.File;
 
@@ -18,15 +19,24 @@ public class CompletionParameters {
     private final int mLine;
     private final int mColumn;
     private final long mIndex;
+    private final Editor mEditor;
 
     public static Builder builder() {
         return new Builder();
     }
 
-    private CompletionParameters(Project project, Module module, File file, String contents,
-                                 String prefix, int line, int column, long index) {
+    private CompletionParameters(Project project,
+                                 Module module,
+                                 Editor editor,
+                                 File file,
+                                 String contents,
+                                 String prefix,
+                                 int line,
+                                 int column,
+                                 long index) {
         mProject = project;
         mModule = module;
+        mEditor = editor;
         mFile = file;
         mContents = contents;
         mPrefix = prefix;
@@ -67,6 +77,34 @@ public class CompletionParameters {
         return mIndex;
     }
 
+    public Editor getEditor() {
+        return mEditor;
+    }
+
+    @Override
+    public String toString() {
+        return "CompletionParameters{" +
+               "mProject=" +
+               mProject +
+               ", mModule=" +
+               mModule +
+               ", mFile=" +
+               mFile +
+               '\'' +
+               ", mPrefix='" +
+               mPrefix +
+               '\'' +
+               ", mLine=" +
+               mLine +
+               ", mColumn=" +
+               mColumn +
+               ", mIndex=" +
+               mIndex +
+               ", mEditor=" +
+               mEditor +
+               '}';
+    }
+
     public static final class Builder {
 
         private Project project;
@@ -77,6 +115,7 @@ public class CompletionParameters {
         private int line;
         private int column;
         private long index;
+        private Editor editor;
 
         private Builder() {
 
@@ -122,9 +161,14 @@ public class CompletionParameters {
             return this;
         }
 
+        public Builder setEditor(Editor editor) {
+            this.editor = editor;
+            return this;
+        }
+
         public CompletionParameters build() {
-            return new CompletionParameters(project, module,
-                    file, contents, prefix, line, column, index);
+            return new CompletionParameters(project, module, editor, file, contents, prefix, line,
+                                            column, index);
         }
     }
 }

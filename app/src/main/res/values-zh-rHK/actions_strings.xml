@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Text Actions -->
+    <string name="text_actions">文本選項</string>
+    <string name="expand_selection">擴大選擇</string>
+    <string name="copied_to_clipoard">文本已複製到剪貼板</string>
+
+    <!-- File Actions -->
+    <string name="menu_action_new_java_class">Java類</string>
+    <string name="menu_action_new_kotlin_class">Kotlin類</string>
+    <string name="menu_action_new_directory">文件夾</string>
+    <string name="menu_action_new_file">文件</string>
+    <string name="directory_name">文件夾名稱</string>
+    <string name="file_name">文件名稱</string>
+    <string name="menu_new">新建</string>
+    <string name="menu_import">導入</string>
+    <string name="menu_refactor">重構</string>
+    <string name="menu_new_layout">新建佈局</string>
+
+    <string name="error_file_creation">無法創建文件</string>
+</resources>

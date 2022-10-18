@@ -1,5 +1,7 @@
 package com.tyron.completion.java.rewrite;
 
+import androidx.annotation.Nullable;
+
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.common.base.Strings;
 import com.tyron.completion.java.compiler.CompileTask;
@@ -16,22 +18,23 @@ import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.TextEdit;
 
-import org.openjdk.javax.lang.model.element.Element;
-import org.openjdk.javax.lang.model.element.ElementKind;
-import org.openjdk.javax.lang.model.element.ExecutableElement;
-import org.openjdk.javax.lang.model.element.Modifier;
-import org.openjdk.javax.lang.model.element.TypeElement;
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.ExecutableType;
-import org.openjdk.javax.lang.model.util.Elements;
-import org.openjdk.javax.lang.model.util.Types;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.source.tree.ClassTree;
-import org.openjdk.source.tree.ImportTree;
-import org.openjdk.source.tree.MethodTree;
-import org.openjdk.source.util.TreePath;
-import org.openjdk.source.util.Trees;
-import org.openjdk.tools.javac.util.JCDiagnostic;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
+import javax.tools.JavaFileObject;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.util.JCDiagnostic;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -99,11 +102,16 @@ public class ImplementAbstractMethods implements JavaRewrite {
         Set<String> typesToImport = new HashSet<>();
 
         TypeElement thisClass = elements.getTypeElement(mClassName);
-        ClassTree thisTree = getClassTree(task);
+        ClassTree thisTree = getClassTree(task, file);
         if (thisTree == null) {
             thisTree = trees.getTree(thisClass);
         }
-        TreePath path = trees.getPath(task.root(), thisTree);
+        CompilationUnitTree root = task.root(file);
+        if (root == null) {
+            return CANCELLED;
+        }
+
+        TreePath path = trees.getPath(root, thisTree);
         Element element = trees.getElement(path);
         DeclaredType thisType = (DeclaredType) element.asType();
 
@@ -148,25 +156,30 @@ public class ImplementAbstractMethods implements JavaRewrite {
         for (String type : typesToImport) {
             String fqn = ActionUtil.removeDiamond(type);
             if (!ActionUtil.hasImport(task.root(), fqn)) {
-                JavaRewrite addImport = new AddImport(file.toFile(), fqn);
-                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                TextEdit[] textEdits = rewrite.get(file);
-                if (textEdits != null) {
-                    Collections.addAll(edits, textEdits);
-                }
+//                JavaRewrite addImport = new AddImport(file.toFile(), fqn);
+//                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+//                TextEdit[] textEdits = rewrite.get(file);
+//                if (textEdits != null) {
+//                    Collections.addAll(edits, textEdits);
+//                }
             }
         }
 
         return Collections.singletonMap(file, edits.toArray(new TextEdit[0]));
     }
 
-    private ClassTree getClassTree(CompileTask task) {
+    @Nullable
+    private ClassTree getClassTree(CompileTask task, Path file) {
         ClassTree thisTree = null;
+        CompilationUnitTree root = task.root(file);
+        if (root == null) {
+            return null;
+        }
         if (mPosition != 0) {
-            thisTree = new FindTypeDeclarationAt(task.task).scan(task.root(), mPosition);
+            thisTree = new FindTypeDeclarationAt(task.task).scan(root, mPosition);
         }
         if (thisTree == null) {
-            thisTree = new FindNewTypeDeclarationAt(task.task, task.root()).scan(task.root(),
+            thisTree = new FindNewTypeDeclarationAt(task.task, root).scan(root,
                     mPosition);
         }
         return thisTree;

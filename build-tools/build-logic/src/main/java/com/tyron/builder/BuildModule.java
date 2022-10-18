@@ -2,6 +2,8 @@ package com.tyron.builder;
 
 import android.content.Context;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.common.util.Decompress;
 
 import java.io.File;
@@ -48,5 +50,13 @@ public class BuildModule {
             }
         }
         return sLambdaStubs;
+    }
+
+    public static void setAndroidJar(@NonNull File jar) {
+        sAndroidJar = jar;
+    }
+
+    public static void setLambdaStubs(File file) {
+        sLambdaStubs = file;
     }
 }

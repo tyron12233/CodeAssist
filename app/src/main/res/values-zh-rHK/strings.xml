@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Hello world!</string>
+    <item name="paste" type="string">粘貼</item>
+    <item name="copy" type="string">複製</item>
+    <item name="selectAll" formatted="true" type="string">選擇全部</item>
+    <item name="saveToProject" translatable="false" type="string">項目</item>
+    <item name="cut" type="string" translatable="false">剪切</item>
+    <item name="last" type="string">底部</item>
+    <item name="next" type="string">下一步</item>
+    <item name="replace" type="string">替換</item>
+    <item name="replaceAll" type="string">替換全部</item>
+    <item name="replacement" type="string">替換</item>
+    <item name="cancel" type="string">取消</item>
+    <item name="text_to_search" type="string">搜索文本</item>
+
+    <item name="more" translatable="false" type="string">更多</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">信息</string>
+    <string name="sync_header">同步</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">你的簽名</string>
+    <string name="reply_title">默認回復</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">定期同步到電子郵件</string>
+    <string name="attachment_title">下載的附件</string>
+    <string name="attachment_summary_on">自動下載收到電子郵件的附件
+    </string>
+    <string name="attachment_summary_off">僅在手動請求時下載附件</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">下一步</string>
+    <string name="wizard_finish">完成</string>
+    <string name="wizard_cancel">取消</string>
+    <string name="wizard_templates">模板</string>
+    <string name="wizard_exit">退出</string>
+    <string name="wizard_desc">從活動模板中選擇</string>
+    <string name="wizard_empty_templates">模板是空的 :(</string>
+    <string name="wizard_loading">加載模板</string>
+    <string name="wizard_app_name">應用名稱</string>
+    <string name="wizard_package_name">包名</string>
+    <string name="wizard_save_location">保存的位置</string>
+    <string name="wizard_language">語言</string>
+    <string name="wizard_minimum_sdk">支持設備的最低版本</string>
+    <string name="wizard_create">創建</string>
+    <string name="wizard_previous">返回</string>
+    <string name="wizard_scoped_storage_info">由於Android 11的存儲限制，你只能在內部存儲上保存文件。</string>
+    <string name="wizard_file_not_writable">目錄不可寫，請選擇其他位置</string>
+    <string name="wizard_path_exceeds">位置路徑超過240個字符。</string>
+    <string name="wizard_package_illegal">包名包含非法字符</string>
+    <string name="wizard_package_too_short">軟件包名稱太短</string>
+    <string name="wizard_package_contains_spaces">包名稱不能包含空格。</string>
+    <string name="wizard_error_name_empty">名稱不能為空</string>
+    <string name="wizard_error_name_illegal">名稱中不能包含非法字符</string>
+    <string name="wizard_package_empty">包名不能為空</string>
+    <string name="wizard_select_min_sdk">選擇最低SDK版本</string>
+    <string name="wizard_select_save_location">選擇保存位置</string>
+
+    <string name="menu_open_project">打開模塊</string>
+    <string name="menu_create_project">創建模塊</string>
+    <string name="menu_run">運行</string>
+    <string name="menu_refresh">重新載入</string>
+    <string name="menu_library_manager">庫管理器</string>
+    <string name="menu_format">格式對齊</string>
+    <string name="menu_settings">設置</string>
+
+    <!-- preferences -->
+    <string name="settings_title_application">應用</string>
+    <string name="settings_desc_application">全局應用設置</string>
+    <string name="settings_title_editor">編輯器</string>
+    <string name="settings_desc_editor">配置編輯器</string>
+    <string name="title_activity_settings">設置</string>
+
+    <!-- Application settings -->
+    <string name="settings_theme_title">主題</string>
+    <string name="settings_theme_value_default">跟隨系統</string>
+    <string name="settings_theme_value_light">淺色模式</string>
+    <string name="settings_theme_value_dark">深色模式</string>
+
+    <string-array name="theme_values">
+        <item>default</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+    <string-array name="theme_entries">
+        <item>@string/settings_theme_value_default</item>
+        <item>@string/settings_theme_value_light</item>
+        <item>@string/settings_theme_value_dark</item>
+    </string-array>
+    
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">編譯器</string>
+    <string name="settings_code_completions">代碼自動補全</string>
+    <string name="settings_kotlin_completions">Kotlin代碼自動補全</string>
+    <string name="settings_kotlin_completions_desc">這個功能還處於實驗階段，可能會比較慢，
+需要一個配置高的設備。
+    </string>
+    <string name="settings_case_insensitive_match_title">不區分類名首字母大小寫</string>
+    <string name="settings_case_insensitive_match_desc">建議使用小寫前綴的類名</string>
+    <string name="code_editor_error_highlight">錯誤高亮顯示</string>
+
+    <string name="editor_settings_title">代碼編輯器設置</string>
+    <string name="editor_settings_wordwrap">自動換行</string>
+    <string name="editor_delete_whitespaces">自動刪除空格</string>
+    <string name="save">保存</string>
+    <string name="defaultString">默認</string>
+    <string name="editor_scheme_title">編輯器主題</string>
+    <string name="editor_scheme_desc">選擇主題</string>
+    <string name="change_scheme_dialog_title">粘貼主題文件的路徑</string>
+    <string name="font_size_title">字體大小</string>
+    <string name="font_size_message">設置編輯器字體大小</string>
+    <string name="font_size_summary">設置編輯器的字體大小</string>
+    <string name="keyboard_settings_title">鍵盤</string>
+    <string name="keyboard_enable_suggestions_description">啟用輸入文本聯想</string>
+    <string name="settings_build_run_title">構建 &amp; 運行</string>
+    <string name="settings_build_run_desc">配置構建和運行環境</string>
+    <string name="run_title">運行</string>
+    <string name="settings_install_apk_title">APK安裝提示</string>
+    <string name="settings_install_desc">編譯成功後顯示APK安裝提示</string>
+    <string-array name="java_versions" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string name="completion_settings_kotlin_title">Kotlin</string>
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">目標版本</string>
+    <string name="completion_java_source_version_title">源碼版本</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">關於我們</string>
+    <string name="settings_about_us_desc">更多關於開發者的信息</string>
+    <string name="app_description">強大和輕量級IDE的Android應用程式開發軟件</string>
+    <string name="app_version">版本</string>
+    <string name="contact_group_title">聯繫方式</string>
+    <string name="app_source_title">源碼</string>
+    <string name="sketchub_team">Sketchub Team</string>
+    <string name="community">社區</string>
+    <string name="rate_us">評價我們</string>
+
+
+    <!-- file manager menu -->
+    <string name="error">錯誤</string>
+    <string name="error_resource_name_restriction">資源名必須只包含小寫的a-z、0-9或下劃線。</string>
+    <string name="item_project">項目</string>
+    <string name="dialog_create_class_title">創建一個類</string>
+    <string name="create_class_dialog_class_name">類名</string>
+    <string name="create_class_dialog_positive">創建</string>
+    <string name="create_class_dialog_class_type">類的類型</string>
+    <string name="create_class_dialog_invalid_name">無效的類名</string>
+
+    <string name="success">成功</string>
+    <string name="delete_success">刪除成功。</string>
+    <string name="dialog_confirm_delete">您確定要刪除嗎?</string>
+    <string name="dialog_delete">刪除</string>
+    <string name="menu_preview_layout">佈局預覽</string>
+    <string name="action_menu_build_release">構建發佈版本APK</string>
+    <string name="action_menu_build_debug">構建測試版本APK</string>
+    <string name="action_menu_build_aab">構建 AAB</string>
+
+    <string name="project_manager_alpha_notice_title">Alpha 版本公告</string>
+    <string name="project_manager_alpha_notice">CodeAssist仍處於alpha版本，
+        你可能會遇到崩潰、bug和不完整的功能，你可以反饋這些問題到這裏 https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_save_location_title">選擇保存位置</string>
+    <string name="project_manager_permission_denied">沒有權限</string>
+    <string name="project_manager_button_request_again">再次請求</string>
+    <string name="project_manager_button_continue">繼續</string>
+    <string name="project_manager_rationale_title">存儲權限</string>
+    <string name="project_manager_button_allow">允許</string>
+    <string name="project_manager_button_use_internal">使用內部存儲</string>
+    <string name="project_manager_permission_rationale">應用程式需要存儲權限才能保存卸載應用程式時模塊文件不會被刪除，或者你可以選擇將模塊文件保存到應用程式的內部存儲中。</string>
+    <string name="project_manager_android11_notice">項目將被保存到應用程式的內部存儲目錄，請在卸載應用程式之前備份模塊。</string>
+    <string name="project_manager_projects">項目</string>
+    <string name="project_manager_empty">項目是空的</string>`
+    <string name="project_manager_create_project">創建模塊</string>
+    <string name="project_path_menu_title">項目路徑</string>
+    <string name="project_manager_null_projects">沒有發現項目</string>
+    <string name="project_manager_suggestions">建議:\n\n  - 創建新項目\n  - 更改項目路徑</string>
+    
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">編譯</string>
+    <string name="compilation_button_install">安裝</string>
+    <string name="compilation_result_success">編譯成功</string>
+    <string name="compilation_result_failed">編譯失敗</string>
+
+    <!-- Library manager -->
+    <string name="library_manager_title">%1s 庫</string>
+    <string name="group_id">組ID</string>
+    <string name="artifact_id">工件ID</string>
+    <string name="version_name">版本</string>
+    <string name="menu_display_dependencies">顯示依賴關係</string>
+    <string name="attributes_editor">屬性編輯器</string>
+    <string name="attribute_value">屬性值</string>
+    <string name="menu_add_libs_gradle">從 build.gradle 添加庫</string>
+
+    <!-- File Editor Manager -->
+    <string name="file_editor_selection_title">您想用哪個編輯器打開?</string>
+
+    <!-- Editor tabs -->
+    <string name="menu_close_file">關閉</string>
+    <string name="menu_close_others">關閉其他</string>
+    <string name="menu_close_all">關閉所有</string>
+
+    <!-- Editor -->
+    <string name="editor_error_file">讀取文件時發生錯誤，更改將不會被保存</string>
+
+     <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">構建日誌</string>
+    <string name="tab_app_logs_title">應用程式日誌</string>
+    <string name="tab_ide_logs_title">IDE日誌</string>
+    <string name="tab_diagnostics_title">診斷</string>
+</resources>

@@ -3,12 +3,13 @@ package com.tyron.completion.java.util;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Ordering;
 
-import org.openjdk.source.tree.LineMap;
-import org.openjdk.tools.javac.parser.Scanner;
-import org.openjdk.tools.javac.parser.ScannerFactory;
-import org.openjdk.tools.javac.parser.Tokens.Token;
-import org.openjdk.tools.javac.parser.Tokens.TokenKind;
-import org.openjdk.tools.javac.util.Context;
+import com.sun.source.tree.LineMap;
+import com.sun.tools.javac.parser.Scanner;
+import com.sun.tools.javac.parser.ScannerFactory;
+import com.sun.tools.javac.parser.Tokens.Token;
+import com.sun.tools.javac.parser.Tokens.TokenKind;
+import com.sun.tools.javac.util.Context;
+import com.tyron.completion.progress.ProgressManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +46,8 @@ public class FileContentFixer {
         Scanner scanner = ScannerFactory.instance(context).newScanner(content, true);
         List<Insertion> insertions = new ArrayList<>();
         for (; ; scanner.nextToken()) {
+            ProgressManager.checkCanceled();
+
             Token token = scanner.token();
             if (token.kind == TokenKind.EOF) {
                 break;

@@ -5,8 +5,13 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.FileManager;
+import com.tyron.code.event.FileDeletedEvent;
+import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.tree.TreeUtil;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
@@ -25,6 +30,8 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import kotlin.io.FileWalkDirection;
 import kotlin.io.FilesKt;
@@ -50,7 +57,7 @@ public class DeleteFileAction extends FileAction {
         TreeView<TreeFile> treeView = fragment.getTreeView();
         TreeNode<TreeFile> currentNode = e.getRequiredData(CommonFileKeys.TREE_NODE);
 
-        new AlertDialog.Builder(fragment.requireContext())
+        new MaterialAlertDialogBuilder(fragment.requireContext())
                 .setMessage(String.format(fragment.getString(R.string.dialog_confirm_delete),
                         currentNode.getValue().getFile().getName()))
                 .setPositiveButton(fragment.getString(R.string.dialog_delete), (d, which) -> {
@@ -65,8 +72,10 @@ public class DeleteFileAction extends FileAction {
                                 treeView.deleteNode(currentNode);
                                 TreeUtil.updateNode(currentNode.getParent());
                                 treeView.refreshTreeView();
+                                FileEditorManagerImpl.getInstance().closeFile(currentNode.getValue()
+                                                                                      .getFile());
                             } else {
-                                new AlertDialog.Builder(fragment.requireContext())
+                                new MaterialAlertDialogBuilder(fragment.requireContext())
                                         .setTitle(R.string.error)
                                         .setMessage("Failed to delete file.")
                                         .setPositiveButton(android.R.string.ok, null)
@@ -82,32 +91,53 @@ public class DeleteFileAction extends FileAction {
 
 
     private boolean deleteFiles(TreeNode<TreeFile> currentNode, TreeFileManagerFragment fragment) {
+        List<File> deletedFiles = new ArrayList<>();
         File currentFile = currentNode.getContent().getFile();
         FilesKt.walk(currentFile, FileWalkDirection.TOP_DOWN).iterator().forEachRemaining(file -> {
+            Module module = ProjectManager.getInstance()
+                    .getCurrentProject()
+                    .getModule(file);
+
             if (file.getName().endsWith(".java")) {
                 // todo: add .kt and .xml checks
 
                 ProgressManager.getInstance().runLater(() ->
                         fragment.getMainViewModel().removeFile(file));
 
-                Module module = ProjectManager.getInstance()
-                        .getCurrentProject()
-                        .getModule(file);
                 if (module instanceof JavaModule) {
                     String packageName = StringSearch.packageName(file);
                     if (packageName != null) {
                         packageName += "." + file.getName()
                                 .substring(0, file.getName().lastIndexOf("."));
+                        ((JavaModule) module).removeJavaFile(packageName);
                     }
-                    ((JavaModule) module).removeJavaFile(packageName);
                 }
             }
+
+            ProgressManager.getInstance().runLater(() -> {
+                FileManager fileManager = module.getFileManager();
+                if (fileManager.isOpened(file)) {
+                    fileManager.closeFileForSnapshot(file);
+                }
+            });
+
+            deletedFiles.add(file);
         });
         try {
             FileUtils.forceDelete(currentFile);
         } catch (IOException e) {
             return false;
         }
+
+        Project currentProject = ProjectManager.getInstance().getCurrentProject();
+        if (currentProject != null) {
+            for (File deletedFile : deletedFiles) {
+                currentProject.getEventManager().dispatchEvent(
+                        new FileDeletedEvent(deletedFile)
+                );
+            }
+        }
+
         return true;
     }
 }

@@ -13,8 +13,8 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
 
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileObject;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -96,7 +96,7 @@ public class CompletionEngine {
 //                newSet.add(library);
 //            } catch (IOException e) {
 //                FileUtils.deleteQuietly(library);
-//                logger.warning("Library is corrupt, deleting jar file! " + library);
+//                logger.warning("CodeAssistLibrary is corrupt, deleting jar file! " + library);
 //            }
 //        }
 //

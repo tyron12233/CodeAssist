@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+apply plugin: 'kotlin'
+
+configurations.implementation {
+    exclude group: "org.jetbrains", module: "annotations"
+}
+
+dependencies {
+    implementation project(path: ":build-tools:javac")
+}
+repositories {
+    mavenCentral()
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}

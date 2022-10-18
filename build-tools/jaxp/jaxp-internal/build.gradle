@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     implementation project(path: ':build-tools:jaxp:xml')
+    implementation files('libs/converted-jaxb-android-v0.2.0.jar')
 }
 
 java {

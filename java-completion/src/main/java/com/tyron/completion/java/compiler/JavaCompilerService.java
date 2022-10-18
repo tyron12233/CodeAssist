@@ -5,23 +5,29 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
+import com.sun.tools.javac.api.JavacTaskImpl;
 import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.api.Module;
+import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.Cache;
 import com.tyron.common.util.StringSearch;
 import com.tyron.completion.java.CompilerProvider;
 import com.tyron.completion.java.Docs;
 import com.tyron.completion.java.FindTypeDeclarations;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.javax.tools.DiagnosticListener;
-import org.openjdk.javax.tools.JavaFileObject;
-import org.openjdk.javax.tools.StandardLocation;
-import org.openjdk.source.tree.CompilationUnitTree;
-import org.openjdk.tools.javac.file.PathFileObject;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
+
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.tools.javac.file.PathFileObject;
+import com.tyron.completion.java.compiler.services.CancelAbort;
+import com.tyron.completion.progress.ProcessCanceledException;
 
 import java.io.File;
 import java.io.IOException;
@@ -38,6 +44,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -48,14 +56,13 @@ public class JavaCompilerService implements CompilerProvider {
     private DiagnosticListener<? super JavaFileObject> mDiagnosticListener;
     public final SourceFileManager mSourceFileManager;
 
-    private final List<Diagnostic<? extends JavaFileObject>> diagnostics =
-            new ArrayList<>();
+    private final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
 
     private final Project mProject;
     private JavaModule mCurrentModule;
     public final Set<File> classPath, docPath;
     public final Set<String> addExports;
-    public final ReusableCompiler compiler = new ReusableCompiler();
+    public ReusableCompiler compiler = new ReusableCompiler();
     private final Docs docs;
 
     private final CompilerContainer mContainer = new CompilerContainer();
@@ -64,7 +71,10 @@ public class JavaCompilerService implements CompilerProvider {
 
     public final ReentrantLock mLock = new ReentrantLock();
 
-    public JavaCompilerService(Project project, Set<File> classPath, Set<File> docPath, Set<String> addExports) {
+    public JavaCompilerService(Project project,
+                               Set<File> classPath,
+                               Set<File> docPath,
+                               Set<String> addExports) {
         mProject = project;
         this.classPath = Collections.unmodifiableSet(classPath);
         this.docPath = Collections.unmodifiableSet(docPath);
@@ -107,7 +117,7 @@ public class JavaCompilerService implements CompilerProvider {
         return false;
     }
 
-    private void loadCompile(Collection<? extends JavaFileObject> sources) {
+    private synchronized void loadCompile(Collection<? extends JavaFileObject> sources) {
         if (cachedCompile != null) {
             if (!cachedCompile.closed) {
                 throw new RuntimeException("Compiler is still in-use!");
@@ -121,11 +131,25 @@ public class JavaCompilerService implements CompilerProvider {
         }
     }
 
+    public void invalidate(Path source) {
+        invalidate(Collections.singletonList(new SourceFileObject(source)));
+    }
+
+    public void invalidate(Collection<? extends JavaFileObject> sources) {
+        for (JavaFileObject source : sources) {
+            cachedModified.remove(source);
+        }
+    }
+
     private CompileBatch doCompile(Collection<? extends JavaFileObject> sources) {
-        if (sources.isEmpty()) throw new RuntimeException("empty sources");
+        if (sources.isEmpty()) {
+            throw new RuntimeException("empty sources");
+        }
         CompileBatch firstAttempt = new CompileBatch(this, sources);
         Set<Path> addFiles = firstAttempt.needsAdditionalSources();
-        if (addFiles.isEmpty()) return firstAttempt;
+        if (addFiles.isEmpty()) {
+            return firstAttempt;
+        }
         // If the compiler needs additional source files that contain package-private files
         //  LOG.info("...need to recompile with " + addFiles);
         Log.d("JavaCompilerService", "Need to recompile with " + addFiles);
@@ -145,18 +169,29 @@ public class JavaCompilerService implements CompilerProvider {
      * @return CompileBatch for this compilation
      */
     private CompilerContainer compileBatch(Collection<? extends JavaFileObject> sources) {
-        mContainer.initialize(() -> {
-            if (needsCompile(sources)) {
-                loadCompile(sources);
-            } else {
-                Log.d("JavaCompilerService", "Using cached compile");
+        try {
+            mContainer.initialize(() -> {
+                if (needsCompile(sources)) {
+                    loadCompile(sources);
+                }
+                if (cachedCompile.task == null || ((JavacTaskImpl) cachedCompile.task).getContext() == null) {
+                    System.out.println();
+                }
+                CompileTask task = new CompileTask(cachedCompile);
+                mContainer.setCompileTask(task);
+            });
+            return mContainer;
+        } catch (Throwable t) {
+            if (t instanceof CancelAbort || t.getCause() instanceof CancelAbort) {
+                if (cachedCompile != null) {
+                    cachedCompile.borrow.close();
+                }
+                throw new ProcessCanceledException();
             }
-            CompileTask task = new CompileTask(cachedCompile);
-            mContainer.setCompileTask(task);
-        });
-        return mContainer;
+            throw t;
+        }
     }
-    
+
     public void clearDiagnostics() {
         diagnostics.clear();
         if (mDiagnosticListener != null) {
@@ -187,13 +222,42 @@ public class JavaCompilerService implements CompilerProvider {
     // TODO: This doesn't list all the public types
     @Override
     public Set<String> publicTopLevelTypes() {
-        Set<String> classes = new HashSet<>(mCurrentModule.getAllClasses());
+        Set<String> classes = new HashSet<>();
         for (Module module : mProject.getDependencies(mCurrentModule)) {
             if (module instanceof JavaModule) {
                 classes.addAll(((JavaModule) module).getAllClasses());
             }
         }
         return classes;
+    }
+
+    public Set<String> findClasses(String packageName) {
+        Set<String> classes = new HashSet<>();
+        for (Module module : mProject.getDependencies(mCurrentModule)) {
+            if (module instanceof JavaModule) {
+                PackageTrie classIndex = ((JavaModule) module).getClassIndex();
+                classes.addAll(classIndex.getMatchingPackages(packageName));
+            }
+        }
+        return classes;
+    }
+
+    /**
+     * For suggesting the first import typed where the package names are not yet correct
+     */
+    public Set<String> getTopLevelNonLeafPackages(Predicate<String> filter) {
+        Set<String> packages = new HashSet<>();
+        for (Module module : mProject.getDependencies(mCurrentModule)) {
+            if (module instanceof JavaModule) {
+                PackageTrie classIndex = ((JavaModule) module).getClassIndex();
+                for (String node : classIndex.getTopLevelNonLeafNodes()) {
+                    if (filter.test(node)) {
+                        packages.add(node);
+                    }
+                }
+            }
+        }
+        return packages;
     }
 
     @Override
@@ -236,15 +300,17 @@ public class JavaCompilerService implements CompilerProvider {
      */
     private Optional<JavaFileObject> findPublicTypeDeclarationInDocPath(String className) {
         try {
-            JavaFileObject found = docs.fileManager.getJavaFileForInput(
-                    StandardLocation.SOURCE_PATH, className, JavaFileObject.Kind.SOURCE);
+            JavaFileObject found = docs.fileManager
+                    .getJavaFileForInput(StandardLocation.SOURCE_PATH, className,
+                            JavaFileObject.Kind.SOURCE);
             return Optional.ofNullable(found);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static final Pattern PACKAGE_EXTRACTOR = Pattern.compile("^([a-z][_a-zA-Z0-9]*\\.)*[a-z][_a-zA-Z0-9]*");
+    private static final Pattern PACKAGE_EXTRACTOR =
+            Pattern.compile("^([a-z][_a-zA-Z0-9]*\\.)*[a-z][_a-zA-Z0-9]*");
 
     private String packageName(String className) {
         Matcher m = PACKAGE_EXTRACTOR.matcher(className);
@@ -298,7 +364,8 @@ public class JavaCompilerService implements CompilerProvider {
         String simpleName = simpleName(className);
 
         for (Module dependency : dependencies) {
-            Path path = findPublicTypeDeclarationInModule(dependency, packageName, simpleName, className);
+            Path path = findPublicTypeDeclarationInModule(dependency, packageName, simpleName,
+                    className);
             if (path != NOT_FOUND) {
                 return path;
             }
@@ -307,7 +374,10 @@ public class JavaCompilerService implements CompilerProvider {
         return NOT_FOUND;
     }
 
-    private Path findPublicTypeDeclarationInModule(Module module, String packageName, String simpleName, String className) {
+    private Path findPublicTypeDeclarationInModule(Module module,
+                                                   String packageName,
+                                                   String simpleName,
+                                                   String className) {
         for (File file : SourceFileManager.list(module, packageName)) {
             if (containsWord(file.toPath(), simpleName) && containsType(file.toPath(), className)) {
                 if (file.getName().endsWith(".java")) {
@@ -321,24 +391,30 @@ public class JavaCompilerService implements CompilerProvider {
     private Path findPublicTypeDeclaration(String className) {
         JavaFileObject source;
         try {
-            source =
-                    mSourceFileManager.getJavaFileForInput(
-                            StandardLocation.SOURCE_PATH, className, JavaFileObject.Kind.SOURCE);
+            source = mSourceFileManager.getJavaFileForInput(StandardLocation.SOURCE_PATH, className,
+                    JavaFileObject.Kind.SOURCE);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        if (source == null) return NOT_FOUND;
-        if (!source.toUri().getScheme().equals("file")) return NOT_FOUND;
+        if (source == null) {
+            return NOT_FOUND;
+        }
+        if (!source.toUri().getScheme().equals("file")) {
+            return NOT_FOUND;
+        }
         Path file = Paths.get(source.toUri());
-        if (!containsType(file, className)) return NOT_FOUND;
+        if (!containsType(file, className)) {
+            return NOT_FOUND;
+        }
         return file;
     }
 
     public Optional<JavaFileObject> findPublicTypeDeclarationInJdk(String className) {
         JavaFileObject source;
         try {
-            source = mSourceFileManager.getJavaFileForInput(
-                    StandardLocation.PLATFORM_CLASS_PATH, className, JavaFileObject.Kind.CLASS);
+            source = mSourceFileManager
+                    .getJavaFileForInput(StandardLocation.PLATFORM_CLASS_PATH, className,
+                            JavaFileObject.Kind.CLASS);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -368,13 +444,14 @@ public class JavaCompilerService implements CompilerProvider {
     private ParseTask cachedParse(JavaFileObject file) {
         if (file instanceof PathFileObject) {
             // workaround to get the file uri of a JarFileObject
-            String path = file.toUri().toString()
-                    .substring(4, file.toUri().toString().lastIndexOf("!"));
+            String path =
+                    file.toUri().toString().substring(4, file.toUri().toString().lastIndexOf("!"));
 
             Path parsedPath = new File(URI.create(path)).toPath();
             if (parseCache.needs(parsedPath, file.getName())) {
                 Parser parser = Parser.parseJavaFileObject(mProject, file);
-                parseCache.load(parsedPath, file.getName(), new ParseTask(parser.task, parser.root));
+                parseCache
+                        .load(parsedPath, file.getName(), new ParseTask(parser.task, parser.root));
             } else {
                 Log.d("JavaCompilerService", "Using cached parse for " + file.getName());
             }
@@ -406,7 +483,8 @@ public class JavaCompilerService implements CompilerProvider {
      */
     @Override
     public ParseTask parse(JavaFileObject file) {
-        return cachedParse(file);
+        Parser parser = Parser.parseJavaFileObject(mProject, file);
+        return new ParseTask(parser.task, parser.root);
     }
 
     public ParseTask parse(Path file, String contents) {
@@ -439,7 +517,7 @@ public class JavaCompilerService implements CompilerProvider {
      * @return a CompileTask for this compilation
      */
     @Override
-    public CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
+    public synchronized CompilerContainer compile(Collection<? extends JavaFileObject> sources) {
         return compileBatch(sources);
     }
 
@@ -457,7 +535,22 @@ public class JavaCompilerService implements CompilerProvider {
     }
 
     public void destroy() {
-        cachedCompile = null;
+        mContainer.initialize(() -> {
+            close();
+            if (cachedCompile != null) {
+                final ReusableCompiler.Borrow borrow = cachedCompile.borrow;
+                if (borrow != null) {
+                    borrow.close();
+                }
+            }
+            cachedCompile = null;
+            cachedModified.clear();
+            compiler = new ReusableCompiler();
+        });
+    }
+
+    public CompileBatch getCompileBatch() {
+        return cachedCompile;
     }
 
     @NonNull

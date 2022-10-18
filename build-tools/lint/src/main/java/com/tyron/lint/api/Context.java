@@ -1,7 +1,5 @@
 package com.tyron.lint.api;
 
-import static com.tyron.builder.compiler.manifest.SdkConstants.DOT_GRADLE;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -59,7 +57,7 @@ public class Context {
         // Java and XML files are handled in sub classes (XmlContext, JavaContext)
 
         String path = file.getPath();
-        if (path.endsWith(".java>") || path.endsWith(DOT_GRADLE)) {
+        if (path.endsWith(".java>") || path.endsWith(".gradle")) {
             return JavaContext.SUPPRESS_COMMENT_PREFIX;
         } else if (path.endsWith(".cfg") || path.endsWith(".pro")) {
             return "#suppress ";

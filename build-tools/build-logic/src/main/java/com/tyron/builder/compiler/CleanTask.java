@@ -6,6 +6,7 @@ import com.tyron.builder.compiler.symbol.MergeSymbolsTask;
 import com.tyron.builder.exception.CompilationFailedException;
 import com.tyron.builder.log.ILogger;
 import com.tyron.builder.parser.FileManager;
+import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.common.util.Cache;
 
@@ -21,8 +22,8 @@ public class CleanTask extends Task<AndroidModule> {
 
     private BuildType mBuildType;
 
-    public CleanTask(AndroidModule project, ILogger logger) {
-        super(project, logger);
+    public CleanTask(Project project, AndroidModule module, ILogger logger) {
+        super(project, module, logger);
     }
 
     @Override
@@ -135,6 +136,7 @@ public class CleanTask extends Task<AndroidModule> {
             fqn = fqn.substring(0, fqn.indexOf('$'));
         }
         return getModule().getJavaFiles().get(fqn) != null ||
-                getModule().getKotlinFiles().get(fqn) != null;
+               getModule().getKotlinFiles().get(fqn) != null ||
+               getModule().getResourceClasses().containsKey(fqn);
     }
 }

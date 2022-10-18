@@ -33,10 +33,10 @@ public class FormatAction extends AnAction {
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
-        FileEditor fileEditor = e.getData(CommonDataKeys.FILE_EDITOR_KEY);
-        Fragment fragment = fileEditor.getFragment();
-        if (fragment instanceof CodeEditorFragment) {
-            ((CodeEditorFragment) fragment).format();
-        }
+        FileEditor fileEditor = e.getRequiredData(CommonDataKeys.FILE_EDITOR_KEY);
+//        Fragment fragment = fileEditor.getFragment();
+//        if (fragment instanceof CodeEditorFragment) {
+//            ((CodeEditorFragment) fragment).format();
+//        }
     }
 }

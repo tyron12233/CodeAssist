@@ -1,14 +1,21 @@
 package com.tyron.code.ui.file.tree;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.ThemeUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -17,6 +24,17 @@ import com.tyron.actions.ActionManager;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
+import com.tyron.code.ApplicationLoader;
+import com.tyron.code.BuildConfig;
+import com.tyron.code.R;
+import com.tyron.code.event.EventManager;
+import com.tyron.code.event.EventReceiver;
+import com.tyron.code.event.SubscriptionReceipt;
+import com.tyron.code.event.Unsubscribe;
+import com.tyron.code.ui.file.event.RefreshRootEvent;
+import com.tyron.code.util.ApkInstaller;
+import com.tyron.code.util.EventManagerUtilsKt;
+import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
@@ -52,6 +70,10 @@ public class TreeFileManagerFragment extends Fragment {
     private FileViewModel mFileViewModel;
     private TreeView<TreeFile> treeView;
 
+    public TreeFileManagerFragment() {
+        super(R.layout.tree_file_manager_fragment);
+    }
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -60,50 +82,62 @@ public class TreeFileManagerFragment extends Fragment {
         mFileViewModel = new ViewModelProvider(requireActivity()).get(FileViewModel.class);
     }
 
-    @Nullable
+    @SuppressLint("ClickableViewAccessibility")
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        FrameLayout root = new FrameLayout(requireContext());
-        root.setBackgroundColor(0xff212121);
-        root.setLayoutParams(
-                new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT));
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        ViewCompat.requestApplyInsets(view);
+        UiUtilsKt.addSystemWindowInsetToPadding(view, false, true, false, true);
+
+        SwipeRefreshLayout refreshLayout = view.findViewById(R.id.refreshLayout);
+        refreshLayout.setOnRefreshListener(() -> partialRefresh(() -> {
+            refreshLayout.setRefreshing(false);
+            treeView.refreshTreeView();
+        }));
+
 
         treeView = new TreeView<>(
                 requireContext(), TreeNode.root(Collections.emptyList()));
 
-        root.addView(treeView.getView(), new FrameLayout.LayoutParams(-1, -1));
+        HorizontalScrollView horizontalScrollView = view.findViewById(R.id.horizontalScrollView);
+        horizontalScrollView.addView(treeView.getView(), new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        treeView.getView().setNestedScrollingEnabled(false);
 
-        SwipeRefreshLayout refreshLayout = new SwipeRefreshLayout(requireContext());
-        refreshLayout.addView(root);
-        refreshLayout.setOnRefreshListener(() -> {
-            ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                if (!treeView.getAllNodes().isEmpty()) {
-                    TreeNode<TreeFile> node = treeView.getAllNodes().get(0);
-                    TreeUtil.updateNode(node);
-                    if (getActivity() != null) {
-                        requireActivity().runOnUiThread(() -> {
-                            refreshLayout.setRefreshing(false);
-                            treeView.refreshTreeView();
-                        });
-                    }
-                }
-            });
+        EventManager eventManager = ApplicationLoader.getInstance()
+                .getEventManager();
+
+        EventManagerUtilsKt.subscribeEvent(eventManager, getViewLifecycleOwner(), RefreshRootEvent.class, (event, unsubscribe) -> {
+            File refreshRoot = event.getRoot();
+            TreeNode<TreeFile> currentRoot = treeView.getRoot();
+            if (currentRoot != null && refreshRoot.equals(currentRoot.getValue().getFile())) {
+                partialRefresh(() -> treeView.refreshTreeView());
+            } else {
+                ProgressManager.getInstance().runNonCancelableAsync(() -> {
+                    TreeNode<TreeFile> node = TreeNode.root(TreeUtil.getNodes(refreshRoot));
+                    ProgressManager.getInstance().runLater(() -> {
+                        if (getActivity() == null) {
+                            return;
+                        }
+                        treeView.refreshTreeView(node);
+                    });
+                });
+            }
         });
 
-        return refreshLayout;
-    }
-
-    @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         treeView.setAdapter(new TreeFileNodeViewFactory(new TreeFileNodeListener() {
             @Override
             public void onNodeToggled(TreeNode<TreeFile> treeNode, boolean expanded) {
                 if (treeNode.isLeaf()) {
-                    if (treeNode.getValue().getFile().isFile()) {
-                        FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), fileEditor -> {
-                            mMainViewModel.openFile(fileEditor);
-                        });
+                    File file = treeNode.getValue().getFile();
+                    if (file.isFile()) {
+                        // TODO: cleaner api to do this
+                        if (file.getName().endsWith(".apk")) {
+                            ApkInstaller.installApplication(requireContext(), BuildConfig.APPLICATION_ID, file.getAbsolutePath());
+                        } else {
+                            FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), true);
+                        }
                     }
                 }
             }
@@ -118,6 +152,22 @@ public class TreeFileManagerFragment extends Fragment {
         }));
         mFileViewModel.getNodes().observe(getViewLifecycleOwner(), node -> {
             treeView.refreshTreeView(node);
+        });
+    }
+
+
+    private void partialRefresh(Runnable callback) {
+        ProgressManager.getInstance().runNonCancelableAsync(() -> {
+            if (!treeView.getAllNodes().isEmpty()) {
+                TreeNode<TreeFile> node = treeView.getAllNodes().get(0);
+                TreeUtil.updateNode(node);
+                ProgressManager.getInstance().runLater(() -> {
+                    if (getActivity() == null) {
+                        return;
+                    }
+                    callback.run();
+                });
+            }
         });
     }
 

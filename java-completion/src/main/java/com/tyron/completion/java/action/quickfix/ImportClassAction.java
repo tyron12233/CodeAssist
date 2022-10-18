@@ -12,6 +12,7 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
+import com.tyron.completion.java.rewrite.JavaRewrite2;
 import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.java.rewrite.JavaRewrite;
@@ -19,9 +20,9 @@ import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.editor.Editor;
 
-import org.openjdk.javax.tools.Diagnostic;
-import org.openjdk.tools.javac.api.ClientCodeWrapper;
-import org.openjdk.tools.javac.util.JCDiagnostic;
+import javax.tools.Diagnostic;
+import com.sun.tools.javac.api.ClientCodeWrapper;
+import com.sun.tools.javac.util.JCDiagnostic;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -98,18 +99,19 @@ public class ImportClassAction extends AnAction {
             return;
         }
 
-        Editor editor = e.getData(CommonDataKeys.EDITOR);
+        Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
         JCDiagnostic d = ((ClientCodeWrapper.DiagnosticSourceUnwrapper) diagnostic).d;
         String simpleName= String.valueOf(d.getArgs()[1]);
-        JavaCompilerService compiler = e.getData(CommonJavaContextKeys.COMPILER);
-        Path file = e.getData(CommonDataKeys.FILE).toPath();
+        JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
+        Path file = e.getRequiredData(CommonDataKeys.FILE).toPath();
 
         Map<String, JavaRewrite> map = new TreeMap<>();
         for (String qualifiedName : compiler.publicTopLevelTypes()) {
             if (qualifiedName.endsWith("." + simpleName)) {
                 String title = e.getDataContext().getString(R.string.import_class_name, qualifiedName);
-                JavaRewrite addImport = new AddImport(file.toFile(), qualifiedName);
-                map.put(title, addImport);
+//                JavaRewrite2 addImport = new AddImport(file.toFile(), qualifiedName);
+//                map.put(title, addImport);
+                throw new UnsupportedOperationException();
             }
         }
 

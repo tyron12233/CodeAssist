@@ -21,20 +21,20 @@ import com.github.javaparser.printer.DefaultPrettyPrinter;
 import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
 import com.github.javaparser.printer.configuration.PrinterConfiguration;
 
-import org.openjdk.javax.lang.model.type.DeclaredType;
-import org.openjdk.javax.lang.model.type.NoType;
-import org.openjdk.javax.lang.model.type.TypeKind;
-import org.openjdk.javax.lang.model.type.TypeMirror;
-import org.openjdk.javax.lang.model.type.TypeVariable;
-import org.openjdk.source.doctree.DocCommentTree;
-import org.openjdk.source.tree.IdentifierTree;
-import org.openjdk.source.tree.ParameterizedTypeTree;
-import org.openjdk.source.tree.PrimitiveTypeTree;
-import org.openjdk.source.tree.Tree;
-import org.openjdk.source.tree.TypeParameterTree;
-import org.openjdk.source.tree.WildcardTree;
-import org.openjdk.tools.javac.code.BoundKind;
-import org.openjdk.tools.javac.tree.JCTree;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.NoType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
+import com.sun.source.doctree.DocCommentTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ParameterizedTypeTree;
+import com.sun.source.tree.PrimitiveTypeTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.TypeParameterTree;
+import com.sun.source.tree.WildcardTree;
+import com.sun.tools.javac.code.BoundKind;
+import com.sun.tools.javac.tree.JCTree;
 
 import java.io.Serializable;
 import java.util.List;
@@ -142,21 +142,21 @@ public class JavaParserTypesUtil {
 
     public static Type toType(TypeMirror typeMirror) {
         if (typeMirror.getKind() == TypeKind.ARRAY) {
-            return toArrayType((org.openjdk.javax.lang.model.type.ArrayType) typeMirror);
+            return toArrayType((javax.lang.model.type.ArrayType) typeMirror);
         }
         if (typeMirror.getKind().isPrimitive()) {
-            return toPrimitiveType((org.openjdk.javax.lang.model.type.PrimitiveType) typeMirror);
+            return toPrimitiveType((javax.lang.model.type.PrimitiveType) typeMirror);
         }
-        if (typeMirror instanceof org.openjdk.javax.lang.model.type.IntersectionType) {
-            return toIntersectionType((org.openjdk.javax.lang.model.type.IntersectionType) typeMirror);
+        if (typeMirror instanceof javax.lang.model.type.IntersectionType) {
+            return toIntersectionType((javax.lang.model.type.IntersectionType) typeMirror);
         }
-        if (typeMirror instanceof org.openjdk.javax.lang.model.type.WildcardType) {
-            return toWildcardType((org.openjdk.javax.lang.model.type.WildcardType) typeMirror);
+        if (typeMirror instanceof javax.lang.model.type.WildcardType) {
+            return toWildcardType((javax.lang.model.type.WildcardType) typeMirror);
         }
-        if (typeMirror instanceof org.openjdk.javax.lang.model.type.DeclaredType) {
+        if (typeMirror instanceof javax.lang.model.type.DeclaredType) {
             return toClassOrInterfaceType((DeclaredType) typeMirror);
         }
-        if (typeMirror instanceof org.openjdk.javax.lang.model.type.TypeVariable) {
+        if (typeMirror instanceof javax.lang.model.type.TypeVariable) {
             return toType(((TypeVariable) typeMirror));
         }
         if (typeMirror instanceof NoType) {
@@ -165,7 +165,7 @@ public class JavaParserTypesUtil {
         return null;
     }
 
-    public static IntersectionType toIntersectionType(org.openjdk.javax.lang.model.type.IntersectionType type) {
+    public static IntersectionType toIntersectionType(javax.lang.model.type.IntersectionType type) {
         NodeList<ReferenceType> collect =
                 type.getBounds().stream().map(JavaParserTypesUtil::toType)
                         .map(it -> ((ReferenceType) it))
@@ -192,7 +192,7 @@ public class JavaParserTypesUtil {
         return typeParameter;
     }
 
-    public static WildcardType toWildcardType(org.openjdk.javax.lang.model.type.WildcardType type) {
+    public static WildcardType toWildcardType(javax.lang.model.type.WildcardType type) {
         WildcardType wildcardType = new WildcardType();
         if (type.getSuperBound() != null) {
             Type result = toType(type.getSuperBound());
@@ -209,12 +209,12 @@ public class JavaParserTypesUtil {
         return wildcardType;
     }
 
-    public static PrimitiveType toPrimitiveType(org.openjdk.javax.lang.model.type.PrimitiveType type) {
+    public static PrimitiveType toPrimitiveType(javax.lang.model.type.PrimitiveType type) {
         PrimitiveType.Primitive primitive = PrimitiveType.Primitive.valueOf(type.getKind().name());
         return new PrimitiveType(primitive);
     }
 
-    public static ArrayType toArrayType(org.openjdk.javax.lang.model.type.ArrayType type) {
+    public static ArrayType toArrayType(javax.lang.model.type.ArrayType type) {
         Type componentType = toType(type.getComponentType());
         return new ArrayType(componentType);
     }

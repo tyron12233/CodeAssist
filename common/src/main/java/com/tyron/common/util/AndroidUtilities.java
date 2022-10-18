@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
@@ -13,8 +14,11 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.common.ApplicationProvider;
 
 import java.io.File;
@@ -32,11 +36,20 @@ public class AndroidUtilities {
 	public static void showToast(String message) {
 		Toast.makeText(ApplicationProvider.getApplicationContext(), message, Toast.LENGTH_LONG).show();
 	}
+
+	public static void showToast(@StringRes int id) {
+		Toast.makeText(ApplicationProvider.getApplicationContext(), id, Toast.LENGTH_SHORT).show();
+	}
     
     public static int dp(float px) {
         return Math.round(ApplicationProvider.getApplicationContext()
 				.getResources().getDisplayMetrics().density * px);
     }
+
+    public static void setMargins(View view, int startMargin, int topMargin, int endMargin, int bottomMargin) {
+		ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+		layoutParams.setMargins(dp(startMargin), dp(topMargin), dp(endMargin), dp(bottomMargin));
+	}
 
 	/**
 	 * Converts a dp value into px that can be applied on margins, paddings etc
@@ -111,12 +124,27 @@ public class AndroidUtilities {
 		showSimpleAlert(context, context.getString(title), context.getString(message));
 	}
 
+	public static void showSimpleAlert(@NonNull Context context, @StringRes int title, String message) {
+		showSimpleAlert(context, context.getString(title), message);
+	}
+
 	public static void showSimpleAlert(Context context, String title, String message) {
-		new AlertDialog.Builder(context)
-				.setTitle(title)
-				.setMessage(message)
-				.setPositiveButton(android.R.string.ok, null)
-				.show();
+		showSimpleAlert(context, title, message, context.getString(android.R.string.ok), null, null, null);
+	}
+
+	public static void showSimpleAlert(Context context, String title, String message, String positive, String neutral, String negative, DialogInterface.OnClickListener lsitener) {
+		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context).setTitle(title)
+						.setMessage(message);
+		if (positive != null) {
+			builder.setPositiveButton(positive, lsitener);
+		}
+		if (neutral != null) {
+			builder.setNeutralButton(neutral, lsitener);
+		}
+		if (negative != null) {
+			builder.setNegativeButton(negative, lsitener);
+		}
+		builder.show();
 	}
 
 	public static void copyToClipboard(String text) {
@@ -125,6 +153,19 @@ public class AndroidUtilities {
 
 		ClipData clip = ClipData.newPlainText("", text); // is label important?
 		clipboard.setPrimaryClip(clip);
+	}
+
+	@Nullable
+	public static CharSequence getPrimaryClip() {
+		ClipboardManager clipboard = (ClipboardManager) ApplicationProvider.getApplicationContext()
+				.getSystemService(Context.CLIPBOARD_SERVICE);
+		ClipData primaryClip = clipboard.getPrimaryClip();
+		if (primaryClip != null) {
+			if (primaryClip.getItemCount() >= 1) {
+				return primaryClip.getItemAt(0).getText();
+			}
+		}
+		return null;
 	}
 
 	public static void copyToClipboard(String text, boolean showToast) {

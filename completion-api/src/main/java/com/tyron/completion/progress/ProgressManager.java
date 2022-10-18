@@ -1,15 +1,24 @@
 package com.tyron.completion.progress;
 
+import android.app.ProgressDialog;
+import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.google.common.util.concurrent.AsyncCallable;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.tyron.common.TestUtil;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
 public class ProgressManager {
@@ -27,21 +36,27 @@ public class ProgressManager {
         getInstance().doCheckCanceled();
     }
 
-    private final ExecutorService mPool = Executors.newFixedThreadPool(8);
-    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService mPool = Executors.newFixedThreadPool(32);
+    private final HandlerInterface mMainHandler;
 
     private final Map<Thread, ProgressIndicator> mThreadToIndicator;
 
     public ProgressManager() {
-        mThreadToIndicator = new HashMap<>();
+        mThreadToIndicator = new WeakHashMap<>();
+        if (TestUtil.isDalvik()) {
+            mMainHandler = new DefaultHandlerInterface(new Handler(Looper.getMainLooper()));
+        } else {
+            mMainHandler = new MockHandler();
+        }
     }
 
     /**
      * Run a cancelable asynchronous task.
-     * @param runnable The task to run
+     *
+     * @param runnable       The task to run
      * @param cancelConsumer The code to run when this task has been canceled,
-     *                      called from background thread
-     * @param indicator The class used to control this task's execution
+     *                       called from background thread
+     * @param indicator      The class used to control this task's execution
      */
     public void runAsync(Runnable runnable,
                          Consumer<ProgressIndicator> cancelConsumer,
@@ -61,16 +76,53 @@ public class ProgressManager {
         });
     }
 
+    public void runAsync(Context uiContext,
+                         Runnable runnable,
+                         ProgressIndicator indicator) {
+        ProgressDialog dialog = new ProgressDialog(uiContext);
+        dialog.show();
+
+        runAsync(runnable, i -> dialog.dismiss(), indicator);
+    }
+
+    /**
+     * Run a non cancelable task in the background. If the task has been running for more than
+     * two seconds,
+     * The loadingRunnable will be run. If the task has finished before 2000, the loadingRunnable
+     * will not be called.
+     *
+     * @param taskToRun       The task to run
+     * @param loadingRunnable The runnable to run if the task has been running for more than 2
+     *                        seconds
+     * @param finishRunnable  The task to run after the task has finished
+     */
+    public void runNonCancelableAsync(Runnable taskToRun,
+                                      Runnable loadingRunnable,
+                                      Runnable finishRunnable) {
+        runNonCancelableAsync(() -> {
+            taskToRun.run();
+            cancelRunLater(loadingRunnable);
+            finishRunnable.run();
+        });
+        runLater(loadingRunnable, 2000);
+    }
+
     /**
      * Run an asynchronous operation that is not cancelable.
+     *
      * @param runnable The code to run
      */
     public void runNonCancelableAsync(Runnable runnable) {
         mPool.execute(runnable);
     }
 
+    public <T> ListenableFuture<T> computeNonCancelableAsync(AsyncCallable<T> callable) {
+        return Futures.submitAsync(callable, mPool);
+    }
+
     /**
      * Posts the runnable into the UI thread to be run later.
+     *
      * @param runnable The code to run
      */
     public void runLater(Runnable runnable) {
@@ -79,10 +131,15 @@ public class ProgressManager {
 
     /**
      * Posts the runnable into the UI thread to be run later.
+     *
      * @param runnable The code to run
      */
     public void runLater(Runnable runnable, long delay) {
         mMainHandler.postDelayed(runnable, delay);
+    }
+
+    public void cancelRunLater(Runnable runnable) {
+        mMainHandler.removeCallbacks(runnable);
     }
 
     public void cancelThread(Thread thread) {

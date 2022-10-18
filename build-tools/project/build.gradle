@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+    id 'kotlin'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    kotlinOptions {
+        jvmTarget = '11'
+        freeCompilerArgs += '-Xjvm-default=enable'
+    }
+}
+
+dependencies {
+    implementation 'androidx.annotation:annotation:1.4.0'
+    implementation projects.common
+    implementation projects.eventManager
+    // for manifest  parsing
+    implementation project(path: ':build-tools:manifmerger')
+
+    // user data holder
+    implementation project(path: ':build-tools:kotlinc')
+    compileOnly project(path: ':android-stubs')
+    compileOnly("com.android.tools:sdk-common:30.4.0-alpha09") {
+        transitive = false
+    }
+
+    testImplementation 'junit:junit:4.13.2'
+}
+

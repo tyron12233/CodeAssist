@@ -12,7 +12,7 @@ import com.tyron.builder.parser.FileManager;
 import com.tyron.common.util.Decompress;
 import com.tyron.common.util.StringSearch;
 
-import org.openjdk.javax.lang.model.SourceVersion;
+import javax.lang.model.SourceVersion;
 
 import java.io.File;
 import java.io.IOException;
