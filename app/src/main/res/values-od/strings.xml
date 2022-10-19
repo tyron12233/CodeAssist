@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Hello world!</string>
+    <item name="paste" type="string">Paste</item>
+    <item name="copy" type="string">Copy</item>
+    <item name="selectAll" formatted="true" type="string">Select All</item>
+    <item name="saveToProject" type="string">Project</item>
+    <item name="cut" type="string">Cut</item>
+    <item name="last" type="string">Last</item>
+    <item name="next" type="string">Next</item>
+    <item name="replace" type="string">Replace</item>
+    <item name="replaceAll" type="string">Replace All</item>
+    <item name="replacement" type="string">Replacement</item>
+    <item name="cancel" type="string">Cancel</item>
+    <item name="text_to_search" type="string">Text to search</item>
+
+    <item name="more" type="string">More</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Messages</string>
+    <string name="sync_header">Sync</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Your signature</string>
+    <string name="reply_title">Default reply action</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Sync email periodically</string>
+    <string name="attachment_title">Download incoming attachments</string>
+    <string name="attachment_summary_on">Automatically download attachments for incoming emails
+    </string>
+    <string name="attachment_summary_off">Only download attachments when manually requested</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">Next</string>
+    <string name="wizard_finish">Finish</string>
+    <string name="wizard_cancel">Cancel</string>
+    <string name="wizard_templates">Templates</string>
+    <string name="wizard_exit">Exit</string>
+    <string name="wizard_desc">Select from Activity templates</string>
+    <string name="wizard_empty_templates">Templates are empty :(</string>
+    <string name="wizard_loading">Loading templates</string>
+    <string name="wizard_app_name">App name</string>
+    <string name="wizard_package_name">com.my.myapplication</string>
+    <string name="wizard_save_location">Save location</string>
+    <string name="wizard_language">Language</string>
+    <string name="wizard_minimum_sdk">Minimum SDK</string>
+    <string name="wizard_create">Create</string>
+    <string name="wizard_previous">Previous</string>
+    <string name="wizard_scoped_storage_info">Due to Android 11 storage restrictions, you can only save files on the app\'s internal storage.</string>
+    <string name="wizard_file_not_writable">Directory is not writable, select another location</string>
+    <string name="wizard_path_exceeds">Location path exceeds 240 characters.</string>
+    <string name="wizard_package_illegal">Package name contains illegal characters.</string>
+    <string name="wizard_package_too_short">Package name is too short.</string>
+    <string name="wizard_package_contains_spaces">Package name cannot contain spaces.</string>
+    <string name="wizard_error_name_empty">Name cannot be empty.</string>
+    <string name="wizard_error_name_illegal">Name cannot contain illegal characters</string>
+    <string name="wizard_package_empty">Package name cannot be empty.</string>
+    <string name="wizard_select_min_sdk">Select a minimum SDK version.</string>
+    <string name="wizard_select_save_location">Select a save location</string>
+
+    <string name="menu_open_project">Open module</string>
+    <string name="menu_create_project">Create module</string>
+    <string name="menu_run">Run</string>
+    <string name="menu_refresh">Refresh module</string>
+    <string name="menu_library_manager">Library manager</string>
+    <string name="menu_format">Format</string>
+    <string name="menu_settings">Settings</string>
+
+    <!-- preferences -->
+    <string name="settings_title_application">Application</string>
+    <string name="settings_desc_application">General application preferences</string>
+    <string name="settings_title_editor">Editor</string>
+    <string name="settings_desc_editor">Configure the editor</string>
+    <string name="title_activity_settings">Settings</string>
+
+    <!-- Application settings -->
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_value_default">System default</string>
+    <string name="settings_theme_value_light">Light</string>
+    <string name="settings_theme_value_dark">Dark</string>
+
+    <string-array name="theme_values">
+        <item>default</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+    <string-array name="theme_entries">
+        <item>@string/settings_theme_value_default</item>
+        <item>@string/settings_theme_value_light</item>
+        <item>@string/settings_theme_value_dark</item>
+    </string-array>
+    
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">Completion Engine</string>
+    <string name="settings_code_completions">Enable code completions</string>
+    <string name="settings_kotlin_completions">Enable code completions for Kotlin</string>
+    <string name="settings_kotlin_completions_desc">This feature is still experimental and may be slow.
+        Requires a powerful device.
+    </string>
+    <string name="settings_case_insensitive_match_title">Case insensitive match</string>
+    <string name="settings_case_insensitive_match_desc">Suggest class names with lowercase prefix.</string>
+    <string name="code_editor_error_highlight">Enable error highlighting</string>
+
+    <string name="editor_settings_title">Code Editor settings</string>
+    <string name="editor_settings_wordwrap">Word wrap mode</string>
+    <string name="editor_delete_whitespaces">Auto delete whitespace</string>
+    <string name="save">Save</string>
+    <string name="defaultString">Default</string>
+    <string name="editor_scheme_title">Editor color scheme</string>
+    <string name="editor_scheme_desc">Change the color scheme</string>
+    <string name="change_scheme_dialog_title">Paste the path of theme file</string>
+    <string name="font_size_title">Font size</string>
+    <string name="font_size_message">Set editor font size</string>
+    <string name="font_size_summary">Specify the default font size of the editor</string>
+    <string name="keyboard_settings_title">Keyboard</string>
+    <string name="keyboard_enable_suggestions_description">Enable keyboard suggestions</string>
+    <string name="settings_build_run_title">Build &amp; Run</string>
+    <string name="settings_build_run_desc">Configure build and execution settings</string>
+    <string name="run_title">Run</string>
+    <string name="settings_install_apk_title">APK Installation Prompt</string>
+    <string name="settings_install_desc">Show APK installation prompt after successful compilation.</string>
+    <string-array name="java_versions" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string name="completion_settings_kotlin_title">Kotlin</string>
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">Target version</string>
+    <string name="completion_java_source_version_title">Source version</string>
+    <string name="editor_tabs_settings_title">Editor Tabs</string>
+    <string name="editor_tab_unique_file_name">Show directory for non-unique file names</string>
+    <string name="editor_tab_unique_file_name_summary">Makes displayed file names unique by showing parent folders if files with identical file names are opened.</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">About Us</string>
+    <string name="settings_about_us_desc">More info about the developers.</string>
+    <string name="app_description">Powerful and lightweight IDE for Android app development right within your pocket.</string>
+    <string name="app_version">Version</string>
+    <string name="contact_group_title">Contact</string>
+    <string name="app_source_title">Source code</string>
+    <string name="sketchub_team">Sketchub Team</string>
+    <string name="community">Community</string>
+    <string name="rate_us">Rate us</string>
+
+    <!-- file manager menu -->
+    <string name="error">Error</string>
+    <string name="error_resource_name_restriction">Resource names must only contain lowercase letters (a–z), digits (0–9), and underscores.</string>
+    <string name="item_project">Project</string>
+    <string name="dialog_create_class_title">Create a class</string>
+    <string name="create_class_dialog_class_name">Class name</string>
+    <string name="create_class_dialog_positive">Create</string>
+    <string name="create_class_dialog_class_type">Class type</string>
+    <string name="create_class_dialog_invalid_name">Invalid class name</string>
+
+    <string name="success">Success</string>
+    <string name="delete_success">Delete success.</string>
+    <string name="dialog_confirm_delete">ଆପଣ ଡିଲେଟ୍ କରିବାକୁ ଚାହୁଁଛନ୍ତି କି %1$s?</string>
+    <string name="dialog_delete">Delete</string>
+    <string name="menu_preview_layout">Preview Layout</string>
+    <string name="action_menu_build_release">Build release APK</string>
+    <string name="action_menu_build_debug">Build debug APK</string>
+    <string name="action_menu_build_aab">Build AAB</string>
+
+    <string name="project_manager_alpha_notice_title">Alpha notice</string>
+    <string name="project_manager_alpha_notice">CodeAssist is still in alpha,
+        you may encounter crashes, bugs and incomplete features.\nYou
+        can report these issues at https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_save_location_title">Select save location</string>
+    <string name="project_manager_permission_denied">ଗ୍ରହଣ କରାଗଲା ନାହି</string>
+    <string name="project_manager_button_request_again">ପୁନର୍ବାର ଅନୁରୋଧ</string>
+    <string name="project_manager_button_continue">ଜାରି ରଖନ୍ତୁ</string>
+    <string name="project_manager_rationale_title">ଷ୍ଟୋରେଜ୍ ଅନୁମତି</string>
+    <string name="project_manager_button_allow">ଅନୁମତି ଦିଅନ୍ତୁ</string>
+    <string name="project_manager_button_use_internal">ଆଭ୍ୟନ୍ତରୀଣ ଷ୍ଟୋରେଜ୍ ବ୍ୟବହାର କରନ୍ତୁ</string>
+    <string name="project_manager_permission_rationale">ମଡ୍ୟୁଲ୍ ଫାଇଲଗୁଡ଼ିକୁ ସେଭ୍ କରିବା ପାଇଁ ଆପ୍ଲିକେସନ୍ ଷ୍ଟୋରେଜ୍ ଅନୁମତି ଆବଶ୍ୟକ କରେ ଯାହା ଆପଣ ଆପ୍ ସଂସ୍ଥାପନ କରିବାବେଳେ ଡିଲିଟ୍ ହେବ ନାହିଁ | ବୈକଳ୍ପିକ ଭାବରେ, ଆପଣ ମଡ୍ୟୁଲ୍ ଫାଇଲଗୁଡ଼ିକୁ ଆପ୍ଲିକେସନ୍ ଆଭ୍ୟନ୍ତରୀଣ ସଂରକ୍ଷଣରେ ସଂରକ୍ଷଣ କରିବାକୁ ବାଛିପାରିବେ |</string>
+    <string name="project_manager_android11_notice">ଆପ୍ଲିକେସନ୍ ର ଆଭ୍ୟନ୍ତରୀଣ ଷ୍ଟୋରେଜ୍ ଡିରେକ୍ଟୋରୀକୁ ପ୍ରୋଜେକ୍ଟଗୁଡିକ ସଞ୍ଚୟ ହେବ।
+        ଆପ୍ଲିକେସନ୍ ଅଣସଂସ୍ଥାପନ କରିବା ପୂର୍ବରୁ ଆପଣଙ୍କ ମଡ୍ୟୁଲ୍ ବ୍ୟାକଅପ୍ କରନ୍ତୁ।</string>
+    <string name="project_manager_projects">Projects</string>
+    <string name="project_manager_empty">Projects are empty</string>`
+    <string name="project_manager_create_project">Create module</string>
+    <string name="project_path_menu_title">Projects Path</string>
+    <string name="project_manager_null_projects">No Projects Found</string>
+    <string name="project_manager_suggestions">Suggestions:\n\n  - Create New Project\n  - Change Projects Path</string>
+    
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">Compiling</string>
+    <string name="compilation_button_install">INSTALL</string>
+    <string name="compilation_result_success">Compilation success</string>
+    <string name="compilation_result_failed">Compilation failed</string>
+
+    <!-- Library manager -->
+    <string name="library_manager_title">%1s Libraries</string>
+    <string name="group_id">Group Id</string>
+    <string name="artifact_id">Artifact Id</string>
+    <string name="version_name">Version Name</string>
+    <string name="menu_display_dependencies">List dependencies</string>
+    <string name="attributes_editor">Attributes Editor</string>
+    <string name="attribute_value">Attribute value</string>
+    <string name="menu_add_libs_gradle">Build.gradle ରୁ ଲାଇବ୍ରେରୀଗୁଡ଼ିକୁ ଯୋଡନ୍ତୁ</string>
+
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">କୌଣସି ପ୍ରୋଜେକ୍ଟ ଖୋଲିନାହିଁ।</string>
+    <string name="dialog_confirm_save_title">XML କୁ ସେଭ୍ କରନ୍ତୁ |</string>
+    <string name="dialog_confirm_save_msg">ଆପଣ ଲେଆଉଟ୍ ସେଭ୍ କରିବାକୁ ଚାହୁଁଛନ୍ତି କି?</string>
+    <!-- File Editor Manager -->
+    <string name="file_editor_selection_title">ଆପଣ କେଉଁ ସମ୍ପାଦକ ଖୋଲିବାକୁ ଚାହାଁନ୍ତି?</string>
+
+    <!-- Editor tabs -->
+    <string name="menu_close_file">ବନ୍ଦ</string>
+    <string name="menu_close_others">ଅନ୍ୟମାନଙ୍କୁ ବନ୍ଦ କରନ୍ତୁ</string>
+    <string name="menu_close_all">ସମସ୍ତ ବନ୍ଦ କରନ୍ତୁ</string>
+
+    <!-- Editor -->
+    <string name="editor_error_file">ଫାଇଲ୍ ପଢିବା ସମୟରେ ଏକ ତ୍ରୁଟି ଘଟିଛି। ପରିବର୍ତ୍ତନଗୁଡିକ ସଞ୍ଚୟ ହେବ ନାହିଁ।</string>
+
+    <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">Build Logs</string>
+    <string name="tab_app_logs_title">App Logs</string>
+    <string name="tab_ide_logs_title">IDE Logs</string>
+    <string name="tab_diagnostics_title">Diagnostics</string>
