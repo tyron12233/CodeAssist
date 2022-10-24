@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CodeAssist</string>
+    <string name="hello_world">Hello world!</string>
+    <item name="paste" type="string">لصق</item>
+    <item name="copy" type="string">نسخ</item>
+    <item name="selectAll" formatted="true" type="string">تحديد الكل</item>
+    <item name="saveToProject" type="string">مشروع</item>
+    <item name="cut" type="string">قص</item>
+    <item name="last" type="string">السابق</item>
+    <item name="next" type="string">التالي</item>
+    <item name="replace" type="string">استبدال</item>
+    <item name="replaceAll" type="string">استبدال الكل</item>
+    <item name="replacement" type="string">تبديل</item>
+    <item name="cancel" type="string">الغاء</item>
+    <item name="text_to_search" type="string">النص للبحث</item>
+
+    <item name="more" type="string">المزيد</item>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">الرسائل</string>
+    <string name="sync_header">المزامنة</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">توقيعك</string>
+    <string name="reply_title">الرد الافتراضي</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">مزامنة البريد الالكتروني</string>
+    <string name="attachment_title">تحميل الملحقات المستلمة</string>
+    <string name="attachment_summary_on">حمل الملحقات من البريد الالكتروني تلقائياً
+    </string>
+    <string name="attachment_summary_off">حمل الملحقات فقط عند الطلب</string>
+
+
+    <!-- wizard -->
+    <string name="wizard_next">التالي</string>
+    <string name="wizard_finish">انهاء</string>
+    <string name="wizard_cancel">الغاء</string>
+    <string name="wizard_templates">القوالب</string>
+    <string name="wizard_exit">خروج</string>
+    <string name="wizard_desc">اختيار من قوالب الانشطة</string>
+    <string name="wizard_empty_templates">لا يوجد لديك قوالب🙁</string>
+    <string name="wizard_loading">تحميل القوالب</string>
+    <string name="wizard_app_name">اسم التطبيق</string>
+    <string name="wizard_package_name">com.my.myapplication</string>
+    <string name="wizard_save_location">مكان الحفظ</string>
+    <string name="wizard_language">اللغة</string>
+    <string name="wizard_minimum_sdk">اقل اصدار للSDK</string>
+    <string name="wizard_create">انشاء</string>
+    <string name="wizard_previous">السابق</string>
+    <string name="wizard_scoped_storage_info">بسبب بعض الخواص في اندرويد 11 فما فوق فإن التطبيق سيقوم بخزن ملفاته في المجلد الافتراضي للتطبيق</string>
+    <string name="wizard_file_not_writable">لا يمكن استعمال هذا المجلد الرجاء اختيار غيره</string>
+    <string name="wizard_path_exceeds">طول المسار يتعدى 240 حرف فأرجو اختيار مسار اقصر</string>
+    <string name="wizard_package_illegal">اسم الحزمة يحتوي على احرف غير مسموح بها</string>
+    <string name="wizard_package_too_short">اسم الحزمة قصير جدا</string>
+    <string name="wizard_package_contains_spaces">اسم الحزمة يحتوي على مسافات</string>
+    <string name="wizard_error_name_empty">الاسم لا يمكن ان يكون فارغا</string>
+    <string name="wizard_error_name_illegal">الاسم لا يمكن ان يحتوي على احرف غير مسموح بها</string>
+    <string name="wizard_package_empty">اسم الحزمة لا يمكن ان يكون فارغة</string>
+    <string name="wizard_select_min_sdk">اختر اقل اصدار للSDK</string>
+    <string name="wizard_select_save_location">اختر مكان للحفظ</string>
+
+    <string name="menu_open_project">وحدة مفتوحة</string>
+    <string name="menu_create_project">انشاء وحدة</string>
+    <string name="menu_run">تشغيل</string>
+    <string name="menu_refresh">تحديث الوحدة</string>
+    <string name="menu_library_manager">مدير المكتبات</string>
+    <string name="menu_format">ترتيب</string>
+    <string name="menu_settings">الاعدادات</string>
+
+    <!-- preferences -->
+    <string name="settings_title_application">التطبيق</string>
+    <string name="settings_desc_application">اختيارات التطبيق الرئيسية</string>
+    <string name="settings_title_editor">المحرر</string>
+    <string name="settings_desc_editor">اعداد المحرر</string>
+    <string name="title_activity_settings">الاعدادات</string>
+
+    <!-- Application settings -->
+    <string name="settings_theme_title">الثيم</string>
+    <string name="settings_theme_value_default">افتراضيات النظام</string>
+    <string name="settings_theme_value_light">فاتح</string>
+    <string name="settings_theme_value_dark">داكن</string>
+
+    <string-array name="theme_values">
+        <item>default</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+    <string-array name="theme_entries">
+        <item>@string/settings_theme_value_default</item>
+        <item>@string/settings_theme_value_light</item>
+        <item>@string/settings_theme_value_dark</item>
+    </string-array>
+    
+
+    <!-- Editor settings -->
+    <string name="code_engine_title">محرك الإكمال</string>
+    <string name="settings_code_completions">تفعيل اكمال الاكواد</string>
+    <string name="settings_kotlin_completions">تفعيل اكمال الاكواد للkotlin</string>
+    <string name="settings_kotlin_completions_desc">هذه الخاصية ما زالت تحت التجربه وقد تحتاج الى جهاز قوي    </string>
+    <string name="settings_case_insensitive_match_title">بحث مع عدم التفرقة بين الحروح الكبيرة والصغيرة</string>
+    <string name="settings_case_insensitive_match_desc">استعمال اسماء كلاسات مع بادئة من احرف صغيرة</string>
+    <string name="code_editor_error_highlight">تفعيل تحديد الاخطاء</string>
+
+    <string name="editor_settings_title">اعدادات محرر الاكواد</string>
+    <string name="editor_settings_wordwrap">تفعيل وضع الword warp</string>
+    <string name="editor_delete_whitespaces">حذف المسافات تلقائياً</string>
+    <string name="save">حفظ</string>
+    <string name="defaultString">الافتراضي</string>
+    <string name="editor_scheme_title">الوان محرر الاكواد</string>
+    <string name="editor_scheme_desc">تغيير الالوان</string>
+    <string name="change_scheme_dialog_title">قم بلصق المسار الى ملف الثيم</string>
+    <string name="font_size_title">حجم الخط</string>
+    <string name="font_size_message">اختيار حجم الخط لمحرر الاكواد</string>
+    <string name="font_size_summary">حدد حجم الخط الافتراضي لمحرر الاكواد</string>
+    <string name="keyboard_settings_title">لوحة المفاتيح</string>
+    <string name="keyboard_enable_suggestions_description">تفعيل اقتراحات لوحة المفاتيح</string>
+
+    <!-- Build and Run Settings Section -->
+    <string name="settings_build_run_title">Build &amp; Run</string>
+    <string name="settings_build_run_desc">تحدد اعداد التجميع والتشغيل</string>
+    <string name="run_title">تشغيل</string>
+
+    <string name="gradle_title">Gradle</string>
+    <string name="gradle_log_level">Log level</string>
+    <string-array name="gradle_log_levels" translatable="false">
+        <item>DEBUG</item>
+        <item>INFO</item>
+        <item>LIFECYCLE</item>
+        <item>WARN</item>
+        <item>QUIET</item>
+        <item>ERROR</item>
+    </string-array>
+
+    <string name="gradle_stacktrace">Stacktrace Mode</string>
+    <string name="gradle_stacktrace_summary">Determines how stacktraces are displayed in logs.</string>
+    <string-array name="gradle_stacktrace_values" translatable="false">
+        <item>ALWAYS</item>
+        <item>ALWAYS_FULL</item>
+        <item>INTERNAL_EXCEPTIONS</item>
+    </string-array>
+    <string name="gradle_verbose_vfs_logging">Verbose VFS Logging</string>
+    <string name="gradle_verbose_vfs_logging_summary">Log extra information about the Virtual File System</string>
+
+    <string name="settings_install_apk_title">نافذة تثبيت APK</string>
+    <string name="settings_install_desc">اظهار نافذة تثبيت APK بعد تجميع ناجح</string>
+    <string-array name="java_versions" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string name="completion_settings_kotlin_title">Kotlin</string>
+    <string name="completion_settings_java_title">Java</string>
+    <string name="completion_java_target_version_title">Target version</string>
+    <string name="completion_java_source_version_title">Source version</string>
+    <string name="editor_tabs_settings_title">Editor Tabs</string>
+    <string name="editor_tab_unique_file_name">عرض المسار للملفات ذات الاسماء المتشابهة</string>
+    <string name="editor_tab_unique_file_name_summary">يجعل اسماء الملفات المتشابهة مختلفة عن طريق اظهار المسار للملفات المتشابهة</string>
+
+    <!-- about page -->
+    <string name="settings_about_us_title">حولنا</string>
+    <string name="settings_about_us_desc">معلومات عن المطورين</string>
+    <string name="app_description">محرر الاكواد ومصمم تطبيقات اندرويد سريع وخفيف مباشرةً في جهازك</string>
+    <string name="app_version">الاصدار</string>
+    <string name="contact_group_title">تواصل</string>
+    <string name="app_source_title">السورس كود</string>
+    <string name="sketchub_team">فريق sketchub</string>
+    <string name="community">المجتمع</string>
+    <string name="rate_us">قيمنا</string>
+
+    <!-- file manager menu -->
+    <string name="error">خطأ</string>
+    <string name="error_resource_name_restriction">Resource names must only contain lowercase letters (a–z), digits (0–9), and underscores.</string>
+    <string name="item_project">مشروع</string>
+    <string name="dialog_create_class_title">انشاء صنف</string>
+    <string name="create_class_dialog_class_name">اسم الصنف</string>
+    <string name="create_class_dialog_positive">انشاء</string>
+    <string name="create_class_dialog_class_type">نوع الصنف</string>
+    <string name="create_class_dialog_invalid_name">اسم صنف غير صالح</string>
+
+    <string name="success">نجاح</string>
+    <string name="delete_success">تم الحذف بنجاح.</string>
+    <string name="dialog_confirm_delete">هل انت متاكد من حذف  %1$s?</string>
+    <string name="dialog_delete">حذف</string>
+    <string name="menu_preview_layout">معاينه</string>
+    <string name="action_menu_build_release">بناء release APK</string>
+    <string name="action_menu_build_debug">بناء debug APK</string>
+    <string name="action_menu_build_aab">بناء AAB</string>
+
+    <string name="project_manager_alpha_notice_title">معلومة عن الالفا</string>
+    <string name="project_manager_alpha_notice">CodeAssistما زات تحت التطوير وقد تواجه به بعض المشاكل.\n
+	يمكن ان تبلغ ن هذه المشاكل في https://github.com/tyron12233/CodeAssist/issues</string>
+    <string name="project_manager_save_location_title">اختر مكان للحفظ</string>
+    <string name="project_manager_permission_denied">تم رفض الاذن</string>
+    <string name="project_manager_button_request_again">الطلب مرة اخرى</string>
+    <string name="project_manager_button_continue">المتابعة</string>
+    <string name="project_manager_rationale_title">اذونات الذاكرة</string>
+    <string name="project_manager_button_allow">السماح</string>
+    <string name="project_manager_button_use_internal">استعمل الذاكرة الداخلية</string>
+    <string name="project_manager_permission_rationale">The application needs storage permissions
+        in order to save module files that will not be deleted when you uninstall the
+        app. Alternatively you can choose to save module files into the app\'s internal storage.</string>
+    <string name="project_manager_android11_notice">Projects will be saved to the app\'s internal storage directory.
+        Backup your modules before uninstalling the app.</string>
+    <string name="project_manager_projects">المشاريع</string>
+    <string name="project_manager_empty">المشاريع فارغة</string>`
+    <string name="project_manager_create_project">انشاء وحدة</string>
+    <string name="project_path_menu_title">مسار المشاريع</string>
+    <string name="project_manager_null_projects">لم يتم العثور على مشروع</string>
+    <string name="project_manager_suggestions">Suggestions:\n\n  - Create New Project\n  - Change Projects Path</string>
+    
+
+    <!-- Compiler Service -->
+    <string name="compilation_state_compiling">جار التجميع</string>
+    <string name="compilation_button_install">تثبيت</string>
+    <string name="compilation_result_success">نجح التجميع</string>
+    <string name="compilation_result_failed">فشل التجميع</string>
+
+    <!-- Library manager -->
+    <string name="library_manager_title">%1s Libraries</string>
+    <string name="group_id">Group Id</string>
+    <string name="artifact_id">Artifact Id</string>
+    <string name="version_name">اسم الاصدار</string>
+    <string name="menu_display_dependencies">List dependencies</string>
+    <string name="attributes_editor">Attributes Editor</string>
+    <string name="attribute_value">Attribute value</string>
+    <string name="menu_add_libs_gradle">اضافة مكتبات من  build.gradle</string>
+
+    <!-- Layout Editor -->
+    <string name="error_no_project_opened">لا يوجد مشروع مفتوح.</string>
+    <string name="dialog_confirm_save_title">حفظ الى XML</string>
+    <string name="dialog_confirm_save_msg">هل تريد ان تحفظ التخطيط؟</string>
+    <!-- File Editor Manager -->
+    <string name="file_editor_selection_title">اي محرر تريد ان تفتح؟</string>
+
+    <!-- Editor tabs -->
+    <string name="menu_close_file">اغلاق</string>
+    <string name="menu_close_others">اغلاق الاخرين</string>
+    <string name="menu_close_all">اغلاق الكل</string>
+
+    <!-- Editor -->
+    <string name="editor_error_file">حدث خطأ اثناء حفظ الملف, لن يتم حفظ التغييرات</string>
+
+    <!-- Bottom Editor Fragment -->
+    <string name="tab_build_logs_title">سجلات التجميع</string>
+    <string name="tab_app_logs_title">سجلات التطبيق</string>
+    <string name="tab_ide_logs_title">سجلات بيئة التطوير</string>
+    <string name="tab_diagnostics_title">Diagnostics</string>
+</resources>
