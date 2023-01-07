@@ -133,125 +133,56 @@ public class JavaCompletionProvider extends CompletionProvider {
     }
 
     public CompletionList.Builder completeV2(CompletionParameters parameters) {
+        JavaKotlincCompletionProvider javaKotlincCompletionProvider =
+                new JavaKotlincCompletionProvider();
 
-        if (true) {
-            JavaKotlincCompletionProvider javaKotlincCompletionProvider =
-                    new JavaKotlincCompletionProvider();
+        try {
+            Class<?> aClass =
+                    Class.forName("com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade");
+            JavaCoreProjectEnvironment projectEnvironment =
+                    (JavaCoreProjectEnvironment) aClass.getDeclaredField("projectEnvironment")
+                            .get(null);
 
-            try {
-                Class<?> aClass =
-                        Class.forName("com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade");
-                JavaCoreProjectEnvironment projectEnvironment =
-                        (JavaCoreProjectEnvironment) aClass.getDeclaredField("projectEnvironment")
-                                .get(null);
+            PsiElement psiElement = ReadAction.compute(() -> {
+                if (projectEnvironment == null) return null;
+                CoreLocalFileSystem localFileSystem =
+                        projectEnvironment.getEnvironment().getLocalFileSystem();
+                VirtualFile virtualFile =
+                        localFileSystem.findFileByIoFile(parameters.getFile());
 
-                PsiElement psiElement = ReadAction.compute(() -> {
-                    if (projectEnvironment == null) return null;
-                    CoreLocalFileSystem localFileSystem =
-                            projectEnvironment.getEnvironment().getLocalFileSystem();
-                    VirtualFile virtualFile =
-                            localFileSystem.findFileByIoFile(parameters.getFile());
+                if (virtualFile == null) return null;
 
-                    if (virtualFile == null) return null;
+                PsiManager psiManager = PsiManager.getInstance(projectEnvironment.getProject());
+                PsiFile file = psiManager.findFile(virtualFile);
 
-                    PsiManager psiManager = PsiManager.getInstance(projectEnvironment.getProject());
-                    PsiFile file = psiManager.findFile(virtualFile);
+                if (file == null || !file.isValid()) return null;
 
-                    if (file == null || !file.isValid()) return null;
+                file = (PsiFile) file.copy();
 
-                    file = (PsiFile) file.copy();
+                Document document = file.getViewProvider().getDocument();
+                assert document != null;
 
-                    Document document = file.getViewProvider().getDocument();
-                    assert document != null;
+                CommandProcessor.getInstance().executeCommand(projectEnvironment.getProject(), () -> {
+                    document.insertString((int) (parameters.getIndex()), "IntelijIdeaRulezzzzzzzz");
+                }, "Insert fake identifier", null);
 
-                    CommandProcessor.getInstance().executeCommand(projectEnvironment.getProject(), () -> {
-                        document.insertString((int) (parameters.getIndex()), "IntelijIdeaRulezzzzzzzz");
-                    }, "Insert fake identifier", null);
+                return file.findElementAt((int) parameters.getIndex());
+            });
 
-                    return file.findElementAt((int) parameters.getIndex());
-                });
-
-                if (psiElement == null) {
-                    return null;
-                }
-
-
-                CompletionList.Builder builder = CompletionList.builder(parameters.getPrefix());
-                javaKotlincCompletionProvider.fillCompletionVariants(psiElement, builder);
-
-                return builder;
-
-            } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
-                e.printStackTrace();
+            if (psiElement == null) {
+                return null;
             }
 
-        }
 
-        CompilationInfo compilationInfo = CompilationInfo.get(parameters.getProject(), parameters.getFile());
-        if (compilationInfo == null) {
+            CompletionList.Builder builder = CompletionList.builder(parameters.getPrefix());
+            javaKotlincCompletionProvider.fillCompletionVariants(psiElement, builder);
+
+            return builder;
+
+        } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
+            e.printStackTrace();
             return null;
         }
-
-        JavacTaskImpl javacTask = compilationInfo.impl.getJavacTask();
-        Context context = javacTask.getContext();
-        SimpleJavaFileObject fileObject = new SimpleJavaFileObject(parameters.getFile().toURI(), JavaFileObject.Kind.SOURCE) {
-                    @Override
-                    public CharSequence getCharContent(boolean ignoreEncodingErrors) {
-                        StringBuilder pruned = new StringBuilder(
-                                new FileContentFixer(context).fixFileContent(parameters.getContents())
-                        );
-                        int toInsert = StringSearch.endOfLine(pruned, (int) parameters.getIndex());
-                        return pruned.insert(toInsert, ';');
-                    }
-                };
-
-        JCTree.JCCompilationUnit unit = compilationInfo.updateImmediately(fileObject);
-        if (unit == null) {
-            return null;
-        }
-        JavacUtilitiesProvider javacUtilities = new DefaultJavacUtilitiesProvider(javacTask, unit, parameters.getProject());
-        TreePath scanned = new FindCurrentPath(javacTask).scan(unit, parameters.getIndex());
-        if (scanned == null || scanned.getLeaf() == null) {
-            return null;
-        }
-        CompletionList.Builder builder = CompletionList.builder(parameters.getPrefix());
-
-        switch (scanned.getLeaf().getKind()) {
-            case IDENTIFIER:
-//                IdentifierTree identifierTree = (IdentifierTree) scanned.getLeaf();
-//                if ("<error>".equals(identifierTree.getName().toString())) {
-//                    // scan the tree before the current one, check if its a "new" expression
-//                    TreePath previousPath = new FindCurrentPath(javacTask).scan(unit, parameters.getIndex() - 1);
-//
-//                    // we are in a new expression
-//                    // e.g. List list = new ...
-//                    if (previousPath != null && previousPath.getLeaf() instanceof NewClassTree) {
-//                        // now suggest types that are applicable to the current type
-//                        new SmartClassNameCompletionProvider(null).complete(builder, javacUtilities,
-//                                scanned, parameters.getPrefix(), false);
-//                    }
-//                }
-                new IdentifierCompletionProvider(null).complete(builder, javacUtilities,
-                        scanned, parameters.getPrefix(), false);
-                break;
-            case MEMBER_SELECT:
-                new MemberSelectCompletionProvider(null).complete(builder, javacUtilities,
-                        scanned, parameters.getPrefix(), false);
-                break;
-            case MEMBER_REFERENCE:
-                new MemberReferenceCompletionProvider(null).complete(builder, javacUtilities,
-                        scanned, parameters.getPrefix(), false);
-            case VARIABLE:
-                if (!parameters.getPrefix().isEmpty()) {
-                    new VariableNameCompletionProvider(null).complete(builder,
-                            javacUtilities,
-                            scanned,
-                            parameters.getPrefix(),
-                            false);
-                }
-                break;
-        }
-        return builder;
     }
 
 
