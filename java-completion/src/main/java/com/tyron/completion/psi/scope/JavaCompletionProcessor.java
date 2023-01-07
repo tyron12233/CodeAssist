@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiField;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiImportStatementBase;
 import org.jetbrains.kotlin.com.intellij.psi.PsiIntersectionType;
+import org.jetbrains.kotlin.com.intellij.psi.PsiInvalidElementAccessException;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaCodeReferenceElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiKeyword;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMember;
@@ -405,8 +406,17 @@ public class JavaCompletionProcessor implements PsiScopeProcessor, ElementClassH
             PsiMember member = (PsiMember)element;
             PsiResolveHelper helper = getResolveHelper();
             PsiModifierList modifierList = member.getModifierList();
-            return ContainerUtil.exists(accessObjectClasses, aoc ->
-                    helper.isAccessible(member, modifierList, myElement, aoc, myDeclarationHolder));
+            try {
+                return ContainerUtil.exists(accessObjectClasses,
+                        aoc -> helper.isAccessible(member,
+                                modifierList,
+                                myElement,
+                                aoc,
+                                myDeclarationHolder));
+            } catch (PsiInvalidElementAccessException e) {
+                System.out.println("Error: " + member.getText());
+                return true;
+            }
         }
         if (element instanceof PsiPackage) {
             return getResolveHelper().isAccessible((PsiPackage)element, myElement);

@@ -2,10 +2,11 @@
 
 package com.tyron.kotlin.completion
 
-import com.tyron.builder.project.api.KotlinModule
 import com.tyron.builder.project.api.Module
 import com.tyron.builder.project.impl.AndroidModuleImpl
+import com.tyron.completion.DefaultInsertHandler
 import com.tyron.completion.model.CompletionItem
+import com.tyron.completion.model.CompletionList
 import com.tyron.completion.model.DrawableKind
 import com.tyron.kotlin.completion.codeInsight.ReferenceVariantsHelper
 import com.tyron.kotlin.completion.model.Analysis
@@ -17,6 +18,7 @@ import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.common.environment.setIdeaIoUseFallback
 import org.jetbrains.kotlin.cli.jvm.compiler.*
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentWriteAccessGuard
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.com.intellij.psi.tree.TokenSet
@@ -26,6 +28,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl
 import org.jetbrains.kotlin.idea.FrontendInternals
+import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.lexer.KtKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
@@ -52,6 +55,8 @@ data class KotlinEnvironment(
 ) {
     private val kotlinFiles = mutableMapOf<String, KotlinFile>()
 
+    var currentItemCount = 0
+
     fun updateKotlinFile(name: String, contents: String): KotlinFile {
         val kotlinFile = KotlinFile.from(kotlinEnvironment.project, name, contents)
         kotlinFiles[name] = kotlinFile
@@ -60,6 +65,10 @@ data class KotlinEnvironment(
 
     fun removeKotlinFile(name: String) {
         kotlinFiles.remove(name)
+    }
+
+    fun getKotlinFile(name: String): KotlinFile? {
+        return kotlinFiles[name]
     }
 
     private data class DescriptorInfo(
@@ -95,13 +104,20 @@ data class KotlinEnvironment(
     }
 
 
-    fun complete(file: KotlinFile, line: Int, character: Int) =
-        with(file.insert("$COMPLETION_SUFFIX ", line, character)) {
+    fun complete(file: KotlinFile, line: Int, character: Int): CompletionList {
+        currentItemCount = 0
+        
+        return with(file.insert("$COMPLETION_SUFFIX ", line, character)) {
             kotlinFiles[file.name] = this
 
-            elementAt(line, character)?.let { element ->
+            val position = elementAt(line, character)
+            val prefix = position?.let { getPrefix(it) } ?: ""
+
+            val reference = (position?.parent as? KtSimpleNameExpression)?.mainReference
+
+            val list = position?.let { element ->
                 val descriptorInfo = descriptorsFrom(element)
-                val prefix = getPrefix(element)
+
                 descriptorInfo.descriptors.toMutableList().apply {
                     sortWith { a, b ->
                         val (a1, a2) = a.presentableName()
@@ -117,7 +133,16 @@ data class KotlinEnvironment(
                     KtTokens.KEYWORDS, prefix
                 ) + keywordsCompletionVariants(KtTokens.SOFT_KEYWORDS, prefix)
             } ?: emptyList()
+
+            val builder = CompletionList.builder(prefix)
+            builder.addItems(list)
+            if (currentItemCount >= MAX_ITEMS_COUNT) {
+                builder.incomplete()
+            }
+
+            builder.build()
         }
+    }
 
     private fun completionVariantFor(
         prefix: String,
@@ -140,6 +165,8 @@ data class KotlinEnvironment(
                 detail = tail
                 commitText = completionText
                 position = commitText.length
+                sortText = fullName
+                setInsertHandler(DefaultInsertHandler(this))
             }
         } else null
     }
@@ -163,7 +190,10 @@ data class KotlinEnvironment(
     private fun keywordsCompletionVariants(keywords: TokenSet, prefix: String) =
         keywords.types.mapNotNull {
             if (it is KtKeywordToken && it.value.startsWith(prefix)) {
-                CompletionItem(it.value, "Keyword", it.value, DrawableKind.Keyword)
+                CompletionItem(it.value, "Keyword", it.value, DrawableKind.Keyword).apply {
+                    setInsertHandler(DefaultInsertHandler(this))
+                    addFilterText(it.value)
+                }
             } else {
                 null
             }
@@ -173,41 +203,44 @@ data class KotlinEnvironment(
         val files = kotlinFiles.values.map { it.kotlinFile }.toList()
         val analysis = analysisOf(files)
         return with(analysis) {
-            (referenceVariantsFrom(element)
-                ?: referenceVariantsFrom(element.parent))?.let { descriptors ->
-                DescriptorInfo(true, descriptors)
-            } ?: element.parent.let { parent ->
-                DescriptorInfo(
-                    isTipsManagerCompletion = false,
-                    descriptors = when (parent) {
-                        is KtQualifiedExpression -> {
-                            analysisResult.bindingContext.get(
-                                BindingContext.EXPRESSION_TYPE_INFO,
-                                parent.receiverExpression
-                            )?.type?.let { expressionType ->
+            logTime("referenceVariants") {
+                (referenceVariantsFrom(element)
+                    ?: referenceVariantsFrom(element.parent))?.let { descriptors ->
+                    DescriptorInfo(true, descriptors)
+                } ?: element.parent.let { parent ->
+                    DescriptorInfo(
+                        isTipsManagerCompletion = false,
+                        descriptors = when (parent) {
+                            is KtQualifiedExpression -> {
                                 analysisResult.bindingContext.get(
-                                    BindingContext.LEXICAL_SCOPE,
+                                    BindingContext.EXPRESSION_TYPE_INFO,
                                     parent.receiverExpression
-                                )?.let {
-                                    expressionType.memberScope.getContributedDescriptors(
-                                        DescriptorKindFilter.ALL,
-                                        MemberScope.ALL_NAME_FILTER
-                                    )
-                                }
-                            }?.toList() ?: emptyList()
-                        }
+                                )?.type?.let { expressionType ->
+                                    analysisResult.bindingContext.get(
+                                        BindingContext.LEXICAL_SCOPE,
+                                        parent.receiverExpression
+                                    )?.let {
+                                        expressionType.memberScope.getContributedDescriptors(
+                                            DescriptorKindFilter.ALL,
+                                            MemberScope.ALL_NAME_FILTER
+                                        )
+                                    }
+                                }?.toList() ?: emptyList()
+                            }
 
-                        else -> analysisResult.bindingContext.get(
-                            BindingContext.LEXICAL_SCOPE,
-                            element as KtExpression
-                        )
-                            ?.getContributedDescriptors(
-                                DescriptorKindFilter.ALL,
-                                MemberScope.ALL_NAME_FILTER
+                            else -> analysisResult.bindingContext.get(
+                                BindingContext.LEXICAL_SCOPE,
+                                element as KtExpression
                             )
-                            ?.toList() ?: emptyList()
-                    }
-                )
+                                ?.getContributedDescriptors(
+                                    DescriptorKindFilter.ALL,
+                                    MemberScope.ALL_NAME_FILTER
+                                )
+                                ?.toList() ?: emptyList()
+                        }
+                    )
+                }
+
             }
         }
     }
@@ -260,6 +293,7 @@ data class KotlinEnvironment(
         )
         val inDescriptor: DeclarationDescriptor =
             elementKt.getResolutionScope(bindingContext, resolutionFacade).ownerDescriptor
+
         return when (element) {
             is KtSimpleNameExpression -> ReferenceVariantsHelper(
                 analysisResult.bindingContext,
@@ -312,13 +346,22 @@ data class KotlinEnvironment(
     // This code is a fragment of org.jetbrains.kotlin.idea.completion.CompletionSession from Kotlin IDE Plugin
     // with a few simplifications which were possible because webdemo has very restricted environment (and well,
     // because requirements on compeltion' quality in web-demo are lower)
-    private inner class VisibilityFilter(
+    private inner class VisibilityFilter    (
         private val inDescriptor: DeclarationDescriptor,
         private val bindingContext: BindingContext,
         private val element: KtElement,
         private val resolutionFacade: KotlinResolutionFacade
     ) : (DeclarationDescriptor) -> Boolean {
         override fun invoke(descriptor: DeclarationDescriptor): Boolean {
+            if (currentItemCount >= MAX_ITEMS_COUNT) {
+                println("MAX COUNT EXCEEDED")
+                return false
+            }
+
+            val a = "a"
+
+            currentItemCount++
+
             if (descriptor is TypeParameterDescriptor && !isTypeParameterVisible(descriptor)) return false
 
             if (descriptor is DeclarationDescriptorWithVisibility) {
@@ -348,7 +391,10 @@ data class KotlinEnvironment(
     companion object {
         private const val COMPLETION_SUFFIX = "IntellijIdeaRulezzz"
 
+        private const val MAX_ITEMS_COUNT = 50
+
         val ENVIRONMENT_KEY = Key.create<KotlinEnvironment>("kotlinEnvironmentKey")
+
 
         private val excludedFromCompletion: List<String> = listOf(
             "kotlin.jvm.internal",
@@ -362,7 +408,8 @@ data class KotlinEnvironment(
         fun with(classpath: List<File>): KotlinEnvironment {
             setIdeaIoUseFallback()
             setupIdeaStandaloneExecution()
-            return KotlinEnvironment(classpath, KotlinCoreEnvironment.createForProduction(
+
+            val kotlinCoreEnvironment = KotlinCoreEnvironment.createForProduction(
                 parentDisposable = {},
                 configFiles = EnvironmentConfigFiles.JVM_CONFIG_FILES,
                 configuration = CompilerConfiguration().apply {
@@ -384,14 +431,22 @@ data class KotlinEnvironment(
                         CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS,
                         languageVersionSettings
                     )
-                    put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true)
+                    put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, false)
+                    put(JVMConfigurationKeys.USE_FAST_JAR_FILE_SYSTEM, true)
 
                     with(K2JVMCompilerArguments()) {
                         put(JVMConfigurationKeys.DISABLE_PARAM_ASSERTIONS, noParamAssertions)
                         put(JVMConfigurationKeys.DISABLE_CALL_ASSERTIONS, noCallAssertions)
                     }
                 }
-            ))
+            )
+
+            kotlinCoreEnvironment.projectEnvironment.registerProjectExtensionPoint(
+                DocumentWriteAccessGuard.EP_NAME,
+                DocumentWriteAccessGuard::class.java
+            )
+
+            return KotlinEnvironment(classpath, kotlinCoreEnvironment)
         }
 
         fun get(module: Module): KotlinEnvironment? {

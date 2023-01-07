@@ -20,8 +20,17 @@ import com.tyron.kotlin.completion.KotlinEnvironment;
 import com.tyron.kotlin.completion.KotlinFile;
 
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
+import org.jetbrains.kotlin.com.intellij.openapi.util.ModificationTracker;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiModificationTrackerImpl;
+import org.jetbrains.kotlin.com.intellij.psi.util.PsiModificationTracker;
+import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusConnection;
+import org.jetbrains.kotlin.idea.KotlinLanguage;
 
 import java.util.List;
+
+import kotlin.Pair;
 
 public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
@@ -29,8 +38,6 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
     private final Editor mEditor;
     private final SharedPreferences mPreferences;
-
-    private KotlinCoreEnvironment environment;
 
     public KotlinAutoCompleteProvider(Editor editor) {
         mEditor = editor;
@@ -71,15 +78,37 @@ public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
         KotlinFile updatedFile =
                 kotlinEnvironment.updateKotlinFile(mEditor.getCurrentFile().getAbsolutePath(),
                         mEditor.getContent().toString());
-        List<CompletionItem> itemList = kotlinEnvironment.complete(updatedFile,
-                line,
-                column - 1);
+        return kotlinEnvironment.complete(updatedFile, line, column);
+    }
 
-        for (CompletionItem completionItem : itemList) {
-            completionItem.addFilterText(completionItem.commitText);
-            completionItem.setSortText(JavaSortCategory.DIRECT_MEMBER.toString());
+    @Override
+    public String getPrefix(Editor editor, int line, int column) {
+        Project project = ProjectManager.getInstance().getCurrentProject();
+        if (project == null) {
+            return null;
         }
 
-        return CompletionList.builder(prefix).addItems(itemList).build();
+        Module currentModule = project.getModule(mEditor.getCurrentFile());
+
+        if (!(currentModule instanceof AndroidModule)) {
+            return null;
+        }
+
+        KotlinEnvironment kotlinEnvironment = KotlinEnvironment.Companion.get(currentModule);
+        if (kotlinEnvironment == null) {
+            return null;
+        }
+
+        KotlinFile kotlinFile =
+                kotlinEnvironment.getKotlinFile(editor.getCurrentFile().getAbsolutePath());
+        if (kotlinFile == null) {
+            return null;
+        }
+
+        PsiElement psiElement = kotlinFile.elementAt(line, column);
+        if (psiElement == null) {
+            return null;
+        }
+        return kotlinEnvironment.getPrefix(psiElement);
     }
 }

@@ -24,6 +24,7 @@ public class CompletionList {
 
     public static final Ordering<CompletionItem> ITEM_ORDERING =
             Ordering.from(CompletionItem.COMPARATOR);
+    private String prefix;
 
     public static Builder builder(String prefix) {
         return new Builder(prefix);
@@ -61,6 +62,10 @@ public class CompletionList {
         }
         builder.addItems(old.getItems());
         return builder.build();
+    }
+
+    public String getPrefix() {
+        return prefix;
     }
 
     public static class Builder {
@@ -130,6 +135,7 @@ public class CompletionList {
             CompletionList list = new CompletionList();
             list.isIncomplete = this.incomplete;
             list.items = ITEM_ORDERING.immutableSortedCopy(items);
+            list.prefix = completionPrefix;
             return list;
         }
     }

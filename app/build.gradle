@@ -30,6 +30,10 @@ android {
         }
     }
 
+    buildFeatures {
+        viewBinding true
+    }
+
     buildTypes {
         release {
             signingConfig signingConfigs.debug

@@ -31,7 +31,7 @@ public class ShortNamesCache {
     /**
      * module used to store JDK indexes
      */
-    private static final JavaModule JDK_MODULE = new JavaModuleImpl(null);
+    public static final JavaModule JDK_MODULE = new JavaModuleImpl(null);
 
     static {
         JDK_MODULE.addLibrary(CodeAssistLibrary.forJar(Objects.requireNonNull(CompletionModule.getAndroidJar())));

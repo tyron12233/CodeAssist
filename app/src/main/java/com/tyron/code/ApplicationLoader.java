@@ -53,6 +53,19 @@ import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
+import org.jetbrains.kotlin.cli.common.environment.UtilKt;
+import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
+import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment;
+import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
+import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
+import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuard;
+import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuardImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentWriteAccessGuard;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
+import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
+import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
+import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
+import org.jetbrains.kotlin.com.intellij.psi.util.JavaClassSupers;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
 import java.io.File;
@@ -61,19 +74,46 @@ import java.io.IOException;
 public class ApplicationLoader extends Application {
 
     private static ApplicationLoader sInstance;
+    public static Context applicationContext;
 
     public static ApplicationLoader getInstance() {
         return sInstance;
     }
 
     private EventManager mEventManager;
+    private JavaCoreApplicationEnvironment coreApplicationEnvironment;
 
-    // no memory leaks since applicationContext is a singleton
-    public static Context applicationContext;
-    
+    private final Disposable disposable = Disposer.newDisposable("Application Environment");
+
     @Override
     public void onCreate() {
         Timer timer = Time.startTimer();
+
+        UtilKt.setIdeaIoUseFallback();
+        IdeaStandaloneExecutionSetup.INSTANCE.doSetup();
+
+        coreApplicationEnvironment = new JavaCoreApplicationEnvironment(disposable);
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(
+                DocumentWriteAccessGuard.EP_NAME,
+                DocumentWriteAccessGuard.class
+        );
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(
+                PsiAugmentProvider.EP_NAME,
+                PsiAugmentProvider.class
+        );
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(
+                JavaModuleSystem.EP_NAME,
+                JavaModuleSystem.class
+        );
+        coreApplicationEnvironment.registerApplicationService(
+                TransactionGuard.class,
+                new TransactionGuardImpl()
+        );
+        coreApplicationEnvironment.registerApplicationService(
+                JavaClassSupers.class,
+                new JavaClassSupersImpl()
+        );
+
         super.onCreate();
         System.out.println("onCreate took " + timer.getElapsed());
 
@@ -106,6 +146,10 @@ public class ApplicationLoader extends Application {
 
         File userDir = new File(getFilesDir(), "user_dir");
         System.setProperty("codeassist.user.dir", userDir.getAbsolutePath());
+    }
+
+    public JavaCoreApplicationEnvironment getCoreApplicationEnvironment() {
+        return coreApplicationEnvironment;
     }
 
     /**

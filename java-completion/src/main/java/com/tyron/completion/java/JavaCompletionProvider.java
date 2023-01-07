@@ -38,6 +38,7 @@ import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.java.provider.Completions;
 import com.tyron.completion.java.provider.DefaultJavacUtilitiesProvider;
 import com.tyron.completion.java.provider.IdentifierCompletionProvider;
+import com.tyron.completion.java.provider.JavaKotlincCompletionProvider;
 import com.tyron.completion.java.provider.JavacUtilitiesProvider;
 import com.tyron.completion.java.provider.MemberReferenceCompletionProvider;
 import com.tyron.completion.java.provider.MemberSelectCompletionProvider;
@@ -48,6 +49,16 @@ import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
+
+import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment;
+import org.jetbrains.kotlin.com.intellij.openapi.application.ReadAction;
+import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -122,6 +133,60 @@ public class JavaCompletionProvider extends CompletionProvider {
     }
 
     public CompletionList.Builder completeV2(CompletionParameters parameters) {
+
+        if (true) {
+            JavaKotlincCompletionProvider javaKotlincCompletionProvider =
+                    new JavaKotlincCompletionProvider();
+
+            try {
+                Class<?> aClass =
+                        Class.forName("com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade");
+                JavaCoreProjectEnvironment projectEnvironment =
+                        (JavaCoreProjectEnvironment) aClass.getDeclaredField("projectEnvironment")
+                                .get(null);
+
+                PsiElement psiElement = ReadAction.compute(() -> {
+                    if (projectEnvironment == null) return null;
+                    CoreLocalFileSystem localFileSystem =
+                            projectEnvironment.getEnvironment().getLocalFileSystem();
+                    VirtualFile virtualFile =
+                            localFileSystem.findFileByIoFile(parameters.getFile());
+
+                    if (virtualFile == null) return null;
+
+                    PsiManager psiManager = PsiManager.getInstance(projectEnvironment.getProject());
+                    PsiFile file = psiManager.findFile(virtualFile);
+
+                    if (file == null || !file.isValid()) return null;
+
+                    file = (PsiFile) file.copy();
+
+                    Document document = file.getViewProvider().getDocument();
+                    assert document != null;
+
+                    CommandProcessor.getInstance().executeCommand(projectEnvironment.getProject(), () -> {
+                        document.insertString((int) (parameters.getIndex()), "IntelijIdeaRulezzzzzzzz");
+                    }, "Insert fake identifier", null);
+
+                    return file.findElementAt((int) parameters.getIndex());
+                });
+
+                if (psiElement == null) {
+                    return null;
+                }
+
+
+                CompletionList.Builder builder = CompletionList.builder(parameters.getPrefix());
+                javaKotlincCompletionProvider.fillCompletionVariants(psiElement, builder);
+
+                return builder;
+
+            } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
+                e.printStackTrace();
+            }
+
+        }
+
         CompilationInfo compilationInfo = CompilationInfo.get(parameters.getProject(), parameters.getFile());
         if (compilationInfo == null) {
             return null;

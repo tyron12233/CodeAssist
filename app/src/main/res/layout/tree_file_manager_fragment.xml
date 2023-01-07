@@ -17,6 +17,12 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/file_tree_recyclerview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                />
+
         </HorizontalScrollView>
     </androidx.core.widget.NestedScrollView>
 

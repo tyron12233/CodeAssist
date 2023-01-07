@@ -38,4 +38,9 @@ public class XMLAutoCompleteProvider extends AbstractAutoCompleteProvider {
                 currentFile, mEditor.getContent().toString(), prefix, line, column,
                 mEditor.getCaret().getStart());
     }
+
+    @Override
+    public String getPrefix(Editor editor, int line, int column) {
+        return null;
+    }
 }

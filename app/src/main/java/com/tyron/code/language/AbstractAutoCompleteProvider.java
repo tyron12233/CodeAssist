@@ -1,10 +1,12 @@
 package com.tyron.code.language;
 
 import com.tyron.completion.model.CompletionList;
+import com.tyron.editor.Editor;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
 
 /**
@@ -24,4 +26,6 @@ public abstract class AbstractAutoCompleteProvider {
     }
 
     public abstract CompletionList getCompletionList(String prefix, int line, int column);
+
+    public abstract String getPrefix(Editor editor, int line, int column);
 }

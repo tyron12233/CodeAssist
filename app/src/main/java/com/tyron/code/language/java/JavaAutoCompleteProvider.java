@@ -18,6 +18,11 @@ import com.tyron.editor.Editor;
 
 import java.util.Optional;
 
+import io.github.rosemoe.sora.lang.completion.CompletionHelper;
+import io.github.rosemoe.sora.text.CharPosition;
+import io.github.rosemoe.sora.text.ContentReference;
+import io.github.rosemoe.sora.widget.CodeEditor;
+
 public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
 
     private final Editor mEditor;
@@ -58,5 +63,16 @@ public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
                             mEditor.getCaret().getStart());
         }
         return null;
+    }
+
+    @Override
+    public String getPrefix(Editor editor, int line, int column) {
+        Content content = editor.getContent();
+        int end = editor.getCharIndex(line, column);
+        int start = end;
+        while (start > 0 && Character.isJavaIdentifierPart(content.charAt(start - 1))) {
+            start--;
+        }
+        return content.subSequence(start, end).toString();
     }
 }

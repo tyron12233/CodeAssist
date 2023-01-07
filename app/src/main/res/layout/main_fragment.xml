@@ -34,24 +34,27 @@
             android:fitsSystemWindows="true"
             android:layout_height="match_parent">
 
-            <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/root"
-                android:name="com.tyron.code.ui.editor.EditorContainerFragment"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                tools:layout="@layout/editor_container_fragment">
+            <include android:id="@+id/editor_container" layout="@layout/editor_container_fragment" />
 
-            </androidx.fragment.app.FragmentContainerView>
         </com.tyron.code.util.NoInsetFrameLayout>
     </LinearLayout>
 
-    <androidx.fragment.app.FragmentContainerView
+
+    <FrameLayout
         android:id="@+id/nav_root"
-        android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment"
         android:layout_width="300dp"
         android:layout_height="match_parent"
         android:background="?android:attr/colorBackground"
-        android:layout_gravity="start" />
+        android:layout_gravity="start">
+
+        <include android:id="@+id/file_tree" layout="@layout/tree_file_manager_fragment" />
+    </FrameLayout>
+<!--    <androidx.fragment.app.FragmentContainerView-->
+<!--        android:id="@+id/nav_root"-->
+<!--        android:name="com.tyron.code.ui.file.tree.TreeFileManagerFragment"-->
+<!--        android:layout_width="300dp"-->
+<!--        android:layout_height="match_parent"-->
+<!--        android:background="?android:attr/colorBackground"-->
+<!--        android:layout_gravity="start" />-->
 
 </com.tyron.code.util.AllowChildInterceptDrawerLayout>

@@ -48,7 +48,7 @@ public class TreeViewAdapter<D> extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private TreeView<D> treeView;
 
-    TreeViewAdapter(Context context, TreeNode<D> root,
+    public TreeViewAdapter(Context context, TreeNode<D> root,
                     @NonNull BaseNodeViewFactory<D> baseNodeViewFactory) {
         this.context = context;
         this.root = root;

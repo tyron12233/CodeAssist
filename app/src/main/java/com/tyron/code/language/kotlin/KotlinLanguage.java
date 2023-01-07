@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.BuildModule;
+import com.tyron.code.language.CachedAutoCompleteProvider;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.completion.DefaultInsertHandler;
@@ -41,6 +42,7 @@ public class KotlinLanguage implements Language {
 
     private final TextMateLanguage delegate;
     private final Editor editor;
+    private final CachedAutoCompleteProvider autoCompleteProvider;
 
     private KotlinEnvironment kotlinEnvironment;
 
@@ -50,6 +52,8 @@ public class KotlinLanguage implements Language {
                 LANGUAGE_PATH,
                 CONFIG_PATH,
                 editor);
+        autoCompleteProvider = new CachedAutoCompleteProvider(editor,
+                new KotlinAutoCompleteProvider(editor));
     }
 
     @NonNull
@@ -68,25 +72,13 @@ public class KotlinLanguage implements Language {
                                     @NonNull CharPosition position,
                                     @NonNull CompletionPublisher publisher,
                                     @NonNull Bundle extraArguments) throws CompletionCancelledException {
-        String identifierPart = CompletionHelper.computePrefix(content, position, CompletionUtils.JAVA_PREDICATE::test);
-        KotlinAutoCompleteProvider provider =
-                new KotlinAutoCompleteProvider(editor);
-        CompletionList completionList = provider.getCompletionList(identifierPart,
+        CompletionList completionList = autoCompleteProvider.getCompletionList(null,
                 position.getLine(),
                 position.getColumn());
         if (completionList == null) {
             return;
         }
         completionList.getItems().stream().map(CompletionItemWrapper::new).forEach(publisher::addItem);
-    }
-
-    private KotlinEnvironment getOrCreateKotlinEnvironment() {
-        if (kotlinEnvironment == null) {
-            kotlinEnvironment =
-                    KotlinEnvironment.Companion.with(List.of(Objects.requireNonNull(BuildModule.getAndroidJar()),
-                            BuildModule.getLambdaStubs()));
-        }
-        return kotlinEnvironment;
     }
 
     @Override

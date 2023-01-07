@@ -8,8 +8,17 @@ import androidx.lifecycle.ViewModel;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.tyron.builder.project.api.Module;
+import com.tyron.code.ApplicationLoader;
 import com.tyron.code.util.CustomMutableLiveData;
+import com.tyron.completion.java.CompletionModule;
 import com.tyron.fileeditor.api.FileEditor;
+
+import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment;
+import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment;
+import org.jetbrains.kotlin.com.intellij.mock.MockProject;
+import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
+import org.jetbrains.kotlin.com.intellij.openapi.roots.FileIndexFacade;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -44,6 +53,18 @@ public class MainViewModel extends ViewModel {
 
     private final MutableLiveData<Boolean> mDrawerState =
             new MutableLiveData<>(false);
+
+
+    private final JavaCoreProjectEnvironment projectEnvironment;
+
+    public MainViewModel(String projectPath) {
+        Disposable disposable = Disposer.newDisposable();
+        CoreApplicationEnvironment app = ApplicationLoader.getInstance().getCoreApplicationEnvironment();
+        projectEnvironment = new JavaCoreProjectEnvironment(disposable, app);
+
+        projectEnvironment.addJarToClassPath(CompletionModule.getAndroidJar());
+        projectEnvironment.addJarToClassPath(CompletionModule.getLambdaStubs());
+    }
 
     public MutableLiveData<String> getCurrentState() {
         if (mCurrentState == null) {

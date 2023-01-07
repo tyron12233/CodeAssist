@@ -13,6 +13,7 @@ import com.tyron.code.language.EditorFormatter;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.java.JavaCompletionProvider;
+import com.tyron.completion.java.ShortNamesCache;
 import com.tyron.completion.java.compiler.services.NBLog;
 import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.model.CompletionList;
@@ -152,7 +153,7 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
                 .setEditor(editor)
                 .setFile(editor.getCurrentFile())
                 .setProject(editor.getProject())
-                .setModule(editor.getProject().getMainModule())
+                .setModule(ShortNamesCache.JDK_MODULE)
                 .setContents(content.getReference().toString())
                 .setPrefix(prefix)
                 .build();

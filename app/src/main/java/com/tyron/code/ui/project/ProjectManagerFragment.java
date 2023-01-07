@@ -39,6 +39,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.code.ui.file.FilePickerDialogFixed;
 import com.tyron.code.ui.main.MainFragment;
+import com.tyron.code.ui.main.MainFragmentV2;
 import com.tyron.code.ui.project.adapter.ProjectManagerAdapter;
 import com.tyron.code.ui.settings.SettingsActivity;
 import com.tyron.code.ui.wizard.WizardFragment;
@@ -297,7 +298,7 @@ public class ProjectManagerFragment extends Fragment {
     }
 
     private void openProject(Project project) {
-        MainFragment fragment = MainFragment.newInstance(project.getRootFile().getAbsolutePath());
+        Fragment fragment = MainFragmentV2.newInstance(project.getRootFile().getAbsolutePath());
         getParentFragmentManager().beginTransaction()
                 .replace(R.id.fragment_container, fragment)
                 .addToBackStack(null)

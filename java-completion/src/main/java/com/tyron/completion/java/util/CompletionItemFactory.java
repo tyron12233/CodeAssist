@@ -14,6 +14,7 @@ import com.tyron.completion.java.provider.JavacUtilitiesProvider;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
+import org.jetbrains.kotlin.com.intellij.psi.PsiField;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
 import org.jetbrains.kotlin.com.intellij.psi.PsiNamedElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
@@ -49,7 +50,20 @@ public class CompletionItemFactory {
         if (element instanceof PsiMethod) {
             return forPsiMethod(((PsiMethod) element));
         }
+        if (element instanceof PsiField) {
+            return forPsiField(((PsiField) element));
+        }
         return item(element.getName());
+    }
+
+    private static CompletionItem forPsiField(PsiField element) {
+        CompletionItem item = new CompletionItem();
+        item.label = element.getName();
+        item.detail = element.getType().getPresentableText();
+        item.iconKind = DrawableKind.Field;
+        item.commitText = element.getName();
+        item.cursorOffset  = item.commitText.length();
+        return item;
     }
 
     public static CompletionItem forPsiMethod(PsiMethod psiMethod) {

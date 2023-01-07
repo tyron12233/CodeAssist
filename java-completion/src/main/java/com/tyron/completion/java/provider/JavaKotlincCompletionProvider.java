@@ -41,10 +41,7 @@ import java.util.Set;
  */
 public class JavaKotlincCompletionProvider {
 
-    private final JavaModule mJavaModule;
-
-    public JavaKotlincCompletionProvider(JavaModule module) {
-        mJavaModule = module;
+    public JavaKotlincCompletionProvider() {
     }
 
     public void fillCompletionVariants(@NonNull PsiElement elementAt,

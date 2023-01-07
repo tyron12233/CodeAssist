@@ -41,6 +41,18 @@ import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.language.api.CodeAssistLanguage;
 
 import org.apache.commons.vfs2.FileObject;
+import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment;
+import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
+import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiJavaFileImpl;
+import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,6 +77,7 @@ import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.diagnostic.DiagnosticRegion;
 import io.github.rosemoe.sora.lang.diagnostic.DiagnosticsContainer;
+import io.github.rosemoe.sora.text.ContentListener;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora2.text.EditorUtil;
@@ -189,6 +202,25 @@ public class RosemoeEditorFacade {
             event.intercept();
 
             Cursor cursor = editor.getCursor();
+
+            CommandProcessor.getInstance().executeCommand(project, () -> {
+                CoreLocalFileSystem localFileSystem =
+                        projectEnvironment.getEnvironment().getLocalFileSystem();
+                VirtualFile vFile = localFileSystem.findFileByIoFile(editor.getCurrentFile());
+
+                PsiFile psiFile = PsiManager.getInstance(project).findFile(vFile);
+                PsiElement elementAt = psiFile.findElementAt(cursor.getLeft());
+                if (elementAt != null) {
+                    if (elementAt.getParent() instanceof PsiReferenceExpression) {
+                        PsiElement qualifier = ((PsiReferenceExpression) elementAt.getParent()).getQualifier();
+                        if (qualifier instanceof PsiReferenceExpression) {
+                            PsiElement resolve = ((PsiReferenceExpression) qualifier).resolve();
+                            System.out.println(resolve);
+                        }
+                    }
+                }
+            }, "", null);
+
             if (cursor.isSelected()) {
                 int index = editor.getCharIndex(event.getLine(), event.getColumn());
                 int cursorLeft = cursor.getLeft();
@@ -248,17 +280,68 @@ public class RosemoeEditorFacade {
                 }
             }
         });
+
+        editor.getText().addContentListener(new ContentListener() {
+            @Override
+            public void beforeReplace(io.github.rosemoe.sora.text.Content content) {
+
+            }
+
+            @Override
+            public void afterInsert(io.github.rosemoe.sora.text.Content content,
+                                    int startLine,
+                                    int startColumn,
+                                    int endLine,
+                                    int endColumn,
+                                    CharSequence insertedContent) {
+                int startIndex = content.getCharIndex(startLine, startColumn);
+                int endIndex = content.getCharIndex(endLine, endColumn);
+                commit(ContentChangeEvent.ACTION_INSERT, startIndex, endIndex, insertedContent);
+            }
+
+            @Override
+            public void afterDelete(io.github.rosemoe.sora.text.Content content,
+                                    int startLine,
+                                    int startColumn,
+                                    int endLine,
+                                    int endColumn,
+                                    CharSequence deletedContent) {
+                int startIndex = content.getCharIndex(startLine, startColumn);
+                int endIndex = content.getCharIndex(endLine, endColumn - deletedContent.length()) + deletedContent.length();
+                commit(ContentChangeEvent.ACTION_DELETE, startIndex, endIndex, deletedContent);
+            }
+
+            private void commit(int action, int start, int end, CharSequence charSequence) {
+                CoreLocalFileSystem localFileSystem =
+                        projectEnvironment.getEnvironment().getLocalFileSystem();
+                VirtualFile fileByIoFile = localFileSystem.findFileByIoFile(file.getPath().toFile());
+                PsiFile file1 =
+                        PsiManager.getInstance(project).findFile(fileByIoFile);
+
+                CommandProcessor.getInstance().executeCommand(project, () -> {
+
+                    Document document = PsiDocumentManager.getInstance(project).getDocument(file1);
+
+                    if (action == ContentChangeEvent.ACTION_DELETE) {
+                        document.deleteString(start, end);
+                    } else if (action == ContentChangeEvent.ACTION_INSERT) {
+                        document.insertString(start, charSequence);
+                    }
+
+                    ((PsiJavaFileImpl) file1).onContentReload();
+
+                    PsiDocumentManager.getInstance(project).commitDocument(document);
+                }, "", null);
+            }
+        });
         editor.subscribeEvent(ContentChangeEvent.class,
-                (event, unsubscribe) -> ProgressManager.getInstance()
-                        .runNonCancelableAsync(() -> DebouncerStore.DEFAULT.registerOrGetDebouncer(
-                                "contentChange").debounce(300, () -> {
-                            try {
-                                onContentChange(editor.getContent());
-                            } catch (Throwable t) {
-                                LOGGER.error("Error in onContentChange", t);
-                            }
-                        })));
+                (event, unsubscribe) -> {
+
+                });
     }
+
+    public static JavaCoreProjectEnvironment projectEnvironment;
+    public static org.jetbrains.kotlin.com.intellij.openapi.project.Project project;
 
     /**
      * Show the popup menu with the actions api
