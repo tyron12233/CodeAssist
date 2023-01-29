@@ -158,7 +158,7 @@ dependencies {
     implementation 'androidx.viewpager2:viewpager2:1.0.0'
     implementation 'androidx.viewpager:viewpager:1.0.0'
     implementation 'androidx.recyclerview:recyclerview:1.2.1'
-    implementation 'androidx.lifecycle:lifecycle-livedata-core:2.4.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata-core:2.5.1'
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.4.1'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.4.1'
     implementation 'androidx.lifecycle:lifecycle-livedata:2.4.1'
