@@ -27,7 +27,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build release apk
-        uses: eskatos/gradle-command-action@v1
+        uses: eskatos/gradle-command-action@v2
         with:
           arguments: assembleRelease
           distributions-cache-enabled: true
