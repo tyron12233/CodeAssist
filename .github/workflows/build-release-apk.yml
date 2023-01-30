@@ -1,0 +1,41 @@
+name: Android CI Release
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build release apk
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel previous runs
+        uses: styfle/cancel-workflow-action@0.5.0
+        with:
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v2
+    
+      - name: set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build release apk
+        uses: eskatos/gradle-command-action@v1
+        with:
+          arguments: assembleRelease
+          distributions-cache-enabled: true
+          dependencies-cache-enabled: true
+          configuration-cache-enabled: true
+
+      - name: Upload release apk
+        uses: actions/upload-artifact@v2
+        with:
+          name: apk-release
+          path: app/build/outputs/apk/release

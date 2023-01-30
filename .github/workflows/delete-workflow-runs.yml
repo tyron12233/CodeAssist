@@ -1,4 +1,3 @@
----
 name: Delete old workflow runs
 on:
   workflow_dispatch:
