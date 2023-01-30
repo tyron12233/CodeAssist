@@ -30,7 +30,7 @@ android {
 dependencies {
 
     compileOnly 'com.android.tools.build:aapt2-proto'
-    implementation 'com.google.protobuf:protobuf-java:3.21.5'
+    implementation 'com.google.protobuf:protobuf-java:3.21.12'
 
     implementation project(path: ':actions-api')
     implementation project(path: ':editor-api')

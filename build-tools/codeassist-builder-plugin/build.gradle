@@ -63,7 +63,7 @@ dependencies {
     implementation("com.android.tools:sdk-common:30.4.0-alpha09") {
         transitive = false
     }
-    implementation 'com.google.protobuf:protobuf-java:3.17.2'
+    implementation 'com.google.protobuf:protobuf-java:3.21.12'
 
     // jetifier, remapping library
     implementation('com.android.tools.build.jetifier:jetifier-processor:1.0.0-beta10') {
