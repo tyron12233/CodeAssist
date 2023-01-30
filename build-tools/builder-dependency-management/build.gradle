@@ -30,7 +30,7 @@ dependencies {
     implementation common.slf4j
     implementation common.commonsLang3
     implementation 'org.ow2.asm:asm-commons:9.3'
-    implementation 'org.apache.httpcomponents:httpcore:4.4.15'
+    implementation 'org.apache.httpcomponents:httpcore:4.4.16'
     implementation 'org.apache.commons:commons-text:1.9'
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.apache.maven:maven-settings-builder:3.8.7'
