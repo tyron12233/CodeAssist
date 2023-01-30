@@ -20,7 +20,7 @@ dependencies {
     implementation common.commonsLang3
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.apache.ant:ant:1.10.12'
-    implementation 'com.esotericsoftware:kryo:5.3.0'
+    implementation 'com.esotericsoftware:kryo:5.4.0'
 
 }
 

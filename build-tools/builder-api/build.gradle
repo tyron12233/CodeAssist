@@ -12,7 +12,7 @@ java {
 dependencies {
     implementation projects.common
     implementation 'javax.inject:javax.inject:1'
-    implementation 'com.esotericsoftware:kryo:5.3.0'
+    implementation 'com.esotericsoftware:kryo:5.4.0'
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
     implementation("net.rubygrapefruit:file-events:0.22-milestone-23")
 
