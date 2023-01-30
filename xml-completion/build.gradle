@@ -47,7 +47,7 @@ dependencies {
 
 
     // v2 dependencies
-    implementation 'it.unimi.dsi:fastutil:8.5.8'
+    implementation 'it.unimi.dsi:fastutil:8.5.11'
     implementation 'net.sf.kxml:kxml2:2.3.0'
 
 

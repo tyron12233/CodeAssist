@@ -9,7 +9,7 @@ dependencies {
     implementation project(path: ':build-tools:logging')
     implementation project(path: ':build-tools:project')
 
-    implementation 'it.unimi.dsi:fastutil:8.5.8'
+    implementation 'it.unimi.dsi:fastutil:8.5.11'
     implementation 'org.jetbrains:annotations:23.0.0'
 
     testImplementation 'junit:junit:4.+'

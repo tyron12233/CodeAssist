@@ -3,7 +3,7 @@
 }
 
 dependencies {
-    api 'it.unimi.dsi:fastutil:8.5.8'
+    api 'it.unimi.dsi:fastutil:8.5.11'
 
     implementation projects.common
 
