@@ -1,0 +1,33 @@
+---
+name: Code Formatter
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Give permission to executable
+        run: chmod +x gradlew
+
+      - name: Format Kotlin Source
+        continue-on-error: true
+        uses: gradle/gradle-build-action@v2.3.3
+        with:
+          gradle-version: nightly
+          arguments: ktlintFormat
+
+      - uses: axel-op/googlejavaformat-action@v3.6.0
+        with:
+          args: "--aosp --replace"
+          commitMessage: "refactor: Format Code"
