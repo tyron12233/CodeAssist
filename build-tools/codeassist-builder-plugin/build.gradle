@@ -57,7 +57,7 @@ dependencies {
     implementation "com.android.tools.build:aapt2-proto:8.1.0-alpha02-9289358"
 
     // for resources API
-    implementation("com.android.tools.layoutlib:layoutlib-api:30.4.0-alpha09") {
+    implementation("com.android.tools.layoutlib:layoutlib-api:31.1.0-alpha02") {
         exclude group: 'com.android.tools', module: 'common'
     }
     implementation("com.android.tools:sdk-common:30.4.0-alpha09") {

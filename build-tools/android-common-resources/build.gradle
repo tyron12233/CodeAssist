@@ -12,7 +12,7 @@ dependencies {
     api("com.android.tools:sdk-common:30.4.0-alpha09") {
         transitive = false
     }
-    api("com.android.tools.layoutlib:layoutlib-api:30.4.0-alpha09") {
+    api("com.android.tools.layoutlib:layoutlib-api:31.1.0-alpha02") {
         exclude group: 'com.android.tools', module: 'common'
     }
     implementation 'javax.inject:javax.inject:1'
