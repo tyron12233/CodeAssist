@@ -164,7 +164,7 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-livedata:2.4.1'
     implementation 'androidx.fragment:fragment:1.4.1'
     implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
-    implementation 'androidx.activity:activity:1.4.0'
+    implementation 'androidx.activity:activity:1.6.1'
     implementation 'androidx.drawerlayout:drawerlayout:1.1.1'
     implementation 'com.github.angads25:filepicker:1.1.1'
 
