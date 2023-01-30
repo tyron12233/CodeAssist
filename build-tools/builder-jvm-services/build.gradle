@@ -12,7 +12,7 @@ dependencies {
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderProcessServices
 
-    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'org.ow2.asm:asm:9.4'
     implementation 'javax.inject:javax.inject:1'
 }
 

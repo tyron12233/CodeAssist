@@ -29,7 +29,7 @@ dependencies {
 
     implementation 'org.apache.ant:ant:1.10.12'
     implementation 'javax.inject:javax.inject:1'
-    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'org.ow2.asm:asm:9.4'
     implementation common.slf4j
     implementation project(path: ':build-tools:builder-language-jvm')
     implementation project(path: ':build-tools:builder-jvm-services')

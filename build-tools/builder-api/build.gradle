@@ -27,7 +27,7 @@ dependencies {
     implementation common.commonsLang3
 
 
-    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'org.ow2.asm:asm:9.4'
 
     implementation 'org.apache-extras.beanshell:bsh:2.0b6'
     api 'it.unimi.dsi:fastutil:8.5.11'
