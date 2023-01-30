@@ -18,7 +18,7 @@ dependencies {
 
     runtimeOnly 'net.rubygrapefruit:native-platform-linux-aarch64-ncurses6:0.22-milestone-24'
     runtimeOnly 'net.rubygrapefruit:native-platform-linux-aarch64:0.22-milestone-23'
-    runtimeOnly 'net.rubygrapefruit:native-platform-linux-amd64:0.22-milestone-23'
+    runtimeOnly 'net.rubygrapefruit:native-platform-linux-amd64:0.22-milestone-24'
     runtimeOnly  'net.rubygrapefruit:file-events-linux-aarch64:0.22-milestone-24'
 
 
