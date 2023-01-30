@@ -35,7 +35,7 @@ jobs:
           configuration-cache-enabled: true
 
       - name: Upload release apk
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: apk-release
           path: app/build/outputs/apk/release
