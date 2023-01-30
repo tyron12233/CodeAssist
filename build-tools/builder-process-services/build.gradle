@@ -10,7 +10,7 @@ dependencies {
     implementation projects.buildTools.builderNative
 
     implementation common.slf4j
-    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-24"
 }
 
 java {
