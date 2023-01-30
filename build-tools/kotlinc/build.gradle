@@ -13,7 +13,7 @@ dependencies {
     implementation project(path: ':build-tools:jaxp:xml')
 
 
-    runtimeOnly ('org.jetbrains.kotlin:kotlin-reflect:1.7.10')
+    runtimeOnly ('org.jetbrains.kotlin:kotlin-reflect:1.8.0')
 
     api 'org.jetbrains.trove4j:trove4j:20160824'
     api files('libs/kotlin-compiler-embeddable-1.7.20-RC.jar')
