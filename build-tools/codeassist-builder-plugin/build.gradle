@@ -54,7 +54,7 @@ dependencies {
 
     def agpVersion = "8.1.0-alpha02"
 
-    implementation "com.android.tools.build:aapt2-proto:7.4.0-alpha09-8841542"
+    implementation "com.android.tools.build:aapt2-proto:8.1.0-alpha02-9289358"
 
     // for resources API
     implementation("com.android.tools.layoutlib:layoutlib-api:30.4.0-alpha09") {
