@@ -23,7 +23,7 @@ dependencies {
     implementation project(path: ":build-tools:javac")
 
     // jaxb
-    implementation 'javax.xml.bind:jaxb-api:2.3.0'
+    implementation 'javax.xml.bind:jaxb-api:2.3.1'
 }
 repositories {
     mavenCentral()
