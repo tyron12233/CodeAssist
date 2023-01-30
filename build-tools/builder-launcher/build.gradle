@@ -28,7 +28,7 @@ dependencies {
 
     implementation common.slf4j
     implementation common.commonsLang3
-    implementation 'org.ow2.asm:asm:9.3'
+    implementation 'org.ow2.asm:asm:9.4'
 
 
     testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-23'
