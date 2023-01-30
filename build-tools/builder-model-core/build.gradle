@@ -27,7 +27,7 @@ dependencies {
     testImplementation 'com.jakewharton.android.repackaged:dalvik-dx:9.0.0_r3'
     testImplementation 'faker.android.base:dex2jar:1.0.1'
     testImplementation 'io.github.skylot:jadx-core:1.4.1'
-    runtimeOnly 'io.github.skylot:jadx-dex-input:1.4.1'
+    runtimeOnly 'io.github.skylot:jadx-dex-input:1.4.5'
 
 
 
