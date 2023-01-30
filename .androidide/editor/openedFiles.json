@@ -1,0 +1,125 @@
+{
+  "allFiles": [
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/delete-workflow-runs.yml",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/dependency-review.yml",
+      "selection": {
+        "end": {
+          "column": 26,
+          "index": -1,
+          "line": 0
+        },
+        "start": {
+          "column": 26,
+          "index": -1,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/format-code.yml",
+      "selection": {
+        "end": {
+          "column": 10,
+          "index": -1,
+          "line": 15
+        },
+        "start": {
+          "column": 10,
+          "index": -1,
+          "line": 15
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/update-gradle-wrapper.yml",
+      "selection": {
+        "end": {
+          "column": 23,
+          "index": -1,
+          "line": 15
+        },
+        "start": {
+          "column": 23,
+          "index": -1,
+          "line": 15
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/android.yml",
+      "selection": {
+        "end": {
+          "column": 31,
+          "index": -1,
+          "line": 20
+        },
+        "start": {
+          "column": 31,
+          "index": -1,
+          "line": 20
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/build-apk.yml",
+      "selection": {
+        "end": {
+          "column": 33,
+          "index": -1,
+          "line": 22
+        },
+        "start": {
+          "column": 33,
+          "index": -1,
+          "line": 22
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/build-release-apk.yml",
+      "selection": {
+        "end": {
+          "column": 23,
+          "index": -1,
+          "line": 23
+        },
+        "start": {
+          "column": 10,
+          "index": -1,
+          "line": 23
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/clean-cache.yml",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": -1,
+          "line": 0
+        }
+      }
+    }
+  ],
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/CodeAssist/.github/workflows/update-gradle-wrapper.yml"
+}

@@ -1,4 +1,4 @@
-name: Android CI Debug
+name: Android CI Release
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    name: Build debug apk
+    name: Build release apk
     runs-on: ubuntu-latest
     steps:
       - name: Cancel previous runs
@@ -26,16 +26,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build debug apk
+      - name: Build release apk
         uses: eskatos/gradle-command-action@v1
         with:
-          arguments: assembleDebug
+          arguments: assembleRelease
           distributions-cache-enabled: true
           dependencies-cache-enabled: true
           configuration-cache-enabled: true
 
-      - name: Upload debug apk
+      - name: Upload release apk
         uses: actions/upload-artifact@v2
         with:
-          name: apk-debug
-          path: app/build/outputs/apk/debug
+          name: apk-release
+          path: app/build/outputs/apk/release
