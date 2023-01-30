@@ -1,13 +1,14 @@
 ---
-name: Code Formatter
+name: Lint with Gradle
 
 on:
   workflow_dispatch:
 
 jobs:
+  build:
 
-  formatting:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
@@ -20,14 +21,14 @@ jobs:
       - name: Give permission to executable
         run: chmod +x gradlew
 
-      - name: Format Kotlin Source
-        continue-on-error: true
+      - name: Build with gradle
         uses: gradle/gradle-build-action@v2.3.3
         with:
           gradle-version: nightly
-          arguments: ktlintFormat
-
-      - uses: axel-op/googlejavaformat-action@v3.6.0
+          arguments: lintDebug
+      - name: Upload lint report
+        uses: actions/upload-artifact@v3
+        if: ${{ !github.head_ref }}
         with:
-          args: "--aosp --replace"
-          commitMessage: "refactor: Format Code"
+          name: lint-reports
+          path: app/build/reports

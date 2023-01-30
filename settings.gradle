@@ -1,3 +1,4 @@
+rootProject.name = "CodeAssist"
 include ':app'
 
 include ':build-tools:jaxp:jaxp-internal'

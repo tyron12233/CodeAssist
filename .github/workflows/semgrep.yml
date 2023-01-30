@@ -1,0 +1,22 @@
+on:
+  schedule:
+    - cron: '34 8 * * 4'
+
+name: Semgrep
+
+jobs:
+  semgrep:
+    name: Scan
+    runs-on: ubuntu-latest
+
+    # Prevent semgrep from running and failing on forks
+    # due to semgrep app token not being found
+
+    if: ${{ !github.head_ref }}
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    container:
+      image: returntocorp/semgrep
+    steps:
+    - uses: actions/checkout@v3
+    - run: semgrep ci
