@@ -1,4 +1,4 @@
-name: Code Formatter
+name: Code Formatter CI
 
 on:
   workflow_dispatch:
@@ -8,11 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Set up JDK 19
-        uses: actions/setup-java@v3.9.0
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '11'
+          cache: gradle
 
       - name: Give permission to executable
         run: chmod +x gradlew

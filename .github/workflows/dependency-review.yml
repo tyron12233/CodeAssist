@@ -1,4 +1,4 @@
-name: Dependency Review
+name: Dependency Review CI
 on:
   workflow_dispatch:
   pull_request:
