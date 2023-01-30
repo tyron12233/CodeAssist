@@ -33,7 +33,7 @@ dependencies {
 
     testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-23'
     testImplementation 'junit:junit:4.13.2'
-    testImplementation 'net.rubygrapefruit:native-platform:0.22-milestone-23'
+    testImplementation 'net.rubygrapefruit:native-platform:0.22-milestone-24'
     testImplementation projects.buildTools.builderApi
     testImplementation projects.buildTools.builderCoreApi
     testImplementation projects.buildTools.builderCore

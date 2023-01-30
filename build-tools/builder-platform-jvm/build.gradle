@@ -25,7 +25,7 @@ dependencies {
     implementation common.slf4j
     implementation common.commonsLang3
     implementation 'javax.inject:javax.inject:1'
-    implementation "net.rubygrapefruit:native-platform:0.22-milestone-23"
+    implementation "net.rubygrapefruit:native-platform:0.22-milestone-24"
 }
 
 java {
