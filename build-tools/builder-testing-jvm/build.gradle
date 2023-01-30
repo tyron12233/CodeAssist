@@ -32,7 +32,7 @@ dependencies {
     implementation 'org.ow2.asm:asm:9.3'
 
     implementation("junit:junit:4.13.2")
-    compileOnly 'org.testng:testng:7.4.0'
+    compileOnly 'org.testng:testng:7.7.1'
 
 
 }

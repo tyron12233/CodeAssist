@@ -3,9 +3,9 @@ name: Android Tests CI
 on:
   workflow_dispatch:
   push:
-    branches: [ javac-17 ]
+    branches: [ dev ]
   pull_request:
-    branches: [ javac-17 ]
+    branches: [ dev ]
 
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
       uses: actions/setup-java@v2
       with:
         java-version: '11'
-        distribution: 'adopt'
+        distribution: 'temurin'
         cache: gradle
 
     - name: Grant execute permission for gradlew
