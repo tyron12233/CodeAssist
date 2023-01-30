@@ -1,16 +1,7 @@
 name: Android Tests CI
 
 on:
-  push:
-    branches: [ "dev", "main" ]
-    paths-ignore:
-      - '**.md'
-      - '.github/workflows/update-gradle-wrapper.yml'
-  pull_request:
-    branches: [ "dev" ]
-    paths-ignore:
-      - '**.md'
-      - '.github/workflows/update-gradle-wrapper.yml'
+  
   workflow_dispatch: {}
 
 jobs:
