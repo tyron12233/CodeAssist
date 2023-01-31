@@ -20,7 +20,7 @@ dependencies {
     implementation projects.common
     implementation common.commonsLang3
     implementation 'javax.inject:javax.inject:1'
-    implementation('org.codehaus.groovy:groovy-json:3.0.7') {
+    implementation('org.codehaus.groovy:groovy-json:3.0.14') {
         transitive = false
     }
     implementation 'com.googlecode.jatl:jatl:0.2.3'

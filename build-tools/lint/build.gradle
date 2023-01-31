@@ -30,7 +30,7 @@ dependencies {
     implementation project(path: ':java-completion')
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 
     implementation project(path: ':completion-api')
     implementation project(path: ':common')

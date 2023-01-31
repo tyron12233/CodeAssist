@@ -41,7 +41,7 @@ dependencies {
 
 
     // bytecode analysis
-    implementation 'org.apache.bcel:bcel:6.5.0'
+    implementation 'org.apache.bcel:bcel:6.7.0'
     implementation 'org.antlr:antlr4-runtime:4.11.1'
     implementation 'org.jsoup:jsoup:1.14.3'
 
@@ -65,7 +65,7 @@ dependencies {
 
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {

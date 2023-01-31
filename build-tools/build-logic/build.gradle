@@ -33,7 +33,7 @@ dependencies {
     testImplementation "org.robolectric:robolectric:4.9.2"
     testImplementation project(path: ':build-tools:jaxp:jaxp-internal')
 
-    api 'com.android.tools:r8:3.1.51'
+    api 'com.android.tools:r8:4.0.48'
 
     compileOnly project(path: ':android-stubs')
 }

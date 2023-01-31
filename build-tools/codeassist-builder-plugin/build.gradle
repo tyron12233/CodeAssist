@@ -48,9 +48,9 @@ dependencies {
     implementation common.slf4j
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.ow2.asm:asm:9.4'
-    implementation 'org.ow2.asm:asm-commons:9.3'
+    implementation 'org.ow2.asm:asm-commons:9.4'
     implementation 'com.android:zipflinger:7.4.0'
-    implementation 'com.android.tools:annotations:30.4.0-alpha09'
+    implementation 'com.android.tools:annotations:30.4.0'
 
     def agpVersion = "8.1.0-alpha02"
 
@@ -79,7 +79,7 @@ dependencies {
     implementation 'com.squareup:javawriter:2.5.1'
 
     // signing
-    implementation 'org.bouncycastle:bcutil-jdk18on:1.71.1'
+    implementation 'org.bouncycastle:bcutil-jdk18on:1.72'
     implementation "com.android.tools.build:apkzlib:$agpVersion"
     implementation "com.android.tools.build:apksig:$agpVersion"
     implementation "com.android:signflinger:$agpVersion"

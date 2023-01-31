@@ -14,7 +14,7 @@ dependencies {
     implementation 'javax.inject:javax.inject:1'
     implementation 'com.esotericsoftware:kryo:5.4.0'
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-24"
-    implementation("net.rubygrapefruit:file-events:0.22-milestone-23")
+    implementation("net.rubygrapefruit:file-events:0.22-milestone-24")
 
     runtimeOnly 'net.rubygrapefruit:native-platform-linux-aarch64-ncurses6:0.22-milestone-24'
     runtimeOnly 'net.rubygrapefruit:native-platform-linux-aarch64:0.22-milestone-23'

@@ -46,20 +46,20 @@ dependencies {
     implementation common.slf4j
     implementation common.commonsLang3
 
-    implementation 'org.apache.ant:ant:1.10.12'
+    implementation 'org.apache.ant:ant:1.10.13'
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.apache-extras.beanshell:bsh:2.0b6'
     implementation 'org.ow2.asm:asm:9.4'
     implementation('org.codehaus.groovy:groovy-xml:3.0.7') {
         exclude group: "org.codehaus.groovy", module: "groovy"
     }
-    implementation('org.codehaus.groovy:groovy-templates:3.0.7') {
+    implementation('org.codehaus.groovy:groovy-templates:3.0.14') {
         transitive = false
     }
 
 
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-24"
-    implementation("net.rubygrapefruit:file-events:0.22-milestone-23")
+    implementation("net.rubygrapefruit:file-events:0.22-milestone-24")
     implementation 'org.tomlj:tomlj:1.1.0'
     implementation project(path: ':build-tools:builder-worker-processes')
     implementation project(path: ':build-tools:builder-jvm-services')
