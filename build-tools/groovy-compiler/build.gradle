@@ -10,7 +10,7 @@ dependencies {
     implementation projects.buildTools.builderBaseServicesGroovy
     implementation projects.buildTools.builderBaseServices
 
-    implementation 'com.android.tools:r8:3.3.28'
+    implementation 'com.android.tools:r8:4.0.48'
 }
 
 java {
