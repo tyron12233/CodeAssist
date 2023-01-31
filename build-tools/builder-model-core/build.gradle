@@ -19,7 +19,7 @@ dependencies {
     implementation 'javax.inject:javax.inject:1'
     implementation common.commonsLang3
     implementation 'org.ow2.asm:asm:9.4'
-    implementation 'com.linkedin.dexmaker:dexmaker:2.28.1'
+    implementation 'com.linkedin.dexmaker:dexmaker:2.28.3'
     implementation 'org.codehaus.groovy:groovy:3.0.7:grooid'
 
     testImplementation("junit:junit:4.13.2")
