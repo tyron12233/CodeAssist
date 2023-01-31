@@ -53,7 +53,7 @@ dependencies {
     implementation('org.codehaus.groovy:groovy-xml:3.0.7') {
         exclude group: "org.codehaus.groovy", module: "groovy"
     }
-    implementation('org.codehaus.groovy:groovy-templates:3.0.7') {
+    implementation('org.codehaus.groovy:groovy-templates:3.0.14') {
         transitive = false
     }
 

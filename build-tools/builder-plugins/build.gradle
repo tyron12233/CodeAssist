@@ -27,7 +27,7 @@ dependencies {
     implementation project(path: ':build-tools:builder-testing-base')
     implementation project(path: ':build-tools:builder-testing-jvm')
     implementation project(path: ':build-tools:builder-reporting')
-    implementation('org.codehaus.groovy:groovy-templates:3.0.7') {
+    implementation('org.codehaus.groovy:groovy-templates:3.0.14') {
         transitive = false
     }
 
