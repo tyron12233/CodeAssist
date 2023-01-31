@@ -30,7 +30,7 @@ dependencies {
 
     implementation 'org.codehaus.groovy:groovy:3.0.7:grooid'
     //noinspection GradleDependency
-    implementation('org.codehaus.groovy:groovy-ant:3.0.7') {
+    implementation('org.codehaus.groovy:groovy-ant:3.0.14') {
         transitive = false
     }
 }
