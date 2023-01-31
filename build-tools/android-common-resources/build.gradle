@@ -9,7 +9,7 @@ dependencies {
     api files('libs/converted-data-binding.jar')
 
     implementation 'com.android.tools:annotations:30.4.0'
-    api("com.android.tools:sdk-common:30.4.0-alpha09") {
+    api("com.android.tools:sdk-common:31.1.0-alpha02") {
         transitive = false
     }
     api("com.android.tools.layoutlib:layoutlib-api:31.1.0-alpha02") {
