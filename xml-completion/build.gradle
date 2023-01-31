@@ -36,7 +36,7 @@ dependencies {
     implementation project(path: ':editor-api')
     implementation projects.eventManager
 
-    implementation 'androidx.appcompat:appcompat:1.4.1'
+    implementation 'androidx.appcompat:appcompat:1.6.0'
     implementation 'com.google.android.material:material:1.8.0'
 
 
