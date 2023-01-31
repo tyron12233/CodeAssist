@@ -39,6 +39,9 @@ android {
     }
 
     packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources.excludes += "license/*"
 
         exclude "plugin.properties"
