@@ -60,7 +60,7 @@ dependencies {
     implementation("com.android.tools.layoutlib:layoutlib-api:31.1.0-alpha02") {
         exclude group: 'com.android.tools', module: 'common'
     }
-    implementation("com.android.tools:sdk-common:30.4.0-alpha09") {
+    implementation("com.android.tools:sdk-common:31.1.0-alpha02") {
         transitive = false
     }
     implementation 'com.google.protobuf:protobuf-java:3.21.12'
@@ -79,7 +79,7 @@ dependencies {
     implementation 'com.squareup:javawriter:2.5.1'
 
     // signing
-    implementation 'org.bouncycastle:bcutil-jdk18on:1.71.1'
+    implementation 'org.bouncycastle:bcutil-jdk18on:1.72'
     implementation "com.android.tools.build:apkzlib:$agpVersion"
     implementation "com.android.tools.build:apksig:$agpVersion"
     implementation "com.android:signflinger:$agpVersion"

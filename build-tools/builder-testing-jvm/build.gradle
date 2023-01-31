@@ -25,7 +25,7 @@ dependencies {
 
     implementation projects.common
     implementation 'javax.inject:javax.inject:1'
-    implementation('org.codehaus.groovy:groovy-xml:3.0.7') {
+    implementation('org.codehaus.groovy:groovy-xml:3.0.14') {
         transitive = false
     }
     implementation common.commonsLang3

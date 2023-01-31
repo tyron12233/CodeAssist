@@ -31,7 +31,7 @@ dependencies {
     implementation 'org.ow2.asm:asm:9.4'
 
 
-    testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-23'
+    testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-24'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'net.rubygrapefruit:native-platform:0.22-milestone-24'
     testImplementation projects.buildTools.builderApi

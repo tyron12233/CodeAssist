@@ -13,7 +13,7 @@ dependencies {
 
     implementation common.slf4j
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-24"
-    implementation "net.rubygrapefruit:file-events:0.22-milestone-23"
+    implementation "net.rubygrapefruit:file-events:0.22-milestone-24"
 
     // used in android
     implementation 'org.apache.commons:commons-vfs2:2.9.0'

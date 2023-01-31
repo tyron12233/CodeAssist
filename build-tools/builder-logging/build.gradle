@@ -13,7 +13,7 @@ dependencies {
     api common.slf4j
     implementation 'org.fusesource.jansi:jansi:2.4.0'
     implementation common.commonsLang3
-    implementation 'org.apache.ant:ant:1.10.12'
+    implementation 'org.apache.ant:ant:1.10.13'
 }
 
 java {

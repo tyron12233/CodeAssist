@@ -25,7 +25,7 @@ dependencies {
     // user data holder
     implementation project(path: ':build-tools:kotlinc')
     compileOnly project(path: ':android-stubs')
-    compileOnly("com.android.tools:sdk-common:30.4.0-alpha09") {
+    compileOnly("com.android.tools:sdk-common:31.1.0-alpha02") {
         transitive = false
     }
 
