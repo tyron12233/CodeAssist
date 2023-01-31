@@ -10,7 +10,7 @@ dependencies {
 
     implementation project(path: ':common')
     implementation project(path: ':build-tools:eclipse-standalone')
-    implementation 'androidx.test:core:1.4.0'
+    implementation 'androidx.test:core:1.5.0'
 
     // required so internal classes would be included 
     api project(path: ':build-tools:jaxp:jaxp-internal')
