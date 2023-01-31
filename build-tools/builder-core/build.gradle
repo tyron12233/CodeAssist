@@ -46,7 +46,7 @@ dependencies {
     implementation common.slf4j
     implementation common.commonsLang3
 
-    implementation 'org.apache.ant:ant:1.10.12'
+    implementation 'org.apache.ant:ant:1.10.13'
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.apache-extras.beanshell:bsh:2.0b6'
     implementation 'org.ow2.asm:asm:9.4'

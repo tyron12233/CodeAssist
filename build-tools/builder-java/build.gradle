@@ -27,7 +27,7 @@ dependencies {
     implementation projects.buildTools.builderExecution
     implementation projects.buildTools.builderDependencyManagement
 
-    implementation 'org.apache.ant:ant:1.10.12'
+    implementation 'org.apache.ant:ant:1.10.13'
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.ow2.asm:asm:9.4'
     implementation common.slf4j
