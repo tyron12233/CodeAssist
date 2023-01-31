@@ -45,7 +45,7 @@ dependencies {
     // code generation
     api 'com.github.javaparser:javaparser-core:3.24.10'
     
-    implementation 'androidx.annotation:annotation:1.3.0'
+    implementation 'androidx.annotation:annotation:1.5.0'
 
     implementation project(path: ':common')
     implementation project(path: ':completion-api')
