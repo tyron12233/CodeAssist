@@ -8,7 +8,7 @@ dependencies {
     api files('libs/org.eclipse.jdt.core-3.28.0.jar')
     api 'org.eclipse.platform:org.eclipse.core.resources:3.18.100'
     api 'org.eclipse.platform:org.eclipse.core.runtime:3.26.100'
-    api 'org.eclipse.platform:org.eclipse.core.filesystem:1.9.300'
+    api 'org.eclipse.platform:org.eclipse.core.filesystem:1.9.500'
     api 'org.eclipse.platform:org.eclipse.text:3.12.300'
 
     testImplementation 'junit:junit:4.13.2'
