@@ -10,7 +10,7 @@ dependencies {
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderLogging
 
-    api 'org.bouncycastle:bcpg-jdk18on:1.71.1'
+    api 'org.bouncycastle:bcpg-jdk18on:1.72.2'
 }
 
 java {
