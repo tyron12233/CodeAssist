@@ -191,7 +191,7 @@ dependencies {
     //testImplementation "org.robolectric:robolectric:4.7.3"
     //testImplementation 'org.mockito:mockito-core:1.10.19'
     testImplementation "org.robolectric:robolectric:4.9.2"
-    debugImplementation 'androidx.test:core:1.4.0'
+    debugImplementation 'androidx.test:core:1.5.0'
     debugImplementation 'androidx.fragment:fragment-testing:1.5.5'
 
     androidTestImplementation 'com.google.truth:truth:1.1.3'
