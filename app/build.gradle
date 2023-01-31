@@ -85,7 +85,7 @@ dependencies {
 
     // TODO: completion providers should not be included on the main module
     // alternate editor impl
-    implementation 'com.blacksquircle.ui:editorkit:2.1.2'
+    implementation 'com.blacksquircle.ui:editorkit:2.2.0'
 
     implementation project(path: ':code-editor')
     implementation project(path: ':xml-completion')
