@@ -79,7 +79,7 @@ dependencies {
     implementation 'com.squareup:javawriter:2.5.1'
 
     // signing
-    implementation 'org.bouncycastle:bcutil-jdk18on:1.71.1'
+    implementation 'org.bouncycastle:bcutil-jdk18on:1.72'
     implementation "com.android.tools.build:apkzlib:$agpVersion"
     implementation "com.android.tools.build:apksig:$agpVersion"
     implementation "com.android:signflinger:$agpVersion"
