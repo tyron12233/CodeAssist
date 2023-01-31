@@ -12,7 +12,7 @@ dependencies {
     implementation projects.buildTools.builderFileTemp
 
     implementation "net.rubygrapefruit:native-platform:0.22-milestone-24"
-    implementation "net.rubygrapefruit:file-events:0.22-milestone-23"
+    implementation "net.rubygrapefruit:file-events:0.22-milestone-24"
     implementation 'org.fusesource.jansi:jansi:2.4.0'
     implementation common.slf4j
 }
