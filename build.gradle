@@ -1,7 +1,8 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    ext.kotlin_version = '1.5.21'
+    ext.kotlin_version = '1.7.22'
+    //ext.kotlin_version = '1.8.0'
     repositories {
         google()
         maven { url 'https://jitpack.io' }
@@ -9,8 +10,8 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.0.3'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.0"
+        classpath 'com.android.tools.build:gradle:7.3.1'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -35,9 +36,9 @@ task clean(type: Delete) {
 }
 
 ext {
-    compileSdkVersion = 32
-    buildToolsVersion = '30.0.2'
-    targetSdkVersion = 32
+    compileSdkVersion = 33
+    buildToolsVersion = '33.0.0'
+    targetSdkVersion = 33
     minSdkVersion = 26
 
     applicationId = "com.tyron.code"
