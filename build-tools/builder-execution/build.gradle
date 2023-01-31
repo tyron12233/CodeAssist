@@ -20,7 +20,7 @@ dependencies {
     implementation projects.buildTools.builderPersistentCache
 
 
-    implementation 'org.jetbrains:annotations:23.0.0'
+    implementation 'org.jetbrains:annotations:24.0.0'
     implementation common.slf4j
 }
 
