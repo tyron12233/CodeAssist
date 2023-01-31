@@ -35,7 +35,7 @@ dependencies {
     implementation 'javax.inject:javax.inject:1'
     implementation 'org.apache.maven:maven-settings-builder:3.8.7'
     implementation 'org.apache.ivy:ivy:2.5.1'
-    implementation 'org.apache.ant:ant:1.10.12'
+    implementation 'org.apache.ant:ant:1.10.13'
 }
 
 java {
