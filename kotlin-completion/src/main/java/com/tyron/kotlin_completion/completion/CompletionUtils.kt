@@ -44,34 +44,8 @@ fun completions(
     cursor: Int,
     index: SymbolIndex,
     partial: String
-): CompletionList {
-
-    val (elementItems, isExhaustive, receiver) = elementCompletionItems(file, cursor, partial)
-
-    val elementItemList = elementItems.toList()
-    val elementItemLabels = elementItemList.mapNotNull { it.label }.toSet()
-//
-    val items = (elementItemList.asSequence()
-            + (if (!isExhaustive) indexCompletionItems(
-        file,
-        cursor,
-        receiver,
-        index,
-        partial
-    ).filter { it.label !in elementItemLabels } else emptySequence())
-            + (if (elementItemList.isEmpty()) keywordCompletionItems(partial) else emptySequence())
-            )
-
-    val itemList = items
-        .take(MAX_COMPLETION_ITEMS)
-        .toList()
-        .onEachIndexed { i, item -> item.data = i.toString().padStart(2, '0') }
-    val isIncomplete = itemList.size >= MAX_COMPLETION_ITEMS || elementItemList.isEmpty()
-
-    val list = CompletionList()
-    list.items = itemList
-    list.isIncomplete = isIncomplete
-    return list
+): CompletionList? {
+    return null
 }
 
 private fun indexCompletionItems(

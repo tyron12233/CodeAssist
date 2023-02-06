@@ -88,7 +88,7 @@ public class AndroidXmlTagUtils {
             item.addFilterText(tag);
             item.addFilterText("<" + tag);
             item.addFilterText("</" + tag);
-            builder.addItem(item);
+            throw new UnsupportedOperationException();
         }
     }
 
@@ -125,7 +125,7 @@ public class AndroidXmlTagUtils {
             item.addFilterText(simpleName);
             item.addFilterText("<" + simpleName);
             item.addFilterText("</" + simpleName);
-            builder.addItem(item);
+            throw new UnsupportedOperationException();
         }
     }
 }

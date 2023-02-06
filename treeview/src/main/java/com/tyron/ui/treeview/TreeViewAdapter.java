@@ -40,7 +40,7 @@ public class TreeViewAdapter<D> extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private final Context context;
 
-    private final TreeNode<D> root;
+    private TreeNode<D> root;
 
     private final List<TreeNode<D>> expandedNodeList;
 
@@ -57,6 +57,10 @@ public class TreeViewAdapter<D> extends RecyclerView.Adapter<RecyclerView.ViewHo
         this.expandedNodeList = new ArrayList<>();
 
         buildExpandedNodeList();
+    }
+
+    public void setRoot(TreeNode<D> root) {
+        this.root = root;
     }
 
     private void buildExpandedNodeList() {
@@ -209,7 +213,7 @@ public class TreeViewAdapter<D> extends RecyclerView.Adapter<RecyclerView.ViewHo
      * changed value or structure because it take much calculation.
      */
     @SuppressLint("NotifyDataSetChanged")
-    void refreshView() {
+    public void refreshView() {
         buildExpandedNodeList();
         notifyDataSetChanged();
     }

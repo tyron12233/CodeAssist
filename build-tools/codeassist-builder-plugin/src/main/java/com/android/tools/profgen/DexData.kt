@@ -133,7 +133,7 @@ internal class Span(
     }
 }
 
-internal class DexFileData(
+class DexFileData(
     val typeIndexes: Set<Int>,
     val classIndexes: Set<Int>,
     val methods: Map<Int, MethodData>,
@@ -165,7 +165,7 @@ internal class MutableDexFileData(
     )
 }
 
-internal data class MethodData(var flags: Int) {
+data class MethodData(var flags: Int) {
     inline val isHot: Boolean get() = isFlagSet(MethodFlags.HOT)
     @Suppress("NOTHING_TO_INLINE")
     inline fun isFlagSet(flag: Int): Boolean {
@@ -179,7 +179,7 @@ internal data class MethodData(var flags: Int) {
 }
 
 // TODO(lmr): refactor to not use iteration and first/last flag strategy for this
-internal object MethodFlags {
+object MethodFlags {
     // Implementation note: DO NOT CHANGE THESE VALUES without adjusting the parsing.
     // To simplify the implementation we use the MethodHotness flag values as indexes into the
     // internal bitmap representation. As such, they should never change unless the profile version

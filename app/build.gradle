@@ -3,7 +3,6 @@ apply plugin: 'kotlin-android'
 
 android {
     compileSdkVersion rootProject.ext.compileSdkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
 
     defaultConfig {
         applicationId rootProject.ext.applicationId
@@ -43,25 +42,17 @@ android {
     }
 
     packagingOptions {
-        resources.excludes += "license/*"
+        resources {
+            excludes += ['license/*', 'plugin.properties', 'plugin.xml', 'about.html', '.api_description', 'about_files/*', 'META-INF/eclipse.inf', 'META-INF/INDEX.LIST', 'META-INF/DEPENDENCIES', 'META-INF/LGPL2.1', 'META-INF/groovy-release-info.properties', 'META-INF/AL2.0', 'README.md']
+            pickFirsts += ['META-INF/sisu/*', '*/*.kotlin_builtins', '*/*/*.kotlin_builtins', '*/*/*/*.kotlin_builtins']
+        }
+        jniLibs {
+            excludes += ['about_files/*']
+            pickFirsts += ['META-INF/sisu/*']
+        }
 
-        exclude "plugin.properties"
-        exclude "plugin.xml"
-        exclude "about.html"
-        exclude ".api_description"
-        exclude "about_files/*"
-        exclude "META-INF/eclipse.inf"
-        exclude "META-INF/INDEX.LIST"
-        exclude "META-INF/DEPENDENCIES"
-        exclude "META-INF/LGPL2.1"
-        exclude "META-INF/groovy-release-info.properties"
-        exclude "META-INF/AL2.0"
-        exclude "README.md"
-        pickFirst "META-INF/sisu/*"
-        pickFirst "*/*.kotlin_builtins"
-        pickFirst "*/*/*.kotlin_builtins"
-        pickFirst "*/*/*/*.kotlin_builtins"
     }
+    namespace 'com.tyron.code'
 }
 
 configurations.implementation {
@@ -149,26 +140,23 @@ dependencies {
     implementation project(path: ':editor-api')
     implementation project(path: ':fileeditor-api')
 
-    // formatters
-    implementation project(path: ':google-java-format')
-
     // about
     implementation 'com.github.daniel-stoneuk:material-about-library:3.1.2'
 
-    implementation 'androidx.appcompat:appcompat:1.4.1'
-    implementation 'androidx.core:core:1.7.0'
-    implementation 'com.google.android.material:material:1.5.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+    implementation 'androidx.appcompat:appcompat:1.6.0'
+    implementation 'androidx.core:core:1.9.0'
+    implementation 'com.google.android.material:material:1.8.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.viewpager2:viewpager2:1.0.0'
     implementation 'androidx.viewpager:viewpager:1.0.0'
     implementation 'androidx.recyclerview:recyclerview:1.2.1'
-    implementation 'androidx.lifecycle:lifecycle-livedata-core:2.4.1'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.4.1'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.4.1'
-    implementation 'androidx.lifecycle:lifecycle-livedata:2.4.1'
-    implementation 'androidx.fragment:fragment:1.4.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata-core:2.5.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.5.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata:2.5.1'
+    implementation 'androidx.fragment:fragment:1.5.5'
     implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
-    implementation 'androidx.activity:activity:1.4.0'
+    implementation 'androidx.activity:activity:1.6.1'
     implementation 'androidx.drawerlayout:drawerlayout:1.1.1'
     implementation 'com.github.angads25:filepicker:1.1.1'
 
@@ -189,8 +177,8 @@ dependencies {
     testImplementation "com.google.truth:truth:1.1.3"
     testImplementation 'org.mockito:mockito-core:1.10.19'
     testImplementation "org.robolectric:robolectric:4.7.3"
-    debugImplementation 'androidx.test:core:1.4.0'
-    debugImplementation 'androidx.fragment:fragment-testing:1.4.1'
+    debugImplementation 'androidx.test:core:1.5.0'
+    debugImplementation 'androidx.fragment:fragment-testing:1.5.5'
 
     androidTestImplementation 'com.google.truth:truth:1.1.3'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'

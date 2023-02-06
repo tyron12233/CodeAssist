@@ -24,6 +24,7 @@ import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
+@Deprecated
 public class LanguageManager {
 
     private static LanguageManager Instance = null;
@@ -79,15 +80,6 @@ public class LanguageManager {
     }
 
     public static TextMateLanguage createTextMateLanguage(String grammarName, String grammarPath, String configurationPath, Editor editor) {
-        AssetManager assets = ApplicationLoader.getInstance().getAssets();
-        try {
-            return TextMateLanguage.createNoCompletion(
-                    grammarName,
-                    assets.open(grammarPath),
-                    new InputStreamReader(assets.open(configurationPath)),
-                    ((TextMateColorScheme) ((CodeEditor) editor).getColorScheme()).getRawTheme());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        throw new UnsupportedOperationException();
     }
 }

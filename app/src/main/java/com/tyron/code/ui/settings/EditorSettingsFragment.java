@@ -27,9 +27,9 @@ import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.common.util.SingleTextWatcher;
 import com.tyron.completion.progress.ProgressManager;
 
-import org.apache.commons.io.FileUtils;
-import org.eclipse.tm4e.core.internal.theme.reader.ThemeReader;
-import org.eclipse.tm4e.core.theme.IRawTheme;
+import org.eclipse.tm4e.core.internal.theme.IRawTheme;
+import org.eclipse.tm4e.core.internal.theme.ThemeReader;
+import org.eclipse.tm4e.core.registry.IThemeSource;
 
 import java.io.File;
 import java.util.Objects;
@@ -119,8 +119,7 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
 
     public static ListenableFuture<TextMateColorScheme> getColorScheme(@NonNull File file) {
         return ProgressManager.getInstance().computeNonCancelableAsync(() -> {
-            IRawTheme rawTheme = ThemeReader.readThemeSync(file.getAbsolutePath(),
-                    FileUtils.openInputStream(file));
+            IRawTheme rawTheme = ThemeReader.readTheme(IThemeSource.fromFile(file));
             return Futures.immediateFuture(EditorUtil.createTheme(rawTheme));
         });
     }

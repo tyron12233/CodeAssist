@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.com.intellij.core;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.jetbrains.kotlin.com.intellij.codeInsight.folding.CodeFoldingSettings;
@@ -35,12 +36,14 @@ import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPointName;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.Extensions;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionsArea;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.FileDocumentManagerImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeExtension;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.impl.CoreProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.util.ClassExtension;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManagerListener;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
@@ -49,6 +52,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.CoreVirtualFilePointer
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.VirtualFileManagerImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalVirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.pointers.VirtualFilePointerManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceService;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceServiceImpl;
@@ -62,7 +66,12 @@ import org.jetbrains.kotlin.com.intellij.util.graph.impl.GraphAlgorithmsImpl;
 import org.jetbrains.kotlin.org.picocontainer.MutablePicoContainer;
 import org.jetbrains.kotlin.resolve.diagnostics.DiagnosticSuppressor;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -93,7 +102,7 @@ public class CoreApplicationEnvironment {
         this.myLocalFileSystem = this.createLocalFileSystem();
         this.myJarFileSystem = this.createJarFileSystem();
         this.myJrtFileSystem = this.createJrtFileSystem();
-        this.registerApplicationService(FileDocumentManager.class, new MockFileDocumentManagerImpl(null, DocumentImpl::new));
+        this.registerApplicationService(FileDocumentManager.class, new FileDocumentManagerImpl());
         registerApplicationExtensionPoint(new ExtensionPointName<>("org.jetbrains.kotlin.com.intellij.virtualFileManagerListener"), VirtualFileManagerListener.class);
         List<VirtualFileSystem> fs = this.myJrtFileSystem != null ? Arrays.asList(this.myLocalFileSystem, this.myJarFileSystem, this.myJrtFileSystem) : Arrays.asList(this.myLocalFileSystem, this.myJarFileSystem);
         this.registerApplicationService(VirtualFileManager.class, new VirtualFileManagerImpl(fs));
@@ -150,7 +159,22 @@ public class CoreApplicationEnvironment {
 
 
     protected CoreLocalFileSystem createLocalFileSystem() {
-        return new CoreLocalFileSystem();
+        return new CoreLocalFileSystem() {
+            @Override
+            public @Nullable VirtualFile findFileByIoFile(@NonNull File ioFile) {
+                if (!ioFile.exists()) {
+                    return null;
+                }
+                return new CoreLocalVirtualFile(this, ioFile) {
+                    @Override
+                    public @NonNull OutputStream getOutputStream(Object requestor,
+                                                                                           long newModificationStamp,
+                                                                                           long newTimeStamp) throws IOException {
+                        return Files.newOutputStream(ioFile.toPath());
+                    }
+                };
+            }
+        };
     }
 
     @Nullable

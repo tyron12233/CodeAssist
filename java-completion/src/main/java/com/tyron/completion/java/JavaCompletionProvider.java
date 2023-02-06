@@ -2,78 +2,35 @@ package com.tyron.completion.java;
 
 import static com.tyron.completion.progress.ProgressManager.checkCanceled;
 
-import android.util.Log;
-
 import com.google.common.base.Throwables;
-import com.sun.source.tree.IdentifierTree;
-import com.sun.source.tree.NewClassTree;
-import com.sun.source.util.TreePath;
-import com.sun.tools.javac.api.JavacTaskImpl;
-import com.sun.tools.javac.code.Symbol;
-import com.sun.tools.javac.code.Symtab;
-import com.sun.tools.javac.comp.AttrContext;
-import com.sun.tools.javac.comp.Env;
-import com.sun.tools.javac.jvm.ClassReader;
-import com.sun.tools.javac.main.JavaCompiler;
-import com.sun.tools.javac.parser.JavacParser;
-import com.sun.tools.javac.parser.ParserFactory;
-import com.sun.tools.javac.tree.JCTree;
-import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.Name;
-import com.sun.tools.javac.util.Names;
-import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.common.logging.IdeLog;
-import com.tyron.common.util.StringSearch;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionProvider;
-import com.tyron.completion.index.CompilerService;
-import com.tyron.completion.java.action.FindCurrentPath;
-import com.tyron.completion.java.compiler.JavaCompilerService;
-import com.tyron.completion.java.compiler.services.NBEnter;
-import com.tyron.completion.java.compiler.services.NBJavaCompiler;
-import com.tyron.completion.java.compiler.services.NBLog;
-import com.tyron.completion.java.compiler.services.NBParserFactory;
-import com.tyron.completion.java.parse.CompilationInfo;
-import com.tyron.completion.java.provider.Completions;
-import com.tyron.completion.java.provider.DefaultJavacUtilitiesProvider;
-import com.tyron.completion.java.provider.IdentifierCompletionProvider;
 import com.tyron.completion.java.provider.JavaKotlincCompletionProvider;
-import com.tyron.completion.java.provider.JavacUtilitiesProvider;
-import com.tyron.completion.java.provider.MemberReferenceCompletionProvider;
-import com.tyron.completion.java.provider.MemberSelectCompletionProvider;
-import com.tyron.completion.java.provider.SmartClassNameCompletionProvider;
-import com.tyron.completion.java.provider.VariableNameCompletionProvider;
-import com.tyron.completion.java.util.FileContentFixer;
 import com.tyron.completion.model.CachedCompletion;
-import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.progress.ProcessCanceledException;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment;
 import org.jetbrains.kotlin.com.intellij.openapi.application.ReadAction;
 import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
+import org.jetbrains.kotlin.com.intellij.openapi.project.IndexNotReadyException;
+import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
+import org.jetbrains.kotlin.com.intellij.psi.ReferenceRange;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiFileImpl;
+import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
-
-import javax.lang.model.element.Element;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
 
 public class JavaCompletionProvider extends CompletionProvider {
 
@@ -91,48 +48,10 @@ public class JavaCompletionProvider extends CompletionProvider {
 
     @Override
     public CompletionList complete(CompletionParameters params) {
-        if (!(params.getModule() instanceof JavaModule)) {
-            return CompletionList.EMPTY;
-        }
-        checkCanceled();
-
-        if (isIncrementalCompletion(mCachedCompletion, params)) {
-            String partial = partialIdentifier(params.getPrefix(), params.getPrefix().length());
-            CompletionList cachedList = mCachedCompletion.getCompletionList();
-            CompletionList copy = CompletionList.copy(cachedList, partial);
-
-            // if the cached completion is incomplete,
-            // chances are there will be new items that are not in the cache
-            // so don't return the cached items
-            if (!copy.isIncomplete && !copy.items.isEmpty()) {
-                return copy;
-            }
-        }
-
-        CompletionList.Builder complete = null;
-        try {
-            complete = completeV2(params);
-        } catch (Throwable t) {
-            IdeLog.getCurrentLogger(getClass()).severe("Failed to complete: " +
-                                                       Throwables.getStackTraceAsString(t));
-        }
-        if (complete == null) {
-            return CompletionList.EMPTY;
-        }
-        CompletionList list = complete.build();
-
-        String newPrefix = params.getPrefix();
-        if (params.getPrefix().contains(".")) {
-            newPrefix = partialIdentifier(params.getPrefix(), params.getPrefix().length());
-        }
-
-        mCachedCompletion =
-                new CachedCompletion(params.getFile(), params.getLine(), params.getColumn(),
-                        newPrefix, list);
-        return list;
+        throw new UnsupportedOperationException();
     }
 
-    public CompletionList.Builder completeV2(CompletionParameters parameters) {
+    public void completeV2(CompletionParameters parameters) {
         JavaKotlincCompletionProvider javaKotlincCompletionProvider =
                 new JavaKotlincCompletionProvider();
 
@@ -144,45 +63,111 @@ public class JavaCompletionProvider extends CompletionProvider {
                             .get(null);
 
             PsiElement psiElement = ReadAction.compute(() -> {
-                if (projectEnvironment == null) return null;
+                if (projectEnvironment == null) {
+                    return null;
+                }
                 CoreLocalFileSystem localFileSystem =
                         projectEnvironment.getEnvironment().getLocalFileSystem();
-                VirtualFile virtualFile =
-                        localFileSystem.findFileByIoFile(parameters.getFile());
+                VirtualFile virtualFile = localFileSystem.findFileByIoFile(parameters.getFile());
 
-                if (virtualFile == null) return null;
+                if (virtualFile == null) {
+                    return null;
+                }
 
                 PsiManager psiManager = PsiManager.getInstance(projectEnvironment.getProject());
                 PsiFile file = psiManager.findFile(virtualFile);
 
-                if (file == null || !file.isValid()) return null;
+                if (file == null || !file.isValid()) {
+                    return null;
+                }
 
                 file = (PsiFile) file.copy();
 
                 Document document = file.getViewProvider().getDocument();
                 assert document != null;
 
-                CommandProcessor.getInstance().executeCommand(projectEnvironment.getProject(), () -> {
-                    document.insertString((int) (parameters.getIndex()), "IntelijIdeaRulezzzzzzzz");
-                }, "Insert fake identifier", null);
+                CommandProcessor.getInstance()
+                        .executeCommand(projectEnvironment.getProject(), () -> {
+                            document.insertString((int) (parameters.getIndex()),
+                                    "IntelijIdeaRulezzzzzzzz");
+                        }, "Insert fake identifier", null);
+
+                ((PsiFileImpl) file).onContentReload();
 
                 return file.findElementAt((int) parameters.getIndex());
             });
 
             if (psiElement == null) {
-                return null;
+                return;
             }
 
+            final long offset = parameters.getIndex();
+            TextRange range = psiElement.getTextRange();
+            assert range.containsOffset((int) offset) : psiElement +
+                                                        "; " +
+                                                        offset +
+                                                        " not in " +
+                                                        range;
 
-            CompletionList.Builder builder = CompletionList.builder(parameters.getPrefix());
+            final Document document =
+                    psiElement.getContainingFile().getViewProvider().getDocument();
+            String prefix = findReferencePrefix(psiElement, ((int) offset));
+            if (prefix == null && !parameters.getPrefix().isEmpty()) {
+                prefix = parameters.getPrefix();
+            }
+
+            if (prefix == null) {
+                return;
+            }
+
+            // only allow completions if prefix is not empty
+            // and the parent is a reference expression (this.[cursor])
+            if (prefix.isEmpty() && !(psiElement.getParent() instanceof PsiReferenceExpression)) {
+                return;
+            }
+
+            CompletionList.Builder builder = parameters.getBuilder();
+            builder.setCompletionPrefix(prefix);
             javaKotlincCompletionProvider.fillCompletionVariants(psiElement, builder);
-
-            return builder;
-
         } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
             e.printStackTrace();
-            return null;
         }
+    }
+
+    @Nullable
+    public static String findReferencePrefix(@NotNull PsiElement position, int offsetInFile) {
+        try {
+            PsiUtilCore.ensureValid(position);
+            PsiReference ref = position.getContainingFile().findReferenceAt(offsetInFile);
+            if (ref != null) {
+                PsiElement element = ref.getElement();
+                int offsetInElement = offsetInFile - element.getTextRange().getStartOffset();
+                for (TextRange refRange : ReferenceRange.getRanges(ref)) {
+                    if (refRange.contains(offsetInElement)) {
+                        int beginIndex = refRange.getStartOffset();
+                        String text = element.getText();
+                        if (beginIndex < 0 ||
+                            beginIndex > offsetInElement ||
+                            offsetInElement > text.length()) {
+                            throw new AssertionError("Inconsistent reference range:" +
+                                                     " ref=" +
+                                                     ref.getClass() +
+                                                     " element=" +
+                                                     element.getClass() +
+                                                     " ref.start=" +
+                                                     refRange.getStartOffset() +
+                                                     " offset=" +
+                                                     offsetInElement +
+                                                     " psi.length=" +
+                                                     text.length());
+                        }
+                        return text.substring(beginIndex, offsetInElement);
+                    }
+                }
+            }
+        } catch (IndexNotReadyException ignored) {
+        }
+        return null;
     }
 
 

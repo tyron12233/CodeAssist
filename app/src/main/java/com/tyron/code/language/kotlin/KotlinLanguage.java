@@ -5,27 +5,16 @@ import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.builder.BuildModule;
 import com.tyron.code.language.CachedAutoCompleteProvider;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.LanguageManager;
-import com.tyron.completion.DefaultInsertHandler;
-import com.tyron.completion.java.provider.JavaSortCategory;
-import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.util.CompletionUtils;
 import com.tyron.editor.Editor;
 import com.tyron.kotlin.completion.KotlinEnvironment;
-import com.tyron.kotlin.completion.KotlinFile;
-
-import java.io.File;
-import java.util.List;
-import java.util.Objects;
 
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
-import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.format.Formatter;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
@@ -78,7 +67,7 @@ public class KotlinLanguage implements Language {
         if (completionList == null) {
             return;
         }
-        completionList.getItems().stream().map(CompletionItemWrapper::new).forEach(publisher::addItem);
+        completionList.getItems().forEach(publisher::addItem);
     }
 
     @Override

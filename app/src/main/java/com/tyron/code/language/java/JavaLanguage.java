@@ -1,12 +1,10 @@
 package com.tyron.code.language.java;
 
 import android.os.Bundle;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.sun.tools.javac.util.JCDiagnostic;
 import com.tyron.builder.project.Project;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.EditorFormatter;
@@ -14,8 +12,8 @@ import com.tyron.code.language.LanguageManager;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.java.ShortNamesCache;
-import com.tyron.completion.java.compiler.services.NBLog;
 import com.tyron.completion.java.parse.CompilationInfo;
+import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 import com.tyron.language.api.CodeAssistLanguage;
@@ -25,36 +23,31 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 
 import io.github.rosemoe.editor.langs.java.JavaTextTokenizer;
 import io.github.rosemoe.editor.langs.java.Tokens;
-import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
+import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
-import io.github.rosemoe.sora.lang.diagnostic.DiagnosticRegion;
 import io.github.rosemoe.sora.lang.format.AsyncFormatter;
 import io.github.rosemoe.sora.lang.format.Formatter;
-import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentReference;
 import io.github.rosemoe.sora.text.TextRange;
-import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
+@Deprecated
 public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLanguage {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JavaLanguage.class);
@@ -161,8 +154,7 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
         CompletionList list = provider.complete(parameters);
 
         publisher.setUpdateThreshold(0);
-        publisher.addItems(list.getItems().stream().map(CompletionItemWrapper::new)
-                .collect(Collectors.toList()));
+        list.getItems().forEach(publisher::addItem);
     }
 
     @Override
@@ -203,8 +195,7 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
     }
 
     private final NewlineHandler[] newLineHandlers =
-            new NewlineHandler[]{new BraceHandler(), new TwoIndentHandler(),
-                    new JavaDocStartHandler(), new JavaDocHandler()};
+            new NewlineHandler[0];
 
     @Override
     public NewlineHandler[] getNewlineHandlers() {
@@ -237,97 +228,6 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
             compilationInfo.update(fileObject);
         } catch (Throwable t) {
             LOGGER.error("Failed to update compilation unit", t);
-        }
-    }
-
-    class TwoIndentHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            Log.d("BeforeText", beforeText);
-            if (beforeText.replace("\r", "").trim().startsWith(".")) {
-                return false;
-            }
-            return beforeText.endsWith(")") && !afterText.startsWith(";");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceAfter = getIndentAdvance(afterText) + (4 * 2);
-            String text;
-            StringBuilder sb = new StringBuilder().append('\n')
-                    .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
-            int shiftLeft = 0;
-            return new NewlineHandleResult(sb, shiftLeft);
-        }
-
-
-    }
-
-    class BraceHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.endsWith("{") && afterText.startsWith("}");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceBefore = getIndentAdvance(beforeText);
-            int advanceAfter = getIndentAdvance(afterText);
-            String text;
-            StringBuilder sb = new StringBuilder("\n").append(
-                            TextUtils.createIndent(count + advanceBefore, tabSize, useTab())).append('\n')
-                    .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
-            int shiftLeft = text.length() + 1;
-            return new NewlineHandleResult(sb, shiftLeft);
-        }
-    }
-
-    class JavaDocStartHandler implements NewlineHandler {
-
-        private boolean shouldCreateEnd = true;
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.trim().startsWith("/**");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceAfter = getIndentAdvance(afterText);
-            String text = "";
-            StringBuilder sb = new StringBuilder().append("\n")
-                    .append(TextUtils.createIndent(count + advanceAfter, tabSize, useTab()))
-                    .append(" * ");
-            if (shouldCreateEnd) {
-                sb.append("\n").append(
-                                text = TextUtils.createIndent(count + advanceAfter, tabSize,
-                                        useTab()))
-                        .append(" */");
-            }
-            return new NewlineHandleResult(sb, text.length() + 4);
-        }
-    }
-
-    class JavaDocHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.trim().startsWith("*") && !beforeText.trim().startsWith("*/");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceAfter = getIndentAdvance(afterText);
-            StringBuilder sb = new StringBuilder().append("\n")
-                    .append(TextUtils.createIndent(count + advanceAfter, tabSize, useTab()))
-                    .append("* ");
-            return new NewlineHandleResult(sb, 0);
         }
     }
 }

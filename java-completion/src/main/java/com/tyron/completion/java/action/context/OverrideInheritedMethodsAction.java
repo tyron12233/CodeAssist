@@ -352,8 +352,7 @@ public class OverrideInheritedMethodsAction extends AnAction {
             OverrideNode value = treeNode.getValue();
             MethodPtr ptr = value.getMethodPtr();
             if (value.isMethod()) {
-                String methodLabel = CompletionItemFactory.getMethodLabel(ptr.method,
-                                                                          (ExecutableType) ptr.method.asType());
+                String methodLabel = "Unsupported feature";
                 methodLabel += ":" + PrintHelper.printType(ptr.method.getReturnType());
                 text.setText(methodLabel);
                 icon.setImageDrawable(new CircleDrawable(DrawableKind.Method, true));

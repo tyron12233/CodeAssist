@@ -9,8 +9,8 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.0.3'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.6.21"
+        classpath 'com.android.tools.build:gradle:7.4.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.21"
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -35,9 +35,9 @@ task clean(type: Delete) {
 }
 
 ext {
-    compileSdkVersion = 32
+    compileSdkVersion = 33
     buildToolsVersion = '30.0.2'
-    targetSdkVersion = 32
+    targetSdkVersion = 33
     minSdkVersion = 26
 
     applicationId = "com.tyron.code"

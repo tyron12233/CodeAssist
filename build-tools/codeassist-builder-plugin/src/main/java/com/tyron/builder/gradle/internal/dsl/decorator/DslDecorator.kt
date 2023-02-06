@@ -463,6 +463,7 @@ class DslDecorator(supportedPropertyTypes: List<SupportedPropertyType>) {
                     )
                 }
             }
+            else -> {}
         }
     }
 

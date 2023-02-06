@@ -39,7 +39,6 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.listener.FileListener;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
-import com.tyron.code.analyzer.BaseTextmateAnalyzer;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.code.language.java.JavaLanguage;
 import com.tyron.code.language.textmate.EmptyTextMateLanguage;
@@ -411,11 +410,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         }
                         assert result != null;
                         mEditor.setColorScheme(result);
-                        if (mLanguage.getAnalyzeManager() instanceof BaseTextmateAnalyzer) {
-                            ((BaseTextmateAnalyzer) mLanguage.getAnalyzeManager()).updateTheme(
-                                    result.getRawTheme());
-                            mLanguage.getAnalyzeManager().rerun();
-                        }
                     }
 
                     @Override

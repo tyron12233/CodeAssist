@@ -1,29 +1,36 @@
 package com.tyron.completion.model;
 
-import static java.util.stream.Collectors.collectingAndThen;
-import static java.util.stream.Collectors.toList;
+import androidx.annotation.RequiresApi;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Ordering;
 import com.google.errorprone.annotations.Immutable;
 import com.tyron.completion.CompletionPrefixMatcher;
 import com.tyron.completion.CompletionPrefixMatcher.MatchLevel;
 import com.tyron.completion.CompletionProvider;
-
+import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Represents a list of completion items to be return from a {@link CompletionProvider}
  */
 @Immutable
+@RequiresApi(24)
 public class CompletionList {
 
-    public static final Ordering<CompletionItem> ITEM_ORDERING =
-            Ordering.from(CompletionItem.COMPARATOR);
+    public static final Comparator<CompletionItemWithMatchLevel> COMPARATOR =
+            Comparator.comparing((CompletionItemWithMatchLevel item) -> item.getMatchLevel()
+                            .ordinal(), Comparator.reverseOrder())
+                    .thenComparing((CompletionItemWithMatchLevel it) -> it.sortText)
+                    .thenComparing((CompletionItemWithMatchLevel it) -> it.getFilterTexts()
+                            .isEmpty() ? it.label.toString() : it.getFilterTexts()
+                            .get(0));
+    public static final Ordering<CompletionItemWithMatchLevel> ITEM_ORDERING =
+            Ordering.from(COMPARATOR);
     private String prefix;
 
     public static Builder builder(String prefix) {
@@ -34,7 +41,7 @@ public class CompletionList {
 
     public boolean isIncomplete = false;
 
-    public List<CompletionItem> items = new ArrayList<>();
+    public List<CompletionItemWithMatchLevel> items = new ArrayList<>();
 
     /**
      * For performance reasons, the completion items are limited to a certain amount.
@@ -51,7 +58,7 @@ public class CompletionList {
         isIncomplete = incomplete;
     }
 
-    public List<CompletionItem> getItems() {
+    public List<CompletionItemWithMatchLevel> getItems() {
         return items;
     }
 
@@ -69,36 +76,49 @@ public class CompletionList {
     }
 
     public static class Builder {
-        private final List<CompletionItem> items;
+        private final List<CompletionItemWithMatchLevel> items;
         private boolean incomplete;
 
-        private final String completionPrefix;
+        private String completionPrefix;
+
+        private final Consumer<CompletionItemWithMatchLevel> consumer;
 
         public Builder(String completionPrefix) {
             items = new ArrayList<>();
             this.completionPrefix = completionPrefix;
+            this.consumer = (s) -> {};
         }
+
+        public Builder(Consumer<CompletionItemWithMatchLevel> consumer) {
+            items = new ArrayList<>();
+            this.consumer = consumer;
+        }
+
+        public void setCompletionPrefix(String prefix) {
+            this.completionPrefix = prefix;
+        }
+
 
         public String getPrefix() {
             return completionPrefix;
         }
 
-        public Builder addItems(Collection<CompletionItem> items) {
-            for (CompletionItem item : items) {
+        public Builder addItems(Collection<CompletionItemWithMatchLevel> items) {
+            for (CompletionItemWithMatchLevel item : items) {
                 addItem(item);
             }
             return this;
         }
 
-        public Builder addItems(Collection<CompletionItem> items, String sortText) {
-            for (CompletionItem item : items) {
-                item.setSortText(sortText);
+        public Builder addItems(Collection<CompletionItemWithMatchLevel> items, String sortText) {
+            for (CompletionItemWithMatchLevel item : items) {
+                item.sortText = sortText;
                 addItem(item);
             }
             return this;
         }
 
-        public Builder addItem(CompletionItem item) {
+        public Builder addItem(CompletionItemWithMatchLevel item) {
             List<MatchLevel> matchLevels = new ArrayList<>();
             for (String filterText : item.getFilterTexts()) {
                 MatchLevel matchLevel =
@@ -113,8 +133,9 @@ public class CompletionList {
             }
             Collections.sort(matchLevels);
             MatchLevel matchLevel = matchLevels.get(matchLevels.size() - 1);
-            item.setMatchLevel(matchLevel);
-            items.add(item);
+            item.matchLevel(matchLevel);
+
+            consumer.accept(item);
             return this;
         }
 

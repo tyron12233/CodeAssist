@@ -31,7 +31,7 @@ public class PasteAction extends CopyAction {
 
         if (presentation.isVisible()) {
             DataContext context = event.getDataContext();
-            presentation.setText(context.getString(io.github.rosemoe.sora2.R.string.paste));
+            presentation.setText("Paste");
             presentation.setIcon(ResourcesCompat.getDrawable(context.getResources(),
                     io.github.rosemoe.sora2.R.drawable.round_content_paste_20, context.getTheme()));
         }

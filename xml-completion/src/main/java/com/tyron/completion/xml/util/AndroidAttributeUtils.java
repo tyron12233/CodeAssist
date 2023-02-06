@@ -67,7 +67,8 @@ public class AndroidAttributeUtils {
             completionItem.setInsertHandler(
                     new AttributeInsertHandler(ResourceNamespace.ANDROID.getXmlNamespaceUri(),
                                                completionItem));
-            builder.addItem(completionItem);
+//            builder.addItem(completionItem);
+            throw new UnsupportedOperationException();
         }
 
         if (resolver.uriToPrefix(ResourceNamespace.RES_AUTO.getXmlNamespaceUri()) == null) {
@@ -77,7 +78,8 @@ public class AndroidAttributeUtils {
             completionItem.setInsertHandler(
                     new AttributeInsertHandler(ResourceNamespace.RES_AUTO.getXmlNamespaceUri(),
                                                completionItem));
-            builder.addItem(completionItem);
+//            builder.addItem(completionItem);
+            throw new UnsupportedOperationException();
         }
     }
 
@@ -122,8 +124,9 @@ public class AndroidAttributeUtils {
             attribute.addFilterText(commitText);
             attribute.addFilterText(reference.getName());
             attribute.setInsertHandler(new AttributeInsertHandler(attribute));
-            builder.addItem(attribute);
             uniques.add(commitText);
+
+            throw new UnsupportedOperationException();
         }
     }
 }

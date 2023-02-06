@@ -31,6 +31,7 @@ import kotlin.Pair;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 
+@Deprecated
 public class CompletionEngine {
 
     private static final Logger LOG = LoggerFactory.getLogger(CompletionEngine.class);
@@ -116,38 +117,7 @@ public class CompletionEngine {
 
     public CompletionList complete(File file, String contents, String prefix, int line,
                                    int column, int cursor) {
-        if (isIndexing()) {
-            return CompletionList.EMPTY;
-        }
-
-        if (isIncrementalCompletion(cachedCompletion, file, prefix, line, column)) {
-            String partialIdentifier = partialIdentifier(prefix, prefix.length());
-            CompletionList cachedList = cachedCompletion.getCompletionList();
-            if (!cachedList.items.isEmpty()) {
-                List<CompletionItem> narrowedList = cachedList.items.stream().filter(item -> {
-                    String label = item.label;
-                    if (label.contains("(")) {
-                        label = label.substring(0, label.indexOf('('));
-                    }
-                    if (label.length() < partialIdentifier.length()) {
-                        return false;
-                    }
-                    return StringUtilsKt.containsCharactersInOrder(label, partialIdentifier, false);
-                }).collect(Collectors.toList());
-                CompletionList completionList = new CompletionList();
-                completionList.items = narrowedList;
-                return completionList;
-            }
-        }
-
-        debounceLint.cancel();
-
-        Pair<CompiledFile, Integer> recover = recover(file, contents, Recompile.NEVER, cursor);
-        CompletionList completions = new Completions().completions(recover.getFirst(), cursor,
-                sp.getIndex());
-        String partialIdentifier = partialIdentifier(contents, cursor);
-        cachedCompletion = new CachedCompletion(file, line, column, partialIdentifier, completions);
-        return completions;
+        throw new UnsupportedOperationException();
     }
 
     private String partialIdentifier(String contents, int end) {

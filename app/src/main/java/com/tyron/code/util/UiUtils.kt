@@ -65,6 +65,31 @@ fun View.addSystemWindowInsetToMargin(
     }
 }
 
+fun View.applySystemWindowInsets(
+    consume: Boolean,
+    block: (Int, Int, Int, Int) -> Unit,
+) {
+    ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+        val statusBarType = WindowInsetsCompat.Type.statusBars()
+        val navigationBarType = WindowInsetsCompat.Type.navigationBars()
+        val imeType = WindowInsetsCompat.Type.ime()
+        val systemWindowInsets = insets.getInsets(statusBarType or navigationBarType or imeType)
+
+        block(
+            systemWindowInsets.left,
+            systemWindowInsets.top,
+            systemWindowInsets.right,
+            systemWindowInsets.bottom,
+        )
+
+        if (consume) {
+            WindowInsetsCompat.CONSUMED
+        } else {
+            insets
+        }
+    }
+}
+
 fun View.removeFromParent() {
     parent?.cast<ViewGroup>()?.removeView(this)
 }

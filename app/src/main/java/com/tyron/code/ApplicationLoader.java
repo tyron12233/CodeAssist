@@ -4,6 +4,7 @@ import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.os.Build;
 import android.widget.Toast;
 
@@ -17,6 +18,9 @@ import com.developer.crashx.config.CrashConfig;
 import com.tyron.actions.ActionManager;
 import com.tyron.builder.BuildModule;
 import com.tyron.code.event.EventManager;
+import com.tyron.code.highlighter.attributes.CodeAssistTextAttributes;
+import com.tyron.code.highlighter.attributes.CodeAssistTextAttributesProvider;
+import com.tyron.code.highlighter.attributes.TextAttributesKeyUtils;
 import com.tyron.code.service.GradleDaemonService;
 import com.tyron.code.ui.editor.action.CloseAllEditorAction;
 import com.tyron.code.ui.editor.action.CloseFileEditorAction;
@@ -60,16 +64,21 @@ import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuardImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentWriteAccessGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
 import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
 import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
+import org.jetbrains.kotlin.com.intellij.psi.impl.compiled.ClsCustomNavigationPolicy;
 import org.jetbrains.kotlin.com.intellij.psi.util.JavaClassSupers;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Objects;
+
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class ApplicationLoader extends Application {
 
@@ -93,26 +102,80 @@ public class ApplicationLoader extends Application {
         IdeaStandaloneExecutionSetup.INSTANCE.doSetup();
 
         coreApplicationEnvironment = new JavaCoreApplicationEnvironment(disposable);
-        CoreApplicationEnvironment.registerApplicationExtensionPoint(
-                DocumentWriteAccessGuard.EP_NAME,
-                DocumentWriteAccessGuard.class
-        );
-        CoreApplicationEnvironment.registerApplicationExtensionPoint(
-                PsiAugmentProvider.EP_NAME,
-                PsiAugmentProvider.class
-        );
-        CoreApplicationEnvironment.registerApplicationExtensionPoint(
-                JavaModuleSystem.EP_NAME,
-                JavaModuleSystem.class
-        );
-        coreApplicationEnvironment.registerApplicationService(
-                TransactionGuard.class,
-                new TransactionGuardImpl()
-        );
-        coreApplicationEnvironment.registerApplicationService(
-                JavaClassSupers.class,
-                new JavaClassSupersImpl()
-        );
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(DocumentWriteAccessGuard.EP_NAME,
+                DocumentWriteAccessGuard.class);
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(PsiAugmentProvider.EP_NAME,
+                PsiAugmentProvider.class);
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(JavaModuleSystem.EP_NAME,
+                JavaModuleSystem.class);
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(ClsCustomNavigationPolicy.EP_NAME,
+                ClsCustomNavigationPolicy.class);
+        coreApplicationEnvironment.registerApplicationService(TransactionGuard.class,
+                new TransactionGuardImpl());
+        coreApplicationEnvironment.registerApplicationService(JavaClassSupers.class,
+                new JavaClassSupersImpl());
+        coreApplicationEnvironment.registerApplicationService(CodeAssistTextAttributesProvider.class,
+                new CodeAssistTextAttributesProvider() {
+                    public CodeAssistTextAttributes getDefaultAttributes(TextAttributesKey textAttributesKey) {
+                        String name = TextAttributesKeyUtils.getExternalName(textAttributesKey);
+
+                        switch (Objects.requireNonNull(name)) {
+                            case "DEFAULT_KEYWORD":
+                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
+                                        EditorColorScheme.KEYWORD,
+                                        Color.RED,
+                                        0,
+                                        null);
+                            case "DEFAULT_PARAMETER":
+                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
+                                        EditorColorScheme.IDENTIFIER_NAME,
+                                        0,
+                                        0,
+                                        null);
+                            case "DEFAULT_STRING":
+                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
+                                        EditorColorScheme.LITERAL,
+                                        Color.RED,
+                                        0,
+                                        null);
+                            case "DEFAULT_LINE_COMMENT":
+                            case "DEFAULT_BLOCK_COMMENT":
+                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
+                                        EditorColorScheme.COMMENT,
+                                        Color.RED,
+                                        0,
+                                        null);
+                            case "DEFAULT_OPERATION_SIGN":
+                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
+                                        EditorColorScheme.OPERATOR,
+                                        Color.RED,
+                                        0,
+                                        null);
+                            case "DEFAULT_INVALID_STRING_ESCAPE":
+                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
+                                        EditorColorScheme.PROBLEM_ERROR,
+                                        Color.RED,
+                                        0,
+                                        null);
+                            case "DEFAULT_FUNCTION_DECLARATION":
+                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
+                                        EditorColorScheme.FUNCTION_NAME,
+                                        Color.RED,
+                                        0,
+                                        null);
+                        }
+
+
+                        TextAttributesKey fallbackAttributeKey =
+                                TextAttributesKeyUtils.getFallbackAttributeKey(textAttributesKey);
+                        if (fallbackAttributeKey != null) {
+                            return TextAttributesKeyUtils.getDefaultAttributes(fallbackAttributeKey);
+                        }
+
+                        return CodeAssistTextAttributes.DEFAULT;
+                    }
+
+                });
 
         super.onCreate();
         System.out.println("onCreate took " + timer.getElapsed());
@@ -154,6 +217,7 @@ public class ApplicationLoader extends Application {
 
     /**
      * Can be used to communicate within the application globally
+     *
      * @return the EventManager
      */
     @NonNull
@@ -162,7 +226,8 @@ public class ApplicationLoader extends Application {
     }
 
     private void setupTheme() {
-        ApplicationSettingsFragment.ThemeProvider provider = new ApplicationSettingsFragment.ThemeProvider(this);
+        ApplicationSettingsFragment.ThemeProvider provider =
+                new ApplicationSettingsFragment.ThemeProvider(this);
         int theme = provider.getThemeFromPreferences();
         AppCompatDelegate.setDefaultNightMode(theme);
     }
@@ -176,9 +241,9 @@ public class ApplicationLoader extends Application {
         });
         startupManager.addStartupActivity(() -> {
             ExpandSelectionProvider.registerProvider(JavaLanguage.INSTANCE,
-                                                     new JavaExpandSelectionProvider());
+                    new JavaExpandSelectionProvider());
             ExpandSelectionProvider.registerProvider(XmlLanguage.INSTANCE,
-                                                     new XmlExpandSelectionProvider());
+                    new XmlExpandSelectionProvider());
         });
         startupManager.addStartupActivity(() -> {
             CompilerService index = CompilerService.getInstance();
@@ -189,7 +254,7 @@ public class ApplicationLoader extends Application {
         });
         startupManager.addStartupActivity(() -> {
             CompletionProvider.registerCompletionProvider(JavaLanguage.INSTANCE,
-                                                          new JavaCompletionProvider());
+                    new JavaCompletionProvider());
         });
         startupManager.addStartupActivity(() -> {
             ActionManager manager = ActionManager.getInstance();
@@ -213,8 +278,8 @@ public class ApplicationLoader extends Application {
             // file manager actions
             manager.registerAction(NewFileActionGroup.ID, new NewFileActionGroup());
             manager.registerAction(DeleteFileAction.ID, new DeleteFileAction());
-            if(Build.VERSION.SDK_INT<Build.VERSION_CODES.R) {
-                manager.registerAction(ImportFileActionGroup.ID,new ImportFileActionGroup());
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                manager.registerAction(ImportFileActionGroup.ID, new ImportFileActionGroup());
             }
 
             // java actions
@@ -234,8 +299,7 @@ public class ApplicationLoader extends Application {
     }
 
     public static void showToast(String message) {
-        Toast.makeText(applicationContext, message, Toast.LENGTH_LONG)
-                .show();
+        Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show();
     }
 
     @VisibleForTesting
@@ -245,7 +309,7 @@ public class ApplicationLoader extends Application {
 
     /**
      * Starts a new gradle daemon on a separate process.
-     *
+     * <p>
      * Accessed reflectively via {@link org.gradle.launcher.daemon.client.DefaultDaemonStarter}
      */
     @Keep

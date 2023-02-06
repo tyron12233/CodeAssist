@@ -1,7 +1,7 @@
 package com.tyron.code.event;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -93,7 +93,7 @@ public final class EventManager {
      *
      * @see #dispatchEvent(Event)
      */
-    public <T extends Event> boolean dispatchEventFromRoot(@NonNull T event) {
+    public <T extends Event> boolean dispatchEventFromRoot(@NotNull T event) {
         return getRootManager().dispatchEvent(event);
     }
 
@@ -119,9 +119,9 @@ public final class EventManager {
     /**
      * Get receivers container of a given event type safely
      */
-    @NonNull
+    @NotNull
     @SuppressWarnings("unchecked")
-    <T extends Event> Receivers<T> getReceivers(@NonNull Class<T> type) {
+    <T extends Event> Receivers<T> getReceivers(@NotNull Class<T> type) {
         lock.readLock()
                 .lock();
         Receivers<T> result;
@@ -155,8 +155,8 @@ public final class EventManager {
      * @param receiver  Receiver of event
      * @param <T>       Event type
      */
-    public <T extends Event> SubscriptionReceipt<T> subscribeEvent(@NonNull Class<T> eventType,
-                                                                   @NonNull EventReceiver<T> receiver) {
+    public <T extends Event> SubscriptionReceipt<T> subscribeEvent(@NotNull Class<T> eventType,
+                                                                   @NotNull EventReceiver<T> receiver) {
         Receivers<T> receivers = getReceivers(eventType);
         receivers.lock.writeLock()
                 .lock();
@@ -182,7 +182,7 @@ public final class EventManager {
      * @return Whether the event's intercept flag is set
      */
     @SuppressWarnings("unchecked")
-    public <T extends Event> boolean dispatchEvent(@NonNull T event) {
+    public <T extends Event> boolean dispatchEvent(@NotNull T event) {
         // Safe cast
         Receivers<T> receivers = getReceivers((Class<T>) event.getClass());
         receivers.lock.readLock()

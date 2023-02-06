@@ -40,20 +40,7 @@ public abstract class CompletionProvider {
 
     @SuppressLint("NewApi")
     public static ImmutableList<CompletionProvider> forParameters(@NotNull CompletionParameters parameters) {
-        File file = parameters.getFile();
-        LanguageFileType fileType = FileTypeManager.getInstance()
-                .findFileType(file);
-        if (fileType == null) {
-            return ImmutableList.of();
-        }
-        Collection<CompletionProvider> providers =
-                sRegisteredCompletionProviders.get(fileType.getLanguage());
-        if (providers == null) {
-            return ImmutableList.of();
-        }
-        return providers.stream()
-                .filter(it -> it.accept(file))
-                .collect(ImmutableList.toImmutableList());
+        throw new UnsupportedOperationException();
     }
 
     public static ImmutableList<CompletionProvider> forLanguage(@NotNull Language language) {

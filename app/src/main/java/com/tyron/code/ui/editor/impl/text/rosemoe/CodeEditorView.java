@@ -46,6 +46,7 @@ import io.github.rosemoe.sora.widget.component.EditorTextActionWindow;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
+@Deprecated
 public class CodeEditorView extends CodeEditor implements Editor {
 
     private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder()
@@ -237,28 +238,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public void deleteText() {
-        Cursor cursor = getCursor();
-        if (!cursor.isSelected()) {
-            io.github.rosemoe.sora.text.Content text = getText();
-            int startIndex = cursor.getLeft();
-            if (startIndex - 1 >= 0) {
-                char deleteChar = text.charAt(startIndex - 1);
-                char afterChar = text.charAt(startIndex);
-                SymbolPairMatch.Replacement replacement = null;
-
-                SymbolPairMatch pairs = getEditorLanguage().getSymbolPairs();
-                if (pairs != null) {
-                    replacement = pairs.getCompletion(deleteChar);
-                }
-                if (replacement != null) {
-                    if (("" + deleteChar + afterChar + "").equals(replacement.text)) {
-                        text.delete(startIndex - 1, startIndex + 1);
-                        return;
-                    }
-                }
-            }
-        }
-        super.deleteText();
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -352,7 +332,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public Caret getCaret() {
-        return new CursorWrapper(getCursor());
+        throw new UnsupportedOperationException();
     }
 
     @Override

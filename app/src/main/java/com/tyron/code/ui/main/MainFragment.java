@@ -70,6 +70,7 @@ import java.util.logging.LogRecord;
 
 import javax.tools.Diagnostic;
 
+@Deprecated
 public class MainFragment extends Fragment implements ProjectManager.OnProjectOpenListener {
 
     public static final String REFRESH_TOOLBAR_KEY = "refreshToolbar";

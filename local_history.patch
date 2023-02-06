@@ -59451,7 +59451,7 @@ deleted file mode 100644
 -
 -    defaultConfig {
 -        minSdk 26
--        targetSdk 31
+-        targetSdk rootProject.ext.targetSdkVersion
 -        versionCode 1
 -        versionName "1.0"
 -

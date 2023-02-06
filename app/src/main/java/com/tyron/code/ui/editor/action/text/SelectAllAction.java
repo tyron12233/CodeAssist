@@ -16,7 +16,7 @@ public class SelectAllAction extends CopyAction {
 
         if (event.getPresentation().isVisible()) {
             DataContext context = event.getDataContext();
-            event.getPresentation().setText(context.getString(io.github.rosemoe.sora2.R.string.selectAll));
+            event.getPresentation().setText("Select all");
             event.getPresentation().setIcon(ResourcesCompat.getDrawable(context.getResources(),
                     io.github.rosemoe.sora2.R.drawable.round_select_all_20, context.getTheme()));
         }

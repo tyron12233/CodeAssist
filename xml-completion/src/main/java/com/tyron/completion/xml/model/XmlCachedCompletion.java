@@ -46,16 +46,7 @@ public class XmlCachedCompletion extends CachedCompletion {
 
     @SuppressLint("NewApi")
     public CompletionList getCompletionList() {
-        CompletionList original = super.getCompletionList();
-        CompletionList completionList = new CompletionList();
-        completionList.isIncomplete = original.isIncomplete;
-        completionList.items = new ArrayList<>(original.items);
-        if (mFilter != null) {
-            completionList.items = completionList.items.stream()
-                    .filter(it -> mFilter.invoke(it, mFilterPrefix))
-                    .collect(Collectors.toList());
-        }
-        return completionList;
+       throw new UnsupportedOperationException();
     }
 
     public String getFilterPrefix() {

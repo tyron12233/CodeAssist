@@ -2,6 +2,7 @@ package com.tyron.completion;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
+import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 
 import java.io.File;
@@ -19,6 +20,7 @@ public class CompletionParameters {
     private final int mLine;
     private final int mColumn;
     private final long mIndex;
+    private CompletionList.Builder builder;
     private final Editor mEditor;
 
     public static Builder builder() {
@@ -33,7 +35,7 @@ public class CompletionParameters {
                                  String prefix,
                                  int line,
                                  int column,
-                                 long index) {
+                                 long index, CompletionList.Builder builder) {
         mProject = project;
         mModule = module;
         mEditor = editor;
@@ -43,6 +45,7 @@ public class CompletionParameters {
         mLine = line;
         mColumn = column;
         mIndex = index;
+        this.builder = builder;
     }
 
     public Project getProject() {
@@ -55,6 +58,10 @@ public class CompletionParameters {
 
     public File getFile() {
         return mFile;
+    }
+
+    public CompletionList.Builder getBuilder() {
+        return builder;
     }
 
     public String getContents() {
@@ -116,6 +123,7 @@ public class CompletionParameters {
         private int column;
         private long index;
         private Editor editor;
+        private CompletionList.Builder builder;
 
         private Builder() {
 
@@ -168,7 +176,12 @@ public class CompletionParameters {
 
         public CompletionParameters build() {
             return new CompletionParameters(project, module, editor, file, contents, prefix, line,
-                                            column, index);
+                                            column, index, builder);
+        }
+
+        public Builder setCompletionListBuilder(CompletionList.Builder builder) {
+            this.builder = builder;
+            return this;
         }
     }
 }

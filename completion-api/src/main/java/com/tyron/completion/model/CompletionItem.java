@@ -15,6 +15,7 @@ import java.util.Objects;
 /**
  * A class representing the completion item shown in the user list
  */
+@Deprecated
 public class CompletionItem implements Comparable<CompletionItem> {
 
     @SuppressWarnings("NewApi")

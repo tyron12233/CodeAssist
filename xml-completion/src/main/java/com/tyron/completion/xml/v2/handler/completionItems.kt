@@ -25,49 +25,49 @@ fun addAttributes(
     node: DOMNode,
     builder: CompletionList.Builder
 ) {
-    val resolver = DOMUtils.getNamespaceResolver(node.ownerDocument)
-    val uniques: MutableSet<String> = HashSet()
-    for (tagAttribute in tagAttributes) {
-        val name = tagAttribute.name
-        val reference: ResourceReference = if (name.contains(":")) {
-            val prefix = name.substring(0, name.indexOf(':'))
-            val fixedName = name.substring(name.indexOf(':') + 1)
-            val namespace = ResourceNamespace.fromNamespacePrefix(
-                prefix,
-                tagAttribute.namespace,
-                tagAttribute.namespaceResolver
-            )
-            ResourceReference(namespace!!, tagAttribute.resourceType, fixedName)
-        } else {
-            tagAttribute.asReference()
-        }
-        var prefix = resolver.uriToPrefix(
-            reference.namespace
-                .xmlNamespaceUri
-        )
-        if (TextUtils.isEmpty(prefix)) {
-            if (tagAttribute.libraryName != null) {
-                // default to res-auto namespace, commonly prefixed as 'app'
-                prefix = resolver.uriToPrefix(ResourceNamespace.RES_AUTO.xmlNamespaceUri)
-            }
-        }
-        val commitText = when {
-            TextUtils.isEmpty(prefix) -> reference.name
-            else -> "$prefix:${reference.name}"
-        }
-        if (uniques.contains(commitText)) {
-            continue
-        }
-        val attribute = CompletionItem.create(
-            commitText, "Attribute", commitText,
-            DrawableKind.Attribute
-        )
-        attribute.addFilterText(commitText)
-        attribute.addFilterText(reference.name)
-        attribute.setInsertHandler(AttributeInsertHandler(attribute))
-        builder.addItem(attribute)
-        uniques.add(commitText)
-    }
+//    val resolver = DOMUtils.getNamespaceResolver(node.ownerDocument)
+//    val uniques: MutableSet<String> = HashSet()
+//    for (tagAttribute in tagAttributes) {
+//        val name = tagAttribute.name
+//        val reference: ResourceReference = if (name.contains(":")) {
+//            val prefix = name.substring(0, name.indexOf(':'))
+//            val fixedName = name.substring(name.indexOf(':') + 1)
+//            val namespace = ResourceNamespace.fromNamespacePrefix(
+//                prefix,
+//                tagAttribute.namespace,
+//                tagAttribute.namespaceResolver
+//            )
+//            ResourceReference(namespace!!, tagAttribute.resourceType, fixedName)
+//        } else {
+//            tagAttribute.asReference()
+//        }
+//        var prefix = resolver.uriToPrefix(
+//            reference.namespace
+//                .xmlNamespaceUri
+//        )
+//        if (TextUtils.isEmpty(prefix)) {
+//            if (tagAttribute.libraryName != null) {
+//                // default to res-auto namespace, commonly prefixed as 'app'
+//                prefix = resolver.uriToPrefix(ResourceNamespace.RES_AUTO.xmlNamespaceUri)
+//            }
+//        }
+//        val commitText = when {
+//            TextUtils.isEmpty(prefix) -> reference.name
+//            else -> "$prefix:${reference.name}"
+//        }
+//        if (uniques.contains(commitText)) {
+//            continue
+//        }
+//        val attribute = CompletionItem.create(
+//            commitText, "Attribute", commitText,
+//            DrawableKind.Attribute
+//        )
+//        attribute.addFilterText(commitText)
+//        attribute.addFilterText(reference.name)
+//        attribute.setInsertHandler(AttributeInsertHandler(attribute))
+//        builder.addItem(attribute)
+//        uniques.add(commitText)
+//    }
 }
 
 fun addValueItems(
@@ -205,7 +205,7 @@ fun addValueItems(
             }
         }
     }.forEach {
-        completionBuilder?.addItem(it)
+//        completionBuilder?.addItem(it)
     }
 }
 

@@ -104,45 +104,7 @@ data class KotlinEnvironment(
     }
 
 
-    fun complete(file: KotlinFile, line: Int, character: Int): CompletionList {
-        currentItemCount = 0
-        
-        return with(file.insert("$COMPLETION_SUFFIX ", line, character)) {
-            kotlinFiles[file.name] = this
-
-            val position = elementAt(line, character)
-            val prefix = position?.let { getPrefix(it) } ?: ""
-
-            val reference = (position?.parent as? KtSimpleNameExpression)?.mainReference
-
-            val list = position?.let { element ->
-                val descriptorInfo = descriptorsFrom(element)
-
-                descriptorInfo.descriptors.toMutableList().apply {
-                    sortWith { a, b ->
-                        val (a1, a2) = a.presentableName()
-                        val (b1, b2) = b.presentableName()
-                        ("$a1$a2").compareTo("$b1$b2", true)
-                    }
-                }.mapNotNull { descriptor ->
-                    completionVariantFor(
-                        prefix,
-                        descriptor
-                    )
-                } + keywordsCompletionVariants(
-                    KtTokens.KEYWORDS, prefix
-                ) + keywordsCompletionVariants(KtTokens.SOFT_KEYWORDS, prefix)
-            } ?: emptyList()
-
-            val builder = CompletionList.builder(prefix)
-            builder.addItems(list)
-            if (currentItemCount >= MAX_ITEMS_COUNT) {
-                builder.incomplete()
-            }
-
-            builder.build()
-        }
-    }
+    fun complete(file: KotlinFile, line: Int, character: Int): CompletionList? = null
 
     private fun completionVariantFor(
         prefix: String,

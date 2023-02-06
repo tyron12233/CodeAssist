@@ -17,7 +17,7 @@ public class CutAction extends CopyAction {
 
         if (event.getPresentation().isVisible()) {
             DataContext context = event.getDataContext();
-            event.getPresentation().setText(context.getString(io.github.rosemoe.sora2.R.string.cut));
+            event.getPresentation().setText("Cut");
             event.getPresentation().setIcon(ResourcesCompat.getDrawable(context.getResources(),
                     io.github.rosemoe.sora2.R.drawable.round_content_cut_20, context.getTheme()));
         }

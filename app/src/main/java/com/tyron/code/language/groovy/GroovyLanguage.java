@@ -77,64 +77,7 @@ public class GroovyLanguage implements Language {
                                     @NonNull CharPosition position,
                                     @NonNull CompletionPublisher publisher,
                                     @NonNull Bundle extraArguments) throws CompletionCancelledException {
-        String prefix = CompletionHelper.computePrefix(content, position, MyCharacter::isJavaIdentifierPart);
 
-        if (true) {
-            return;
-        }
-        try {
-            File currentFile = editor.getCurrentFile();
-            URI uri = currentFile.toURI();
-            Position pos = new Position(position.getLine(), position.getColumn());
-
-            CompilerConfiguration compilerConfiguration = new CompilerConfiguration();
-            GroovyClassLoader classLoader = new GroovyClassLoader(getClass().getClassLoader(), compilerConfiguration);
-            CompilationUnit unit = new CompilationUnit(compilerConfiguration, null, classLoader);
-            SourceUnit source = new SourceUnit(
-                    currentFile.getName(),
-                    content.getReference().toString(),
-                    unit.getConfiguration(),
-                    classLoader,
-                    unit.getErrorCollector()
-            );
-            unit.addSource(source);
-
-            unit.compile(Phases.CANONICALIZATION);
-
-            CompletionVisitor completionVisitor = new CompletionVisitor();
-            completionVisitor.visitCompilationUnit(uri,
-                    unit
-            );
-
-            Set<MethodCallExpression> methodCalls = completionVisitor.getMethodCalls(uri);
-            MethodCallExpression containingCall = null;
-            for (MethodCallExpression call : methodCalls) {
-                Expression expression = call.getArguments();
-                Range range = GroovyUtils.toRange(expression);
-                if (Ranges.containsPosition(range, pos)
-                    && (containingCall == null || Ranges.containsRange(GroovyUtils.toRange(containingCall.getArguments()),
-                        GroovyUtils.toRange(call.getArguments())))) {
-                    // find inner containing call
-                    containingCall = call;
-                }
-            }
-
-            if (containingCall != null) {
-                CompletionHandler completionHandler = new CompletionHandler();
-                List<CompletionItem> completionItems = completionHandler.getCompletionItems(
-                        containingCall,
-                        currentFile.getName(),
-                        editor.getProject().getRootFile().getAbsolutePath(),
-                        completionVisitor.getPlugins(uri));
-                CompletionList.Builder builder = new CompletionList.Builder(prefix);
-                completionItems.forEach(builder::addItem);
-                builder.build().getItems().forEach(it -> {
-                    publisher.addItem(new CompletionItemWrapper(it));
-                });
-            }
-        } catch (Exception e) {
-            System.out.println(e);
-        }
     }
 
     @Override
@@ -161,11 +104,7 @@ public class GroovyLanguage implements Language {
     @Nullable
     @Override
     public NewlineHandler[] getNewlineHandlers() {
-        return new NewlineHandler[]{
-                new BraceHandler(),
-                new JavaDocHandler(),
-                new TwoIndentHandler()
-        };
+        return new NewlineHandler[0];
     }
 
     @Override
@@ -183,96 +122,5 @@ public class GroovyLanguage implements Language {
             }
         }
         return (advance * delegate.getTabSize());
-    }
-
-    class TwoIndentHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            Log.d("BeforeText", beforeText);
-            if (beforeText.replace("\r", "").trim().startsWith(".")) {
-                return false;
-            }
-            return beforeText.endsWith(")") && !afterText.startsWith(";");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceAfter = getIndentAdvance(afterText) + (4 * 2);
-            String text;
-            StringBuilder sb = new StringBuilder().append('\n')
-                    .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
-            int shiftLeft = 0;
-            return new NewlineHandleResult(sb, shiftLeft);
-        }
-
-
-    }
-
-    class BraceHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.endsWith("{") && afterText.startsWith("}");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceBefore = getIndentAdvance(beforeText);
-            int advanceAfter = getIndentAdvance(afterText);
-            String text;
-            StringBuilder sb = new StringBuilder("\n").append(
-                            TextUtils.createIndent(count + advanceBefore, tabSize, useTab())).append('\n')
-                    .append(text = TextUtils.createIndent(count + advanceAfter, tabSize, useTab()));
-            int shiftLeft = text.length() + 1;
-            return new NewlineHandleResult(sb, shiftLeft);
-        }
-    }
-
-    class JavaDocStartHandler implements NewlineHandler {
-
-        private boolean shouldCreateEnd = true;
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.trim().startsWith("/**");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceAfter = getIndentAdvance(afterText);
-            String text = "";
-            StringBuilder sb = new StringBuilder().append("\n")
-                    .append(TextUtils.createIndent(count + advanceAfter, tabSize, useTab()))
-                    .append(" * ");
-            if (shouldCreateEnd) {
-                sb.append("\n").append(
-                                text = TextUtils.createIndent(count + advanceAfter, tabSize,
-                                        useTab()))
-                        .append(" */");
-            }
-            return new NewlineHandleResult(sb, text.length() + 4);
-        }
-    }
-
-    class JavaDocHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.trim().startsWith("*") && !beforeText.trim().startsWith("*/");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            int advanceAfter = getIndentAdvance(afterText);
-            StringBuilder sb = new StringBuilder().append("\n")
-                    .append(TextUtils.createIndent(count + advanceAfter, tabSize, useTab()))
-                    .append("* ");
-            return new NewlineHandleResult(sb, 0);
-        }
     }
 }

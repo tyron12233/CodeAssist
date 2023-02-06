@@ -38,7 +38,7 @@ public class CopyAction extends AnAction {
 
         DataContext context = event.getDataContext();
         presentation.setVisible(true);
-        presentation.setText(context.getString(io.github.rosemoe.sora2.R.string.copy));
+        presentation.setText("Copy");
         presentation.setIcon(ResourcesCompat.getDrawable(context.getResources(),
                 io.github.rosemoe.sora2.R.drawable.round_content_copy_20, context.getTheme()));
     }

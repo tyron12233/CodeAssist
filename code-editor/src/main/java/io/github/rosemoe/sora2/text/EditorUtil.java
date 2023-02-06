@@ -9,13 +9,12 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.eclipse.tm4e.core.internal.theme.ThemeRaw;
-import org.eclipse.tm4e.core.internal.theme.reader.ThemeReader;
-import org.eclipse.tm4e.core.theme.IRawTheme;
-import org.eclipse.tm4e.core.theme.IRawThemeSetting;
+import org.eclipse.tm4e.core.internal.theme.IRawTheme;
+import org.eclipse.tm4e.core.internal.theme.ThemeReader;
+import org.eclipse.tm4e.core.registry.IThemeSource;
 
 import java.lang.reflect.Method;
-import java.util.Collection;
+import java.nio.charset.StandardCharsets;
 
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.lang.Language;
@@ -24,7 +23,6 @@ import io.github.rosemoe.sora.text.ContentLine;
 import io.github.rosemoe.sora.text.ICUUtils;
 import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
-import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class EditorUtil {
 
@@ -36,37 +34,38 @@ public class EditorUtil {
 
     @NonNull
     public static TextMateColorScheme createTheme(IRawTheme rawTheme) {
-        TextMateColorScheme scheme = TextMateColorScheme.create(rawTheme);
-        Collection<IRawThemeSetting> settings = rawTheme.getSettings();
-        if (settings != null && settings.size() >= 1) {
-            ThemeRaw setting = (ThemeRaw) settings.iterator().next();
-            setting = (ThemeRaw) setting.getSetting();
-
-            Object blockLine = setting.get(KEY_BLOCK_LINE);
-            if (blockLine != null) {
-                scheme.setColor(EditorColorScheme.BLOCK_LINE, getColor(blockLine));
-            }
-
-            Object currBlockLine = setting.get(KEY_CURRENT_BLOCK_LINE);
-            if (currBlockLine == null) {
-                currBlockLine = blockLine;
-            }
-            if (currBlockLine != null) {
-                scheme.setColor(EditorColorScheme.BLOCK_LINE_CURRENT, getColor(currBlockLine));
-            }
-
-            Object completionWindowBackground = setting.get(KEY_COMPLETION_WINDOW_BACKGROUND);
-            if (completionWindowBackground == null) {
-                completionWindowBackground = setting.get(KEY_BACKGROUND);
-            }
-            scheme.setColor(EditorColorScheme.COMPLETION_WND_BACKGROUND,
-                            getColor(completionWindowBackground));
-
-            Object completionStroke = setting.get(KEY_COMPLETION_WINDOW_STROKE);
-            scheme.setColor(EditorColorScheme.COMPLETION_WND_CORNER,
-                            getColor(completionStroke, Color.TRANSPARENT));
-        }
-        return scheme;
+        throw new UnsupportedOperationException();
+//        TextMateColorScheme scheme = TextMateColorScheme.create(rawTheme);
+//        Collection<IRawThemeSetting> settings = rawTheme.getSettings();
+//        if (settings != null && settings.size() >= 1) {
+//            ThemeRaw setting = (ThemeRaw) settings.iterator().next();
+//            setting = (ThemeRaw) setting.getSetting();
+//
+//            Object blockLine = setting.get(KEY_BLOCK_LINE);
+//            if (blockLine != null) {
+//                scheme.setColor(EditorColorScheme.BLOCK_LINE, getColor(blockLine));
+//            }
+//
+//            Object currBlockLine = setting.get(KEY_CURRENT_BLOCK_LINE);
+//            if (currBlockLine == null) {
+//                currBlockLine = blockLine;
+//            }
+//            if (currBlockLine != null) {
+//                scheme.setColor(EditorColorScheme.BLOCK_LINE_CURRENT, getColor(currBlockLine));
+//            }
+//
+//            Object completionWindowBackground = setting.get(KEY_COMPLETION_WINDOW_BACKGROUND);
+//            if (completionWindowBackground == null) {
+//                completionWindowBackground = setting.get(KEY_BACKGROUND);
+//            }
+//            scheme.setColor(EditorColorScheme.COMPLETION_WND_BACKGROUND,
+//                    getColor(completionWindowBackground));
+//
+//            Object completionStroke = setting.get(KEY_COMPLETION_WINDOW_STROKE);
+//            scheme.setColor(EditorColorScheme.COMPLETION_WND_CORNER,
+//                    getColor(completionStroke, Color.TRANSPARENT));
+//        }
+//        return scheme;
     }
 
 
@@ -86,7 +85,8 @@ public class EditorUtil {
     }
 
     public static boolean isDarkMode(Context context) {
-        int uiMode = context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        int uiMode =
+                context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return uiMode == Configuration.UI_MODE_NIGHT_YES;
     }
 
@@ -109,11 +109,13 @@ public class EditorUtil {
             AssetManager assets = context.getAssets();
             IRawTheme rawTheme;
             if (light) {
-                rawTheme = ThemeReader.readThemeSync("QuietLight.tmTheme", assets.open(
-                        "textmate/QuietLight.tmTheme"));
+                rawTheme = ThemeReader.readTheme(IThemeSource.fromInputStream(assets.open(
+                                "textmate/QuietLight.tmTheme"),
+                        "QuietLight.tmTheme",
+                        StandardCharsets.UTF_8));
             } else {
-                rawTheme = ThemeReader.readThemeSync("darcula.json",
-                                                     assets.open("textmate/darcula.json"));
+                rawTheme = ThemeReader.readTheme(IThemeSource.fromInputStream(assets.open(
+                        "textmate/darcula.json"), "darcula.json", StandardCharsets.UTF_8));
             }
             return createTheme(rawTheme);
         } catch (Exception e) {
@@ -145,6 +147,7 @@ public class EditorUtil {
         }
         return true;
     }
+
     public static void selectWord(CodeEditor editor, int line, int column) {
         // Find word edges
         int startLine = line, endLine = line;
@@ -168,6 +171,10 @@ public class EditorUtil {
                 }
             }
         }
-        editor.setSelectionRegion(startLine, startColumn, endLine, endColumn, SelectionChangeEvent.CAUSE_LONG_PRESS);
+        editor.setSelectionRegion(startLine,
+                startColumn,
+                endLine,
+                endColumn,
+                SelectionChangeEvent.CAUSE_LONG_PRESS);
     }
 }

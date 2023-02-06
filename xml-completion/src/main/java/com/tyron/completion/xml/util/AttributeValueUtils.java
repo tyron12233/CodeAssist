@@ -77,7 +77,7 @@ public class AttributeValueUtils {
                         CompletionItem.create(flag, "Value", flag, DrawableKind.Snippet);
 //                item.setInsertHandler(new ValueInsertHandler(attribute, item));
                 item.addFilterText(flag);
-                list.addItem(item);
+                throw new UnsupportedOperationException();
             }
         }
 
@@ -125,7 +125,7 @@ public class AttributeValueUtils {
 //                    item.setInsertHandler(new ValueInsertHandler(attribute, item));
                     item.addFilterText(value.asReference().getRelativeResourceUrl(appNamespace).toString());
                     item.addFilterText(value.getName());
-                    list.addItem(item);
+                    throw new UnsupportedOperationException();
                 }
             }
         }

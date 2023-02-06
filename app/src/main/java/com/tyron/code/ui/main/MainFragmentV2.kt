@@ -5,59 +5,42 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.children
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.transition.TransitionManager
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayout.OnTabSelectedListener
 import com.google.android.material.transition.MaterialFadeThrough
 import com.google.android.material.transition.MaterialSharedAxis
 import com.tyron.code.databinding.MainFragmentBinding
 import com.tyron.code.ui.editor.EditorTabUtil
-import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeCodeEditor
-import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade
-import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorProvider
-import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder
-import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewFactory
-import com.tyron.code.ui.file.tree.model.TreeFile
+import com.tyron.code.ui.editor.EditorView
+import com.tyron.code.ui.file.FileViewModel
+import com.tyron.code.util.applySystemWindowInsets
 import com.tyron.code.util.viewModel
-import com.tyron.ui.treeview.TreeNode
-import com.tyron.ui.treeview.TreeViewAdapter
 import kotlinx.coroutines.flow.collect
-import org.jetbrains.kotlin.com.intellij.psi.PsiManager
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiManagerImpl
-import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport
-import java.io.File
 
 class MainFragmentV2 : Fragment() {
 
     private var editorListState: TextEditorListState? = null
 
-    private val treeFileNodeFactory = TreeFileNodeViewFactory(object: TreeFileNodeViewBinder.TreeFileNodeListener {
-        override fun onNodeToggled(treeNode: TreeNode<TreeFile>?, expanded: Boolean) {
+    private val viewModelV2 by viewModels<MainViewModelV2>()
+    private val fileViewModel by viewModels<FileViewModel>()
 
-        }
-
-        override fun onNodeLongClicked(
-            view: View?,
-            treeNode: TreeNode<TreeFile>?,
-            expanded: Boolean
-        ): Boolean {
-            return false;
-        }
-
-    })
-
-
-    private lateinit var viewModelV2: MainViewModelV2
     private lateinit var binding: MainFragmentBinding
+    private val toolbarManager by lazy { ToolbarManager() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         enterTransition = MaterialSharedAxis(MaterialSharedAxis.X, true)
         exitTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
-
-        val projectPath = requireArguments().getString("project_path")!!
-        viewModelV2 = viewModel(MainViewModelV2::class.java, projectPath)
     }
 
     override fun onCreateView(
@@ -66,32 +49,62 @@ class MainFragmentV2 : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         binding = MainFragmentBinding.inflate(inflater, container, false)
-
-
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        toolbarManager.bind(binding)
+
+        view.applySystemWindowInsets(false) { left, top, right, bottom ->
+            binding.drawerMainContent.updatePadding(top = top, bottom = bottom)
+        }
+
+        binding.editorContainer.tablayout.addOnTabSelectedListener(object : OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+               tab?.position?.let { viewModelV2.onTabSelected(it) }
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab?) {
+
+            }
+
+            override fun onTabReselected(tab: TabLayout.Tab?) {
+
+            }
+
+        })
+
+        observeViewModel()
+    }
+
+    fun observeViewModel() {
         lifecycleScope.launchWhenResumed {
-            viewModelV2.currentTextEditorState.collect {
+            viewModelV2.currentTextEditorState.collect { textEditorState ->
+                if (textEditorState == null) {
+                    binding.editorContainer.viewpager.removeAllViews()
+                    return@collect
+                }
 
+                val editorView = binding.editorContainer.viewpager.children.filterIsInstance(EditorView::class.java)
+                    .find { it.file == textEditorState.file }
+                if (editorView != null) {
+                    editorView.bringToFront()
+                    // view already selected
+                    return@collect
+                }
 
-
-                if (it == null) return@collect
-
-
-                val editor = RosemoeCodeEditor(
+                val editor = EditorView(
                     requireContext(),
-                    File(it.file.path),
-                    RosemoeEditorProvider()
+                    viewModelV2.projectEnvironment.project,
+                    textEditorState
                 )
-
-
-                binding.editorContainer.viewpager.addView(editor.view, ViewGroup.LayoutParams(
+                binding.editorContainer.viewpager.addView(editor, ViewGroup.LayoutParams(
                     -1, -1
                 ))
             }
+        }
 
+        lifecycleScope.launchWhenResumed {
             viewModelV2.textEditorListState.collect {
                 val oldList = editorListState?.editors ?: emptyList()
 
@@ -111,19 +124,16 @@ class MainFragmentV2 : Fragment() {
                     )
                 }
             }
+        }
 
-
+        lifecycleScope.launchWhenResumed {
             viewModelV2.projectState.collect { state ->
-                if (state.initialized && state.projectPath != null) {
-                    binding.toolbar.setTitle(state.projectPath)
+                if (state.initialized && state.projectName != null) {
+                    binding.toolbar.setTitle(state.projectName)
                 }
 
+                binding.progressbar.isIndeterminate = true
                 binding.progressbar.visibility = if (state.showProgressBar) View.VISIBLE else View.GONE
-            }
-
-            viewModelV2.treeNode.collect {
-                if (it == null) return@collect
-                binding.fileTree.fileTreeRecyclerview.adapter = TreeViewAdapter(requireContext(), it, treeFileNodeFactory)
             }
         }
     }

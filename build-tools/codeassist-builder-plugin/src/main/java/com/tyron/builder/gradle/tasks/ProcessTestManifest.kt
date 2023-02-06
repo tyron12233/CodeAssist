@@ -207,12 +207,11 @@ abstract class ProcessTestManifest : ManifestProcessorTask() {
                     .also { tempFile1 = it }
             // we are generating the manifest and if there is an existing one,
             // it will be merged with the generated one
-            logger.verbose("Generating in %1\$s", generatedTestManifest!!.absolutePath)
+            logger.verbose("Generating in %1\$s", generatedTestManifest.absolutePath)
             if (handleProfiling != null) {
-                Preconditions.checkNotNull(
-                    functionalTest,
-                    "functionalTest cannot be null."
-                )
+                checkNotNull(
+                    functionalTest
+                ) { "functionalTest cannot be null." }
                 generateInstrumentedTestManifest(
                     testApplicationId,
                     minSdkVersion,

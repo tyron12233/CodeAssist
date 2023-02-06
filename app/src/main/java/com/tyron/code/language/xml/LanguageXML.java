@@ -12,21 +12,17 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.event.EventManager;
 import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.LanguageManager;
-import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.xml.lexer.XMLLexer;
-import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.completion.xml.v2.AndroidXmlCompletionProvider;
 import com.tyron.completion.xml.v2.events.XmlResourceChangeEvent;
 import com.tyron.editor.Editor;
 import com.tyron.language.api.CodeAssistLanguage;
-import com.tyron.viewbinding.task.InjectViewBindingTask;
 
 import java.io.File;
-import java.util.List;
 
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.Language;
@@ -35,15 +31,14 @@ import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.format.Formatter;
-import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
-import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
+@Deprecated
 public class LanguageXML implements Language, CodeAssistLanguage {
 
     private final Editor mEditor;
@@ -106,8 +101,7 @@ public class LanguageXML implements Language, CodeAssistLanguage {
 
     @Override
     public NewlineHandler[] getNewlineHandlers() {
-        return new NewlineHandler[]{new StartTagHandler(), new EndTagHandler(),
-                new EndTagAttributeHandler()};
+        return new NewlineHandler[0];
     }
 
     @Override
@@ -154,9 +148,7 @@ public class LanguageXML implements Language, CodeAssistLanguage {
         if (items == null) {
             return;
         }
-        for (CompletionItem item : items.getItems()) {
-            publisher.addItem(new CompletionItemWrapper(item));
-        }
+        items.getItems().forEach(publisher::addItem);
     }
 
     @Override
@@ -207,70 +199,5 @@ public class LanguageXML implements Language, CodeAssistLanguage {
         }
         EventManager eventManager = mEditor.getProject().getEventManager();
         eventManager.dispatchEvent(new XmlResourceChangeEvent(mEditor.getCurrentFile(), mEditor.getContent()));
-    }
-
-    private class EndTagHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            String trim = beforeText.trim();
-            if (!trim.startsWith("<")) {
-                return false;
-            }
-            if (!trim.endsWith(">")) {
-                return false;
-            }
-            return afterText.trim().startsWith("</");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            String middle;
-            StringBuilder sb = new StringBuilder();
-            sb.append('\n');
-            sb.append(TextUtils.createIndent(count + tabSize, tabSize, useTab()));
-            sb.append('\n');
-            sb.append(middle = TextUtils.createIndent(count, tabSize, useTab()));
-            return new NewlineHandleResult(sb, middle.length() + 1);
-        }
-    }
-
-    private class EndTagAttributeHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            return beforeText.trim().endsWith(">") && afterText.trim().startsWith("</");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            String middle;
-            StringBuilder sb = new StringBuilder();
-            sb.append('\n');
-            sb.append(TextUtils.createIndent(count, tabSize, useTab()));
-            sb.append('\n');
-            sb.append(middle = TextUtils.createIndent(count - tabSize, tabSize, useTab()));
-            return new NewlineHandleResult(sb, middle.length() + 1);
-        }
-    }
-
-    private class StartTagHandler implements NewlineHandler {
-
-        @Override
-        public boolean matchesRequirement(String beforeText, String afterText) {
-            String trim = beforeText.trim();
-            return trim.startsWith("<") && !trim.endsWith(">");
-        }
-
-        @Override
-        public NewlineHandleResult handleNewline(String beforeText, String afterText, int tabSize) {
-            int count = TextUtils.countLeadingSpaceCount(beforeText, tabSize);
-            String text;
-            StringBuilder sb = new StringBuilder().append("\n")
-                    .append(TextUtils.createIndent(count + tabSize, tabSize, useTab()));
-            return new NewlineHandleResult(sb, 0);
-        }
     }
 }

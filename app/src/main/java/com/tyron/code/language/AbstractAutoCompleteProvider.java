@@ -12,6 +12,7 @@ import io.github.rosemoe.sora.lang.completion.CompletionItem;
 /**
  * An auto complete provider that supports cancellation as the user types
  */
+@Deprecated
 public abstract class AbstractAutoCompleteProvider {
 
     public final List<CompletionItem> getAutoCompleteItems(String prefix, int line, int column) {
@@ -20,9 +21,7 @@ public abstract class AbstractAutoCompleteProvider {
             return null;
         }
 
-        return list.items.stream()
-               .map(CompletionItemWrapper::new)
-               .collect(Collectors.toList());
+        throw new UnsupportedOperationException();
     }
 
     public abstract CompletionList getCompletionList(String prefix, int line, int column);

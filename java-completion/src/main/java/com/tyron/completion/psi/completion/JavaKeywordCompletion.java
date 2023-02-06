@@ -11,6 +11,7 @@ import com.tyron.completion.java.patterns.PsiElementPatterns;
 import com.tyron.completion.java.util.CompletionItemFactory;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.psi.completion.item.KeywordCompletionItem;
 
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -43,6 +44,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiForStatement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiIdentifier;
 import org.jetbrains.kotlin.com.intellij.psi.PsiIfStatement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiInvalidElementAccessException;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaCodeReferenceCodeFragment;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaCodeReferenceElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaModule;
@@ -149,10 +151,8 @@ public class JavaKeywordCompletion {
             not(JavaMemberNameCompletionContributor.INSIDE_TYPE_PARAMS_PATTERN));
 
     private static final ElementPattern<PsiElement> INSIDE_PARAMETER_LIST =
-            psiElement().withParent(
-                    psiElement(PsiJavaCodeReferenceElement.class).inside(
-                            psiElement().withParent(
-                                    psiElement(PsiParameterList.class).andNot(psiElement(PsiAnnotationParameterList.class)))));
+            psiElement().withParent(psiElement(PsiJavaCodeReferenceElement.class).inside(psiElement().withParent(
+                    psiElement(PsiParameterList.class).andNot(psiElement(PsiAnnotationParameterList.class)))));
 
     @SafeVarargs
     public static <E> ElementPattern<E> and(final ElementPattern<? extends E>... patterns) {
@@ -260,15 +260,23 @@ public class JavaKeywordCompletion {
     }
 
     private void addFinal() {
-        PsiStatement statement = PsiTreeUtil.getParentOfType(myPosition, PsiExpressionStatement.class, PsiDeclarationStatement.class);
-        if (statement != null && statement.getTextRange().getStartOffset() == myPosition.getTextRange().getStartOffset()) {
-            if (!psiElement().withSuperParent(2, psiElement(PsiSwitchBlock.class)).afterLeaf(psiElement().withText("{")).accepts(statement)) {
-                PsiTryStatement tryStatement = PsiTreeUtil.getParentOfType(myPrevLeaf, PsiTryStatement.class);
+        PsiStatement statement = PsiTreeUtil.getParentOfType(myPosition,
+                PsiExpressionStatement.class,
+                PsiDeclarationStatement.class);
+        if (statement != null &&
+            statement.getTextRange().getStartOffset() ==
+            myPosition.getTextRange().getStartOffset()) {
+            if (!psiElement().withSuperParent(2, psiElement(PsiSwitchBlock.class))
+                    .afterLeaf(psiElement().withText("{"))
+                    .accepts(statement)) {
+                PsiTryStatement tryStatement =
+                        PsiTreeUtil.getParentOfType(myPrevLeaf, PsiTryStatement.class);
                 if (tryStatement == null ||
                     tryStatement.getCatchSections().length > 0 ||
-                    tryStatement.getFinallyBlock() != null || tryStatement.getResourceList() != null) {
+                    tryStatement.getFinallyBlock() != null ||
+                    tryStatement.getResourceList() != null) {
 
-                    CompletionItem item = CompletionItemFactory.item(PsiKeyword.FINAL);
+                    KeywordCompletionItem item = createKeyword(PsiKeyword.FINAL);
 //                    if (statement.getParent() instanceof PsiSwitchLabeledRuleStatement) {
 //                        item = wrapRuleIntoBlock(item);
 //                    }
@@ -281,8 +289,14 @@ public class JavaKeywordCompletion {
         if ((isInsideParameterList(myPosition) || isAtCatchOrResourceVariableStart(myPosition)) &&
             !psiElement().afterLeaf(psiElement().withText(PsiKeyword.FINAL)).accepts(myPosition) &&
             !AFTER_DOT.accepts(myPosition)) {
-            myBuilder.addItem(CompletionItemFactory.item(PsiKeyword.FINAL));
+            myBuilder.addItem(createKeyword(PsiKeyword.FINAL));
         }
+    }
+
+    public KeywordCompletionItem createKeyword(String keyword) {
+        return new KeywordCompletionItem(JavaPsiFacade.getInstance(myPosition.getProject())
+                .getElementFactory()
+                .createKeyword(keyword), myPosition);
     }
 
     public static boolean isInsideParameterList(PsiElement position) {
@@ -293,16 +307,20 @@ public class JavaKeywordCompletion {
                 return false;
             }
             PsiElement parent = modifierList.getParent();
-            return parent instanceof PsiParameterList || parent instanceof PsiParameter && parent.getParent() instanceof PsiParameterList;
+            return parent instanceof PsiParameterList ||
+                   parent instanceof PsiParameter && parent.getParent() instanceof PsiParameterList;
         }
         return INSIDE_PARAMETER_LIST.accepts(position);
     }
 
     private static boolean isAtCatchOrResourceVariableStart(PsiElement position) {
         PsiElement type = PsiTreeUtil.getParentOfType(position, PsiTypeElement.class);
-        if (type != null && type.getTextRange().getStartOffset() == position.getTextRange().getStartOffset()) {
+        if (type != null &&
+            type.getTextRange().getStartOffset() == position.getTextRange().getStartOffset()) {
             PsiElement parent = type.getParent();
-            if (parent instanceof PsiVariable) parent = parent.getParent();
+            if (parent instanceof PsiVariable) {
+                parent = parent.getParent();
+            }
             return parent instanceof PsiCatchSection || parent instanceof PsiResourceList;
         }
         return psiElement().inside(psiElement(PsiResourceExpression.class)).accepts(position);
@@ -311,13 +329,13 @@ public class JavaKeywordCompletion {
     private void addClassKeywords() {
         if (isSuitableForClass(myPosition)) {
             for (String modifier : PsiModifier.MODIFIERS) {
-                myBuilder.addItem(CompletionItemFactory.keyword(modifier));
+                myBuilder.addItem(createKeyword(modifier));
             }
 
             if (insideStarting(or(psiElement(PsiLocalVariable.class),
                     psiElement(PsiExpression.class))).accepts(myPosition)) {
-                myBuilder.addItem(CompletionItemFactory.keyword(PsiKeyword.CLASS));
-                myBuilder.addItem(CompletionItemFactory.item("abstract class"));
+                myBuilder.addItem(createKeyword(PsiKeyword.CLASS));
+//                myBuilder.addItem(createKeyword);
             }
 
             if (PsiTreeUtil.getParentOfType(myPosition,
@@ -338,7 +356,7 @@ public class JavaKeywordCompletion {
 
                 // TODO: recommend class declaration
                 for (String keyword : keywords) {
-                    myBuilder.addItem(CompletionItemFactory.keyword(keyword));
+                    myBuilder.addItem(createKeyword(keyword));
                 }
             }
         }
@@ -355,10 +373,10 @@ public class JavaKeywordCompletion {
             final boolean insideInheritorClass = isInsideInheritorClass();
             if (!afterDot || insideQualifierClass || insideInheritorClass) {
                 if (!afterDot || insideQualifierClass) {
-                    myBuilder.addItem(CompletionItemFactory.item(PsiKeyword.THIS));
+                    myBuilder.addItem(createKeyword(PsiKeyword.THIS));
                 }
 
-                final CompletionItem superItem = CompletionItemFactory.item(PsiKeyword.SUPER);
+                final KeywordCompletionItem superItem = createKeyword(PsiKeyword.SUPER);
                 if (psiElement().afterLeaf(psiElement().withText("}")
                         .withSuperParent(2,
                                 psiElement(PsiMethod.class).with(new PatternCondition<PsiMethod>(
@@ -457,21 +475,21 @@ public class JavaKeywordCompletion {
                                         !(grandParent instanceof PsiUnaryExpression);
             if (PsiTreeUtil.getParentOfType(myPosition, PsiAnnotation.class) == null) {
                 if (!statementPosition) {
-                    myBuilder.addItem(CompletionItemFactory.keyword(PsiKeyword.NEW));
+                    myBuilder.addItem(createKeyword(PsiKeyword.NEW));
                 }
                 if (allowExprKeywords) {
-                    myBuilder.addItem(CompletionItemFactory.keyword(PsiKeyword.NULL));
+                    myBuilder.addItem(createKeyword(PsiKeyword.NULL));
                 }
             }
 
             if (allowExprKeywords && mayExpectBoolean()) {
-                myBuilder.addItem(CompletionItemFactory.keyword(PsiKeyword.TRUE));
-                myBuilder.addItem(CompletionItemFactory.keyword(PsiKeyword.FALSE));
+                myBuilder.addItem(createKeyword(PsiKeyword.TRUE));
+                myBuilder.addItem(createKeyword(PsiKeyword.FALSE));
             }
         }
 
         if (isQualifiedNewContext()) {
-            myBuilder.addItem(CompletionItemFactory.keyword(PsiKeyword.NEW));
+            myBuilder.addItem(createKeyword(PsiKeyword.NEW));
         }
     }
 
@@ -479,12 +497,17 @@ public class JavaKeywordCompletion {
         if (myPosition.getParent() instanceof PsiReferenceExpression) {
             PsiExpression qualifier =
                     ((PsiReferenceExpression) myPosition.getParent()).getQualifierExpression();
-            PsiClass qualifierClass = PsiUtil.resolveClassInClassTypeOnly(qualifier ==
-                                                                          null ? null :
-                    qualifier.getType());
-            return qualifierClass != null &&
-                   ContainerUtil.exists(qualifierClass.getAllInnerClasses(),
-                           inner -> canBeCreatedInQualifiedNew(qualifierClass, inner));
+            try {
+                PsiClass qualifierClass = PsiUtil.resolveClassInClassTypeOnly(qualifier ==
+                                                                              null ? null :
+                        qualifier.getType());
+                return qualifierClass != null &&
+                       ContainerUtil.exists(qualifierClass.getAllInnerClasses(),
+                               inner -> canBeCreatedInQualifiedNew(qualifierClass, inner));
+            } catch (PsiInvalidElementAccessException e) {
+                System.out.println(e);
+            }
+
         }
         return false;
     }
@@ -550,7 +573,7 @@ public class JavaKeywordCompletion {
 
     private void addInstanceOf() {
         if (isInstanceofPlace(myPosition)) {
-            myBuilder.addItem(CompletionItemFactory.keyword(PsiKeyword.INSTANCEOF));
+            myBuilder.addItem(createKeyword(PsiKeyword.INSTANCEOF));
         }
     }
 
