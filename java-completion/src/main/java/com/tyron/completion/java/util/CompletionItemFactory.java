@@ -1,28 +1,15 @@
 package com.tyron.completion.java.util;
 
-import static com.tyron.completion.java.util.ElementUtil.simpleType;
-
-import androidx.annotation.NonNull;
-
-import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.provider.JavaSortCategory;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.completion.model.DrawableKind;
-import com.tyron.completion.psi.completion.item.KeywordCompletionItem;
 import com.tyron.completion.psi.completion.item.MethodCompletionItem;
 import com.tyron.completion.psi.completion.item.SimplePsiCompletionItem;
 
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
-import org.jetbrains.kotlin.com.intellij.psi.PsiField;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
 import org.jetbrains.kotlin.com.intellij.psi.PsiNamedElement;
-import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
-import org.jetbrains.kotlin.com.intellij.psi.PsiParameterList;
-import org.jetbrains.kotlin.com.intellij.psi.PsiType;
-
-import java.util.Arrays;
-import java.util.stream.Collectors;
 
 import javax.lang.model.element.Element;
 

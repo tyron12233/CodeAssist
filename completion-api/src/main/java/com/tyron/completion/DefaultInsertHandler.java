@@ -8,7 +8,7 @@ import com.tyron.editor.Editor;
 
 import java.util.function.Predicate;
 
-public class DefaultInsertHandler implements InsertHandler {
+public class DefaultInsertHandler implements DeprecatedInsertHandler {
 
     private final Predicate<Character> predicate;
     protected final CompletionItem item;

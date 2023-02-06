@@ -24,6 +24,7 @@ import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.util.CompletionUtils;
 
+import org.jetbrains.kotlin.com.intellij.codeInsight.ExternalAnnotationsManager;
 import org.jetbrains.kotlin.com.intellij.lang.ASTNode;
 import org.jetbrains.kotlin.com.intellij.lang.FileASTNode;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
@@ -247,6 +248,7 @@ public class EditorView extends FrameLayout {
                 }
 
                 CharPosition tokenStart = contentReference.getCharPosition(lexer.getTokenStart());
+
 
                 TextAttributesKey[] tokenHighlights = highlighter.getTokenHighlights(tokenType);
 

@@ -71,6 +71,7 @@ import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
 import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
 import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
 import org.jetbrains.kotlin.com.intellij.psi.impl.compiled.ClsCustomNavigationPolicy;
+import org.jetbrains.kotlin.com.intellij.psi.impl.smartPointers.SmartPointerAnchorProvider;
 import org.jetbrains.kotlin.com.intellij.psi.util.JavaClassSupers;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
@@ -108,6 +109,8 @@ public class ApplicationLoader extends Application {
                 PsiAugmentProvider.class);
         CoreApplicationEnvironment.registerApplicationExtensionPoint(JavaModuleSystem.EP_NAME,
                 JavaModuleSystem.class);
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(SmartPointerAnchorProvider.EP_NAME,
+                SmartPointerAnchorProvider.class);
         CoreApplicationEnvironment.registerApplicationExtensionPoint(ClsCustomNavigationPolicy.EP_NAME,
                 ClsCustomNavigationPolicy.class);
         coreApplicationEnvironment.registerApplicationService(TransactionGuard.class,

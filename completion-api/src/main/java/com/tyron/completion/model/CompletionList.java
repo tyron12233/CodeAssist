@@ -7,6 +7,8 @@ import com.google.errorprone.annotations.Immutable;
 import com.tyron.completion.CompletionPrefixMatcher;
 import com.tyron.completion.CompletionPrefixMatcher.MatchLevel;
 import com.tyron.completion.CompletionProvider;
+import com.tyron.completion.lookup.LookupElement;
+
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -81,7 +83,7 @@ public class CompletionList {
 
         private String completionPrefix;
 
-        private final Consumer<CompletionItemWithMatchLevel> consumer;
+        private final Consumer<LookupElement> consumer;
 
         public Builder(String completionPrefix) {
             items = new ArrayList<>();
@@ -89,7 +91,7 @@ public class CompletionList {
             this.consumer = (s) -> {};
         }
 
-        public Builder(Consumer<CompletionItemWithMatchLevel> consumer) {
+        public Builder(Consumer<LookupElement> consumer) {
             items = new ArrayList<>();
             this.consumer = consumer;
         }
@@ -103,24 +105,34 @@ public class CompletionList {
             return completionPrefix;
         }
 
-        public Builder addItems(Collection<CompletionItemWithMatchLevel> items) {
-            for (CompletionItemWithMatchLevel item : items) {
+        public Builder addItems(Collection<? extends CompletionItem> items) {
+            for (CompletionItem item : items) {
                 addItem(item);
             }
             return this;
         }
 
-        public Builder addItems(Collection<CompletionItemWithMatchLevel> items, String sortText) {
-            for (CompletionItemWithMatchLevel item : items) {
+        public Builder addItems(Collection<CompletionItem> items, String sortText) {
+            for (CompletionItem item : items) {
                 item.sortText = sortText;
                 addItem(item);
             }
             return this;
         }
 
-        public Builder addItem(CompletionItemWithMatchLevel item) {
+        public Builder addItem(CompletionItem i) {
+            if (!(i instanceof LookupElement)) {
+                throw new IllegalArgumentException("use the LookupElement API directly");
+            }
+
+            LookupElement element = (LookupElement) i;
+
             List<MatchLevel> matchLevels = new ArrayList<>();
-            for (String filterText : item.getFilterTexts()) {
+            List<String> filterTexts = element.getFilterTexts();
+            if (filterTexts.isEmpty()) {
+                filterTexts = Collections.singletonList(element.getLookupString());
+            }
+            for (String filterText : filterTexts) {
                 MatchLevel matchLevel =
                         CompletionPrefixMatcher.computeMatchLevel(filterText, completionPrefix);
                 if (matchLevel == MatchLevel.NOT_MATCH) {
@@ -133,9 +145,9 @@ public class CompletionList {
             }
             Collections.sort(matchLevels);
             MatchLevel matchLevel = matchLevels.get(matchLevels.size() - 1);
-            item.matchLevel(matchLevel);
+            element.matchLevel(matchLevel);
 
-            consumer.accept(item);
+            consumer.accept(element);
             return this;
         }
 

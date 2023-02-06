@@ -458,6 +458,12 @@ public class JavaCompletionProcessor implements PsiScopeProcessor, ElementClassH
         }
     }
 
+    @Nullable
+    public PsiType getQualifierType() {
+        return myQualifierType;
+    }
+
+
     private enum StaticProblem {
         none,
         staticAfterInstance,

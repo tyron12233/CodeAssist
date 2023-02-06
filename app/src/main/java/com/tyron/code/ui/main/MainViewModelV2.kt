@@ -17,6 +17,7 @@ import com.tyron.code.ui.file.tree.TreeUtil
 import com.tyron.code.ui.file.tree.model.TreeFile
 import com.tyron.code.util.subscribeEvent
 import com.tyron.completion.java.CompletionModule
+import com.tyron.completion.psi.search.PsiShortNamesCache
 import com.tyron.ui.treeview.TreeNode
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -26,6 +27,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import org.jetbrains.kotlin.cli.jvm.compiler.MockExternalAnnotationsManager
+import org.jetbrains.kotlin.cli.jvm.compiler.MockInferredAnnotationsManager
+import org.jetbrains.kotlin.com.intellij.codeInsight.ExternalAnnotationsManager
+import org.jetbrains.kotlin.com.intellij.codeInsight.InferredAnnotationsManager
 import org.jetbrains.kotlin.com.intellij.core.CoreJavaCodeStyleManager
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment
 import org.jetbrains.kotlin.com.intellij.lang.jvm.facade.JvmElementProvider
@@ -41,10 +46,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.com.intellij.pom.PomManager
 import org.jetbrains.kotlin.com.intellij.pom.PomModel
 import org.jetbrains.kotlin.com.intellij.pom.core.impl.PomModelImpl
-import org.jetbrains.kotlin.com.intellij.psi.PsiClass
-import org.jetbrains.kotlin.com.intellij.psi.PsiElementFinder
-import org.jetbrains.kotlin.com.intellij.psi.PsiNameHelper
-import org.jetbrains.kotlin.com.intellij.psi.PsiPackage
+import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.com.intellij.psi.codeStyle.CodeStyleManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl
 import org.jetbrains.kotlin.com.intellij.psi.impl.PsiManagerImpl
@@ -53,8 +55,10 @@ import org.jetbrains.kotlin.com.intellij.psi.impl.PsiTreeChangePreprocessor
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManagerImpl
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.PsiResolveHelperImpl
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport
+import org.jetbrains.kotlin.com.intellij.util.Processor
 import java.io.File
 import java.util.*
 
@@ -174,6 +178,79 @@ class MainViewModelV2(
         val project = projectEnvironment.project
 
         project.registerService(
+            PsiShortNamesCache::class.java,
+            object : PsiShortNamesCache() {
+                override fun getClassesByName(
+                    name: String,
+                    scope: GlobalSearchScope
+                ): Array<PsiClass> {
+                    return emptyArray()
+                }
+
+                override fun getAllClassNames(): Array<String> {
+                    return emptyArray()
+                }
+
+                override fun getMethodsByName(
+                    name: String,
+                    scope: GlobalSearchScope
+                ): Array<PsiMethod> {
+                    return emptyArray()
+                }
+
+                override fun getMethodsByNameIfNotMoreThan(
+                    name: String,
+                    scope: GlobalSearchScope,
+                    maxCount: Int
+                ): Array<PsiMethod> {
+                    return emptyArray()
+                }
+
+                override fun getFieldsByNameIfNotMoreThan(
+                    name: String,
+                    scope: GlobalSearchScope,
+                    maxCount: Int
+                ): Array<PsiField> {
+                    return emptyArray()
+                }
+
+                override fun processMethodsWithName(
+                    name: String,
+                    scope: GlobalSearchScope,
+                    processor: Processor<in PsiMethod>
+                ): Boolean {
+                    return false
+                }
+
+                override fun getAllMethodNames(): Array<String> {
+                    return emptyArray()
+                }
+
+                override fun getFieldsByName(
+                    name: String,
+                    scope: GlobalSearchScope
+                ): Array<PsiField> {
+                    return emptyArray()
+                }
+
+                override fun getAllFieldNames(): Array<String> {
+                    return emptyArray()
+                }
+
+            }
+        )
+
+        project.registerService(
+            ExternalAnnotationsManager::class.java,
+            MockExternalAnnotationsManager()
+        )
+
+        project.registerService(
+            InferredAnnotationsManager::class.java,
+            MockInferredAnnotationsManager()
+        )
+
+        project.registerService(
             BlockSupport::class.java,
             BlockSupportImpl()
         )
@@ -198,6 +275,10 @@ class MainViewModelV2(
     }
 
     private fun registerExtensionPoints() {
+        projectEnvironment.registerProjectExtensionPoint(
+            PsiShortNamesCache.EP_NAME,
+            PsiShortNamesCache::class.java
+        )
         projectEnvironment.registerProjectExtensionPoint(
             PsiTreeChangePreprocessor.EP_NAME,
             PsiTreeChangePreprocessor::class.java

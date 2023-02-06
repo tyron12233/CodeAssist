@@ -1,11 +1,19 @@
 package com.tyron.completion;
 
-import com.tyron.editor.Editor;
+import androidx.annotation.NonNull;
+
+import com.tyron.completion.lookup.LookupElement;
 
 /**
- * Interface for customizing the how the completion item inserts the text
+ * An object allowing to decouple {@link LookupElement#handleInsert} logic from the lookup element class, e.g. for the purposes
+ * of overriding its behavior or reusing the logic between multiple types of elements.
+ * @see com.intellij.codeInsight.lookup.LookupElementDecorator#withInsertHandler
+ * @see com.intellij.codeInsight.completion.util.ParenthesesInsertHandler
  */
-public interface InsertHandler {
+public interface InsertHandler<T extends LookupElement> {
 
-    void handleInsert(Editor editor);
+    /**
+     * Invoked inside write action.
+     */
+    void handleInsert(@NonNull InsertionContext context, @NonNull T item);
 }

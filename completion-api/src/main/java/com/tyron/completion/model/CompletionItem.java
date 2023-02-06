@@ -3,7 +3,7 @@ package com.tyron.completion.model;
 import com.google.common.collect.ImmutableList;
 import com.tyron.completion.CompletionPrefixMatcher;
 import com.tyron.completion.DefaultInsertHandler;
-import com.tyron.completion.InsertHandler;
+import com.tyron.completion.DeprecatedInsertHandler;
 import com.tyron.completion.util.CompletionUtils;
 import com.tyron.editor.Editor;
 
@@ -40,7 +40,7 @@ public class CompletionItem implements Comparable<CompletionItem> {
         return completionItem;
     }
 
-    private InsertHandler insertHandler;
+    private DeprecatedInsertHandler insertHandler;
     public String label;
     public String detail;
     public String commitText;
@@ -108,7 +108,7 @@ public class CompletionItem implements Comparable<CompletionItem> {
         OVERRIDE, IMPORT, NORMAL
     }
 
-    public void setInsertHandler(InsertHandler handler) {
+    public void setInsertHandler(DeprecatedInsertHandler handler) {
         this.insertHandler = handler;
     }
 
