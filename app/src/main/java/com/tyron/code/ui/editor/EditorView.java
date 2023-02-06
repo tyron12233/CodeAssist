@@ -191,8 +191,7 @@ public class EditorView extends FrameLayout {
                                     int endColumn,
                                     CharSequence deletedContent) {
                 int startIndex = content.getCharIndex(startLine, startColumn);
-                int endIndex = content.getCharIndex(endLine, endColumn - deletedContent.length()) +
-                               deletedContent.length();
+                int endIndex = startIndex + deletedContent.length();
                 commit(ContentChangeEvent.ACTION_DELETE, startIndex, endIndex, deletedContent);
             }
 
