@@ -6,7 +6,9 @@ import org.jetbrains.kotlin.com.intellij.lang.FileASTNode;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator;
+import org.jetbrains.kotlin.com.intellij.pom.MockPomModel;
 import org.jetbrains.kotlin.com.intellij.pom.PomManager;
+import org.jetbrains.kotlin.com.intellij.pom.PomModel;
 import org.jetbrains.kotlin.com.intellij.pom.core.impl.PomModelImpl;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl;
@@ -57,9 +59,16 @@ public class OffsetsInFile {
             throw new IllegalStateException();
         }
 
+        Runnable runnable = ((MockPomModel) PomManager.getModel(fileCopy.getProject())).reparseFile(
+                fileCopy,
+                ((FileElement) node),
+                tempDocument.getImmutableCharSequence());
+
         return () -> {
-            copyDocument.setText(tempDocument.getImmutableCharSequence());
-            ((PsiFileImpl) fileCopy).onContentReload();
+            copyDocument.setText(tempDocument.getText());
+            if (runnable != null) {
+                runnable.run();
+            }
 
             return new OffsetsInFile(fileCopy, tempMap.copyOffsets(copyDocument));
         };

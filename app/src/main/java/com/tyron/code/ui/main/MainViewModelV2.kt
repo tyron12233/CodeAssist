@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.tyron.code.ApplicationLoader
 import com.tyron.code.event.SubscriptionReceipt
 import com.tyron.code.ui.editor.DummyCodeStyleManager
+import org.jetbrains.kotlin.com.intellij.pom.MockPomModel
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade
 import com.tyron.code.ui.file.event.OpenFileEvent
 import com.tyron.code.ui.file.event.RefreshRootEvent
@@ -28,6 +29,7 @@ import org.jetbrains.kotlin.com.intellij.codeInsight.InferredAnnotationsManager
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment
 import org.jetbrains.kotlin.com.intellij.lang.jvm.facade.JvmElementProvider
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable
+import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeRegistry
@@ -36,6 +38,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.roots.FileIndexFacade
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.util.NotNullLazyValue
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.kotlin.com.intellij.pom.PomModel
 import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.com.intellij.psi.codeStyle.CodeStyleManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl
@@ -50,7 +53,6 @@ import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport
 import org.jetbrains.kotlin.com.intellij.util.Processor
 import org.jetbrains.kotlin.org.picocontainer.PicoContainer
 import java.io.File
-import java.util.*
 
 
 class MainViewModelV2(
@@ -240,6 +242,11 @@ class MainViewModelV2(
         )
 
         project.registerService(
+            PomModel::class.java,
+            MockPomModel.newInstance(project)
+        )
+
+        project.registerService(
             ExternalAnnotationsManager::class.java,
             MockExternalAnnotationsManager()
         )
@@ -274,6 +281,11 @@ class MainViewModelV2(
     }
 
     private fun registerExtensionPoints() {
+        projectEnvironment.project.extensionArea.registerExtensionPoint(
+            PsiTreeChangeListener.EP.name,
+            PsiTreeChangeListener::class.qualifiedName!!,
+            ExtensionPoint.Kind.INTERFACE
+        )
         projectEnvironment.registerProjectExtensionPoint(
             PsiShortNamesCache.EP_NAME,
             PsiShortNamesCache::class.java

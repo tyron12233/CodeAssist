@@ -62,6 +62,7 @@ import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
+import org.jetbrains.concurrency.CancellablePromise;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
 import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment;
@@ -69,6 +70,10 @@ import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.lang.MetaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
+import org.jetbrains.kotlin.com.intellij.openapi.application.AppUIExecutor;
+import org.jetbrains.kotlin.com.intellij.openapi.application.AsyncExecutionService;
+import org.jetbrains.kotlin.com.intellij.openapi.application.ModalityState;
+import org.jetbrains.kotlin.com.intellij.openapi.application.NonBlockingReadAction;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuardImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
@@ -78,6 +83,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.extensions.Extensions;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.PluginId;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
+import org.jetbrains.kotlin.com.intellij.openapi.util.ThrowableComputable;
 import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
 import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
 import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
@@ -89,6 +95,15 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
@@ -128,6 +143,111 @@ public class ApplicationLoader extends Application {
                 FileDocumentManagerListener.class);
         CoreApplicationEnvironment.registerApplicationExtensionPoint(MetaLanguage.EP_NAME,
                 MetaLanguage.class);
+        coreApplicationEnvironment.registerApplicationService(AsyncExecutionService.class, new AsyncExecutionService() {
+            @Override
+            protected @NonNull AppUIExecutor createWriteThreadExecutor(@NonNull ModalityState modalityState) {
+                return new AppUIExecutor() {
+                    @Override
+                    public @NonNull AppUIExecutor later() {
+                        return this;
+                    }
+
+                    @Override
+                    public @NonNull AppUIExecutor expireWith(@NonNull Disposable disposable) {
+                        return this;
+                    }
+
+                    @Override
+                    public CancellablePromise<?> submit(@NonNull Runnable runnable) {
+                        CompletableFuture<?> future = CompletableFuture.runAsync(runnable);
+                        return new CancellablePromise<>() {
+                            @Override
+                            public boolean cancel(boolean mayInterruptIfRunning) {
+                                return future.cancel(mayInterruptIfRunning);
+                            }
+
+                            @Override
+                            public boolean isCancelled() {
+                                return future.isCancelled();
+                            }
+
+                            @Override
+                            public boolean isDone() {
+                                return future.isDone();
+                            }
+
+                            @Override
+                            public Object get() throws ExecutionException, InterruptedException {
+                                return future.get();
+                            }
+
+                            @Override
+                            public Object get(long timeout,
+                                              TimeUnit unit) throws ExecutionException, InterruptedException, TimeoutException {
+                                return future.get(timeout, unit);
+                            }
+                        };
+                    }
+                };
+            }
+
+            @Override
+            protected @NonNull <T> NonBlockingReadAction<T> buildNonBlockingReadAction(
+                    @NonNull Callable<T> callable) {
+
+                return new NonBlockingReadAction<T>() {
+
+                    CompletableFuture<T> future = new CompletableFuture<>();
+
+                    @Override
+                    public @NonNull NonBlockingReadAction<T> expireWhen(@NonNull BooleanSupplier booleanSupplier) {
+                        return this;
+                    }
+
+                    @Override
+                    public @NonNull NonBlockingReadAction<T> finishOnUiThread(@NonNull ModalityState modalityState,
+                                                                              @NonNull Consumer<? super T> consumer) {
+                        future.whenComplete((t, throwable) -> consumer.accept(t));
+                        return this;
+                    }
+
+                    @Override
+                    public @NonNull NonBlockingReadAction<T> coalesceBy(Object... objects) {
+                        return this;
+                    }
+
+                    @Override
+                    public @NonNull CancellablePromise<T> submit(@NonNull Executor executor) {
+                        return new CancellablePromise<>() {
+                            @Override
+                            public boolean cancel(boolean mayInterruptIfRunning) {
+                                return future.cancel(mayInterruptIfRunning);
+                            }
+
+                            @Override
+                            public boolean isCancelled() {
+                                return future.isCancelled();
+                            }
+
+                            @Override
+                            public boolean isDone() {
+                                return future.isDone();
+                            }
+
+                            @Override
+                            public T get() throws ExecutionException, InterruptedException {
+                                return future.get();
+                            }
+
+                            @Override
+                            public T get(long timeout, TimeUnit unit) throws ExecutionException, InterruptedException, TimeoutException {
+                                return future.get(timeout, unit);
+                            }
+                        };
+                    }
+                };
+            }
+        });
         coreApplicationEnvironment.registerApplicationService(CompletionService.class,
                 new CompletionServiceImpl());
         coreApplicationEnvironment.registerApplicationService(TransactionGuard.class,

@@ -129,7 +129,7 @@ class MainFragmentV2 : Fragment() {
         lifecycleScope.launchWhenResumed {
             viewModelV2.projectState.collect { state ->
                 if (state.initialized && state.projectName != null) {
-                    binding.toolbar.setTitle(state.projectName)
+                    binding.toolbar.title = state.projectName
                 }
 
                 binding.progressbar.isIndeterminate = true

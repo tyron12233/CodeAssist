@@ -51,6 +51,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
 import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType;
 import org.jetbrains.kotlin.com.intellij.util.Consumer;
 
@@ -110,8 +111,14 @@ public class EditorView extends FrameLayout {
         document = FileDocumentManager.getInstance().getDocument(file);
         EditorMemory.putUserData(editor, EditorMemory.DOCUMENT_KEY, document);
 
-        PsiFile psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document);
+        PsiDocumentManagerBase documentManager =
+                (PsiDocumentManagerBase) PsiDocumentManager.getInstance(project);
+        PsiFile psiFile = documentManager.getPsiFile(document);
         EditorMemory.putUserData(editor, EditorMemory.FILE_KEY, psiFile);
+
+
+        document.addDocumentListener(documentManager);
+        document.addDocumentListener(documentManager.new PriorityEventCollector());
 
 
         AnalyzeManager analyzeManager = new TestAnalyzeManager(new JavaFileHighlighter());
@@ -131,8 +138,7 @@ public class EditorView extends FrameLayout {
                 // there may be a race condition where the editor will call requireAutoComplete()
                 // first before the text is synchronized to intellij, attempting to read the
                 // psi will throw an error.
-                if (FileDocumentManager.getInstance().isDocumentUnsaved(document) ||
-                    !document.getText().contentEquals(content)) {
+                if (!document.getText().contentEquals(content)) {
                     return;
                 }
 
@@ -160,7 +166,8 @@ public class EditorView extends FrameLayout {
         addView(editor);
     }
 
-    private void performCompletionUnderIndicator(CompletionPublisher publisher, Disposable completionSession) {
+    private void performCompletionUnderIndicator(CompletionPublisher publisher,
+                                                 Disposable completionSession) {
         publisher.setComparator((o1, o2) -> {
             if (o1 instanceof CompletionItemWithMatchLevel &&
                 o2 instanceof CompletionItemWithMatchLevel) {
@@ -171,7 +178,8 @@ public class EditorView extends FrameLayout {
         });
 
 
-        CompletionInitializationContext ctx = CompletionInitializationUtil.createCompletionInitializationContext(project,
+        CompletionInitializationContext ctx =
+                CompletionInitializationUtil.createCompletionInitializationContext(project,
                         editor,
                         editor.getCursor(),
                         0,
@@ -181,22 +189,24 @@ public class EditorView extends FrameLayout {
         PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
         OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
 
-        Supplier<? extends OffsetsInFile> supplier = CompletionInitializationUtil.insertDummyIdentifier(ctx,
+        Supplier<? extends OffsetsInFile> supplier =
+                CompletionInitializationUtil.insertDummyIdentifier(ctx,
                         offsetsInFile,
                         completionSession);
         OffsetsInFile newOffsets = supplier.get();
 
-        CompletionParameters completionParameters = CompletionInitializationUtil.createCompletionParameters(ctx,
+        CompletionParameters completionParameters =
+                CompletionInitializationUtil.createCompletionParameters(ctx,
                         completionProcess,
                         newOffsets);
 
-        CompletionService.getCompletionService().performCompletion(completionParameters,
-                        completionResult -> {
-                            LookupElement lookupElement = completionResult.getLookupElement();
-                            if (lookupElement.isValid()) {
-                                publisher.addItem(lookupElement);
-                            }
-                        });
+        CompletionService.getCompletionService()
+                .performCompletion(completionParameters, completionResult -> {
+                    LookupElement lookupElement = completionResult.getLookupElement();
+                    if (lookupElement.isValid()) {
+                        publisher.addItem(lookupElement);
+                    }
+                });
     }
 
     private void commit(int action, int start, int end, CharSequence charSequence) {

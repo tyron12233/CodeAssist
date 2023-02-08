@@ -64,14 +64,7 @@ public class EditorChangeUtil {
                 document.insertString(start, charSequence);
             }
 
-            FileDocumentManager.getInstance().saveDocument(document);
-
-            PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
-            assert psiFile != null;
-
-            ((PsiFileImpl) psiFile).onContentReload();
-
-            updatePackageCache(project, psiFile);
+            PsiDocumentManager.getInstance(project).commitDocument(document);
         }, "", null);
     }
 
