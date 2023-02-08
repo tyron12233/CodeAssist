@@ -7,10 +7,10 @@ import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.not;
 import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.or;
 import static org.jetbrains.kotlin.com.intellij.psi.SyntaxTraverser.psiApi;
 
+import com.tyron.completion.CompletionResultSet;
 import com.tyron.completion.java.patterns.PsiAnnotationPattern;
 import com.tyron.completion.java.patterns.PsiElementPatterns;
 import com.tyron.completion.lookup.LookupElementBuilder;
-import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.psi.completion.item.KeywordLookupItem;
 
 import org.jetbrains.annotations.NonNls;
@@ -213,12 +213,12 @@ public class JavaKeywordCompletion {
             PsiKeyword.BYTE));
 
     private final PsiElement myPosition;
-    private final CompletionList.Builder myBuilder;
+    private final CompletionResultSet myBuilder;
     private final PsiElement myPrevLeaf;
 
-    public JavaKeywordCompletion(PsiElement position, CompletionList.Builder builder) {
+    public JavaKeywordCompletion(PsiElement position, CompletionResultSet parameters) {
         myPosition = position;
-        myBuilder = builder;
+        myBuilder = parameters;
         myPrevLeaf = prevSignificantLeaf(myPosition);
 
         addKeywords();
@@ -283,12 +283,12 @@ public class JavaKeywordCompletion {
         KeywordLookupItem cont = createKeyword(PsiKeyword.CONTINUE);
 
         if (loop != null && PsiTreeUtil.isAncestor(loop.getBody(), myPosition, false)) {
-            myBuilder.addItem(br);
-            myBuilder.addItem(cont);
+            myBuilder.addElement(br);
+            myBuilder.addElement(cont);
         }
 
         for (PsiLabeledStatement labeled : psiApi().parents(myPosition).takeWhile(psiElement -> !(psiElement instanceof PsiMember)).filter(PsiLabeledStatement.class)) {
-            myBuilder.addItem(LookupElementBuilder.create("break " + labeled).bold());
+            myBuilder.addElement(LookupElementBuilder.create("break " + labeled).bold());
         }
     }
 
@@ -298,8 +298,8 @@ public class JavaKeywordCompletion {
             return;
         }
 
-        myBuilder.addItem(createKeyword(PsiKeyword.CASE));
-        myBuilder.addItem(createKeyword(PsiKeyword.DEFAULT));
+        myBuilder.addElement(createKeyword(PsiKeyword.CASE));
+        myBuilder.addElement(createKeyword(PsiKeyword.DEFAULT));
     }
 
     private static PsiSwitchBlock getSwitchFromLabelPosition(PsiElement position) {
@@ -335,7 +335,7 @@ public class JavaKeywordCompletion {
 //                    if (statement.getParent() instanceof PsiSwitchLabeledRuleStatement) {
 //                        item = wrapRuleIntoBlock(item);
 //                    }
-                    myBuilder.addItem(item);
+                    myBuilder.addElement(item);
                     return;
                 }
             }
@@ -344,7 +344,7 @@ public class JavaKeywordCompletion {
         if ((isInsideParameterList(myPosition) || isAtCatchOrResourceVariableStart(myPosition)) &&
             !psiElement().afterLeaf(psiElement().withText(PsiKeyword.FINAL)).accepts(myPosition) &&
             !AFTER_DOT.accepts(myPosition)) {
-            myBuilder.addItem(createKeyword(PsiKeyword.FINAL));
+            myBuilder.addElement(createKeyword(PsiKeyword.FINAL));
         }
     }
 
@@ -384,13 +384,13 @@ public class JavaKeywordCompletion {
     private void addClassKeywords() {
         if (isSuitableForClass(myPosition)) {
             for (String modifier : PsiModifier.MODIFIERS) {
-                myBuilder.addItem(createKeyword(modifier));
+                myBuilder.addElement(createKeyword(modifier));
             }
 
             if (insideStarting(or(psiElement(PsiLocalVariable.class),
                     psiElement(PsiExpression.class))).accepts(myPosition)) {
-                myBuilder.addItem(createKeyword(PsiKeyword.CLASS));
-//                myBuilder.addItem(createKeyword);
+                myBuilder.addElement(createKeyword(PsiKeyword.CLASS));
+//                myBuilder.addElement(createKeyword);
             }
 
             if (PsiTreeUtil.getParentOfType(myPosition,
@@ -411,7 +411,7 @@ public class JavaKeywordCompletion {
 
                 // TODO: recommend class declaration
                 for (String keyword : keywords) {
-                    myBuilder.addItem(createKeyword(keyword));
+                    myBuilder.addElement(createKeyword(keyword));
                 }
             }
         }
@@ -428,7 +428,7 @@ public class JavaKeywordCompletion {
             final boolean insideInheritorClass = isInsideInheritorClass();
             if (!afterDot || insideQualifierClass || insideInheritorClass) {
                 if (!afterDot || insideQualifierClass) {
-                    myBuilder.addItem(createKeyword(PsiKeyword.THIS));
+                    myBuilder.addElement(createKeyword(PsiKeyword.THIS));
                 }
 
                 final KeywordLookupItem superItem = createKeyword(PsiKeyword.SUPER);
@@ -448,10 +448,10 @@ public class JavaKeywordCompletion {
                             PsiClass.class);
                     assert method != null;
                     final boolean hasParams = superConstructorHasParameters(method);
-                    myBuilder.addItem(superItem);
+                    myBuilder.addElement(superItem);
                     return;
                 }
-                myBuilder.addItem(superItem);
+                myBuilder.addElement(superItem);
             }
         }
     }
@@ -530,21 +530,21 @@ public class JavaKeywordCompletion {
                                         !(grandParent instanceof PsiUnaryExpression);
             if (PsiTreeUtil.getParentOfType(myPosition, PsiAnnotation.class) == null) {
                 if (!statementPosition) {
-                    myBuilder.addItem(createKeyword(PsiKeyword.NEW));
+                    myBuilder.addElement(createKeyword(PsiKeyword.NEW));
                 }
                 if (allowExprKeywords) {
-                    myBuilder.addItem(createKeyword(PsiKeyword.NULL));
+                    myBuilder.addElement(createKeyword(PsiKeyword.NULL));
                 }
             }
 
             if (allowExprKeywords && mayExpectBoolean()) {
-                myBuilder.addItem(createKeyword(PsiKeyword.TRUE));
-                myBuilder.addItem(createKeyword(PsiKeyword.FALSE));
+                myBuilder.addElement(createKeyword(PsiKeyword.TRUE));
+                myBuilder.addElement(createKeyword(PsiKeyword.FALSE));
             }
         }
 
         if (isQualifiedNewContext()) {
-            myBuilder.addItem(createKeyword(PsiKeyword.NEW));
+            myBuilder.addElement(createKeyword(PsiKeyword.NEW));
         }
     }
 
@@ -623,7 +623,7 @@ public class JavaKeywordCompletion {
 
     private void addInstanceOf() {
         if (isInstanceofPlace(myPosition)) {
-            myBuilder.addItem(createKeyword(PsiKeyword.INSTANCEOF));
+            myBuilder.addElement(createKeyword(PsiKeyword.INSTANCEOF));
         }
     }
 

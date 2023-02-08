@@ -6,7 +6,8 @@ import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.string
 
 import androidx.annotation.NonNull;
 
-import com.tyron.completion.legacy.CompletionParameters;
+import com.tyron.completion.CompletionParameters;
+import com.tyron.completion.CompletionResultSet;
 import com.tyron.completion.java.util.JavaCompletionUtil;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.impl.LookupItemUtil;
@@ -148,9 +149,8 @@ public class JavaKotlincCompletionProvider {
         return null;
     }
 
-    public void fillCompletionVariants(@NonNull PsiElement position,
-                                       @NonNull CompletionList.Builder builder,
-                                       CompletionParameters parameters) {
+    public void fillCompletionVariants(CompletionParameters parameters, CompletionResultSet result) {
+        PsiElement position = parameters.getPosition();
         if (!isInJavaContext(position)) {
             return;
         }
@@ -158,16 +158,16 @@ public class JavaKotlincCompletionProvider {
         if (AFTER_NUMBER_LITERAL.accepts(position) ) { //||
 //            UNEXPECTED_REFERENCE_AFTER_DOT.accepts(position) ||
 //            AFTER_ENUM_CONSTANT.accepts(position)) {
-//            _result.stopHere();
+            result.stopHere();
             return;
         }
 
         PsiElement parent = position.getParent();
 
         if (position instanceof PsiIdentifier) {
-            new JavaKeywordCompletion(position, builder);
+            new JavaKeywordCompletion(position, result);
 
-            addIdentifierVariants(position, builder);
+            addIdentifierVariants(position, parameters);
 
 //            Set<ExpectedTypeInfo> expectedInfos = ContainerUtil.newHashSet(
 //                    JavaSmartCompletionContributor.getExpectedTypes(parameters));
@@ -190,10 +190,10 @@ public class JavaKotlincCompletionProvider {
 //                }
 //            }
 
-            PsiReference ref = position.getContainingFile().findReferenceAt((int) parameters.getIndex());
+            PsiReference ref = position.getContainingFile().findReferenceAt(parameters.getOffset());
             if (ref instanceof PsiLabelReference) {
 //                session.registerBatchItems(processLabelReference((PsiLabelReference)ref));
-//                result.stopHere();
+                result.stopHere();
                 return;
             }
 
@@ -212,9 +212,7 @@ public class JavaKotlincCompletionProvider {
                             }
                         }, JavaCompletionProcessor.Options.DEFAULT_OPTIONS, s -> true);
 
-                for (LookupElement lookupElement : lookupElements) {
-                    builder.addItem(lookupElement);
-                }
+                result.addAllElements(lookupElements);
             }
         }
     }
@@ -389,7 +387,7 @@ public class JavaKotlincCompletionProvider {
     private static List<PsiType> getQualifierCastTypes(PsiJavaReference javaReference) {
         return Collections.emptyList();
     }
-    private void addIdentifierVariants(PsiElement position, CompletionList.Builder builder) {
+    private void addIdentifierVariants(PsiElement position, CompletionParameters parameters) {
         if (JavaSmartCompletionContributor.AFTER_NEW.accepts(position)) {
             ExpectedTypeInfo[] types = JavaSmartCompletionContributor.getExpectedTypes(position, true);
             System.out.println(Arrays.toString(types));
