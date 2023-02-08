@@ -110,6 +110,10 @@ public class VariableLookupItem extends LookupItem<PsiVariable> implements Typed
 
     @Nullable
     private static Color getInitializerColor(@NotNull PsiVariable var) {
+        if (true) {
+            // TODO: add support for displaying colors
+            return null;
+        }
 //        if (!JavaColorProvider.isColorType(var.getType())) return null;
 
         PsiExpression expression = getInitializer(var);
