@@ -110,8 +110,11 @@ public class CompletionInitializationUtil {
         PsiFile fileCopy = finalOffsets.getFile();
         PsiFile originalFile = fileCopy.getOriginalFile();
         PsiElement insertedElement = findCompletionPositionLeaf(finalOffsets, offset, originalFile);
-//        insertedElement.putUserData(CompletionContext.COMPLETION_CONTEXT_KEY, new
-//        CompletionContext(fileCopy, finalOffsets.getOffsets()));
+        insertedElement.putUserData(CompletionContext.COMPLETION_CONTEXT_KEY, new
+        CompletionContext(fileCopy, finalOffsets.getOffsets()));
+
+        EditorMemory.putUserData(initContext.getEditor(), EditorMemory.INSERTED_KEY, insertedElement);
+
         return new CompletionParameters(insertedElement,
                 originalFile,
                 initContext.getCompletionType(),

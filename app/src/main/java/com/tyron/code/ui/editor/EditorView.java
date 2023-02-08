@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.com.intellij.lexer.Lexer;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextLanguage;
@@ -87,6 +88,8 @@ public class EditorView extends FrameLayout {
 
     private final Document document;
 
+    private final Disposable disposable;
+
     private ProgressIndicator completionProgressIndicator = new EmptyProgressIndicator();
 
     public EditorView(Context context, Project project, TextEditorState state) {
@@ -101,10 +104,11 @@ public class EditorView extends FrameLayout {
             fileLanguage = PlainTextLanguage.INSTANCE;
         }
 
+        disposable = Disposer.newDisposable("fileEditor_" + file.getName());
+
 
         editor = new CodeEditor(context);
         editor.setColorScheme(new SchemeGitHub());
-        editor.setText(state.getContent());
         editor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
         editor.setTypefaceText(ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular));
 
@@ -119,6 +123,7 @@ public class EditorView extends FrameLayout {
 
         document.addDocumentListener(documentManager);
         document.addDocumentListener(documentManager.new PriorityEventCollector());
+        editor.setText(document.getCharsSequence());
 
 
         AnalyzeManager analyzeManager = new TestAnalyzeManager(new JavaFileHighlighter());
@@ -146,13 +151,10 @@ public class EditorView extends FrameLayout {
                 completionProgressIndicator = new StandardProgressIndicatorBase();
 
                 ProgressManager.getInstance().runProcess(() -> {
-                    Disposable completionSession = Disposer.newDisposable("completionSession");
                     try {
-                        performCompletionUnderIndicator(publisher, completionSession);
+                        performCompletionUnderIndicator(publisher, disposable);
                     } catch (ProcessCanceledException e) {
                         // ignored, expected to be cancelled
-                    } finally {
-                        Disposer.dispose(completionSession);
                     }
                 }, completionProgressIndicator);
             }

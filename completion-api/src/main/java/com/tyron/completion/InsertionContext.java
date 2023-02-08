@@ -1,60 +1,136 @@
 package com.tyron.completion;
 
+import androidx.annotation.Nullable;
+
+import com.tyron.completion.lookup.Lookup;
+import com.tyron.completion.lookup.LookupElement;
 import com.tyron.editor.snippet.Snippet;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
+import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+
+import java.util.List;
+import java.util.Objects;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class InsertionContext {
-
     public static final OffsetKey TAIL_OFFSET = OffsetKey.create("tailOffset", true);
 
-    private final PsiFile file;
-    private final CodeEditor editor;
+    private final OffsetMap myOffsetMap;
+    private final char myCompletionChar;
+    private final LookupElement[] myElements;
+    private final PsiFile myFile;
+    private final CodeEditor myEditor;
+    private Runnable myLaterRunnable;
+    private boolean myAddCompletionChar;
 
-    private int tailOffset;
-    private boolean addCompletionChar;
-
-    public InsertionContext(CodeEditor editor, PsiFile file) {
-        this.editor = editor;
-        this.file = file;
+    public InsertionContext(final OffsetMap offsetMap, final char completionChar, final LookupElement[] elements,
+                            @NotNull final PsiFile file,
+                            @NotNull final CodeEditor editor, final boolean addCompletionChar) {
+        myOffsetMap = offsetMap;
+        myCompletionChar = completionChar;
+        myElements = elements;
+        myFile = file;
+        myEditor = editor;
+        setTailOffset(editor.getCursor().getLeft());
+        myAddCompletionChar = addCompletionChar;
     }
 
-    public boolean shouldAddCompletionChar() {
-        return addCompletionChar;
-    }
-
-    public char getCompletionChar() {
-        return '.';
-    }
-
-    public CodeEditor getEditor() {
-        return editor;
+    public void setTailOffset(final int offset) {
+        myOffsetMap.addOffset(TAIL_OFFSET, offset);
     }
 
     public int getTailOffset() {
-        return tailOffset;
+        return myOffsetMap.getOffset(TAIL_OFFSET);
     }
 
-    public void setAddCompletionChar(boolean b) {
-        this.addCompletionChar = b;
-    }
-
+    @NotNull
     public PsiFile getFile() {
-        return file;
+        return myFile;
     }
 
-    public void setTailOffset(int tailOffset) {
-        this.tailOffset = tailOffset;
+    @NotNull
+    public CodeEditor getEditor() {
+        return myEditor;
+    }
+
+    public void commitDocument() {
+        PsiDocumentManager.getInstance(getProject()).commitDocument(getDocument());
+    }
+
+    @NotNull
+    public Document getDocument() {
+        return Objects.requireNonNull(EditorMemory.getUserData(myEditor,
+                EditorMemory.DOCUMENT_KEY));
+    }
+
+    public int getOffset(OffsetKey key) {
+        return getOffsetMap().getOffset(key);
+    }
+
+    public OffsetMap getOffsetMap() {
+        return myOffsetMap;
+    }
+
+    public OffsetKey trackOffset(int offset, boolean movableToRight) {
+        final OffsetKey key = OffsetKey.create("tracked", movableToRight);
+        getOffsetMap().addOffset(key, offset);
+        return key;
     }
 
     public int getStartOffset() {
-        return 0;
+        return myOffsetMap.getOffset(CompletionInitializationContext.START_OFFSET);
     }
 
+    public char getCompletionChar() {
+        return myCompletionChar;
+    }
+
+    public LookupElement[] getElements() {
+        return myElements;
+    }
+
+    @NotNull
     public Project getProject() {
-        return file.getProject();
+        return myFile.getProject();
+    }
+
+    public int getSelectionEndOffset() {
+        return myOffsetMap.getOffset(CompletionInitializationContext.SELECTION_END_OFFSET);
+    }
+
+    @Nullable
+    public Runnable getLaterRunnable() {
+        return myLaterRunnable;
+    }
+
+    public void setLaterRunnable(@Nullable final Runnable laterRunnable) {
+        myLaterRunnable = laterRunnable;
+    }
+
+    /**
+     * @param addCompletionChar Whether completionChar should be added to document at tail offset (see {@link #TAIL_OFFSET}) after insert handler (default: {@code true}).
+     */
+    public void setAddCompletionChar(final boolean addCompletionChar) {
+        myAddCompletionChar = addCompletionChar;
+    }
+
+    public boolean shouldAddCompletionChar() {
+        return myAddCompletionChar;
+    }
+
+
+    public static boolean shouldAddCompletionChar(char completionChar) {
+        return completionChar != Lookup.AUTO_INSERT_SELECT_CHAR &&
+               completionChar != Lookup.REPLACE_SELECT_CHAR &&
+               completionChar != Lookup.NORMAL_SELECT_CHAR;
+    }
+
+    public InsertionContext forkByOffsetMap() {
+        return new InsertionContext(myOffsetMap.copyOffsets(EditorMemory.getUserData(myEditor, EditorMemory.DOCUMENT_KEY)), myCompletionChar, myElements, myFile, myEditor, myAddCompletionChar);
     }
 }

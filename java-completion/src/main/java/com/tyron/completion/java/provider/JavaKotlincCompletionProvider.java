@@ -2,12 +2,14 @@ package com.tyron.completion.java.provider;
 
 import static org.jetbrains.kotlin.com.intellij.patterns.PlatformPatterns.elementType;
 import static org.jetbrains.kotlin.com.intellij.patterns.PsiJavaPatterns.psiElement;
+import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.or;
 import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.string;
 
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionResultSet;
+import com.tyron.completion.java.patterns.PatternUtil;
 import com.tyron.completion.java.util.JavaCompletionUtil;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.impl.LookupItemUtil;
@@ -41,6 +43,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiCodeBlock;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiEnumConstant;
+import org.jetbrains.kotlin.com.intellij.psi.PsiErrorElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpressionList;
 import org.jetbrains.kotlin.com.intellij.psi.PsiIdentifier;
@@ -53,6 +56,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaParameterType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMember;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiPackage;
 import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReference;

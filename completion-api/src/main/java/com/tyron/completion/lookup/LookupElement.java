@@ -3,8 +3,10 @@ package com.tyron.completion.lookup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.CompletionUtil;
 import com.tyron.completion.EditorMemory;
 import com.tyron.completion.InsertionContext;
+import com.tyron.completion.impl.CompletionContext;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.editor.Editor;
 
@@ -18,6 +20,7 @@ import org.jetbrains.kotlin.com.intellij.psi.ResolveResult;
 import org.jetbrains.kotlin.com.intellij.psi.SmartPsiElementPointer;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
@@ -118,16 +121,32 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
                                   @NonNull Content text,
                                   int line,
                                   int column) {
-        PsiFile file = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
-        String prefix = EditorMemory.getUserData(editor, EditorMemory.PREFIX_KEY);
 
-        InsertionContext context = new InsertionContext(editor, file);
+        PsiElement insertedElement = EditorMemory.getUserData(editor, EditorMemory.INSERTED_KEY);
+        assert insertedElement != null;
+        CompletionContext completionContext =
+                insertedElement.getUserData(CompletionContext.COMPLETION_CONTEXT_KEY);
+        assert completionContext != null;
 
-        if (prefix != null && !prefix.isEmpty()) {
-            for (int i = 0; i < prefix.length(); i++) {
-                editor.deleteText();
-            }
-        }
+        int idEndOffset = CompletionUtil.calcIdEndOffset(completionContext.getOffsetMap(),
+                editor,
+                editor.getCursor().getLeft());
+
+        List<LookupElement> elements = Collections.emptyList();
+        InsertionContext context = CompletionUtil.createInsertionContext(
+                elements,
+                this,
+                (char) 0,
+                editor,
+                completionContext.file,
+                editor.getCursor().getLeft(),
+                idEndOffset,
+                completionContext.getOffsetMap()
+        );
+
+        int caretOffset = editor.getCursor().getLeft();
+        editor.getText().delete(caretOffset, idEndOffset);
+
 
         String lookupString = getLookupString();
         editor.insertText(lookupString, lookupString.length());

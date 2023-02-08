@@ -13,8 +13,10 @@ import com.tyron.completion.psi.completion.item.JavaElementLookupRenderer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
 import org.jetbrains.kotlin.com.intellij.openapi.util.registry.Registry;
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil;
 import org.jetbrains.kotlin.com.intellij.pom.java.LanguageLevel;
@@ -29,8 +31,13 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiConditionalExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpressionList;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiJavaCodeReferenceElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
+import org.jetbrains.kotlin.com.intellij.psi.PsiModifier;
 import org.jetbrains.kotlin.com.intellij.psi.PsiModifierListOwner;
+import org.jetbrains.kotlin.com.intellij.psi.PsiNewExpression;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiSubstitutor;
 import org.jetbrains.kotlin.com.intellij.psi.PsiType;
@@ -170,25 +177,26 @@ public class JavaMethodCallElement extends LookupItem<PsiMethod> implements Type
 
     @Override
     public void handleInsert(@NotNull InsertionContext context) {
-        final Content document = context.getEditor().getText();
-        final PsiFile file = context.getFile();
-        final PsiMethod method = getObject();
-
-//        final LookupElement[] allItems = context.getElements();
-//        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : MethodParenthesesHandler.overloadsHaveParameters(allItems, method);
-//        if (method.isConstructor()) {
-//            PsiClass aClass = method.getContainingClass();
-//            if (aClass != null && aClass.getTypeParameters().length > 0) {
-//                document.insertString(context.getTailOffset(), "<>");
-//            }
-//        }
-//        JavaCompletionUtil.insertParentheses(context, this, false, hasParams, false);
+//        final Document document = context.getDocument();
+//        final PsiFile file = context.getFile();
+//        final PsiMethod method = getObject();
 //
+////        final LookupElement[] allItems = context.getElements();
+//        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : ThreeState.YES;
+////        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : MethodParenthesesHandler.overloadsHaveParameters(allItems, method);
+////        if (method.isConstructor()) {
+////            PsiClass aClass = method.getContainingClass();
+////            if (aClass != null && aClass.getTypeParameters().length > 0) {
+////                document.insertString(context.getTailOffset(), "<>");
+////            }
+////        }
+//        JavaCompletionUtil.insertParentheses(context, this, false, hasParams, false);
+////
 //        final int startOffset = context.getStartOffset();
 //        final OffsetKey refStart = context.trackOffset(startOffset, true);
 //        if (myNeedExplicitTypeParameters) {
 //            qualifyMethodCall(file, startOffset, document);
-//            insertExplicitTypeParameters(context, refStart);
+////            insertExplicitTypeParameters(context, refStart);
 //        }
 //        else if (myHelper != null) {
 //            context.commitDocument();
@@ -209,7 +217,7 @@ public class JavaMethodCallElement extends LookupItem<PsiMethod> implements Type
 //            CompletionMemory.registerChosenMethod(method, methodCall);
 //            handleNegation(context, document, methodCall);
 //        }
-//
+
 //        startArgumentLiveTemplate(context, method);
 //        showParameterHints(this, context, method, methodCall);
     }
@@ -227,28 +235,28 @@ public class JavaMethodCallElement extends LookupItem<PsiMethod> implements Type
 //        }
 //    }
 //
-//    private void importOrQualify(Document document, PsiFile file, PsiMethod method, int startOffset) {
-//        if (willBeImported()) {
-//            if (method.isConstructor()) {
-//                final PsiNewExpression newExpression = PsiTreeUtil.findElementOfClassAtOffset(file, startOffset, PsiNewExpression.class, false);
-//                if (newExpression != null) {
-//                    PsiJavaCodeReferenceElement ref = newExpression.getClassReference();
-//                    if (ref != null && myContainingClass != null && !ref.isReferenceTo(myContainingClass)) {
-//                        ref.bindToElement(myContainingClass);
-//                        return;
-//                    }
-//                }
-//            } else {
-//                final PsiReferenceExpression ref = PsiTreeUtil.findElementOfClassAtOffset(file, startOffset, PsiReferenceExpression.class, false);
-//                if (ref != null && myContainingClass != null && !ref.isReferenceTo(method)) {
-//                    ref.bindToElementViaStaticImport(myContainingClass);
-//                }
-//                return;
-//            }
-//        }
-//
-//        qualifyMethodCall(file, startOffset, document);
-//    }
+    private void importOrQualify(Document document, PsiFile file, PsiMethod method, int startOffset) {
+        if (willBeImported()) {
+            if (method.isConstructor()) {
+                final PsiNewExpression newExpression = PsiTreeUtil.findElementOfClassAtOffset(file, startOffset, PsiNewExpression.class, false);
+                if (newExpression != null) {
+                    PsiJavaCodeReferenceElement ref = newExpression.getClassReference();
+                    if (ref != null && myContainingClass != null && !ref.isReferenceTo(myContainingClass)) {
+                        ref.bindToElement(myContainingClass);
+                        return;
+                    }
+                }
+            } else {
+                final PsiReferenceExpression ref = PsiTreeUtil.findElementOfClassAtOffset(file, startOffset, PsiReferenceExpression.class, false);
+                if (ref != null && myContainingClass != null && !ref.isReferenceTo(method)) {
+                    ref.bindToElementViaStaticImport(myContainingClass);
+                }
+                return;
+            }
+        }
+
+        qualifyMethodCall(file, startOffset, document);
+    }
 
     public static final Key<PsiMethod> ARGUMENT_TEMPLATE_ACTIVE = Key.create("ARGUMENT_TEMPLATE_ACTIVE");
 
@@ -290,24 +298,24 @@ public class JavaMethodCallElement extends LookupItem<PsiMethod> implements Type
         return true;
     }
 
-//    private void qualifyMethodCall(PsiFile file, final int startOffset, final Document document) {
-//        final PsiReference reference = file.findReferenceAt(startOffset);
-//        if (reference instanceof PsiReferenceExpression && ((PsiReferenceExpression)reference).isQualified()) {
-//            return;
-//        }
-//
-//        final PsiMethod method = getObject();
-//        if (method.isConstructor()) return;
-//        if (!method.hasModifierProperty(PsiModifier.STATIC)) {
-//            document.insertString(startOffset, "this.");
-//            return;
-//        }
-//
-//        if (myContainingClass == null) return;
-//
-//        document.insertString(startOffset, ".");
-//        JavaCompletionUtil.insertClassReference(myContainingClass, file, startOffset);
-//    }
+    private void qualifyMethodCall(PsiFile file, final int startOffset, final Document document) {
+        final PsiReference reference = file.findReferenceAt(startOffset);
+        if (reference instanceof PsiReferenceExpression && ((PsiReferenceExpression)reference).isQualified()) {
+            return;
+        }
+
+        final PsiMethod method = getObject();
+        if (method.isConstructor()) return;
+        if (!method.hasModifierProperty(PsiModifier.STATIC)) {
+            document.insertString(startOffset, "this.");
+            return;
+        }
+
+        if (myContainingClass == null) return;
+
+        document.insertString(startOffset, ".");
+        JavaCompletionUtil.insertClassReference(myContainingClass, file, startOffset);
+    }
 
     @Nullable
     public static String getTypeParamsText(boolean presentable, PsiTypeParameterListOwner owner, PsiSubstitutor substitutor) {
