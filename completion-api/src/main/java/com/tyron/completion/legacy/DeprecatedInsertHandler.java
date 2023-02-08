@@ -1,4 +1,4 @@
-package com.tyron.completion;
+package com.tyron.completion.legacy;
 
 import com.tyron.editor.Editor;
 

@@ -4,7 +4,7 @@ package com.tyron.kotlin.completion
 
 import com.tyron.builder.project.api.Module
 import com.tyron.builder.project.impl.AndroidModuleImpl
-import com.tyron.completion.DefaultInsertHandler
+import com.tyron.completion.legacy.DefaultInsertHandler
 import com.tyron.completion.model.CompletionItem
 import com.tyron.completion.model.CompletionList
 import com.tyron.completion.model.DrawableKind
@@ -28,9 +28,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl
 import org.jetbrains.kotlin.idea.FrontendInternals
-import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.lexer.KtKeywordToken
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.renderer.ClassifierNamePolicy
 import org.jetbrains.kotlin.renderer.ParameterNameRenderingPolicy
@@ -128,7 +126,11 @@ data class KotlinEnvironment(
                 commitText = completionText
                 position = commitText.length
                 sortText = fullName
-                setInsertHandler(DefaultInsertHandler(this))
+                setInsertHandler(
+                    DefaultInsertHandler(
+                        this
+                    )
+                )
             }
         } else null
     }
@@ -153,7 +155,11 @@ data class KotlinEnvironment(
         keywords.types.mapNotNull {
             if (it is KtKeywordToken && it.value.startsWith(prefix)) {
                 CompletionItem(it.value, "Keyword", it.value, DrawableKind.Keyword).apply {
-                    setInsertHandler(DefaultInsertHandler(this))
+                    setInsertHandler(
+                        DefaultInsertHandler(
+                            this
+                        )
+                    )
                     addFilterText(it.value)
                 }
             } else {

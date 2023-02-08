@@ -17,8 +17,11 @@ import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment;
 import org.jetbrains.kotlin.com.intellij.mock.MockProject;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
+import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.FileIndexFacade;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.org.picocontainer.PicoContainer;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -51,16 +54,24 @@ public class MainViewModel extends ViewModel {
     private final MutableLiveData<Integer> mBottomSheetState =
             new MutableLiveData<>(BottomSheetBehavior.STATE_COLLAPSED);
 
-    private final MutableLiveData<Boolean> mDrawerState =
-            new MutableLiveData<>(false);
+    private final MutableLiveData<Boolean> mDrawerState = new MutableLiveData<>(false);
 
 
     private final JavaCoreProjectEnvironment projectEnvironment;
 
     public MainViewModel(String projectPath) {
         Disposable disposable = Disposer.newDisposable();
-        CoreApplicationEnvironment app = ApplicationLoader.getInstance().getCoreApplicationEnvironment();
-        projectEnvironment = new JavaCoreProjectEnvironment(disposable, app);
+        CoreApplicationEnvironment app =
+                ApplicationLoader.getInstance().getCoreApplicationEnvironment();
+        projectEnvironment = new JavaCoreProjectEnvironment(disposable, app) {
+            @NonNull
+            @Override
+            protected CodeAssistProject createProject(@NonNull PicoContainer parent,
+                                                @NonNull Disposable parentDisposable) {
+                VirtualFile fileByPath = app.getLocalFileSystem().findFileByPath(projectPath);
+                return new CodeAssistProject(parent, parentDisposable, fileByPath);
+            }
+        };
 
         projectEnvironment.addJarToClassPath(CompletionModule.getAndroidJar());
         projectEnvironment.addJarToClassPath(CompletionModule.getLambdaStubs());
@@ -165,6 +176,7 @@ public class MainViewModel extends ViewModel {
 
     /**
      * Opens this file to the editor
+     *
      * @param file The fle to be opened
      * @return whether the operation was successful
      */

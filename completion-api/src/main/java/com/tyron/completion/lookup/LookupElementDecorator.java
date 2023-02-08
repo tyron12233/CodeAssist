@@ -87,6 +87,7 @@ public abstract class LookupElementDecorator<T extends LookupElement> extends Lo
 //        return myDelegate.getAutoCompletionPolicy();
 //    }
 
+    @NonNull
     @Override
     public String toString() {
         return myDelegate.toString();

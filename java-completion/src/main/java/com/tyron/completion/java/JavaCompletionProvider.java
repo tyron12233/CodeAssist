@@ -1,12 +1,8 @@
 package com.tyron.completion.java;
 
-import static com.tyron.completion.progress.ProgressManager.checkCanceled;
-
-import com.google.common.base.Throwables;
-import com.tyron.builder.project.api.JavaModule;
-import com.tyron.common.logging.IdeLog;
-import com.tyron.completion.CompletionParameters;
-import com.tyron.completion.CompletionProvider;
+import com.tyron.completion.legacy.CompletionParameters;
+import com.tyron.completion.legacy.CompletionProvider;
+import com.tyron.completion.EditorMemory;
 import com.tyron.completion.java.provider.JavaKotlincCompletionProvider;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
@@ -21,16 +17,18 @@ import org.jetbrains.kotlin.com.intellij.openapi.project.IndexNotReadyException;
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
+import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
-import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.ReferenceRange;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiFileImpl;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
 
 import java.io.File;
+
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class JavaCompletionProvider extends CompletionProvider {
 
@@ -74,8 +72,13 @@ public class JavaCompletionProvider extends CompletionProvider {
                     return null;
                 }
 
-                PsiManager psiManager = PsiManager.getInstance(projectEnvironment.getProject());
-                PsiFile file = psiManager.findFile(virtualFile);
+                Document editorDocument =
+                        EditorMemory.getUserData(parameters.getEditor(), EditorMemory.DOCUMENT_KEY);
+                assert editorDocument != null;
+
+                PsiFile file = PsiDocumentManager.getInstance(projectEnvironment.getProject())
+                        .getPsiFile(editorDocument);
+
 
                 if (file == null || !file.isValid()) {
                     return null;
@@ -120,15 +123,21 @@ public class JavaCompletionProvider extends CompletionProvider {
                 return;
             }
 
+            CodeEditor editor = parameters.getEditor();
+            EditorMemory.putUserData(editor, EditorMemory.FILE_KEY, psiElement.getContainingFile());
+            EditorMemory.putUserData(editor, EditorMemory.PREFIX_KEY, prefix);
+
+            PsiElement prevElement =
+                    psiElement.getContainingFile().findElementAt((int) (parameters.getIndex() - 1));
             // only allow completions if prefix is not empty
             // and the parent is a reference expression (this.[cursor])
-            if (prefix.isEmpty() && !(psiElement.getParent() instanceof PsiReferenceExpression)) {
+            if (prefix.isEmpty() && prevElement != null && !".".equals(prevElement.getText())) {
                 return;
             }
 
             CompletionList.Builder builder = parameters.getBuilder();
             builder.setCompletionPrefix(prefix);
-            javaKotlincCompletionProvider.fillCompletionVariants(psiElement, builder);
+            javaKotlincCompletionProvider.fillCompletionVariants(psiElement, builder, parameters);
         } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
             e.printStackTrace();
         }

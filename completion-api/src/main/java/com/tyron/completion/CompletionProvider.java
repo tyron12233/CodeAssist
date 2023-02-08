@@ -1,56 +1,24 @@
 package com.tyron.completion;
 
-import android.annotation.SuppressLint;
-
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Multimap;
-import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.Module;
-import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.progress.ProgressManager;
-import com.tyron.language.api.Language;
-import com.tyron.language.fileTypes.FileType;
-import com.tyron.language.fileTypes.FileTypeManager;
-import com.tyron.language.fileTypes.LanguageFileType;
-
 import org.jetbrains.annotations.NotNull;
-
-import java.io.File;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
+import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 
 /**
- * Subclass this to provide completions on the given file.
+ * Provides completion items.
  * <p>
- * Be sure to frequently call {@link ProgressManager#checkCanceled()} for the
- * user to have a smooth experience because the user may be typing fast and operations
- * may be cancelled at that time.
+ * Register via {@link CompletionContributor#extend(CompletionType, ElementPattern, CompletionProvider)}.
  */
-public abstract class CompletionProvider {
+public abstract class CompletionProvider<V extends CompletionParameters> {
 
-    private static final Multimap<Language, CompletionProvider> sRegisteredCompletionProviders =
-            ArrayListMultimap.create();
+  protected CompletionProvider() {
+  }
 
-    public abstract boolean accept(File file);
+  protected abstract void addCompletions(@NotNull V parameters, @NotNull ProcessingContext context, @NotNull CompletionResultSet result);
 
-    public abstract CompletionList complete(CompletionParameters parameters);
-
-    @SuppressLint("NewApi")
-    public static ImmutableList<CompletionProvider> forParameters(@NotNull CompletionParameters parameters) {
-        throw new UnsupportedOperationException();
-    }
-
-    public static ImmutableList<CompletionProvider> forLanguage(@NotNull Language language) {
-        return ImmutableList.copyOf(sRegisteredCompletionProviders.get(language));
-    }
-
-    public static void registerCompletionProvider(@NotNull Language language, CompletionProvider provider) {
-        if (sRegisteredCompletionProviders.containsEntry(language, provider)) {
-            return;
-        }
-        sRegisteredCompletionProviders.put(language, provider);
-    }
+  public final void addCompletionVariants(@NotNull final V parameters,
+                                          @NotNull ProcessingContext context,
+                                          @NotNull final CompletionResultSet result) {
+    addCompletions(parameters, context, result);
+  }
 }

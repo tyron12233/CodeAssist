@@ -1,187 +1,186 @@
 package com.tyron.completion;
 
-import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.Module;
-import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.Editor;
+import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
 
-import java.io.File;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 /**
- * Contains useful information about the current completion request
+ * See {@link #withType(CompletionType)}, {@link #withInvocationCount(int)} and
+ * {@link #withPosition(PsiElement, int)} to
+ * create modified copy of given current parameters.
+ *
+ * @see CompletionContributor
  */
-public class CompletionParameters {
+public final class CompletionParameters {
+    private final PsiElement myPosition;
+    private final PsiFile myOriginalFile;
+    private final CompletionType myCompletionType;
+    @NotNull
+    private final CodeEditor myEditor;
+    private final int myOffset;
+    private final int myInvocationCount;
+    private final CompletionProcess myProcess;
+    private boolean isTestingMode = false;
+    private boolean completeOnlyNotImported = false;
 
-    private final Project mProject;
-    private final Module mModule;
-    private final File mFile;
-    private final String mContents;
-    private final String mPrefix;
-    private final int mLine;
-    private final int mColumn;
-    private final long mIndex;
-    private CompletionList.Builder builder;
-    private final Editor mEditor;
-
-    public static Builder builder() {
-        return new Builder();
+    @ApiStatus.Internal
+    public CompletionParameters(@NotNull final PsiElement position,
+                                @NotNull final PsiFile originalFile,
+                                @NotNull CompletionType completionType,
+                                int offset,
+                                int invocationCount,
+                                @NotNull CodeEditor editor,
+                                @NotNull CompletionProcess process) {
+        PsiUtilCore.ensureValid(position);
+        assert position.getTextRange().containsOffset(offset) : position;
+        myPosition = position;
+        myOriginalFile = originalFile;
+        myCompletionType = completionType;
+        myOffset = offset;
+        myInvocationCount = invocationCount;
+        myEditor = editor;
+        myProcess = process;
     }
 
-    private CompletionParameters(Project project,
-                                 Module module,
-                                 Editor editor,
-                                 File file,
-                                 String contents,
-                                 String prefix,
-                                 int line,
-                                 int column,
-                                 long index, CompletionList.Builder builder) {
-        mProject = project;
-        mModule = module;
-        mEditor = editor;
-        mFile = file;
-        mContents = contents;
-        mPrefix = prefix;
-        mLine = line;
-        mColumn = column;
-        mIndex = index;
-        this.builder = builder;
+    @NotNull
+    public CompletionParameters withType(@NotNull CompletionType type) {
+        return new CompletionParameters(myPosition,
+                myOriginalFile,
+                type,
+                myOffset,
+                myInvocationCount,
+                myEditor,
+                myProcess);
     }
 
-    public Project getProject() {
-        return mProject;
+    @NotNull
+    public CompletionParameters withInvocationCount(int newCount) {
+        return new CompletionParameters(myPosition,
+                myOriginalFile,
+                myCompletionType,
+                myOffset,
+                newCount,
+                myEditor,
+                myProcess);
     }
 
-    public Module getModule() {
-        return mModule;
+    /**
+     * Return the leaf PSI element in the "completion file" at offset {@link #getOffset()}.
+     * <p>
+     * "Completion file" is a PSI file used for completion purposes. Most often it's a non-physical
+     * copy of the file being edited
+     * (the original file can be accessed from {@link PsiFile#getOriginalFile()} or
+     * {@link #getOriginalFile()}).
+     * </p>
+     * <p>
+     * A special 'dummy identifier' string is inserted to the copied file at caret offset (removing
+     * the selection).
+     * Most often this string is an identifier (see
+     * {@link CompletionInitializationContext#DUMMY_IDENTIFIER}).
+     * It can be changed via
+     * {@link CompletionContributor#beforeCompletion(CompletionInitializationContext)} method.
+     * </p>
+     * <p>
+     * Why? This way there'll always be some non-empty element there, which usually reduces the
+     * number of
+     * possible cases to be considered inside a {@link CompletionContributor}.
+     * Also, even if completion was invoked in the middle of a white space, a reference might
+     * appear there after dummy identifier is inserted,
+     * and its {@link com.intellij.psi.PsiReference#getVariants()} can then be suggested.
+     * </p>
+     * <p>
+     * If the dummy identifier is empty, then the file isn't copied and this method returns
+     * whatever is at caret in the original file.
+     */
+    @NotNull
+    public PsiElement getPosition() {
+        return myPosition;
     }
 
-    public File getFile() {
-        return mFile;
+    @Nullable
+    public PsiElement getOriginalPosition() {
+        return myOriginalFile.findElementAt(myPosition.getTextRange().getStartOffset());
     }
 
-    public CompletionList.Builder getBuilder() {
-        return builder;
+    /**
+     * @return the file being edited, possibly injected, where code completion was invoked.
+     */
+    @NotNull
+    public PsiFile getOriginalFile() {
+        return myOriginalFile;
     }
 
-    public String getContents() {
-        return mContents;
+    @NotNull
+    public CompletionType getCompletionType() {
+        return myCompletionType;
     }
 
-    public String getPrefix() {
-        return mPrefix;
+    /**
+     * @return the offset (relative to the file) where code completion was invoked.
+     */
+    public int getOffset() {
+        return myOffset;
     }
 
-    public int getLine() {
-        return mLine;
+    /**
+     * @return 0 for autopopup<br>
+     * 1 for explicitly invoked completion<br>
+     * >1 for next completion invocations when one lookup is already active
+     */
+    public int getInvocationCount() {
+        return myInvocationCount;
     }
 
-    public int getColumn() {
-        return mColumn;
+    public boolean isAutoPopup() {
+        return myInvocationCount == 0;
     }
 
-    public long getIndex() {
-        return mIndex;
+    @NotNull
+    public CompletionParameters withPosition(@NotNull PsiElement element, int offset) {
+        return new CompletionParameters(element,
+                myOriginalFile,
+                myCompletionType,
+                offset,
+                myInvocationCount,
+                myEditor,
+                myProcess);
     }
 
-    public Editor getEditor() {
-        return mEditor;
+    public boolean isExtendedCompletion() {
+        return myCompletionType == CompletionType.BASIC && myInvocationCount >= 2;
     }
 
-    @Override
-    public String toString() {
-        return "CompletionParameters{" +
-               "mProject=" +
-               mProject +
-               ", mModule=" +
-               mModule +
-               ", mFile=" +
-               mFile +
-               '\'' +
-               ", mPrefix='" +
-               mPrefix +
-               '\'' +
-               ", mLine=" +
-               mLine +
-               ", mColumn=" +
-               mColumn +
-               ", mIndex=" +
-               mIndex +
-               ", mEditor=" +
-               mEditor +
-               '}';
+    /**
+     * @return the editor where the completion was started
+     */
+    @NotNull
+    public CodeEditor getEditor() {
+        return myEditor;
     }
 
-    public static final class Builder {
+    @NotNull
+    public CompletionProcess getProcess() {
+        return myProcess;
+    }
 
-        private Project project;
-        private Module module;
-        private File file;
-        private String contents;
-        private String prefix;
-        private int line;
-        private int column;
-        private long index;
-        private Editor editor;
-        private CompletionList.Builder builder;
+    public boolean isTestingMode() {
+        return isTestingMode;
+    }
 
-        private Builder() {
+    public void setIsTestingMode(boolean runTestingMode) {
+        isTestingMode = runTestingMode;
+    }
 
-        }
+    public boolean isCompleteOnlyNotImported() {
+        return completeOnlyNotImported;
+    }
 
-        public Builder setProject(Project project) {
-            this.project = project;
-            return this;
-        }
-
-        public Builder setModule(Module module) {
-            this.module = module;
-            return this;
-        }
-
-        public Builder setFile(File file) {
-            this.file = file;
-            return this;
-        }
-
-        public Builder setContents(String contents) {
-            this.contents = contents;
-            return this;
-        }
-
-        public Builder setPrefix(String prefix) {
-            this.prefix = prefix;
-            return this;
-        }
-
-        public Builder setLine(int line) {
-            this.line = line;
-            return this;
-        }
-
-        public Builder setColumn(int column) {
-            this.column = column;
-            return this;
-        }
-
-        public Builder setIndex(long index) {
-            this.index = index;
-            return this;
-        }
-
-        public Builder setEditor(Editor editor) {
-            this.editor = editor;
-            return this;
-        }
-
-        public CompletionParameters build() {
-            return new CompletionParameters(project, module, editor, file, contents, prefix, line,
-                                            column, index, builder);
-        }
-
-        public Builder setCompletionListBuilder(CompletionList.Builder builder) {
-            this.builder = builder;
-            return this;
-        }
+    public void setCompleteOnlyNotImported(boolean onlyNonImported) {
+        completeOnlyNotImported = onlyNonImported;
     }
 }

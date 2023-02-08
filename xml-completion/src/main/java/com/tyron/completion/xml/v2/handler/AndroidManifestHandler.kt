@@ -3,7 +3,7 @@ package com.tyron.completion.xml.v2.handler
 import com.android.ide.common.rendering.api.ResourceNamespace
 import com.android.resources.ResourceType.STYLEABLE
 import com.tyron.builder.project.api.AndroidModule
-import com.tyron.completion.CompletionParameters
+import com.tyron.completion.legacy.CompletionParameters
 import com.tyron.completion.model.CompletionList
 import com.tyron.completion.xml.model.XmlCompletionType
 import com.tyron.completion.xml.util.AndroidXmlTagUtils.addManifestTagItems

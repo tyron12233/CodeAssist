@@ -2,6 +2,7 @@ package com.tyron.completion.lookup.impl;
 
 import android.graphics.drawable.Icon;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.completion.CharTailType;
@@ -82,6 +83,7 @@ public class LookupItem<T> extends MutableLookupElement implements Comparable<Lo
         return myAllLookupStrings.hashCode() * 239 + object.hashCode();
     }
 
+    @NonNull
     public String toString() {
         return getLookupString();
     }

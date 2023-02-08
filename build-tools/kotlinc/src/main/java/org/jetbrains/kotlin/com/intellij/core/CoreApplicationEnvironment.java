@@ -167,6 +167,11 @@ public class CoreApplicationEnvironment {
                 }
                 return new CoreLocalVirtualFile(this, ioFile) {
                     @Override
+                    public boolean isWritable() {
+                        return ioFile.canWrite();
+                    }
+
+                    @Override
                     public @NonNull OutputStream getOutputStream(Object requestor,
                                                                                            long newModificationStamp,
                                                                                            long newTimeStamp) throws IOException {

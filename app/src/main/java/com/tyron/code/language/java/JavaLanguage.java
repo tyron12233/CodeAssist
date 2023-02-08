@@ -6,14 +6,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.builder.project.Project;
-import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.EditorFormatter;
 import com.tyron.code.language.LanguageManager;
-import com.tyron.completion.CompletionParameters;
+import com.tyron.completion.legacy.CompletionParameters;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.java.ShortNamesCache;
 import com.tyron.completion.java.parse.CompilationInfo;
-import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 import com.tyron.language.api.CodeAssistLanguage;
@@ -22,8 +20,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.util.List;
-import java.util.stream.Collectors;
 
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
@@ -34,7 +30,6 @@ import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
 import io.github.rosemoe.sora.lang.completion.CompletionHelper;
-import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.format.AsyncFormatter;
 import io.github.rosemoe.sora.lang.format.Formatter;
@@ -143,7 +138,6 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
                 .setColumn(position.getColumn())
                 .setLine(position.getLine())
                 .setIndex(position.getIndex())
-                .setEditor(editor)
                 .setFile(editor.getCurrentFile())
                 .setProject(editor.getProject())
                 .setModule(ShortNamesCache.JDK_MODULE)

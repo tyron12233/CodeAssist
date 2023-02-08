@@ -1,6 +1,6 @@
 package com.tyron.completion.xml.insert;
 
-import com.tyron.completion.DefaultInsertHandler;
+import com.tyron.completion.legacy.DefaultInsertHandler;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;

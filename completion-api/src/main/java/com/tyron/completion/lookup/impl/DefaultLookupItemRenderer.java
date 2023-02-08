@@ -1,11 +1,16 @@
 package com.tyron.completion.lookup.impl;
 
+import android.graphics.drawable.Icon;
+
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.R;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
 import com.tyron.completion.lookup.LookupElementRenderer;
 
+import org.jetbrains.kotlin.com.intellij.openapi.util.Iconable;
+import org.jetbrains.kotlin.com.intellij.openapi.util.registry.Registry;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.meta.PsiMetaData;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
@@ -14,9 +19,13 @@ public class DefaultLookupItemRenderer extends LookupElementRenderer<LookupItem<
 
     public static final DefaultLookupItemRenderer INSTANCE = new DefaultLookupItemRenderer();
 
+    public static Icon getRawIcon(LookupElement item) {
+        PsiElement psiElement = item.getPsiElement();
+        return null;
+    }
     @Override
     public void renderElement(LookupItem<?> item, LookupElementPresentation presentation) {
-//        presentation.setIcon(getRawIcon(item));
+        presentation.setIcon(getRawIcon(item));
 
         presentation.setItemText(getName(item));
         presentation.setItemTextBold(item.getAttribute(LookupItem.HIGHLIGHTED_ATTR) != null);

@@ -20,6 +20,8 @@ dependencies {
 
     compileOnly files('libs/the-unsafe.jar')
     compileOnly project(path: ':android-stubs')
+    compileOnly 'org.jetbrains:annotations:24.0.0'
+
 
 }
 repositories {

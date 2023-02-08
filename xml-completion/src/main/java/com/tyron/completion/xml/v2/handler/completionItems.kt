@@ -1,6 +1,5 @@
 package com.tyron.completion.xml.v2.handler
 
-import android.text.TextUtils
 import com.android.ide.common.rendering.api.*
 import com.android.ide.common.resources.ResourceRepository
 import com.android.ide.common.resources.ResourceResolver
@@ -8,11 +7,10 @@ import com.android.ide.common.resources.ResourceValueMap
 import com.android.ide.common.resources.configuration.FolderConfiguration
 import com.android.ide.common.resources.getConfiguredResources
 import com.android.resources.ResourceType
-import com.tyron.completion.CompletionParameters
+import com.tyron.completion.legacy.CompletionParameters
 import com.tyron.completion.model.CompletionItem
 import com.tyron.completion.model.CompletionList
 import com.tyron.completion.model.DrawableKind
-import com.tyron.completion.xml.insert.AttributeInsertHandler
 import com.tyron.completion.xml.insert.ValueInsertHandler
 import com.tyron.completion.xml.v2.aar.FrameworkResourceRepository
 import com.tyron.completion.xml.v2.project.LocalResourceRepository

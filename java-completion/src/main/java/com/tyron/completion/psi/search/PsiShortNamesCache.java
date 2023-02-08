@@ -1,6 +1,6 @@
 package com.tyron.completion.psi.search;
 
-import com.tyron.completion.psi.indexing.IdFilter;
+import org.jetbrains.kotlin.com.intellij.util.indexing.IdFilter;
 
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;

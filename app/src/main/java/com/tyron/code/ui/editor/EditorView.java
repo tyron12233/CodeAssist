@@ -2,10 +2,8 @@ package com.tyron.code.ui.editor;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -16,70 +14,48 @@ import com.tyron.code.highlighter.JavaFileHighlighter;
 import com.tyron.code.highlighter.SyntaxHighlighter;
 import com.tyron.code.highlighter.attributes.CodeAssistTextAttributes;
 import com.tyron.code.highlighter.attributes.TextAttributesKeyUtils;
-import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.ui.main.TextEditorState;
+import com.tyron.completion.CompletionInitializationContext;
 import com.tyron.completion.CompletionParameters;
+import com.tyron.completion.CompletionProcess;
+import com.tyron.completion.CompletionResult;
+import com.tyron.completion.CompletionService;
+import com.tyron.completion.CompletionType;
+import com.tyron.completion.EditorMemory;
+import com.tyron.completion.impl.CompletionInitializationUtil;
+import com.tyron.completion.impl.OffsetsInFile;
 import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.util.CompletionUtils;
 
-import org.jetbrains.kotlin.com.intellij.codeInsight.ExternalAnnotationsManager;
-import org.jetbrains.kotlin.com.intellij.lang.ASTNode;
-import org.jetbrains.kotlin.com.intellij.lang.FileASTNode;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.lang.LanguageUtil;
 import org.jetbrains.kotlin.com.intellij.lexer.Lexer;
-import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
-import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Attachment;
+import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.markup.TextAttributes;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
-import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.FileDocumentManagerImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType;
-import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.LanguageFileType;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextLanguage;
-import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator;
-import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
-import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
-import org.jetbrains.kotlin.com.intellij.pom.core.impl.PomModelImpl;
-import org.jetbrains.kotlin.com.intellij.psi.FileViewProvider;
-import org.jetbrains.kotlin.com.intellij.psi.JavaTokenType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
-import org.jetbrains.kotlin.com.intellij.psi.PsiInvalidElementAccessException;
-import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
-import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl;
-import org.jetbrains.kotlin.com.intellij.psi.impl.ChangedPsiRangeUtil;
-import org.jetbrains.kotlin.com.intellij.psi.impl.DiffLog;
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
-import org.jetbrains.kotlin.com.intellij.psi.impl.light.JavaIdentifier;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiJavaFileImpl;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.ResolveCache;
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.tree.FileElement;
-import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport;
 import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType;
-import org.jetbrains.kotlin.com.intellij.util.FileContentUtilCore;
-import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
+import org.jetbrains.kotlin.com.intellij.util.Consumer;
 
 import java.io.File;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.util.Comparator;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 import io.github.rosemoe.sora.event.ContentChangeEvent;
+import io.github.rosemoe.sora.event.EventReceiver;
+import io.github.rosemoe.sora.event.Unsubscribe;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
-import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
-import io.github.rosemoe.sora.lang.styling.ExternalRenderer;
 import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Span;
 import io.github.rosemoe.sora.lang.styling.Styles;
@@ -88,11 +64,8 @@ import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.ContentListener;
 import io.github.rosemoe.sora.text.ContentReference;
-import io.github.rosemoe.sora.text.LineNumberCalculator;
-import io.github.rosemoe.sora.util.IntPair;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
-import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 import io.github.rosemoe.sora.widget.schemes.SchemeGitHub;
 
 @SuppressLint("ViewConstructor")
@@ -102,6 +75,8 @@ public class EditorView extends FrameLayout {
     private final FileType fileType;
 
     private final CodeEditor editor;
+
+    private final Document document;
 
     public EditorView(Context context, Project project, TextEditorState state) {
         super(context);
@@ -122,6 +97,13 @@ public class EditorView extends FrameLayout {
         editor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
         editor.setTypefaceText(ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular));
 
+        document = FileDocumentManager.getInstance().getDocument(file);
+        EditorMemory.putUserData(editor, EditorMemory.DOCUMENT_KEY, document);
+
+        PsiFile psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document);
+        EditorMemory.putUserData(editor, EditorMemory.FILE_KEY, psiFile);
+
+
         AnalyzeManager analyzeManager = new TestAnalyzeManager(new JavaFileHighlighter());
         editor.setEditorLanguage(new EmptyLanguage() {
             @NonNull
@@ -135,6 +117,11 @@ public class EditorView extends FrameLayout {
                                             @NonNull CharPosition position,
                                             @NonNull CompletionPublisher publisher,
                                             @NonNull Bundle extraArguments) {
+                if (FileDocumentManager.getInstance().isDocumentUnsaved(document) ||
+                    !document.getText().contentEquals(content)) {
+                    return;
+                }
+
                 publisher.setComparator((o1, o2) -> {
                     if (o1 instanceof CompletionItemWithMatchLevel &&
                         o2 instanceof CompletionItemWithMatchLevel) {
@@ -143,65 +130,59 @@ public class EditorView extends FrameLayout {
                     }
                     return 0;
                 });
-                String prefix = CompletionUtils.computePrefix(content.getLine(position.getLine()),
-                        new com.tyron.editor.CharPosition(position.line, position.column),
-                        Character::isJavaIdentifierPart);
 
-                CompletionList.Builder builder = new CompletionList.Builder(publisher::addItem);
-
-                CompletionParameters params = CompletionParameters.builder()
-                        .setLine(position.getLine())
-                        .setColumn(position.getColumn())
-                        .setIndex(position.getIndex())
-                        .setFile(new File(file.getPath()))
-                        .setContents(content.toString())
-                        .setPrefix(prefix)
-                        .setCompletionListBuilder(builder)
-                        .build();
+                Disposable completionSession = Disposer.newDisposable("completionSession");
 
 
-                JavaCompletionProvider javaCompletionProvider = new JavaCompletionProvider();
-                javaCompletionProvider.completeV2(params);
+                CompletionInitializationContext ctx =
+                        CompletionInitializationUtil.createCompletionInitializationContext(project,
+                                editor,
+                                editor.getCursor(),
+                                0,
+                                CompletionType.SMART);
+                CompletionProcess completionProcess = new CompletionProcess() {
+                    @Override
+                    public boolean isAutopopupCompletion() {
+                        return true;
+                    }
+                };
+
+                OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
+
+                Supplier<? extends OffsetsInFile> supplier =
+                        CompletionInitializationUtil.insertDummyIdentifier(ctx,
+                                offsetsInFile,
+                                completionSession);
+                OffsetsInFile newOffsets = supplier.get();
+
+                CompletionParameters completionParameters =
+                        CompletionInitializationUtil.createCompletionParameters(ctx,
+                                completionProcess,
+                                newOffsets);
+
+                CompletionService.getCompletionService()
+                        .performCompletion(completionParameters,
+                                completionResult -> publisher.addItem(completionResult.getLookupElement()));
             }
         });
-
-
-        ContentListener psiUpdater = new ContentListener() {
-            @Override
-            public void beforeReplace(@NonNull Content content) {
-
-            }
-
-            @Override
-            public void afterInsert(Content content,
-                                    int startLine,
-                                    int startColumn,
-                                    int endLine,
-                                    int endColumn,
-                                    @NonNull CharSequence insertedContent) {
-                int startIndex = content.getCharIndex(startLine, startColumn);
-                int endIndex = content.getCharIndex(endLine, endColumn);
-                commit(ContentChangeEvent.ACTION_INSERT, startIndex, endIndex, insertedContent);
-            }
-
-            @Override
-            public void afterDelete(Content content,
-                                    int startLine,
-                                    int startColumn,
-                                    int endLine,
-                                    int endColumn,
-                                    CharSequence deletedContent) {
-                int startIndex = content.getCharIndex(startLine, startColumn);
-                int endIndex = startIndex + deletedContent.length();
-                commit(ContentChangeEvent.ACTION_DELETE, startIndex, endIndex, deletedContent);
-            }
-
-            private void commit(int action, int start, int end, CharSequence charSequence) {
-                EditorChangeUtil.doCommit(action, start, end, charSequence, project, file);
-            }
-        };
-        state.getContent().addContentListener(psiUpdater);
+        editor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
+            commit(event.getAction(),
+                    event.getChangeStart().index,
+                    event.getChangeEnd().index,
+                    event.getChangedText());
+        });
         addView(editor);
+    }
+
+    private void commit(int action, int start, int end, CharSequence charSequence) {
+        EditorChangeUtil.doCommit(editor,
+                action,
+                start,
+                end,
+                charSequence,
+                project,
+                file,
+                document);
     }
 
     public VirtualFile getFile() {

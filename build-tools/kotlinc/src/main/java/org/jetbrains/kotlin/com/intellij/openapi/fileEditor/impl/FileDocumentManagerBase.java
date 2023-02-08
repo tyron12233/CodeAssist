@@ -74,13 +74,26 @@ public abstract class FileDocumentManagerBase extends FileDocumentManager {
 
                 document = (DocumentEx) createDocument(text, file);
                 document.setModificationStamp(file.getModificationStamp());
+                setDocumentTooLarge(document, tooLarge);
+                FileType fileType = file.getFileType();
+                document.setReadOnly(tooLarge || !file.isWritable() || fileType.isBinary());
 
                 if (isTrackable(file)) {
                     document.addDocumentListener(getDocumentListener());
                 }
 
+                if (file instanceof LightVirtualFile) {
+                    registerDocument(document, file);
+                }
+                else {
+                    document.putUserData(FILE_KEY, file);
+                    cacheDocument(file, document);
+                }
+
                 cacheDocument(file, document);
             }
+
+            fileContentLoaded(file, document);
         }
         return document;
     }

@@ -6,7 +6,7 @@ import com.google.common.collect.Ordering;
 import com.google.errorprone.annotations.Immutable;
 import com.tyron.completion.CompletionPrefixMatcher;
 import com.tyron.completion.CompletionPrefixMatcher.MatchLevel;
-import com.tyron.completion.CompletionProvider;
+import com.tyron.completion.legacy.CompletionProvider;
 import com.tyron.completion.lookup.LookupElement;
 
 import io.github.rosemoe.sora.lang.completion.CompletionItem;

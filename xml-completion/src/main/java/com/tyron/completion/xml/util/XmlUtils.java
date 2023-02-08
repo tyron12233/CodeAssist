@@ -6,7 +6,7 @@ import android.util.Pair;
 
 import androidx.annotation.Nullable;
 
-import com.tyron.completion.CompletionParameters;
+import com.tyron.completion.legacy.CompletionParameters;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;

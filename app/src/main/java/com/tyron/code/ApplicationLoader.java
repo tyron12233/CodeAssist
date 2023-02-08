@@ -38,11 +38,16 @@ import com.tyron.code.ui.main.action.other.OpenSettingsAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.settings.ApplicationSettingsFragment;
 import com.tyron.common.ApplicationProvider;
-import com.tyron.completion.CompletionProvider;
+import com.tyron.completion.CompletionContributor;
+import com.tyron.completion.CompletionContributorEP;
+import com.tyron.completion.CompletionService;
+import com.tyron.completion.impl.CompletionServiceImpl;
+import com.tyron.completion.legacy.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
+import com.tyron.completion.psi.codeInsight.completion.JavaCompletionContributor;
 import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.editor.selection.ExpandSelectionProvider;
@@ -61,11 +66,17 @@ import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
 import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
+import org.jetbrains.kotlin.com.intellij.lang.Language;
+import org.jetbrains.kotlin.com.intellij.lang.MetaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuardImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentWriteAccessGuard;
+import org.jetbrains.kotlin.com.intellij.openapi.extensions.DefaultPluginDescriptor;
+import org.jetbrains.kotlin.com.intellij.openapi.extensions.Extensions;
+import org.jetbrains.kotlin.com.intellij.openapi.extensions.PluginId;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
 import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
@@ -113,6 +124,12 @@ public class ApplicationLoader extends Application {
                 SmartPointerAnchorProvider.class);
         CoreApplicationEnvironment.registerApplicationExtensionPoint(ClsCustomNavigationPolicy.EP_NAME,
                 ClsCustomNavigationPolicy.class);
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(FileDocumentManagerListener.EP_NAME,
+                FileDocumentManagerListener.class);
+        CoreApplicationEnvironment.registerApplicationExtensionPoint(MetaLanguage.EP_NAME,
+                MetaLanguage.class);
+        coreApplicationEnvironment.registerApplicationService(CompletionService.class,
+                new CompletionServiceImpl());
         coreApplicationEnvironment.registerApplicationService(TransactionGuard.class,
                 new TransactionGuardImpl());
         coreApplicationEnvironment.registerApplicationService(JavaClassSupers.class,
@@ -179,6 +196,13 @@ public class ApplicationLoader extends Application {
                     }
 
                 });
+
+
+        // language specific stuff
+        coreApplicationEnvironment.addExplicitExtension(CompletionContributor.INSTANCE,
+                org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage.INSTANCE,
+                new JavaCompletionContributor());
+
 
         super.onCreate();
         System.out.println("onCreate took " + timer.getElapsed());

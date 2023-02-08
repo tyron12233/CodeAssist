@@ -1,6 +1,5 @@
 package com.tyron.code.language
 
-import com.tyron.completion.CompletionParameters
 import com.tyron.completion.model.CachedCompletion
 import com.tyron.completion.model.CompletionList
 import com.tyron.editor.Editor

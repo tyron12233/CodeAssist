@@ -2,21 +2,26 @@ package com.tyron.completion.java.provider;
 
 import static org.jetbrains.kotlin.com.intellij.patterns.PlatformPatterns.elementType;
 import static org.jetbrains.kotlin.com.intellij.patterns.PsiJavaPatterns.psiElement;
+import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.string;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.completion.legacy.CompletionParameters;
 import com.tyron.completion.java.util.JavaCompletionUtil;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.impl.LookupItemUtil;
 import com.tyron.completion.model.CompletionList;
+import com.tyron.completion.psi.codeInsight.ExpectedTypeInfo;
 import com.tyron.completion.psi.codeInsight.completion.CompletionUtil;
 import com.tyron.completion.psi.codeInsight.completion.JavaConstructorCallElement;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodCallElement;
 import com.tyron.completion.psi.completion.JavaClassNameCompletionContributor;
 import com.tyron.completion.psi.completion.JavaClassNameInsertHandler;
 import com.tyron.completion.psi.completion.JavaKeywordCompletion;
+import com.tyron.completion.psi.completion.JavaSmartCompletionContributor;
 import com.tyron.completion.psi.completion.item.JavaLookupElementBuilder;
 import com.tyron.completion.psi.completion.item.JavaPsiClassReferenceElement;
+import com.tyron.completion.psi.completion.item.PackageLookupItem;
 import com.tyron.completion.psi.completion.item.VariableLookupItem;
 import com.tyron.completion.psi.scope.CompletionElement;
 import com.tyron.completion.psi.scope.JavaCompletionProcessor;
@@ -30,11 +35,13 @@ import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.patterns.PatternCondition;
 import org.jetbrains.kotlin.com.intellij.psi.JavaTokenType;
 import org.jetbrains.kotlin.com.intellij.psi.LambdaUtil;
+import org.jetbrains.kotlin.com.intellij.psi.PsiAnnotation;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiCodeBlock;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiEnumConstant;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpression;
+import org.jetbrains.kotlin.com.intellij.psi.PsiExpressionList;
 import org.jetbrains.kotlin.com.intellij.psi.PsiIdentifier;
 import org.jetbrains.kotlin.com.intellij.psi.PsiImportStatementBase;
 import org.jetbrains.kotlin.com.intellij.psi.PsiImportStaticStatement;
@@ -45,13 +52,17 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaParameterType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMember;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
+import org.jetbrains.kotlin.com.intellij.psi.PsiPackage;
 import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceList;
 import org.jetbrains.kotlin.com.intellij.psi.PsiSubstitutor;
 import org.jetbrains.kotlin.com.intellij.psi.PsiType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiVariable;
 import org.jetbrains.kotlin.com.intellij.psi.PsiWildcardType;
 import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
+import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiLabelReference;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTypesUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtil;
@@ -59,6 +70,7 @@ import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.jetbrains.kotlin.com.intellij.util.containers.JBIterable;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -92,8 +104,53 @@ public class JavaKotlincCompletionProvider {
     public JavaKotlincCompletionProvider() {
     }
 
+    static final ElementPattern<PsiElement> IN_EXTENDS_OR_IMPLEMENTS = psiElement().afterLeaf(
+            psiElement()
+                    .withText(string().oneOf(PsiKeyword.EXTENDS, PsiKeyword.IMPLEMENTS, ",", "&"))
+                    .withParent(PsiReferenceList.class));
+//    static final ElementPattern<PsiElement> IN_PERMITS_LIST = psiElement().afterLeaf(
+//            psiElement()
+//                    .withText(string().oneOf(PsiKeyword.PERMITS, ","))
+//                    .withParent(psiElement(PsiReferenceList.class).withFirstChild(psiElement(PsiKeyword.class).withText(PsiKeyword.PERMITS))));
+//    private static final ElementPattern<PsiElement> IN_VARIABLE_TYPE = psiElement()
+//            .withParents(PsiJavaCodeReferenceElement.class, PsiTypeElement.class, PsiDeclarationStatement.class)
+//            .afterLeaf(psiElement().inside(psiElement(PsiAnnotation.class)));
+
+
+    /**
+     * @param position completion invocation position
+     * @return filter for acceptable references; if null then no references are accepted at a given position
+     */
+    @Nullable
+    public static ElementFilter getReferenceFilter(PsiElement position) {
+        PsiClass containingClass = PsiTreeUtil.getParentOfType(position, PsiClass.class, false,
+                PsiCodeBlock.class, PsiMethod.class,
+                PsiExpressionList.class, PsiVariable.class, PsiAnnotation.class);
+
+        if (containingClass != null) {
+//            if (IN_PERMITS_LIST.accepts(position)) {
+//                return createPermitsListFilter();
+//            }
+//
+//            if (IN_EXTENDS_OR_IMPLEMENTS.accepts(position)) {
+//                AndFilter filter = new AndFilter(ElementClassFilter.CLASS, new NotFilter(new AssignableFromContextFilter()),
+//                        new ExcludeDeclaredFilter(new ClassFilter(PsiClass.class)));
+//                PsiElement cls = position.getParent().getParent().getParent();
+//                if (cls instanceof PsiClass && !(cls instanceof PsiTypeParameter)) {
+//                    filter = new AndFilter(filter, new NoFinalLibraryClassesFilter());
+//                }
+//                return filter;
+//            }
+//            if (IN_TYPE_PARAMETER.accepts(position)) {
+//                return new ExcludeDeclaredFilter(new ClassFilter(PsiTypeParameter.class));
+//            }
+        }
+        return null;
+    }
+
     public void fillCompletionVariants(@NonNull PsiElement position,
-                                       @NonNull CompletionList.Builder builder) {
+                                       @NonNull CompletionList.Builder builder,
+                                       CompletionParameters parameters) {
         if (!isInJavaContext(position)) {
             return;
         }
@@ -112,7 +169,33 @@ public class JavaKotlincCompletionProvider {
 
             addIdentifierVariants(position, builder);
 
-            addClassNames(position, builder);
+//            Set<ExpectedTypeInfo> expectedInfos = ContainerUtil.newHashSet(
+//                    JavaSmartCompletionContributor.getExpectedTypes(parameters));
+
+//            boolean shouldAddExpressionVariants = shouldAddExpressionVariants(parameters);
+//
+//            boolean hasTypeMatchingSuggestions =
+//                    shouldAddExpressionVariants && addExpectedTypeMembers(parameters, false, expectedInfos,
+//                            item -> session.registerBatchItems(Collections.singleton(item)));
+
+//            if (!smart) {
+//                PsiAnnotation anno = findAnnotationWhoseAttributeIsCompleted(position);
+//                if (anno != null) {
+//                    PsiClass annoClass = anno.resolveAnnotationType();
+//                    mayCompleteReference = mayCompleteValueExpression(position, annoClass);
+//                    if (annoClass != null) {
+//                        completeAnnotationAttributeName(result, position, anno, annoClass);
+//                        JavaKeywordCompletion.addPrimitiveTypes(result, position, session);
+//                    }
+//                }
+//            }
+
+            PsiReference ref = position.getContainingFile().findReferenceAt((int) parameters.getIndex());
+            if (ref instanceof PsiLabelReference) {
+//                session.registerBatchItems(processLabelReference((PsiLabelReference)ref));
+//                result.stopHere();
+                return;
+            }
 
             if (parent instanceof PsiJavaCodeReferenceElement) {
                 PsiJavaCodeReferenceElement parentRef = (PsiJavaCodeReferenceElement) parent;
@@ -295,9 +378,9 @@ public class JavaKotlincCompletionProvider {
             }
             return Collections.singletonList(new VariableLookupItem((PsiVariable)completion).setSubstitutor(substitutor).qualifyIfNeeded(reference, null));
         }
-//        if (completion instanceof PsiPackage) {
-//            return Collections.singletonList(new PackageLookupItem((PsiPackage)completion, reference.getElement()));
-//        }
+        if (completion instanceof PsiPackage) {
+            return Collections.singletonList(new PackageLookupItem((PsiPackage)completion, reference.getElement()));
+        }
 
         return Collections.singletonList(LookupItemUtil.objectToLookupItem(completion));
     }
@@ -306,8 +389,11 @@ public class JavaKotlincCompletionProvider {
     private static List<PsiType> getQualifierCastTypes(PsiJavaReference javaReference) {
         return Collections.emptyList();
     }
-    private void addIdentifierVariants(PsiElement elementAt, CompletionList.Builder builder) {
-
+    private void addIdentifierVariants(PsiElement position, CompletionList.Builder builder) {
+        if (JavaSmartCompletionContributor.AFTER_NEW.accepts(position)) {
+            ExpectedTypeInfo[] types = JavaSmartCompletionContributor.getExpectedTypes(position, true);
+            System.out.println(Arrays.toString(types));
+        }
     }
 
     public static boolean isInJavaContext(PsiElement position) {

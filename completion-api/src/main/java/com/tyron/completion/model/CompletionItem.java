@@ -2,8 +2,8 @@ package com.tyron.completion.model;
 
 import com.google.common.collect.ImmutableList;
 import com.tyron.completion.CompletionPrefixMatcher;
-import com.tyron.completion.DefaultInsertHandler;
-import com.tyron.completion.DeprecatedInsertHandler;
+import com.tyron.completion.legacy.DefaultInsertHandler;
+import com.tyron.completion.legacy.DeprecatedInsertHandler;
 import com.tyron.completion.util.CompletionUtils;
 import com.tyron.editor.Editor;
 

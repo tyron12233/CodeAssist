@@ -1,15 +1,18 @@
 package com.tyron.code.ui.editor;
 
+import com.tyron.completion.EditorMemory;
+import com.tyron.editor.util.EditorUtil;
+
 import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
-import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.LoadTextUtil;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
+import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile;
-import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiPackage;
 import org.jetbrains.kotlin.com.intellij.psi.impl.DocumentCommitThread;
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.PsiPackageImpl;
@@ -17,11 +20,11 @@ import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiFileImpl;
 import org.jetbrains.kotlin.com.intellij.reference.SoftReference;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.Map;
 
 import io.github.rosemoe.sora.event.ContentChangeEvent;
+import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class EditorChangeUtil {
     
@@ -46,17 +49,13 @@ public class EditorChangeUtil {
      * dependencies
      * of this class are not included and does not work properly.
      */
-    static void doCommit(int action,
+    static void doCommit(CodeEditor editor, int action,
                          int start,
                          int end,
                          CharSequence charSequence,
                          Project project,
-                         VirtualFile virtualFile) {
-        PsiFile psiFile = PsiManager.getInstance(project).findFile(virtualFile);
-        assert psiFile != null : "PsiManager.findFile() returned null";
-
-        Document document = psiFile.getViewProvider().getDocument();
-        assert document != null : "psiFile.getViewProvider().getDocument() returned null";
+                         VirtualFile virtualFile,
+                         Document document) {
 
         CommandProcessor.getInstance().executeCommand(project, () -> {
             if (action == ContentChangeEvent.ACTION_DELETE) {
@@ -64,25 +63,16 @@ public class EditorChangeUtil {
             } else if (action == ContentChangeEvent.ACTION_INSERT) {
                 document.insertString(start, charSequence);
             }
+
+            FileDocumentManager.getInstance().saveDocument(document);
+
+            PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
+            assert psiFile != null;
+
+            ((PsiFileImpl) psiFile).onContentReload();
+
+            updatePackageCache(project, psiFile);
         }, "", null);
-
-        ((PsiFileImpl) psiFile).onContentReload();
-
-        updatePackageCache(project, psiFile);
-
-        synchronized (fileLock) {
-            try {
-                LoadTextUtil.write(
-                        project,
-                        virtualFile,
-                        document,
-                        document.getText(),
-                        document.getModificationStamp()
-                );
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
     }
 
     private static void updatePackageCache(Project project, PsiFile psiFile) {

@@ -3,14 +3,17 @@ package com.tyron.completion.lookup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.EditorMemory;
 import com.tyron.completion.InsertionContext;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolder;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderBase;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.ResolveResult;
 import org.jetbrains.kotlin.com.intellij.psi.SmartPsiElementPointer;
 
@@ -24,7 +27,7 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 
 public abstract class LookupElement extends CompletionItemWithMatchLevel implements UserDataHolder {
 
-    private UserDataHolderBase userDataHolderBase = new UserDataHolderBase();
+    private final UserDataHolderBase userDataHolderBase = new UserDataHolderBase();
 
     public LookupElement() {
         super("");
@@ -102,6 +105,7 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
         return true;
     }
 
+
     @Override
     public final void performCompletion(@NonNull CodeEditor editor,
                                   @NonNull Content text,
@@ -114,7 +118,21 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
                                   @NonNull Content text,
                                   int line,
                                   int column) {
+        PsiFile file = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
+        String prefix = EditorMemory.getUserData(editor, EditorMemory.PREFIX_KEY);
 
+        InsertionContext context = new InsertionContext(editor, file);
+
+        if (prefix != null && !prefix.isEmpty()) {
+            for (int i = 0; i < prefix.length(); i++) {
+                editor.deleteText();
+            }
+        }
+
+        String lookupString = getLookupString();
+        editor.insertText(lookupString, lookupString.length());
+
+        handleInsert(context);
     }
 
     public void handleInsert(InsertionContext context) {

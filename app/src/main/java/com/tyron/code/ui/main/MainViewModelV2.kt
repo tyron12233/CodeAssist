@@ -1,21 +1,16 @@
 package com.tyron.code.ui.main
 
-import android.graphics.Color
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tyron.code.ApplicationLoader
 import com.tyron.code.event.SubscriptionReceipt
-import com.tyron.code.highlighter.attributes.CodeAssistTextAttributes
-import com.tyron.code.highlighter.attributes.CodeAssistTextAttributesProvider
-import com.tyron.code.highlighter.attributes.TextAttributesKeyUtils
 import com.tyron.code.ui.editor.DummyCodeStyleManager
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade
 import com.tyron.code.ui.file.event.OpenFileEvent
 import com.tyron.code.ui.file.event.RefreshRootEvent
 import com.tyron.code.ui.file.tree.TreeUtil
 import com.tyron.code.ui.file.tree.model.TreeFile
-import com.tyron.code.util.subscribeEvent
 import com.tyron.completion.java.CompletionModule
 import com.tyron.completion.psi.search.PsiShortNamesCache
 import com.tyron.ui.treeview.TreeNode
@@ -25,27 +20,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.cli.jvm.compiler.MockExternalAnnotationsManager
 import org.jetbrains.kotlin.cli.jvm.compiler.MockInferredAnnotationsManager
 import org.jetbrains.kotlin.com.intellij.codeInsight.ExternalAnnotationsManager
 import org.jetbrains.kotlin.com.intellij.codeInsight.InferredAnnotationsManager
-import org.jetbrains.kotlin.com.intellij.core.CoreJavaCodeStyleManager
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment
 import org.jetbrains.kotlin.com.intellij.lang.jvm.facade.JvmElementProvider
-import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey
+import org.jetbrains.kotlin.com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeRegistry
-import org.jetbrains.kotlin.com.intellij.openapi.project.Project
+import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject
 import org.jetbrains.kotlin.com.intellij.openapi.roots.FileIndexFacade
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.util.NotNullLazyValue
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.com.intellij.pom.PomManager
-import org.jetbrains.kotlin.com.intellij.pom.PomModel
-import org.jetbrains.kotlin.com.intellij.pom.core.impl.PomModelImpl
 import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.com.intellij.psi.codeStyle.CodeStyleManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl
@@ -55,10 +45,10 @@ import org.jetbrains.kotlin.com.intellij.psi.impl.PsiTreeChangePreprocessor
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManagerImpl
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager
-import org.jetbrains.kotlin.com.intellij.psi.impl.source.resolve.PsiResolveHelperImpl
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport
 import org.jetbrains.kotlin.com.intellij.util.Processor
+import org.jetbrains.kotlin.org.picocontainer.PicoContainer
 import java.io.File
 import java.util.*
 
@@ -97,7 +87,16 @@ class MainViewModelV2(
         viewModelScope.launch(handler) {
             val disposable = Disposer.newDisposable()
             val appEnvironment = ApplicationLoader.getInstance().coreApplicationEnvironment
-            projectEnvironment = JavaCoreProjectEnvironment(disposable, appEnvironment)
+            projectEnvironment = object : JavaCoreProjectEnvironment(disposable, appEnvironment) {
+                override fun createProject(
+                    parent: PicoContainer,
+                    parentDisposable: Disposable
+                ): CodeAssistProject {
+                    val fileByPath: VirtualFile =
+                        appEnvironment.localFileSystem.findFileByPath(projectPath)!!
+                    return CodeAssistProject(parent, parentDisposable, fileByPath)
+                }
+            }
 
             registerComponentsAndServices()
             registerExtensionPoints()

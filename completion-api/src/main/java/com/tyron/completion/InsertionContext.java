@@ -11,32 +11,43 @@ public class InsertionContext {
 
     public static final OffsetKey TAIL_OFFSET = OffsetKey.create("tailOffset", true);
 
+    private final PsiFile file;
+    private final CodeEditor editor;
+
+    private int tailOffset;
+    private boolean addCompletionChar;
+
+    public InsertionContext(CodeEditor editor, PsiFile file) {
+        this.editor = editor;
+        this.file = file;
+    }
+
     public boolean shouldAddCompletionChar() {
-        return false;
+        return addCompletionChar;
     }
 
     public char getCompletionChar() {
-        return 0;
+        return '.';
     }
 
     public CodeEditor getEditor() {
-        throw new UnsupportedOperationException();
+        return editor;
     }
 
     public int getTailOffset() {
-        return 0;
+        return tailOffset;
     }
 
     public void setAddCompletionChar(boolean b) {
-
+        this.addCompletionChar = b;
     }
 
     public PsiFile getFile() {
-        return null;
+        return file;
     }
 
-    public void setTailOffset(int i) {
-
+    public void setTailOffset(int tailOffset) {
+        this.tailOffset = tailOffset;
     }
 
     public int getStartOffset() {
@@ -44,6 +55,6 @@ public class InsertionContext {
     }
 
     public Project getProject() {
-        return null;
+        return file.getProject();
     }
 }

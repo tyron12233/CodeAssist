@@ -10,8 +10,8 @@ import androidx.annotation.RequiresApi;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.completion.CompletionParameters;
-import com.tyron.completion.CompletionProvider;
+import com.tyron.completion.legacy.CompletionParameters;
+import com.tyron.completion.legacy.CompletionProvider;
 import com.tyron.completion.model.CachedCompletion;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.xml.XmlRepository;
@@ -26,7 +26,6 @@ import com.tyron.completion.xml.util.XmlUtils;
 
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
-import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.dom.DOMParser;
 import org.eclipse.lemminx.uriresolver.URIResolverExtensionManager;
 import org.openjdk.javax.xml.parsers.ParserConfigurationException;

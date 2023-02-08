@@ -1,6 +1,7 @@
-package com.tyron.completion.psi.indexing;
+package org.jetbrains.kotlin.com.intellij.openapi.roots;
 
-import org.jetbrains.annotations.NotNull;
+import androidx.annotation.NonNull;
+
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 
 /**
@@ -16,5 +17,7 @@ public interface ContentIterator {
    * @param fileOrDir the file or directory to process.
    * @return false if files processing should be stopped, true if it should be continued.
    */
-  boolean processFile(@NotNull VirtualFile fileOrDir);
+  boolean processFile(@NonNull VirtualFile fileOrDir);
+
+
 }

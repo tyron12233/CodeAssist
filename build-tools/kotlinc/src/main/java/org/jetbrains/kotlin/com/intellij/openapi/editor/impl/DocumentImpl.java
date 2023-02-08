@@ -294,7 +294,6 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return stripTrailingSpaces(project, inChangedLinesOnly, null);
   }
 
-  @Override
   public boolean isLineModified(int line) {
     LineSet lineSet = myLineSet;
     return lineSet != null && lineSet.isModified(line);
@@ -457,8 +456,9 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
                                   boolean greedyToLeft,
                                   boolean greedyToRight,
                                   int layer) {
-    throw new UnsupportedOperationException();
-//    treeFor(rangeMarker).addInterval(rangeMarker, start, end, greedyToLeft, greedyToRight, false, layer);
+//    RangeMarkerTree<RangeMarkerEx> rangeMarkerExRangeMarkerTree = treeFor(rangeMarker);
+//    RangeMarkerTree.class.getDeclaredMethod("in")
+//    rangeMarkerExRangeMarkerTree.addInterval(rangeMarker, start, end, greedyToLeft, greedyToRight, false, layer);
   }
 
   @VisibleForTesting
@@ -471,7 +471,6 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return myRangeMarkers.nodeSize()+myPersistentRangeMarkers.nodeSize();
   }
 
-  @Override
   @NonNull
   public RangeMarker createGuardedBlock(int startOffset, int endOffset) {
     LOG.assertTrue(startOffset <= endOffset, "Should be startOffset <= endOffset");
@@ -491,7 +490,6 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return myGuardedBlocks;
   }
 
-  @Override
   public RangeMarker getOffsetGuard(int offset) {
     // Way too many garbage is produced otherwise in AbstractList.iterator()
     //noinspection ForLoopReplaceableByForEach
@@ -505,7 +503,7 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return null;
   }
 
-  @Override
+
   public RangeMarker getRangeGuard(int start, int end) {
     for (RangeMarker block : myGuardedBlocks) {
       if (rangesIntersect(start, end, true, true,
@@ -517,12 +515,11 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return null;
   }
 
-  @Override
   public void startGuardedBlockChecking() {
     myCheckGuardedBlocks++;
   }
 
-  @Override
+
   public void stopGuardedBlockChecking() {
     LOG.assertTrue(myCheckGuardedBlocks > 0, "Unpaired start/stopGuardedBlockChecking");
     myCheckGuardedBlocks--;
@@ -546,13 +543,11 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return end0 > start1;
   }
 
-  @Override
   @NonNull
   public RangeMarker createRangeMarker(int startOffset, int endOffset, boolean surviveOnExternalChange) {
     if (!(0 <= startOffset && startOffset <= endOffset && endOffset <= getTextLength())) {
       LOG.error("Incorrect offsets: startOffset=" + startOffset + ", endOffset=" + endOffset + ", text length=" + getTextLength());
     }
-
     throw new UnsupportedOperationException();
 //    return surviveOnExternalChange
 //           ? new PersistentRangeMarker(this, startOffset, endOffset, true)
@@ -1093,14 +1088,12 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return result;
   }
 
-  @Override
   public int getLineSeparatorLength(int line) {
     int separatorLength = getLineSet().getSeparatorLength(line);
     assert separatorLength >= 0;
     return separatorLength;
   }
 
-  @Override
   public int getLineCount() {
     int lineCount = getLineSet().getLineCount();
     assert lineCount >= 0;
@@ -1111,7 +1104,6 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return myDocumentListeners.getArray();
   }
 
-  @Override
   public void fireReadOnlyModificationAttempt() {
 //    for (EditReadOnlyListener listener : myReadOnlyListeners) {
 //      listener.readOnlyModificationAttempt(this);
@@ -1128,7 +1120,6 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
 //    myReadOnlyListeners.remove(listener);
 //  }
 
-  @Override
   public void addPropertyChangeListener(@NonNull PropertyChangeListener listener) {
     myPropertyChangeSupport.addPropertyChangeListener(listener);
   }
@@ -1162,7 +1153,7 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     return myDoingBulkUpdate;
   }
 
-  @Override
+
   public void setInBulkUpdate(boolean value) {
     if (myAssertThreading) {
       ApplicationManager.getApplication().assertIsWriteThread();

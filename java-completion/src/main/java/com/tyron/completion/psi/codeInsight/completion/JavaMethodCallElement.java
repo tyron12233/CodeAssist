@@ -2,6 +2,8 @@ package com.tyron.completion.psi.codeInsight.completion;
 
 import com.tyron.completion.InsertionContext;
 import com.tyron.completion.OffsetKey;
+import com.tyron.completion.java.util.JavaCompletionUtil;
+import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
 import com.tyron.completion.lookup.impl.DefaultLookupItemRenderer;
 import com.tyron.completion.lookup.impl.LookupItem;
@@ -38,10 +40,13 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiWildcardType;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.TypeConversionUtil;
+import org.jetbrains.kotlin.com.intellij.util.ThreeState;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
 import java.util.List;
 import java.util.Objects;
+
+import io.github.rosemoe.sora.text.Content;
 
 public class JavaMethodCallElement extends LookupItem<PsiMethod> implements TypedLookupItem {
     public static final Key<Boolean> COMPLETION_HINTS = Key.create("completion.hints");
@@ -165,10 +170,10 @@ public class JavaMethodCallElement extends LookupItem<PsiMethod> implements Type
 
     @Override
     public void handleInsert(@NotNull InsertionContext context) {
-//        final Document document = context.getDocument();
-//        final PsiFile file = context.getFile();
-//        final PsiMethod method = getObject();
-//
+        final Content document = context.getEditor().getText();
+        final PsiFile file = context.getFile();
+        final PsiMethod method = getObject();
+
 //        final LookupElement[] allItems = context.getElements();
 //        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : MethodParenthesesHandler.overloadsHaveParameters(allItems, method);
 //        if (method.isConstructor()) {
