@@ -25,6 +25,7 @@ import com.tyron.completion.EditorMemory;
 import com.tyron.completion.impl.CompletionInitializationUtil;
 import com.tyron.completion.impl.OffsetsInFile;
 import com.tyron.completion.java.JavaCompletionProvider;
+import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.util.CompletionUtils;
@@ -38,6 +39,13 @@ import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextLanguage;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.PerformInBackgroundOption;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.Task;
+import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
@@ -78,6 +86,8 @@ public class EditorView extends FrameLayout {
 
     private final Document document;
 
+    private ProgressIndicator completionProgressIndicator = new EmptyProgressIndicator();
+
     public EditorView(Context context, Project project, TextEditorState state) {
         super(context);
 
@@ -117,52 +127,28 @@ public class EditorView extends FrameLayout {
                                             @NonNull CharPosition position,
                                             @NonNull CompletionPublisher publisher,
                                             @NonNull Bundle extraArguments) {
+
+                // there may be a race condition where the editor will call requireAutoComplete()
+                // first before the text is synchronized to intellij, attempting to read the
+                // psi will throw an error.
                 if (FileDocumentManager.getInstance().isDocumentUnsaved(document) ||
                     !document.getText().contentEquals(content)) {
                     return;
                 }
 
-                publisher.setComparator((o1, o2) -> {
-                    if (o1 instanceof CompletionItemWithMatchLevel &&
-                        o2 instanceof CompletionItemWithMatchLevel) {
-                        return CompletionList.COMPARATOR.compare((CompletionItemWithMatchLevel) o1,
-                                (CompletionItemWithMatchLevel) o2);
+                completionProgressIndicator.cancel();
+                completionProgressIndicator = new StandardProgressIndicatorBase();
+
+                ProgressManager.getInstance().runProcess(() -> {
+                    Disposable completionSession = Disposer.newDisposable("completionSession");
+                    try {
+                        performCompletionUnderIndicator(publisher, completionSession);
+                    } catch (ProcessCanceledException e) {
+                        // ignored, expected to be cancelled
+                    } finally {
+                        Disposer.dispose(completionSession);
                     }
-                    return 0;
-                });
-
-                Disposable completionSession = Disposer.newDisposable("completionSession");
-
-
-                CompletionInitializationContext ctx =
-                        CompletionInitializationUtil.createCompletionInitializationContext(project,
-                                editor,
-                                editor.getCursor(),
-                                0,
-                                CompletionType.SMART);
-                CompletionProcess completionProcess = new CompletionProcess() {
-                    @Override
-                    public boolean isAutopopupCompletion() {
-                        return true;
-                    }
-                };
-
-                OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
-
-                Supplier<? extends OffsetsInFile> supplier =
-                        CompletionInitializationUtil.insertDummyIdentifier(ctx,
-                                offsetsInFile,
-                                completionSession);
-                OffsetsInFile newOffsets = supplier.get();
-
-                CompletionParameters completionParameters =
-                        CompletionInitializationUtil.createCompletionParameters(ctx,
-                                completionProcess,
-                                newOffsets);
-
-                CompletionService.getCompletionService()
-                        .performCompletion(completionParameters,
-                                completionResult -> publisher.addItem(completionResult.getLookupElement()));
+                }, completionProgressIndicator);
             }
         });
         editor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
@@ -172,6 +158,45 @@ public class EditorView extends FrameLayout {
                     event.getChangedText());
         });
         addView(editor);
+    }
+
+    private void performCompletionUnderIndicator(CompletionPublisher publisher, Disposable completionSession) {
+        publisher.setComparator((o1, o2) -> {
+            if (o1 instanceof CompletionItemWithMatchLevel &&
+                o2 instanceof CompletionItemWithMatchLevel) {
+                return CompletionList.COMPARATOR.compare((CompletionItemWithMatchLevel) o1,
+                        (CompletionItemWithMatchLevel) o2);
+            }
+            return 0;
+        });
+
+
+        CompletionInitializationContext ctx = CompletionInitializationUtil.createCompletionInitializationContext(project,
+                        editor,
+                        editor.getCursor(),
+                        0,
+                        CompletionType.SMART);
+        CompletionProcess completionProcess = () -> true;
+
+        PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
+        OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
+
+        Supplier<? extends OffsetsInFile> supplier = CompletionInitializationUtil.insertDummyIdentifier(ctx,
+                        offsetsInFile,
+                        completionSession);
+        OffsetsInFile newOffsets = supplier.get();
+
+        CompletionParameters completionParameters = CompletionInitializationUtil.createCompletionParameters(ctx,
+                        completionProcess,
+                        newOffsets);
+
+        CompletionService.getCompletionService().performCompletion(completionParameters,
+                        completionResult -> {
+                            LookupElement lookupElement = completionResult.getLookupElement();
+                            if (lookupElement.isValid()) {
+                                publisher.addItem(lookupElement);
+                            }
+                        });
     }
 
     private void commit(int action, int start, int end, CharSequence charSequence) {
