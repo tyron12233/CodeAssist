@@ -15,13 +15,18 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.widget.ThemeUtils;
 
 import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorCompletionAdapter;
 import io.github.rosemoe.sora2.R;
 
@@ -48,6 +53,7 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
         LookupElementPresentation presentation = new LookupElementPresentation();
         LookupElement item = (LookupElement) getItem(pos);
         item.renderElement(presentation);
+
 
 
         int start = 0;
@@ -114,5 +120,13 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
         return view;
     }
 
-
+    @Override
+    public void attachValues(@NonNull EditorAutoCompletion window,
+                             @NonNull List<CompletionItem> items) {
+        List<CompletionItem> filteredElements = items.stream()
+                .filter(it -> it instanceof LookupElement)
+                .filter(it -> ((LookupElement) it).isValid())
+                .collect(Collectors.toList());
+        super.attachValues(window, filteredElements);
+    }
 }
