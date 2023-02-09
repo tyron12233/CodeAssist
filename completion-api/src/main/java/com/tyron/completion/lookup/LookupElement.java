@@ -3,10 +3,15 @@ package com.tyron.completion.lookup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.tyron.completion.CompletionResult;
+import com.tyron.completion.CompletionService;
 import com.tyron.completion.CompletionUtil;
 import com.tyron.completion.EditorMemory;
 import com.tyron.completion.InsertionContext;
+import com.tyron.completion.PrefixMatcher;
+import com.tyron.completion.impl.BaseCompletionService;
 import com.tyron.completion.impl.CompletionContext;
+import com.tyron.completion.impl.CompletionServiceImpl;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.editor.Editor;
 
@@ -30,6 +35,7 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 
 public abstract class LookupElement extends CompletionItemWithMatchLevel implements UserDataHolder {
 
+    public static Key<PrefixMatcher> PREFIX_MATCHER_KEY = Key.create("prefix_matcher");
     private final UserDataHolderBase userDataHolderBase = new UserDataHolderBase();
 
     public LookupElement() {
@@ -128,9 +134,13 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
                 insertedElement.getUserData(CompletionContext.COMPLETION_CONTEXT_KEY);
         assert completionContext != null;
 
-        int idEndOffset = CompletionUtil.calcIdEndOffset(completionContext.getOffsetMap(),
-                editor,
-                editor.getCursor().getLeft());
+        PrefixMatcher prefixMatcher = getUserData(PREFIX_MATCHER_KEY);
+        assert prefixMatcher != null;
+
+        String prefix = prefixMatcher.getPrefix();
+
+        int cursorStart = editor.getCursor().getLeft();
+        int identifierStart = cursorStart - prefix.length();
 
         List<LookupElement> elements = Collections.emptyList();
         InsertionContext context = CompletionUtil.createInsertionContext(
@@ -139,13 +149,11 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
                 (char) 0,
                 editor,
                 completionContext.file,
-                editor.getCursor().getLeft(),
-                idEndOffset,
+                cursorStart,
+                identifierStart + prefix.length(),
                 completionContext.getOffsetMap()
         );
-
-        int caretOffset = editor.getCursor().getLeft();
-        editor.getText().delete(caretOffset, idEndOffset);
+        editor.getText().delete(identifierStart, identifierStart + prefix.length());
 
 
         String lookupString = getLookupString();
@@ -157,6 +165,7 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
     public void handleInsert(InsertionContext context) {
 
     }
+
 
     @NonNull
     @Override

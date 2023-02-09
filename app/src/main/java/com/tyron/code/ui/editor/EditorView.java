@@ -207,6 +207,8 @@ public class EditorView extends FrameLayout {
                     LookupElement lookupElement = completionResult.getLookupElement();
                     if (lookupElement.isValid()) {
                         publisher.addItem(lookupElement);
+
+                        lookupElement.putUserData(LookupElement.PREFIX_MATCHER_KEY, completionResult.getPrefixMatcher());
                     }
                 });
     }

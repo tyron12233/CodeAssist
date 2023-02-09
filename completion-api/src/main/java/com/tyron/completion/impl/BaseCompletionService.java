@@ -60,7 +60,6 @@ public class BaseCompletionService extends CompletionService {
         final int offset = parameters.getOffset();
         TextRange range = position.getTextRange();
         assert range.containsOffset(offset) : position + "; " + offset + " not in " + range;
-        //noinspection deprecation
         return CompletionUtil.findPrefixStatic(position, offset);
     }
 
@@ -201,9 +200,9 @@ public class BaseCompletionService extends CompletionService {
             }
             else {
                 sorter = sorter.weigh(new LookupElementWeigher(id, true, false) {
+                    @SuppressWarnings("unchecked")
                     @Override
-                    public @Nullable Comparable weigh(@NotNull LookupElement element) {
-                        //noinspection unchecked
+                    public @Nullable Comparable<?> weigh(@NotNull LookupElement element) {
                         return weigher.weigh(element, location);
                     }
                 });

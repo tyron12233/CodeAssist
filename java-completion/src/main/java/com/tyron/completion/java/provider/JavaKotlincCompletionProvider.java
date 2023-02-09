@@ -18,6 +18,7 @@ import com.tyron.completion.psi.codeInsight.ExpectedTypeInfo;
 import com.tyron.completion.psi.codeInsight.completion.CompletionUtil;
 import com.tyron.completion.psi.codeInsight.completion.JavaConstructorCallElement;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodCallElement;
+import com.tyron.completion.psi.codeInsight.completion.JavaMethodReferenceElement;
 import com.tyron.completion.psi.completion.JavaClassNameCompletionContributor;
 import com.tyron.completion.psi.completion.JavaClassNameInsertHandler;
 import com.tyron.completion.psi.completion.JavaKeywordCompletion;
@@ -57,6 +58,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaParameterType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMember;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
+import org.jetbrains.kotlin.com.intellij.psi.PsiMethodReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiPackage;
 import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
@@ -364,10 +366,10 @@ public class JavaKotlincCompletionProvider {
         }
 
         if (completion instanceof PsiMethod) {
-//            if (reference instanceof PsiMethodReferenceExpression) {
-//                return Collections.singleton((LookupElement)new JavaMethodReferenceElement(
-//                        (PsiMethod)completion, (PsiMethodReferenceExpression)reference, completionElement.getMethodRefType()));
-//            }
+            if (reference instanceof PsiMethodReferenceExpression) {
+                return Collections.singleton((LookupElement)new JavaMethodReferenceElement(
+                        (PsiMethod)completion, (PsiMethodReferenceExpression)reference, completionElement.getMethodRefType()));
+            }
             JavaMethodCallElement item = new JavaMethodCallElement((PsiMethod)completion).setQualifierSubstitutor(substitutor);
             item.setForcedQualifier(completionElement.getQualifierText());
             return Collections.singletonList(item);

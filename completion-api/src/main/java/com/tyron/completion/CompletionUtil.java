@@ -233,10 +233,7 @@ public class CompletionUtil {
         return findPrefixDefault(insertedElement, offsetInFile, prefixStartTrim);
     }
 
-    /**
-     * @deprecated Use {@link CompletionUtil} methods instead
-     */
-    @Deprecated(forRemoval = true)
+
     public static String findPrefixStatic(final PsiElement insertedElement,
                                           final int offsetInFile) {
         return findPrefixStatic(insertedElement, offsetInFile, NOT_JAVA_ID);
