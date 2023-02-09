@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.StrikethroughSpan;
 import android.text.style.StyleSpan;
 import android.text.style.UnderlineSpan;
@@ -19,8 +20,13 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.widget.ThemeUtils;
 
 import com.tyron.common.util.AndroidUtilities;
+import com.tyron.completion.PrefixMatcher;
+import com.tyron.completion.impl.CamelHumpMatcher;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
+
+import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange;
+import org.jetbrains.kotlin.com.intellij.util.containers.FList;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,6 +34,7 @@ import java.util.stream.Collectors;
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.component.EditorCompletionAdapter;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora2.R;
 
 public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
@@ -53,7 +60,6 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
         LookupElementPresentation presentation = new LookupElementPresentation();
         LookupElement item = (LookupElement) getItem(pos);
         item.renderElement(presentation);
-
 
 
         int start = 0;
@@ -87,6 +93,21 @@ public class CodeAssistCompletionAdapter extends EditorCompletionAdapter {
             sb.append(tailFragment.text);
 
             start = end;
+        }
+
+        PrefixMatcher prefixMatcher = item.getUserData(LookupElement.PREFIX_MATCHER_KEY);
+        if (prefixMatcher instanceof CamelHumpMatcher) {
+            CamelHumpMatcher camelHumpMatcher = (CamelHumpMatcher) prefixMatcher;
+            FList<TextRange> textRanges =
+                    camelHumpMatcher.matchingFragments(item.getLookupString());
+            if (textRanges != null) {
+                for (TextRange textRange : textRanges) {
+                    sb.setSpan(new ForegroundColorSpan(getThemeColor(EditorColorScheme.KEYWORD)),
+                            textRange.getStartOffset(),
+                            textRange.getEndOffset(),
+                            Spanned.SPAN_INCLUSIVE_INCLUSIVE);
+                }
+            }
         }
 
 
