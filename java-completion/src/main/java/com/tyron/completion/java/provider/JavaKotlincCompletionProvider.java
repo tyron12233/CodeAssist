@@ -19,6 +19,7 @@ import com.tyron.completion.psi.codeInsight.completion.CompletionUtil;
 import com.tyron.completion.psi.codeInsight.completion.JavaConstructorCallElement;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodCallElement;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodReferenceElement;
+import com.tyron.completion.psi.codeInsight.completion.StaticMemberProcessor;
 import com.tyron.completion.psi.completion.JavaClassNameCompletionContributor;
 import com.tyron.completion.psi.completion.JavaClassNameInsertHandler;
 import com.tyron.completion.psi.completion.JavaKeywordCompletion;
@@ -60,6 +61,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethodReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiPackage;
+import org.jetbrains.kotlin.com.intellij.psi.PsiPackageStatement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
@@ -70,6 +72,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiVariable;
 import org.jetbrains.kotlin.com.intellij.psi.PsiWildcardType;
 import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiLabelReference;
+import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTypesUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtil;
@@ -321,7 +324,7 @@ public class JavaKotlincCompletionProvider {
             }
         }
 
-        PsiElement refQualifier = javaReference.getQualifier();
+//        PsiElement refQualifier = javaReference.getQualifier();
 //        if (refQualifier == null && PsiTreeUtil.getParentOfType(element, PsiPackageStatement.class, PsiImportStatementBase.class) == null) {
 //            StaticMemberProcessor memberProcessor = new JavaStaticMemberProcessor(parameters);
 //            memberProcessor.processMembersOfRegisteredClasses(nameCondition, (member, psiClass) -> {

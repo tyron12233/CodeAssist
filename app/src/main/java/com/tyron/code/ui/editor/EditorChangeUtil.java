@@ -3,10 +3,13 @@ package com.tyron.code.ui.editor;
 import com.tyron.completion.EditorMemory;
 import com.tyron.editor.util.EditorUtil;
 
+import org.jetbrains.kotlin.com.intellij.openapi.application.WriteAction;
 import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
+import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
+import org.jetbrains.kotlin.com.intellij.openapi.project.ProjectCoreUtil;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
@@ -56,16 +59,16 @@ public class EditorChangeUtil {
                          Project project,
                          VirtualFile virtualFile,
                          Document document) {
-
-        CommandProcessor.getInstance().executeCommand(project, () -> {
+        WriteCommandAction.runWriteCommandAction(project, "editorChange", null, () -> {
             if (action == ContentChangeEvent.ACTION_DELETE) {
                 document.deleteString(start, end);
             } else if (action == ContentChangeEvent.ACTION_INSERT) {
                 document.insertString(start, charSequence);
             }
-
-            PsiDocumentManager.getInstance(project).commitDocument(document);
-        }, "", null);
+            ProjectCoreUtil.theProject = project;
+            FileDocumentManager.getInstance().saveDocument(document);
+            PsiDocumentManager.getInstance(project).commitAllDocuments();
+        });
     }
 
     private static void updatePackageCache(Project project, PsiFile psiFile) {

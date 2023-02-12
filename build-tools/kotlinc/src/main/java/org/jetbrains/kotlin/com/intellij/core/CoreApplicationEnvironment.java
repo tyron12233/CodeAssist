@@ -21,14 +21,12 @@ import org.jetbrains.kotlin.com.intellij.lang.ParserDefinition;
 import org.jetbrains.kotlin.com.intellij.lang.PsiBuilderFactory;
 import org.jetbrains.kotlin.com.intellij.lang.impl.PsiBuilderFactoryImpl;
 import org.jetbrains.kotlin.com.intellij.mock.MockApplication;
-import org.jetbrains.kotlin.com.intellij.mock.MockFileDocumentManagerImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationInfo;
 import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager;
 import org.jetbrains.kotlin.com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
 import org.jetbrains.kotlin.com.intellij.openapi.command.impl.CoreCommandProcessor;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.BaseExtensionPointName;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint.Kind;
@@ -43,12 +41,15 @@ import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.impl.CoreProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.util.ClassExtension;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.CoreLocalVirtualFileEx;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManagerListener;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFilePointerManagerEx;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.encoding.EncodingManager;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.CoreVirtualFilePointerManager;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.CoreVirtualFilePointerManagerEx;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.VirtualFileManagerImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
@@ -67,7 +68,6 @@ import org.jetbrains.kotlin.org.picocontainer.MutablePicoContainer;
 import org.jetbrains.kotlin.resolve.diagnostics.DiagnosticSuppressor;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Modifier;
@@ -98,24 +98,42 @@ public class CoreApplicationEnvironment {
         DisabledPluginsState.dontLoadDisabledPlugins();
         this.myFileTypeRegistry = new CoreFileTypeRegistry();
         this.myApplication = this.createApplication(this.myParentDisposable);
-        ApplicationManager.setApplication(this.myApplication, () -> this.myFileTypeRegistry, this.myParentDisposable);
+        ApplicationManager.setApplication(this.myApplication,
+                () -> this.myFileTypeRegistry,
+                this.myParentDisposable);
         this.myLocalFileSystem = this.createLocalFileSystem();
         this.myJarFileSystem = this.createJarFileSystem();
         this.myJrtFileSystem = this.createJrtFileSystem();
+        this.registerApplicationService(CoreLocalFileSystem.class, myLocalFileSystem);
+        this.registerApplicationService(CoreJarFileSystem.class,
+                ((CoreJarFileSystem) myJarFileSystem));
         this.registerApplicationService(FileDocumentManager.class, new FileDocumentManagerImpl());
-        registerApplicationExtensionPoint(new ExtensionPointName<>("org.jetbrains.kotlin.com.intellij.virtualFileManagerListener"), VirtualFileManagerListener.class);
-        List<VirtualFileSystem> fs = this.myJrtFileSystem != null ? Arrays.asList(this.myLocalFileSystem, this.myJarFileSystem, this.myJrtFileSystem) : Arrays.asList(this.myLocalFileSystem, this.myJarFileSystem);
+        registerApplicationExtensionPoint(new ExtensionPointName<>(
+                        "org.jetbrains.kotlin.com.intellij.virtualFileManagerListener"),
+                VirtualFileManagerListener.class);
+        List<VirtualFileSystem> fs =
+                this.myJrtFileSystem != null ? Arrays.asList(this.myLocalFileSystem,
+                        this.myJarFileSystem,
+                        this.myJrtFileSystem) : Arrays.asList(this.myLocalFileSystem,
+                        this.myJarFileSystem);
         this.registerApplicationService(VirtualFileManager.class, new VirtualFileManagerImpl(fs));
-        registerApplicationExtensionPoint(new ExtensionPointName<>("org.jetbrains.kotlin.com.intellij.virtualFileSystem"), KeyedLazyInstanceEP.class);
-        registerApplicationExtensionPoint(DiagnosticSuppressor.Companion.getEP_NAME(), DiagnosticSuppressor.class);
+        registerApplicationExtensionPoint(new ExtensionPointName<>(
+                "org.jetbrains.kotlin.com.intellij.virtualFileSystem"), KeyedLazyInstanceEP.class);
+        registerApplicationExtensionPoint(DiagnosticSuppressor.Companion.getEP_NAME(),
+                DiagnosticSuppressor.class);
         this.registerApplicationService(EncodingManager.class, new CoreEncodingRegistry());
-        this.registerApplicationService(VirtualFilePointerManager.class, this.createVirtualFilePointerManager());
+        this.registerApplicationService(VirtualFilePointerManager.class,
+                this.createVirtualFilePointerManager());
+        this.registerApplicationService(VirtualFilePointerManagerEx.class,
+                new CoreVirtualFilePointerManagerEx());
         this.registerApplicationService(DefaultASTFactory.class, new DefaultASTFactoryImpl());
         this.registerApplicationService(PsiBuilderFactory.class, new PsiBuilderFactoryImpl());
-        this.registerApplicationService(ReferenceProvidersRegistry.class, new ReferenceProvidersRegistryImpl());
+        this.registerApplicationService(ReferenceProvidersRegistry.class,
+                new ReferenceProvidersRegistryImpl());
         this.registerApplicationService(StubTreeLoader.class, new CoreStubTreeLoader());
         this.registerApplicationService(PsiReferenceService.class, new PsiReferenceServiceImpl());
-        this.registerApplicationService(ProgressManager.class, this.createProgressIndicatorProvider());
+        this.registerApplicationService(ProgressManager.class,
+                this.createProgressIndicatorProvider());
         this.registerApplicationService(JobLauncher.class, this.createJobLauncher());
         this.registerApplicationService(CodeFoldingSettings.class, new CodeFoldingSettings());
         this.registerApplicationService(CommandProcessor.class, new CoreCommandProcessor());
@@ -165,19 +183,7 @@ public class CoreApplicationEnvironment {
                 if (!ioFile.exists()) {
                     return null;
                 }
-                return new CoreLocalVirtualFile(this, ioFile) {
-                    @Override
-                    public boolean isWritable() {
-                        return ioFile.canWrite();
-                    }
-
-                    @Override
-                    public @NonNull OutputStream getOutputStream(Object requestor,
-                                                                                           long newModificationStamp,
-                                                                                           long newTimeStamp) throws IOException {
-                        return Files.newOutputStream(ioFile.toPath());
-                    }
-                };
+                return new CoreLocalVirtualFileEx(this, ioFile);
             }
         };
     }
@@ -198,7 +204,9 @@ public class CoreApplicationEnvironment {
     }
 
     public <T> void registerApplicationComponent(Class<T> interfaceClass, T implementation) {
-        registerComponentInstance(this.myApplication.getPicoContainer(), interfaceClass, implementation);
+        registerComponentInstance(this.myApplication.getPicoContainer(),
+                interfaceClass,
+                implementation);
         if (implementation instanceof Disposable) {
             Disposer.register(this.myApplication, (Disposable) implementation);
         }
@@ -211,24 +219,33 @@ public class CoreApplicationEnvironment {
     public void registerParserDefinition(ParserDefinition definition) {
 
         this.addExplicitExtension(LanguageParserDefinitions.INSTANCE,
-                definition.getFileNodeType().getLanguage(), definition);
+                definition.getFileNodeType().getLanguage(),
+                definition);
     }
 
-    public static <T> void registerComponentInstance(MutablePicoContainer container, Class<T> key, T implementation) {
+    public static <T> void registerComponentInstance(MutablePicoContainer container,
+                                                     Class<T> key,
+                                                     T implementation) {
         container.unregisterComponent(key);
         container.registerComponentInstance(key, implementation);
     }
 
-    public <T> void addExplicitExtension(LanguageExtension<T> instance, Language language, T object) {
+    public <T> void addExplicitExtension(LanguageExtension<T> instance,
+                                         Language language,
+                                         T object) {
         instance.addExplicitExtension(language, object, this.myParentDisposable);
     }
 
     public void registerParserDefinition(Language language, ParserDefinition parserDefinition) {
 
-        this.addExplicitExtension(LanguageParserDefinitions.INSTANCE, (Language) language, parserDefinition);
+        this.addExplicitExtension(LanguageParserDefinitions.INSTANCE,
+                (Language) language,
+                parserDefinition);
     }
 
-    public <T> void addExplicitExtension(FileTypeExtension<T> instance, FileType fileType, T object) {
+    public <T> void addExplicitExtension(FileTypeExtension<T> instance,
+                                         FileType fileType,
+                                         T object) {
         instance.addExplicitExtension(fileType, object, this.myParentDisposable);
     }
 
@@ -241,17 +258,25 @@ public class CoreApplicationEnvironment {
         extensionPoint.registerExtension(extension, this.myParentDisposable);
     }
 
-    public static <T> void registerExtensionPoint(ExtensionsArea area, ExtensionPointName<T> extensionPointName, Class<? extends T> aClass) {
+    public static <T> void registerExtensionPoint(ExtensionsArea area,
+                                                  ExtensionPointName<T> extensionPointName,
+                                                  Class<? extends T> aClass) {
         registerExtensionPoint(area, extensionPointName.getName(), aClass);
     }
 
-    public static <T> void registerExtensionPoint(ExtensionsArea area, BaseExtensionPointName<T> extensionPointName, Class<? extends T> aClass) {
+    public static <T> void registerExtensionPoint(ExtensionsArea area,
+                                                  BaseExtensionPointName<T> extensionPointName,
+                                                  Class<? extends T> aClass) {
         registerExtensionPoint(area, extensionPointName.getName(), aClass);
     }
 
-    public static <T> void registerExtensionPoint(ExtensionsArea area, String name, Class<? extends T> aClass) {
+    public static <T> void registerExtensionPoint(ExtensionsArea area,
+                                                  String name,
+                                                  Class<? extends T> aClass) {
         if (!area.hasExtensionPoint(name)) {
-            Kind kind = !aClass.isInterface() && !Modifier.isAbstract(aClass.getModifiers()) ? Kind.BEAN_CLASS : Kind.INTERFACE;
+            Kind kind = !aClass.isInterface() &&
+                        !Modifier.isAbstract(aClass.getModifiers()) ? Kind.BEAN_CLASS :
+                    Kind.INTERFACE;
             area.registerExtensionPoint(name, aClass.getName(), kind);
         }
     }
@@ -260,7 +285,9 @@ public class CoreApplicationEnvironment {
                                                          String name,
                                                          Class<? extends T> aClass) {
         if (!area.hasExtensionPoint(name)) {
-            Kind kind = !aClass.isInterface() && !Modifier.isAbstract(aClass.getModifiers()) ? Kind.BEAN_CLASS : Kind.INTERFACE;
+            Kind kind = !aClass.isInterface() &&
+                        !Modifier.isAbstract(aClass.getModifiers()) ? Kind.BEAN_CLASS :
+                    Kind.INTERFACE;
             area.registerDynamicExtensionPoint(name, aClass.getName(), kind);
         }
     }
@@ -269,17 +296,20 @@ public class CoreApplicationEnvironment {
         registerDynamicExtensionPoint(Extensions.getRootArea(), name, clazz);
     }
 
-    public static <T> void registerApplicationExtensionPoint(ExtensionPointName<T> extensionPointName, Class<? extends T> aClass) {
+    public static <T> void registerApplicationExtensionPoint(ExtensionPointName<T> extensionPointName,
+                                                             Class<? extends T> aClass) {
         registerExtensionPoint(Extensions.getRootArea(), extensionPointName, aClass);
     }
 
-    public static void registerExtensionPointAndExtensions(Path pluginRoot, String fileName, ExtensionsArea area) {
+    public static void registerExtensionPointAndExtensions(Path pluginRoot,
+                                                           String fileName,
+                                                           ExtensionsArea area) {
         PluginManagerCore.registerExtensionPointAndExtensions(pluginRoot, fileName, area);
     }
 
 
     public CoreLocalFileSystem getLocalFileSystem() {
-       return this.myLocalFileSystem;
+        return this.myLocalFileSystem;
     }
 
 

@@ -113,6 +113,7 @@ public class EditorView extends FrameLayout {
         editor.setTypefaceText(ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular));
 
         document = FileDocumentManager.getInstance().getDocument(file);
+        ;
         EditorMemory.putUserData(editor, EditorMemory.DOCUMENT_KEY, document);
 
         PsiDocumentManagerBase documentManager =

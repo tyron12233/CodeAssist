@@ -451,7 +451,9 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
         String lineSeparator = file.getDetectedLineSeparator();
         if (lineSeparator == null) {
             lineSeparator = document.getUserData(LINE_SEPARATOR_KEY);
-            assert lineSeparator != null : document;
+            if (lineSeparator == null) {
+                lineSeparator = "\n";
+            }
         }
         return lineSeparator;
     }
@@ -460,9 +462,10 @@ public class FileDocumentManagerImpl extends FileDocumentManagerBase {
     @NonNull
     public String getLineSeparator(@Nullable VirtualFile file, @Nullable Project project) {
         String lineSeparator = file == null ? null : file.getDetectedLineSeparator();
-//        if (lineSeparator == null) {
+        if (lineSeparator == null) {
 //            lineSeparator = CodeStyle.getProjectOrDefaultSettings(project).getLineSeparator();
-//        }
+            lineSeparator = "\n";
+        }
         return lineSeparator;
     }
 

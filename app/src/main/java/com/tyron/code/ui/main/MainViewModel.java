@@ -11,6 +11,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.util.CustomMutableLiveData;
 import com.tyron.completion.java.CompletionModule;
+import com.tyron.completion.resolve.impl.ResolveScopeManagerImpl;
 import com.tyron.fileeditor.api.FileEditor;
 
 import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment;
@@ -21,6 +22,8 @@ import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.FileIndexFacade;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
+import org.jetbrains.kotlin.com.intellij.psi.impl.ResolveScopeManager;
 import org.jetbrains.kotlin.org.picocontainer.PicoContainer;
 
 import java.io.File;
@@ -70,6 +73,12 @@ public class MainViewModel extends ViewModel {
                                                 @NonNull Disposable parentDisposable) {
                 VirtualFile fileByPath = app.getLocalFileSystem().findFileByPath(projectPath);
                 return new CodeAssistProject(parent, parentDisposable, fileByPath);
+            }
+
+            @Override
+            protected @NonNull ResolveScopeManager createResolveScopeManager(
+                    @NonNull PsiManager psiManager) {
+                return new ResolveScopeManagerImpl(getProject());
             }
         };
 

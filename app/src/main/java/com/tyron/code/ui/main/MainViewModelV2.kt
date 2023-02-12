@@ -5,8 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tyron.code.ApplicationLoader
 import com.tyron.code.event.SubscriptionReceipt
+import com.tyron.code.module.ModuleManagerImpl
+import com.tyron.code.sdk.SdkManagerImpl
 import com.tyron.code.ui.editor.DummyCodeStyleManager
-import org.jetbrains.kotlin.com.intellij.pom.MockPomModel
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade
 import com.tyron.code.ui.file.event.OpenFileEvent
 import com.tyron.code.ui.file.event.RefreshRootEvent
@@ -14,6 +15,7 @@ import com.tyron.code.ui.file.tree.TreeUtil
 import com.tyron.code.ui.file.tree.model.TreeFile
 import com.tyron.completion.java.CompletionModule
 import com.tyron.completion.psi.search.PsiShortNamesCache
+import com.tyron.completion.resolve.impl.ResolveScopeManagerImpl
 import com.tyron.ui.treeview.TreeNode
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -33,23 +35,23 @@ import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeRegistry
+import org.jetbrains.kotlin.com.intellij.openapi.module.ModuleManager
 import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject
 import org.jetbrains.kotlin.com.intellij.openapi.roots.FileIndexFacade
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.util.NotNullLazyValue
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.kotlin.com.intellij.pom.MockPomModel
 import org.jetbrains.kotlin.com.intellij.pom.PomModel
 import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.com.intellij.psi.codeStyle.CodeStyleManager
-import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiManagerImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiNameHelperImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiTreeChangePreprocessor
+import org.jetbrains.kotlin.com.intellij.psi.impl.*
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManagerImpl
 import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport
+import org.jetbrains.kotlin.com.intellij.sdk.SdkManager
 import org.jetbrains.kotlin.com.intellij.util.Processor
 import org.jetbrains.kotlin.org.picocontainer.PicoContainer
 import java.io.File
@@ -59,7 +61,7 @@ class MainViewModelV2(
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val projectPath by lazy { savedStateHandle.get<String>("project_path")!!     }
+    private val projectPath by lazy { savedStateHandle.get<String>("project_path")!! }
 
     private val _projectState = MutableStateFlow(ProjectState())
     val projectState: StateFlow<ProjectState> = _projectState
@@ -79,9 +81,10 @@ class MainViewModelV2(
 
     init {
 
-        fileOpenSubscriptionReceipt = ApplicationLoader.getInstance().eventManager.subscribeEvent(OpenFileEvent::class.java) { event, _ ->
-            openFile(event.file.absolutePath)
-        }
+        fileOpenSubscriptionReceipt =
+            ApplicationLoader.getInstance().eventManager.subscribeEvent(OpenFileEvent::class.java) { event, _ ->
+                openFile(event.file.absolutePath)
+            }
 
         val handler = CoroutineExceptionHandler { _, exception ->
             println("Error: $exception")
@@ -97,6 +100,12 @@ class MainViewModelV2(
                     val fileByPath: VirtualFile =
                         appEnvironment.localFileSystem.findFileByPath(projectPath)!!
                     return CodeAssistProject(parent, parentDisposable, fileByPath)
+                }
+
+                override fun createResolveScopeManager(
+                    psiManager: PsiManager
+                ): ResolveScopeManager {
+                    return ResolveScopeManagerImpl(project)
                 }
             }
 
@@ -140,10 +149,18 @@ class MainViewModelV2(
             val localFs = appEnvironment.localFileSystem;
             val projectDir = localFs.findFileByPath(projectPath)!!
 
+            SdkManager.getInstance(projectEnvironment.project).loadDefaultSdk()
+
 
 
             viewModelScope.launch(Dispatchers.IO) {
-                ApplicationLoader.getInstance().eventManager.dispatchEvent(RefreshRootEvent(File(projectPath)))
+                ApplicationLoader.getInstance().eventManager.dispatchEvent(
+                    RefreshRootEvent(
+                        File(
+                            projectPath
+                        )
+                    )
+                )
             }
 
             val javaSourceRoot = projectDir.findFileByRelativePath("app/src/main/java")
@@ -152,6 +169,11 @@ class MainViewModelV2(
             projectEnvironment.addSourcesToClasspath(projectDir)
             projectEnvironment.addJarToClassPath(CompletionModule.getAndroidJar())
             projectEnvironment.addJarToClassPath(CompletionModule.getLambdaStubs())
+
+            val parsed =
+                (ModuleManagerImpl.getInstance(projectEnvironment.project) as ModuleManagerImpl)
+                    .parse()
+            println(parsed)
 
             val previouslyOpenedFiles = ApplicationLoader.getDefaultPreferences()
                 .getStringSet(projectDir.path, emptySet())!!
@@ -177,6 +199,18 @@ class MainViewModelV2(
 
     private fun registerComponentsAndServices() {
         val project = projectEnvironment.project
+
+
+        // services
+        project.registerService(
+            SdkManager::class.java,
+            SdkManagerImpl(project)
+        )
+
+        project.registerService(
+            ModuleManager::class.java,
+            ModuleManagerImpl(project)
+        )
 
         project.registerService(
             PsiShortNamesCache::class.java,
@@ -265,12 +299,12 @@ class MainViewModelV2(
             PsiNameHelper::class.java,
             PsiNameHelperImpl(project)
         )
-        
+
         project.registerService(
             CodeStyleManager::class.java,
             DummyCodeStyleManager(project)
         )
-        
+
         projectEnvironment.registerProjectComponent(
             FileManager::class.java, FileManagerImpl(
                 PsiManagerImpl.getInstance(project) as PsiManagerImpl,
@@ -336,7 +370,7 @@ class MainViewModelV2(
             _currentTextEditorState.emit(
                 newEditorState
             )
-            
+
             val list = _textEditorListState.value.editors.toMutableList()
             list.add(newEditorState)
 
