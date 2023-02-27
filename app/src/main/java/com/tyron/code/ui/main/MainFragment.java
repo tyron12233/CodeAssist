@@ -42,7 +42,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
 import com.tyron.code.gradle.util.GradleLaunchUtil;
-import com.tyron.code.ui.editor.log.AppLogFragment;
+import com.tyron.code.ui.legacyEditor.log.AppLogFragment;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.ui.project.ProjectManager;

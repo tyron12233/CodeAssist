@@ -1,1 +1,1 @@
-com.tyron.code.ui.editor.impl.DefaultFileDocumentContentProvider
+com.tyron.code.ui.legacyEditor.impl.DefaultFileDocumentContentProvider

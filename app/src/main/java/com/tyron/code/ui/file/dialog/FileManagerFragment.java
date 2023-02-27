@@ -15,7 +15,7 @@ import com.tyron.code.R;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.activity.OnBackPressedCallback;
 
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.legacyEditor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.FileManagerAdapter;
 import com.tyron.code.ui.main.MainFragment;
 

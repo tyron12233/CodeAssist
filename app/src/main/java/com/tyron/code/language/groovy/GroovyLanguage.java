@@ -1,49 +1,25 @@
 package com.tyron.code.language.groovy;
 
 import android.os.Bundle;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.LanguageManager;
-import com.tyron.completion.model.CompletionItem;
-import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
-import org.codehaus.groovy.ast.expr.Expression;
-import org.codehaus.groovy.ast.expr.MethodCallExpression;
-import org.codehaus.groovy.control.CompilationUnit;
-import org.codehaus.groovy.control.CompilerConfiguration;
-import org.codehaus.groovy.control.Phases;
-import org.codehaus.groovy.control.SourceUnit;
-import org.eclipse.lsp4j.Position;
-import org.eclipse.lsp4j.Range;
-import org.eclipse.lsp4j.util.Ranges;
 
-import java.io.File;
-import java.net.URI;
-import java.util.List;
-import java.util.Set;
-
-import groovy.lang.GroovyClassLoader;
-import groovy.lang.GroovyCodeSource;
 import io.github.rosemoe.sora.lang.Language;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 import io.github.rosemoe.sora.lang.completion.CompletionCancelledException;
-import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.lang.format.Formatter;
-import io.github.rosemoe.sora.lang.smartEnter.NewlineHandleResult;
 import io.github.rosemoe.sora.lang.smartEnter.NewlineHandler;
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.ContentReference;
-import io.github.rosemoe.sora.text.TextUtils;
-import io.github.rosemoe.sora.util.MyCharacter;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 
 public class GroovyLanguage implements Language {

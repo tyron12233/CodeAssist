@@ -10,7 +10,7 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
 import com.tyron.code.template.CodeTemplate;
 import com.tyron.code.template.xml.LayoutTemplate;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.legacyEditor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.RegexReason;
 import com.tyron.code.ui.file.action.FileAction;

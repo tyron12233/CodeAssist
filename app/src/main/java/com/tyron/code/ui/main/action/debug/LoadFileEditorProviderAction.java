@@ -6,11 +6,9 @@ import com.android.tools.r8.CompilationFailedException;
 import com.android.tools.r8.D8;
 import com.android.tools.r8.D8Command;
 import com.android.tools.r8.OutputMode;
-import com.tyron.actions.ActionManager;
-import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.builder.BuildModule;
-import com.tyron.code.ui.editor.impl.FileEditorProviderManagerImpl;
+import com.tyron.code.ui.legacyEditor.impl.FileEditorProviderManagerImpl;
 import com.tyron.fileeditor.api.FileEditorProvider;
 
 import org.openjdk.com.sun.org.apache.bcel.internal.classfile.ClassParser;

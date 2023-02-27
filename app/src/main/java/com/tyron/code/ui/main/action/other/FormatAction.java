@@ -1,7 +1,6 @@
 package com.tyron.code.ui.main.action.other;
 
 import androidx.annotation.NonNull;
-import androidx.fragment.app.Fragment;
 
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
@@ -9,7 +8,6 @@ import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.code.R;
 import com.tyron.fileeditor.api.FileEditor;
-import com.tyron.code.ui.editor.impl.text.rosemoe.CodeEditorFragment;
 
 public class FormatAction extends AnAction {
 

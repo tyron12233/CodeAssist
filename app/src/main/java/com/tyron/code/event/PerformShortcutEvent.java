@@ -1,6 +1,6 @@
 package com.tyron.code.event;
 
-import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
+import com.tyron.code.ui.legacyEditor.shortcuts.ShortcutItem;
 import com.tyron.fileeditor.api.FileEditor;
 
 public class PerformShortcutEvent extends Event {

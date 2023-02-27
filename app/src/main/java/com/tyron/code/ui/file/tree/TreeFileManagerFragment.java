@@ -2,24 +2,16 @@ package com.tyron.code.ui.file.tree;
 
 import android.annotation.SuppressLint;
 import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
-import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.widget.ThemeUtils;
 import androidx.core.view.ViewCompat;
-import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentViewModelLazyKt;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.lifecycle.ViewModelStore;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.tyron.actions.ActionManager;
@@ -31,9 +23,6 @@ import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 import com.tyron.code.event.Event;
 import com.tyron.code.event.EventManager;
-import com.tyron.code.event.EventReceiver;
-import com.tyron.code.event.SubscriptionReceipt;
-import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.ui.file.event.OpenFileEvent;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
 import com.tyron.code.util.EventManagerUtilsKt;
@@ -42,7 +31,6 @@ import com.tyron.common.util.ApkInstaller;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.FileViewModel;
 import com.tyron.code.ui.file.tree.binder.TreeFileNodeViewBinder.TreeFileNodeListener;
@@ -53,9 +41,6 @@ import com.tyron.code.ui.project.ProjectManager;
 
 import java.io.File;
 import java.util.Collections;
-import java.util.concurrent.Executors;
-
-import kotlin.jvm.functions.Function0;
 
 public class TreeFileManagerFragment extends Fragment {
     private MainViewModel mMainViewModel;

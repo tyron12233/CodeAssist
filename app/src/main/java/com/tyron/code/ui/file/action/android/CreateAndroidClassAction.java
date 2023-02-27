@@ -12,7 +12,7 @@ import com.tyron.builder.project.api.Module;
 import com.tyron.code.template.android.ActivityTemplate;
 import com.tyron.ui.treeview.TreeNode;
 import com.tyron.ui.treeview.TreeView;
-import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
+import com.tyron.code.ui.legacyEditor.impl.FileEditorManagerImpl;
 import com.tyron.code.ui.file.CommonFileKeys;
 import com.tyron.code.ui.file.action.java.CreateClassAction;
 import com.tyron.code.ui.file.dialog.CreateClassDialogFragment;

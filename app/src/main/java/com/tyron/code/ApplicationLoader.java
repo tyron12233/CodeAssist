@@ -1,12 +1,9 @@
 package com.tyron.code;
 
-import static org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment.registerApplicationExtensionPoint;
-
 import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.os.Build;
 import android.widget.Toast;
 
@@ -20,16 +17,13 @@ import com.developer.crashx.config.CrashConfig;
 import com.tyron.actions.ActionManager;
 import com.tyron.builder.BuildModule;
 import com.tyron.code.event.EventManager;
-import com.tyron.code.highlighter.attributes.CodeAssistTextAttributes;
-import com.tyron.code.highlighter.attributes.CodeAssistTextAttributesProvider;
-import com.tyron.code.highlighter.attributes.TextAttributesKeyUtils;
 import com.tyron.code.service.GradleDaemonService;
-import com.tyron.code.ui.editor.action.CloseAllEditorAction;
-import com.tyron.code.ui.editor.action.CloseFileEditorAction;
-import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
-import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
-import com.tyron.code.ui.editor.action.PreviewLayoutAction;
-import com.tyron.code.ui.editor.action.text.TextActionGroup;
+import com.tyron.code.ui.legacyEditor.action.CloseAllEditorAction;
+import com.tyron.code.ui.legacyEditor.action.CloseFileEditorAction;
+import com.tyron.code.ui.legacyEditor.action.CloseOtherEditorAction;
+import com.tyron.code.ui.legacyEditor.action.DiagnosticInfoAction;
+import com.tyron.code.ui.legacyEditor.action.PreviewLayoutAction;
+import com.tyron.code.ui.legacyEditor.action.text.TextActionGroup;
 import com.tyron.code.ui.file.action.ImportFileActionGroup;
 import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
@@ -40,17 +34,11 @@ import com.tyron.code.ui.main.action.other.OpenSettingsAction;
 import com.tyron.code.ui.main.action.project.ProjectActionGroup;
 import com.tyron.code.ui.settings.ApplicationSettingsFragment;
 import com.tyron.common.ApplicationProvider;
-import com.tyron.completion.CompletionContributor;
-import com.tyron.completion.CompletionService;
-import com.tyron.completion.impl.CompletionServiceImpl;
 import com.tyron.completion.legacy.CompletionProvider;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
-import com.tyron.completion.psi.codeInsight.completion.JavaCompletionContributor;
-import com.tyron.completion.resolve.ResolveScopeEnlarger;
-import com.tyron.completion.resolve.ResolveScopeProvider;
 import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.XmlIndexProvider;
 import com.tyron.editor.selection.ExpandSelectionProvider;
@@ -65,54 +53,18 @@ import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.concurrency.CancellablePromise;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
-import org.jetbrains.kotlin.com.intellij.diagnostic.PluginProblemReporterImpl;
-import org.jetbrains.kotlin.com.intellij.lang.MetaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
-import org.jetbrains.kotlin.com.intellij.openapi.application.AppUIExecutor;
-import org.jetbrains.kotlin.com.intellij.openapi.application.AsyncExecutionService;
-import org.jetbrains.kotlin.com.intellij.openapi.application.ModalityState;
-import org.jetbrains.kotlin.com.intellij.openapi.application.NonBlockingReadAction;
-import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuard;
-import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuardImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentWriteAccessGuard;
-import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManagerListener;
-import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextFileType;
-import org.jetbrains.kotlin.com.intellij.openapi.project.DumbService;
-import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderEnumerationHandler;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.util.io.FileUtil;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFilePointerManagerEx;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.CoreVirtualFilePointerManagerEx;
-import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
-import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
-import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
-import org.jetbrains.kotlin.com.intellij.psi.impl.compiled.ClsCustomNavigationPolicy;
-import org.jetbrains.kotlin.com.intellij.psi.impl.smartPointers.SmartPointerAnchorProvider;
-import org.jetbrains.kotlin.com.intellij.psi.util.JavaClassSupers;
-import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.kotlin.utils.PrintingLogger;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
-
-import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 public class ApplicationLoader extends Application {
 

@@ -6,7 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.code.language.CachedAutoCompleteProvider;
-import com.tyron.code.language.CompletionItemWrapper;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.Editor;

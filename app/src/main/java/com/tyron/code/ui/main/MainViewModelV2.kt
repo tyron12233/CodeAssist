@@ -8,7 +8,7 @@ import com.tyron.code.event.SubscriptionReceipt
 import com.tyron.code.indexing.ProjectIndexer
 import com.tyron.code.module.ModuleManagerImpl
 import com.tyron.code.project.CodeAssistJavaCoreProjectEnvironment
-import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade
+import com.tyron.code.ui.legacyEditor.impl.text.rosemoe.RosemoeEditorFacade
 import com.tyron.code.ui.file.event.OpenFileEvent
 import com.tyron.code.ui.file.event.RefreshRootEvent
 import com.tyron.code.ui.file.tree.TreeUtil

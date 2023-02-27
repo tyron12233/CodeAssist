@@ -32,7 +32,7 @@ import com.tyron.code.event.FileCreatedEvent;
 import com.tyron.code.event.FileDeletedEvent;
 import com.tyron.code.gradle.util.GradleLaunchUtil;
 import com.tyron.code.template.CodeTemplate;
-import com.tyron.code.ui.editor.log.AppLogFragment;
+import com.tyron.code.ui.legacyEditor.log.AppLogFragment;
 import com.tyron.code.util.ProjectUtils;
 import com.tyron.common.logging.IdeLog;
 import com.tyron.common.util.DebouncerStore;
@@ -53,7 +53,6 @@ import org.gradle.tooling.BuildException;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.events.ProgressListener;
-import org.gradle.tooling.model.GradleProject;
 
 import java.io.File;
 import java.io.IOException;
