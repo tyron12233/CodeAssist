@@ -25,7 +25,6 @@ import java.io.File;
 public class CompletionModule {
 
     private static Context sApplicationContext;
-    private static final Handler sApplicationHandler = new Handler(Looper.getMainLooper());
     private static File sAndroidJar;
     private static File sLambdaStubs;
 
@@ -48,10 +47,6 @@ public class CompletionModule {
 
     public static Context getContext() {
         return sApplicationContext;
-    }
-
-    public static void post(Runnable runnable) {
-        sApplicationHandler.post(runnable);
     }
 
     public static File getAndroidJar() {

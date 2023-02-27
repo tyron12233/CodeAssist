@@ -4,6 +4,8 @@ import androidx.annotation.NonNull;
 
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 
+import java.io.IOException;
+
 /**
  * Interface which can be used to receive the contents of a project.
  *

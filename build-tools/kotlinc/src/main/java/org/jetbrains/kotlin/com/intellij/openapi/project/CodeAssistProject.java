@@ -13,9 +13,12 @@ public class CodeAssistProject extends MockProject {
     private VirtualFile projectRoot;
 
     public CodeAssistProject(@Nullable PicoContainer parent,
-                             @NonNull Disposable parentDisposable, VirtualFile fileByPath) {
+                             @NonNull Disposable parentDisposable) {
         super(parent, parentDisposable);
-        projectRoot = fileByPath;
+    }
+
+    public void setProjectRoot(VirtualFile projectRoot) {
+        this.projectRoot = projectRoot;
     }
 
     @Override

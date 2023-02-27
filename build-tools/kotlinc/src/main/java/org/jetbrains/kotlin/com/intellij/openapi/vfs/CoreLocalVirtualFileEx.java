@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalVirtualFile;
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileIdStorage;
 
 import java.io.File;
 import java.io.IOException;
@@ -11,7 +12,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class CoreLocalVirtualFileEx extends CoreLocalVirtualFile {
+public class CoreLocalVirtualFileEx extends CoreLocalVirtualFile implements VirtualFileWithId {
     private final CoreLocalFileSystem fileSystem;
     private final File ioFile;
 
@@ -57,5 +58,10 @@ public class CoreLocalVirtualFileEx extends CoreLocalVirtualFile {
     @Override
     public Path toNioPath() {
         return ioFile.toPath();
+    }
+
+    @Override
+    public int getId() {
+        return FileIdStorage.getAndStoreId(this);
     }
 }

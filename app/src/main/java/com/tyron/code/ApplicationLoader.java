@@ -65,6 +65,7 @@ import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.concurrency.CancellablePromise;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
@@ -78,12 +79,15 @@ import org.jetbrains.kotlin.com.intellij.openapi.application.ModalityState;
 import org.jetbrains.kotlin.com.intellij.openapi.application.NonBlockingReadAction;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuardImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentWriteAccessGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextFileType;
+import org.jetbrains.kotlin.com.intellij.openapi.project.DumbService;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderEnumerationHandler;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
+import org.jetbrains.kotlin.com.intellij.openapi.util.io.FileUtil;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFilePointerManagerEx;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.CoreVirtualFilePointerManagerEx;
 import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
@@ -92,6 +96,8 @@ import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
 import org.jetbrains.kotlin.com.intellij.psi.impl.compiled.ClsCustomNavigationPolicy;
 import org.jetbrains.kotlin.com.intellij.psi.impl.smartPointers.SmartPointerAnchorProvider;
 import org.jetbrains.kotlin.com.intellij.psi.util.JavaClassSupers;
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
+import org.jetbrains.kotlin.utils.PrintingLogger;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
 import java.io.File;
@@ -124,218 +130,21 @@ public class ApplicationLoader extends Application {
 
     @Override
     public void onCreate() {
+        Logger.setFactory(category -> new PrintingLogger(System.out));
+
         Timer timer = Time.startTimer();
 
         UtilKt.setIdeaIoUseFallback();
         IdeaStandaloneExecutionSetup.INSTANCE.doSetup();
 
-        coreApplicationEnvironment = new JavaCoreApplicationEnvironment(disposable);
-
-        // fileTypes
-        coreApplicationEnvironment.registerFileType(PlainTextFileType.INSTANCE, "json");
-
-        registerApplicationExtensionPoint(OrderEnumerationHandler.EP_NAME,
-                OrderEnumerationHandler.Factory.class);
-        registerApplicationExtensionPoint(ResolveScopeProvider.EP_NAME, ResolveScopeProvider.class);
-        registerApplicationExtensionPoint(ResolveScopeEnlarger.EP_NAME, ResolveScopeEnlarger.class);
-        registerApplicationExtensionPoint(DocumentWriteAccessGuard.EP_NAME,
-                DocumentWriteAccessGuard.class);
-        registerApplicationExtensionPoint(PsiAugmentProvider.EP_NAME, PsiAugmentProvider.class);
-        registerApplicationExtensionPoint(JavaModuleSystem.EP_NAME, JavaModuleSystem.class);
-        registerApplicationExtensionPoint(SmartPointerAnchorProvider.EP_NAME,
-                SmartPointerAnchorProvider.class);
-        registerApplicationExtensionPoint(ClsCustomNavigationPolicy.EP_NAME,
-                ClsCustomNavigationPolicy.class);
-        registerApplicationExtensionPoint(FileDocumentManagerListener.EP_NAME,
-                FileDocumentManagerListener.class);
-        registerApplicationExtensionPoint(MetaLanguage.EP_NAME, MetaLanguage.class);
-
-        // services
-        coreApplicationEnvironment.registerApplicationService(PluginProblemReporterImpl.getInterface(),
-                new PluginProblemReporterImpl());
-        coreApplicationEnvironment.registerApplicationService(AsyncExecutionService.class,
-                new AsyncExecutionService() {
-                    @Override
-                    protected @NonNull AppUIExecutor createWriteThreadExecutor(@NonNull ModalityState modalityState) {
-                        return new AppUIExecutor() {
-                            @Override
-                            public @NonNull AppUIExecutor later() {
-                                return this;
-                            }
-
-                            @Override
-                            public @NonNull AppUIExecutor expireWith(@NonNull Disposable disposable) {
-                                return this;
-                            }
-
-                            @Override
-                            public CancellablePromise<?> submit(@NonNull Runnable runnable) {
-                                CompletableFuture<?> future = CompletableFuture.runAsync(runnable);
-                                return new CancellablePromise<>() {
-                                    @Override
-                                    public boolean cancel(boolean mayInterruptIfRunning) {
-                                        return future.cancel(mayInterruptIfRunning);
-                                    }
-
-                                    @Override
-                                    public boolean isCancelled() {
-                                        return future.isCancelled();
-                                    }
-
-                                    @Override
-                                    public boolean isDone() {
-                                        return future.isDone();
-                                    }
-
-                                    @Override
-                                    public Object get() throws ExecutionException,
-                                            InterruptedException {
-                                        return future.get();
-                                    }
-
-                                    @Override
-                                    public Object get(long timeout,
-                                                      TimeUnit unit) throws ExecutionException,
-                                            InterruptedException, TimeoutException {
-                                        return future.get(timeout, unit);
-                                    }
-                                };
-                            }
-                        };
-                    }
-
-                    @Override
-                    protected @NonNull <T> NonBlockingReadAction<T> buildNonBlockingReadAction(@NonNull Callable<T> callable) {
-
-                        return new NonBlockingReadAction<T>() {
-
-                            CompletableFuture<T> future = new CompletableFuture<>();
-
-                            @Override
-                            public @NonNull NonBlockingReadAction<T> expireWhen(@NonNull BooleanSupplier booleanSupplier) {
-                                return this;
-                            }
-
-                            @Override
-                            public @NonNull NonBlockingReadAction<T> finishOnUiThread(@NonNull ModalityState modalityState,
-                                                                                      @NonNull Consumer<? super T> consumer) {
-                                future.whenComplete((t, throwable) -> consumer.accept(t));
-                                return this;
-                            }
-
-                            @Override
-                            public @NonNull NonBlockingReadAction<T> coalesceBy(Object... objects) {
-                                return this;
-                            }
-
-                            @Override
-                            public @NonNull CancellablePromise<T> submit(@NonNull Executor executor) {
-                                return new CancellablePromise<>() {
-                                    @Override
-                                    public boolean cancel(boolean mayInterruptIfRunning) {
-                                        return future.cancel(mayInterruptIfRunning);
-                                    }
-
-                                    @Override
-                                    public boolean isCancelled() {
-                                        return future.isCancelled();
-                                    }
-
-                                    @Override
-                                    public boolean isDone() {
-                                        return future.isDone();
-                                    }
-
-                                    @Override
-                                    public T get() throws ExecutionException, InterruptedException {
-                                        return future.get();
-                                    }
-
-                                    @Override
-                                    public T get(long timeout,
-                                                 TimeUnit unit) throws ExecutionException,
-                                            InterruptedException, TimeoutException {
-                                        return future.get(timeout, unit);
-                                    }
-                                };
-                            }
-                        };
-                    }
-                });
-        coreApplicationEnvironment.registerApplicationService(CompletionService.class,
-                new CompletionServiceImpl());
-        coreApplicationEnvironment.registerApplicationService(TransactionGuard.class,
-                new TransactionGuardImpl());
-        coreApplicationEnvironment.registerApplicationService(JavaClassSupers.class,
-                new JavaClassSupersImpl());
-        coreApplicationEnvironment.registerApplicationService(CodeAssistTextAttributesProvider.class,
-                new CodeAssistTextAttributesProvider() {
-                    public CodeAssistTextAttributes getDefaultAttributes(TextAttributesKey textAttributesKey) {
-                        String name = TextAttributesKeyUtils.getExternalName(textAttributesKey);
-
-                        switch (Objects.requireNonNull(name)) {
-                            case "DEFAULT_KEYWORD":
-                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
-                                        EditorColorScheme.KEYWORD,
-                                        Color.RED,
-                                        0,
-                                        null);
-                            case "DEFAULT_PARAMETER":
-                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
-                                        EditorColorScheme.IDENTIFIER_NAME,
-                                        0,
-                                        0,
-                                        null);
-                            case "DEFAULT_STRING":
-                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
-                                        EditorColorScheme.LITERAL,
-                                        Color.RED,
-                                        0,
-                                        null);
-                            case "DEFAULT_LINE_COMMENT":
-                            case "DEFAULT_BLOCK_COMMENT":
-                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
-                                        EditorColorScheme.COMMENT,
-                                        Color.RED,
-                                        0,
-                                        null);
-                            case "DEFAULT_OPERATION_SIGN":
-                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
-                                        EditorColorScheme.OPERATOR,
-                                        Color.RED,
-                                        0,
-                                        null);
-                            case "DEFAULT_INVALID_STRING_ESCAPE":
-                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
-                                        EditorColorScheme.PROBLEM_ERROR,
-                                        Color.RED,
-                                        0,
-                                        null);
-                            case "DEFAULT_FUNCTION_DECLARATION":
-                                return new CodeAssistTextAttributes(Color.TRANSPARENT,
-                                        EditorColorScheme.FUNCTION_NAME,
-                                        Color.RED,
-                                        0,
-                                        null);
-                        }
+        File intellijHome = new File(getFilesDir(), "intellij_home");
+        if (!intellijHome.exists()) {
+            FileUtil.createDirectory(intellijHome);
+        }
+        System.setProperty("idea.home.path", intellijHome.getAbsolutePath());
 
 
-                        TextAttributesKey fallbackAttributeKey =
-                                TextAttributesKeyUtils.getFallbackAttributeKey(textAttributesKey);
-                        if (fallbackAttributeKey != null) {
-                            return TextAttributesKeyUtils.getDefaultAttributes(fallbackAttributeKey);
-                        }
-
-                        return CodeAssistTextAttributes.DEFAULT;
-                    }
-
-                });
-
-
-        // language specific stuff
-        coreApplicationEnvironment.addExplicitExtension(CompletionContributor.INSTANCE,
-                org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage.INSTANCE,
-                new JavaCompletionContributor());
+        coreApplicationEnvironment = new CodeAssistApplicationEnvironment(disposable, false);
 
 
         super.onCreate();

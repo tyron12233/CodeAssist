@@ -14,6 +14,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.transition.TransitionManager
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayout.OnTabSelectedListener
 import com.google.android.material.transition.MaterialFadeThrough
@@ -35,6 +36,8 @@ class MainFragmentV2 : Fragment() {
 
     private lateinit var binding: MainFragmentBinding
     private val toolbarManager by lazy { ToolbarManager() }
+
+    private val indexingUiFragment by lazy { BottomSheetDialogFragment() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,7 +80,7 @@ class MainFragmentV2 : Fragment() {
         observeViewModel()
     }
 
-    fun observeViewModel() {
+    private fun observeViewModel() {
         lifecycleScope.launchWhenResumed {
             viewModelV2.currentTextEditorState.collect { textEditorState ->
                 if (textEditorState == null) {
@@ -134,6 +137,16 @@ class MainFragmentV2 : Fragment() {
 
                 binding.progressbar.isIndeterminate = true
                 binding.progressbar.visibility = if (state.showProgressBar) View.VISIBLE else View.GONE
+            }
+        }
+
+        lifecycleScope.launchWhenResumed {
+            viewModelV2.indexingState.collect { indexingState ->
+                if (indexingState == null) {
+                    indexingUiFragment.dismiss()
+                } else {
+                    indexingUiFragment.show(childFragmentManager, "")
+                }
             }
         }
     }

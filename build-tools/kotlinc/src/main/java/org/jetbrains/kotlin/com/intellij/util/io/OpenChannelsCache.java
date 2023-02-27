@@ -1,0 +1,194 @@
+package org.jetbrains.kotlin.com.intellij.util.io;
+
+import androidx.annotation.NonNull;
+
+import org.jetbrains.kotlin.com.intellij.openapi.util.io.FileUtilRt;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.file.*;
+import java.util.*;
+
+/**
+ * Cache of {@link FileChannel}s.
+ * Cache eviction policy is kind of FIFO -- the first channel cached is the first candidate to drop
+ * from the cache, given it is not used right now.
+ */
+final class OpenChannelsCache { // TODO: Will it make sense to have a background thread, that flushes the cache by timeout?
+  private final int myCapacity;
+  private int myHitCount;
+  private int myMissCount;
+  private int myLoadCount;
+
+  //@GuardedBy("myCacheLock")
+  @NonNull
+  private final Map<Path, ChannelDescriptor> myCache;
+
+  private final transient Object myCacheLock = new Object();
+
+  OpenChannelsCache(final int capacity) {
+    myCapacity = capacity;
+    myCache = new LinkedHashMap<>(capacity, 0.5f, true);
+  }
+
+  @NonNull CachedChannelsStatistics getStatistics() {
+    synchronized (myCacheLock) {
+      return new CachedChannelsStatistics(myHitCount, myMissCount, myLoadCount, myCapacity);
+    }
+  }
+
+  @FunctionalInterface
+  interface ChannelProcessor<T> {
+    T process(@NonNull FileChannel channel) throws IOException;
+  }
+
+  /**
+   * Parameter {@param processor} should be idempotent because sometimes calculation might be restarted
+   * when file channel was closed by thread interruption
+   */
+  <T> T useChannel(@NonNull Path path,
+                   @NonNull ChannelProcessor<T> processor,
+                   boolean read) throws IOException {
+    ChannelDescriptor descriptor;
+    synchronized (myCacheLock) {
+      descriptor = myCache.get(path);
+      if (descriptor == null) {
+        boolean somethingDropped = releaseOverCachedChannels();
+        descriptor = new ChannelDescriptor(path, read);
+        myCache.put(path, descriptor);
+        if (somethingDropped) {
+          myMissCount++;
+        }
+        else {
+          myLoadCount++;
+        }
+      }
+      else if (!read && descriptor.isReadOnly()) {
+        if (descriptor.isLocked()) {
+          descriptor = new ChannelDescriptor(path, false);
+        }
+        else {
+          // re-open as write
+          closeChannel(path);
+          descriptor = new ChannelDescriptor(path, false);
+          myCache.put(path, descriptor);
+        }
+        myMissCount++;
+      }
+      else {
+        myHitCount++;
+      }
+      descriptor.lock();
+    }
+
+    //channel access is NOT guarded by the myCacheLock
+    try {
+      return processor.process(descriptor.getChannel());
+    }
+    finally {
+      synchronized (myCacheLock) {
+        descriptor.unlock();
+      }
+    }
+  }
+
+  void closeChannel(Path path) throws IOException {
+    synchronized (myCacheLock) {
+      final ChannelDescriptor descriptor = myCache.remove(path);
+
+      if (descriptor != null) {
+        assert !descriptor.isLocked() : "Channel is in use: " + descriptor;
+        descriptor.close();
+      }
+    }
+  }
+
+  private boolean releaseOverCachedChannels() throws IOException {
+    int dropCount = myCache.size() - myCapacity;
+
+    if (dropCount >= 0) {
+      List<Path> keysToDrop = new ArrayList<>();
+      for (Map.Entry<Path, ChannelDescriptor> entry : myCache.entrySet()) {
+          if (dropCount < 0) {
+              break;
+          }
+        if (!entry.getValue().isLocked()) {
+          dropCount--;
+          keysToDrop.add(entry.getKey());
+        }
+      }
+
+      for (Path file : keysToDrop) {
+        closeChannel(file);
+      }
+
+      return true;
+    }
+    return false;
+  }
+
+  static final class ChannelDescriptor implements Closeable {
+    private int myLockCount = 0;
+    private final @NonNull UnInterruptibleFileChannel myChannel;
+    private final boolean myReadOnly;
+
+    private static final OpenOption[] MODIFIABLE_OPTS = {StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE};
+    private static final OpenOption[] READ_ONLY_OPTS = {StandardOpenOption.READ};
+
+    ChannelDescriptor(@NonNull Path file, boolean readOnly) throws IOException {
+      myReadOnly = readOnly;
+      myChannel = Objects.requireNonNull(FileUtilRt.doIOOperation(lastAttempt -> {
+        try {
+          return new UnInterruptibleFileChannel(file, readOnly ? READ_ONLY_OPTS : MODIFIABLE_OPTS);
+        }
+        catch (NoSuchFileException ex) {
+          Path parent = file.getParent();
+          if (!readOnly) {
+            if (!Files.exists(parent)) {
+              Files.createDirectories(parent);
+            }
+              if (!lastAttempt) {
+                  return null;
+              }
+          }
+          throw ex;
+        }
+      }));
+    }
+
+    boolean isReadOnly() {
+      return myReadOnly;
+    }
+
+    void lock() {
+      myLockCount++;
+    }
+
+    void unlock() {
+      myLockCount--;
+    }
+
+    boolean isLocked() {
+      return myLockCount != 0;
+    }
+
+    @NonNull UnInterruptibleFileChannel getChannel() {
+      return myChannel;
+    }
+
+    @Override
+    public void close() throws IOException {
+      myChannel.close();
+    }
+
+    @Override
+    public String toString() {
+      return "ChannelDescriptor{" +
+             "locks=" + myLockCount +
+             ", channel=" + myChannel +
+             ", readOnly=" + myReadOnly +
+             '}';
+    }
+  }
+}

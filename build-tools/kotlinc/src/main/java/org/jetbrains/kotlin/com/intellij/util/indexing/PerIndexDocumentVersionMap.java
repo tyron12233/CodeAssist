@@ -1,0 +1,79 @@
+package org.jetbrains.kotlin.com.intellij.util.indexing;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
+import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderEx;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * @author Dmitry Avdeev
+ */
+final class PerIndexDocumentVersionMap {
+  private static final int INVALID_STAMP = -1; // 0 isn't acceptable as Document has 0 stamp when loaded from unchanged file
+  private volatile int mapVersion;
+  private static final class IdVersionInfo {
+    private final ID<?,?> id;
+    private int mapVersion;
+    private long docVersion;
+
+    private IdVersionInfo(@NotNull ID<?, ?> id, long docVersion, int mapVersion) {
+      this.docVersion = docVersion;
+      this.mapVersion = mapVersion;
+      this.id = id;
+    }
+  }
+
+  private static final Key<List<IdVersionInfo>> KEY = Key.create("UnsavedDocIdVersionInfo");
+  long set(@NotNull Document document, @NotNull ID<?, ?> indexId, long value) {
+    List<IdVersionInfo> list = document.getUserData(KEY);
+    if (list == null) {
+      list = ((UserDataHolderEx)document).putUserDataIfAbsent(KEY, new ArrayList<>());
+    }
+
+    synchronized (list) {
+      for (IdVersionInfo info : list) {
+        if (info.id == indexId) {
+          long old = info.docVersion;
+          if (info.mapVersion != mapVersion) {
+            old = INVALID_STAMP;
+            info.mapVersion = mapVersion;
+          }
+          info.docVersion = value;
+          return old;
+        }
+      }
+      list.add(new IdVersionInfo(indexId, value, mapVersion));
+      return INVALID_STAMP;
+    }
+  }
+
+  long get(@NotNull Document document, @NotNull ID<?, ?> indexId) {
+    List<IdVersionInfo> list = document.getUserData(KEY);
+    if (list == null) {
+      return INVALID_STAMP;
+    }
+
+    synchronized (list) {
+      for (IdVersionInfo info : list) {
+        if (info.id == indexId) {
+          long old = info.docVersion;
+          if (info.mapVersion != mapVersion) {
+            return INVALID_STAMP;
+          }
+          return old;
+        }
+      }
+      return INVALID_STAMP;
+    }
+  }
+
+  void clearForDocument(@NotNull Document document) {
+    document.putUserData(KEY, new ArrayList<>());
+  }
+  void clear() {
+    mapVersion++;
+  }
+}

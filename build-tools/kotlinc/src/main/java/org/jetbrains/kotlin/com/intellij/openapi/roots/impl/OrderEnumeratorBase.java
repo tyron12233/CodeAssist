@@ -256,7 +256,9 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
     private ProcessEntryAction shouldAddOrRecurse(@NonNull OrderEntry entry, boolean firstLevel, @NonNull List<? extends OrderEnumerationHandler> customHandlers) {
         if (myCondition != null && !myCondition.value(entry)) return ProcessEntryAction.SKIP;
 
-        if (entry instanceof JdkOrderEntry && (myWithoutJdk || !firstLevel)) return ProcessEntryAction.SKIP;
+        if (entry instanceof JdkOrderEntry && (myWithoutJdk || !firstLevel)) {
+            return ProcessEntryAction.SKIP;
+        }
         if (myWithoutLibraries && entry instanceof LibraryOrderEntry) return ProcessEntryAction.SKIP;
         if (myWithoutDepModules) {
             if (!myRecursively && entry instanceof ModuleOrderEntry) return ProcessEntryAction.SKIP;
@@ -295,8 +297,12 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
             exported = exportableEntry.isExported();
         }
         if (!exported) {
-            if (myExportedOnly) return ProcessEntryAction.SKIP;
-            if (myRecursivelyExportedOnly && !firstLevel) return ProcessEntryAction.SKIP;
+            if (myExportedOnly) {
+                return ProcessEntryAction.SKIP;
+            }
+            if (myRecursivelyExportedOnly && !firstLevel) {
+                return ProcessEntryAction.SKIP;
+            }
         }
         if (myRecursively && entry instanceof ModuleOrderEntry) {
             ModuleOrderEntry moduleOrderEntry = (ModuleOrderEntry) entry;
@@ -319,6 +325,7 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
 
         for (OrderEntry entry : rootModel.getOrderEntries()) {
             ProcessEntryAction action = shouldAddOrRecurse(entry, firstLevel, customHandlers);
+
             if (action.type == ProcessEntryActionType.SKIP) {
                 continue;
             }

@@ -41,6 +41,7 @@ public class ReadOnlyInheritedJdkOrderEntry implements InheritedJdkOrderEntry {
 
     @Override
     public VirtualFile[] getRootFiles(@NonNull OrderRootType type) {
+        System.out.println("Get root files: " + type);
         if (type == OrderRootType.CLASSES) {
             VirtualFileSystem jfs = StandardFileSystems.jar();
             return sdk.getJarFiles().stream()

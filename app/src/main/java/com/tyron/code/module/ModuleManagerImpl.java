@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.roots.ModuleRootManager;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.impl.ModuleRootManagerImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.jetbrains.kotlin.com.intellij.openapi.util.io.FileUtil;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
 import org.jetbrains.kotlin.com.intellij.util.graph.Graph;
@@ -45,13 +46,10 @@ public class ModuleManagerImpl extends ModuleManager {
 
     public static final String JAVA_MODULE = "JAVA_MODULE";
     private final Project project;
-    private final CoreLocalFileSystem fileSystem =
-            ApplicationLoader.getInstance().getCoreApplicationEnvironment().getLocalFileSystem();
-
     private final MutableGraph<Module> graph =
             GraphBuilder.directed().allowsSelfLoops(false).build();
 
-    public ModuleManagerImpl(Project project) throws IOException {
+    public ModuleManagerImpl(Project project) {
         this.project = project;
 
     }
@@ -147,7 +145,7 @@ public class ModuleManagerImpl extends ModuleManager {
 
     @Override
     public Module loadModule(String file) throws IOException {
-        VirtualFile fileByPath = fileSystem.findFileByPath(file);
+        VirtualFile fileByPath = StandardFileSystems.local().findFileByPath(file);
         if (fileByPath == null) {
             throw new FileNotFoundException(file);
         }

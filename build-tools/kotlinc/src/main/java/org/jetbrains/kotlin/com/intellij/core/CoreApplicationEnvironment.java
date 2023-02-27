@@ -104,9 +104,6 @@ public class CoreApplicationEnvironment {
         this.myLocalFileSystem = this.createLocalFileSystem();
         this.myJarFileSystem = this.createJarFileSystem();
         this.myJrtFileSystem = this.createJrtFileSystem();
-        this.registerApplicationService(CoreLocalFileSystem.class, myLocalFileSystem);
-        this.registerApplicationService(CoreJarFileSystem.class,
-                ((CoreJarFileSystem) myJarFileSystem));
         this.registerApplicationService(FileDocumentManager.class, new FileDocumentManagerImpl());
         registerApplicationExtensionPoint(new ExtensionPointName<>(
                         "org.jetbrains.kotlin.com.intellij.virtualFileManagerListener"),

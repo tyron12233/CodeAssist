@@ -1,5 +1,7 @@
 package com.tyron.code.sdk;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.google.common.collect.ImmutableList;
 import com.tyron.completion.java.CompletionModule;
 
@@ -48,8 +50,8 @@ public class SdkManagerImpl extends SdkManager {
             FileUtil.copy(lambdaStubs, defaultLambdaStubs);
         }
 
-        File defaultSdkJar = new File("rt.jar");
-        if (!defaultSdkDir.exists()) {
+        File defaultSdkJar = new File(defaultSdkDir, "rt.jar");
+        if (!defaultSdkJar.exists()) {
             FileUtil.copy(androidJar, defaultSdkJar);
         }
 
@@ -57,5 +59,10 @@ public class SdkManagerImpl extends SdkManager {
                 project,
                 defaultSdkDir.getPath(),
                 ImmutableList.of(defaultSdkJar, defaultLambdaStubs));
+    }
+
+    @VisibleForTesting
+    public void setDefaultSdk(Sdk sdk) {
+        defaultSdk = sdk;
     }
 }

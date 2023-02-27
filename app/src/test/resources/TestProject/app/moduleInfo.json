@@ -1,0 +1,21 @@
+{
+  "dependencies": [],
+  "contents": [
+    {
+      "url": "$MODULE_DIR$",
+      "sourceFolders": [
+        {
+          "url": "$MODULE_DIR$/src/main/java"
+        }
+      ]
+    }
+  ],
+  "orderEntries": [
+    {
+      "type": "sourceFolder"
+    },
+    {
+      "type": "inheritedJdk"
+    }
+  ]
+}

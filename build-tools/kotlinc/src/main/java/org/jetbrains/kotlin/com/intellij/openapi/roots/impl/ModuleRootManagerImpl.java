@@ -3,9 +3,11 @@ package org.jetbrains.kotlin.com.intellij.openapi.roots.impl;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
 import org.jetbrains.kotlin.com.intellij.openapi.module.ModuleImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ContentEntry;
+import org.jetbrains.kotlin.com.intellij.openapi.roots.ModuleFileIndex;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ModuleRootManager;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderEntry;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderEnumerator;
@@ -32,6 +34,7 @@ public class ModuleRootManagerImpl extends ModuleRootManager {
 
     private final Module module;
     private final JSONObject options;
+    private final ModuleFileIndexImpl moduleFileIndex;
 
     private List<ContentEntry> contentEntries = new ArrayList<>();
     private List<OrderEntry> orderEntries = new ArrayList<>();
@@ -41,6 +44,7 @@ public class ModuleRootManagerImpl extends ModuleRootManager {
         assert options != null;
 
         this.module = module;
+        moduleFileIndex = new ModuleFileIndexImpl(module);
 
         String modulePath = ((ModuleImpl) module).getFilePath();
         VirtualFileSystem local = StandardFileSystems.local();
@@ -88,6 +92,11 @@ public class ModuleRootManagerImpl extends ModuleRootManager {
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public @NotNull ModuleFileIndex getFileIndex() {
+        return moduleFileIndex;
     }
 
     @Override
@@ -190,7 +199,7 @@ public class ModuleRootManagerImpl extends ModuleRootManager {
 
     @Override
     public <R> R processOrder(@NonNull RootPolicy<R> policy, R initialValue) {
-        return null;
+        return orderEntries().process(policy, initialValue);
     }
 
     @NonNull

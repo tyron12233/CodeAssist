@@ -5,17 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tyron.code.ApplicationLoader
 import com.tyron.code.event.SubscriptionReceipt
+import com.tyron.code.indexing.ProjectIndexer
 import com.tyron.code.module.ModuleManagerImpl
-import com.tyron.code.sdk.SdkManagerImpl
-import com.tyron.code.ui.editor.DummyCodeStyleManager
+import com.tyron.code.project.CodeAssistJavaCoreProjectEnvironment
 import com.tyron.code.ui.editor.impl.text.rosemoe.RosemoeEditorFacade
 import com.tyron.code.ui.file.event.OpenFileEvent
 import com.tyron.code.ui.file.event.RefreshRootEvent
 import com.tyron.code.ui.file.tree.TreeUtil
 import com.tyron.code.ui.file.tree.model.TreeFile
-import com.tyron.completion.java.CompletionModule
-import com.tyron.completion.psi.search.PsiShortNamesCache
-import com.tyron.completion.resolve.impl.ResolveScopeManagerImpl
 import com.tyron.ui.treeview.TreeNode
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -24,36 +21,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.jetbrains.kotlin.cli.jvm.compiler.MockExternalAnnotationsManager
-import org.jetbrains.kotlin.cli.jvm.compiler.MockInferredAnnotationsManager
-import org.jetbrains.kotlin.com.intellij.codeInsight.ExternalAnnotationsManager
-import org.jetbrains.kotlin.com.intellij.codeInsight.InferredAnnotationsManager
-import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment
-import org.jetbrains.kotlin.com.intellij.lang.jvm.facade.JvmElementProvider
-import org.jetbrains.kotlin.com.intellij.openapi.Disposable
-import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeRegistry
-import org.jetbrains.kotlin.com.intellij.openapi.module.ModuleManager
-import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject
-import org.jetbrains.kotlin.com.intellij.openapi.roots.FileIndexFacade
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager
+import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
-import org.jetbrains.kotlin.com.intellij.openapi.util.NotNullLazyValue
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.com.intellij.pom.MockPomModel
-import org.jetbrains.kotlin.com.intellij.pom.PomModel
-import org.jetbrains.kotlin.com.intellij.psi.*
-import org.jetbrains.kotlin.com.intellij.psi.codeStyle.CodeStyleManager
-import org.jetbrains.kotlin.com.intellij.psi.impl.*
-import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManager
-import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.FileManagerImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager
-import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
-import org.jetbrains.kotlin.com.intellij.psi.text.BlockSupport
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords
+import org.jetbrains.kotlin.com.intellij.psi.stubs.StubIndex
 import org.jetbrains.kotlin.com.intellij.sdk.SdkManager
-import org.jetbrains.kotlin.com.intellij.util.Processor
-import org.jetbrains.kotlin.org.picocontainer.PicoContainer
+import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex
+import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex
 import java.io.File
 
 
@@ -75,12 +55,14 @@ class MainViewModelV2(
     private val _currentTextEditorState = MutableStateFlow<TextEditorState?>(null)
     val currentTextEditorState = _currentTextEditorState.asStateFlow()
 
-    lateinit var projectEnvironment: JavaCoreProjectEnvironment
+    private val _indexingState = MutableStateFlow<IndexingState?>(null)
+    val indexingState = _indexingState.asStateFlow()
+
+    lateinit var projectEnvironment: CodeAssistJavaCoreProjectEnvironment
 
     private var fileOpenSubscriptionReceipt: SubscriptionReceipt<OpenFileEvent>
 
     init {
-
         fileOpenSubscriptionReceipt =
             ApplicationLoader.getInstance().eventManager.subscribeEvent(OpenFileEvent::class.java) { event, _ ->
                 openFile(event.file.absolutePath)
@@ -92,57 +74,12 @@ class MainViewModelV2(
         viewModelScope.launch(handler) {
             val disposable = Disposer.newDisposable()
             val appEnvironment = ApplicationLoader.getInstance().coreApplicationEnvironment
-            projectEnvironment = object : JavaCoreProjectEnvironment(disposable, appEnvironment) {
-                override fun createProject(
-                    parent: PicoContainer,
-                    parentDisposable: Disposable
-                ): CodeAssistProject {
-                    val fileByPath: VirtualFile =
-                        appEnvironment.localFileSystem.findFileByPath(projectPath)!!
-                    return CodeAssistProject(parent, parentDisposable, fileByPath)
-                }
+            val fileByPath: VirtualFile =
+                appEnvironment.localFileSystem.findFileByPath(projectPath)!!
+            projectEnvironment =
+                CodeAssistJavaCoreProjectEnvironment(disposable, appEnvironment, fileByPath)
 
-                override fun createResolveScopeManager(
-                    psiManager: PsiManager
-                ): ResolveScopeManager {
-                    return ResolveScopeManagerImpl(project)
-                }
-            }
-
-            registerComponentsAndServices()
-            registerExtensionPoints()
-
-            projectEnvironment.addProjectExtension(
-                PsiElementFinder.EP_NAME,
-                object : PsiElementFinder() {
-
-                    private val fileManager =
-                        JavaFileManager.getInstance(projectEnvironment.project)
-
-                    override fun findClass(className: String, scope: GlobalSearchScope): PsiClass? {
-                        return fileManager.findClass(className, scope)
-                    }
-
-                    override fun findClasses(
-                        className: String,
-                        globalSearchScope: GlobalSearchScope
-                    ): Array<PsiClass> {
-                        return fileManager.findClasses(className, globalSearchScope)
-                    }
-
-                    override fun findPackage(qualifiedName: String): PsiPackage? {
-                        return fileManager.findPackage(qualifiedName)
-                    }
-
-                    override fun getClassNames(
-                        psiPackage: PsiPackage,
-                        scope: GlobalSearchScope
-                    ): MutableSet<String> {
-                        return super.getClassNames(psiPackage, scope)
-                    }
-                }
-            )
-
+            // TODO: remove this
             RosemoeEditorFacade.project = projectEnvironment.project
             RosemoeEditorFacade.projectEnvironment = projectEnvironment
 
@@ -150,8 +87,6 @@ class MainViewModelV2(
             val projectDir = localFs.findFileByPath(projectPath)!!
 
             SdkManager.getInstance(projectEnvironment.project).loadDefaultSdk()
-
-
 
             viewModelScope.launch(Dispatchers.IO) {
                 ApplicationLoader.getInstance().eventManager.dispatchEvent(
@@ -163,24 +98,70 @@ class MainViewModelV2(
                 )
             }
 
-            val javaSourceRoot = projectDir.findFileByRelativePath("app/src/main/java")
-            javaSourceRoot?.let(projectEnvironment::addSourcesToClasspath)
-
-            projectEnvironment.addSourcesToClasspath(projectDir)
-            projectEnvironment.addJarToClassPath(CompletionModule.getAndroidJar())
-            projectEnvironment.addJarToClassPath(CompletionModule.getLambdaStubs())
-
             val parsed =
                 (ModuleManagerImpl.getInstance(projectEnvironment.project) as ModuleManagerImpl)
                     .parse()
-            println(parsed)
+
+            val progressIndicator = object : StandardProgressIndicatorBase() {
+                override fun setText2(text: String?) {
+                    viewModelScope.launch {
+                        _indexingState.emit(
+                            _indexingState.value!!.copy(
+                                text = text ?: ""
+                            )
+                        )
+                    }
+                }
+
+                override fun setFraction(fraction: Double) {
+                    viewModelScope.launch {
+                        _indexingState.emit(
+                            _indexingState.value!!.copy(
+                                fraction = fraction
+                            )
+                        )
+                    }
+                }
+            }
+
+
+
+            viewModelScope.launch {
+                _indexingState.emit(IndexingState("Initializing indexing framework", 0.0))
+                ProgressManager.getInstance().executeProcessUnderProgress({
+                    FSRecords.connect()
+
+                    val fileBasedIndex = FileBasedIndex.getInstance() as CoreFileBasedIndex
+                    val stubIndex = StubIndex.getInstance() as CoreStubIndex
+
+                    fileBasedIndex.indexableFilesFilterHolder
+                        .getProjectIndexableFiles(projectEnvironment.project)
+                    stubIndex.initializeStubIndexes()
+                    fileBasedIndex.registeredIndexes.extensionsDataWasLoaded()
+
+                    ProjectIndexer.index(
+                        projectEnvironment.project,
+                        fileBasedIndex
+                    )
+                }, progressIndicator)
+
+                _indexingState.emit(null)
+                _projectState.emit(
+                    ProjectState(
+                        initialized = true,
+                        projectPath = projectPath,
+                        projectName = projectDir.name,
+                        showProgressBar = false
+                    )
+                )
+            }
+
 
             val previouslyOpenedFiles = ApplicationLoader.getDefaultPreferences()
                 .getStringSet(projectDir.path, emptySet())!!
-
             _projectState.emit(
                 ProjectState(
-                    initialized = true,
+                    initialized = false,
                     projectPath = projectPath,
                     projectName = projectDir.name,
                     showProgressBar = false
@@ -195,147 +176,6 @@ class MainViewModelV2(
         super.onCleared()
 
         fileOpenSubscriptionReceipt.unsubscribe()
-    }
-
-    private fun registerComponentsAndServices() {
-        val project = projectEnvironment.project
-
-
-        // services
-        project.registerService(
-            SdkManager::class.java,
-            SdkManagerImpl(project)
-        )
-
-        project.registerService(
-            ModuleManager::class.java,
-            ModuleManagerImpl(project)
-        )
-
-        project.registerService(
-            PsiShortNamesCache::class.java,
-            object : PsiShortNamesCache() {
-                override fun getClassesByName(
-                    name: String,
-                    scope: GlobalSearchScope
-                ): Array<PsiClass> {
-                    return emptyArray()
-                }
-
-                override fun getAllClassNames(): Array<String> {
-                    return emptyArray()
-                }
-
-                override fun getMethodsByName(
-                    name: String,
-                    scope: GlobalSearchScope
-                ): Array<PsiMethod> {
-                    return emptyArray()
-                }
-
-                override fun getMethodsByNameIfNotMoreThan(
-                    name: String,
-                    scope: GlobalSearchScope,
-                    maxCount: Int
-                ): Array<PsiMethod> {
-                    return emptyArray()
-                }
-
-                override fun getFieldsByNameIfNotMoreThan(
-                    name: String,
-                    scope: GlobalSearchScope,
-                    maxCount: Int
-                ): Array<PsiField> {
-                    return emptyArray()
-                }
-
-                override fun processMethodsWithName(
-                    name: String,
-                    scope: GlobalSearchScope,
-                    processor: Processor<in PsiMethod>
-                ): Boolean {
-                    return false
-                }
-
-                override fun getAllMethodNames(): Array<String> {
-                    return emptyArray()
-                }
-
-                override fun getFieldsByName(
-                    name: String,
-                    scope: GlobalSearchScope
-                ): Array<PsiField> {
-                    return emptyArray()
-                }
-
-                override fun getAllFieldNames(): Array<String> {
-                    return emptyArray()
-                }
-
-            }
-        )
-
-        project.registerService(
-            PomModel::class.java,
-            MockPomModel.newInstance(project)
-        )
-
-        project.registerService(
-            ExternalAnnotationsManager::class.java,
-            MockExternalAnnotationsManager()
-        )
-
-        project.registerService(
-            InferredAnnotationsManager::class.java,
-            MockInferredAnnotationsManager()
-        )
-
-        project.registerService(
-            BlockSupport::class.java,
-            BlockSupportImpl()
-        )
-
-        project.registerService(
-            PsiNameHelper::class.java,
-            PsiNameHelperImpl(project)
-        )
-
-        project.registerService(
-            CodeStyleManager::class.java,
-            DummyCodeStyleManager(project)
-        )
-
-        projectEnvironment.registerProjectComponent(
-            FileManager::class.java, FileManagerImpl(
-                PsiManagerImpl.getInstance(project) as PsiManagerImpl,
-                NotNullLazyValue.createValue {
-                    FileIndexFacade.getInstance(project)
-                })
-        )
-    }
-
-    private fun registerExtensionPoints() {
-        projectEnvironment.project.extensionArea.registerExtensionPoint(
-            PsiTreeChangeListener.EP.name,
-            PsiTreeChangeListener::class.qualifiedName!!,
-            ExtensionPoint.Kind.INTERFACE
-        )
-        projectEnvironment.registerProjectExtensionPoint(
-            PsiShortNamesCache.EP_NAME,
-            PsiShortNamesCache::class.java
-        )
-        projectEnvironment.registerProjectExtensionPoint(
-            PsiTreeChangePreprocessor.EP_NAME,
-            PsiTreeChangePreprocessor::class.java
-        )
-        projectEnvironment.registerProjectExtensionPoint(
-            JvmElementProvider.EP_NAME,
-            JvmElementProvider::class.java
-        )
-        projectEnvironment.registerProjectExtensionPoint(
-            PsiElementFinder.EP_NAME,
-            PsiElementFinder::class.java
-        )
     }
 
     fun setRoot(rootPath: String) {
@@ -391,6 +231,12 @@ class MainViewModelV2(
         }
     }
 }
+
+data class IndexingState(
+    val text: String = "",
+
+    val fraction: Double = 0.0
+)
 
 data class ProjectState(
     val initialized: Boolean = false,

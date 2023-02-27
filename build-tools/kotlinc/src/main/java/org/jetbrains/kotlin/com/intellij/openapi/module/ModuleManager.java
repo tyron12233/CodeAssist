@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.com.intellij.util.graph.Graph;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -66,4 +67,7 @@ public abstract class ModuleManager extends SimpleModificationTracker {
 
     public abstract Graph<Module> getModuleGraph(boolean includeTests);
 
+    public Iterable<? extends UnloadedModuleDescription> getUnloadedModuleDescriptions() {
+        return Collections.emptyList();
+    }
 }

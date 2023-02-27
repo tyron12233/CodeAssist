@@ -2,16 +2,16 @@ package com.tyron.completion.java.provider;
 
 import static org.jetbrains.kotlin.com.intellij.patterns.PlatformPatterns.elementType;
 import static org.jetbrains.kotlin.com.intellij.patterns.PsiJavaPatterns.psiElement;
-import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.or;
 import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.string;
 
 import androidx.annotation.NonNull;
 
 import com.tyron.completion.CompletionParameters;
 import com.tyron.completion.CompletionResultSet;
-import com.tyron.completion.java.patterns.PatternUtil;
+import com.tyron.completion.PrefixMatcher;
 import com.tyron.completion.java.util.JavaCompletionUtil;
 import com.tyron.completion.lookup.LookupElement;
+import com.tyron.completion.lookup.LookupElementBuilder;
 import com.tyron.completion.lookup.impl.LookupItemUtil;
 import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.psi.codeInsight.ExpectedTypeInfo;
@@ -19,7 +19,6 @@ import com.tyron.completion.psi.codeInsight.completion.CompletionUtil;
 import com.tyron.completion.psi.codeInsight.completion.JavaConstructorCallElement;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodCallElement;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodReferenceElement;
-import com.tyron.completion.psi.codeInsight.completion.StaticMemberProcessor;
 import com.tyron.completion.psi.completion.JavaClassNameCompletionContributor;
 import com.tyron.completion.psi.completion.JavaClassNameInsertHandler;
 import com.tyron.completion.psi.completion.JavaKeywordCompletion;
@@ -45,7 +44,6 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiCodeBlock;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiEnumConstant;
-import org.jetbrains.kotlin.com.intellij.psi.PsiErrorElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiExpressionList;
 import org.jetbrains.kotlin.com.intellij.psi.PsiIdentifier;
@@ -58,10 +56,8 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiLambdaParameterType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMember;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
-import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethodReferenceExpression;
 import org.jetbrains.kotlin.com.intellij.psi.PsiPackage;
-import org.jetbrains.kotlin.com.intellij.psi.PsiPackageStatement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiParameter;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
 import org.jetbrains.kotlin.com.intellij.psi.PsiReferenceExpression;
@@ -72,7 +68,6 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiVariable;
 import org.jetbrains.kotlin.com.intellij.psi.PsiWildcardType;
 import org.jetbrains.kotlin.com.intellij.psi.filters.ElementFilter;
 import org.jetbrains.kotlin.com.intellij.psi.impl.source.PsiLabelReference;
-import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTypesUtil;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtil;
@@ -80,6 +75,7 @@ import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
 import org.jetbrains.kotlin.com.intellij.util.ProcessingContext;
 import org.jetbrains.kotlin.com.intellij.util.containers.JBIterable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -176,7 +172,7 @@ public class JavaKotlincCompletionProvider {
         if (position instanceof PsiIdentifier) {
             new JavaKeywordCompletion(position, result);
 
-            addIdentifierVariants(position, parameters);
+            addIdentifierVariants(position, result.getPrefixMatcher(), result, parameters);
 
 //            Set<ExpectedTypeInfo> expectedInfos = ContainerUtil.newHashSet(
 //                    JavaSmartCompletionContributor.getExpectedTypes(parameters));
@@ -284,7 +280,7 @@ public class JavaKotlincCompletionProvider {
         JavaCompletionProcessor processor = new JavaCompletionProcessor(element, elementFilter, options, nameCondition);
         PsiType plainQualifier = processor.getQualifierType();
 
-//        List<PsiType> runtimeQualifiers = getQualifierCastTypes(javaReference, parameters);
+        List<PsiType> runtimeQualifiers = getQualifierCastTypes(javaReference);
 
         javaReference.processVariants(processor);
 
@@ -396,11 +392,66 @@ public class JavaKotlincCompletionProvider {
     private static List<PsiType> getQualifierCastTypes(PsiJavaReference javaReference) {
         return Collections.emptyList();
     }
-    private void addIdentifierVariants(PsiElement position, CompletionParameters parameters) {
+    private void addIdentifierVariants(PsiElement position,
+                                       @NotNull PrefixMatcher matcher,
+                                       CompletionResultSet result,
+                                       CompletionParameters parameters) {
+        List<LookupElement> fastIdentifierVariants =
+                getFastIdentifierVariants(parameters, position, matcher, position.getParent());
+        result.addAllElements(fastIdentifierVariants);
+
         if (JavaSmartCompletionContributor.AFTER_NEW.accepts(position)) {
             ExpectedTypeInfo[] types = JavaSmartCompletionContributor.getExpectedTypes(position, true);
             System.out.println(Arrays.toString(types));
         }
+
+        if (IMPORT_REFERENCE.accepts(position)) {
+            PsiReference[] references = position.getReferences();
+            System.out.println("Import references: " + Arrays.toString(references));
+        }
+    }
+
+    private List<LookupElement> getFastIdentifierVariants(CompletionParameters parameters,
+                                                          PsiElement position,
+                                                          PrefixMatcher matcher,
+                                                          PsiElement parent) {
+        List<LookupElement> items = new ArrayList<>();
+
+//        if (TypeArgumentCompletionProvider.IN_TYPE_ARGS.accepts(position)) {
+//            new TypeArgumentCompletionProvider(smart, session).addTypeArgumentVariants(parameters, items::add, matcher);
+//        }
+//
+//        FunctionalExpressionCompletionProvider.addFunctionalVariants(parameters, false, matcher, items::add);
+//
+//        if (MethodReturnTypeProvider.IN_METHOD_RETURN_TYPE.accepts(position)) {
+//            MethodReturnTypeProvider.addProbableReturnTypes(position, element -> {
+//                registerClassFromTypeElement(element, session);
+//                items.add(element);
+//            });
+//        }
+//        suggestSmartCast(parameters, session, true, items::add);
+//
+//        if (parent instanceof PsiReferenceExpression && !(parent instanceof PsiMethodReferenceExpression)) {
+//            List<ExpectedTypeInfo> expected = Arrays.asList(ExpectedTypesProvider.getExpectedTypes((PsiExpression)parent, true));
+//            StreamConversion.addCollectConversion((PsiReferenceExpression)parent, expected,
+//                    lookupElement -> items.add(JavaSmartCompletionContributor.decorate(lookupElement, expected)));
+//            if (!smart) {
+//                items.addAll(StreamConversion.addToStreamConversion((PsiReferenceExpression)parent, parameters));
+//            }
+//            items.addAll(ArgumentSuggester.suggestArgument((PsiReferenceExpression)parent, smart ? expected : Collections.emptyList()));
+//        }
+
+        if (IMPORT_REFERENCE.accepts(position)) {
+            items.add(LookupElementBuilder.create("*"));
+        }
+
+//        if (!smart && findAnnotationWhoseAttributeIsCompleted(position) == null) {
+//            items.addAll(new JavaKeywordCompletion(parameters, session).getResults());
+//        }
+//
+//        addExpressionVariants(parameters, position, items::add);
+
+        return items;
     }
 
     public static boolean isInJavaContext(PsiElement position) {

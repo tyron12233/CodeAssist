@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.com.intellij.openapi.roots;
 
 import androidx.annotation.NonNull;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 
@@ -16,6 +17,14 @@ public abstract class ModuleRootManager implements ModuleRootModel {
     public static ModuleRootManager getInstance(@NonNull Module module) {
         return module.getComponent(ModuleRootManager.class);
     }
+
+    /**
+     * Returns the file index for the current module.
+     *
+     * @return the file index instance.
+     */
+    @NotNull
+    public abstract ModuleFileIndex getFileIndex();
 
     /**
      * Returns the list of modules on which the current module directly depends. The method does not traverse

@@ -4,6 +4,7 @@ package org.jetbrains.kotlin.com.intellij.util.containers;
 
 import androidx.annotation.NonNull;
 
+import org.jetbrains.kotlin.com.intellij.concurrency.ConcurrentCollectionFactory;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.lang.invoke.MethodHandle;
@@ -358,7 +359,7 @@ public final class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectM
     /**
      * Creates a new, empty map with the default initial table size (16).
      */
-    ConcurrentIntObjectHashMap() {
+    public ConcurrentIntObjectHashMap() {
     }
 
     /**

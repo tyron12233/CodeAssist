@@ -3,6 +3,7 @@ package com.tyron.completion.psi.scope;
 import androidx.annotation.Nullable;
 
 import com.tyron.common.logging.IdeLog;
+import com.tyron.completion.psi.codeInsight.completion.ExpectedTypesGetter;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.codeInsight.completion.scope.JavaCompletionHints;
@@ -145,10 +146,10 @@ public class JavaCompletionProcessor implements PsiScopeProcessor, ElementClassH
 
         myAllowStaticWithInstanceQualifier =
                 !options.filterStaticAfterInstance || allowStaticAfterInstanceQualifier(element);
-//        myExpectedGroundTypes = NotNullLazyValue.createValue(
-//                () -> ContainerUtil.map(ExpectedTypesGetter.getExpectedTypes(element, false),
-//                                        FunctionalInterfaceParameterizationUtil::getGroundTargetType));
-        myExpectedGroundTypes = NotNullLazyValue.createValue(Collections::emptyList);
+        myExpectedGroundTypes = NotNullLazyValue.createValue(
+                () -> ContainerUtil.map(ExpectedTypesGetter.getExpectedTypes(element, false),
+                                        FunctionalInterfaceParameterizationUtil::getGroundTargetType));
+//        myExpectedGroundTypes = NotNullLazyValue.createValue(Collections::emptyList);
     }
 
     private static boolean allowStaticAfterInstanceQualifier(@NotNull PsiElement position) {
@@ -254,16 +255,28 @@ public class JavaCompletionProcessor implements PsiScopeProcessor, ElementClassH
                 mySecondRateResults.add(completion);
             }
         }
-        // || !PATTERNS_IN_SWITCH.isAvailable(myElement)
+//         || !PATTERNS_IN_SWITCH.isAvailable(myElement)
         if (!(element instanceof PsiClass)) {
             return true;
         }
 
         final PsiClass psiClass = (PsiClass) element;
         if (psiClass.hasModifierProperty(PsiModifier.SEALED)) {
-//            addSealedHierarchy(state, psiClass);
+            addSealedHierarchy(state, psiClass);
         }
         return true;
+    }
+
+    private void addSealedHierarchy(@NotNull ResolveState state, @NotNull PsiClass psiClass) {
+//        final Collection<PsiClass> sealedInheritors = SealedUtils.findSameFileInheritorsClasses(psiClass);
+//        for (PsiClass inheritor : sealedInheritors) {
+//            final CompletionElement completion = new CompletionElement(inheritor, state.get(PsiSubstitutor.KEY));
+//            final CompletionElement prev = myResults.get(completion);
+//
+//            if (prev == null || completion.isMoreSpecificThan(prev)) {
+//                myResults.put(completion, completion);
+//            }
+//        }
     }
 
     public Iterable<CompletionElement> getResults() {

@@ -72,7 +72,7 @@ public class MainViewModel extends ViewModel {
             protected CodeAssistProject createProject(@NonNull PicoContainer parent,
                                                 @NonNull Disposable parentDisposable) {
                 VirtualFile fileByPath = app.getLocalFileSystem().findFileByPath(projectPath);
-                return new CodeAssistProject(parent, parentDisposable, fileByPath);
+                return new CodeAssistProject(parent, parentDisposable);
             }
 
             @Override

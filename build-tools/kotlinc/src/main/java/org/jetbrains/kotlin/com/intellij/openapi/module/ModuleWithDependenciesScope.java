@@ -4,26 +4,34 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.kotlin.com.intellij.core.CoreFileTypeRegistry;
 import org.jetbrains.kotlin.com.intellij.ide.highlighter.JavaClassFileType;
 import org.jetbrains.kotlin.com.intellij.model.ModelBranch;
 import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType;
+import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeRegistry;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ContentEntry;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ModuleOrderEntry;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ModuleRootManager;
+import org.jetbrains.kotlin.com.intellij.openapi.roots.ModuleRootModel;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ModuleSourceOrderEntry;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderEnumerator;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderRootType;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderRootsEnumerator;
+import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectRootManager;
+import org.jetbrains.kotlin.com.intellij.openapi.roots.impl.ProjectFileIndexImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Comparing;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderBase;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VfsUtilCore;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFilePointerManagerEx;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileWithId;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.ex.VirtualFileManagerEx;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
@@ -34,6 +42,7 @@ import org.jetbrains.kotlin.com.intellij.psi.util.CachedValueProvider;
 import org.jetbrains.kotlin.com.intellij.psi.util.CachedValuesManager;
 import org.jetbrains.kotlin.com.intellij.sdk.Sdk;
 import org.jetbrains.kotlin.com.intellij.sdk.SdkManager;
+import org.jetbrains.kotlin.com.intellij.testFramework.LightVirtualFile;
 import org.jetbrains.kotlin.com.intellij.util.ArrayUtil;
 import org.jetbrains.kotlin.com.intellij.util.BitUtil;
 import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
@@ -56,7 +65,7 @@ public final class ModuleWithDependenciesScope extends GlobalSearchScope {
     public static final int TESTS = 0x08;
     public static final int CONTENT = 0x20;
 
-    //    @(value = {COMPILE_ONLY, LIBRARIES, MODULES, TESTS, CONTENT})
+    //    @MagicConstant(value = {COMPILE_ONLY, LIBRARIES, MODULES, TESTS, CONTENT})
     @interface ScopeConstant {
     }
 
@@ -66,7 +75,7 @@ public final class ModuleWithDependenciesScope extends GlobalSearchScope {
     private final ModuleImpl myModule;
     @ScopeConstant
     private final int myOptions;
-//  private final ProjectFileIndexImpl myProjectFileIndex;
+    private final ProjectFileIndexImpl myProjectFileIndex;
 
     private volatile Set<Module> myModules;
     private final Object2IntMap<VirtualFile> myRoots;
@@ -76,8 +85,9 @@ public final class ModuleWithDependenciesScope extends GlobalSearchScope {
         super(((ModuleImpl) module).getProject());
         myModule = (ModuleImpl) module;
         myOptions = options;
-//    myProjectFileIndex = (ProjectFileIndexImpl)ProjectRootManager.getInstance(module.getProject
-//    ()).getFileIndex();
+        myProjectFileIndex =
+                (ProjectFileIndexImpl) ProjectRootManager.getInstance(((ModuleImpl) module).getProject())
+                        .getFileIndex();
         myRoots = calcRoots(null);
     }
 
@@ -134,9 +144,8 @@ public final class ModuleWithDependenciesScope extends GlobalSearchScope {
         OrderEnumerator en = getOrderEnumeratorForOptions();
         en.forEach(each -> {
             if (each instanceof ModuleOrderEntry) {
-                ContainerUtil.addIfNotNull(modules, ((ModuleOrderEntry)each).getModule());
-            }
-            else if (each instanceof ModuleSourceOrderEntry) {
+                ContainerUtil.addIfNotNull(modules, ((ModuleOrderEntry) each).getModule());
+            } else if (each instanceof ModuleSourceOrderEntry) {
                 ContainerUtil.addIfNotNull(modules, each.getOwnerModule());
             }
             return true;
@@ -189,9 +198,8 @@ public final class ModuleWithDependenciesScope extends GlobalSearchScope {
         if (hasOption(CONTENT)) {
             return roots.containsKey(VfsUtil.getContentRootForFile(myModule.getProject(), file));
         }
-//        VirtualFile root = myProjectFileIndex.getModuleSourceOrLibraryClassesRoot(file);
-//        return root != null && roots.containsKey(root);
-        return false;
+        VirtualFile root = myProjectFileIndex.getModuleSourceOrLibraryClassesRoot(file);
+        return root != null && roots.containsKey(root);
     }
 
     private Object2IntMap<VirtualFile> getRoots(@NonNull VirtualFile file) {
@@ -244,8 +252,7 @@ public final class ModuleWithDependenciesScope extends GlobalSearchScope {
         if (hasOption(CONTENT)) {
             return VfsUtil.getContentRootForFile(getProject(), file);
         }
-        throw new UnsupportedOperationException();
-//    return myProjectFileIndex.getModuleSourceOrLibraryClassesRoot(file);
+        return myProjectFileIndex.getModuleSourceOrLibraryClassesRoot(file);
     }
 
     public Collection<VirtualFile> getRoots() {
@@ -254,47 +261,50 @@ public final class ModuleWithDependenciesScope extends GlobalSearchScope {
         return result;
     }
 
-//  @Override
-//  public @Nullable VirtualFileEnumeration extractFileEnumeration() {
-//    // todo might not cheap
-//      if (hasOption(MODULES) || hasOption(LIBRARIES)) {
-//          return null;
-//      }
-//
-//    CachedValueProvider<ConcurrentMap<Integer, VirtualFileEnumeration>> provider = () -> {
-//      return CachedValueProvider.Result.create(new ConcurrentHashMap<Integer,
-//      VirtualFileEnumeration>(),
-//                                               VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS);
-//    };
-//
-//    CachedValuesManager cachedValuesManager = CachedValuesManager.getManager(myModule
-//    .getProject());
-//    ConcurrentMap<Integer, VirtualFileEnumeration> cacheHolder = cachedValuesManager
-//    .getCachedValue(myUserDataHolderBase,
-//                                                                                                    CACHED_FILE_ID_ENUMERATIONS_KEY,
-//                                                                                                    provider,
-//                                                                                                    false);
-//
-//    return cacheHolder.computeIfAbsent(myOptions, key -> doExtractFilIdEnumeration());
-//  }
-//
-//  @NonNull
-//  private VirtualFileEnumeration doExtractFilIdEnumeration() {
-//    IntSet result = new IntOpenHashSet();
-//    for (VirtualFile file : myRoots.keySet()) {
-//      if (file instanceof VirtualFileWithId) {
-//        int[] children = VirtualFileManager.getInstance().listAllChildIds(((VirtualFileWithId)
-//        file).getId());
-//        IntArrayList integers = new IntArrayList();
-//        for (int child : children) {
-//          integers.add(child);
-//        }
-//        result.addAll(integers);
-//      }
-//    }
-//
-//    return new MyVirtualFileEnumeration(result);
-//  }
+    //  @Override
+    public @Nullable VirtualFileEnumeration extractFileEnumeration() {
+        // todo might not cheap
+        if (hasOption(MODULES) || hasOption(LIBRARIES)) {
+            return null;
+        }
+
+        CachedValueProvider<ConcurrentMap<Integer, VirtualFileEnumeration>> provider =
+                () -> CachedValueProvider.Result.create(new ConcurrentHashMap<Integer,
+                                VirtualFileEnumeration>(),
+                        VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS);
+
+        CachedValuesManager cachedValuesManager =
+                CachedValuesManager.getManager(myModule.getProject());
+        ConcurrentMap<Integer, VirtualFileEnumeration> cacheHolder =
+                cachedValuesManager.getCachedValue(myUserDataHolderBase,
+                        CACHED_FILE_ID_ENUMERATIONS_KEY,
+                        provider,
+                        false);
+
+        return cacheHolder.computeIfAbsent(myOptions, key -> doExtractFilIdEnumeration());
+    }
+
+    //
+    @NonNull
+    private VirtualFileEnumeration doExtractFilIdEnumeration() {
+        IntSet result = new IntOpenHashSet();
+        for (VirtualFile file : myRoots.keySet()) {
+            if (file instanceof VirtualFileWithId) {
+                int[] children = Arrays.stream(file.getChildren())
+                        .filter(it -> it instanceof VirtualFileWithId)
+                        .map(it -> (VirtualFileWithId) it)
+                        .mapToInt(VirtualFileWithId::getId)
+                        .toArray();
+                IntArrayList integers = new IntArrayList();
+                for (int child : children) {
+                    integers.add(child);
+                }
+                result.addAll(integers);
+            }
+        }
+
+        return new MyVirtualFileEnumeration(result);
+    }
 
     @Override
     public boolean equals(Object o) {

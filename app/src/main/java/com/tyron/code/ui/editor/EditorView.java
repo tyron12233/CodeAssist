@@ -9,7 +9,9 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.tyron.code.R;
+import com.tyron.code.debug.PsiView;
 import com.tyron.code.highlighter.JavaFileHighlighter;
 import com.tyron.code.highlighter.SyntaxHighlighter;
 import com.tyron.code.highlighter.attributes.CodeAssistTextAttributes;
@@ -40,6 +42,8 @@ import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType;
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextLanguage;
+import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
+import org.jetbrains.kotlin.com.intellij.openapi.module.ModuleWithDependenciesScope;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.PerformInBackgroundOption;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException;
@@ -50,16 +54,22 @@ import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressI
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
+import org.jetbrains.kotlin.com.intellij.psi.impl.file.impl.JavaFileManager;
+import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
+import org.jetbrains.kotlin.com.intellij.psi.search.VfsUtil;
 import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType;
 import org.jetbrains.kotlin.com.intellij.util.Consumer;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.function.Supplier;
 
 import io.github.rosemoe.sora.event.ContentChangeEvent;
+import io.github.rosemoe.sora.event.DoubleClickEvent;
 import io.github.rosemoe.sora.event.EventReceiver;
 import io.github.rosemoe.sora.event.Unsubscribe;
 import io.github.rosemoe.sora.lang.EmptyLanguage;
@@ -113,7 +123,7 @@ public class EditorView extends FrameLayout {
         editor.setTypefaceText(ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular));
 
         document = FileDocumentManager.getInstance().getDocument(file);
-        ;
+
         EditorMemory.putUserData(editor, EditorMemory.DOCUMENT_KEY, document);
 
         PsiDocumentManagerBase documentManager =
@@ -125,6 +135,12 @@ public class EditorView extends FrameLayout {
         document.addDocumentListener(documentManager);
         document.addDocumentListener(documentManager.new PriorityEventCollector());
         editor.setText(document.getCharsSequence());
+
+
+        editor.subscribeEvent(DoubleClickEvent.class, (event, unsubscribe) -> {
+            PsiView psiView = new PsiView(getContext(), psiFile);
+            new MaterialAlertDialogBuilder(getContext()).setView(psiView).show();
+        });
 
 
         AnalyzeManager analyzeManager = new TestAnalyzeManager(new JavaFileHighlighter());
@@ -209,7 +225,8 @@ public class EditorView extends FrameLayout {
                     if (lookupElement.isValid()) {
                         publisher.addItem(lookupElement);
 
-                        lookupElement.putUserData(LookupElement.PREFIX_MATCHER_KEY, completionResult.getPrefixMatcher());
+                        lookupElement.putUserData(LookupElement.PREFIX_MATCHER_KEY,
+                                completionResult.getPrefixMatcher());
                     }
                 });
     }
