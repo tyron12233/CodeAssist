@@ -10,7 +10,6 @@ import androidx.lifecycle.lifecycleScope
 import com.tyron.code.databinding.NewEditorFragmentBinding
 import com.tyron.code.highlighter.JavaFileHighlighter
 import com.tyron.code.ui.legacyEditor.EditorView
-import com.tyron.code.ui.main.MainViewModelV2
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.lang.EmptyLanguage
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager
@@ -20,12 +19,11 @@ import io.github.rosemoe.sora.text.ContentReference
 
 class EditorFragment : Fragment() {
 
-    private val viewModelV2: MainViewModelV2 by requireParentFragment().viewModels()
     private val viewModel: EditorViewModel by viewModels()
 
     private lateinit var binding: NewEditorFragmentBinding
 
-    private val language = object: EmptyLanguage() {
+    private val language = object : EmptyLanguage() {
         val analyzeManager = EditorView.TestAnalyzeManager(JavaFileHighlighter())
 
         override fun getAnalyzeManager(): AnalyzeManager {

@@ -24,6 +24,9 @@ public class ProjectIndexer {
 
     public static void index(Project project,
                              CoreFileBasedIndex fileBasedIndex) throws IndexUpdateRunner.IndexingInterruptedException {
+        fileBasedIndex.registerProjectFileSets(project);
+        fileBasedIndex.getIndexableFilesFilterHolder().getProjectIndexableFiles(project);
+
         UnindexedFilesFinder finder =
                 new UnindexedFilesFinder(project, fileBasedIndex, indexedFile -> false);
 

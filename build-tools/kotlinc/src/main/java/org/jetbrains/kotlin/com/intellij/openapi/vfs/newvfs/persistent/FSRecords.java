@@ -66,6 +66,16 @@ public class FSRecords {
         return connection;
     }
 
+    public static synchronized void flush() {
+        if (ourConnection != null) {
+            try {
+                ourConnection.doForce();
+            } catch (IOException e) {
+                ourConnection.handleError(e);
+            }
+        }
+    }
+
     public static synchronized void dispose() {
         if (ourConnection != null) {
             PersistentFSConnector.disconnect(ourConnection);

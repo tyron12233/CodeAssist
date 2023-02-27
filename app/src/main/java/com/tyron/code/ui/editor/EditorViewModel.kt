@@ -1,17 +1,9 @@
 package com.tyron.code.ui.editor
 
-import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tyron.code.highlighter.JavaFileHighlighter
 import com.tyron.code.ui.legacyEditor.EditorChangeUtil
-import com.tyron.code.ui.legacyEditor.EditorView.TestAnalyzeManager
-import io.github.rosemoe.sora.lang.EmptyLanguage
-import io.github.rosemoe.sora.lang.analysis.AnalyzeManager
-import io.github.rosemoe.sora.lang.completion.CompletionPublisher
-import io.github.rosemoe.sora.text.CharPosition
-import io.github.rosemoe.sora.text.ContentReference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch

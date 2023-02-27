@@ -124,16 +124,16 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
         Map<String, String> userProperties = Registry.getInstance().getUserProperties();
         userProperties.put("indexing.use.indexable.files.index", "true");
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                ((CoreStubIndex) StubIndex.getInstance()).flush();
-                ((CoreFileBasedIndex) FileBasedIndex.getInstance()).flush();
-                FileIdStorage.saveIds();
-                FSRecords.dispose();
-            } catch (IOException | StorageException e) {
-                throw new RuntimeException(e);
-            }
-        }));
+//        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+//            try {
+//                ((CoreStubIndex) StubIndex.getInstance()).flush();
+//                ((CoreFileBasedIndex) FileBasedIndex.getInstance()).flush();
+//                FileIdStorage.saveIds();
+//                FSRecords.dispose();
+//            } catch (IOException | StorageException e) {
+//                throw new RuntimeException(e);
+//            }
+//        }));
 
         AsyncEventSupport.startListening();
         FSRecords.connect();
@@ -168,12 +168,6 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
 
     public void registerApplicationExtensionPoints() {
         ExtensionsAreaImpl extensionsArea = getApplication().getExtensionArea();
-
-        extensionsArea.registerExtensionPoint(
-                PsiTreeChangeListener.EP.getName(),
-                PsiTreeChangeListener.class.getName(),
-                ExtensionPoint.Kind.INTERFACE
-        );
 
         extensionsArea.registerExtensionPoint(FileBasedIndexExtension.EXTENSION_POINT_NAME.getName(),
                 FileBasedIndexExtension.class.getName(),

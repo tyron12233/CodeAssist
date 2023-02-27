@@ -11,6 +11,16 @@ import androidx.fragment.app.FragmentContainerView;
 import com.tyron.code.ui.project.ProjectManagerFragment;
 import com.tyron.code.util.UiUtilsKt;
 
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
+import org.jetbrains.kotlin.com.intellij.psi.stubs.StubIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileIdStorage;
+import org.jetbrains.kotlin.com.intellij.util.indexing.StorageException;
+
+import java.io.IOException;
+
 import kotlin.Unit;
 import kotlin.jvm.functions.Function4;
 
@@ -35,6 +45,20 @@ public class MainActivity extends AppCompatActivity {
                             ProjectManagerFragment.TAG)
                     .commit();
         }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        try {
+            ((CoreStubIndex) StubIndex.getInstance()).flush();
+            ((CoreFileBasedIndex) FileBasedIndex.getInstance()).flush();
+            FileIdStorage.saveIds();
+            FSRecords.flush();
+        } catch (IOException | StorageException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     @Override

@@ -187,7 +187,7 @@ public final class IndexUpdateRunner {
                 fileSets,
                 originalIndicator,
                 originalSuspender);
-        if (ApplicationManager.getApplication().isWriteAccessAllowed()) {
+        if (ApplicationManager.getApplication().isWriteAccessAllowed() && false) {
             // If the current thread has acquired the write lock, we can't grant it to worker
             // threads, so we must do the work in the current thread.
             while (!indexingJob.areAllFilesProcessed()) {

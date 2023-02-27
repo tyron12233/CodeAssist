@@ -60,6 +60,13 @@ import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
 import org.jetbrains.kotlin.com.intellij.openapi.util.io.FileUtil;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
+import org.jetbrains.kotlin.com.intellij.psi.stubs.StubIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileIdStorage;
+import org.jetbrains.kotlin.com.intellij.util.indexing.StorageException;
 import org.jetbrains.kotlin.utils.PrintingLogger;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
@@ -79,6 +86,11 @@ public class ApplicationLoader extends Application {
     private JavaCoreApplicationEnvironment coreApplicationEnvironment;
 
     private final Disposable disposable = Disposer.newDisposable("Application Environment");
+
+    @Override
+    public void onTerminate() {
+        super.onTerminate();
+    }
 
     @Override
     public void onCreate() {
@@ -214,6 +226,8 @@ public class ApplicationLoader extends Application {
         });
         startupManager.startup();
     }
+
+
 
     public static SharedPreferences getDefaultPreferences() {
         return PreferenceManager.getDefaultSharedPreferences(applicationContext);

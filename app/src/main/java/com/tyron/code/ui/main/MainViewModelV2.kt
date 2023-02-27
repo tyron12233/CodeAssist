@@ -105,7 +105,9 @@ class MainViewModelV2(
                     .parse()
 
             val progressIndicator = object : StandardProgressIndicatorBase() {
+
                 override fun setText2(text: String?) {
+                    println("Indexing: $text")
                     viewModelScope.launch {
                         _indexingState.emit(
                             _indexingState.value!!.copy(
@@ -128,14 +130,12 @@ class MainViewModelV2(
 
 
 
-            viewModelScope.launch {
+            viewModelScope.launch(Dispatchers.IO) {
                 _indexingState.emit(IndexingState("Initializing indexing framework", 0.0))
+
                 ProgressManager.getInstance().executeProcessUnderProgress({
                     val fileBasedIndex = FileBasedIndex.getInstance() as CoreFileBasedIndex
                     fileBasedIndex.loadIndexes()
-                    fileBasedIndex.indexableFilesFilterHolder
-                        .getProjectIndexableFiles(projectEnvironment.project)
-
 
                     val stubIndex = StubIndex.getInstance() as CoreStubIndex
 
@@ -150,7 +150,6 @@ class MainViewModelV2(
                     )
                 }, progressIndicator)
 
-                _indexingState.emit(null)
                 _projectState.emit(
                     ProjectState(
                         initialized = true,
@@ -249,7 +248,11 @@ data class ProjectState(
 
     val projectName: String? = null,
 
-    val showProgressBar: Boolean = true
+    val showProgressBar: Boolean = true,
+
+    val progressBarIndeterminate: Boolean = true,
+
+    val progressBarFraction: Double = 0.0,
 )
 
 data class TextEditorListState(

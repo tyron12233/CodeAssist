@@ -93,7 +93,6 @@ class MainFragmentV2 : Fragment() {
                 val fragment = editorMap.computeIfAbsent(textEditorState.file) {
                     EditorFragment().apply {
                         arguments = bundleOf(
-                            Pair("state", textEditorState),
                             Pair("filePath", textEditorState.file.path)
                         )
                     }
@@ -159,7 +158,9 @@ class MainFragmentV2 : Fragment() {
                     return@collect
                 }
 
-                indexingUiFragment.show(childFragmentManager, "")
+                if (indexingUiFragment.isDetached) {
+                    indexingUiFragment.show(childFragmentManager, "")
+                }
             }
         }
     }
