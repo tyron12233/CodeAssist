@@ -148,6 +148,7 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
         fileBasedIndexExtensionExtensionPoint.registerExtension(new StubUpdatingIndex(),
                 getParentDisposable());
 
+        addExtension(AsyncEventSupport.EP_NAME, new ChangedFilesCollector());
         addExtension(FileBasedIndexExtension.EXTENSION_POINT_NAME, new FileTypeIndexImpl());
         addExtension(StubIndexExtension.EP_NAME, JavaFullClassNameIndex.getInstance());
         addExtension(StubIndexExtension.EP_NAME, JavaShortClassNameIndex.getInstance());
