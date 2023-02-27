@@ -118,12 +118,6 @@ public class CodeAssistJavaCoreProjectEnvironment extends JavaCoreProjectEnviron
 
     @SuppressWarnings("deprecation")
     protected void preregisterExtensionPoints() {
-        getEnvironment().getApplication().getExtensionArea().registerExtensionPoint(
-                PsiTreeChangeListener.EP.getName(),
-                PsiTreeChangeListener.class.getName(),
-                ExtensionPoint.Kind.INTERFACE
-        );
-
         registerProjectExtensionPoint(PsiShortNamesCache.EP_NAME, PsiShortNamesCache.class);
         registerProjectExtensionPoint(PsiTreeChangePreprocessor.EP_NAME, PsiTreeChangePreprocessor.class);
         registerProjectExtensionPoint(JvmElementProvider.EP_NAME, JvmElementProvider.class);

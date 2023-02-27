@@ -43,6 +43,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.AsyncFileListener;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
+import org.jetbrains.kotlin.com.intellij.psi.PsiTreeChangeListener;
 import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
 import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
 import org.jetbrains.kotlin.com.intellij.psi.impl.compiled.ClsCustomNavigationPolicy;
@@ -166,6 +167,12 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
 
     public void registerApplicationExtensionPoints() {
         ExtensionsAreaImpl extensionsArea = getApplication().getExtensionArea();
+
+        extensionsArea.registerExtensionPoint(
+                PsiTreeChangeListener.EP.getName(),
+                PsiTreeChangeListener.class.getName(),
+                ExtensionPoint.Kind.INTERFACE
+        );
 
         extensionsArea.registerExtensionPoint(FileBasedIndexExtension.EXTENSION_POINT_NAME.getName(),
                 FileBasedIndexExtension.class.getName(),
