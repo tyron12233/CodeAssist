@@ -92,7 +92,10 @@ class MainFragmentV2 : Fragment() {
 
                 val fragment = editorMap.computeIfAbsent(textEditorState.file) {
                     EditorFragment().apply {
-                        arguments = bundleOf(Pair("state", textEditorState))
+                        arguments = bundleOf(
+                            Pair("state", textEditorState),
+                            Pair("filePath", textEditorState.file.path)
+                        )
                     }
                 }
 
@@ -150,10 +153,13 @@ class MainFragmentV2 : Fragment() {
         lifecycleScope.launchWhenResumed {
             viewModelV2.indexingState.collect { indexingState ->
                 if (indexingState == null) {
-                    indexingUiFragment.dismiss()
-                } else {
-                    indexingUiFragment.show(childFragmentManager, "")
+                    if (indexingUiFragment.isVisible) {
+                        indexingUiFragment.dismiss()
+                    }
+                    return@collect
                 }
+
+                indexingUiFragment.show(childFragmentManager, "")
             }
         }
     }
