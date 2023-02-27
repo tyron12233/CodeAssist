@@ -10,7 +10,8 @@ import java.security.SecureRandom
 import kotlin.io.path.inputStream
 
 object DigestUtil {
-  private val sunSecurityProvider: Provider = java.security.Security.getProvider("SUN")
+
+  private val sunSecurityProvider: Provider = java.security.Security.getProvider("AndroidOpenSSL")
 
   @JvmStatic
   val random: SecureRandom by lazy { SecureRandom() }
