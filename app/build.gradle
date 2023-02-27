@@ -130,7 +130,6 @@ dependencies {
     implementation 'org.apache.commons:commons-vfs2:2.9.0'
 
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
-    implementation project(path: ':dependency-resolver')
 
     implementation project(path: ':treeview')
 
