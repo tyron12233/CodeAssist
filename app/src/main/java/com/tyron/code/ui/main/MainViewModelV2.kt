@@ -132,11 +132,16 @@ class MainViewModelV2(
                 _indexingState.emit(IndexingState("Initializing indexing framework", 0.0))
                 ProgressManager.getInstance().executeProcessUnderProgress({
                     val fileBasedIndex = FileBasedIndex.getInstance() as CoreFileBasedIndex
-                    val stubIndex = StubIndex.getInstance() as CoreStubIndex
-
+                    fileBasedIndex.loadIndexes()
                     fileBasedIndex.indexableFilesFilterHolder
                         .getProjectIndexableFiles(projectEnvironment.project)
+
+
+                    val stubIndex = StubIndex.getInstance() as CoreStubIndex
+
                     stubIndex.initializeStubIndexes()
+
+                    fileBasedIndex.waitUntilIndicesAreInitialized()
                     fileBasedIndex.registeredIndexes.extensionsDataWasLoaded()
 
                     ProjectIndexer.index(

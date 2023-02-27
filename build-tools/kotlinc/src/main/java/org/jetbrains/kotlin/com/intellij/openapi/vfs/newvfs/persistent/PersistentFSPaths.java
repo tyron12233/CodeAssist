@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 final class PersistentFSPaths {
   @NonNls private static final String DEPENDENT_PERSISTENT_LIST_START_PREFIX = "vfs_enum_";
@@ -27,7 +28,7 @@ final class PersistentFSPaths {
   }
 
   @NotNull Path getVfsEnumFile(@NotNull String enumName) {
-    return Path.of(myCachesDir).resolve(DEPENDENT_PERSISTENT_LIST_START_PREFIX + enumName + VFS_FILES_EXTENSION);
+    return Paths.get(myCachesDir).resolve(DEPENDENT_PERSISTENT_LIST_START_PREFIX + enumName + VFS_FILES_EXTENSION);
   }
 
   @NotNull File getRootsBaseFile() {
@@ -35,6 +36,6 @@ final class PersistentFSPaths {
   }
 
   @NotNull Path getRootsStorage(@NotNull String storageName) {
-    return Path.of(myCachesDir).resolve(ROOTS_START_PREFIX + storageName + VFS_FILES_EXTENSION);
+    return Paths.get(myCachesDir).resolve(ROOTS_START_PREFIX + storageName + VFS_FILES_EXTENSION);
   }
 }
