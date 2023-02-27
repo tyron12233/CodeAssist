@@ -5,25 +5,18 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import com.tyron.code.R
 import com.tyron.code.databinding.NewEditorFragmentBinding
-import com.tyron.code.event.EventReceiver
-import com.tyron.code.event.Unsubscribe
 import com.tyron.code.highlighter.JavaFileHighlighter
 import com.tyron.code.ui.legacyEditor.EditorView
 import com.tyron.code.ui.main.MainViewModelV2
-import com.tyron.code.ui.main.TextEditorState
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.lang.EmptyLanguage
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher
 import io.github.rosemoe.sora.text.CharPosition
 import io.github.rosemoe.sora.text.ContentReference
-import io.github.rosemoe.sora.widget.subscribeEvent
-import kotlinx.coroutines.flow.collect
 
 class EditorFragment : Fragment() {
 

@@ -38,6 +38,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderEnumerationHandler;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectFileIndex;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectRootManager;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.impl.ProjectFileIndexImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.util.registry.Registry;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.AsyncFileListener;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
@@ -75,14 +76,17 @@ import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndexExtension;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndexInfrastructureExtension;
+import org.jetbrains.kotlin.com.intellij.util.indexing.FileIdStorage;
 import org.jetbrains.kotlin.com.intellij.util.indexing.IndexableSetContributor;
 import org.jetbrains.kotlin.com.intellij.util.indexing.IndexableSetContributorModificationTracker;
+import org.jetbrains.kotlin.com.intellij.util.indexing.StorageException;
 import org.jetbrains.kotlin.com.intellij.util.indexing.TestIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.events.ChangedFilesCollector;
 import org.jetbrains.kotlin.com.intellij.util.indexing.storage.MapReduceIndexBase;
 import org.jetbrains.kotlin.com.intellij.util.indexing.storage.VfsAwareIndexStorageLayout;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -114,6 +118,22 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
     }
 
     protected void postInit() {
+        System.setProperty("indexing.filename.over.vfs", "false");
+        System.setProperty("intellij.idea.indices.debug", "true");
+        Map<String, String> userProperties = Registry.getInstance().getUserProperties();
+        userProperties.put("indexing.use.indexable.files.index", "true");
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                ((CoreStubIndex) StubIndex.getInstance()).flush();
+                ((CoreFileBasedIndex) FileBasedIndex.getInstance()).flush();
+                FileIdStorage.saveIds();
+                FSRecords.dispose();
+            } catch (IOException | StorageException e) {
+                throw new RuntimeException(e);
+            }
+        }));
+
         AsyncEventSupport.startListening();
         FSRecords.connect();
     }

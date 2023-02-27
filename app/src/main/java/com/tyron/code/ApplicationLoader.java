@@ -95,7 +95,6 @@ public class ApplicationLoader extends Application {
         }
         System.setProperty("idea.home.path", intellijHome.getAbsolutePath());
 
-
         coreApplicationEnvironment = new CodeAssistApplicationEnvironment(disposable, false);
 
 
