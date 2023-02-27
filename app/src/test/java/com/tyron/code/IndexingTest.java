@@ -4,17 +4,6 @@ import static com.tyron.code.indexing.ProjectIndexer.index;
 
 import com.tyron.code.project.CodeAssistJavaCoreProjectEnvironment;
 import com.tyron.code.sdk.SdkManagerImpl;
-import com.tyron.completion.CompletionInitializationContext;
-import com.tyron.completion.CompletionParameters;
-import com.tyron.completion.CompletionProcess;
-import com.tyron.completion.CompletionResult;
-import com.tyron.completion.CompletionService;
-import com.tyron.completion.CompletionType;
-import com.tyron.completion.EditorMemory;
-import com.tyron.completion.impl.CompletionInitializationUtil;
-import com.tyron.completion.impl.OffsetsInFile;
-import com.tyron.completion.model.CompletionItemWithMatchLevel;
-import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.progress.ProcessCanceledException;
 
 import org.jetbrains.annotations.NonNls;
@@ -37,7 +26,6 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.JavaStubElementTypes;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
@@ -45,7 +33,6 @@ import org.jetbrains.kotlin.com.intellij.psi.stubs.StubIndex;
 import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType;
 import org.jetbrains.kotlin.com.intellij.sdk.Sdk;
 import org.jetbrains.kotlin.com.intellij.sdk.SdkManager;
-import org.jetbrains.kotlin.com.intellij.util.Consumer;
 import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
@@ -63,12 +50,9 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
-
-import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 
 
-public class MainActivityTest {
+public class IndexingTest {
 
     private static void preInit() throws Exception {
 //        Logger.setFactory(category -> new PrintingLogger(System.out));
@@ -158,8 +142,29 @@ public class MainActivityTest {
         sdkManager.setDefaultSdk(sdk);
     }
 
+    private Project project;
+
+    private void initEnvironment() {
+        Disposable env = Disposer.newDisposable("env");
+        CodeAssistApplicationEnvironment environment =
+                new CodeAssistApplicationEnvironment(env, false);
+
+        ChangedFilesCollector changedFilesCollector = new ChangedFilesCollector();
+        environment.addExtension(AsyncEventSupport.EP_NAME, changedFilesCollector);
+        AsyncEventSupport.startListening();
+
+        File testProject = new File("src/test/resources/TestProject");
+        VirtualFile projectVirtualFile =
+                environment.getLocalFileSystem().findFileByIoFile(testProject);
+        assert projectVirtualFile != null;
+
+        CodeAssistJavaCoreProjectEnvironment projectEnvironment =
+                new CodeAssistJavaCoreProjectEnvironment(env, environment, projectVirtualFile);
+        project = projectEnvironment.getProject();
+    }
+
     @Test
-    public void test() throws Exception {
+    public void testIndexingFrameworkGeneratesIndicesProperly() throws Exception {
         Instant start = Instant.now();
         try {
             doTest();
@@ -171,40 +176,21 @@ public class MainActivityTest {
     public void doTest() throws Exception {
         preInit();
 
-        Disposable env = Disposer.newDisposable("env");
-        CodeAssistApplicationEnvironment environment =
-                new CodeAssistApplicationEnvironment(env, false);
+        initEnvironment();
 
-        ChangedFilesCollector changedFilesCollector = new ChangedFilesCollector();
-        environment.addExtension(AsyncEventSupport.EP_NAME, changedFilesCollector);
-        AsyncEventSupport.startListening();
-
-        File testProject = new File("C:\\Users\\tyron scott\\AndroidStudioProjects\\CodeAssist" +
-                                    "-rollback\\app\\src\\test\\resources\\TestProject");
-        VirtualFile projectVirtualFile =
-                environment.getLocalFileSystem().findFileByIoFile(testProject);
-        assert projectVirtualFile != null;
-
-        CodeAssistJavaCoreProjectEnvironment projectEnvironment =
-                new CodeAssistJavaCoreProjectEnvironment(env, environment, projectVirtualFile);
-
-        CodeAssistProject project = projectEnvironment.getProject();
         initSdk(project);
         FSRecords.connect();
 
         CoreFileBasedIndex fileBasedIndex = (CoreFileBasedIndex) FileBasedIndex.getInstance();
         fileBasedIndex.registerProjectFileSets(project);
-
         fileBasedIndex.loadIndexes();
         fileBasedIndex.waitUntilIndicesAreInitialized();
+        fileBasedIndex.getRegisteredIndexes().extensionsDataWasLoaded();
 
 
         System.out.println("Initializing stub index");
         CoreStubIndex stubIndex = ((CoreStubIndex) StubIndex.getInstance());
-        fileBasedIndex.getIndexableFilesFilterHolder().getProjectIndexableFiles(project);
         stubIndex.initializeStubIndexes();
-        fileBasedIndex.getRegisteredIndexes().extensionsDataWasLoaded();
-
 
 
         ProgressIndicator indicator = new StandardProgressIndicatorBase() {
@@ -232,7 +218,11 @@ public class MainActivityTest {
         assert !activity.isEmpty();
 
         PsiClass activityClass = activity.iterator().next();
+
+
         PsiClass superClass = activityClass.getSuperClass();
+        assert superClass != null;
+
         System.out.println(superClass);
     }
 

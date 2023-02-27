@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
 import org.jetbrains.kotlin.com.intellij.openapi.module.ModuleManager;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject;
+import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileWithId;
 import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex;
@@ -21,7 +22,7 @@ import kotlin.Unit;
 
 public class ProjectIndexer {
 
-    public static void index(CodeAssistProject project,
+    public static void index(Project project,
                              CoreFileBasedIndex fileBasedIndex) throws IndexUpdateRunner.IndexingInterruptedException {
         UnindexedFilesFinder finder =
                 new UnindexedFilesFinder(project, fileBasedIndex, indexedFile -> false);
