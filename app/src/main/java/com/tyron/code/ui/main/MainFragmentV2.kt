@@ -58,7 +58,7 @@ class MainFragmentV2 : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         toolbarManager.bind(binding)
 
-        view.applySystemWindowInsets(false) { left, top, right, bottom ->
+        view.applySystemWindowInsets(false) { _, top, _, bottom ->
             binding.drawerMainContent.updatePadding(top = top, bottom = bottom)
         }
 

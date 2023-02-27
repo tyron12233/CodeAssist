@@ -11,6 +11,9 @@
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel target="1.8">
+      <module name="CodeAssist-rollback.eclipse-formatter" target="11" />
+      <module name="CodeAssist-rollback.eclipse-formatter.main" target="11" />
+      <module name="CodeAssist-rollback.eclipse-formatter.test" target="11" />
       <module name="CodeAssist.build-tools.android-builder" target="11" />
       <module name="CodeAssist.build-tools.android-builder.main" target="11" />
       <module name="CodeAssist.build-tools.android-builder.test" target="11" />

@@ -165,7 +165,6 @@ dependencies {
 
     implementation 'androidx.preference:preference:1.2.0'
     implementation 'com.github.TutorialsAndroid:crashx:v6.0.19'
-    implementation project(path: ':eclipse-formatter')
     implementation project(path: ':build-tools:builder-core')
 
 

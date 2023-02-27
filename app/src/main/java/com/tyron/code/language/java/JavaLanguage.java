@@ -57,14 +57,7 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
         @Nullable
         @Override
         public TextRange formatAsync(@NonNull Content text, @NonNull TextRange cursorRange) {
-            String format = com.tyron.eclipse.formatter.Formatter.format(text.toString(),
-                    cursorRange.getStartIndex(),
-                    cursorRange.getEndIndex() - cursorRange.getStartIndex());
-            if (!text.toString().equals(format)) {
-                text.delete(0, text.getLineCount() - 1);
-                text.insert(0, 0, format);
-            }
-            return cursorRange;
+            throw new UnsupportedOperationException("Formatting is not yet supported.");
         }
 
         @Nullable
@@ -179,8 +172,7 @@ public class JavaLanguage  implements Language, EditorFormatter, CodeAssistLangu
     @NonNull
     @Override
     public CharSequence format(@NonNull CharSequence contents, int start, int end) {
-        return com.tyron.eclipse.formatter.Formatter.format(contents.toString(), start,
-                end - start);
+        throw new UnsupportedOperationException();
     }
 
     @Override
