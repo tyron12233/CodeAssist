@@ -131,8 +131,6 @@ class MainViewModelV2(
             viewModelScope.launch {
                 _indexingState.emit(IndexingState("Initializing indexing framework", 0.0))
                 ProgressManager.getInstance().executeProcessUnderProgress({
-                    FSRecords.connect()
-
                     val fileBasedIndex = FileBasedIndex.getInstance() as CoreFileBasedIndex
                     val stubIndex = StubIndex.getInstance() as CoreStubIndex
 

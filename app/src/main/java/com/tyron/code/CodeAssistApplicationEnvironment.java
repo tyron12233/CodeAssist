@@ -40,6 +40,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectRootManager;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.impl.ProjectFileIndexImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.AsyncFileListener;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem;
 import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider;
 import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl;
@@ -77,6 +78,7 @@ import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndexInfrastruct
 import org.jetbrains.kotlin.com.intellij.util.indexing.IndexableSetContributor;
 import org.jetbrains.kotlin.com.intellij.util.indexing.IndexableSetContributorModificationTracker;
 import org.jetbrains.kotlin.com.intellij.util.indexing.TestIndex;
+import org.jetbrains.kotlin.com.intellij.util.indexing.events.ChangedFilesCollector;
 import org.jetbrains.kotlin.com.intellij.util.indexing.storage.MapReduceIndexBase;
 import org.jetbrains.kotlin.com.intellij.util.indexing.storage.VfsAwareIndexStorageLayout;
 
@@ -107,6 +109,13 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
         registerFileTypes();
         registerLanguageSpecificExtensions();
         registerExtensionPointInstances();
+
+        postInit();
+    }
+
+    protected void postInit() {
+        AsyncEventSupport.startListening();
+        FSRecords.connect();
     }
 
     public void registerExtensionPointInstances() {
@@ -130,6 +139,9 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
         addExtension(StubIndexExtension.EP_NAME, JavaStaticMemberTypeIndex.getInstance());
         addExtension(StubIndexExtension.EP_NAME, JavaAnnotationIndex.getInstance());
         addExtension(StubIndexExtension.EP_NAME, JavaFieldNameIndex.getInstance());
+
+        ChangedFilesCollector changedFilesCollector = new ChangedFilesCollector();
+        addExtension(AsyncEventSupport.EP_NAME, changedFilesCollector);
     }
 
     public void registerApplicationExtensionPoints() {
