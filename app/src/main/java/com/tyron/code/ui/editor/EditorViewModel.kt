@@ -38,14 +38,14 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
     private lateinit var document: Document
 
     init {
-
+        loadFile()
     }
 
-    fun loadFile() {
+    private fun loadFile() {
         viewModelScope.launch {
             val file = localFileManager.findFileByPath(filePath)
             if (file == null) {
-               errorLoading("{$filePath} not found.")
+                errorLoading("{$filePath} not found.")
                 return@launch
             }
 
@@ -59,7 +59,13 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
             document.addDocumentListener(psiDocumentManager as PsiDocumentManagerBase)
             document.addDocumentListener(psiDocumentManager.PriorityEventCollector())
 
-
+            _editorState.emit(
+                InternalEditorState(
+                    loadingContent = false,
+                    loadingErrorMessage = null,
+                    editorContent = document.text
+                )
+            )
         }
     }
 
