@@ -45,6 +45,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
@@ -106,8 +107,7 @@ public class IndexingTest {
         });
         UtilKt.setIdeaIoUseFallback();
         IdeaStandaloneExecutionSetup.INSTANCE.doSetup();
-        System.setProperty("idea.home.path",
-                "C:/Users/tyron scott/AndroidStudioProjects" + "/CodeAssist-rollback/TestHomePath");
+        System.setProperty("idea.home.path", Paths.get("").toAbsolutePath().getParent().resolve("TestHomePath").toString());
         System.setProperty("indexing.filename.over.vfs", "false");
         System.setProperty("intellij.idea.indices.debug", "true");
         Map<String, String> userProperties = Registry.getInstance().getUserProperties();
