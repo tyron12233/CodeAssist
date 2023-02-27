@@ -16,6 +16,7 @@ import com.google.android.material.tabs.TabLayout.OnTabSelectedListener
 import com.google.android.material.transition.MaterialFadeThrough
 import com.google.android.material.transition.MaterialSharedAxis
 import com.tyron.code.databinding.MainFragmentBinding
+import com.tyron.code.ui.editor.EditorFragment
 import com.tyron.code.ui.legacyEditor.EditorTabUtil
 import com.tyron.code.ui.file.FileViewModel
 import com.tyron.code.util.applySystemWindowInsets
@@ -59,7 +60,7 @@ class MainFragmentV2 : Fragment() {
 
         binding.editorContainer.tablayout.addOnTabSelectedListener(object : OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
-               tab?.position?.let { viewModelV2.onTabSelected(it) }
+                tab?.position?.let { viewModelV2.onTabSelected(it) }
             }
 
             override fun onTabUnselected(tab: TabLayout.Tab?) {
@@ -80,17 +81,32 @@ class MainFragmentV2 : Fragment() {
             viewModelV2.currentTextEditorState.collect { textEditorState ->
                 if (textEditorState == null) {
                     binding.editorContainer.viewpager.removeAllViews()
+
+                    val editors = childFragmentManager.fragments.filter { it.tag != null }
+                        .filter { it.tag!!.startsWith("editor") }
+                    val transaction = childFragmentManager.beginTransaction()
+                    editors.forEach(transaction::hide)
+                    transaction.commit()
                     return@collect
                 }
 
                 val fragment = editorMap.computeIfAbsent(textEditorState.file) {
-                    Fragment()
+                    EditorFragment().apply {
+                        arguments = bundleOf(Pair("state", textEditorState))
+                    }
                 }
 
-                childFragmentManager.beginTransaction().replace(
-                    binding.editorContainer.viewpager.id,
-                    fragment
-                ).commit()
+                if (fragment.isVisible) {
+                    // no need to do expensive work
+                    return@collect
+                }
+
+                val editors = childFragmentManager.fragments.filter { it.tag != null }
+                    .filter { it.tag!!.startsWith("editor") }
+                val transaction = childFragmentManager.beginTransaction()
+                editors.forEach(transaction::hide)
+                transaction.replace(binding.editorContainer.viewpager.id, fragment)
+                transaction.commit()
             }
         }
 
@@ -100,7 +116,10 @@ class MainFragmentV2 : Fragment() {
 
                 editorListState = it
 
-                TransitionManager.beginDelayedTransition(binding.editorContainer.viewpager, MaterialFadeThrough())
+                TransitionManager.beginDelayedTransition(
+                    binding.editorContainer.viewpager,
+                    MaterialFadeThrough()
+                )
                 if (it.editors.isEmpty()) {
                     binding.editorContainer.viewpager.removeAllViews()
                     binding.editorContainer.tablayout.removeAllTabs()
@@ -123,7 +142,8 @@ class MainFragmentV2 : Fragment() {
                 }
 
                 binding.progressbar.isIndeterminate = true
-                binding.progressbar.visibility = if (state.showProgressBar) View.VISIBLE else View.GONE
+                binding.progressbar.visibility =
+                    if (state.showProgressBar) View.VISIBLE else View.GONE
             }
         }
 

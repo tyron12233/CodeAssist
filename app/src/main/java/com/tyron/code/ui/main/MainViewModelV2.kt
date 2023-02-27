@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType
 import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeRegistry
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager
 import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase
+import org.jetbrains.kotlin.com.intellij.openapi.project.ProjectCoreUtil
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords
@@ -78,6 +79,7 @@ class MainViewModelV2(
                 appEnvironment.localFileSystem.findFileByPath(projectPath)!!
             projectEnvironment =
                 CodeAssistJavaCoreProjectEnvironment(disposable, appEnvironment, fileByPath)
+            ProjectCoreUtil.theProject = projectEnvironment.project
 
             // TODO: remove this
             RosemoeEditorFacade.project = projectEnvironment.project
@@ -202,7 +204,6 @@ class MainViewModelV2(
 
             val newEditorState = TextEditorState(
                 file = vFile,
-                content = content,
                 fileType = fileType,
                 loading = false
             )
@@ -253,9 +254,8 @@ data class TextEditorListState(
 )
 
 data class TextEditorState(
-    val file: VirtualFile, val content: Content,
-
+    val file: VirtualFile,
     val loading: Boolean = true,
 
     val fileType: FileType? = null
-)
+) : java.io.Serializable

@@ -1,8 +1,19 @@
 package com.tyron.code.ui.legacyEditor;
 
+import com.tyron.completion.CompletionInitializationContext;
+import com.tyron.completion.CompletionParameters;
+import com.tyron.completion.CompletionProcess;
+import com.tyron.completion.CompletionService;
+import com.tyron.completion.CompletionType;
 import com.tyron.completion.EditorMemory;
+import com.tyron.completion.impl.CompletionInitializationUtil;
+import com.tyron.completion.impl.OffsetsInFile;
+import com.tyron.completion.lookup.LookupElement;
+import com.tyron.completion.model.CompletionItemWithMatchLevel;
+import com.tyron.completion.model.CompletionList;
 import com.tyron.editor.util.EditorUtil;
 
+import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.application.WriteAction;
 import org.jetbrains.kotlin.com.intellij.openapi.command.CommandProcessor;
 import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
@@ -25,8 +36,10 @@ import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
 import java.lang.reflect.Field;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import io.github.rosemoe.sora.event.ContentChangeEvent;
+import io.github.rosemoe.sora.lang.completion.CompletionPublisher;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class EditorChangeUtil {
@@ -52,13 +65,12 @@ public class EditorChangeUtil {
      * dependencies
      * of this class are not included and does not work properly.
      */
-    static void doCommit(CodeEditor editor, int action,
-                         int start,
-                         int end,
-                         CharSequence charSequence,
-                         Project project,
-                         VirtualFile virtualFile,
-                         Document document) {
+    public static void doCommit(int action,
+                                int start,
+                                int end,
+                                CharSequence charSequence,
+                                Project project,
+                                Document document) {
         WriteCommandAction.runWriteCommandAction(project, "editorChange", null, () -> {
             if (action == ContentChangeEvent.ACTION_DELETE) {
                 document.deleteString(start, end);
@@ -69,6 +81,55 @@ public class EditorChangeUtil {
             FileDocumentManager.getInstance().saveDocument(document);
             PsiDocumentManager.getInstance(project).commitAllDocuments();
         });
+    }
+
+    public static void performCompletionUnderIndicator(
+            Project project,
+            CodeEditor editor,
+            CompletionPublisher publisher,
+            Disposable completionSession) {
+        publisher.setComparator((o1, o2) -> {
+            if (o1 instanceof CompletionItemWithMatchLevel &&
+                o2 instanceof CompletionItemWithMatchLevel) {
+                return CompletionList.COMPARATOR.compare((CompletionItemWithMatchLevel) o1,
+                        (CompletionItemWithMatchLevel) o2);
+            }
+            return 0;
+        });
+
+
+        CompletionInitializationContext ctx =
+                CompletionInitializationUtil.createCompletionInitializationContext(project,
+                        editor,
+                        editor.getCursor(),
+                        0,
+                        CompletionType.SMART);
+        CompletionProcess completionProcess = () -> true;
+
+        PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
+        OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
+
+        Supplier<? extends OffsetsInFile> supplier =
+                CompletionInitializationUtil.insertDummyIdentifier(ctx,
+                        offsetsInFile,
+                        completionSession);
+        OffsetsInFile newOffsets = supplier.get();
+
+        CompletionParameters completionParameters =
+                CompletionInitializationUtil.createCompletionParameters(ctx,
+                        completionProcess,
+                        newOffsets);
+
+        CompletionService.getCompletionService()
+                .performCompletion(completionParameters, completionResult -> {
+                    LookupElement lookupElement = completionResult.getLookupElement();
+                    if (lookupElement.isValid()) {
+                        publisher.addItem(lookupElement);
+
+                        lookupElement.putUserData(LookupElement.PREFIX_MATCHER_KEY,
+                                completionResult.getPrefixMatcher());
+                    }
+                });
     }
 
     private static void updatePackageCache(Project project, PsiFile psiFile) {

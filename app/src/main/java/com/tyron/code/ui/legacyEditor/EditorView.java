@@ -96,7 +96,6 @@ public class EditorView extends FrameLayout {
 
         disposable = Disposer.newDisposable("fileEditor_" + file.getName());
 
-
         editor = new CodeEditor(context);
         editor.setColorScheme(new SchemeGitHub());
         editor.setAutoCompletionItemAdapter(new CodeAssistCompletionAdapter());
@@ -149,7 +148,7 @@ public class EditorView extends FrameLayout {
 
                 ProgressManager.getInstance().runProcess(() -> {
                     try {
-                        performCompletionUnderIndicator(publisher, disposable);
+                        EditorChangeUtil.performCompletionUnderIndicator(project, editor, publisher, disposable);
                     } catch (ProcessCanceledException e) {
                         // ignored, expected to be cancelled
                     }
@@ -165,61 +164,12 @@ public class EditorView extends FrameLayout {
         addView(editor);
     }
 
-    private void performCompletionUnderIndicator(CompletionPublisher publisher,
-                                                 Disposable completionSession) {
-        publisher.setComparator((o1, o2) -> {
-            if (o1 instanceof CompletionItemWithMatchLevel &&
-                o2 instanceof CompletionItemWithMatchLevel) {
-                return CompletionList.COMPARATOR.compare((CompletionItemWithMatchLevel) o1,
-                        (CompletionItemWithMatchLevel) o2);
-            }
-            return 0;
-        });
-
-
-        CompletionInitializationContext ctx =
-                CompletionInitializationUtil.createCompletionInitializationContext(project,
-                        editor,
-                        editor.getCursor(),
-                        0,
-                        CompletionType.SMART);
-        CompletionProcess completionProcess = () -> true;
-
-        PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
-        OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
-
-        Supplier<? extends OffsetsInFile> supplier =
-                CompletionInitializationUtil.insertDummyIdentifier(ctx,
-                        offsetsInFile,
-                        completionSession);
-        OffsetsInFile newOffsets = supplier.get();
-
-        CompletionParameters completionParameters =
-                CompletionInitializationUtil.createCompletionParameters(ctx,
-                        completionProcess,
-                        newOffsets);
-
-        CompletionService.getCompletionService()
-                .performCompletion(completionParameters, completionResult -> {
-                    LookupElement lookupElement = completionResult.getLookupElement();
-                    if (lookupElement.isValid()) {
-                        publisher.addItem(lookupElement);
-
-                        lookupElement.putUserData(LookupElement.PREFIX_MATCHER_KEY,
-                                completionResult.getPrefixMatcher());
-                    }
-                });
-    }
-
     private void commit(int action, int start, int end, CharSequence charSequence) {
-        EditorChangeUtil.doCommit(editor,
-                action,
+        EditorChangeUtil.doCommit(action,
                 start,
                 end,
                 charSequence,
-                project,
-                file,
-                document);
+                project, document);
     }
 
     public VirtualFile getFile() {
@@ -230,7 +180,7 @@ public class EditorView extends FrameLayout {
         return project;
     }
 
-    private static class TestAnalyzeManager extends SimpleAnalyzeManager<Void> {
+    public static class TestAnalyzeManager extends SimpleAnalyzeManager<Void> {
 
         private final SyntaxHighlighter highlighter;
         private ContentReference contentReference;
