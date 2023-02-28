@@ -1370,7 +1370,7 @@ public class CoreFileBasedIndex extends FileBasedIndexEx {
         VirtualFile virtualFile = file.getFile();
         if (isMock(virtualFile)) return FileIndexingState.NOT_INDEXED;
 
-        return getIndex(indexId).getIndexingStateForFile(FileIdStorage.getAndStoreId(virtualFile), file);
+        return getIndex(indexId).getIndexingStateForFile(((VirtualFileWithId) virtualFile).getId(), file);
     }
 
     private boolean isPendingDeletionFileAppearedInIndexableFilter(int fileId, @NotNull VirtualFile file) {

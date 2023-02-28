@@ -106,7 +106,7 @@ public class FSRecords {
         return getConnectionOrFail().getRecords();
     }
 
-    public static long getCreationTimestamp() {
+    public static long getCreationTimestamp() throws IOException {
         return getConnectionOrFail().getTimestamp();
     }
 

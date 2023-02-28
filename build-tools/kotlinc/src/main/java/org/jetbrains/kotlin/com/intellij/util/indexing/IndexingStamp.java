@@ -6,6 +6,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.kotlin.com.intellij.concurrency.ConcurrentCollectionFactory;
 import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager;
+import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.InvalidVirtualFileAccessException;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.FileAttribute;
@@ -56,6 +57,8 @@ import java.util.concurrent.BlockingQueue;
  * </ul>
  */
 public final class IndexingStamp {
+
+    private static final Logger LOG = Logger.getInstance(IndexingStamp.class);
     private static final boolean IS_UNIT_TEST =
             ApplicationManager.getApplication().isUnitTestMode();
     private static final long INDEX_DATA_OUTDATED_STAMP = -2L;
@@ -71,9 +74,11 @@ public final class IndexingStamp {
             if (stamp == HAS_NO_INDEXED_DATA_STAMP) {
                 return FileIndexingState.NOT_INDEXED;
             }
-            return stamp ==
-                   IndexVersion.getIndexCreationStamp(indexName) ? FileIndexingState.UP_TO_DATE :
-                    FileIndexingState.OUT_DATED;
+            FileIndexingState fileIndexingState = stamp ==
+                                                  IndexVersion.getIndexCreationStamp(indexName) ?
+                    FileIndexingState.UP_TO_DATE : FileIndexingState.OUT_DATED;
+
+            return fileIndexingState;
         } catch (RuntimeException e) {
             final Throwable cause = e.getCause();
             if (!(cause instanceof IOException)) {
@@ -282,7 +287,6 @@ public final class IndexingStamp {
         assert id > 0;
         Timestamps timestamps = ourTimestampsCache.get(id);
         if (timestamps == null) {
-
             try (final DataInputStream stream = FSRecords.readAttributeWithLock(id,
                     Timestamps.PERSISTENCE)) {
                 if (stream == null && !createIfNoneSaved) {
@@ -372,6 +376,9 @@ public final class IndexingStamp {
     }
 
     private static void doFlush() {
+
+        LOG.debug("Starting flush: " + ourFinishedFiles);
+
         List<Integer> files = new ArrayList<>(ourFinishedFiles.size());
         ourFinishedFiles.drainTo(files);
 

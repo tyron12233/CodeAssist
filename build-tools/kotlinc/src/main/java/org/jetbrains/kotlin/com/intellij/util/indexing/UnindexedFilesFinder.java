@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.util.EmptyRunnable;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Ref;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileWithId;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.impl.CachedFileType;
 import org.jetbrains.kotlin.com.intellij.psi.search.FileTypeIndex;
 import org.jetbrains.kotlin.com.intellij.util.Function;
@@ -86,7 +87,7 @@ public class UnindexedFilesFinder {
             AtomicLong timeIndexingWithoutContent = new AtomicLong();
 
             IndexedFileImpl indexedFile = new IndexedFileImpl(file, fileType, myProject);
-            int inputId = FileBasedIndex.getFileId(file);
+            int inputId = ((VirtualFileWithId) file).getId();
             boolean fileWereJustAdded =
                     myIndexableFilesFilterHolder.addFileId(inputId, myProject) ==
                     FileAddStatus.ADDED;

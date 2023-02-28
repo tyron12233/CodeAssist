@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileIdStorage;
+import org.jetbrains.kotlin.com.intellij.util.indexing.IndexingStamp;
 import org.jetbrains.kotlin.com.intellij.util.indexing.StorageException;
 
 import java.io.IOException;
@@ -55,6 +56,7 @@ public class MainActivity extends AppCompatActivity {
             ((CoreFileBasedIndex) FileBasedIndex.getInstance()).flush();
             FileIdStorage.saveIds();
             FSRecords.flush();
+            IndexingStamp.flushCaches();
         } catch (IOException | StorageException e) {
             throw new RuntimeException(e);
         }

@@ -71,8 +71,8 @@ public class PersistentFSConnection {
         ExceptionUtil.rethrow(e);
     }
 
-    public long getTimestamp() {
-        return 0;
+    public long getTimestamp() throws IOException {
+        return myRecords.getTimestamp();
     }
 
     PersistentFSRecordsStorage getRecords() {

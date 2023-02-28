@@ -37,6 +37,7 @@ import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.kotlin.com.intellij.util.indexing.FileIdStorage;
+import org.jetbrains.kotlin.com.intellij.util.indexing.IndexingStamp;
 import org.jetbrains.kotlin.com.intellij.util.indexing.StorageException;
 import org.jetbrains.kotlin.com.intellij.util.indexing.contentQueue.IndexUpdateRunner;
 import org.jetbrains.kotlin.com.intellij.util.indexing.events.ChangedFilesCollector;
@@ -65,7 +66,7 @@ public class IndexingTest {
 
             @Override
             public void debug(@NonNls String s) {
-
+                System.out.println(s);
             }
 
             @Override
@@ -107,7 +108,8 @@ public class IndexingTest {
         });
         UtilKt.setIdeaIoUseFallback();
         IdeaStandaloneExecutionSetup.INSTANCE.doSetup();
-        System.setProperty("idea.home.path", Paths.get("").toAbsolutePath().getParent().resolve("TestHomePath").toString());
+        System.setProperty("idea.home.path",
+                Paths.get("").toAbsolutePath().getParent().resolve("TestHomePath").toString());
         System.setProperty("indexing.filename.over.vfs", "false");
         System.setProperty("intellij.idea.indices.debug", "true");
         Map<String, String> userProperties = Registry.getInstance().getUserProperties();
@@ -118,6 +120,7 @@ public class IndexingTest {
                 ((CoreStubIndex) StubIndex.getInstance()).flush();
                 ((CoreFileBasedIndex) FileBasedIndex.getInstance()).flush();
                 FileIdStorage.saveIds();
+                IndexingStamp.flushCaches();
                 FSRecords.dispose();
             } catch (IOException | StorageException e) {
                 throw new RuntimeException(e);
@@ -131,8 +134,11 @@ public class IndexingTest {
     }
 
     private static void initSdk(Project project) {
-        File classpathDir = new File("C:\\Users\\tyron scott\\AndroidStudioProjects\\CodeAssist" +
-                                     "-rollback\\java-completion\\src\\test\\resources\\classpath");
+        File classpathDir = Paths.get("")
+                .toAbsolutePath()
+                .getParent()
+                .resolve("java-completion/src/test" + "/resources/classpath")
+                .toFile();
         Sdk sdk = new Sdk("testSdk",
                 project,
                 classpathDir.getPath(),

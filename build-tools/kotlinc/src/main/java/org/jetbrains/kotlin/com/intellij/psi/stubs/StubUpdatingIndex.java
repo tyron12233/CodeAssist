@@ -119,8 +119,9 @@ public final class StubUpdatingIndex extends SingleEntryFileBasedIndexExtension<
                         .info("Can't build stub using stub file element type " +
                               file.getName() +
                               ", properties: " +
-                              PushedFilePropertiesRetriever.getInstance()
-                                      .dumpSortedPushedProperties(file));
+//                              PushedFilePropertiesRetriever.getInstance()
+//                                      .dumpSortedPushedProperties(file));
+                        null);
             }
         }
         final BinaryFileStubBuilder builder = BinaryFileStubBuilders.INSTANCE.forFileType(fileType);

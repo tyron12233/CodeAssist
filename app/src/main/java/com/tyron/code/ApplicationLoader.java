@@ -106,6 +106,8 @@ public class ApplicationLoader extends Application {
             FileUtil.createDirectory(intellijHome);
         }
         System.setProperty("idea.home.path", intellijHome.getAbsolutePath());
+        System.setProperty("trace.file.based.index.update", "true");
+        System.setProperty("trace.stub.index.update", "true");
 
         coreApplicationEnvironment = new CodeAssistApplicationEnvironment(disposable, false);
 

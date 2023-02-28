@@ -8,11 +8,11 @@ import com.tyron.code.event.SubscriptionReceipt
 import com.tyron.code.indexing.ProjectIndexer
 import com.tyron.code.module.ModuleManagerImpl
 import com.tyron.code.project.CodeAssistJavaCoreProjectEnvironment
-import com.tyron.code.ui.legacyEditor.impl.text.rosemoe.RosemoeEditorFacade
 import com.tyron.code.ui.file.event.OpenFileEvent
 import com.tyron.code.ui.file.event.RefreshRootEvent
 import com.tyron.code.ui.file.tree.TreeUtil
 import com.tyron.code.ui.file.tree.model.TreeFile
+import com.tyron.code.ui.legacyEditor.impl.text.rosemoe.RosemoeEditorFacade
 import com.tyron.ui.treeview.TreeNode
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -32,9 +32,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords
 import org.jetbrains.kotlin.com.intellij.psi.stubs.StubIndex
 import org.jetbrains.kotlin.com.intellij.sdk.SdkManager
-import org.jetbrains.kotlin.com.intellij.util.indexing.CoreFileBasedIndex
-import org.jetbrains.kotlin.com.intellij.util.indexing.CoreStubIndex
-import org.jetbrains.kotlin.com.intellij.util.indexing.FileBasedIndex
+import org.jetbrains.kotlin.com.intellij.util.indexing.*
 import java.io.File
 
 
@@ -149,6 +147,15 @@ class MainViewModelV2(
                         fileBasedIndex
                     )
                 }, progressIndicator)
+
+                println("Saving indices")
+                (StubIndex.getInstance() as CoreStubIndex).flush()
+                (FileBasedIndex.getInstance() as CoreFileBasedIndex).flush()
+                FileIdStorage.saveIds()
+                FSRecords.flush()
+                IndexingStamp.flushCaches()
+
+                println("Done saving indices")
 
                 _projectState.emit(
                     ProjectState(
