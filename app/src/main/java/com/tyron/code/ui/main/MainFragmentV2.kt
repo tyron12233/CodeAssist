@@ -79,11 +79,8 @@ class MainFragmentV2 : Fragment() {
     private fun observeViewModel() {
         lifecycleScope.launchWhenResumed {
             viewModelV2.currentTextEditorState.collect { textEditorState ->
+                val editors = getEditorFragments()
                 if (textEditorState == null) {
-                    binding.editorContainer.viewpager.removeAllViews()
-
-                    val editors = childFragmentManager.fragments.filter { it.tag != null }
-                        .filter { it.tag!!.startsWith("editor") }
                     val transaction = childFragmentManager.beginTransaction()
                     editors.forEach(transaction::hide)
                     transaction.commit()
@@ -103,11 +100,11 @@ class MainFragmentV2 : Fragment() {
                     return@collect
                 }
 
-                val editors = childFragmentManager.fragments.filter { it.tag != null }
-                    .filter { it.tag!!.startsWith("editor") }
+                val tag = "editor-{${textEditorState.file.hashCode()}"
+
                 val transaction = childFragmentManager.beginTransaction()
                 editors.forEach(transaction::hide)
-                transaction.replace(binding.editorContainer.viewpager.id, fragment)
+                transaction.replace(binding.editorContainer.viewpager.id, fragment, tag)
                 transaction.commit()
             }
         }
@@ -164,6 +161,10 @@ class MainFragmentV2 : Fragment() {
             }
         }
     }
+
+    private fun getEditorFragments() = childFragmentManager.fragments
+        .filter { it.tag != null }
+        .filter { it.tag!!.startsWith("editor") }
 
     companion object {
         @JvmStatic
