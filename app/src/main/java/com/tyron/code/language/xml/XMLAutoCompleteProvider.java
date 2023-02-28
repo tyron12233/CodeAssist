@@ -7,7 +7,7 @@ import com.tyron.code.language.AbstractAutoCompleteProvider;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.io.File;
 

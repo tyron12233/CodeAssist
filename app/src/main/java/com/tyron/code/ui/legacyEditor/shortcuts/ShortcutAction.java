@@ -1,6 +1,6 @@
 package com.tyron.code.ui.legacyEditor.shortcuts;
 
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 public interface ShortcutAction {
 

@@ -1,6 +1,6 @@
 package com.tyron.completion.util;
 
-import com.tyron.editor.CharPosition;
+import com.tyron.legacyEditor.CharPosition;
 
 import java.util.function.Predicate;
 

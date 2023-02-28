@@ -2,7 +2,6 @@ package com.tyron.completion.java.action.context;
 
 import androidx.annotation.NonNull;
 
-import com.android.tools.r8.internal.P;
 import com.sun.source.tree.ErroneousTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.util.SourcePositions;
@@ -24,13 +23,12 @@ import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
 import com.tyron.completion.java.rewrite.JavaRewrite2;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.util.RewriteUtil;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.io.File;
 import java.util.List;
 
 import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;

@@ -1,28 +1,20 @@
 package com.tyron.code.language;
 
-import android.content.res.AssetManager;
-
-import com.tyron.code.ApplicationLoader;
 import com.tyron.code.language.groovy.Groovy;
 import com.tyron.code.language.java.Java;
 import com.tyron.code.language.json.Json;
 import com.tyron.code.language.kotlin.Kotlin;
 import com.tyron.code.language.xml.Xml;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import org.apache.commons.vfs2.FileObject;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.function.Supplier;
 
-import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
-import io.github.rosemoe.sora.widget.CodeEditor;
 
 @Deprecated
 public class LanguageManager {

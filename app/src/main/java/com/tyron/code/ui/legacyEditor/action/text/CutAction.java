@@ -6,8 +6,8 @@ import androidx.core.content.res.ResourcesCompat;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
-import com.tyron.editor.Caret;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.Editor;
 
 public class CutAction extends CopyAction {
 

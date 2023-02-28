@@ -19,7 +19,7 @@ import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.ElementUtil;
 import com.tyron.common.util.ThreadUtil;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;

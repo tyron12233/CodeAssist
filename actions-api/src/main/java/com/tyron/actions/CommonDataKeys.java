@@ -7,7 +7,7 @@ import androidx.fragment.app.Fragment;
 
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.fileeditor.api.FileEditor;
 
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;

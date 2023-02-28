@@ -11,26 +11,12 @@ import com.tyron.code.ApplicationLoader;
 import com.tyron.code.language.AbstractAutoCompleteProvider;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
-import com.tyron.completion.java.provider.JavaSortCategory;
-import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.completion.util.CompletionUtils;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.kotlin.completion.KotlinEnvironment;
 import com.tyron.kotlin.completion.KotlinFile;
 
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
-import org.jetbrains.kotlin.com.intellij.openapi.util.ModificationTracker;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiModificationTrackerImpl;
-import org.jetbrains.kotlin.com.intellij.psi.util.PsiModificationTracker;
-import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusConnection;
-import org.jetbrains.kotlin.idea.KotlinLanguage;
-
-import java.util.List;
-
-import kotlin.Pair;
 
 public class KotlinAutoCompleteProvider extends AbstractAutoCompleteProvider {
 

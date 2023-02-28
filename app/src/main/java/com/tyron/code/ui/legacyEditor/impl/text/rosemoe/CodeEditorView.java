@@ -19,10 +19,10 @@ import com.tyron.code.ui.editor.NoOpTextActionWindow;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.xml.model.XmlCompletionType;
 import com.tyron.completion.xml.util.XmlUtils;
-import com.tyron.editor.Caret;
-import com.tyron.editor.CharPosition;
-import com.tyron.editor.Content;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.CharPosition;
+import com.tyron.legacyEditor.Content;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.xml.completion.util.DOMUtils;
 
 import org.eclipse.lemminx.dom.DOMDocument;

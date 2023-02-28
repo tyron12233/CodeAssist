@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 import com.tyron.code.language.CachedAutoCompleteProvider;
 import com.tyron.code.language.LanguageManager;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.kotlin.completion.KotlinEnvironment;
 
 import io.github.rosemoe.sora.lang.Language;

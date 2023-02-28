@@ -5,7 +5,7 @@ import android.os.Bundle;
 import androidx.annotation.NonNull;
 
 import com.tyron.builder.model.DiagnosticWrapper;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.util.List;
 

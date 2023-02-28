@@ -1,7 +1,7 @@
 package com.tyron.completion.xml.v2.events;
 
 import com.tyron.code.event.Event;
-import com.tyron.editor.Content;
+import com.tyron.legacyEditor.Content;
 
 import java.io.File;
 

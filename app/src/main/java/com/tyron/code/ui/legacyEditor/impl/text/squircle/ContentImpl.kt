@@ -4,8 +4,7 @@ import android.text.Editable
 import android.text.InputFilter
 import android.text.SpannableStringBuilder
 import com.blacksquircle.ui.editorkit.plugin.base.EditorPlugin
-import com.tyron.editor.Content
-import com.tyron.editor.event.ContentListener
+import com.tyron.legacyEditor.Content
 
 class ContentImpl(
     private val baseContent: Content

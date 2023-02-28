@@ -62,7 +62,7 @@ import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.editor.CharPosition;
+import com.tyron.legacyEditor.CharPosition;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.FileContent;

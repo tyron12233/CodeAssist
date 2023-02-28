@@ -32,8 +32,8 @@ import com.tyron.code.ui.legacyEditor.shortcuts.action.TextInsertAction;
 import com.tyron.code.ui.legacyEditor.shortcuts.action.UndoAction;
 import com.tyron.code.ui.main.MainViewModel;
 import com.tyron.common.util.AndroidUtilities;
-import com.tyron.editor.Caret;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.fileeditor.api.FileEditor;
 
 import java.util.ArrayList;

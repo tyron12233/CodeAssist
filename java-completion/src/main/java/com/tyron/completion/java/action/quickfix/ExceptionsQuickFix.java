@@ -7,8 +7,7 @@ import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.util.ActionUtil;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import javax.tools.Diagnostic;
 import com.sun.source.util.TreePath;

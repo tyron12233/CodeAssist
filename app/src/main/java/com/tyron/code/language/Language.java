@@ -1,11 +1,9 @@
 package com.tyron.code.language;
 
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import org.apache.commons.vfs2.FileObject;
-import org.apache.commons.vfs2.FileSystem;
 import org.apache.commons.vfs2.provider.local.LocalFile;
-import org.apache.commons.vfs2.provider.local.LocalFileSystem;
 
 import java.io.File;
 

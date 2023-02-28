@@ -3,9 +3,9 @@ package com.tyron.selection.xml;
 import android.util.Pair;
 
 import com.google.common.collect.Range;
-import com.tyron.editor.Caret;
-import com.tyron.editor.Editor;
-import com.tyron.editor.selection.ExpandSelectionProvider;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.Editor;
+import com.tyron.legacyEditor.selection.ExpandSelectionProvider;
 
 import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;

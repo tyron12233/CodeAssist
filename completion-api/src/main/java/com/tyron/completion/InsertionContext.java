@@ -4,7 +4,6 @@ import androidx.annotation.Nullable;
 
 import com.tyron.completion.lookup.Lookup;
 import com.tyron.completion.lookup.LookupElement;
-import com.tyron.editor.snippet.Snippet;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
@@ -12,7 +11,6 @@ import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 
-import java.util.List;
 import java.util.Objects;
 
 import io.github.rosemoe.sora.widget.CodeEditor;

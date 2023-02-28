@@ -4,7 +4,7 @@ import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.Module;
 import com.tyron.common.logging.IdeLog;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.io.File;
 import java.util.logging.Logger;

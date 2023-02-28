@@ -6,7 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.tyron.code.language.LanguageManager;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;

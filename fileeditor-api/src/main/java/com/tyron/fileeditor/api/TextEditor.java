@@ -1,6 +1,6 @@
 package com.tyron.fileeditor.api;
 
-import com.tyron.editor.Content;
+import com.tyron.legacyEditor.Content;
 
 public interface TextEditor extends FileEditor {
 

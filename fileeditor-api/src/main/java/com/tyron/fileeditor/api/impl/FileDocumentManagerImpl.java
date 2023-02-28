@@ -1,10 +1,10 @@
 package com.tyron.fileeditor.api.impl;
 
 import com.tyron.common.util.ThreadUtil;
-import com.tyron.editor.Content;
-import com.tyron.editor.event.ContentEvent;
-import com.tyron.editor.event.ContentListener;
-import com.tyron.editor.event.PrioritizedContentListener;
+import com.tyron.legacyEditor.Content;
+import com.tyron.legacyEditor.event.ContentEvent;
+import com.tyron.legacyEditor.event.ContentListener;
+import com.tyron.legacyEditor.event.PrioritizedContentListener;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.vfs2.FileContent;

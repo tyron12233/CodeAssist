@@ -3,24 +3,18 @@ package com.tyron.completion.lookup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tyron.completion.CompletionResult;
-import com.tyron.completion.CompletionService;
 import com.tyron.completion.CompletionUtil;
 import com.tyron.completion.EditorMemory;
 import com.tyron.completion.InsertionContext;
 import com.tyron.completion.PrefixMatcher;
-import com.tyron.completion.impl.BaseCompletionService;
 import com.tyron.completion.impl.CompletionContext;
-import com.tyron.completion.impl.CompletionServiceImpl;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
-import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolder;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderBase;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.com.intellij.psi.ResolveResult;
 import org.jetbrains.kotlin.com.intellij.psi.SmartPsiElementPointer;
 
@@ -28,7 +22,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import io.github.rosemoe.sora.lang.completion.CompletionItem;
 import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.widget.CodeEditor;

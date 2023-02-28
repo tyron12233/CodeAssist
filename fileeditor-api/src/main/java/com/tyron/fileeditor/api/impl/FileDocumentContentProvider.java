@@ -1,6 +1,6 @@
 package com.tyron.fileeditor.api.impl;
 
-import com.tyron.editor.Content;
+import com.tyron.legacyEditor.Content;
 
 import org.apache.commons.vfs2.FileObject;
 import org.jetbrains.annotations.NotNull;

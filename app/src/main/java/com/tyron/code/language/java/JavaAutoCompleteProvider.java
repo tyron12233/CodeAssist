@@ -13,15 +13,8 @@ import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.common.SharedPreferenceKeys;
 import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.Content;
-import com.tyron.editor.Editor;
-
-import java.util.Optional;
-
-import io.github.rosemoe.sora.lang.completion.CompletionHelper;
-import io.github.rosemoe.sora.text.CharPosition;
-import io.github.rosemoe.sora.text.ContentReference;
-import io.github.rosemoe.sora.widget.CodeEditor;
+import com.tyron.legacyEditor.Content;
+import com.tyron.legacyEditor.Editor;
 
 public class JavaAutoCompleteProvider extends AbstractAutoCompleteProvider {
 

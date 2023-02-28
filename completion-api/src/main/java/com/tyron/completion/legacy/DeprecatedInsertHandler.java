@@ -1,6 +1,6 @@
 package com.tyron.completion.legacy;
 
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 /**
  * Interface for customizing the how the completion item inserts the text

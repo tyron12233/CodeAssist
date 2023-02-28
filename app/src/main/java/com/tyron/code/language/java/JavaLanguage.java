@@ -13,7 +13,7 @@ import com.tyron.completion.java.JavaCompletionProvider;
 import com.tyron.completion.java.ShortNamesCache;
 import com.tyron.completion.java.parse.CompilationInfo;
 import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.language.api.CodeAssistLanguage;
 
 import org.slf4j.Logger;

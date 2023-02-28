@@ -3,8 +3,8 @@ package com.tyron.code.ui.legacyEditor.shortcuts.action;
 import com.tyron.code.ui.legacyEditor.impl.text.rosemoe.CodeEditorView;
 import com.tyron.code.ui.legacyEditor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.legacyEditor.shortcuts.ShortcutItem;
-import com.tyron.editor.Caret;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.Editor;
 
 public class TextInsertAction implements ShortcutAction {
 

@@ -2,10 +2,8 @@ package com.tyron.completion.xml.insert;
 
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.editor.Caret;
-import com.tyron.editor.Editor;
-
-import org.jetbrains.kotlin.checkers.TextDiagnosticDescriptor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.Editor;
 
 public class AttributeInsertHandler extends DefaultXmlInsertHandler {
 

@@ -5,7 +5,7 @@ import com.tyron.completion.CompletionPrefixMatcher;
 import com.tyron.completion.legacy.DefaultInsertHandler;
 import com.tyron.completion.legacy.DeprecatedInsertHandler;
 import com.tyron.completion.util.CompletionUtils;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.util.ArrayList;
 import java.util.Comparator;

@@ -1,9 +1,7 @@
 package com.tyron.code.ui.legacyEditor.impl.text.squircle
 
 import android.content.Context
-import android.view.View
 import com.blacksquircle.ui.editorkit.widget.TextProcessor
-import com.tyron.editor.Content
 import com.tyron.fileeditor.api.FileDocumentManager
 import com.tyron.fileeditor.api.FileEditor
 import org.apache.commons.vfs2.VFS

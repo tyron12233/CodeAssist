@@ -1,6 +1,6 @@
 package com.tyron.fileeditor.api;
 
-import com.tyron.editor.Content;
+import com.tyron.legacyEditor.Content;
 import com.tyron.fileeditor.api.impl.FileDocumentManagerImpl;
 
 import org.apache.commons.vfs2.FileObject;

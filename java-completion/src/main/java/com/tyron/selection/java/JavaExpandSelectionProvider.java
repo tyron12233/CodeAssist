@@ -5,9 +5,8 @@ import com.tyron.builder.model.SourceFileObject;
 import com.tyron.builder.project.Project;
 import com.tyron.completion.java.action.FindCurrentPath;
 import com.tyron.completion.java.compiler.Parser;
-import com.tyron.editor.CharPosition;
-import com.tyron.editor.Editor;
-import com.tyron.editor.selection.ExpandSelectionProvider;
+import com.tyron.legacyEditor.Editor;
+import com.tyron.legacyEditor.selection.ExpandSelectionProvider;
 
 import org.jetbrains.annotations.Nullable;
 import com.sun.source.util.SourcePositions;

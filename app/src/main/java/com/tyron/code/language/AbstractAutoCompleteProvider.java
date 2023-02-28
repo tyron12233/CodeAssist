@@ -1,12 +1,10 @@
 package com.tyron.code.language;
 
 import com.tyron.completion.model.CompletionList;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
-import io.github.rosemoe.sora.lang.completion.CompletionHelper;
 import io.github.rosemoe.sora.lang.completion.CompletionItem;
 
 /**

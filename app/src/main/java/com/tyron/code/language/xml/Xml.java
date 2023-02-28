@@ -1,8 +1,7 @@
 package com.tyron.code.language.xml;
 
 import com.tyron.code.language.Language;
-import com.tyron.code.language.LanguageManager;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import org.apache.commons.vfs2.FileObject;
 

@@ -14,7 +14,7 @@ import com.tyron.completion.util.RewriteUtil;
 import com.tyron.completion.java.rewrite.ImplementAbstractMethods;
 import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.DiagnosticUtil;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import javax.tools.Diagnostic;
 import com.sun.tools.javac.api.ClientCodeWrapper;

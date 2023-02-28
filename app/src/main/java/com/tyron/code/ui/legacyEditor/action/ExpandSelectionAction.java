@@ -10,24 +10,12 @@ import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
-import com.tyron.builder.model.SourceFileObject;
-import com.tyron.builder.project.Project;
 import com.tyron.code.R;
 import com.tyron.common.util.AndroidUtilities;
-import com.tyron.completion.java.action.FindCurrentPath;
-import com.tyron.completion.java.compiler.Parser;
-import com.tyron.editor.CharPosition;
-import com.tyron.editor.Editor;
-import com.tyron.editor.selection.ExpandSelectionProvider;
-
-import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.util.SourcePositions;
-import com.sun.source.util.TreePath;
-import com.sun.source.util.Trees;
+import com.tyron.legacyEditor.Editor;
+import com.tyron.legacyEditor.selection.ExpandSelectionProvider;
 
 import java.io.File;
-import java.time.Instant;
 
 public class ExpandSelectionAction extends AnAction {
 

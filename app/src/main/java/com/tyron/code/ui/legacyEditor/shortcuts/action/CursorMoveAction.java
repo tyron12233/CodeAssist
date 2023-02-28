@@ -2,7 +2,7 @@ package com.tyron.code.ui.legacyEditor.shortcuts.action;
 
 import com.tyron.code.ui.legacyEditor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.legacyEditor.shortcuts.ShortcutItem;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 public class CursorMoveAction implements ShortcutAction {
 

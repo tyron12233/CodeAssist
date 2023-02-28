@@ -4,8 +4,8 @@ import androidx.annotation.Nullable;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.tyron.editor.Content;
-import com.tyron.editor.event.ContentListener;
+import com.tyron.legacyEditor.Content;
+import com.tyron.legacyEditor.event.ContentListener;
 import com.tyron.fileeditor.api.FileDocumentManager;
 
 import org.apache.commons.vfs2.FileObject;

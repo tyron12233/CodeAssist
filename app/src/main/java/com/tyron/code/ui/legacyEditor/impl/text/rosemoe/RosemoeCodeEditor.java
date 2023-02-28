@@ -5,7 +5,7 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 
-import com.tyron.editor.Content;
+import com.tyron.legacyEditor.Content;
 import com.tyron.fileeditor.api.FileDocumentManager;
 import com.tyron.fileeditor.api.TextEditor;
 

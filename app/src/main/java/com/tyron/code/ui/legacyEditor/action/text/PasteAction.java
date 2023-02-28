@@ -8,8 +8,8 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.actions.Presentation;
 import com.tyron.common.util.AndroidUtilities;
-import com.tyron.editor.Caret;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.Editor;
 
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora2.text.EditorUtil;

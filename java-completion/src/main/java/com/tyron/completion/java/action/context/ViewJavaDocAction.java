@@ -13,7 +13,7 @@ import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
 import com.tyron.completion.java.hover.HoverProvider;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import com.sun.source.util.TreePath;
 

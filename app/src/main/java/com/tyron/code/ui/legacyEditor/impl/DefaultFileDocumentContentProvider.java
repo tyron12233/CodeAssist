@@ -1,6 +1,6 @@
 package com.tyron.code.ui.legacyEditor.impl;
 
-import com.tyron.editor.Content;
+import com.tyron.legacyEditor.Content;
 import com.tyron.fileeditor.api.impl.FileDocumentContentProvider;
 
 import org.apache.commons.vfs2.FileObject;

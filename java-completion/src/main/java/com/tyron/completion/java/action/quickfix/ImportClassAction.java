@@ -12,13 +12,11 @@ import com.tyron.actions.Presentation;
 import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.R;
 import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.rewrite.JavaRewrite2;
 import com.tyron.completion.util.RewriteUtil;
-import com.tyron.completion.java.rewrite.AddImport;
 import com.tyron.completion.java.rewrite.JavaRewrite;
 import com.tyron.completion.java.util.ActionUtil;
 import com.tyron.completion.java.util.DiagnosticUtil;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import javax.tools.Diagnostic;
 import com.sun.tools.javac.api.ClientCodeWrapper;

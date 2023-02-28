@@ -2,7 +2,7 @@ package com.tyron.code.language.json;
 
 import com.tyron.code.language.Language;
 import com.tyron.code.language.LanguageManager;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.io.File;
 

@@ -7,8 +7,8 @@ import com.sun.tools.javac.util.JCDiagnostic;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.completion.java.action.FindMethodDeclarationAt;
 import com.tyron.completion.java.compiler.CompileTask;
-import com.tyron.editor.CharPosition;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.CharPosition;
+import com.tyron.legacyEditor.Editor;
 
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;

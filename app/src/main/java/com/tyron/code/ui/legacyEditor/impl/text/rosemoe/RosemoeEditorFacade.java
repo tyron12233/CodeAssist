@@ -35,7 +35,7 @@ import com.tyron.common.util.AndroidUtilities;
 import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.diagnostics.DiagnosticProvider;
-import com.tyron.editor.Content;
+import com.tyron.legacyEditor.Content;
 import com.tyron.fileeditor.api.FileEditor;
 import com.tyron.language.api.CodeAssistLanguage;
 

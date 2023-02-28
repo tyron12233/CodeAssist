@@ -1,31 +1,24 @@
 package com.tyron.completion.util;
 
-import android.os.Looper;
-
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.tyron.common.ApplicationProvider;
 import com.tyron.common.logging.IdeLog;
 import com.tyron.common.util.ThreadUtil;
-import com.tyron.completion.model.Position;
 import com.tyron.completion.model.Range;
 import com.tyron.completion.model.Rewrite;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.progress.ProgressManager;
-import com.tyron.editor.CharPosition;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.CharPosition;
+import com.tyron.legacyEditor.Editor;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.concurrent.Executor;
 import java.util.logging.Logger;
-
-import kotlin.ReplaceWith;
 
 public class RewriteUtil {
 

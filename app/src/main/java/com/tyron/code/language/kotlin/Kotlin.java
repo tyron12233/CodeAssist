@@ -1,7 +1,7 @@
 package com.tyron.code.language.kotlin;
 
 import com.tyron.code.language.Language;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import java.io.File;
 

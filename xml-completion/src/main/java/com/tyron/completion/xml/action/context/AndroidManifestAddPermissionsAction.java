@@ -19,7 +19,7 @@ import com.tyron.completion.xml.R;
 import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.rewrite.AddPermissions;
 import com.tyron.completion.xml.util.XmlUtils;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 
 import org.apache.commons.io.FileUtils;
 import org.xmlpull.v1.XmlPullParser;

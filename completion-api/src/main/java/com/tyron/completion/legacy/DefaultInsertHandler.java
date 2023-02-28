@@ -2,9 +2,9 @@ package com.tyron.completion.legacy;
 
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.util.CompletionUtils;
-import com.tyron.editor.Caret;
-import com.tyron.editor.CharPosition;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.CharPosition;
+import com.tyron.legacyEditor.Editor;
 
 import java.util.function.Predicate;
 

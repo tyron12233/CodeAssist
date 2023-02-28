@@ -17,7 +17,7 @@ import com.tyron.completion.model.CompletionList;
 import com.tyron.completion.xml.lexer.XMLLexer;
 import com.tyron.completion.xml.v2.AndroidXmlCompletionProvider;
 import com.tyron.completion.xml.v2.events.XmlResourceChangeEvent;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.language.api.CodeAssistLanguage;
 
 import java.io.File;

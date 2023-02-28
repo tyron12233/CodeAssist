@@ -11,8 +11,8 @@ import com.tyron.actions.CommonDataKeys;
 import com.tyron.completion.model.Rewrite;
 import com.tyron.completion.model.TextEdit;
 import com.tyron.completion.util.RewriteUtil;
-import com.tyron.editor.Caret;
-import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+import com.tyron.legacyEditor.Editor;
 import com.tyron.kotlin_completion.CompiledFile;
 import com.tyron.kotlin_completion.util.PsiUtils;
 
