@@ -5,6 +5,7 @@ import com.tyron.code.module.ModuleManagerImpl;
 import com.tyron.code.sdk.SdkManagerImpl;
 import com.tyron.code.ui.legacyEditor.DummyCodeStyleManager;
 import com.tyron.completion.psi.search.PsiShortNamesCache;
+import com.tyron.completion.psi.search.PsiShortNamesCacheImpl;
 import com.tyron.completion.resolve.impl.ResolveScopeManagerImpl;
 
 import org.jetbrains.annotations.NotNull;
@@ -142,61 +143,7 @@ public class CodeAssistJavaCoreProjectEnvironment extends JavaCoreProjectEnviron
         myProject.registerService(LibraryScopeCache.class, new LibraryScopeCache(myProject));
         myProject.registerService(SdkManager.class, new SdkManagerImpl(myProject));
         myProject.registerService(ModuleManager.class, new ModuleManagerImpl(myProject));
-        myProject.registerService(PsiShortNamesCache.class, new PsiShortNamesCache() {
-            @Override
-            public @NotNull PsiClass @NotNull [] getClassesByName(@NotNull String name,
-                                                                  @NotNull GlobalSearchScope scope) {
-                return new PsiClass[0];
-            }
-
-            @Override
-            public @NotNull String @NotNull [] getAllClassNames() {
-                return new String[0];
-            }
-
-            @Override
-            public @NotNull PsiMethod @NotNull [] getMethodsByName(@NotNull String name,
-                                                                   @NotNull GlobalSearchScope scope) {
-                return new PsiMethod[0];
-            }
-
-            @Override
-            public @NotNull PsiMethod @NotNull [] getMethodsByNameIfNotMoreThan(@NotNull String name,
-                                                                                @NotNull GlobalSearchScope scope,
-                                                                                int maxCount) {
-                return new PsiMethod[0];
-            }
-
-            @Override
-            public @NotNull PsiField @NotNull [] getFieldsByNameIfNotMoreThan(@NotNull String name,
-                                                                              @NotNull GlobalSearchScope scope,
-                                                                              int maxCount) {
-                return new PsiField[0];
-            }
-
-            @Override
-            public boolean processMethodsWithName(@NotNull String name,
-                                                  @NotNull GlobalSearchScope scope,
-                                                  @NotNull Processor<? super PsiMethod> processor) {
-                return false;
-            }
-
-            @Override
-            public @NotNull String @NotNull [] getAllMethodNames() {
-                return new String[0];
-            }
-
-            @Override
-            public @NotNull PsiField @NotNull [] getFieldsByName(@NotNull String name,
-                                                                 @NotNull GlobalSearchScope scope) {
-                return new PsiField[0];
-            }
-
-            @Override
-            public @NotNull String @NotNull [] getAllFieldNames() {
-                return new String[0];
-            }
-        });
+        myProject.registerService(PsiShortNamesCache.class, new PsiShortNamesCacheImpl(myProject));
         myProject.registerService(PomModel.class, new MockPomModel(myProject));
         myProject.registerService(ExternalAnnotationsManager.class, new MockExternalAnnotationsManager());
         myProject.registerService(InferredAnnotationsManager.class, new MockInferredAnnotationsManager());

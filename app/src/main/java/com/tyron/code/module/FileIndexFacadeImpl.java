@@ -21,7 +21,7 @@ import java.util.Collections;
 
 public class FileIndexFacadeImpl extends FileIndexFacade {
 
-    private ProjectFileIndex myIndex;
+    private final ProjectFileIndex myIndex;
     public FileIndexFacadeImpl(@NonNull Project project) {
         super(project);
 
@@ -50,21 +50,17 @@ public class FileIndexFacadeImpl extends FileIndexFacade {
 
     @Override
     public boolean isInLibrarySource(@NonNull VirtualFile virtualFile) {
-        return Arrays.stream(ModuleManager.getInstance(myProject).getModules())
-                .map(ModuleRootManager::getInstance)
-                .map(manager -> manager.orderEntries().librariesOnly().sources().getRoots())
-                .flatMap(Arrays::stream)
-                .anyMatch(it -> VfsUtilCore.isAncestor(it, virtualFile, false));
+        return myIndex.isInLibrarySource(virtualFile);
     }
 
     @Override
     public boolean isExcludedFile(@NonNull VirtualFile virtualFile) {
-        return false;
+        return myIndex.isExcluded(virtualFile);
     }
 
     @Override
     public boolean isUnderIgnored(@NonNull VirtualFile virtualFile) {
-        return false;
+        return myIndex.isUnderIgnored(virtualFile);
     }
 
     @Override

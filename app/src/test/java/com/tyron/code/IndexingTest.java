@@ -5,6 +5,7 @@ import static com.tyron.code.indexing.ProjectIndexer.index;
 import com.tyron.code.project.CodeAssistJavaCoreProjectEnvironment;
 import com.tyron.code.sdk.SdkManagerImpl;
 import com.tyron.completion.progress.ProcessCanceledException;
+import com.tyron.completion.psi.search.PsiShortNamesCache;
 
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -219,7 +220,8 @@ public class IndexingTest {
         }, indicator);
 
 
-        Collection<PsiClass> activity = JavaShortClassNameIndex.getInstance()
+        JavaShortClassNameIndex shortClassNameIndex = JavaShortClassNameIndex.getInstance();
+        Collection<PsiClass> activity = shortClassNameIndex
                 .get("Activity", project, new CustomSearchScope(project));
         assert !activity.isEmpty();
 
@@ -230,6 +232,13 @@ public class IndexingTest {
         assert superClass != null;
 
         System.out.println(superClass);
+
+        PsiShortNamesCache shortNamesCache = PsiShortNamesCache.getInstance(project);
+
+        assert shortNamesCache.getAllClassNames().length != 0;
+        assert shortNamesCache.getAllFieldNames().length != 0;
+        assert shortNamesCache.getAllMethodNames().length != 0;
+        assert shortNamesCache.getAllFieldNames().length != 0;
     }
 
     private static class CustomSearchScope extends GlobalSearchScope {

@@ -74,11 +74,10 @@ public final class IndexingStamp {
             if (stamp == HAS_NO_INDEXED_DATA_STAMP) {
                 return FileIndexingState.NOT_INDEXED;
             }
-            FileIndexingState fileIndexingState = stamp ==
-                                                  IndexVersion.getIndexCreationStamp(indexName) ?
-                    FileIndexingState.UP_TO_DATE : FileIndexingState.OUT_DATED;
 
-            return fileIndexingState;
+            return stamp ==
+                   IndexVersion.getIndexCreationStamp(indexName) ?
+                    FileIndexingState.UP_TO_DATE : FileIndexingState.OUT_DATED;
         } catch (RuntimeException e) {
             final Throwable cause = e.getCause();
             if (!(cause instanceof IOException)) {
