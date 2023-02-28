@@ -120,7 +120,6 @@ class MainFragmentV2 : Fragment() {
                     MaterialFadeThrough()
                 )
                 if (it.editors.isEmpty()) {
-                    binding.editorContainer.viewpager.removeAllViews()
                     binding.editorContainer.tablayout.removeAllTabs()
                     binding.editorContainer.tablayout.visibility = View.GONE
                 } else {
@@ -149,9 +148,7 @@ class MainFragmentV2 : Fragment() {
         lifecycleScope.launchWhenResumed {
             viewModelV2.indexingState.collect { indexingState ->
                 if (indexingState == null) {
-                    if (indexingUiFragment.isVisible) {
-                        indexingUiFragment.dismiss()
-                    }
+                    // dismiss logic handled in the fragment itself
                     return@collect
                 }
 
