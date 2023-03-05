@@ -37,57 +37,6 @@ public class AttributeValueUtils {
 
     private static final FolderConfiguration DEFAULT = FolderConfiguration.createDefault();
 
-    public static void addManifestValueItems(@NonNull XmlRepository repository,
-                                             @NonNull String prefix,
-                                             int index,
-                                             @NonNull DOMAttr attr,
-                                             @NonNull ResourceNamespace appNamespace,
-                                             CompletionList.Builder builder) {
-        DOMElement ownerElement = attr.getOwnerElement();
-        if (ownerElement == null) {
-            return;
-        }
-
-        String tagName = ownerElement.getTagName();
-        if (tagName == null) {
-            return;
-        }
-
-        String manifestStyleName = AndroidXmlTagUtils.getManifestStyleName(tagName);
-        if (manifestStyleName == null) {
-            return;
-        }
-
-        String namespace = DOMUtils.lookupPrefix(attr);
-        if (namespace == null) {
-            return;
-        }
-        ResourceNamespace resourceNamespace = ResourceNamespace.fromNamespaceUri(namespace);
-        if (resourceNamespace == null) {
-            return;
-        }
-        ResourceValue resourceValue =
-                AttributeProcessingUtil.getResourceValue(repository.getRepository(),
-                                                         manifestStyleName, resourceNamespace);
-        if (!(resourceValue instanceof StyleableResourceValue)) {
-            return;
-        }
-
-        String attributeName = attr.getLocalName();
-        StyleableResourceValue styleable = (StyleableResourceValue) resourceValue;
-        for (AttrResourceValue attribute : styleable.getAllAttributes()) {
-            if (attributeName.equals(attribute.getName())) {
-                AttrResourceValue attributeResourceValue =
-                        AttributeProcessingUtil.getAttributeResourceValue(
-                                repository.getRepository(), attribute);
-                if (attributeResourceValue != null) {
-                    addValues(attributeResourceValue, repository.getRepository(),
-                              attr, index, prefix, appNamespace, builder);
-                }
-            }
-        }
-    }
-
     public static void addValueItems(@NonNull Project project,
                                      @NonNull Module module,
                                      @NonNull String prefix,
@@ -126,7 +75,7 @@ public class AttributeValueUtils {
             for (String flag : attributeValues.keySet()) {
                 CompletionItem item =
                         CompletionItem.create(flag, "Value", flag, DrawableKind.Snippet);
-                item.setInsertHandler(new ValueInsertHandler(attribute, item));
+//                item.setInsertHandler(new ValueInsertHandler(attribute, item));
                 item.addFilterText(flag);
                 list.addItem(item);
             }
@@ -173,7 +122,7 @@ public class AttributeValueUtils {
                             .toString();
                     CompletionItem item = CompletionItem.create(label, "Value", label);
                     item.iconKind = DrawableKind.LocalVariable;
-                    item.setInsertHandler(new ValueInsertHandler(attribute, item));
+//                    item.setInsertHandler(new ValueInsertHandler(attribute, item));
                     item.addFilterText(value.asReference().getRelativeResourceUrl(appNamespace).toString());
                     item.addFilterText(value.getName());
                     list.addItem(item);

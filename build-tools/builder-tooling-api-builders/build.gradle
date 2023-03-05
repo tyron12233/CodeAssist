@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    implementation projects.buildTools.builderBaseServices
+    implementation projects.buildTools.builderBaseServicesGroovy
+    implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderBuildEvents
+    implementation projects.buildTools.builderCompositeBuilds
+    implementation projects.buildTools.builderCore
+    implementation projects.buildTools.builderCoreApi
+    implementation projects.buildTools.builderFunctional
+    implementation projects.buildTools.builderDependencyManagement
+    implementation projects.buildTools.builderLauncher
+    implementation projects.buildTools.builderLogging
+    implementation projects.buildTools.builderMessaging
+    implementation projects.buildTools.builderModelCore
+    implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderProcessServices
+    implementation projects.buildTools.builderReporting
+    implementation projects.buildTools.builderResources
+    implementation projects.buildTools.builderTestingBase
+    implementation projects.buildTools.builderTestingJvm
+    implementation projects.buildTools.builderToolingApi
+    implementation projects.buildTools.builderWorkers
+
+    implementation projects.common
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}

@@ -58,7 +58,6 @@ public class StyleUtils {
 
         putStyle(View.class);
         putStyle(ViewGroup.class);;
-        sViewStyleMap.put(ViewGroup.class.getSimpleName(), "ViewGroup_MarginLayout");
         putStyle(LinearLayout.class);
         putStyle(FrameLayout.class);
         putStyle(ListView.class);
@@ -154,12 +153,20 @@ public class StyleUtils {
 
     private static void putStyle(@NonNull Class<? extends View> view) {
         Class<?> current = view;
+        boolean isViewGroup = false;
         while (current != null) {
             if ("java.lang.Object".equals(current.getName())) {
                 break;
             }
+            if (ViewGroup.class.getName().equals(current.getName())) {
+                isViewGroup = true;
+            }
             sViewStyleMap.put(view.getSimpleName(), current.getSimpleName());
             current = current.getSuperclass();
+        }
+
+        if (isViewGroup) {
+            sViewStyleMap.put(view.getSimpleName(), view.getSimpleName() + "_Layout");
         }
     }
 

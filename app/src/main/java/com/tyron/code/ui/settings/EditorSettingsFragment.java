@@ -28,13 +28,13 @@ import com.tyron.common.util.SingleTextWatcher;
 import com.tyron.completion.progress.ProgressManager;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.tm4e.core.internal.theme.reader.ThemeReader;
+import org.eclipse.tm4e.core.theme.IRawTheme;
 
 import java.io.File;
 import java.util.Objects;
 
-import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
-import io.github.rosemoe.sora.textmate.core.internal.theme.reader.ThemeReader;
-import io.github.rosemoe.sora.textmate.core.theme.IRawTheme;
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class EditorSettingsFragment extends PreferenceFragmentCompat {
@@ -46,14 +46,15 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
         setEnterTransition(new MaterialSharedAxis(MaterialSharedAxis.X, false));
         setExitTransition(new MaterialSharedAxis(MaterialSharedAxis.X, true));
     }
+
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         setPreferencesFromResource(R.xml.editor_preferences, rootKey);
 
         EditTextPreference fontSize = findPreference(SharedPreferenceKeys.FONT_SIZE);
         if (fontSize != null) {
-            fontSize.setOnBindEditTextListener(editText ->
-                    editText.setInputType(InputType.TYPE_CLASS_NUMBER));
+            fontSize.setOnBindEditTextListener(
+                    editText -> editText.setInputType(InputType.TYPE_CLASS_NUMBER));
         }
 
         Preference scheme = findPreference(SharedPreferenceKeys.SCHEME);
@@ -63,16 +64,13 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
             String path = pref.getString("scheme", "");
             File currentTheme = new File(path);
 
-            AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
-                    .setView(R.layout.base_textinput_layout)
-                    .setTitle(R.string.change_scheme_dialog_title)
+            AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext()).setView(
+                            R.layout.base_textinput_layout).setTitle(R.string.change_scheme_dialog_title)
                     .setNeutralButton(R.string.defaultString, (d, w) -> {
                         pref.edit().putString(SharedPreferenceKeys.SCHEME, null).apply();
                         preference.callChangeListener(null);
-                    })
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(R.string.save, null)
-                    .create();
+                    }).setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.save, null).create();
             dialog.setOnShowListener(d -> {
                 final Button button = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
 
@@ -85,8 +83,7 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
                     @Override
                     public void afterTextChanged(Editable editable) {
                         File file = new File(editable.toString());
-                        boolean enabled = file.exists() && file.canRead()
-                                && file.isFile();
+                        boolean enabled = file.exists() && file.canRead() && file.isFile();
                         button.setEnabled(enabled);
                     }
                 });
@@ -107,12 +104,10 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
                         @Override
                         public void onFailure(@NonNull Throwable t) {
                             d.dismiss();
-                            new MaterialAlertDialogBuilder(requireContext())
-                                    .setTitle(R.string.error)
-                                    .setMessage(t.getMessage())
+                            new MaterialAlertDialogBuilder(requireContext()).setTitle(
+                                            R.string.error).setMessage(t.getMessage())
                                     .setPositiveButton(android.R.string.ok, null)
-                                    .setNegativeButton(android.R.string.cancel, null)
-                                    .show();
+                                    .setNegativeButton(android.R.string.cancel, null).show();
                         }
                     }, ContextCompat.getMainExecutor(requireContext()));
                 });
@@ -125,7 +120,7 @@ public class EditorSettingsFragment extends PreferenceFragmentCompat {
     public static ListenableFuture<TextMateColorScheme> getColorScheme(@NonNull File file) {
         return ProgressManager.getInstance().computeNonCancelableAsync(() -> {
             IRawTheme rawTheme = ThemeReader.readThemeSync(file.getAbsolutePath(),
-                                                            FileUtils.openInputStream(file));
+                    FileUtils.openInputStream(file));
             return Futures.immediateFuture(EditorUtil.createTheme(rawTheme));
         });
     }

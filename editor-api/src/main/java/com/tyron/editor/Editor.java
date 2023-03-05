@@ -16,12 +16,6 @@ public interface Editor {
     @Nullable
     Project getProject();
 
-    /**
-     * Returns a mutable list of diagnostics from this editor
-     * @return mutable list of diagnostics
-     */
-    List<DiagnosticWrapper> getDiagnostics();
-
     void setDiagnostics(List<DiagnosticWrapper> diagnostics);
 
     boolean isBackgroundAnalysisEnabled();

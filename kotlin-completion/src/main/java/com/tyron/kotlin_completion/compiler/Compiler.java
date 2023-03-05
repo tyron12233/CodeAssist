@@ -3,12 +3,8 @@ package com.tyron.kotlin_completion.compiler;
 import android.util.Log;
 
 import com.tyron.builder.project.api.KotlinModule;
-import com.tyron.kotlin.completion.core.resolve.AnalysisResultWithProvider;
-import com.tyron.kotlin.completion.core.resolve.CodeAssistAnalyzerFacadeForJVM;
-import com.tyron.kotlin.completion.core.resolve.KotlinAnalyzer;
 
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
-import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
 import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems;
@@ -92,13 +88,7 @@ public class Compiler implements Closeable {
     public Pair<BindingContext, ComponentProvider> compileKtFiles(Collection<? extends KtFile> files, Collection<KtFile> sourcePath, CompletionKind kind) {
         mCompileLock.lock();
         try {
-            AnalysisResultWithProvider result =
-                    KotlinAnalyzer.INSTANCE.analyzeFiles(sourcePath, files);
-            return new Pair<>(result.getAnalysisResult().getBindingContext(), result.getComponentProvider());
-//            Pair<ComponentProvider, BindingTraceContext> pair = mDefaultCompileEnvironment.createContainer(sourcePath);
-//            ((LazyTopDownAnalyzer) pair.getFirst().resolve(LazyTopDownAnalyzer.class).getValue())
-//                    .analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.Companion.getEMPTY(), null);
-//            return new Pair<>(pair.getSecond().getBindingContext(), pair.getFirst());
+            throw new UnsupportedOperationException();
         } finally {
             mCompileLock.unlock();
         }

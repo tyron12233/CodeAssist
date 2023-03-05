@@ -12,24 +12,18 @@ import com.google.common.collect.ImmutableSet;
 import com.tyron.actions.DataContext;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
-import com.tyron.code.language.HighlightUtil;
-import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
+import com.tyron.code.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.CodeAssistCompletionWindow;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.NoOpTextActionWindow;
-import com.tyron.code.language.EditorFormatter;
-import com.tyron.code.analyzer.DiagnosticTextmateAnalyzer;
-import com.tyron.code.language.xml.LanguageXML;
-import com.tyron.code.ui.editor.impl.text.rosemoe.window.ActionsWindow;
 import com.tyron.code.ui.project.ProjectManager;
-import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.xml.model.XmlCompletionType;
-import com.tyron.xml.completion.util.DOMUtils;
 import com.tyron.completion.xml.util.XmlUtils;
 import com.tyron.editor.Caret;
 import com.tyron.editor.CharPosition;
 import com.tyron.editor.Content;
 import com.tyron.editor.Editor;
+import com.tyron.xml.completion.util.DOMUtils;
 
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMNode;
@@ -37,15 +31,12 @@ import org.eclipse.lemminx.dom.DOMParser;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
 import io.github.rosemoe.sora.lang.Language;
-import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
-import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.text.Cursor;
 import io.github.rosemoe.sora.text.TextUtils;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -57,20 +48,14 @@ import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class CodeEditorView extends CodeEditor implements Editor {
 
-    private static final Field sFormatThreadField;
-
-    static {
-        try {
-            sFormatThreadField = CodeEditor.class.getDeclaredField("mFormatThread");
-            sFormatThreadField.setAccessible(true);
-        } catch (Throwable e) {
-            throw new Error(e);
-        }
-    }
-
-    private final Set<Character> IGNORED_PAIR_ENDS =
-            ImmutableSet.<Character>builder().add(')').add(']').add('"').add('>').add('\'').add(';')
-                    .build();
+    private final Set<Character> IGNORED_PAIR_ENDS = ImmutableSet.<Character>builder()
+            .add(')')
+            .add(']')
+            .add('"')
+            .add('>')
+            .add('\'')
+            .add(';')
+            .build();
 
     private boolean mIsBackgroundAnalysisEnabled;
 
@@ -132,10 +117,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     private void init() {
         setColorScheme(EditorUtil.getDefaultColorScheme(getContext()));
-
-        mCompletionWindow = new CodeAssistCompletionWindow(this);
-        mCompletionWindow.setAdapter(new CodeAssistCompletionAdapter());
-        replaceComponent(EditorAutoCompletion.class, mCompletionWindow);
         replaceComponent(EditorTextActionWindow.class, new NoOpTextActionWindow(this));
     }
 
@@ -151,30 +132,10 @@ public class CodeEditorView extends CodeEditor implements Editor {
         super.setColorScheme(colors);
     }
 
-    @Override
-    public List<DiagnosticWrapper> getDiagnostics() {
-        return mDiagnostics;
-    }
 
     @Override
     public void setDiagnostics(List<DiagnosticWrapper> diagnostics) {
         mDiagnostics = diagnostics;
-
-        AnalyzeManager manager = getEditorLanguage().getAnalyzeManager();
-        if (manager instanceof DiagnosticTextmateAnalyzer) {
-            ((DiagnosticTextmateAnalyzer) manager).setDiagnostics(this, diagnostics);
-        }
-
-        if (mDiagnosticsListener != null) {
-            mDiagnosticsListener.accept(mDiagnostics);
-        }
-
-        Styles styles = getStyles();
-        if (styles != null) {
-            HighlightUtil.clearDiagnostics(styles);
-            HighlightUtil.markDiagnostics(this, diagnostics, styles);
-            setStyles(manager, styles);
-        }
     }
 
     public void setDiagnosticsListener(Consumer<List<DiagnosticWrapper>> listener) {
@@ -250,22 +211,26 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     private void handleAutoInsert(char c) {
         if (getEditorLanguage() instanceof LanguageXML) {
-            if (c != '>' && c != '/') {
-                return;
-            }
-            boolean full = c == '>';
-
-            DOMDocument document = DOMParser.getInstance().parse(getText().toString(), "", null);
-            DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
-            if (!DOMUtils.isClosed(nodeAt) && nodeAt.getNodeName() != null) {
-                if (XmlUtils.getCompletionType(document, getCursor().getLeft()) ==
-                    XmlCompletionType.ATTRIBUTE_VALUE) {
+            try {
+                if (c != '>' && c != '/') {
                     return;
                 }
-                String insertText = full ? "</" + nodeAt.getNodeName() + ">" : ">";
-                commitText(insertText);
-                setSelection(getCursor().getLeftLine(),
-                             getCursor().getLeftColumn() - (full ? insertText.length() : 0));
+                boolean full = c == '>';
+
+                DOMDocument document = DOMParser.getInstance().parse(getText().toString(), "", null);
+                DOMNode nodeAt = document.findNodeAt(getCursor().getLeft());
+                if (!DOMUtils.isClosed(nodeAt) && nodeAt.getNodeName() != null) {
+                    if (XmlUtils.getCompletionType(document, getCursor().getLeft()) ==
+                        XmlCompletionType.ATTRIBUTE_VALUE) {
+                        return;
+                    }
+                    String insertText = full ? "</" + nodeAt.getNodeName() + ">" : ">";
+                    commitText(insertText);
+                    setSelection(getCursor().getLeftLine(),
+                            getCursor().getLeftColumn() - (full ? insertText.length() : 0));
+                }
+            } catch (Exception e) {
+                // ignored, just dont auto insert
             }
         }
     }
@@ -359,8 +324,10 @@ public class CodeEditorView extends CodeEditor implements Editor {
     public void setSelectionRegion(int startIndex, int endIndex) {
         CharPosition start = getCharPosition(startIndex);
         CharPosition end = getCharPosition(endIndex);
-        CodeEditorView.super.setSelectionRegion(start.getLine(), start.getColumn(), end.getLine(),
-                                                end.getColumn());
+        CodeEditorView.super.setSelectionRegion(start.getLine(),
+                start.getColumn(),
+                end.getLine(),
+                end.getColumn());
     }
 
     @Override
@@ -373,34 +340,13 @@ public class CodeEditorView extends CodeEditor implements Editor {
         getText().endBatchEdit();
     }
 
-    public boolean isFormatting() {
-        try {
-            return sFormatThreadField.get(this) != null;
-        } catch (IllegalAccessException e) {
-            return false;
-        }
-    }
-
     @Override
     public synchronized boolean formatCodeAsync() {
         return CodeEditorView.super.formatCodeAsync();
     }
 
-
     @Override
-    public synchronized boolean formatCodeAsync(int start, int end) {
-        if (isFormatting()) {
-            return false;
-        }
-        if (getEditorLanguage() instanceof EditorFormatter) {
-            ProgressManager.getInstance().runNonCancelableAsync(() -> {
-                CharSequence originalText = getText();
-                final CharSequence formatted =
-                        ((EditorFormatter) getEditorLanguage()).format(originalText, start, end);
-                super.onFormatSucceed(originalText, formatted);
-            });
-            return true;
-        }
+    public boolean formatCodeAsync(int startIndex, int endIndex) {
         return false;
     }
 
@@ -423,25 +369,6 @@ public class CodeEditorView extends CodeEditor implements Editor {
     }
 
     @Override
-    public void rerunAnalysis() {
-        //noinspection ConstantConditions
-        if (getEditorLanguage() != null) {
-            AnalyzeManager analyzeManager = getEditorLanguage().getAnalyzeManager();
-            Project project = ProjectManager.getInstance().getCurrentProject();
-
-            if (analyzeManager instanceof DiagnosticTextmateAnalyzer) {
-                if (isBackgroundAnalysisEnabled() && (project != null && !project.isCompiling())) {
-                    ((DiagnosticTextmateAnalyzer) analyzeManager).rerunWithBg();
-                } else {
-                    ((DiagnosticTextmateAnalyzer) analyzeManager).rerunWithoutBg();
-                }
-            } else {
-                analyzeManager.rerun();
-            }
-        }
-    }
-
-    @Override
     public boolean isBackgroundAnalysisEnabled() {
         return mIsBackgroundAnalysisEnabled;
     }
@@ -454,7 +381,7 @@ public class CodeEditorView extends CodeEditor implements Editor {
 
     @Override
     public void requireCompletion() {
-        mCompletionWindow.requireCompletion();
+        getComponent(EditorAutoCompletion.class).requireCompletion();
     }
 
     public void setViewModel(EditorViewModel editorViewModel) {
@@ -464,32 +391,5 @@ public class CodeEditorView extends CodeEditor implements Editor {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-    }
-
-    private void drawSquigglyLine(Canvas canvas,
-                                  float startX,
-                                  float startY,
-                                  float endX,
-                                  float endY) {
-        float waveSize = getDpUnit() * 3;
-        float doubleWaveSize = waveSize * 2;
-        float width = endX - startX;
-        for (int i = (int) startX; i < startX + width; i += doubleWaveSize) {
-            canvas.drawLine(i, startY, i + waveSize, startY - waveSize, mDiagnosticPaint);
-            canvas.drawLine(i + waveSize, startY - waveSize, i + doubleWaveSize, startY,
-                            mDiagnosticPaint);
-        }
-    }
-
-    private void setDiagnosticColor(DiagnosticWrapper wrapper) {
-        EditorColorScheme color = getColorScheme();
-        switch (wrapper.getKind()) {
-            case ERROR:
-                mDiagnosticPaint.setColor(color.getColor(EditorColorScheme.PROBLEM_ERROR));
-                break;
-            case MANDATORY_WARNING:
-            case WARNING:
-                mDiagnosticPaint.setColor(color.getColor(EditorColorScheme.PROBLEM_WARNING));
-        }
     }
 }

@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.tyron.builder.model.Library;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.project.api.JavaModule;
 import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.StringSearch;
@@ -32,7 +32,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     // Map of fully qualified names and the jar they are contained in
     private final Map<String, File> mClassFiles;
     private final Map<String, File> mJavaFiles;
-    private final Map<String, Library> mLibraryHashMap;
+    private final Map<String, CodeAssistLibrary> mLibraryHashMap;
     private final Map<String, File> mInjectedClassesMap;
     private final Set<File> mLibraries;
 
@@ -83,13 +83,13 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void putLibraryHashes(Map<String, Library> hashes) {
+    public void putLibraryHashes(Map<String, CodeAssistLibrary> hashes) {
         mLibraryHashMap.putAll(hashes);
     }
 
     @Nullable
     @Override
-    public Library getLibrary(String hash) {
+    public CodeAssistLibrary getLibrary(String hash) {
         return mLibraryHashMap.get(hash);
     }
 
@@ -108,7 +108,11 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
     }
 
     @Override
-    public void addLibrary(@NonNull File jar) {
+    public void addLibrary(@NonNull CodeAssistLibrary library) {
+        File jar = library.getSourceFile();
+        if (jar == null) {
+            return;
+        }
         if (!jar.getName().endsWith(".jar")) {
             return;
         }
@@ -122,7 +126,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
         }
     }
 
-    private void putJar(File file) throws IOException {
+    protected void putJar(File file) throws IOException {
         if (file == null) {
             return;
         }
@@ -243,29 +247,7 @@ public class JavaModuleImpl extends ModuleImpl implements JavaModule {
 
     @Override
     public void index() {
-        try {
-            putJar(getBootstrapJarFile());
-        } catch (IOException e) {
-            // ignored
-        }
 
-        if (getJavaDirectory().exists()) {
-            FileUtils.iterateFiles(getJavaDirectory(),
-                    FileFilterUtils.suffixFileFilter(".java"),
-                    TrueFileFilter.INSTANCE
-            ).forEachRemaining(this::addJavaFile);
-        }
-
-        File[] libraryDirectories = new File(getBuildDirectory(), "libs")
-                .listFiles(File::isDirectory);
-        if (libraryDirectories != null) {
-            for (File directory : libraryDirectories) {
-                File check = new File(directory, "classes.jar");
-                if (check.exists()) {
-                    addLibrary(check);
-                }
-            }
-        }
     }
 
     @Override

@@ -7,6 +7,7 @@ description = "This project contains various native operating system integration
 dependencies {
     api projects.buildTools.builderFiles
 
+    implementation projects.common
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderFileTemp
 
@@ -17,6 +18,6 @@ dependencies {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
 }

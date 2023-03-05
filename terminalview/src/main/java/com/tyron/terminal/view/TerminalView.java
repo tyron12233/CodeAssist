@@ -993,8 +993,6 @@ public final class TerminalView extends View {
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
         int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
 
-        Log.d(LOG_TAG, "COLUMNS: " + newColumns + " ROWS: " + newRows);
-
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
             mTermSession.updateSize(newColumns, newRows);
             mEmulator = mTermSession.getEmulator();
@@ -1305,9 +1303,9 @@ public final class TerminalView extends View {
     }
 
     public void startTextSelectionMode(MotionEvent event) {
-        if (!requestFocus()) {
-            return;
-        }
+//        if (!requestFocus()) {
+//            return;
+//        }
 
         showTextSelectionCursors(event);
         mClient.copyModeChanged(isSelectingText());

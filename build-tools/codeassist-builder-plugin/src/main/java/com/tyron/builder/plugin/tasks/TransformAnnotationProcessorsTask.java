@@ -3,37 +3,32 @@ package com.tyron.builder.plugin.tasks;
 import com.android.tools.r8.D8;
 import com.android.tools.r8.D8Command;
 import com.android.tools.r8.OutputMode;
-import com.tyron.builder.api.Action;
-import com.tyron.builder.api.BuildException;
-import com.tyron.builder.api.artifacts.repositories.IvyArtifactRepository;
-import com.tyron.builder.api.file.FileCollection;
-import com.tyron.builder.api.file.FileTree;
-import com.tyron.builder.api.file.FileVisitDetails;
-import com.tyron.builder.api.tasks.IgnoreEmptyDirectories;
-import com.tyron.builder.api.tasks.InputFiles;
-import com.tyron.builder.api.tasks.OutputDirectory;
-import com.tyron.builder.api.tasks.PathSensitive;
-import com.tyron.builder.api.tasks.PathSensitivity;
-import com.tyron.builder.api.tasks.SkipWhenEmpty;
-import com.tyron.builder.api.tasks.SourceTask;
-import com.tyron.builder.api.tasks.TaskAction;
-import com.tyron.builder.api.tasks.compile.JavaCompile;
-import com.tyron.builder.util.internal.GFileUtils;
-import com.tyron.builder.util.internal.GUtil;
-import com.tyron.builder.work.ChangeType;
-import com.tyron.builder.work.FileChange;
-import com.tyron.builder.work.InputChanges;
-import com.tyron.builder.work.NormalizeLineEndings;
+
+import org.gradle.api.GradleException;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.tasks.IgnoreEmptyDirectories;
+import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.SkipWhenEmpty;
+import org.gradle.api.tasks.SourceTask;
+import org.gradle.api.tasks.TaskAction;
+import org.gradle.util.internal.GFileUtils;
+import org.gradle.util.internal.GUtil;
+import org.gradle.work.ChangeType;
+import org.gradle.work.FileChange;
+import org.gradle.work.InputChanges;
+import org.gradle.work.NormalizeLineEndings;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.FileSystems;
 import java.util.Enumeration;
 import java.util.concurrent.Callable;
 import java.util.jar.JarEntry;
@@ -80,7 +75,7 @@ public class TransformAnnotationProcessorsTask extends SourceTask {
             File[] dexFiles = temporaryDir.listFiles(c -> c.getName().endsWith(".dex"));
 
             if (dexFiles == null) {
-                throw new BuildException("No dex files found in " + temporaryDir);
+                throw new GradleException("No dex files found in " + temporaryDir);
             }
 
 

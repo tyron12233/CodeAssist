@@ -1,19 +1,30 @@
 package com.tyron.completion.xml.insert;
 
+import com.android.ide.common.rendering.api.AttrResourceValue;
+import com.android.ide.common.rendering.api.AttributeFormat;
+import com.android.resources.ResourceUrl;
 import com.tyron.completion.model.CompletionItem;
-import com.tyron.xml.completion.repository.api.AttrResourceValue;
-import com.tyron.xml.completion.repository.api.AttributeFormat;
 import com.tyron.editor.Caret;
 import com.tyron.editor.Editor;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class ValueInsertHandler extends DefaultXmlInsertHandler {
 
     private final AttrResourceValue attributeInfo;
+    private final ResourceUrl selfReference;
 
     public ValueInsertHandler(AttrResourceValue attributeInfo, CompletionItem item) {
-        super(item);
+        this(null, attributeInfo, item);
+    }
 
-        this.attributeInfo = attributeInfo;
+    public ValueInsertHandler(@Nullable ResourceUrl selfReference,
+                              @NotNull AttrResourceValue attribute,
+                              @Nullable CompletionItem completionItem) {
+        super(completionItem);
+        this.selfReference = selfReference;
+        this.attributeInfo = attribute;
     }
 
     @Override

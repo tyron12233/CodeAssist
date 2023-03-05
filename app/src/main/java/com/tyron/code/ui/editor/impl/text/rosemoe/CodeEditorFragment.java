@@ -22,7 +22,6 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.lifecycle.ViewModelStoreOwner;
 
-import com.android.tools.r8.graph.V;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -35,22 +34,20 @@ import com.tyron.actions.util.DataContextUtils;
 import com.tyron.builder.log.LogViewModel;
 import com.tyron.builder.model.DiagnosticWrapper;
 import com.tyron.builder.project.Project;
-import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.builder.project.api.FileManager;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.listener.FileListener;
 import com.tyron.code.ApplicationLoader;
 import com.tyron.code.R;
+import com.tyron.code.analyzer.BaseTextmateAnalyzer;
+import com.tyron.code.language.LanguageManager;
+import com.tyron.code.language.java.JavaLanguage;
+import com.tyron.code.language.textmate.EmptyTextMateLanguage;
 import com.tyron.code.ui.editor.CodeAssistCompletionAdapter;
 import com.tyron.code.ui.editor.CodeAssistCompletionLayout;
 import com.tyron.code.ui.editor.EditorViewModel;
 import com.tyron.code.ui.editor.Savable;
 import com.tyron.code.ui.editor.impl.FileEditorManagerImpl;
-import com.tyron.code.language.LanguageManager;
-import com.tyron.code.language.java.JavaLanguage;
-import com.tyron.code.analyzer.BaseTextmateAnalyzer;
-import com.tyron.code.language.textmate.EmptyTextMateLanguage;
-import com.tyron.code.language.xml.LanguageXML;
 import com.tyron.code.ui.editor.scheme.CompiledEditorScheme;
 import com.tyron.code.ui.editor.shortcuts.ShortcutAction;
 import com.tyron.code.ui.editor.shortcuts.ShortcutItem;
@@ -67,32 +64,16 @@ import com.tyron.completion.java.util.DiagnosticUtil;
 import com.tyron.completion.java.util.JavaDataContextUtil;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.editor.CharPosition;
-import com.tyron.kotlin_completion.CompletionEngine;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.FileContent;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemManager;
 import org.apache.commons.vfs2.VFS;
-import org.jetbrains.kotlin.backend.common.psi.PsiSourceManager;
-import org.jetbrains.kotlin.com.intellij.openapi.components.ServiceManager;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentEvent;
-import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.event.DocumentEventImpl;
-import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.LoadTextUtil;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem;
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalVirtualFile;
-import org.jetbrains.kotlin.com.intellij.psi.AbstractFileViewProvider;
-import org.jetbrains.kotlin.com.intellij.psi.FileViewProvider;
-import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
-import org.jetbrains.kotlin.com.intellij.psi.PsiManager;
-import org.jetbrains.kotlin.com.intellij.util.DocumentEventUtil;
-import org.jetbrains.kotlin.com.intellij.util.FileContentUtilCore;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
@@ -101,10 +82,9 @@ import io.github.rosemoe.sora.event.ClickEvent;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.LongPressEvent;
 import io.github.rosemoe.sora.lang.Language;
-import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.Cursor;
-import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.DirectAccessProps;
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
@@ -230,7 +210,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         View topView = view.findViewById(R.id.top_view);
         EditorViewModel viewModel =
-                new ViewModelProvider((ViewModelStoreOwner) requireParentFragment()).get(EditorViewModel.class);
+                new ViewModelProvider((ViewModelStoreOwner) requireParentFragment()).get(
+                        EditorViewModel.class);
         viewModel.getAnalyzeState().observe(getViewLifecycleOwner(), analyzing -> {
             if (analyzing) {
                 topView.setVisibility(View.VISIBLE);
@@ -430,8 +411,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
                         assert result != null;
                         mEditor.setColorScheme(result);
                         if (mLanguage.getAnalyzeManager() instanceof BaseTextmateAnalyzer) {
-                            ((BaseTextmateAnalyzer) mLanguage.getAnalyzeManager())
-                                    .updateTheme(result.getRawTheme());
+                            ((BaseTextmateAnalyzer) mLanguage.getAnalyzeManager()).updateTheme(
+                                    result.getRawTheme());
                             mLanguage.getAnalyzeManager().rerun();
                         }
                     }
@@ -554,10 +535,13 @@ public class CodeEditorFragment extends Fragment implements Savable,
             ProgressManager.getInstance().runNonCancelableAsync(() -> {
                 try {
                     FileUtils.writeStringToFile(mCurrentFile, mEditor.getText().toString(),
-                                                StandardCharsets.UTF_8);
+                            StandardCharsets.UTF_8);
                 } catch (IOException e) {
-                    LOG.severe("Unable to save file: " + mCurrentFile.getAbsolutePath() + "\n" +
-                               "Reason: " + e.getMessage());
+                    LOG.severe("Unable to save file: " +
+                               mCurrentFile.getAbsolutePath() +
+                               "\n" +
+                               "Reason: " +
+                               e.getMessage());
                 }
             });
         }
@@ -594,7 +578,6 @@ public class CodeEditorFragment extends Fragment implements Savable,
         Module module = currentProject.getModule(mCurrentFile);
         FileManager fileManager = module.getFileManager();
         fileManager.addSnapshotListener(this);
-
 
 
         // the file is already opened, so no need to load it.
@@ -651,8 +634,11 @@ public class CodeEditorFragment extends Fragment implements Savable,
                     checkCanSave();
                 }
 
-                LOG.severe("Unable to read current file: " + mCurrentFile + "\n" +
-                           "Reason: " + t.getMessage());
+                LOG.severe("Unable to read current file: " +
+                           mCurrentFile +
+                           "\n" +
+                           "Reason: " +
+                           t.getMessage());
             }
         }, ContextCompat.getMainExecutor(requireContext()));
     }
@@ -780,6 +766,7 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
     /**
      * Create the data context specific to this fragment for use with the actions API.
+     *
      * @return the data context.
      */
     private DataContext createDataContext() {
@@ -794,19 +781,8 @@ public class CodeEditorFragment extends Fragment implements Savable,
 
         if (currentProject != null && mLanguage instanceof JavaLanguage) {
             JavaDataContextUtil.addEditorKeys(dataContext, currentProject, mCurrentFile,
-                                              mEditor.getCursor().getLeft());
+                    mEditor.getCursor().getLeft());
         }
-
-        DiagnosticWrapper diagnosticWrapper = DiagnosticUtil
-                .getDiagnosticWrapper(mEditor.getDiagnostics(),
-                                      mEditor.getCursor().getLeft(),
-                                      mEditor.getCursor().getRight());
-        if (diagnosticWrapper == null && mLanguage instanceof LanguageXML) {
-            diagnosticWrapper = DiagnosticUtil.getXmlDiagnosticWrapper(mEditor.getDiagnostics(),
-                                                                       mEditor.getCursor()
-                                                                               .getLeftLine());
-        }
-        dataContext.putData(CommonDataKeys.DIAGNOSTIC, diagnosticWrapper);
         return dataContext;
     }
 }

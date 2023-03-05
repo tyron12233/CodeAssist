@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -124,6 +125,28 @@ public class PackageTrie {
         }
 
         return mRoot.getChildren().keySet();
+    }
+
+    public Set<String> getLeafNodes() {
+        return new HashSet<>(getLeafNodes("", mRoot));
+    }
+
+    private Set<String> getLeafNodes(String currentPackage, Node current) {
+        if (current.isLeaf) {
+            return Collections.singleton(currentPackage);
+        } else {
+            if (current.getChildren() == null || current.getChildren().isEmpty()) {
+                return Collections.emptySet();
+            }
+            Set<String> leafNodes = new HashSet<>();
+            for (Node value : current.getChildren().values()) {
+                String newPackage = currentPackage.isEmpty()
+                        ? value.getValue()
+                        : currentPackage + "." + value.getValue();
+                leafNodes.addAll(getLeafNodes(newPackage, value));
+            }
+            return leafNodes;
+        }
     }
 
     private void recurse(Node node, String currentPackage, List<String> result) {

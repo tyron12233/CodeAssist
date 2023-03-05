@@ -40,8 +40,8 @@ public class CompiledEditorScheme extends EditorColorScheme {
             .put(R.styleable.EditorColorScheme_problemWarning, PROBLEM_WARNING)
             .put(R.styleable.EditorColorScheme_problemTypo, PROBLEM_TYPO)
             .put(R.styleable.EditorColorScheme_selectedTextBackground, SELECTED_TEXT_BACKGROUND)
-            .put(R.styleable.EditorColorScheme_completionPanelBackground, AUTO_COMP_PANEL_BG)
-            .put(R.styleable.EditorColorScheme_completionPanelStrokeColor, AUTO_COMP_PANEL_CORNER)
+            .put(R.styleable.EditorColorScheme_completionPanelBackground, COMPLETION_WND_BACKGROUND)
+            .put(R.styleable.EditorColorScheme_completionPanelStrokeColor, COMPLETION_WND_CORNER)
             .put(R.styleable.EditorColorScheme_lineNumberBackground, LINE_NUMBER_BACKGROUND)
             .put(R.styleable.EditorColorScheme_lineNumberTextColor, LINE_NUMBER_PANEL_TEXT)
             .put(R.styleable.EditorColorScheme_lineNumberDividerColor, LINE_DIVIDER)
@@ -80,6 +80,6 @@ public class CompiledEditorScheme extends EditorColorScheme {
     }
 
     private void setColorInternal(int id, int value) {
-        mColors.put(id, value);
+        colors.put(id, value);
     }
 }

@@ -58,15 +58,15 @@ public class AddTryCatch implements JavaRewrite {
         TextEdit insert = new TextEdit(range, edit, true);
         edits.add(insert);
 
-        ParseTask task = compiler.parse(file);
-        if (!ActionUtil.hasImport(task.root, exceptionName)) {
-            AddImport addImport = new AddImport(file.toFile(), exceptionName);
-            Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-            TextEdit[] imports = rewrite.get(file);
-            if (imports != null) {
-                Collections.addAll(edits, imports);
-            }
-        }
+//        ParseTask task = compiler.parse(file);
+//        if (!ActionUtil.hasImport(task.root, exceptionName)) {
+//            AddImport addImport = new AddImport(file.toFile(), exceptionName);
+//            Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+//            TextEdit[] imports = rewrite.get(file);
+//            if (imports != null) {
+//                Collections.addAll(edits, imports);
+//            }
+//        }
         return ImmutableMap.of(file, edits.toArray(new TextEdit[0]));
     }
 

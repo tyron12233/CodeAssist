@@ -156,12 +156,12 @@ public class ImplementAbstractMethods implements JavaRewrite {
         for (String type : typesToImport) {
             String fqn = ActionUtil.removeDiamond(type);
             if (!ActionUtil.hasImport(task.root(), fqn)) {
-                JavaRewrite addImport = new AddImport(file.toFile(), fqn);
-                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
-                TextEdit[] textEdits = rewrite.get(file);
-                if (textEdits != null) {
-                    Collections.addAll(edits, textEdits);
-                }
+//                JavaRewrite addImport = new AddImport(file.toFile(), fqn);
+//                Map<Path, TextEdit[]> rewrite = addImport.rewrite(compiler);
+//                TextEdit[] textEdits = rewrite.get(file);
+//                if (textEdits != null) {
+//                    Collections.addAll(edits, textEdits);
+//                }
             }
         }
 

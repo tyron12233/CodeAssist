@@ -43,4 +43,5 @@ public interface TerminalSessionClient {
 
     void logStackTrace(String tag, Exception e);
 
+    void onShareText(TerminalSession terminalSession, String transcriptText);
 }

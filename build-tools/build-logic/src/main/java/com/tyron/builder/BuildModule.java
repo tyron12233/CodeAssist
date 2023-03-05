@@ -55,4 +55,8 @@ public class BuildModule {
     public static void setAndroidJar(@NonNull File jar) {
         sAndroidJar = jar;
     }
+
+    public static void setLambdaStubs(File file) {
+        sLambdaStubs = file;
+    }
 }

@@ -1,13 +1,11 @@
 package com.tyron.code.ui.theme;
 
-import com.tyron.code.ui.settings.EditorSettingsFragment;
 import com.tyron.common.ApplicationProvider;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import io.github.rosemoe.sora.langs.textmate.theme.TextMateColorScheme;
-import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora2.text.EditorUtil;
 
 public class ThemeRepository {

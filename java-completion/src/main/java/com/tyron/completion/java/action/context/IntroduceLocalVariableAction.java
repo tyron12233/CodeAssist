@@ -1,44 +1,41 @@
 package com.tyron.completion.java.action.context;
 
-import android.app.Activity;
-import android.content.Context;
-
 import androidx.annotation.NonNull;
 
+import com.android.tools.r8.internal.P;
+import com.sun.source.tree.ErroneousTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.Trees;
+import com.sun.tools.javac.api.JavacTaskImpl;
+import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.tree.JCTree;
 import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.AnAction;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.Presentation;
-import com.tyron.completion.java.compiler.CompileTask;
-import com.tyron.completion.java.compiler.CompilerContainer;
-import com.tyron.completion.java.compiler.JavaCompilerService;
 import com.tyron.completion.java.R;
-import com.tyron.completion.java.action.CommonJavaContextKeys;
-import com.tyron.completion.java.util.TreeUtil;
-import com.tyron.completion.util.RewriteUtil;
+import com.tyron.completion.java.action.FindCurrentPath;
+import com.tyron.completion.java.parse.CompilationInfo;
+import com.tyron.completion.java.provider.DefaultJavacUtilitiesProvider;
 import com.tyron.completion.java.rewrite.IntroduceLocalVariable;
-import com.tyron.completion.java.rewrite.JavaRewrite;
+import com.tyron.completion.java.rewrite.JavaRewrite2;
 import com.tyron.completion.java.util.ActionUtil;
+import com.tyron.completion.util.RewriteUtil;
 import com.tyron.editor.Editor;
-
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.ErrorType;
-import javax.lang.model.type.ExecutableType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import com.sun.source.tree.ErroneousTree;
-import com.sun.source.tree.MethodInvocationTree;
-import com.sun.source.tree.NewClassTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.util.SourcePositions;
-import com.sun.source.util.TreePath;
-import com.sun.source.util.Trees;
-import com.sun.tools.javac.code.Type;
 
 import java.io.File;
 import java.util.List;
+
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
 
 public class IntroduceLocalVariableAction extends AnAction {
 
@@ -58,51 +55,56 @@ public class IntroduceLocalVariableAction extends AnAction {
             return;
         }
 
-        JavaCompilerService compiler = event.getData(CommonJavaContextKeys.COMPILER);
-        if (compiler == null) {
-            return;
-        }
-
         File file = event.getData(CommonDataKeys.FILE);
         if (file == null) {
             return;
         }
 
-        TreePath currentPath = event.getData(CommonJavaContextKeys.CURRENT_PATH);
-        if (currentPath == null) {
+        CompilationInfo compilationInfo = event.getData(CompilationInfo.COMPILATION_INFO_KEY);
+        if (compilationInfo == null) {
             return;
         }
+
+        JCTree.JCCompilationUnit unit = compilationInfo.getCompilationUnit(file.toURI());
+        if (unit == null) {
+            return;
+        }
+
+        int left = editor.getCaret().getStart();
+        int right = editor.getCaret().getEnd();
+        JavacTaskImpl javacTask = compilationInfo.impl.getJavacTask();
+        TreePath currentPath = new FindCurrentPath(javacTask).scan(unit, left, right);
 
         if (ActionUtil.canIntroduceLocalVariable(currentPath) == null) {
             return;
         }
 
         presentation.setVisible(true);
-        presentation.setText(event.getDataContext().getString(R.string.menu_quickfix_introduce_local_variable_title));
+        presentation.setText(event.getDataContext()
+                .getString(R.string.menu_quickfix_introduce_local_variable_title));
     }
 
     @Override
     public void actionPerformed(@NonNull AnActionEvent e) {
         Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
-        TreePath currentPath = e.getRequiredData(CommonJavaContextKeys.CURRENT_PATH);
         File file = e.getRequiredData(CommonDataKeys.FILE);
-        JavaCompilerService compiler = e.getRequiredData(CommonJavaContextKeys.COMPILER);
-        CompilerContainer cachedContainer = compiler.getCachedContainer();
 
-        JavaRewrite rewrite = cachedContainer.get(task -> {
-            if (task != null) {
-                TreePath path = ActionUtil.canIntroduceLocalVariable(currentPath);
-                return performInternal(task, path, file);
-            }
-            return null;
-        });
+        CompilationInfo compilationInfo = e.getRequiredData(CompilationInfo.COMPILATION_INFO_KEY);
+        JavacTaskImpl javacTask = compilationInfo.impl.getJavacTask();
+        JCTree.JCCompilationUnit unit = compilationInfo.getCompilationUnit(file.toURI());
+        TreePath currentPath =
+                new FindCurrentPath(javacTask).scan(unit, editor.getCaret().getStart(),
+                        editor.getCaret().getEnd());
+        TreePath path = ActionUtil.canIntroduceLocalVariable(currentPath);
+        JavaRewrite2 rewrite = performInternal(javacTask, path, file);
 
         if (rewrite != null) {
-            RewriteUtil.performRewrite(editor, file, compiler, rewrite);
+            RewriteUtil.performRewrite(editor, file,
+                    new DefaultJavacUtilitiesProvider(javacTask, unit, editor.getProject()), rewrite);
         }
     }
 
-    private JavaRewrite performInternal(CompileTask task, TreePath path, File file) {
+    private JavaRewrite2 performInternal(JavacTaskImpl task, TreePath path, File file) {
         if (path.getLeaf().getKind() == Tree.Kind.ERRONEOUS) {
             ErroneousTree leaf = (ErroneousTree) path.getLeaf();
             List<? extends Tree> errorTrees = leaf.getErrorTrees();
@@ -110,27 +112,50 @@ public class IntroduceLocalVariableAction extends AnAction {
                 path = new TreePath(path.getParentPath(), errorTrees.get(0));
             }
         }
-        Trees trees = task.getTrees();
+        Trees trees = Trees.instance(task);
         Element element = trees.getElement(path);
 
         if (element == null) {
             return null;
         }
 
+        if (element instanceof ExecutableElement) {
+            TypeMirror returnType =
+                    ActionUtil.getReturnType(task, path, (ExecutableElement) element);
+            if (returnType instanceof TypeVariable) {
+                TypeVariable typeVariable = (TypeVariable) returnType;
+
+                TypeMirror lowerBound = typeVariable.getLowerBound();
+                TypeMirror upperBound = typeVariable.getUpperBound();
+                if (lowerBound != null && lowerBound.getKind() != TypeKind.NULL) {
+                    returnType = lowerBound;
+                } else if (upperBound != null && upperBound.getKind() != TypeKind.NULL) {
+                    returnType = upperBound;
+                } else {
+                    returnType = task.getElements().getTypeElement("java.lang.Object").asType();
+                }
+            }
+            if (returnType != null) {
+                if (returnType.getKind() == TypeKind.VOID) {
+                    return null;
+                }
+                return rewrite(returnType, trees, path, file, element.getSimpleName().toString());
+            }
+        }
+
         TypeMirror typeMirror = trees.getTypeMirror(path);
 
         if (typeMirror == null || typeMirror.getKind() == TypeKind.ERROR) {
             // information is incomplete and type cannot be determined, default to Object
-            typeMirror = task.task.getElements()
-                    .getTypeElement("java.lang.Object")
-                    .asType();
+            typeMirror = task.getElements().getTypeElement("java.lang.Object").asType();
         }
 
         if (typeMirror != null) {
+            if (typeMirror.getKind() == TypeKind.VOID) {
+                return null;
+            }
             if (typeMirror.getKind() == TypeKind.TYPEVAR) {
-                if (((Type.TypeVar) typeMirror).isCaptured()) {
-                    typeMirror = ((Type.TypeVar) typeMirror).getUpperBound();
-                }
+                typeMirror = ((Type.TypeVar) typeMirror).getUpperBound();
             }
             if (typeMirror.getKind() == TypeKind.EXECUTABLE) {
                 // use the return type of the method
@@ -138,26 +163,16 @@ public class IntroduceLocalVariableAction extends AnAction {
             }
             return rewrite(typeMirror, trees, path, file, element.getSimpleName().toString());
         }
-
-        if (element instanceof ExecutableElement) {
-            TypeMirror returnType = ActionUtil.getReturnType(task.task, path,
-                    (ExecutableElement) element);
-            if (returnType != null) {
-                return rewrite(returnType, trees, path, file, element.getSimpleName().toString());
-            }
-        }
         return null;
     }
 
-    private JavaRewrite rewrite(TypeMirror type,
-                                Trees trees,
-                                TreePath path,
-                                File file,
-                                String methodName) {
+    private JavaRewrite2 rewrite(TypeMirror type,
+                                 Trees trees,
+                                 TreePath path,
+                                 File file,
+                                 String methodName) {
         SourcePositions pos = trees.getSourcePositions();
-        long startPosition = pos.getStartPosition(path.getCompilationUnit(),
-                path.getLeaf());
-        return new IntroduceLocalVariable(file.toPath(),
-                methodName, type, startPosition);
+        long startPosition = pos.getStartPosition(path.getCompilationUnit(), path.getLeaf());
+        return new IntroduceLocalVariable(file.toPath(), methodName, type, startPosition);
     }
 }

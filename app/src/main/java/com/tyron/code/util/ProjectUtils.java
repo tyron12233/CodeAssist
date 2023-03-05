@@ -110,9 +110,6 @@ public class ProjectUtils {
     }
 
     public static boolean isResourceXMLFile(@NonNull File file) {
-        if (!file.getName().endsWith(".xml")) {
-            return false;
-        }
         return isResourceXMLDir(file.getParentFile());
     }
 

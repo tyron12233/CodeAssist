@@ -70,8 +70,7 @@ public class AndroidXmlTagUtils {
         return sManifestTagMappings.get(tag);
     }
 
-    public static void addManifestTagItems(@NonNull XmlRepository repository,
-                                           @NonNull String prefix,
+    public static void addManifestTagItems(@NonNull String prefix,
                                            @NonNull CompletionList.Builder builder) {
         for (String tag : sManifestTagMappings.keySet()) {
             CompletionItem item = new CompletionItem();

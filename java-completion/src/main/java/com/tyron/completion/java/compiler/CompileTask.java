@@ -15,6 +15,7 @@ import java.util.List;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 import com.sun.source.util.Trees;
+import com.sun.tools.javac.api.JavacTrees;
 
 public class CompileTask implements AutoCloseable {
 
@@ -28,7 +29,7 @@ public class CompileTask implements AutoCloseable {
     public CompileTask(CompileBatch batch) {
         mCompileBatch = batch;
         this.task = batch.task;
-        this.trees = Trees.instance(task);
+        this.trees = JavacTrees.instance(task);
 
         this.roots = batch.roots;
         this.diagnostics = batch.parent.getDiagnostics();
@@ -74,5 +75,9 @@ public class CompileTask implements AutoCloseable {
         if (borrow != null && !borrow.closed) {
             borrow.close();
         }
+    }
+
+    public boolean isClosed() {
+        return mCompileBatch.closed;
     }
 }

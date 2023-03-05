@@ -81,4 +81,9 @@ public class TerminalSessionClientAdapter implements TerminalSessionClient {
     public void logStackTrace(String tag, Exception e) {
 
     }
+
+    @Override
+    public void onShareText(TerminalSession terminalSession, String transcriptText) {
+
+    }
 }

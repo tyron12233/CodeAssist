@@ -3,6 +3,7 @@ package com.tyron.xml.completion.util;
 import com.tyron.xml.completion.repository.api.ResourceNamespace;
 
 import org.eclipse.lemminx.dom.DOMAttr;
+import org.eclipse.lemminx.dom.DOMComment;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
@@ -11,10 +12,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
@@ -65,6 +67,21 @@ public class DOMUtils {
             element = element.getParentElement();
         }
         return prefix;
+    }
+
+    public static List<DOMElement> getSubTags(DOMElement tag) {
+        return tag.getChildren().stream()
+                .filter(it -> it instanceof DOMElement)
+                .map(it -> (DOMElement) it)
+                .collect(Collectors.toList());
+    }
+
+    @Nullable
+    public static String getNamespace(@NotNull DOMAttr attr) {
+        String prefix = getPrefix(attr);
+        ResourceNamespace.Resolver namespaceResolver =
+                getNamespaceResolver(attr.getOwnerDocument());
+        return namespaceResolver.prefixToUri(prefix);
     }
 
     public static String getPrefix(@NotNull DOMAttr attr) {
@@ -159,6 +176,25 @@ public class DOMUtils {
         putUserData(document, NAMESPACE_KEY, namespace);
     }
 
+    public static List<String> getXmlnsAttributes(DOMDocument document) {
+        DOMElement rootElement = getRootElement(document);
+        if (rootElement == null) {
+            return Collections.emptyList();
+        }
+        List<DOMAttr> attributeNodes = rootElement.getAttributeNodes();
+        if (attributeNodes == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> namespaces = new ArrayList<>();
+        for (DOMAttr attributeNode : attributeNodes) {
+            if (attributeNode.isXmlns() || attributeNode.getName().startsWith("xmlns:")) {
+                namespaces.add(attributeNode.getValue());
+            }
+        }
+        return namespaces;
+    }
+
     @Nullable
     public static ResourceNamespace getNamespace(DOMDocument document) {
         final Object userData = getUserData(document, NAMESPACE_KEY);
@@ -166,5 +202,49 @@ public class DOMUtils {
             return ((ResourceNamespace) userData);
         }
         return null;
+    }
+
+    public static DOMComment findPreviousComment(DOMElement tag) {
+        DOMNode current = tag;
+        while (current != null && !(current instanceof DOMComment)) {
+            current = current.getPreviousSibling();
+
+            if (current == null) {
+                break;
+            }
+        }
+
+        if (current == null) {
+            return null;
+        }
+        return (DOMComment) current;
+    }
+
+    public static <T extends DOMNode> List<T> findChildrenOfType(DOMNode element, Class<T> domElementClass) {
+        List<T> list = new ArrayList<>();
+
+        LinkedList<DOMNode> queue = new LinkedList<>();
+        queue.addFirst(element);
+
+        while (!queue.isEmpty()) {
+            DOMNode first = queue.poll();
+
+            if (domElementClass.isAssignableFrom(first.getClass())) {
+                //noinspection unchecked
+                list.add((T) first);
+            }
+
+            queue.addAll(first.getChildren());
+        }
+
+        return list;
+    }
+
+    public static String getNameWithoutPrefix(DOMAttr it) {
+        String name = it.getName();
+        if (name.contains(":")) {
+            return name.substring(name.indexOf(":") + 1);
+        }
+        return name;
     }
 }

@@ -7,19 +7,28 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
+import com.tyron.builder.model.CodeAssistAndroidLibrary;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.model.ModuleSettings;
+import com.tyron.builder.project.Project;
+import com.tyron.builder.project.api.AndroidContentRoot;
 import com.tyron.builder.project.api.AndroidModule;
+import com.tyron.builder.project.api.ContentRoot;
+import com.tyron.builder.project.util.PackageTrie;
 import com.tyron.common.util.StringSearch;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.util.ReflectionUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,9 +36,18 @@ import java.util.function.Consumer;
 
 public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
-    private ManifestData mManifestData;
     private final Map<String, File> mKotlinFiles;
-    private Map<String, File> mResourceClasses;
+    private final Map<String, File> mResourceClasses;
+
+    private final Set<String> moduleDependencies = new HashSet<>();
+    private final Set<ContentRoot> contentRoots = new HashSet<>(3);
+
+    private String packageName;
+    private String name;
+    private Project project;
+    private String namespace;
+
+    private final List<CodeAssistLibrary> libraries = new ArrayList<>();
 
     public AndroidModuleImpl(File root) {
         super(root);
@@ -41,13 +59,6 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
     @Override
     public void open() throws IOException {
         super.open();
-
-        try {
-            mManifestData = AndroidManifestParser.parse(getManifestFile());
-        } catch (IOException e) {
-            throw new IOException("Unable to parse manifest. Fix manifest errors and then refresh the module." +
-                                  "\nError: " + e.getMessage());
-        }
     }
 
     @Override
@@ -56,28 +67,43 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
 
         Consumer<File> kotlinConsumer = this::addKotlinFile;
 
-        if (getJavaDirectory().exists()) {
-            FileUtils.iterateFiles(getJavaDirectory(),
-                    FileFilterUtils.suffixFileFilter(".kt"),
-                    TrueFileFilter.INSTANCE
-            ).forEachRemaining(kotlinConsumer);
+        for (ContentRoot contentRoot : getContentRoots()) {
+            if (contentRoot instanceof AndroidContentRoot) {
+                AndroidContentRoot androidContentRoot = ((AndroidContentRoot) contentRoot);
+                for (File javaDirectory : androidContentRoot.getJavaDirectories()) {
+                    // java source root may contain kotlin files aswell
+                    FileUtils.iterateFiles(javaDirectory,
+                            FileFilterUtils.suffixFileFilter(".kt"),
+                            TrueFileFilter.INSTANCE).forEachRemaining(kotlinConsumer);
+                    FileUtils.iterateFiles(javaDirectory,
+                            FileFilterUtils.suffixFileFilter(".java"),
+                            TrueFileFilter.INSTANCE).forEachRemaining(this::addJavaFile);
+                }
+            }
         }
+    }
 
-        if (getKotlinDirectory().exists()) {
-            FileUtils.iterateFiles(getKotlinDirectory(),
-                    FileFilterUtils.suffixFileFilter(".kt"),
-                    TrueFileFilter.INSTANCE
-            ).forEachRemaining(kotlinConsumer);
+    public List<CodeAssistLibrary> getCodeAssistLibraries() {
+        return libraries;
+    }
+
+    @Override
+    public void addLibrary(@NonNull @NotNull CodeAssistLibrary library) {
+        libraries.add(library);
+
+        if (library instanceof CodeAssistAndroidLibrary) {
+            CodeAssistAndroidLibrary androidLibrary = (CodeAssistAndroidLibrary) library;
+            List<File> compileJarFiles = androidLibrary.getCompileJarFiles();
+            for (File compileJarFile : compileJarFiles) {
+                try {
+                    putJar(compileJarFile);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+        } else {
+            super.addLibrary(library);
         }
-
-        // R.java files
-//        File gen = new File(getBuildDirectory(), "gen");
-//        if (gen.exists()) {
-//            FileUtils.iterateFiles(gen,
-//                    FileFilterUtils.suffixFileFilter(".java"),
-//                    TrueFileFilter.INSTANCE
-//            ).forEachRemaining(this::addJavaFile);
-//        }
     }
 
     @Override
@@ -114,12 +140,13 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         return new File(getRootFile(), "src/main/assets");
     }
 
+    public void setPackageName(String packageName) {
+        this.packageName = packageName;
+    }
+
     @Override
     public String getPackageName() {
-        if (mManifestData == null) {
-            return null;
-        }
-        return mManifestData.getPackage();
+        return packageName;
     }
 
     @Override
@@ -203,5 +230,56 @@ public class AndroidModuleImpl extends JavaModuleImpl implements AndroidModule {
         } catch (Throwable e) {
             throw new Error(e);
         }
+    }
+
+    @Override
+    public void setProject(Project project) {
+        this.project = project;
+    }
+
+    @Override
+    public Project getProject() {
+        return project;
+    }
+
+    public void addModuleDependency(String targetModuleName) {
+        moduleDependencies.add(targetModuleName);
+    }
+
+    @Override
+    public Set<String> getModuleDependencies() {
+        return moduleDependencies;
+    }
+
+    @Override
+    public void addContentRoot(ContentRoot contentRoot) {
+        contentRoots.add(contentRoot);
+    }
+
+    @Override
+    public Set<ContentRoot> getContentRoots() {
+        return contentRoots;
+    }
+
+    /**
+     * Sets the name of this module
+     * @param name Typically the gradle path of the module e.g. :app
+     */
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    public void setNamespace(String namespace) {
+        this.namespace = namespace;
+    }
+
+    @Override
+    public String getNamespace() {
+        return namespace;
     }
 }

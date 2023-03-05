@@ -25,12 +25,15 @@ import com.tyron.actions.ActionPlaces;
 import com.tyron.actions.CommonDataKeys;
 import com.tyron.actions.DataContext;
 import com.tyron.code.ApplicationLoader;
+import com.tyron.code.BuildConfig;
 import com.tyron.code.R;
 import com.tyron.code.event.EventManager;
 import com.tyron.code.event.EventReceiver;
 import com.tyron.code.event.SubscriptionReceipt;
 import com.tyron.code.event.Unsubscribe;
 import com.tyron.code.ui.file.event.RefreshRootEvent;
+import com.tyron.code.util.ApkInstaller;
+import com.tyron.code.util.EventManagerUtilsKt;
 import com.tyron.code.util.UiUtilsKt;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.ui.treeview.TreeNode;
@@ -104,7 +107,8 @@ public class TreeFileManagerFragment extends Fragment {
 
         EventManager eventManager = ApplicationLoader.getInstance()
                 .getEventManager();
-        eventManager.subscribeEvent(getViewLifecycleOwner(), RefreshRootEvent.class, (event, unsubscribe) -> {
+
+        EventManagerUtilsKt.subscribeEvent(eventManager, getViewLifecycleOwner(), RefreshRootEvent.class, (event, unsubscribe) -> {
             File refreshRoot = event.getRoot();
             TreeNode<TreeFile> currentRoot = treeView.getRoot();
             if (currentRoot != null && refreshRoot.equals(currentRoot.getValue().getFile())) {
@@ -126,8 +130,14 @@ public class TreeFileManagerFragment extends Fragment {
             @Override
             public void onNodeToggled(TreeNode<TreeFile> treeNode, boolean expanded) {
                 if (treeNode.isLeaf()) {
-                    if (treeNode.getValue().getFile().isFile()) {
-                        FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), true);
+                    File file = treeNode.getValue().getFile();
+                    if (file.isFile()) {
+                        // TODO: cleaner api to do this
+                        if (file.getName().endsWith(".apk")) {
+                            ApkInstaller.installApplication(requireContext(), BuildConfig.APPLICATION_ID, file.getAbsolutePath());
+                        } else {
+                            FileEditorManagerImpl.getInstance().openFile(requireContext(), treeNode.getValue().getFile(), true);
+                        }
                     }
                 }
             }

@@ -11,8 +11,11 @@ import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.Graphs;
 import com.google.common.graph.MutableGraph;
 import com.tyron.builder.model.ProjectSettings;
+import com.tyron.builder.project.api.ContentRoot;
 import com.tyron.builder.project.api.Module;
 import com.tyron.builder.project.impl.AndroidModuleImpl;
+import com.tyron.builder.project.mock.MockAndroidModule;
+import com.tyron.code.event.EventManager;
 
 import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusConnection;
 import org.jetbrains.kotlin.com.intellij.util.messages.MessageBusFactory;
@@ -35,8 +38,9 @@ import java.util.TreeMap;
 @SuppressWarnings("UnstableApiUsage")
 public class Project {
 
+    private final Module EMPTY = new MockAndroidModule(null, null);
+
     private final Map<String, Module> mModules;
-    private final Module mMainModule;
     private final File mRoot;
 
     private final ProjectSettings mSettings;
@@ -44,16 +48,24 @@ public class Project {
     private volatile boolean mCompiling;
     private volatile boolean mIndexing;
 
-    MutableGraph<Module> graph = GraphBuilder
-            .directed()
-            .allowsSelfLoops(false)
-            .build();
-    
+    private final EventManager eventManager;
+
     public Project(File root) {
         mRoot = root;
         mModules = new LinkedHashMap<>();
-        mMainModule = new AndroidModuleImpl(new File(mRoot, "app"));
         mSettings = new ProjectSettings(new File(root, "settings.json"));
+        eventManager = new EventManager();
+    }
+
+    public void clear() {
+        mModules.clear();
+    }
+
+    public void addModule(Module module) {
+        assert module.getProject() == null;
+        module.setProject(this);
+
+        mModules.put(module.getName(), module);
     }
 
     public boolean isCompiling() {
@@ -73,25 +85,10 @@ public class Project {
     }
 
     public void open() throws IOException {
-        mSettings.refresh();
-        mMainModule.open();;
-
-        graph.addNode(mMainModule);
-        addEdges(graph, mMainModule);
-        Set<Module> modules = Graphs.reachableNodes(graph, mMainModule);
-        for (Module module : modules) {
-            module.open();
-            File rootFile = module.getRootFile();
-            mModules.put(rootFile.getName(), module);
-        }
     }
 
     public void index() throws IOException {
-        Set<Module> modules = Graphs.reachableNodes(graph, mMainModule);
-        for (Module module : modules) {
-            module.clear();
-            module.index();
-        }
+
     }
 
     /**
@@ -103,7 +100,10 @@ public class Project {
 
     @NonNull
     public Module getMainModule() {
-        return mMainModule;
+        if (mModules.isEmpty()) {
+            return EMPTY;
+        }
+        return mModules.values().iterator().next();
     }
 
     public File getRootFile() {
@@ -115,7 +115,31 @@ public class Project {
     }
 
     public Module getModule(File file) {
+        for (Module value : mModules.values()) {
+            for (ContentRoot contentRoot : value.getContentRoots()) {
+                for (File sourceDirectory : contentRoot.getSourceDirectories()) {
+                    if (directoryContainsFile(sourceDirectory, file)) {
+                        return value;
+                    }
+                }
+            }
+        }
         return getMainModule();
+    }
+
+    public Module getModuleByName(String name) {
+        return mModules.get(name);
+    }
+
+    private boolean directoryContainsFile(File dir, File file) {
+        try {
+            File rootFile = dir.getCanonicalFile();
+            File absoluteFile = file.getCanonicalFile();
+
+            return absoluteFile.exists() && absoluteFile.getAbsolutePath().startsWith(rootFile.getAbsolutePath());
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     public List<Module> getDependencies(Module module) {
@@ -136,29 +160,7 @@ public class Project {
         return Objects.hash(mRoot);
     }
 
-    public List<Module> getBuildOrder() throws IOException  {
-        return getDependencies(mMainModule);
-    }
-
-    private void addEdges(MutableGraph<Module> graph, Module module) throws IOException {
-        Set<String> modules = module.getSettings().getStringSet("modules",
-                Collections.emptySet());
-        if (modules == null) {
-            return;
-        }
-
-        for (String s : modules) {
-            File moduleRoot = new File(mRoot, s);
-            if (!moduleRoot.exists()) {
-                continue;
-            }
-            Module subModule = ModuleUtil.fromDirectory(moduleRoot);
-            if (subModule != null) {
-                subModule.open();
-                graph.putEdge(module, subModule);
-
-                addEdges(graph, subModule);
-            }
-        }
+    public EventManager getEventManager() {
+        return eventManager;
     }
 }

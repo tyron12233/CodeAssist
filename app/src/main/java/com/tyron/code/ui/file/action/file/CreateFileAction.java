@@ -14,7 +14,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
 import com.tyron.actions.AnActionEvent;
 import com.tyron.actions.CommonDataKeys;
+import com.tyron.builder.project.Project;
 import com.tyron.code.R;
+import com.tyron.code.event.FileCreatedEvent;
 import com.tyron.code.ui.project.ProjectManager;
 import com.tyron.completion.xml.task.InjectResourcesTask;
 import com.tyron.ui.treeview.TreeNode;
@@ -78,10 +80,11 @@ public class CreateFileAction extends FileAction {
                     refreshTreeView(context);
                     dialog.dismiss();
 
-                    try {
-                        InjectResourcesTask.inject(ProjectManager.getInstance().getCurrentProject());
-                    } catch (IOException e) {
-                        // ignored
+                    Project currentProject = ProjectManager.getInstance().getCurrentProject();
+                    if (currentProject != null) {
+                        currentProject.getEventManager().dispatchEvent(
+                                new FileCreatedEvent(fileToCreate)
+                        );
                     }
                 }
             });

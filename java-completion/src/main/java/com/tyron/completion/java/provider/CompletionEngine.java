@@ -96,7 +96,7 @@ public class CompletionEngine {
 //                newSet.add(library);
 //            } catch (IOException e) {
 //                FileUtils.deleteQuietly(library);
-//                logger.warning("Library is corrupt, deleting jar file! " + library);
+//                logger.warning("CodeAssistLibrary is corrupt, deleting jar file! " + library);
 //            }
 //        }
 //

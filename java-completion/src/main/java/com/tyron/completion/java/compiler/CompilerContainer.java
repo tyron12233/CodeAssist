@@ -39,12 +39,12 @@ public class CompilerContainer {
 
     private volatile boolean mIsWriting;
 
-    private final Semaphore semaphore = new Semaphore(1);
+    private static final Semaphore semaphore = new Semaphore(1);
 
-    private CompileTask mCompileTask;
+    private volatile CompileTask mCompileTask;
 
     public CompilerContainer() {
-
+        System.out.println("New instance created - CompilerContainer");
     }
 
     private void cancel() {
@@ -78,6 +78,7 @@ public class CompilerContainer {
         try {
             consumer.accept(mCompileTask);
         } finally {
+            mCompileTask.close();
             semaphore.release();
         }
     }
@@ -89,9 +90,11 @@ public class CompilerContainer {
         } catch (InterruptedException e) {
             throw new ProcessCanceledException();
         }
+
         try {
             return fun.invoke(mCompileTask);
         } finally {
+            mCompileTask.close();
             semaphore.release();
         }
     }
@@ -102,9 +105,11 @@ public class CompilerContainer {
         } catch (InterruptedException e) {
             throw new ProcessCanceledException();
         }
+
         try {
             return fun.invoke(mCompileTask);
         } finally {
+            mCompileTask.close();
             semaphore.release();
         }
 
@@ -138,5 +143,11 @@ public class CompilerContainer {
 
     void setCompileTask(CompileTask task) {
         mCompileTask = task;
+    }
+
+    private static void assertNotClosed(CompileTask task) {
+        if (task.isClosed()) {
+            throw new RuntimeException("Compile task is already closed.");
+        }
     }
 }

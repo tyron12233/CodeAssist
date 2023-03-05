@@ -1,15 +1,20 @@
 package com.tyron.completion.java.compiler.services;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.DiagnosticSource;
 import com.sun.tools.javac.util.JCDiagnostic;
 import com.sun.tools.javac.util.Log;
+import com.sun.tools.javac.util.Pair;
+
 import java.io.PrintWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.tools.Diagnostic;
@@ -35,6 +40,9 @@ public class NBLog extends Log {
         super(context, output);
     }
 
+
+    private final ArrayListMultimap<URI, JCDiagnostic> diagnosticMap = ArrayListMultimap.create();
+
     public static NBLog instance(Context context) {
         final Log log = Log.instance(context);
         if (!(log instanceof NBLog)) {
@@ -42,7 +50,16 @@ public class NBLog extends Log {
         }
         return (NBLog) log;
     }
-    
+
+    @Override
+    public DiagnosticSource getSource(JavaFileObject file) {
+        return super.getSource(file);
+    }
+
+    public void removeFileObject(JavaFileObject fileObject) {
+        sourceMap.remove(fileObject);
+    }
+
     public static void preRegister(Context context,
                                    final PrintWriter errWriter,
                                    final PrintWriter warnWriter,
@@ -61,6 +78,8 @@ public class NBLog extends Log {
 
     @Override
     public void report(JCDiagnostic diagnostic) {
+        diagnosticMap.put(diagnostic.getSource().toUri(), diagnostic);
+
         //XXX: needs testing!
         if (diagnostic.getKind() == Diagnostic.Kind.ERROR &&
             ERR_NOT_IN_PROFILE.equals(diagnostic.getCode())) {
@@ -76,10 +95,17 @@ public class NBLog extends Log {
         super.report(diagnostic);
     }
 
+    public List<JCDiagnostic> getDiagnostics(URI uri) {
+        return diagnosticMap.get(uri);
+    }
+
     @Override
     protected boolean shouldReport(JavaFileObject file, int pos) {
+        if (true) {
+            return false;
+        }
         if (partialReparseFile != null) {
-            return file == partialReparseFile && seenPartialReparsePositions.add(pos);
+            return file.toUri().equals(partialReparseFile.toUri()) && seenPartialReparsePositions.add(pos);
         } else {
             return super.shouldReport(file, pos);
         }
@@ -106,5 +132,13 @@ public class NBLog extends Log {
     public void endPartialReparse(JavaFileObject inFile) {
         partialReparseFile = null;
         seenPartialReparsePositions.clear(); //TODO: not tested
+    }
+
+    public Set<Pair<JavaFileObject, Integer>> getRecorded() {
+        return recorded;
+    }
+
+    public void removeDiagnostics(URI toUri) {
+        diagnosticMap.removeAll(toUri);
     }
 }

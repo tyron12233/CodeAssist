@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.renderer.DescriptorRenderer;
 import org.jetbrains.kotlin.renderer.ParameterNameRenderingPolicy;
 import org.jetbrains.kotlin.types.ErrorUtils;
 import org.jetbrains.kotlin.types.KotlinType;
-import org.jetbrains.kotlin.types.UnresolvedType;
 
 import java.util.Collections;
 import java.util.List;
@@ -47,9 +46,9 @@ public class RenderCompletionItem implements DeclarationDescriptorVisitor<Comple
         it.setClassifierNamePolicy(ClassifierNamePolicy.SHORT.INSTANCE);
         it.setParameterNameRenderingPolicy(ParameterNameRenderingPolicy.ONLY_NON_SYNTHESIZED);
         it.setTypeNormalizer(kotlinType -> {
-            if (kotlinType instanceof UnresolvedType) {
-                return ErrorUtils.createErrorTypeWithCustomDebugName(((UnresolvedType) kotlinType).getPresentableName());
-            }
+//            if (kotlinType instanceof UnresolvedType) {
+//                return ErrorUtils.createErrorTypeWithCustomDebugName(((UnresolvedType) kotlinType).getPresentableName());
+//            }
             return kotlinType;
         });
         return Unit.INSTANCE;

@@ -19,31 +19,31 @@
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true"
         android:resizeableActivity="true"
-android:supportsRtl="true"
+        android:supportsRtl="true"
         tools:targetApi="q">
         <service
-            android:name=".service.IndexService"
+            android:name=".service.GradleDaemonService"
+            android:process=":gradleDaemonProcess"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false">
+        </service>
 
         <activity
             android:name=".ui.settings.SettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings"
-            android:theme="@style/AppThemeNew"/>
+            android:theme="@style/AppThemeNew" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize"
-            android:theme="@style/AppThemeNew">
+            android:theme="@style/AppThemeNew"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <service android:name=".service.CompilerService" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

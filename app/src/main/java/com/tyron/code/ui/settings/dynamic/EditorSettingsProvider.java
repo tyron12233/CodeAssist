@@ -16,6 +16,7 @@ import androidx.preference.PreferenceScreen;
 import androidx.preference.SwitchPreference;
 
 import com.tyron.code.R;
+import com.tyron.common.SharedPreferenceKeys;
 
 import java.util.function.Consumer;
 
@@ -43,14 +44,14 @@ public class EditorSettingsProvider implements SettingsProvider {
             SwitchPreference errorHighlight = new SwitchPreference(context);
             errorHighlight.setTitle(R.string.code_editor_error_highlight);
             errorHighlight.setKey("code_editor_error_highlight");
-            errorHighlight.setDefaultValue("true");
+            errorHighlight.setDefaultValue(true);
             errorHighlight.setIconSpaceReserved(false);
             javaCategory.addPreference(errorHighlight);
 
             SwitchPreference codeCompletion = new SwitchPreference(context);
             codeCompletion.setTitle(R.string.settings_code_completions);
             codeCompletion.setKey("code_editor_completion");
-            codeCompletion.setDefaultValue("true");
+            codeCompletion.setDefaultValue(true);
             codeCompletion.setIconSpaceReserved(false);
             javaCategory.addPreference(codeCompletion);
 
@@ -58,9 +59,21 @@ public class EditorSettingsProvider implements SettingsProvider {
             caseInsensitiveMatch.setTitle(R.string.settings_case_insensitive_match_title);
             caseInsensitiveMatch.setSummary(R.string.settings_case_insensitive_match_desc);
             caseInsensitiveMatch.setKey("java_case_insensitive_match");
-            caseInsensitiveMatch.setDefaultValue("true");
+            caseInsensitiveMatch.setDefaultValue(true);
             caseInsensitiveMatch.setIconSpaceReserved(false);
             javaCategory.addPreference(caseInsensitiveMatch);
+        });
+
+        addCategory(preferenceScreen, category -> {
+            category.setTitle("Kotlin");
+            category.setIconSpaceReserved(false);
+
+            SwitchPreference codeCompletion = new SwitchPreference(context);
+            codeCompletion.setTitle(R.string.settings_code_completions);
+            codeCompletion.setKey(SharedPreferenceKeys.KOTLIN_COMPLETIONS);
+            codeCompletion.setDefaultValue(false);
+            codeCompletion.setIconSpaceReserved(false);
+            category.addPreference(codeCompletion);
         });
 
         addCategory(preferenceScreen, editor -> {
@@ -86,7 +99,7 @@ public class EditorSettingsProvider implements SettingsProvider {
             wordWrap.setIconSpaceReserved(false);
             wordWrap.setTitle(R.string.editor_settings_wordwrap);
             wordWrap.setKey("editor_wordwrap");
-            wordWrap.setDefaultValue("false");
+            wordWrap.setDefaultValue(false);
             editor.addPreference(wordWrap);
         });
 
@@ -99,7 +112,7 @@ public class EditorSettingsProvider implements SettingsProvider {
             showNonUniqueFileNames.setSummary(R.string.editor_tab_unique_file_name_summary);
             showNonUniqueFileNames.setIconSpaceReserved(false);
             showNonUniqueFileNames.setKey("editor_tab_unique_file_name");
-            showNonUniqueFileNames.setDefaultValue("true");
+            showNonUniqueFileNames.setDefaultValue(true);
             editorTabs.addPreference(showNonUniqueFileNames);
         });
 

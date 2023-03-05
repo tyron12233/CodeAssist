@@ -12,6 +12,7 @@ import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.Document;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.text.edits.TextEdit;
+import org.eclipse.text.edits.TextEditVisitor;
 
 /**
  * Formats java source files using the eclipse formatter.

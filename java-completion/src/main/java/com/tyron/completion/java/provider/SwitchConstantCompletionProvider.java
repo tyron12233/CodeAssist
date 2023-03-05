@@ -26,12 +26,12 @@ public class SwitchConstantCompletionProvider extends BaseCompletionProvider {
     }
 
     @Override
-    public void complete(CompletionList.Builder builder, CompileTask task, TreePath path,
+    public void complete(CompletionList.Builder builder, JavacUtilitiesProvider task, TreePath path,
                          String partial, boolean endsWithParen) {
         completeSwitchConstant(builder, task, path, partial);
     }
 
-    public static void completeSwitchConstant(CompletionList.Builder builder, CompileTask task,
+    public static void completeSwitchConstant(CompletionList.Builder builder, JavacUtilitiesProvider task,
                                               TreePath path, String partial) {
         checkCanceled();
 
@@ -49,7 +49,7 @@ public class SwitchConstantCompletionProvider extends BaseCompletionProvider {
             }
         }
 
-        TypeMirror type = Trees.instance(task.task)
+        TypeMirror type = task.getTrees()
                 .getTypeMirror(path);
 
         if (!(type instanceof DeclaredType)) {
@@ -58,7 +58,7 @@ public class SwitchConstantCompletionProvider extends BaseCompletionProvider {
 
         DeclaredType declared = (DeclaredType) type;
         TypeElement element = (TypeElement) declared.asElement();
-        for (Element member : task.task.getElements()
+        for (Element member : task.getElements()
                 .getAllMembers(element)) {
             if (member.getKind() != ElementKind.ENUM_CONSTANT) {
                 continue;

@@ -148,43 +148,43 @@ public class Completions {
                                              boolean endsWithParen) {
         ProcessingContext context = createProcessingContext(task.task, task.root());
         CompletionList.Builder builder = CompletionList.builder(partial);
-        switch (path.getLeaf().getKind()) {
-            case IDENTIFIER:
-                // suggest only classes on a parameterized tree
-                if (INSIDE_PARAMETERIZED.accepts(path.getLeaf(), context)) {
-                    new ClassNameCompletionProvider(compiler)
-                            .complete(builder, task, path, partial, endsWithParen);
-                    break;
-                } else if (SWITCH_CONSTANT.accepts(path.getLeaf(), context)) {
-                    new SwitchConstantCompletionProvider(compiler)
-                            .complete(builder, task, path, partial, endsWithParen);
-                }
-                new IdentifierCompletionProvider(compiler)
-                        .complete(builder, task, path, partial, endsWithParen);
-                break;
-            case MEMBER_SELECT:
-                new MemberSelectCompletionProvider(compiler)
-                        .complete(builder, task, path, partial, endsWithParen);
-                break;
-            case MEMBER_REFERENCE:
-                new MemberReferenceCompletionProvider(compiler)
-                        .complete(builder, task, path, partial, endsWithParen);
-                break;
-            case IMPORT:
-                new ImportCompletionProvider(compiler)
-                        .complete(builder, task, path, partial, endsWithParen);
-                break;
-            case STRING_LITERAL:
-                break;
-            case VARIABLE:
-                new VariableNameCompletionProvider(compiler)
-                        .complete(builder, task, path, partial, endsWithParen);
-                break;
-            default:
-                new KeywordCompletionProvider(compiler)
-                        .complete(builder, task, path, partial, endsWithParen);
-                break;
-        }
+//        switch (path.getLeaf().getKind()) {
+//            case IDENTIFIER:
+//                // suggest only classes on a parameterized tree
+//                if (INSIDE_PARAMETERIZED.accepts(path.getLeaf(), context)) {
+//                    new ClassNameCompletionProvider(compiler)
+//                            .complete(builder,  task, path, partial, endsWithParen);
+//                    break;
+//                } else if (SWITCH_CONSTANT.accepts(path.getLeaf(), context)) {
+//                    new SwitchConstantCompletionProvider(compiler)
+//                            .complete(builder, task, path, partial, endsWithParen);
+//                }
+//                new IdentifierCompletionProvider(compiler)
+//                        .complete(builder, task, path, partial, endsWithParen);
+//                break;
+//            case MEMBER_SELECT:
+//                new MemberSelectCompletionProvider(compiler)
+//                        .complete(builder, task, path, partial, endsWithParen);
+//                break;
+//            case MEMBER_REFERENCE:
+//                new MemberReferenceCompletionProvider(compiler)
+//                        .complete(builder, task, path, partial, endsWithParen);
+//                break;
+//            case IMPORT:
+//                new ImportCompletionProvider(compiler)
+//                        .complete(builder, task, path, partial, endsWithParen);
+//                break;
+//            case STRING_LITERAL:
+//                break;
+//            case VARIABLE:
+//                new VariableNameCompletionProvider(compiler)
+//                        .complete(builder, task, path, partial, endsWithParen);
+//                break;
+//            default:
+//                new KeywordCompletionProvider(compiler)
+//                        .complete(builder, task, path, partial, endsWithParen);
+//                break;
+//        }
         return builder;
     }
 

@@ -2,10 +2,12 @@ package com.tyron.code;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.widget.Toast;
 
+import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -14,14 +16,16 @@ import androidx.preference.PreferenceManager;
 import com.developer.crashx.config.CrashConfig;
 import com.tyron.actions.ActionManager;
 import com.tyron.builder.BuildModule;
+import com.tyron.code.event.EventManager;
+import com.tyron.code.service.GradleDaemonService;
 import com.tyron.code.ui.editor.action.CloseAllEditorAction;
 import com.tyron.code.ui.editor.action.CloseFileEditorAction;
 import com.tyron.code.ui.editor.action.CloseOtherEditorAction;
 import com.tyron.code.ui.editor.action.DiagnosticInfoAction;
 import com.tyron.code.ui.editor.action.PreviewLayoutAction;
 import com.tyron.code.ui.editor.action.text.TextActionGroup;
-import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.ImportFileActionGroup;
+import com.tyron.code.ui.file.action.NewFileActionGroup;
 import com.tyron.code.ui.file.action.file.DeleteFileAction;
 import com.tyron.code.ui.main.action.compile.CompileActionGroup;
 import com.tyron.code.ui.main.action.debug.DebugActionGroup;
@@ -35,12 +39,8 @@ import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.java.CompletionModule;
 import com.tyron.completion.java.JavaCompilerProvider;
 import com.tyron.completion.java.JavaCompletionProvider;
-import com.tyron.completion.main.CompletionEngine;
 import com.tyron.completion.xml.XmlCompletionModule;
 import com.tyron.completion.xml.XmlIndexProvider;
-import com.tyron.completion.xml.providers.AndroidManifestCompletionProvider;
-import com.tyron.completion.xml.providers.EmptyCompletionProvider;
-import com.tyron.completion.xml.providers.LayoutXmlCompletionProvider;
 import com.tyron.editor.selection.ExpandSelectionProvider;
 import com.tyron.kotlin_completion.KotlinCompletionModule;
 import com.tyron.language.fileTypes.FileTypeManager;
@@ -51,7 +51,12 @@ import com.tyron.language.xml.XmlLanguage;
 import com.tyron.selection.java.JavaExpandSelectionProvider;
 import com.tyron.selection.xml.XmlExpandSelectionProvider;
 
-import com.tyron.code.event.EventManager;
+import org.gradle.internal.time.Time;
+import org.gradle.internal.time.Timer;
+import org.lsposed.hiddenapibypass.HiddenApiBypass;
+
+import java.io.File;
+import java.io.IOException;
 
 public class ApplicationLoader extends Application {
 
@@ -68,7 +73,14 @@ public class ApplicationLoader extends Application {
     
     @Override
     public void onCreate() {
+        Timer timer = Time.startTimer();
         super.onCreate();
+        System.out.println("onCreate took " + timer.getElapsed());
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            HiddenApiBypass.addHiddenApiExemptions("Lsun/misc/Unsafe");
+        }
+
         setupTheme();
 
         mEventManager = new EventManager();
@@ -91,6 +103,9 @@ public class ApplicationLoader extends Application {
                 .apply();
 
         runStartup();
+
+        File userDir = new File(getFilesDir(), "user_dir");
+        System.setProperty("codeassist.user.dir", userDir.getAbsolutePath());
     }
 
     /**
@@ -122,7 +137,6 @@ public class ApplicationLoader extends Application {
                                                      new XmlExpandSelectionProvider());
         });
         startupManager.addStartupActivity(() -> {
-            CompletionEngine engine = CompletionEngine.getInstance();
             CompilerService index = CompilerService.getInstance();
             if (index.isEmpty()) {
                 index.registerIndexProvider(JavaCompilerProvider.KEY, new JavaCompilerProvider());
@@ -132,12 +146,6 @@ public class ApplicationLoader extends Application {
         startupManager.addStartupActivity(() -> {
             CompletionProvider.registerCompletionProvider(JavaLanguage.INSTANCE,
                                                           new JavaCompletionProvider());
-            CompletionProvider.registerCompletionProvider(XmlLanguage.INSTANCE,
-                                                          new LayoutXmlCompletionProvider());
-            CompletionProvider.registerCompletionProvider(XmlLanguage.INSTANCE,
-                                                          new AndroidManifestCompletionProvider());
-            CompletionProvider.registerCompletionProvider(XmlLanguage.INSTANCE,
-                                                          new EmptyCompletionProvider());
         });
         startupManager.addStartupActivity(() -> {
             ActionManager manager = ActionManager.getInstance();
@@ -189,5 +197,21 @@ public class ApplicationLoader extends Application {
     @VisibleForTesting
     public static void setApplicationContext(Context context) {
         applicationContext = context;
+    }
+
+    /**
+     * Starts a new gradle daemon on a separate process.
+     *
+     * Accessed reflectively via {@link org.gradle.launcher.daemon.client.DefaultDaemonStarter}
+     */
+    @Keep
+    private static void startDaemonProcess(File dir) throws IOException {
+        assert applicationContext != null;
+
+
+        Intent intent = new Intent(applicationContext, GradleDaemonService.class);
+        intent.putExtra("dir", dir.toString());
+
+        applicationContext.startService(intent);
     }
 }

@@ -1,5 +1,6 @@
 package com.tyron.completion.xml;
 
+import android.annotation.SuppressLint;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AbsoluteLayout;
@@ -23,14 +24,12 @@ import android.widget.ViewSwitcher;
 
 import com.tyron.builder.project.Project;
 import com.tyron.builder.project.api.AndroidModule;
-import com.tyron.common.ApplicationProvider;
-import com.tyron.common.util.Decompress;
 import com.tyron.completion.index.CompilerService;
 import com.tyron.completion.xml.model.AttributeInfo;
 import com.tyron.completion.xml.model.DeclareStyleable;
 import com.tyron.completion.xml.model.Format;
-import com.tyron.xml.completion.repository.ResourceRepository;
 import com.tyron.completion.xml.util.StyleUtils;
+import com.tyron.xml.completion.repository.ResourceRepository;
 
 import org.apache.bcel.Repository;
 import org.apache.bcel.classfile.JavaClass;
@@ -314,7 +313,6 @@ public class XmlRepository {
         XmlIndexProvider indexProvider = CompilerService.getInstance()
                 .getIndex(XmlIndexProvider.KEY);
         XmlRepository repository = indexProvider.get(project, module);
-        repository.initialize(module);
         return repository;
     }
 }

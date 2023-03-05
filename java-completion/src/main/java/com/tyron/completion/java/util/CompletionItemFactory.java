@@ -10,6 +10,7 @@ import com.tyron.completion.DefaultInsertHandler;
 import com.tyron.completion.java.compiler.CompileTask;
 import com.tyron.completion.java.insert.MethodInsertHandler;
 import com.tyron.completion.java.provider.JavaSortCategory;
+import com.tyron.completion.java.provider.JavacUtilitiesProvider;
 import com.tyron.completion.model.CompletionItem;
 import com.tyron.completion.model.DrawableKind;
 
@@ -22,6 +23,7 @@ import org.openjdk.javax.annotation.processing.Completion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ErrorType;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
@@ -174,15 +176,22 @@ public class CompletionItemFactory {
         return name + "(" + params + ")";
     }
 
-    public static List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads,
-                                        boolean endsWithParen, boolean methodRef,
-                                        DeclaredType type) {
+    public static List<CompletionItem> method(JavacUtilitiesProvider task, List<ExecutableElement> overloads,
+                                              boolean endsWithParen, boolean methodRef,
+                                              DeclaredType type) {
         checkCanceled();
         List<CompletionItem> items = new ArrayList<>();
-        Types types = task.task.getTypes();
+        Types types = task.getTypes();
         for (ExecutableElement overload : overloads) {
-            ExecutableType executableType = (ExecutableType) types.asMemberOf(type, overload);
-            items.add(method(overload, endsWithParen, methodRef, executableType));
+            try {
+                TypeMirror typeMirror = types.asMemberOf(type, overload);
+                if (!(typeMirror instanceof ExecutableType)) {
+                    continue;
+                }
+                ExecutableType executableType = (ExecutableType) typeMirror;
+                items.add(method(overload, endsWithParen, methodRef, executableType));
+            } catch (IllegalArgumentException ignored) {
+            }
         }
         return items;
     }
@@ -225,7 +234,7 @@ public class CompletionItemFactory {
         return item;
     }
 
-    public static List<CompletionItem> method(CompileTask task, List<ExecutableElement> overloads,
+    public static List<CompletionItem> method(JavacUtilitiesProvider task, List<ExecutableElement> overloads,
                                         boolean endsWithParen, boolean methodRef,
                                         ExecutableType type) {
         checkCanceled();
@@ -237,14 +246,14 @@ public class CompletionItemFactory {
         return items;
     }
 
-    public static List<CompletionItem> overridableMethod(CompileTask task, TreePath parentPath,
+    public static List<CompletionItem> overridableMethod(JavacUtilitiesProvider task, TreePath parentPath,
                                                    List<ExecutableElement> overloads,
                                                    boolean endsWithParen) {
         checkCanceled();
 
         List<CompletionItem> items = new ArrayList<>(overloads.size());
-        Types types = task.task.getTypes();
-        Element parentElement = Trees.instance(task.task).getElement(parentPath);
+        Types types = task.getTypes();
+        Element parentElement = task.getTrees().getElement(parentPath);
         DeclaredType type = (DeclaredType) parentElement.asType();
         for (ExecutableElement element : overloads) {
             checkCanceled();
@@ -256,7 +265,11 @@ public class CompletionItemFactory {
                 continue;
             }
 
-            ExecutableType executableType = (ExecutableType) types.asMemberOf(type, element);
+            TypeMirror typeMirror = types.asMemberOf(type, element);
+            if (!(typeMirror instanceof ExecutableType)) {
+                continue;
+            }
+            ExecutableType executableType = (ExecutableType) typeMirror;
             String text = PrintHelper.printMethod(element, executableType, element);
 
             CompletionItem item = new CompletionItem();

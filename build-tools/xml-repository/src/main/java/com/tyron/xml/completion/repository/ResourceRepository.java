@@ -4,7 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.tyron.builder.compiler.manifest.resources.ResourceType;
 import com.tyron.builder.compiler.manifest.xml.AndroidManifestParser;
 import com.tyron.builder.compiler.manifest.xml.ManifestData;
-import com.tyron.builder.model.Library;
+import com.tyron.builder.model.CodeAssistLibrary;
 import com.tyron.builder.project.api.AndroidModule;
 import com.tyron.xml.completion.repository.api.ResourceNamespace;
 import com.tyron.xml.completion.repository.api.ResourceReference;
@@ -64,7 +64,7 @@ public class ResourceRepository extends SimpleResourceRepository {
                 continue;
             }
 
-            Library lib = mModule.getLibrary(parent.getName());
+            CodeAssistLibrary lib = mModule.getLibrary(parent.getName());
             String name = null;
             if (lib != null) {
                 name = lib.getSourceFile()

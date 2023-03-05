@@ -842,6 +842,9 @@ public class ManifestMerger2 {
         /**
          * Optional behavior of the merging tool can be turned on by setting these Feature.
          */
+        /**
+         * Optional behavior of the merging tool can be turned on by setting these Feature.
+         */
         public enum Feature {
 
             /**
@@ -851,8 +854,8 @@ public class ManifestMerger2 {
             KEEP_INTERMEDIARY_STAGES,
 
             /**
-             * When logging file names, use {@link java.io.File#getName()} rather than
-             * {@link java.io.File#getPath()}
+             * When logging file names, use {@link File#getName()} rather than {@link
+             * File#getPath()}
              */
             PRINT_SIMPLE_FILENAMES,
 
@@ -870,7 +873,96 @@ public class ManifestMerger2 {
             /**
              * Do no perform placeholders replacement.
              */
-            NO_PLACEHOLDER_REPLACEMENT
+            NO_PLACEHOLDER_REPLACEMENT,
+
+            /**
+             * Encode unresolved placeholders to be AAPT friendly.
+             */
+            MAKE_AAPT_SAFE,
+
+            /**
+             * Clients will not request the blame history
+             */
+            SKIP_BLAME,
+
+            /**
+             * Clients will only request the merged XML documents, not XML pretty printed documents
+             */
+            SKIP_XML_STRING,
+
+            /**
+             * Add android:testOnly="true" attribute to prevent APK from being uploaded to Play
+             * store.
+             */
+            TEST_ONLY,
+
+            /**
+             * Do not perform implicit permission addition.
+             */
+            NO_IMPLICIT_PERMISSION_ADDITION,
+
+            /** Perform Studio advanced profiling manifest modifications */
+            ADVANCED_PROFILING,
+
+            /** Mark this application as a feature split */
+            ADD_DYNAMIC_FEATURE_ATTRIBUTES,
+
+            /** Set the android:debuggable flag to the application. */
+            DEBUGGABLE,
+
+            /**
+             * When there are attribute value conflicts, automatically pick the higher priority
+             * value.
+             *
+             * <p>This is for example used in the IDE when we need to merge a new manifest template
+             * into an existing one and we don't want to abort the merge.
+             *
+             * <p>(This will log a warning.)
+             */
+            HANDLE_VALUE_CONFLICTS_AUTOMATICALLY,
+
+            /**
+             * Adds the AndroidX name of {AndroidXConstants#MULTI_DEX_APPLICATION} as
+             * application name if none is specified. Used for legacy multidex.
+             */
+            ADD_ANDROIDX_MULTIDEX_APPLICATION_IF_NO_NAME,
+
+            /**
+             * Adds the pre-AndroidX name of {@AndroidXConstants#MULTI_DEX_APPLICATION} as
+             * application name if none is specified. Used for legacy multidex.
+             */
+            ADD_SUPPORT_MULTIDEX_APPLICATION_IF_NO_NAME,
+
+            /** Rewrite local resource references with fully qualified namespace */
+            FULLY_NAMESPACE_LOCAL_RESOURCES,
+
+            /** Enforce that dependencies manifests don't have duplicated package names. */
+            ENFORCE_UNIQUE_PACKAGE_NAME,
+
+            /**
+             * Sets the application's android:extractNativeLibs attribute to false, unless it's
+             * already explicitly set to true.
+             */
+            DO_NOT_EXTRACT_NATIVE_LIBS,
+
+            /** Unsafely disables minSdkVersion check in libraries. */
+            DISABLE_MINSDKLIBRARY_CHECK,
+
+            /**
+             * Warn if the package attribute is present in a source manifest.
+             *
+             * <p>This is used in AGP because users should migrate to the new namespace DSL.
+             */
+            WARN_IF_PACKAGE_IN_SOURCE_MANIFEST,
+
+            /** Removes target SDK for library manifest */
+            DISABLE_STRIP_LIBRARY_TARGET_SDK,
+
+            /**
+             * If set, merger will continue merging after any errors, allowing to surface errors in
+             * the "merged manifest" editor view.
+             */
+            KEEP_GOING_AFTER_ERRORS
         }
 
         /**
@@ -911,6 +1003,32 @@ public class ManifestMerger2 {
             }
             mLibraryFilesBuilder.add(Pair.create(file.getName(), file));
             return thisAsT();
+        }
+
+        /**
+         * Sets manifest providers for this merging activity.
+         * @param providers the list of manifest providers.
+         * @return itself.
+         */
+        @NotNull
+        public Invoker addManifestProviders(@NotNull Iterable<? extends ManifestProvider> providers) {
+            for (ManifestProvider provider : providers) {
+                mLibraryFilesBuilder.add(Pair.create(provider.getName(), provider.getManifest()));
+            }
+            return this;
+        }
+
+
+        /**
+         * Add several navigation.json files in the list.
+         *
+         * @param files the navigation.json files to add.
+         * @return itself.
+         */
+        @NotNull
+        public Invoker addNavigationJsons(@NotNull Iterable<File> files) {
+//            this.mNavigationJsonsBuilder.addAll(files);
+            return this;
         }
 
         public Invoker addLibraryManifests(List<Pair<String, File>> namesAndFiles) {

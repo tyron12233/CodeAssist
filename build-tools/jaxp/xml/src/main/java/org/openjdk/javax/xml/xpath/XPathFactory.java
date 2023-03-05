@@ -25,7 +25,16 @@
 
 package org.openjdk.javax.xml.xpath;
 
+import com.sun.org.apache.xpath.internal.jaxp.XPathFactoryImpl;
+
 import org.openjdk.javax.xml.XMLConstants;
+import org.openjdk.javax.xml.namespace.NamespaceContext;
+import org.openjdk.javax.xml.namespace.QName;
+import org.xml.sax.InputSource;
+
+import java.util.List;
+
+import javax.xml.xpath.XPathFunction;
 
 /**
  * <p>An <code>XPathFactory</code> instance can be used to create
@@ -169,8 +178,17 @@ public abstract class XPathFactory {
     * @throws IllegalArgumentException If <code>uri</code> is <code>null</code>
     *   or <code>uri.length() == 0</code>.
     */
-    public static XPathFactory newInstance(final String uri)
-        throws org.openjdk.javax.xml.xpath.XPathFactoryConfigurationException {
+    public static XPathFactory newInstance(final String uri) throws org.openjdk.javax.xml.xpath.XPathFactoryConfigurationException {
+
+        if (DEFAULT_OBJECT_MODEL_URI.equals(uri)) {
+            try {
+                Class<?> aClass = Class.forName(
+                        "org.openjdk.com.sun.org.apache.xpath.internal.jaxp.XPathFactoryImpl");
+                return (XPathFactory) aClass.newInstance();
+            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+                throw new RuntimeException(e.getMessage());
+            }
+        }
 
         if (uri == null) {
             throw new NullPointerException(

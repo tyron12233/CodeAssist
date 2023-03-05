@@ -41,8 +41,6 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.logging.Logger;
 
-import jdk.internal.org.jline.utils.Colors;
-
 public class SimpleResourceRepository implements Repository {
 
     private static final ImmutableMap<ResourceFolderType, ResourceParser> sParsers;
@@ -115,7 +113,7 @@ public class SimpleResourceRepository implements Repository {
         return sParsers.get(folderType);
     }
 
-    private void parseFile(@NotNull ResourceParser parser,
+    private synchronized void parseFile(@NotNull ResourceParser parser,
                            @NotNull File xmlFile,
                            @Nullable String contents,
                            @NotNull String folderName,
@@ -133,7 +131,7 @@ public class SimpleResourceRepository implements Repository {
     }
 
     @Override
-    public void updateFile(@NotNull File file, @Nullable String contents) throws IOException {
+    public synchronized void updateFile(@NotNull File file, @Nullable String contents) throws IOException {
         Collection<ResourceItem> existingItems = mFileItems.get(file);
         if (existingItems != null) {
             existingItems.stream()

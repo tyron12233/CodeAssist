@@ -7,10 +7,16 @@ dependencies {
 
     implementation projects.buildTools.codeassistBuilderPlugin
 
+    implementation projects.buildTools.builderApi
+    implementation projects.buildTools.builderToolingApi
+    implementation projects.buildTools.builderJvmServices
+    implementation projects.buildTools.builderProcessServices
     implementation projects.buildTools.builderBaseServices
     implementation projects.buildTools.builderEnterpriseOperations
+    implementation projects.buildTools.builderEnterpriseWorkers
     implementation projects.buildTools.builderMessaging
     implementation projects.buildTools.builderNative
+    implementation projects.buildTools.builderBuildEvents
     implementation projects.buildTools.builderLogging
     implementation projects.buildTools.builderFiles
     implementation projects.buildTools.fileCollections
@@ -22,6 +28,8 @@ dependencies {
 
     implementation common.slf4j
     implementation common.commonsLang3
+    implementation 'org.ow2.asm:asm:9.3'
+
 
     testRuntimeOnly 'net.rubygrapefruit:file-events-windows-i386-min:0.22-milestone-23'
     testImplementation 'junit:junit:4.13.2'
@@ -39,6 +47,6 @@ dependencies {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
 }

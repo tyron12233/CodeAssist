@@ -6,9 +6,9 @@
     <codeStyleSettings language="JAVA">
       <option name="KEEP_LINE_BREAKS" value="false" />
       <option name="ALIGN_MULTILINE_BINARY_OPERATION" value="true" />
-      <option name="CALL_PARAMETERS_WRAP" value="1" />
+      <option name="CALL_PARAMETERS_WRAP" value="5" />
       <option name="METHOD_PARAMETERS_WRAP" value="5" />
-      <option name="METHOD_CALL_CHAIN_WRAP" value="1" />
+      <option name="METHOD_CALL_CHAIN_WRAP" value="5" />
       <option name="BINARY_OPERATION_WRAP" value="5" />
       <option name="ARRAY_INITIALIZER_WRAP" value="1" />
       <option name="ASSIGNMENT_WRAP" value="1" />

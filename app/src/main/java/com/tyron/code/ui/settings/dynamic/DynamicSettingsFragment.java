@@ -12,7 +12,7 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
 
 import com.google.common.collect.Maps;
-import com.tyron.builder.internal.service.DefaultServiceLocator;
+import org.gradle.internal.service.DefaultServiceLocator;
 
 import java.io.Serializable;
 import java.util.List;
