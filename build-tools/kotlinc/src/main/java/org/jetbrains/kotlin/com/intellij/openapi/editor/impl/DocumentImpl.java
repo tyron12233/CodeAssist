@@ -701,8 +701,8 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
       newText = (ImmutableCharSequence)s;
     }
     else {
-      myText.delete(startOffset, endOffset);
-      newText = myText.insert(startOffset, changedPart);
+      newText = myText.delete(startOffset, endOffset)
+              .insert(startOffset, changedPart);
       changedPart = newText.subtext(startOffset, startOffset + changedPart.length());
     }
     boolean wasOptimized = initialStartOffset != startOffset || endOffset - startOffset != initialOldLength;

@@ -15,11 +15,15 @@ import io.github.rosemoe.sora.lang.EmptyLanguage
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher
 import io.github.rosemoe.sora.text.CharPosition
+import io.github.rosemoe.sora.text.Content
 import io.github.rosemoe.sora.text.ContentReference
+import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentEvent
+import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentListener
 
 class EditorFragment : Fragment() {
 
     private val viewModel: EditorViewModel by viewModels()
+
 
     private lateinit var binding: NewEditorFragmentBinding
 
@@ -67,14 +71,6 @@ class EditorFragment : Fragment() {
 
                 binding.editorView.setText(editorState.editorContent)
                 binding.editorView.setEditorLanguage(language)
-                binding.editorView.subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
-                    viewModel.commit(
-                        event.action,
-                        event.changeStart.index,
-                        event.changeEnd.index,
-                        event.changedText
-                    )
-                }
             }
         }
     }
@@ -110,6 +106,13 @@ class EditorFragment : Fragment() {
             binding.loadingView.visibility = View.GONE
             binding.editorContent.visibility = View.VISIBLE
             binding.completionIndicatorContainer.visibility = View.VISIBLE
+        }
+    }
+
+    val content: Content = TODO()
+    val documentListener = object : DocumentListener {
+        override fun documentChanged(event: DocumentEvent) {
+
         }
     }
 

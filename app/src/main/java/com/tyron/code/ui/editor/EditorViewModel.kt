@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tyron.code.ui.legacyEditor.EditorChangeUtil
+import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -28,6 +29,8 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
     val editorState = _editorState.asStateFlow()
 
     private lateinit var document: Document
+    private lateinit var content: Content
+    private lateinit var synchronizer: DocumentContentSynchronizer
 
     init {
         loadFile()
@@ -47,24 +50,23 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
                 return@launch
             }
             this@EditorViewModel.document = document
+            this@EditorViewModel.content = Content(document.text)
 
             document.addDocumentListener(psiDocumentManager as PsiDocumentManagerBase)
             document.addDocumentListener(psiDocumentManager.PriorityEventCollector())
+
+            synchronizer = DocumentContentSynchronizer(project, document, content)
+            synchronizer.start()
 
             _editorState.emit(
                 InternalEditorState(
                     loadingContent = false,
                     loadingErrorMessage = null,
-                    editorContent = document.text
+                    editorContent = this@EditorViewModel.content
                 )
             )
         }
     }
-
-    fun commit(action: Int, start: Int, end: Int, text: CharSequence) {
-        EditorChangeUtil.doCommit(action, start, end, text, project, document)
-    }
-
     private suspend fun errorLoading(message: String) {
         _editorState.emit(
             InternalEditorState(
@@ -77,6 +79,6 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
     data class InternalEditorState(
         val loadingContent: Boolean = false,
         val loadingErrorMessage: String? = null,
-        val editorContent: String = ""
+        val editorContent: Content = Content()
     )
 }

@@ -14,11 +14,14 @@ import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
+import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.FileDocumentManagerBase;
 import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase;
-import org.jetbrains.kotlin.com.intellij.openapi.project.CodeAssistProject;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectFileIndex;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
@@ -27,6 +30,8 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.JavaStubElementTypes;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope;
@@ -221,8 +226,8 @@ public class IndexingTest {
 
 
         JavaShortClassNameIndex shortClassNameIndex = JavaShortClassNameIndex.getInstance();
-        Collection<PsiClass> activity = shortClassNameIndex
-                .get("Activity", project, new CustomSearchScope(project));
+        Collection<PsiClass> activity =
+                shortClassNameIndex.get("Activity", project, new CustomSearchScope(project));
         assert !activity.isEmpty();
 
         PsiClass activityClass = activity.iterator().next();
@@ -239,6 +244,17 @@ public class IndexingTest {
         assert shortNamesCache.getAllFieldNames().length != 0;
         assert shortNamesCache.getAllMethodNames().length != 0;
         assert shortNamesCache.getAllFieldNames().length != 0;
+
+        FileDocumentManagerBase fileDocumentManagerBase =
+                (FileDocumentManagerBase) FileDocumentManager.getInstance();
+        PsiDocumentManagerBase psiDocumentManagerBase =
+                (PsiDocumentManagerBase) PsiDocumentManagerBase.getInstance(project);
+        Document testDocument = new DocumentImpl("class Main { }");
+        testDocument.addDocumentListener(psiDocumentManagerBase);
+        testDocument.addDocumentListener(psiDocumentManagerBase.new PriorityEventCollector());
+
+        PsiFile psiFile = psiDocumentManagerBase.getPsiFile(testDocument);
+        System.out.println(psiFile);
     }
 
     private static class CustomSearchScope extends GlobalSearchScope {
