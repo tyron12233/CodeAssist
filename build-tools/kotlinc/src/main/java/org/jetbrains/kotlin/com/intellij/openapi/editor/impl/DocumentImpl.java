@@ -4,6 +4,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.google.common.collect.Iterators;
+
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.kotlin.com.intellij.core.CoreBundle;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.application.Application;
@@ -24,6 +27,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.editor.actionSystem.DocCommandG
 import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentEvent;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentListener;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.DocumentEx;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.LineIterator;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.MarkupIterator;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.PrioritizedDocumentListener;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.RangeMarkerEx;
@@ -148,7 +152,7 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
 
   static final Key<Reference<RangeMarkerTree<RangeMarkerEx>>> RANGE_MARKERS_KEY = Key.create("RANGE_MARKERS_KEY");
   static final Key<Reference<RangeMarkerTree<RangeMarkerEx>>> PERSISTENT_RANGE_MARKERS_KEY = Key.create("PERSISTENT_RANGE_MARKERS_KEY");
-//  @ApiStatus.Internal
+  @ApiStatus.Internal
   public void documentCreatedFrom(@NonNull VirtualFile f, int tabSize) {
     processQueue();
     getSaveRMTree(f, RANGE_MARKERS_KEY, myRangeMarkers, tabSize);
@@ -183,15 +187,15 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     }
 
     // old tree was saved in the virtual file. Have to transfer markers from there.
-//    oldTree.processAll(r -> {
-//      if (r.isValid()) {
-//        ((RangeMarkerImpl)r).reRegister(this, tabSize);
-//      }
-//      else {
-//        ((RangeMarkerImpl)r).invalidate("document was gc-ed and re-created");
-//      }
-//      return true;
-//    });
+    oldTree.processAll(r -> {
+      if (r.isValid()) {
+        ((RangeMarkerImpl)r).reRegister(this, tabSize);
+      }
+      else {
+        ((RangeMarkerImpl)r).invalidate("document was gc-ed and re-created");
+      }
+      return true;
+    });
   }
 
   // track GC of RangeMarkerTree: means no-one is interested in range markers for this file anymore
@@ -226,29 +230,28 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
                                                      int endLine,
                                                      int endCol,
                                                      boolean persistent) {
-//    int estimatedLength = RangeMarkerImpl.estimateDocumentLength(file);
-//    offset = Math.min(offset, estimatedLength);
-//    RangeMarkerImpl marker = persistent
-//                             ? new PersistentRangeMarker(file, offset, offset, startLine, startCol, endLine, endCol, estimatedLength, false)
-//                             : new RangeMarkerImpl(file, offset, offset, estimatedLength, false);
-//    Key<Reference<RangeMarkerTree<RangeMarkerEx>>> key = persistent ? PERSISTENT_RANGE_MARKERS_KEY : RANGE_MARKERS_KEY;
-//    RangeMarkerTree<RangeMarkerEx> tree;
-//    while (true) {
-//      Reference<RangeMarkerTree<RangeMarkerEx>> oldRef = file.getUserData(key);
-//      tree = SoftReference.dereference(oldRef);
-//        if (tree != null) {
-//            break;
-//        }
-//      tree = new RangeMarkerTree<>();
-//      RMTreeReference reference = new RMTreeReference(tree, file);
-//        if (file.replace(key, oldRef, reference)) {
-//            break;
-//        }
-//    }
-//    tree.addInterval(marker, offset, offset, false, false, false, 0);
-//
-//    return marker;
-    throw new UnsupportedOperationException();
+    int estimatedLength = RangeMarkerImpl.estimateDocumentLength(file);
+    offset = Math.min(offset, estimatedLength);
+    RangeMarkerImpl marker = persistent
+                             ? new PersistentRangeMarker(file, offset, offset, startLine, startCol, endLine, endCol, estimatedLength, false)
+                             : new RangeMarkerImpl(file, offset, offset, estimatedLength, false);
+    Key<Reference<RangeMarkerTree<RangeMarkerEx>>> key = persistent ? PERSISTENT_RANGE_MARKERS_KEY : RANGE_MARKERS_KEY;
+    RangeMarkerTree<RangeMarkerEx> tree;
+    while (true) {
+      Reference<RangeMarkerTree<RangeMarkerEx>> oldRef = file.getUserData(key);
+      tree = SoftReference.dereference(oldRef);
+        if (tree != null) {
+            break;
+        }
+      tree = new RangeMarkerTree<>();
+      RMTreeReference reference = new RMTreeReference(tree, file);
+        if (file.replace(key, oldRef, reference)) {
+            break;
+        }
+    }
+    tree.addInterval(marker, offset, offset, false, false, false, 0);
+
+    return marker;
 
   }
   public boolean setAcceptSlashR(boolean accept) {
@@ -456,9 +459,7 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
                                   boolean greedyToLeft,
                                   boolean greedyToRight,
                                   int layer) {
-//    RangeMarkerTree<RangeMarkerEx> rangeMarkerExRangeMarkerTree = treeFor(rangeMarker);
-//    RangeMarkerTree.class.getDeclaredMethod("in")
-//    rangeMarkerExRangeMarkerTree.addInterval(rangeMarker, start, end, greedyToLeft, greedyToRight, false, layer);
+    treeFor(rangeMarker).addInterval(rangeMarker, start, end, greedyToLeft, greedyToRight, false, layer);
   }
 
   @VisibleForTesting
@@ -492,8 +493,7 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
 
   public RangeMarker getOffsetGuard(int offset) {
     // Way too many garbage is produced otherwise in AbstractList.iterator()
-    //noinspection ForLoopReplaceableByForEach
-    for (int i = 0; i < myGuardedBlocks.size(); i++) {
+      for (int i = 0; i < myGuardedBlocks.size(); i++) {
       RangeMarker block = myGuardedBlocks.get(i);
         if (offsetInRange(offset, block.getStartOffset(), block.getEndOffset())) {
             return block;
@@ -548,10 +548,9 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
     if (!(0 <= startOffset && startOffset <= endOffset && endOffset <= getTextLength())) {
       LOG.error("Incorrect offsets: startOffset=" + startOffset + ", endOffset=" + endOffset + ", text length=" + getTextLength());
     }
-    throw new UnsupportedOperationException();
-//    return surviveOnExternalChange
-//           ? new PersistentRangeMarker(this, startOffset, endOffset, true)
-//           : new RangeMarkerImpl(this, startOffset, endOffset, true, false);
+    return surviveOnExternalChange
+           ? new PersistentRangeMarker(this, startOffset, endOffset, true)
+           : new RangeMarkerImpl(this, startOffset, endOffset, true, false);
   }
 
   @Override
@@ -1065,10 +1064,10 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
   }
 
 //  @Override
-//  @NonNull
-//  public LineIterator createLineIterator() {
-//    return getLineSet().createIterator();
-//  }
+  @NonNull
+  public LineIterator createLineIterator() {
+    return getLineSet().createIterator();
+  }
 
   @Override
   public int getLineStartOffset(final int line) {
@@ -1229,16 +1228,21 @@ public final class DocumentImpl extends UserDataHolderBase implements DocumentEx
 
 //  @Override
   public boolean processRangeMarkersOverlappingWith(int start, int end, @NonNull Processor<? super RangeMarker> processor) {
-//    TextRange interval = new ProperTextRange(start, end);
-//    MarkupIterator<RangeMarkerEx> iterator = IntervalTreeImpl
-//      .mergingOverlappingIterator(myRangeMarkers, interval, myPersistentRangeMarkers, interval, RangeMarker.BY_START_OFFSET);
-//    try {
-//      return ContainerUtil.process(iterator, processor);
-//    }
-//    finally {
-//      iterator.dispose();
-//    }
-    throw new UnsupportedOperationException();
+    TextRange interval = new ProperTextRange(start, end);
+    MarkupIterator<RangeMarkerEx> iterator = IntervalTreeImpl
+      .mergingOverlappingIterator(myRangeMarkers, interval, myPersistentRangeMarkers, interval, RangeMarker.BY_START_OFFSET);
+    try {
+      while (iterator.hasNext()) {
+        RangeMarkerEx next = iterator.next();
+        if (!processor.process(next)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    finally {
+      iterator.dispose();
+    }
   }
 
   @NonNull

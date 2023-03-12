@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.com.intellij.openapi.editor.impl;
 
 import androidx.annotation.NonNull;
 
+import org.jetbrains.kotlin.com.intellij.openapi.editor.ex.LineIterator;
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.LineTokenizer;
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil;
 import org.jetbrains.kotlin.com.intellij.util.ArrayUtil;
@@ -171,10 +172,10 @@ public final class LineSet {
         return bsResult >= 0 ? bsResult : -bsResult - 2;
     }
 
-//    @NonNull
-//    public LineIterator createIterator() {
-//        return new LineIteratorImpl(this);
-//    }
+    @NonNull
+    public LineIterator createIterator() {
+        return new LineIteratorImpl(this);
+    }
 
     public int getLineStart(int index) {
         checkLineIndex(index);
