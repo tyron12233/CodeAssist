@@ -9,6 +9,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.tyron.code.databinding.NewEditorFragmentBinding
 import com.tyron.code.highlighter.JavaFileHighlighter
+import com.tyron.code.ui.legacyEditor.EditorChangeUtil
 import com.tyron.code.ui.legacyEditor.EditorView
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.lang.EmptyLanguage
@@ -19,6 +20,11 @@ import io.github.rosemoe.sora.text.Content
 import io.github.rosemoe.sora.text.ContentReference
 import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentEvent
 import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentListener
+import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator
+import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager
+import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase
 
 class EditorFragment : Fragment() {
 
@@ -26,9 +32,14 @@ class EditorFragment : Fragment() {
 
 
     private lateinit var binding: NewEditorFragmentBinding
+    private lateinit var editorImpl: EditorImpl
+
+
 
     private val language = object : EmptyLanguage() {
         val analyzeManager = EditorView.TestAnalyzeManager(JavaFileHighlighter())
+
+        private var completionProgressIndicator: ProgressIndicator = EmptyProgressIndicator()
 
         override fun getAnalyzeManager(): AnalyzeManager {
             return analyzeManager
@@ -41,6 +52,21 @@ class EditorFragment : Fragment() {
             extraArguments: Bundle
         ) {
 
+            completionProgressIndicator.cancel()
+            completionProgressIndicator = StandardProgressIndicatorBase()
+
+            ProgressManager.getInstance().runProcess({
+                try {
+                    EditorChangeUtil.performCompletionUnderIndicator(
+                        viewModel.project,
+                        editorImpl,
+                        publisher,
+                        viewModel.disposable
+                    )
+                } catch (_: ProcessCanceledException) {
+
+                }
+            }, completionProgressIndicator)
         }
     }
 
@@ -68,6 +94,8 @@ class EditorFragment : Fragment() {
                     setErrorViewVisibility(editorState.loadingErrorMessage)
                     return@collect
                 }
+
+                editorImpl = EditorImpl(binding.editorView, editorState.editorDocument)
 
                 binding.editorView.setText(editorState.editorContent)
                 binding.editorView.setEditorLanguage(language)
@@ -108,12 +136,4 @@ class EditorFragment : Fragment() {
             binding.completionIndicatorContainer.visibility = View.VISIBLE
         }
     }
-
-    val content: Content = TODO()
-    val documentListener = object : DocumentListener {
-        override fun documentChanged(event: DocumentEvent) {
-
-        }
-    }
-
 }

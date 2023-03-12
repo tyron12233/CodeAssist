@@ -8,9 +8,11 @@ import com.tyron.completion.java.util.JavaCompletionUtil;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.progress.ProgressManager;
 import com.tyron.completion.psi.completion.item.JavaPsiClassReferenceElement;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.codeInsight.CodeInsightUtilCore;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiCompiledElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
@@ -28,18 +30,18 @@ public class AllClassesGetter {
     public static final InsertHandler<JavaPsiClassReferenceElement> TRY_SHORTENING = new InsertHandler<JavaPsiClassReferenceElement>() {
 
         private void _handleInsert(final InsertionContext context, final JavaPsiClassReferenceElement item) {
-            final CodeEditor editor = context.getEditor();
+            final Editor editor = context.getEditor();
             final PsiClass psiClass = item.getObject();
 
             if (!psiClass.isValid()) return;
 
-            int endOffset = editor.getCursor().getLeft();
+            int endOffset = editor.getCaret().getStart();
             final String qname = psiClass.getQualifiedName();
             if (qname == null) return;
 
             if (endOffset == 0) return;
 
-            Content document = editor.getText();
+            Document document = editor.getDocument();
             final PsiFile file = context.getFile();
             PsiReference psiReference = file.findReferenceAt(endOffset - 1);
 
@@ -82,7 +84,7 @@ public class AllClassesGetter {
         @Override
         public void handleInsert(@NonNull InsertionContext context, @NonNull JavaPsiClassReferenceElement item) {
             _handleInsert(context, item);
-            item.getTailType().processTail(context.getEditor(), context.getEditor().getCursor().getLeft());
+            item.getTailType().processTail(context.getEditor(), context.getEditor().getCaret().getStart());
         }
     };
 

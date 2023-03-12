@@ -128,8 +128,14 @@ class DocumentTest {
         content.insert(0, 0, "Hello World")
         assert(document.text.contentEquals(content))
 
+        val rangeMarker = document.createRangeMarker(document.textLength - 1, document.textLength, true)
+        print(rangeMarker)
+
         content.delete(0, "Hello ".length)
         assert(document.text.contentEquals(content))
+
+        println(rangeMarker)
+
 
         content.replace(0, content.length, content.toString().uppercase())
         assert(document.text.contentEquals(content))

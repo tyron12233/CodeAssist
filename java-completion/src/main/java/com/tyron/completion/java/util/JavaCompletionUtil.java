@@ -8,6 +8,7 @@ import com.tyron.completion.lookup.Lookup;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.impl.LookupItem;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodCallElement;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -241,55 +242,19 @@ public class JavaCompletionUtil {
     }
 
     @Nullable
-    public static RangeMarker insertTemporary(int endOffset, Document document, String temporary) {
+    public static RangeMarker insertTemporary(int endOffset, Document document, String temporary)  {
         CharSequence chars = document.getCharsSequence();
         if (endOffset < chars.length() && Character.isJavaIdentifierPart(chars.charAt(endOffset))){
             document.insertString(endOffset, temporary);
-            RangeMarker toDelete = new RangeMarker() {
-                @Override
-                public int getStartOffset() {
-                    return endOffset;
-                }
-
-                @Override
-                public int getEndOffset() {
-                    return endOffset + 1;
-                }
-
-                @Override
-                public boolean isValid() {
-                    return true;
-                }
-
-                @Override
-                public boolean isGreedyToRight() {
-                    return true;
-                }
-
-                @Override
-                public boolean isGreedyToLeft() {
-                    return true;
-                }
-
-                @Override
-                public void dispose() {
-
-                }
-
-                @Override
-                public <T> @Nullable T getUserData(@NotNull Key<T> key) {
-                    return null;
-                }
-
-                @Override
-                public <T> void putUserData(@NotNull Key<T> key, @Nullable T t) {
-
-                }
-            };
+            RangeMarker toDelete = document.createRangeMarker(endOffset, endOffset + 1);
+            toDelete.setGreedyToLeft(true);
+            toDelete.setGreedyToRight(true);
             return toDelete;
         }
         return null;
     }
+
+
 
     public static <T extends PsiElement> T findElementInRange(@NotNull PsiFile file,
                                                               int startOffset,
@@ -345,9 +310,9 @@ public class JavaCompletionUtil {
                                          ThreeState hasParams,
                                          // UNSURE if providing no arguments is a valid situation
                                          boolean forceClosingParenthesis) {
-//        CodeEditor editor = context.getEditor();
-//        char completionChar = context.getCompletionChar();
-//        PsiFile file = context.getFile();
+        Editor editor = context.getEditor();
+        char completionChar = context.getCompletionChar();
+        PsiFile file = context.getFile();
 //
 //        TailType tailType = completionChar == '(' ? TailType.NONE :
 //                completionChar == ':' ? TailType.COND_EXPR_COLON :

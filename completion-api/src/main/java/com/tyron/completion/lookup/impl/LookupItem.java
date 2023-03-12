@@ -11,6 +11,7 @@ import com.tyron.completion.InsertionContext;
 import com.tyron.completion.TailType;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Comparing;
@@ -194,7 +195,7 @@ public class LookupItem<T> extends MutableLookupElement implements Comparable<Lo
     }
 
     @NotNull
-    public static TailType handleCompletionChar(@NotNull final CodeEditor editor,
+    public static TailType handleCompletionChar(@NotNull final Editor editor,
                                                 @NotNull final LookupElement lookupElement,
                                                 final char completionChar) {
         final TailType type = getDefaultTailType(completionChar);

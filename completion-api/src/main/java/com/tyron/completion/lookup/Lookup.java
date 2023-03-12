@@ -5,6 +5,7 @@ import android.graphics.Rect;
 import androidx.annotation.Nullable;
 
 import com.tyron.completion.PrefixMatcher;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.ColorKey;
@@ -59,13 +60,13 @@ public interface Lookup {
    * Consider using {@link #getTopLevelEditor()} if you don't need injected editor.
    * @return editor, possibly injected, where this lookup is shown
    */
-  @NotNull CodeEditor getEditor();
+  @NotNull Editor getEditor();
 
   /**
    * @return the non-injected editor where this lookup is shown
    */
   @NotNull
-  CodeEditor getTopLevelEditor();
+  Editor getTopLevelEditor();
 
   @NotNull Project getProject();
 

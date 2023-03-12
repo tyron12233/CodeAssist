@@ -8,6 +8,7 @@ import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.psi.codeInsight.ExpectedTypesProvider;
 import com.tyron.completion.psi.codeInsight.MethodCallUtils;
 import com.tyron.completion.psi.completion.item.JavaPsiClassReferenceElement;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -79,7 +80,7 @@ public class JavaClassNameInsertHandler implements InsertHandler<JavaPsiClassRef
             }
             if (importStatement instanceof PsiImportStaticStatement) {
                 context.setAddCompletionChar(false);
-                context.getEditor().insertText(".", 0);
+                context.getDocument().insertString(0, ".");
             }
             return;
         }
@@ -91,7 +92,7 @@ public class JavaClassNameInsertHandler implements InsertHandler<JavaPsiClassRef
         SmartPsiElementPointer<PsiClass> classPointer = SmartPointerManager.createPointer(psiClass);
         final Project project = context.getProject();
 
-        final CodeEditor editor = context.getEditor();
+        final Editor editor = context.getEditor();
         final char c = context.getCompletionChar();
 
         throw new UnsupportedOperationException();

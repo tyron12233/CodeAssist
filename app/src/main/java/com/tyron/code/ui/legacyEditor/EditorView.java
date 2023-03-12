@@ -103,12 +103,12 @@ public class EditorView extends FrameLayout {
 
         document = FileDocumentManager.getInstance().getDocument(file);
 
-        EditorMemory.putUserData(editor, EditorMemory.DOCUMENT_KEY, document);
+//        EditorMemory.putUserData(editor, EditorMemory.DOCUMENT_KEY, document);
 
         PsiDocumentManagerBase documentManager =
                 (PsiDocumentManagerBase) PsiDocumentManager.getInstance(project);
         PsiFile psiFile = documentManager.getPsiFile(document);
-        EditorMemory.putUserData(editor, EditorMemory.FILE_KEY, psiFile);
+//        EditorMemory.putUserData(editor, EditorMemory.FILE_KEY, psiFile);
 
 
         document.addDocumentListener(documentManager);
@@ -148,7 +148,7 @@ public class EditorView extends FrameLayout {
 
                 ProgressManager.getInstance().runProcess(() -> {
                     try {
-                        EditorChangeUtil.performCompletionUnderIndicator(project, editor, publisher, disposable);
+//                        EditorChangeUtil.performCompletionUnderIndicator(project, editor, publisher, disposable);
                     } catch (ProcessCanceledException e) {
                         // ignored, expected to be cancelled
                     }

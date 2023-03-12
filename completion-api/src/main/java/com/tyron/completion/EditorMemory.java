@@ -1,5 +1,7 @@
 package com.tyron.completion;
 
+import com.tyron.editor.Editor;
+
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderBase;
@@ -19,9 +21,9 @@ public class EditorMemory {
     public static Key<PsiElement> INSERTED_KEY = Key.create("INSERTED_ELEMENT");
     public static Key<Document> DOCUMENT_KEY = Key.create("DOCUMENT");
 
-    private static final Map<CodeEditor, UserDataHolderBase> editorToHolderMap = new WeakHashMap<>();
+    private static final Map<Editor, UserDataHolderBase> editorToHolderMap = new WeakHashMap<>();
 
-    public static <T> T getUserData(CodeEditor editor, Key<T> key) {
+    public static <T> T getUserData(Editor editor, Key<T> key) {
         UserDataHolderBase userDataHolderBase = editorToHolderMap.get(editor);
         if (userDataHolderBase != null) {
             return userDataHolderBase.getUserData(key);
@@ -29,7 +31,7 @@ public class EditorMemory {
         return null;
     }
 
-    public static <T> void putUserData(CodeEditor editor, Key<T> key, T value) {
+    public static <T> void putUserData(Editor editor, Key<T> key, T value) {
         UserDataHolderBase userDataHolderBase = editorToHolderMap.get(editor);
         if (userDataHolderBase == null) {
             editorToHolderMap.put(editor, userDataHolderBase = new UserDataHolderBase());

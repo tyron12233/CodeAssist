@@ -1,6 +1,7 @@
 package com.tyron.completion.psi.completion.simple;
 
 import com.tyron.completion.TailType;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
@@ -35,22 +36,22 @@ public abstract class RParenthTailType extends TailType {
     return element == null ? new TextRange(0, document.getTextLength()) : element.getTextRange();
   }
 
-  protected abstract boolean isSpaceWithinParentheses(Object styleSettings, CodeEditor editor, final int tailOffset);
+  protected abstract boolean isSpaceWithinParentheses(Object styleSettings, Editor editor, final int tailOffset);
 
   @Override
-  public int processTail(final CodeEditor editor, int tailOffset) {
+  public int processTail(final Editor editor, int tailOffset) {
     return addRParenth(editor, tailOffset,
                        isSpaceWithinParentheses(null, editor, tailOffset));
   }
 
-  public static int addRParenth(CodeEditor editor, int offset, boolean spaceWithinParens) {
+  public static int addRParenth(Editor editor, int offset, boolean spaceWithinParens) {
     int existingRParenthOffset = -1;
 
     if (existingRParenthOffset < 0){
       if (spaceWithinParens){
         offset = insertChar(editor, offset, ' ');
       }
-      editor.insertText(")", offset);
+      editor.getDocument().insertString(offset, ")");
       return moveCaret(editor, offset, 1);
     }
     if (spaceWithinParens && offset == existingRParenthOffset) {

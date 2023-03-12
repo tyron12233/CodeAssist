@@ -121,33 +121,29 @@ public class CompletionList {
         }
 
         public Builder addItem(CompletionItem i) {
-            if (!(i instanceof LookupElement)) {
-                throw new IllegalArgumentException("use the LookupElement API directly");
-            }
-
-            LookupElement element = (LookupElement) i;
-
-            List<MatchLevel> matchLevels = new ArrayList<>();
-            List<String> filterTexts = element.getFilterTexts();
-            if (filterTexts.isEmpty()) {
-                filterTexts = Collections.singletonList(element.getLookupString());
-            }
-            for (String filterText : filterTexts) {
-                MatchLevel matchLevel =
-                        CompletionPrefixMatcher.computeMatchLevel(filterText, completionPrefix);
-                if (matchLevel == MatchLevel.NOT_MATCH) {
-                    continue;
-                }
-                matchLevels.add(matchLevel);
-            }
-            if (matchLevels.isEmpty()) {
-                return this;
-            }
-            Collections.sort(matchLevels);
-            MatchLevel matchLevel = matchLevels.get(matchLevels.size() - 1);
-            element.matchLevel(matchLevel);
-
-            consumer.accept(element);
+//            LookupElement element = null;
+//
+//            List<MatchLevel> matchLevels = new ArrayList<>();
+//            List<String> filterTexts = element.getFilterTexts();
+//            if (filterTexts.isEmpty()) {
+//                filterTexts = Collections.singletonList(element.getLookupString());
+//            }
+//            for (String filterText : filterTexts) {
+//                MatchLevel matchLevel =
+//                        CompletionPrefixMatcher.computeMatchLevel(filterText, completionPrefix);
+//                if (matchLevel == MatchLevel.NOT_MATCH) {
+//                    continue;
+//                }
+//                matchLevels.add(matchLevel);
+//            }
+//            if (matchLevels.isEmpty()) {
+//                return this;
+//            }
+//            Collections.sort(matchLevels);
+//            MatchLevel matchLevel = matchLevels.get(matchLevels.size() - 1);
+//            element.matchLevel(matchLevel);
+//
+//            consumer.accept(element);
             return this;
         }
 

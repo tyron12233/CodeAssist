@@ -8,6 +8,7 @@ import com.tyron.completion.psi.codeInsight.completion.CompletionUtil;
 import com.tyron.completion.psi.codeInsight.completion.JavaMethodCallElement;
 import com.tyron.completion.psi.impl.source.resolve.CompletionParameterTypeInferencePolicy;
 import com.tyron.completion.psi.search.PsiShortNamesCache;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -1877,11 +1878,11 @@ false
         }
 
         @Override
-        public int processTail(CodeEditor editor, int tailOffset) {
+        public int processTail(Editor editor, int tailOffset) {
             int result = CommaTailType.INSTANCE.processTail(editor, tailOffset);
             if (myOriginalCall.isValid()) {
-//                PsiDocumentManager.getInstance(myOriginalCall.getProject()).commitDocument
-//                (editor.getDocument());
+                PsiDocumentManager.getInstance(myOriginalCall.getProject()).commitDocument
+                (editor.getDocument());
 //                if (myOriginalCall.isValid()) ParameterHintsPass.asyncUpdate(myOriginalCall,
 //                editor);
             }

@@ -6,6 +6,7 @@ import static org.jetbrains.kotlin.com.intellij.patterns.StandardPatterns.string
 import com.tyron.completion.impl.CompletionAssertions;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.impl.LookupItem;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
@@ -113,7 +114,7 @@ public class CompletionUtil {
     public static InsertionContext createInsertionContext(@Nullable List<LookupElement> lookupItems,
                                                           LookupElement item,
                                                           char completionChar,
-                                                          CodeEditor editor,
+                                                          Editor editor,
                                                           PsiFile psiFile,
                                                           int caretOffset,
                                                           int idEndOffset,
@@ -132,7 +133,7 @@ public class CompletionUtil {
 
     public static InsertionContext createInsertionContext(@Nullable List<LookupElement> lookupItems,
                                                           char completionChar,
-                                                          CodeEditor editor,
+                                                          Editor editor,
                                                           PsiFile psiFile,
                                                           int startOffset,
                                                           int caretOffset,
@@ -388,7 +389,7 @@ public class CompletionUtil {
         return text.subSequence(start + 1, offsetInElement).toString().trim();
     }
 
-    public static int calcIdEndOffset(OffsetMap offsetMap, CodeEditor editor, Integer initOffset) {
+    public static int calcIdEndOffset(OffsetMap offsetMap, Editor editor, Integer initOffset) {
         return offsetMap.containsOffset(CompletionInitializationContext.IDENTIFIER_END_OFFSET) ?
                 offsetMap.getOffset(CompletionInitializationContext.IDENTIFIER_END_OFFSET) :
                 CompletionInitializationContext.calcDefaultIdentifierEnd(editor, initOffset);

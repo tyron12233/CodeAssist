@@ -85,48 +85,8 @@ public final class OffsetMap implements Disposable {
       if (old != null) {
           old.dispose();
       }
-    final RangeMarker marker = new RangeMarker() {
-      @Override
-      public int getStartOffset() {
-        return offset;
-      }
-
-      @Override
-      public int getEndOffset() {
-        return offset;
-      }
-
-      @Override
-      public boolean isValid() {
-        return true;
-      }
-
-      @Override
-      public boolean isGreedyToRight() {
-        return key.isMovableToRight();
-      }
-
-      @Override
-      public boolean isGreedyToLeft() {
-        return false;
-      }
-
-      @Override
-      public void dispose() {
-
-      }
-
-      @Override
-      public <T> @Nullable T getUserData(@NotNull Key<T> key) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public <T> void putUserData(@NotNull Key<T> key, @Nullable T t) {
-        throw new UnsupportedOperationException();
-      }
-    };
-//    marker.setGreedyToRight(key.isMovableToRight());
+    final RangeMarker marker = myDocument.createRangeMarker(offset, offset);
+    marker.setGreedyToRight(key.isMovableToRight());
     myMap.put(key, marker);
   }
 

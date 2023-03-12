@@ -11,6 +11,8 @@ import com.tyron.completion.CompletionProcess;
 import com.tyron.completion.CompletionType;
 import com.tyron.completion.EditorMemory;
 import com.tyron.completion.OffsetMap;
+import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
@@ -49,8 +51,8 @@ public class CompletionInitializationUtil {
     private static final Logger LOG = Logger.getInstance(CompletionInitializationUtil.class);
 
     public static CompletionInitializationContext createCompletionInitializationContext(@NotNull Project project,
-                                                                                        @NotNull CodeEditor editor,
-                                                                                        @NotNull Cursor caret,
+                                                                                        @NotNull Editor editor,
+                                                                                        @NotNull Caret caret,
                                                                                         int invocationCount,
                                                                                         CompletionType completionType) {
         return WriteCommandAction.runWriteCommandAction(project,
@@ -59,8 +61,8 @@ public class CompletionInitializationUtil {
                     CompletionAssertions.checkEditorValid(editor);
 
                     final PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
-                    //            assert psiFile != null : "no PSI file: " + FileDocumentManager
-                    //            .getInstance().getFile(editor.getDocument());
+                                assert psiFile != null : "no PSI file: " + FileDocumentManager
+                                .getInstance().getFile(editor.getDocument());
                     psiFile.putUserData(PsiFileEx.BATCH_REFERENCE_PROCESSING, Boolean.TRUE);
                     CompletionAssertions.assertCommitSuccessful(editor, psiFile);
 
@@ -72,10 +74,10 @@ public class CompletionInitializationUtil {
                 });
     }
 
-    public static CompletionInitializationContext runContributorsBeforeCompletion(CodeEditor editor,
+    public static CompletionInitializationContext runContributorsBeforeCompletion(Editor editor,
                                                                                   PsiFile psiFile,
                                                                                   int invocationCount,
-                                                                                  @NotNull Cursor caret,
+                                                                                  @NotNull Caret caret,
                                                                                   CompletionType completionType) {
         final Ref<CompletionContributor> current = Ref.create(null);
         CompletionInitializationContext context = new CompletionInitializationContext(editor,
@@ -143,7 +145,7 @@ public class CompletionInitializationUtil {
             return () -> topLevelOffsets;
         }
 
-        CodeEditor editor = initContext.getEditor();
+        Editor editor = initContext.getEditor();
         Document originalDocument = EditorMemory.getUserData(editor, EditorMemory.DOCUMENT_KEY);
 //        Editor hostEditor = editor instanceof EditorWindow ? ((EditorWindow)editor).getDelegate
 //        () : editor;

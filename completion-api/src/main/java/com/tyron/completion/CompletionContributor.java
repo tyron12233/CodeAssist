@@ -3,6 +3,7 @@ package com.tyron.completion;
 import com.tyron.completion.lookup.Lookup;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -15,6 +16,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
 import org.jetbrains.kotlin.com.intellij.openapi.project.DumbService;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Pair;
+import org.jetbrains.kotlin.com.intellij.openapi.util.text.CharFilter;
 import org.jetbrains.kotlin.com.intellij.patterns.ElementPattern;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
@@ -57,7 +59,7 @@ import io.github.rosemoe.sora.widget.CodeEditor;
  * A: Use {@link CompletionResultSet#addLookupAdvertisement(String)}.<p>
  *
  * Q: How do I change the text that gets shown when there are no suitable variants at all? <br>
- * A: Use {@link CompletionContributor#handleEmptyLookup(CompletionParameters, CodeEditor)}.
+ * A: Use {@link CompletionContributor#handleEmptyLookup(CompletionParameters, Editor)}.
  * Don't forget to check whether you are in correct place (see {@link CompletionParameters}).<p>
  *
  * Q: How do I affect lookup element's appearance (icon, text attributes, etc.)?<br>
@@ -193,7 +195,7 @@ public abstract class CompletionContributor {
    * @return hint text to be shown if no variants are found, typically "No suggestions"
    */
   @Nullable
-  public String handleEmptyLookup(@NotNull CompletionParameters parameters, final CodeEditor editor) {
+  public String handleEmptyLookup(@NotNull CompletionParameters parameters, final Editor editor) {
     return null;
   }
 

@@ -4,6 +4,7 @@ import com.tyron.completion.CompletionInitializationContext;
 import com.tyron.completion.EditorMemory;
 import com.tyron.completion.InsertionContext;
 import com.tyron.completion.OffsetMap;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NonNls;
@@ -27,7 +28,7 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 
 public class CompletionAssertions {
 
-    static void assertCommitSuccessful(CodeEditor editor, PsiFile psiFile) {
+    static void assertCommitSuccessful(Editor editor, PsiFile psiFile) {
         Document document = EditorMemory.getUserData(editor, EditorMemory.DOCUMENT_KEY);
         int docLength = document.getTextLength();
         int psiLength = psiFile.getTextLength();
@@ -74,14 +75,14 @@ public class CompletionAssertions {
                 new Attachment("docText.txt", document.getText()));
     }
 
-    static void checkEditorValid(CodeEditor editor) {
+    public static void checkEditorValid(Editor editor) {
         if (!isEditorValid(editor)) {
             throw new AssertionError();
         }
     }
 
-    static boolean isEditorValid(CodeEditor editor) {
-        return editor.isAttachedToWindow();
+    static boolean isEditorValid(Editor editor) {
+        return true;
 //        return !(editor instanceof EditorWindow) || ((EditorWindow)editor).isValid();
     }
 

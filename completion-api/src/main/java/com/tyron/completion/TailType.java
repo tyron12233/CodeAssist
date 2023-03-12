@@ -1,8 +1,10 @@
 package com.tyron.completion;
 
 import com.tyron.completion.lookup.LookupElement;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.text.Cursor;
@@ -19,28 +21,28 @@ import io.github.rosemoe.sora.widget.CodeEditor;
  */
 public abstract class TailType {
 
-    public static int insertChar(final CodeEditor editor, final int tailOffset, final char c) {
+    public static int insertChar(final Editor editor, final int tailOffset, final char c) {
         return insertChar(editor, tailOffset, c, true);
     }
 
-    public static int insertChar(CodeEditor editor, int tailOffset, char c, boolean overwrite) {
-        Content document = editor.getText();
-        int textLength = document.length();
+    public static int insertChar(Editor editor, int tailOffset, char c, boolean overwrite) {
+        Document document = editor.getDocument();
+        int textLength = document.getTextLength();
         if (tailOffset == textLength ||
             !overwrite ||
             ((CharSequence) document).charAt(tailOffset) != c) {
-            editor.insertText(String.valueOf(c), tailOffset);
+            document.insertString(tailOffset, String.valueOf(c));
         }
         return moveCaret(editor, tailOffset, 1);
     }
 
-    protected static int moveCaret(final CodeEditor editor, final int tailOffset, final int delta) {
+    protected static int moveCaret(final Editor editor, final int tailOffset, final int delta) {
         return tailOffset + delta;
     }
 
     public static final TailType UNKNOWN = new TailType() {
         @Override
-        public int processTail(final CodeEditor editor, final int tailOffset) {
+        public int processTail(final Editor editor, final int tailOffset) {
             return tailOffset;
         }
 
@@ -51,7 +53,7 @@ public abstract class TailType {
 
     public static final TailType NONE = new TailType() {
         @Override
-        public int processTail(final CodeEditor editor, final int tailOffset) {
+        public int processTail(final Editor editor, final int tailOffset) {
             return tailOffset;
         }
 
@@ -61,7 +63,7 @@ public abstract class TailType {
     };
 
 
-    public abstract int processTail(final CodeEditor editor, int tailOffset);
+    public abstract int processTail(final Editor editor, int tailOffset);
 
     public static TailType createSimpleTailType(final char c) {
         return new CharTailType(c);
@@ -82,7 +84,7 @@ public abstract class TailType {
 
         @Override
         public boolean isApplicable(@NotNull InsertionContext context) {
-            CharSequence text = context.getEditor().getText();
+            CharSequence text = context.getEditor().getDocument().getCharsSequence();
             int tail = context.getTailOffset();
             if (text.length() > tail + 1 && text.charAt(tail) == ' ') {
                 char ch = text.charAt(tail + 1);

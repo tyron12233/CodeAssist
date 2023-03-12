@@ -1,9 +1,13 @@
 package com.tyron.completion;
 
+import com.tyron.editor.Editor;
+import com.tyron.legacyEditor.Caret;
+
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.lang.Language;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 
@@ -22,9 +26,9 @@ public class CompletionInitializationContext {
    */
   public static @NonNls final String DUMMY_IDENTIFIER = CompletionUtilCore.DUMMY_IDENTIFIER;
   public static @NonNls final String DUMMY_IDENTIFIER_TRIMMED = CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED;
-  private final CodeEditor myEditor;
+  private final Editor myEditor;
   @NotNull
-  private final Cursor myCaret;
+  private final Caret myCaret;
   private final PsiFile myFile;
   private final CompletionType myCompletionType;
   private final int myInvocationCount;
@@ -32,8 +36,8 @@ public class CompletionInitializationContext {
   private String myDummyIdentifier = DUMMY_IDENTIFIER;
   private final Language myPositionLanguage;
 
-  public CompletionInitializationContext(final CodeEditor editor,
-                                         final @NotNull Cursor caret,
+  public CompletionInitializationContext(final Editor editor,
+                                         final @NotNull Caret caret,
                                          Language language,
                                          final PsiFile file,
                                          final CompletionType completionType,
@@ -52,18 +56,18 @@ public class CompletionInitializationContext {
   }
 
   @ApiStatus.Internal
-  public static int calcSelectionEnd(Cursor caret) {
-    return caret.isSelected() ? caret.getRight() : caret.getLeft();
+  public static int calcSelectionEnd(Caret caret) {
+    return caret.isSelected() ? caret.getEnd() : caret.getStart();
   }
 
-  public static int calcStartOffset(Cursor caret) {
-    return caret.getLeft();
+  public static int calcStartOffset(Caret caret) {
+    return caret.getStart();
   }
 
-  public static int calcDefaultIdentifierEnd(CodeEditor editor, int startFrom) {
-    final CharSequence text = editor.getText();
+  public static int calcDefaultIdentifierEnd(Editor editor, int startFrom) {
+    final Document text = editor.getDocument();
     int idEnd = startFrom;
-    while (idEnd < text.length() && Character.isJavaIdentifierPart(text.charAt(idEnd))) {
+    while (idEnd < text.getTextLength() && Character.isJavaIdentifierPart(text.getCharsSequence().charAt(idEnd))) {
       idEnd++;
     }
     return idEnd;
@@ -83,12 +87,12 @@ public class CompletionInitializationContext {
   }
 
   @NotNull
-  public CodeEditor getEditor() {
+  public Editor getEditor() {
     return myEditor;
   }
 
   @NotNull
-  public Cursor getCaret() {
+  public Caret getCaret() {
     return myCaret;
   }
 

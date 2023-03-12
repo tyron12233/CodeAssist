@@ -4,6 +4,7 @@ import com.tyron.completion.InsertionContext;
 import com.tyron.completion.lookup.LookupElement;
 import com.tyron.completion.lookup.LookupElementPresentation;
 import com.tyron.completion.psi.completion.TypedLookupItem;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -75,12 +76,10 @@ public class JavaMethodReferenceElement extends LookupElement implements TypedLo
             PsiClass containingClass = Objects.requireNonNull(myMethod.getContainingClass());
             String qualifiedName = Objects.requireNonNull(containingClass.getQualifiedName());
 
-            CodeEditor editor = context.getEditor();
+            Editor editor = context.getEditor();
             int startOffset = context.getStartOffset();
-            CharPosition position = editor.getText().getIndexer().getCharPosition(startOffset);
 
-
-            editor.getText().insert(position.line, position.column, qualifiedName + "::");
+            editor.getDocument().insertString(startOffset, qualifiedName + "::");
         }
     }
 }

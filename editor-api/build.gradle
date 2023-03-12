@@ -6,6 +6,7 @@ dependencies {
 
     implementation projects.common
     implementation projects.languageApi
+    implementation project(path: ':build-tools:kotlinc')
     implementation project(path: ':build-tools:logging')
     implementation project(path: ':build-tools:project')
 

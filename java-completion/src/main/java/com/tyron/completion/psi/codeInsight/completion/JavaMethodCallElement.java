@@ -177,64 +177,64 @@ public class JavaMethodCallElement extends LookupItem<PsiMethod> implements Type
 
     @Override
     public void handleInsert(@NotNull InsertionContext context) {
-//        final Document document = context.getDocument();
-//        final PsiFile file = context.getFile();
-//        final PsiMethod method = getObject();
-//
-////        final LookupElement[] allItems = context.getElements();
-//        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : ThreeState.YES;
-////        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : MethodParenthesesHandler.overloadsHaveParameters(allItems, method);
-////        if (method.isConstructor()) {
-////            PsiClass aClass = method.getContainingClass();
-////            if (aClass != null && aClass.getTypeParameters().length > 0) {
-////                document.insertString(context.getTailOffset(), "<>");
-////            }
-////        }
-//        JavaCompletionUtil.insertParentheses(context, this, false, hasParams, false);
-////
-//        final int startOffset = context.getStartOffset();
-//        final OffsetKey refStart = context.trackOffset(startOffset, true);
-//        if (myNeedExplicitTypeParameters) {
-//            qualifyMethodCall(file, startOffset, document);
-////            insertExplicitTypeParameters(context, refStart);
-//        }
-//        else if (myHelper != null) {
-//            context.commitDocument();
-//            importOrQualify(document, file, method, startOffset);
-//        }
-//
-//        PsiCallExpression methodCall = findCallAtOffset(context, context.getOffset(refStart));
-//        // make sure this is the method call we've just added, not the enclosing one
-//        if (methodCall != null) {
-//            PsiElement completedElement = methodCall instanceof PsiMethodCallExpression ?
-//                    ((PsiMethodCallExpression)methodCall).getMethodExpression().getReferenceNameElement() : null;
-//            TextRange completedElementRange = completedElement == null ? null : completedElement.getTextRange();
-//            if (completedElementRange == null || completedElementRange.getStartOffset() != context.getStartOffset()) {
-//                methodCall = null;
-//            }
-//        }
-//        if (methodCall != null) {
+        final Document document = context.getDocument();
+        final PsiFile file = context.getFile();
+        final PsiMethod method = getObject();
+
+        final LookupElement[] allItems = context.getElements();
+        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : ThreeState.YES;
+//        ThreeState hasParams = method.getParameterList().isEmpty() ? ThreeState.NO : MethodParenthesesHandler.overloadsHaveParameters(allItems, method);
+        if (method.isConstructor()) {
+            PsiClass aClass = method.getContainingClass();
+            if (aClass != null && aClass.getTypeParameters().length > 0) {
+                document.insertString(context.getTailOffset(), "<>");
+            }
+        }
+        JavaCompletionUtil.insertParentheses(context, this, false, hasParams, false);
+
+        final int startOffset = context.getStartOffset();
+        final OffsetKey refStart = context.trackOffset(startOffset, true);
+        if (myNeedExplicitTypeParameters) {
+            qualifyMethodCall(file, startOffset, document);
+//            insertExplicitTypeParameters(context, refStart);
+        }
+        else if (myHelper != null) {
+            context.commitDocument();
+            importOrQualify(document, file, method, startOffset);
+        }
+
+        PsiCallExpression methodCall = findCallAtOffset(context, context.getOffset(refStart));
+        // make sure this is the method call we've just added, not the enclosing one
+        if (methodCall != null) {
+            PsiElement completedElement = methodCall instanceof PsiMethodCallExpression ?
+                    ((PsiMethodCallExpression)methodCall).getMethodExpression().getReferenceNameElement() : null;
+            TextRange completedElementRange = completedElement == null ? null : completedElement.getTextRange();
+            if (completedElementRange == null || completedElementRange.getStartOffset() != context.getStartOffset()) {
+                methodCall = null;
+            }
+        }
+        if (methodCall != null) {
 //            CompletionMemory.registerChosenMethod(method, methodCall);
-//            handleNegation(context, document, methodCall);
-//        }
+            handleNegation(context, document, methodCall);
+        }
 
 //        startArgumentLiveTemplate(context, method);
 //        showParameterHints(this, context, method, methodCall);
     }
 
     static PsiCallExpression findCallAtOffset(InsertionContext context, int offset) {
-//        context.commitDocument();
+        context.commitDocument();
         return PsiTreeUtil.findElementOfClassAtOffset(context.getFile(), offset, PsiCallExpression.class, false);
     }
 
-//    private void handleNegation(InsertionContext context, Document document, PsiCallExpression methodCall) {
-//        if (context.getCompletionChar() == '!' && myNegatable) {
-//            context.setAddCompletionChar(false);
+    private void handleNegation(InsertionContext context, Document document, PsiCallExpression methodCall) {
+        if (context.getCompletionChar() == '!' && myNegatable) {
+            context.setAddCompletionChar(false);
 //            FeatureUsageTracker.getInstance().triggerFeatureUsed(CodeCompletionFeatures.EXCLAMATION_FINISH);
-//            document.insertString(methodCall.getTextRange().getStartOffset(), "!");
-//        }
-//    }
-//
+            document.insertString(methodCall.getTextRange().getStartOffset(), "!");
+        }
+    }
+
     private void importOrQualify(Document document, PsiFile file, PsiMethod method, int startOffset) {
         if (willBeImported()) {
             if (method.isConstructor()) {

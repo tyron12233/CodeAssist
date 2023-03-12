@@ -9,16 +9,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document
+import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager
 import org.jetbrains.kotlin.com.intellij.openapi.project.ProjectCoreUtil
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase
 
 class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewModel() {
 
+    val disposable = Disposer.newDisposable()
+
     @Suppress("DEPRECATION")
-    private val project by lazy { ProjectCoreUtil.theOnlyOpenProject()!! }
+    val project by lazy { ProjectCoreUtil.theOnlyOpenProject()!! }
     private val psiDocumentManager = PsiDocumentManager.getInstance(project)
     private val fileDocumentManager = FileDocumentManager.getInstance()
     private val localFileManager = StandardFileSystems.local()
@@ -62,7 +66,8 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
                 InternalEditorState(
                     loadingContent = false,
                     loadingErrorMessage = null,
-                    editorContent = this@EditorViewModel.content
+                    editorContent = this@EditorViewModel.content,
+                    editorDocument = document
                 )
             )
         }
@@ -76,9 +81,16 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
         )
     }
 
+    override fun onCleared() {
+        super.onCleared()
+
+        Disposer.dispose(disposable)
+    }
+
     data class InternalEditorState(
         val loadingContent: Boolean = false,
         val loadingErrorMessage: String? = null,
-        val editorContent: Content = Content()
+        val editorContent: Content = Content(),
+        val editorDocument: Document = DocumentImpl("")
     )
 }

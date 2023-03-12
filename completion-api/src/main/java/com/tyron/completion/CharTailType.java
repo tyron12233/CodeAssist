@@ -2,6 +2,8 @@ package com.tyron.completion;
 
 import androidx.annotation.NonNull;
 
+import com.tyron.editor.Editor;
+
 import org.jetbrains.annotations.NotNull;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -26,7 +28,7 @@ public class CharTailType extends TailType {
     }
 
     @Override
-    public int processTail(final CodeEditor editor, final int tailOffset) {
+    public int processTail(final Editor editor, final int tailOffset) {
         return insertChar(editor, tailOffset, myChar, myOverwrite);
     }
 

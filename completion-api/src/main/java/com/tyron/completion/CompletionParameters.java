@@ -1,10 +1,13 @@
 package com.tyron.completion;
 
+import com.tyron.editor.Editor;
+
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiReference;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtilCore;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -21,7 +24,7 @@ public final class CompletionParameters {
     private final PsiFile myOriginalFile;
     private final CompletionType myCompletionType;
     @NotNull
-    private final CodeEditor myEditor;
+    private final Editor myEditor;
     private final int myOffset;
     private final int myInvocationCount;
     private final CompletionProcess myProcess;
@@ -34,7 +37,7 @@ public final class CompletionParameters {
                                 @NotNull CompletionType completionType,
                                 int offset,
                                 int invocationCount,
-                                @NotNull CodeEditor editor,
+                                @NotNull Editor editor,
                                 @NotNull CompletionProcess process) {
         PsiUtilCore.ensureValid(position);
         assert position.getTextRange().containsOffset(offset) : position;
@@ -91,7 +94,7 @@ public final class CompletionParameters {
      * possible cases to be considered inside a {@link CompletionContributor}.
      * Also, even if completion was invoked in the middle of a white space, a reference might
      * appear there after dummy identifier is inserted,
-     * and its {@link com.intellij.psi.PsiReference#getVariants()} can then be suggested.
+     * and its {@link PsiReference#getVariants()} can then be suggested.
      * </p>
      * <p>
      * If the dummy identifier is empty, then the file isn't copied and this method returns
@@ -159,7 +162,7 @@ public final class CompletionParameters {
      * @return the editor where the completion was started
      */
     @NotNull
-    public CodeEditor getEditor() {
+    public Editor getEditor() {
         return myEditor;
     }
 

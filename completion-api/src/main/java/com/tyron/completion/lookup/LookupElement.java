@@ -9,6 +9,7 @@ import com.tyron.completion.InsertionContext;
 import com.tyron.completion.PrefixMatcher;
 import com.tyron.completion.impl.CompletionContext;
 import com.tyron.completion.model.CompletionItemWithMatchLevel;
+import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
@@ -26,13 +27,13 @@ import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.widget.CodeEditor;
 
-public abstract class LookupElement extends CompletionItemWithMatchLevel implements UserDataHolder {
+public abstract class LookupElement implements UserDataHolder {
 
     public static Key<PrefixMatcher> PREFIX_MATCHER_KEY = Key.create("prefix_matcher");
     private final UserDataHolderBase userDataHolderBase = new UserDataHolderBase();
 
     public LookupElement() {
-        super("");
+
     }
 
     @Override
@@ -108,15 +109,10 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
     }
 
 
-    @Override
-    public final void performCompletion(@NonNull CodeEditor editor,
-                                  @NonNull Content text,
-                                  @NonNull CharPosition position) {
-        super.performCompletion(editor, text, position);
-    }
 
-    @Override
-    public final void performCompletion(@NonNull CodeEditor editor,
+
+
+    public final void performCompletion(@NonNull Editor editor,
                                   @NonNull Content text,
                                   int line,
                                   int column) {
@@ -132,7 +128,7 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
 
         String prefix = prefixMatcher.getPrefix();
 
-        int cursorStart = editor.getCursor().getLeft();
+        int cursorStart = editor.getCaret().getStart();
         int identifierStart = cursorStart - prefix.length();
 
         List<LookupElement> elements = Collections.emptyList();
@@ -146,11 +142,11 @@ public abstract class LookupElement extends CompletionItemWithMatchLevel impleme
                 identifierStart + prefix.length(),
                 completionContext.getOffsetMap()
         );
-        editor.getText().delete(identifierStart, identifierStart + prefix.length());
+        editor.getDocument().deleteString(identifierStart, identifierStart + prefix.length());
 
 
         String lookupString = getLookupString();
-        editor.insertText(lookupString, lookupString.length());
+        editor.getDocument().insertString(lookupString.length(), lookupString);
 
         handleInsert(context);
     }
