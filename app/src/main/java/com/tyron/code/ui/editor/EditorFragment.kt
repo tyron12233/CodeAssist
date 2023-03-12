@@ -8,23 +8,8 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.tyron.code.databinding.NewEditorFragmentBinding
-import com.tyron.code.highlighter.JavaFileHighlighter
-import com.tyron.code.ui.legacyEditor.EditorChangeUtil
-import com.tyron.code.ui.legacyEditor.EditorView
-import io.github.rosemoe.sora.event.ContentChangeEvent
-import io.github.rosemoe.sora.lang.EmptyLanguage
-import io.github.rosemoe.sora.lang.analysis.AnalyzeManager
-import io.github.rosemoe.sora.lang.completion.CompletionPublisher
-import io.github.rosemoe.sora.text.CharPosition
-import io.github.rosemoe.sora.text.Content
-import io.github.rosemoe.sora.text.ContentReference
-import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentEvent
-import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentListener
-import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator
-import org.jetbrains.kotlin.com.intellij.openapi.progress.ProcessCanceledException
-import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator
-import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager
-import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressIndicatorBase
+import com.tyron.code.ui.legacyEditor.CodeAssistCompletionAdapter
+import io.github.rosemoe.sora.event.SelectionChangeEvent
 
 class EditorFragment : Fragment() {
 
@@ -32,43 +17,6 @@ class EditorFragment : Fragment() {
 
 
     private lateinit var binding: NewEditorFragmentBinding
-    private lateinit var editorImpl: EditorImpl
-
-
-
-    private val language = object : EmptyLanguage() {
-        val analyzeManager = EditorView.TestAnalyzeManager(JavaFileHighlighter())
-
-        private var completionProgressIndicator: ProgressIndicator = EmptyProgressIndicator()
-
-        override fun getAnalyzeManager(): AnalyzeManager {
-            return analyzeManager
-        }
-
-        override fun requireAutoComplete(
-            content: ContentReference,
-            position: CharPosition,
-            publisher: CompletionPublisher,
-            extraArguments: Bundle
-        ) {
-
-            completionProgressIndicator.cancel()
-            completionProgressIndicator = StandardProgressIndicatorBase()
-
-            ProgressManager.getInstance().runProcess({
-                try {
-                    EditorChangeUtil.performCompletionUnderIndicator(
-                        viewModel.project,
-                        editorImpl,
-                        publisher,
-                        viewModel.disposable
-                    )
-                } catch (_: ProcessCanceledException) {
-
-                }
-            }, completionProgressIndicator)
-        }
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -95,10 +43,12 @@ class EditorFragment : Fragment() {
                     return@collect
                 }
 
-                editorImpl = EditorImpl(binding.editorView, editorState.editorDocument)
-
+                binding.editorView.subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
+                    viewModel.handleCursorEvent(event);
+                }
+                binding.editorView.setAutoCompletionItemAdapter(CodeAssistCompletionAdapter(editorState.editor))
                 binding.editorView.setText(editorState.editorContent)
-                binding.editorView.setEditorLanguage(language)
+                binding.editorView.setEditorLanguage(editorState.soraLanguage)
             }
         }
     }

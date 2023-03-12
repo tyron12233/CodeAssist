@@ -29,7 +29,7 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 public class CompletionAssertions {
 
     static void assertCommitSuccessful(Editor editor, PsiFile psiFile) {
-        Document document = EditorMemory.getUserData(editor, EditorMemory.DOCUMENT_KEY);
+        Document document = editor.getDocument();
         int docLength = document.getTextLength();
         int psiLength = psiFile.getTextLength();
         PsiDocumentManager manager = PsiDocumentManager.getInstance(psiFile.getProject());

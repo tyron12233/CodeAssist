@@ -3,7 +3,9 @@ package com.tyron.code.ui.editor
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tyron.code.ui.legacyEditor.EditorChangeUtil
+import com.tyron.completion.EditorMemory
+import com.tyron.editor.Editor
+import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +19,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager
 import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase
 
+typealias SoraLanguage = io.github.rosemoe.sora.lang.Language
 class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewModel() {
 
     val disposable = Disposer.newDisposable()
@@ -35,6 +38,8 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
     private lateinit var document: Document
     private lateinit var content: Content
     private lateinit var synchronizer: DocumentContentSynchronizer
+
+    private val caret = CaretImpl()
 
     init {
         loadFile()
@@ -62,12 +67,19 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
             synchronizer = DocumentContentSynchronizer(project, document, content)
             synchronizer.start()
 
+            val psiFile = psiDocumentManager.getPsiFile(document)
+
+            val editor = EditorImpl(caret, document)
+            editor.putUserData(EditorMemory.FILE_KEY, psiFile)
+
             _editorState.emit(
                 InternalEditorState(
                     loadingContent = false,
                     loadingErrorMessage = null,
                     editorContent = this@EditorViewModel.content,
-                    editorDocument = document
+                    editorDocument = document,
+                    soraLanguage = SoraLanguageImpl(project, editor, file),
+                    editor = editor
                 )
             )
         }
@@ -87,10 +99,17 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
         Disposer.dispose(disposable)
     }
 
+    fun handleCursorEvent(event: SelectionChangeEvent) {
+        caret.updateStart(event.left)
+        caret.updateEnd(event.right)
+    }
+
     data class InternalEditorState(
         val loadingContent: Boolean = false,
         val loadingErrorMessage: String? = null,
         val editorContent: Content = Content(),
-        val editorDocument: Document = DocumentImpl("")
+        val editorDocument: Document = DocumentImpl(""),
+        val soraLanguage: SoraLanguage? = null,
+        val editor: Editor? = null
     )
 }

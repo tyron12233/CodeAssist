@@ -102,7 +102,7 @@ public class EditorChangeUtil {
                         CompletionType.SMART);
         CompletionProcess completionProcess = () -> true;
 
-        PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
+        PsiFile psiFile = editor.getUserData(EditorMemory.FILE_KEY);
         OffsetsInFile offsetsInFile = new OffsetsInFile(psiFile, ctx.getOffsetMap());
 
         Supplier<? extends OffsetsInFile> supplier =

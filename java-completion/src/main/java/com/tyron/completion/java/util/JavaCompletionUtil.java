@@ -376,4 +376,7 @@ public class JavaCompletionUtil {
 //        }
     }
 
+    public static boolean isInExcludedPackage(PsiClass aClass, boolean b) {
+        return false;
+    }
 }

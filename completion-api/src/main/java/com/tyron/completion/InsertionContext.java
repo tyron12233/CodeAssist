@@ -63,8 +63,7 @@ public class InsertionContext {
 
     @NotNull
     public Document getDocument() {
-        return Objects.requireNonNull(EditorMemory.getUserData(myEditor,
-                EditorMemory.DOCUMENT_KEY));
+        return myEditor.getDocument();
     }
 
     public int getOffset(OffsetKey key) {
@@ -130,6 +129,6 @@ public class InsertionContext {
     }
 
     public InsertionContext forkByOffsetMap() {
-        return new InsertionContext(myOffsetMap.copyOffsets(EditorMemory.getUserData(myEditor, EditorMemory.DOCUMENT_KEY)), myCompletionChar, myElements, myFile, myEditor, myAddCompletionChar);
+        return new InsertionContext(myOffsetMap.copyOffsets(myEditor.getDocument()), myCompletionChar, myElements, myFile, myEditor, myAddCompletionChar);
     }
 }

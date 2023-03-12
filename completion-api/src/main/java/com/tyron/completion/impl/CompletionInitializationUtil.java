@@ -60,7 +60,7 @@ public class CompletionInitializationUtil {
                     PsiDocumentManager.getInstance(project).commitAllDocuments();
                     CompletionAssertions.checkEditorValid(editor);
 
-                    final PsiFile psiFile = EditorMemory.getUserData(editor, EditorMemory.FILE_KEY);
+                    final PsiFile psiFile = editor.getUserData(EditorMemory.FILE_KEY);
                                 assert psiFile != null : "no PSI file: " + FileDocumentManager
                                 .getInstance().getFile(editor.getDocument());
                     psiFile.putUserData(PsiFileEx.BATCH_REFERENCE_PROCESSING, Boolean.TRUE);
@@ -95,8 +95,7 @@ public class CompletionInitializationUtil {
             contributor.beforeCompletion(context);
             CompletionAssertions.checkEditorValid(editor);
             assert !PsiDocumentManager.getInstance(project)
-                    .isUncommited(Objects.requireNonNull(EditorMemory.getUserData(editor,
-                            EditorMemory.DOCUMENT_KEY))) : "Contributor " +
+                    .isUncommited(editor.getDocument()) : "Contributor " +
                                                            contributor +
                                                            " left the document uncommitted";
         }
@@ -115,7 +114,7 @@ public class CompletionInitializationUtil {
         insertedElement.putUserData(CompletionContext.COMPLETION_CONTEXT_KEY, new
         CompletionContext(fileCopy, finalOffsets.getOffsets()));
 
-        EditorMemory.putUserData(initContext.getEditor(), EditorMemory.INSERTED_KEY, insertedElement);
+        initContext.getEditor().putUserData(EditorMemory.INSERTED_KEY, insertedElement);
 
         return new CompletionParameters(insertedElement,
                 originalFile,
@@ -146,7 +145,7 @@ public class CompletionInitializationUtil {
         }
 
         Editor editor = initContext.getEditor();
-        Document originalDocument = EditorMemory.getUserData(editor, EditorMemory.DOCUMENT_KEY);
+        Document originalDocument = editor.getDocument();
 //        Editor hostEditor = editor instanceof EditorWindow ? ((EditorWindow)editor).getDelegate
 //        () : editor;
         OffsetMap hostMap = topLevelOffsets.getOffsets();

@@ -1,19 +1,27 @@
 package com.tyron.completion.psi.codeInsight;
 
+import androidx.annotation.NonNull;
+
 import com.tyron.completion.TailType;
+import com.tyron.completion.psi.codeInsight.daemon.impl.quickfix.ImportClassFixBase;
+import com.tyron.completion.psi.search.PsiShortNamesCache;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.util.NullableLazyValue;
 import org.jetbrains.kotlin.com.intellij.openapi.util.VolatileNullableLazyValue;
+import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClassType;
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement;
+import org.jetbrains.kotlin.com.intellij.psi.PsiElementFactory;
 import org.jetbrains.kotlin.com.intellij.psi.PsiMethod;
 import org.jetbrains.kotlin.com.intellij.psi.PsiResolveHelper;
 import org.jetbrains.kotlin.com.intellij.psi.PsiType;
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiUtil;
+import org.jetbrains.kotlin.com.intellij.util.containers.ContainerUtil;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 public class ExpectedTypeInfoImpl implements ExpectedTypeInfo {
@@ -123,6 +131,7 @@ public class ExpectedTypeInfoImpl implements ExpectedTypeInfo {
     return equals((Object)obj);
   }
 
+  @NonNull
   public String toString() {
     return "ExpectedTypeInfo[type='" + myType + "' kind='" + myKind + "']";
   }
@@ -206,16 +215,17 @@ public class ExpectedTypeInfoImpl implements ExpectedTypeInfo {
       int typeParamCount = ((PsiClassType)type).getParameterCount();
       Project project = context.getProject();
       PsiResolveHelper helper = project.getService(PsiResolveHelper.class);
-//      List<PsiClass> suitableClasses = ContainerUtil.filter(
-//        PsiShortNamesCache.getInstance(project).getClassesByName(className, context.getResolveScope()),
-//        c -> (typeParamCount == 0 || c.hasTypeParameters()) &&
-//             helper.isAccessible(c, context, null) &&
-//             ImportClassFixBase.qualifiedNameAllowsAutoImport(context.getContainingFile(), c));
-//      if (suitableClasses.size() == 1) {
-//        return PsiElementFactory.getInstance(project).createType(suitableClasses.get(0), ((PsiClassType)type).getParameters());
-//      }
+      List<PsiClass> suitableClasses = ContainerUtil.filter(
+        PsiShortNamesCache.getInstance(project).getClassesByName(className, context.getResolveScope()),
+        c -> (typeParamCount == 0 || c.hasTypeParameters()) &&
+             helper.isAccessible(c, context, null) &&
+             ImportClassFixBase.qualifiedNameAllowsAutoImport(context.getContainingFile(), c));
+      if (suitableClasses.size() == 1) {
+        return PsiElementFactory.getInstance(project).createType(suitableClasses.get(0), ((PsiClassType)type).getParameters());
+      }
         throw new UnsupportedOperationException();
     }
     return type;
   }
+
 }

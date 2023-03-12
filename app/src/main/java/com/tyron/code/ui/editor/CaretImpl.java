@@ -2,48 +2,69 @@ package com.tyron.code.ui.editor;
 
 import com.tyron.legacyEditor.Caret;
 
+import io.github.rosemoe.sora.text.CharPosition;
 import io.github.rosemoe.sora.text.Cursor;
 
 public class CaretImpl implements Caret {
 
-    private final Cursor cursor;
+    private int start;
+    private int end;
 
-    public CaretImpl(Cursor cursor) {
-        this.cursor = cursor;
+    private int startLine;
+    private int startColumn;
+
+    private int endLine;
+    private int endColumn;
+
+
+    public CaretImpl() {
+
     }
 
     @Override
     public int getStart() {
-        return cursor.getLeft();
+        return start;
     }
 
     @Override
     public int getEnd() {
-        return cursor.getRight();
+        return end;
     }
 
     @Override
     public int getStartLine() {
-        return cursor.getLeftLine();
+        return startLine;
     }
 
     @Override
     public int getStartColumn() {
-        return cursor.getLeftColumn();
+        return startColumn;
     }
 
     @Override
     public int getEndLine() {
-        return cursor.getRightLine();
+        return endLine;
     }
 
     @Override
     public int getEndColumn() {
-        return cursor.getRightColumn();
+        return endColumn;
     }
 
     @Override
     public boolean isSelected() {
-        return cursor.isSelected();
+        return start != end;
+    }
+
+    public void updateStart(CharPosition start) {
+        this.start = start.getIndex();
+        this.startLine = start.getLine();
+        this.startColumn = start.getColumn();
+    }
+
+    public void updateEnd(CharPosition end) {
+        this.end = end.getIndex();
+        this.endLine = end.getLine();
+        this.endColumn = end.getColumn();
     }
 }

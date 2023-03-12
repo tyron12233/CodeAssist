@@ -48,7 +48,7 @@ public class CompletionInitializationContext {
     myFile = file;
     myCompletionType = completionType;
     myInvocationCount = invocationCount;
-    myOffsetMap = new OffsetMap(EditorMemory.getUserData(editor, EditorMemory.DOCUMENT_KEY));
+    myOffsetMap = new OffsetMap(editor.getDocument());
 
     myOffsetMap.addOffset(START_OFFSET, calcStartOffset(caret));
     myOffsetMap.addOffset(SELECTION_END_OFFSET, calcSelectionEnd(caret));

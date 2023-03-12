@@ -17,6 +17,8 @@ import com.tyron.completion.resolve.ResolveScopeProvider;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.concurrency.CancellablePromise;
+import org.jetbrains.kotlin.com.intellij.codeInsight.CodeInsightUtilCore2;
+import org.jetbrains.kotlin.com.intellij.codeInsight.FileModificationService2;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
 import org.jetbrains.kotlin.com.intellij.diagnostic.PluginProblemReporterImpl;
 import org.jetbrains.kotlin.com.intellij.lang.MetaLanguage;
@@ -37,6 +39,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.PlainTextFileType;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.OrderEnumerationHandler;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectFileIndex;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectRootManager;
+import org.jetbrains.kotlin.com.intellij.openapi.roots.TestSourcesFilter;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.impl.ProjectFileIndexImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.util.registry.Registry;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.AsyncFileListener;
@@ -143,8 +146,6 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
         ExtensionsAreaImpl extensionArea = getApplication().getExtensionArea();
         ExtensionPoint<FileBasedIndexExtension<?, ?>> fileBasedIndexExtensionExtensionPoint =
                 extensionArea.getExtensionPoint(FileBasedIndexExtension.EXTENSION_POINT_NAME);
-        fileBasedIndexExtensionExtensionPoint.registerExtension(new TestIndex(),
-                getParentDisposable());
         fileBasedIndexExtensionExtensionPoint.registerExtension(new StubUpdatingIndex(),
                 getParentDisposable());
 
@@ -173,10 +174,15 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
                 FileBasedIndexExtension.class.getName(),
                 ExtensionPoint.Kind.INTERFACE);
 
+        extensionsArea.registerExtensionPoint(
+                "com.intellij.testSourcesFilter",
+                TestSourcesFilter.class.getName(),
+                ExtensionPoint.Kind.INTERFACE
+        );
+
         extensionsArea.registerExtensionPoint(StubIndexExtension.EP_NAME.getName(),
                 StubIndexExtension.class.getName(),
                 ExtensionPoint.Kind.INTERFACE);
-
         registerApplicationExtensionPoint(IndexableSetContributor.EP_NAME,
                 IndexableSetContributor.class);
         registerApplicationExtensionPoint(StubElementTypeHolderEP.EP_NAME,
@@ -206,6 +212,7 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
     }
 
     public void registerApplicationServices() {
+        registerApplicationService(FileModificationService2.class, new CodeInsightUtilCore2());
         registerApplicationService(Queries.class, new QueriesImpl());
         registerApplicationService(StubUpdatableIndexFactory.class,
                 new StubUpdatableIndexFactoryImpl());

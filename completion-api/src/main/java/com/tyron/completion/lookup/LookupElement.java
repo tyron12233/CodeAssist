@@ -12,6 +12,7 @@ import com.tyron.completion.model.CompletionItemWithMatchLevel;
 import com.tyron.editor.Editor;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.com.intellij.openapi.command.WriteCommandAction;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolder;
 import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderBase;
@@ -112,12 +113,9 @@ public abstract class LookupElement implements UserDataHolder {
 
 
 
-    public final void performCompletion(@NonNull Editor editor,
-                                  @NonNull Content text,
-                                  int line,
-                                  int column) {
+    public final void performCompletion(@NonNull Editor editor) {
 
-        PsiElement insertedElement = EditorMemory.getUserData(editor, EditorMemory.INSERTED_KEY);
+        PsiElement insertedElement = editor.getUserData(EditorMemory.INSERTED_KEY);
         assert insertedElement != null;
         CompletionContext completionContext =
                 insertedElement.getUserData(CompletionContext.COMPLETION_CONTEXT_KEY);
@@ -142,11 +140,14 @@ public abstract class LookupElement implements UserDataHolder {
                 identifierStart + prefix.length(),
                 completionContext.getOffsetMap()
         );
-        editor.getDocument().deleteString(identifierStart, identifierStart + prefix.length());
+
+        WriteCommandAction.runWriteCommandAction(insertedElement.getProject(), "insert completion item", "null", () -> {
+            editor.getDocument().deleteString(identifierStart, identifierStart + prefix.length());
 
 
-        String lookupString = getLookupString();
-        editor.getDocument().insertString(lookupString.length(), lookupString);
+            String lookupString = getLookupString();
+            editor.getDocument().insertString(lookupString.length(), lookupString);
+        },  insertedElement.getContainingFile());
 
         handleInsert(context);
     }
