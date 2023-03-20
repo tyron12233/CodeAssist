@@ -146,7 +146,9 @@ public abstract class LookupElement implements UserDataHolder {
 
 
             String lookupString = getLookupString();
-            editor.getDocument().insertString(lookupString.length(), lookupString);
+            editor.getDocument().insertString(identifierStart, lookupString);
+
+            context.commitDocument();
         },  insertedElement.getContainingFile());
 
         handleInsert(context);

@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.com.intellij.psi.stubs.StubIndex
 import org.jetbrains.kotlin.com.intellij.sdk.SdkManager
 import org.jetbrains.kotlin.com.intellij.util.indexing.*
 import java.io.File
+import java.util.concurrent.Executors
 
 
 class MainViewModelV2(
@@ -105,7 +106,6 @@ class MainViewModelV2(
             val progressIndicator = object : StandardProgressIndicatorBase() {
 
                 override fun setText2(text: String?) {
-                    println("Indexing: $text")
                     viewModelScope.launch {
                         _indexingState.emit(
                             _indexingState.value!!.copy(
@@ -156,6 +156,8 @@ class MainViewModelV2(
                 IndexingStamp.flushCaches()
 
                 println("Done saving indices")
+
+                _indexingState.emit(null)
 
                 _projectState.emit(
                     ProjectState(

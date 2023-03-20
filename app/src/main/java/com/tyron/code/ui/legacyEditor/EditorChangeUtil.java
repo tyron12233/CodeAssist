@@ -84,6 +84,8 @@ public class EditorChangeUtil {
             Editor editor,
             CompletionPublisher publisher,
             Disposable completionSession) {
+        PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
+
         publisher.setComparator((o1, o2) -> {
             if (o1 instanceof CompletionItemWithMatchLevel &&
                 o2 instanceof CompletionItemWithMatchLevel) {

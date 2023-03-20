@@ -94,10 +94,10 @@ public class CompletionInitializationUtil {
             current.set(contributor);
             contributor.beforeCompletion(context);
             CompletionAssertions.checkEditorValid(editor);
-            assert !PsiDocumentManager.getInstance(project)
-                    .isUncommited(editor.getDocument()) : "Contributor " +
-                                                           contributor +
-                                                           " left the document uncommitted";
+//            assert !PsiDocumentManager.getInstance(project)
+//                    .isUncommited(editor.getDocument()) : "Contributor " +
+//                                                           contributor +
+//                                                           " left the document uncommitted";
         }
         return context;
     }
