@@ -345,9 +345,9 @@ public final class IndexingStamp {
             }
             return false;
         });
-        if (exit) {
-            return;
-        }
+//        if (exit) {
+//            return;
+//        }
 
         while (!ourFinishedFiles.offer(finishedFile)) {
             doFlush();

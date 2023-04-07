@@ -30,32 +30,28 @@ public class ProjectIndexer {
 
         ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-        executorService.submit(() -> {
-            findFilesToIndex(project, fileBasedIndex);
+        findFilesToIndex(project, fileBasedIndex);
 
-            Collection<VirtualFile> filesToUpdate = fileBasedIndex
-                    .getChangedFilesCollector()
-                    .getAllFilesToUpdate();
+        Collection<VirtualFile> filesToUpdate = fileBasedIndex
+                .getChangedFilesCollector()
+                .getAllFilesToUpdate();
 
-            IndexUpdateRunner.FileSet fileSet = new IndexUpdateRunner.FileSet(
-                    project,
-                    "files to update",
-                    filesToUpdate
-            );
-            IndexUpdateRunner indexUpdateRunner = new IndexUpdateRunner(
-                    fileBasedIndex,
-                    2
-            );
-            try {
-                indexUpdateRunner.indexFiles(project,
-                        Collections.singletonList(fileSet),
-                        ProgressManager.getInstance().getProgressIndicator());
-            } catch (IndexUpdateRunner.IndexingInterruptedException e) {
-                // ignored for now
-            }
-        });
-
-
+        IndexUpdateRunner.FileSet fileSet = new IndexUpdateRunner.FileSet(
+                project,
+                "files to update",
+                filesToUpdate
+        );
+        IndexUpdateRunner indexUpdateRunner = new IndexUpdateRunner(
+                fileBasedIndex,
+                2
+        );
+        try {
+            indexUpdateRunner.indexFiles(project,
+                    Collections.singletonList(fileSet),
+                    ProgressManager.getInstance().getProgressIndicator());
+        } catch (IndexUpdateRunner.IndexingInterruptedException e) {
+            // ignored for now
+        }
     }
 
     private static void findFilesToIndex(Project project, CoreFileBasedIndex fileBasedIndex) {
@@ -68,6 +64,7 @@ public class ProjectIndexer {
 
                 UnindexedFileStatus fileStatus = finder.getFileStatus(fileOrDir);
                 if (fileStatus != null && fileStatus.isShouldIndex()) {
+                    System.out.println("Indexing " + fileOrDir.getName() + " because " + fileStatus.isShouldIndex());
                     ProgressManager.getInstance().computeInNonCancelableSection(() -> {
                         fileBasedIndex.scheduleFileForIndexing(FileIdStorage.getAndStoreId(fileOrDir),
                                 fileOrDir,

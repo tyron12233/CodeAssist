@@ -12,12 +12,16 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
+import org.jetbrains.kotlin.com.intellij.core.CoreFileTypeRegistry;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
+import org.jetbrains.kotlin.com.intellij.openapi.application.Application;
+import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager;
 import org.jetbrains.kotlin.com.intellij.openapi.diagnostic.Logger;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.Document;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.FileDocumentManager;
 import org.jetbrains.kotlin.com.intellij.openapi.fileEditor.impl.FileDocumentManagerBase;
+import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileTypeRegistry;
 import org.jetbrains.kotlin.com.intellij.openapi.module.Module;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressIndicator;
 import org.jetbrains.kotlin.com.intellij.openapi.progress.ProgressManager;
@@ -25,6 +29,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.progress.util.StandardProgressI
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project;
 import org.jetbrains.kotlin.com.intellij.openapi.roots.ProjectFileIndex;
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer;
+import org.jetbrains.kotlin.com.intellij.openapi.util.Getter;
 import org.jetbrains.kotlin.com.intellij.openapi.util.registry.Registry;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
@@ -62,8 +67,22 @@ import java.util.Map;
 
 public class IndexingTest {
 
-    private static void preInit() throws Exception {
-//        Logger.setFactory(category -> new PrintingLogger(System.out));
+    private static void initSdk(Project project) {
+        File classpathDir = Paths.get("")
+                .toAbsolutePath()
+                .getParent()
+                .resolve("java-completion/src/test" + "/resources/classpath")
+                .toFile();
+        Sdk sdk = new Sdk("testSdk",
+                project,
+                classpathDir.getPath(),
+                List.of(new File(classpathDir, "rt.jar"),
+                        new File(classpathDir, "core-lambda-stubs.jar")));
+        SdkManagerImpl sdkManager = (SdkManagerImpl) SdkManager.getInstance(project);
+        sdkManager.setDefaultSdk(sdk);
+    }
+
+    private static void preInit() {
         Logger.setFactory(category -> new Logger() {
             @Override
             public boolean isDebugEnabled() {
@@ -132,26 +151,15 @@ public class IndexingTest {
                 throw new RuntimeException(e);
             }
         }));
-        FileIdStorage.loadIds();
+        try {
+            FileIdStorage.loadIds();
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
 
         // so types are pre-registered
         IElementType annotationMethod = JavaStubElementTypes.ANNOTATION_METHOD;
         IElementType clazz = JavaStubElementTypes.CLASS;
-    }
-
-    private static void initSdk(Project project) {
-        File classpathDir = Paths.get("")
-                .toAbsolutePath()
-                .getParent()
-                .resolve("java-completion/src/test" + "/resources/classpath")
-                .toFile();
-        Sdk sdk = new Sdk("testSdk",
-                project,
-                classpathDir.getPath(),
-                List.of(new File(classpathDir, "rt.jar"),
-                        new File(classpathDir, "core-lambda-stubs.jar")));
-        SdkManagerImpl sdkManager = (SdkManagerImpl) SdkManager.getInstance(project);
-        sdkManager.setDefaultSdk(sdk);
     }
 
     private Project project;
@@ -165,10 +173,10 @@ public class IndexingTest {
         environment.addExtension(AsyncEventSupport.EP_NAME, changedFilesCollector);
         AsyncEventSupport.startListening();
 
-        File testProject = new File("src/test/resources/TestProject");
-        VirtualFile projectVirtualFile =
-                environment.getLocalFileSystem().findFileByIoFile(testProject);
-        assert projectVirtualFile != null;
+        VirtualFile projectVirtualFile = environment.getLocalFileSystem()
+                .findFileByPath("C:\\Users\\tyron " +
+                                "scott\\AndroidStudioProjects\\CodeAssist-rollback\\app\\src" +
+                                "\\test\\resources\\TestProject");
 
         CodeAssistJavaCoreProjectEnvironment projectEnvironment =
                 new CodeAssistJavaCoreProjectEnvironment(env, environment, projectVirtualFile);
@@ -217,12 +225,10 @@ public class IndexingTest {
             }
         };
         ProgressManager.getInstance().executeProcessUnderProgress(() -> {
-            try {
-                index(project, fileBasedIndex);
-            } catch (IndexUpdateRunner.IndexingInterruptedException e) {
-                throw new ProcessCanceledException(e);
-            }
+            index(project, fileBasedIndex);
         }, indicator);
+
+        fileBasedIndex.waitUntilIndicesAreInitialized();
 
 
         JavaShortClassNameIndex shortClassNameIndex = JavaShortClassNameIndex.getInstance();

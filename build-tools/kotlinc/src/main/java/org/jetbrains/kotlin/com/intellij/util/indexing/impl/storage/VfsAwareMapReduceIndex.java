@@ -364,7 +364,7 @@ public class VfsAwareMapReduceIndex<Key, Value,
         Runnable action =
                 () -> FileBasedIndex.getInstance().requestRebuild((ID<?, ?>) myIndexId, ex);
         Application app = ApplicationManager.getApplication();
-        if (app.isUnitTestMode() || app.isHeadlessEnvironment()) {
+        if (app.isUnitTestMode()) {
             // avoid deadlock due to synchronous update in DumbServiceImpl#queueTask
             app.invokeLater(action);
         } else if (app.isReadAccessAllowed()) {

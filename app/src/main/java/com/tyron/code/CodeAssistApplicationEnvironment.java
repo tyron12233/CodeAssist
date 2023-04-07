@@ -21,8 +21,10 @@ import org.jetbrains.kotlin.com.intellij.codeInsight.CodeInsightUtilCore2;
 import org.jetbrains.kotlin.com.intellij.codeInsight.FileModificationService2;
 import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment;
 import org.jetbrains.kotlin.com.intellij.diagnostic.PluginProblemReporterImpl;
+import org.jetbrains.kotlin.com.intellij.ide.highlighter.JavaClassFileType;
 import org.jetbrains.kotlin.com.intellij.lang.MetaLanguage;
 import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
+import org.jetbrains.kotlin.com.intellij.mock.MockApplication;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.application.AppUIExecutor;
 import org.jetbrains.kotlin.com.intellij.openapi.application.AsyncExecutionService;
@@ -121,6 +123,11 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
         postInit();
     }
 
+    @Override
+    protected MockApplication createApplication(Disposable parentDisposable) {
+        return new CodeAssistApplication(parentDisposable, Thread.currentThread());
+    }
+
     protected void postInit() {
         System.setProperty("indexing.filename.over.vfs", "false");
         System.setProperty("intellij.idea.indices.debug", "true");
@@ -209,6 +216,7 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
 
     public void registerFileTypes() {
         registerFileType(PlainTextFileType.INSTANCE, "json");
+        registerFileType(JavaClassFileType.INSTANCE, "class");
     }
 
     public void registerApplicationServices() {
