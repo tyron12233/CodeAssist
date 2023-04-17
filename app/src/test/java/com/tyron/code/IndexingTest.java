@@ -13,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.cli.common.environment.UtilKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.IdeaStandaloneExecutionSetup;
 import org.jetbrains.kotlin.com.intellij.core.CoreFileTypeRegistry;
+import org.jetbrains.kotlin.com.intellij.lang.java.JavaLanguage;
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable;
 import org.jetbrains.kotlin.com.intellij.openapi.application.Application;
 import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager;
@@ -35,7 +36,9 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.AsyncEventSupport;
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass;
+import org.jetbrains.kotlin.com.intellij.psi.PsiDocumentManager;
 import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory;
 import org.jetbrains.kotlin.com.intellij.psi.impl.PsiDocumentManagerBase;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.JavaStubElementTypes;
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
@@ -251,16 +254,14 @@ public class IndexingTest {
         assert shortNamesCache.getAllMethodNames().length != 0;
         assert shortNamesCache.getAllFieldNames().length != 0;
 
-        FileDocumentManagerBase fileDocumentManagerBase =
-                (FileDocumentManagerBase) FileDocumentManager.getInstance();
-        PsiDocumentManagerBase psiDocumentManagerBase =
-                (PsiDocumentManagerBase) PsiDocumentManagerBase.getInstance(project);
-        Document testDocument = new DocumentImpl("class Main { }");
-        testDocument.addDocumentListener(psiDocumentManagerBase);
-        testDocument.addDocumentListener(psiDocumentManagerBase.new PriorityEventCollector());
+        PsiFile fileFromText = PsiFileFactory.getInstance(project)
+                .createFileFromText(JavaLanguage.INSTANCE, "class Main { }");
 
-        PsiFile psiFile = psiDocumentManagerBase.getPsiFile(testDocument);
-        System.out.println(psiFile);
+        PsiDocumentManager documentManager = PsiDocumentManager.getInstance(project);
+
+        Document document = documentManager.getDocument(fileFromText);
+
+        System.out.println();
     }
 
     private static class CustomSearchScope extends GlobalSearchScope {

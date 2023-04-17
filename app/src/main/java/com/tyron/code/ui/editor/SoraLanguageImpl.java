@@ -10,6 +10,8 @@ import com.tyron.code.highlighter.SyntaxHighlighter;
 import com.tyron.code.highlighter.SyntaxHighlighterBase;
 import com.tyron.code.ui.legacyEditor.EditorChangeUtil;
 import com.tyron.code.ui.legacyEditor.EditorView;
+import com.tyron.editor.Editor;
+import com.tyron.editor.impl.EditorImpl;
 
 import org.jetbrains.kotlin.com.intellij.ide.highlighter.JavaFileType;
 import org.jetbrains.kotlin.com.intellij.lexer.DummyLexer;
@@ -47,12 +49,12 @@ public class SoraLanguageImpl implements Language {
 
     private final Disposable disposable = Disposer.newDisposable();
     private final Project project;
-    private final EditorImpl editor;
+    private final Editor editor;
     private final AnalyzeManager analyzeManager;
     private ProgressIndicator completionProgressIndicator = new EmptyProgressIndicator();
 
 
-    public SoraLanguageImpl(Project project, EditorImpl editor, VirtualFile file) {
+    public SoraLanguageImpl(Project project, Editor editor, VirtualFile file) {
         this.project = project;
         this.editor = editor;
         analyzeManager = new EditorView.TestAnalyzeManager(getHighlighter(file));

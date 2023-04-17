@@ -9,6 +9,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.tyron.code.databinding.NewEditorFragmentBinding
 import com.tyron.code.ui.legacyEditor.CodeAssistCompletionAdapter
+import com.tyron.editor.impl.EditorImpl
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 
 class EditorFragment : Fragment() {
@@ -17,6 +18,7 @@ class EditorFragment : Fragment() {
 
 
     private lateinit var binding: NewEditorFragmentBinding
+    private lateinit var editorView: EditorView
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -43,20 +45,14 @@ class EditorFragment : Fragment() {
                     return@collect
                 }
 
-                binding.editorView.subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
-                    viewModel.handleCursorEvent(event);
-                }
-                binding.editorView.setAutoCompletionItemAdapter(CodeAssistCompletionAdapter(editorState.editor))
-                binding.editorView.setText(editorState.editorContent)
-                binding.editorView.setEditorLanguage(editorState.soraLanguage)
+                editorView = EditorView(requireContext(), editorState)
+                binding.editorContent.addView(editorView)
             }
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-
-        binding.editorView.release()
     }
 
     private fun setErrorViewVisibility(loadingErrorMessage: String) {

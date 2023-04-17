@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 public class CodeAssistApplication extends MockApplication {
 
     private static final Logger LOG = Logger.getInstance(CodeAssistApplication.class);
+    private final Thread myWriteThread;
 
     // defer reading isUnitTest flag until it's initialized
     private static class Holder {
@@ -48,6 +49,7 @@ public class CodeAssistApplication extends MockApplication {
         super(parentDisposable);
 
         myLock = new ReadMostlyRWLock(writeThread);
+        this.myWriteThread = writeThread;
     }
 
     @Override
@@ -57,7 +59,7 @@ public class CodeAssistApplication extends MockApplication {
 
     @Override
     public boolean isDispatchThread() {
-        return Looper.getMainLooper().isCurrentThread();
+        return Thread.currentThread() == myWriteThread;
     }
 
     @Override

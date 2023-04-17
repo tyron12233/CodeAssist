@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tyron.completion.EditorMemory
 import com.tyron.editor.Editor
+import com.tyron.editor.EditorFactory
+import com.tyron.editor.ex.EditorEx
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,8 +71,8 @@ class EditorViewModel(private val savedStateHandle: SavedStateHandle) : ViewMode
 
             val psiFile = psiDocumentManager.getPsiFile(document)
 
-            val editor = EditorImpl(caret, document)
-            editor.putUserData(EditorMemory.FILE_KEY, psiFile)
+            val editor = EditorFactory.getInstance().createEditor(document, project, file, false) as EditorEx
+            editor.setFile(file)
 
             _editorState.emit(
                 InternalEditorState(

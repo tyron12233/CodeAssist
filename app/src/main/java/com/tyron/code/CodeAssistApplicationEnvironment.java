@@ -14,6 +14,9 @@ import com.tyron.completion.impl.CompletionServiceImpl;
 import com.tyron.completion.psi.codeInsight.completion.JavaCompletionContributor;
 import com.tyron.completion.resolve.ResolveScopeEnlarger;
 import com.tyron.completion.resolve.ResolveScopeProvider;
+import com.tyron.editor.EditorFactory;
+import com.tyron.editor.event.EditorFactoryListener;
+import com.tyron.editor.impl.EditorFactoryImpl;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.concurrency.CancellablePromise;
@@ -33,6 +36,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.application.NonBlockingReadActi
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.application.TransactionGuardImpl;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.colors.TextAttributesKey;
+import org.jetbrains.kotlin.com.intellij.openapi.editor.event.DocumentListener;
 import org.jetbrains.kotlin.com.intellij.openapi.editor.impl.DocumentWriteAccessGuard;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint;
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.impl.ExtensionsAreaImpl;
@@ -186,10 +190,14 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
                 TestSourcesFilter.class.getName(),
                 ExtensionPoint.Kind.INTERFACE
         );
-
+        ;
         extensionsArea.registerExtensionPoint(StubIndexExtension.EP_NAME.getName(),
                 StubIndexExtension.class.getName(),
                 ExtensionPoint.Kind.INTERFACE);
+        registerExtensionPoint(extensionsArea, "com.intellij.editorFactoryListener",
+                EditorFactoryListener.class);
+        registerExtensionPoint(extensionsArea, "com.intellij.editorFactoryDocumentListener",
+                DocumentListener.class);
         registerApplicationExtensionPoint(IndexableSetContributor.EP_NAME,
                 IndexableSetContributor.class);
         registerApplicationExtensionPoint(StubElementTypeHolderEP.EP_NAME,
@@ -220,6 +228,7 @@ public class CodeAssistApplicationEnvironment extends JavaCoreApplicationEnviron
     }
 
     public void registerApplicationServices() {
+        registerApplicationService(EditorFactory.class, new EditorFactoryImpl());
         registerApplicationService(FileModificationService2.class, new CodeInsightUtilCore2());
         registerApplicationService(Queries.class, new QueriesImpl());
         registerApplicationService(StubUpdatableIndexFactory.class,

@@ -89,6 +89,7 @@ dependencies {
     implementation project(path: ':build-tools:javac')
 
     implementation project(path: ':language-api')
+    implementation project(path: ':platform-impl')
 
     // groovy support
     implementation projects.buildTools.builderBaseServicesGroovy
