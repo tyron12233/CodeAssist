@@ -1,8 +1,10 @@
-name: Android CI
+name: Build Massive APK
 
 on:
   pull_request:
   workflow_dispatch:
+  trigger workflow_call: 
+  
 
 jobs:
   build:
