@@ -111,7 +111,13 @@ object AndroidAppTemplate : ProjectTemplate {
             """
             <?xml version="1.0" encoding="utf-8"?>
             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="$pkg">
-                <application android:label="@string/app_name" android:theme="@style/Theme.App">
+                <application
+                    android:allowBackup="true"
+                    android:icon="@mipmap/ic_launcher"
+                    android:label="@string/app_name"
+                    android:roundIcon="@mipmap/ic_launcher_round"
+                    android:supportsRtl="true"
+                    android:theme="@style/Theme.App">
                     <activity android:name=".MainActivity" android:exported="true">
                         <intent-filter>
                             <action android:name="android.intent.action.MAIN"/>
@@ -139,20 +145,15 @@ object AndroidAppTemplate : ProjectTemplate {
             <resources>
                 <color name="primary">#FF6200EE</color>
                 <color name="on_primary">#FFFFFFFF</color>
+                ${AndroidAppAssets.ICON_BACKGROUND_COLOR_XML}
             </resources>
             """,
         )
-        scaffold.writeText(
-            "app/src/main/res/values/styles.xml",
-            """
-            <?xml version="1.0" encoding="utf-8"?>
-            <resources>
-                <style name="Theme.App" parent="android:Theme.Material.Light">
-                    <item name="android:colorPrimary">@color/primary</item>
-                </style>
-            </resources>
-            """,
-        )
+        scaffold.writeText("app/src/main/res/values/themes.xml", AndroidAppAssets.themesXml)
+        scaffold.writeText("app/src/main/res/values-night/themes.xml", AndroidAppAssets.themesNightXml)
+        for ((rel, content) in AndroidAppAssets.launcherIconResFiles) {
+            scaffold.writeText("app/src/main/res/$rel", content)
+        }
         scaffold.writeText(
             "app/src/main/res/layout/activity_main.xml",
             """

@@ -311,18 +311,23 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) { Breadcrumb(crumbs) }
-                ViewModeToggle(active.viewMode) { active.viewMode = it }
+                ViewModeToggle(active.viewMode, dev.ide.ui.editor.preview.isPreviewable(active.path)) { active.viewMode = it }
             }
             AndroidSourcesBanner(state)
-            if (active.viewMode == dev.ide.ui.EditorViewMode.Blocks) {
-                BlockEditor(
+            when (active.viewMode) {
+                dev.ide.ui.EditorViewMode.Blocks -> BlockEditor(
                     path = active.path,
                     session = active.session,
                     backend = state.backend,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
-            } else {
-                CodeEditor(
+                dev.ide.ui.EditorViewMode.Preview -> dev.ide.ui.editor.preview.ResourcePreviewPane(
+                    path = active.path,
+                    text = active.text,
+                    backend = state.backend,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+                else -> CodeEditor(
                     path = active.path,
                     session = active.session,
                     backend = state.backend,
@@ -536,13 +541,16 @@ private fun VerticalDivider() {
 
 /** A compact `Code / Blocks` segmented control switching the active tab between the two editor surfaces. */
 @Composable
-private fun ViewModeToggle(mode: dev.ide.ui.EditorViewMode, onSelect: (dev.ide.ui.EditorViewMode) -> Unit) {
+private fun ViewModeToggle(mode: dev.ide.ui.EditorViewMode, canPreview: Boolean, onSelect: (dev.ide.ui.EditorViewMode) -> Unit) {
     Row(
         Modifier.background(Ca.colors.surface2, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm)).padding(2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         SegmentItem(CaIcons.code, "Code", mode == dev.ide.ui.EditorViewMode.Text) { onSelect(dev.ide.ui.EditorViewMode.Text) }
         SegmentItem(CaIcons.layers, "Blocks", mode == dev.ide.ui.EditorViewMode.Blocks) { onSelect(dev.ide.ui.EditorViewMode.Blocks) }
+        if (canPreview) {
+            SegmentItem(CaIcons.image, "Preview", mode == dev.ide.ui.EditorViewMode.Preview) { onSelect(dev.ide.ui.EditorViewMode.Preview) }
+        }
     }
 }
 

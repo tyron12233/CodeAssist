@@ -56,7 +56,11 @@ object SampleAndroidProject {
         write(store, "app/src/main/AndroidManifest.xml", APP_MANIFEST)
         write(store, "app/src/main/res/values/strings.xml", APP_STRINGS)
         write(store, "app/src/main/res/values/colors.xml", APP_COLORS)
-        write(store, "app/src/main/res/values/styles.xml", APP_STYLES)
+        write(store, "app/src/main/res/values/themes.xml", dev.ide.android.support.templates.AndroidAppAssets.themesXml)
+        write(store, "app/src/main/res/values-night/themes.xml", dev.ide.android.support.templates.AndroidAppAssets.themesNightXml)
+        for ((rel, content) in dev.ide.android.support.templates.AndroidAppAssets.launcherIconResFiles) {
+            write(store, "app/src/main/res/$rel", content)
+        }
         write(store, "app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
     }
 
@@ -97,7 +101,13 @@ object SampleAndroidProject {
     private val APP_MANIFEST = """
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
-            <application android:label="@string/app_name" android:theme="@style/Theme.App">
+            <application
+                android:allowBackup="true"
+                android:icon="@mipmap/ic_launcher"
+                android:label="@string/app_name"
+                android:roundIcon="@mipmap/ic_launcher_round"
+                android:supportsRtl="true"
+                android:theme="@style/Theme.App">
                 <activity android:name=".MainActivity" android:exported="true">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN"/>
@@ -121,15 +131,7 @@ object SampleAndroidProject {
         <resources>
             <color name="primary">#FF6200EE</color>
             <color name="on_primary">#FFFFFFFF</color>
-        </resources>
-    """
-
-    private val APP_STYLES = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <resources>
-            <style name="Theme.App" parent="android:Theme.Material.Light">
-                <item name="android:colorPrimary">@color/primary</item>
-            </style>
+            <color name="ic_launcher_background">#3DDC84</color>
         </resources>
     """
 

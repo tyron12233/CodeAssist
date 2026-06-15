@@ -119,8 +119,17 @@ import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleDependency
 import dev.ide.model.SdkDependency
 import dev.ide.android.support.resources.AndroidResources
+import dev.ide.android.support.resources.DrawableXmlCatalog
 import dev.ide.android.support.resources.ResourceReferences
+import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
+import dev.ide.android.support.preview.AndroidColor
+import dev.ide.android.support.preview.ColorEntry
+import dev.ide.android.support.preview.ColorResources
+import dev.ide.android.support.preview.DrawablePreview
+import dev.ide.android.support.preview.DrawablePreviewParser
+import dev.ide.android.support.preview.DrawableResolver
+import dev.ide.android.support.preview.ResolvedDrawable
 import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.android.support.metadata.AttrEntry
 import dev.ide.android.support.metadata.AttrsXmlParser
@@ -1761,6 +1770,78 @@ class IdeServices private constructor(
     private fun indexDefinition(type: ResourceType, name: String): Pair<Path, Int>? =
         indexService.exact<ResourceDeclValue>(AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, name))
             .firstOrNull()?.let { Path.of(it.filePath) to it.offset }
+
+    // --- resource preview ------------------------------------------------------------------------------
+
+    /**
+     * A render-ready model of the drawable XML in [file] ([text] is the live buffer), with every
+     * `@color`/`@dimen`/`@drawable` reference resolved against the module's merged resources. Null for a
+     * non-Android module or a file that isn't a drawable/color/mipmap resource.
+     */
+    fun drawablePreview(file: Path, text: String): DrawablePreview? {
+        if (!DrawableXmlCatalog.appliesTo(file.toString())) return null
+        val module = moduleForResourceFile(file) ?: return null
+        if (module.facets.get(AndroidFacet.KEY) == null) return null
+        return runCatching { DrawablePreviewParser.parse(text, drawableResolver(module)) }.getOrNull()
+    }
+
+    /** The `<color>` entries of a `res/values` XML [file] ([text] = live buffer), resolved to ARGB for swatches. */
+    fun colorResources(file: Path, text: String): List<ColorEntry> {
+        val resolver = moduleForResourceFile(file)?.let { drawableResolver(it) } ?: DrawableResolver.NONE
+        return runCatching { ColorResources.parse(text, resolver) }.getOrDefault(emptyList())
+    }
+
+    /** Raw bytes of a resource file (for bitmap preview); null if unreadable. */
+    fun resourceBytes(file: Path): ByteArray? = runCatching { Files.readAllBytes(file) }.getOrNull()
+
+    /** A [DrawableResolver] backed by [module]'s merged resource repository (colors/dimens/nested drawables). */
+    private fun drawableResolver(module: Module): DrawableResolver {
+        val repo = runCatching { AndroidResources.repository(module, store.workspace) }.getOrNull()
+            ?: return DrawableResolver.NONE
+        return object : DrawableResolver {
+            override fun resolveColor(ref: String): Long? = resolveColorRef(ref, repo, 0)
+
+            override fun resolveDimenDp(ref: String): Float? {
+                val name = sanitizeResName(ref.substringAfterLast('/'))
+                val v = repo.definitions(ResourceType.DIMEN, name).firstOrNull()?.value ?: return null
+                return DIMEN_LITERAL.find(v)?.groupValues?.get(1)?.toFloatOrNull()
+            }
+
+            override fun resolveDrawable(ref: String): ResolvedDrawable? {
+                val name = sanitizeResName(ref.substringAfterLast('/'))
+                // A @color used where a drawable is expected resolves to a flat fill — let the color path handle it.
+                if (ref.contains("color") && repo.has(ResourceType.COLOR, name)) return null
+                val item = repo.definitions(ResourceType.DRAWABLE, name).firstOrNull()
+                    ?: repo.definitions(ResourceType.MIPMAP, name).firstOrNull()
+                    ?: return null
+                val src = item.source ?: return null
+                val p = src.toString()
+                return if (p.endsWith(".xml")) {
+                    runCatching { Files.readString(src) }.getOrNull()?.let { ResolvedDrawable.Xml(it) }
+                } else {
+                    ResolvedDrawable.BitmapFile(item.type.rClass, name, p)
+                }
+            }
+        }
+    }
+
+    /** Resolve `@color/x` (transitively through `@color` indirection) to ARGB; `@android:color/x` via the table. */
+    private fun resolveColorRef(ref: String, repo: ResourceRepository, depth: Int): Long? {
+        if (depth > 8) return null
+        val raw = ref.trim()
+        if (raw.startsWith("#")) return AndroidColor.parseHex(raw)
+        if (raw.contains("android:")) return AndroidColor.framework(raw.substringAfterLast('/'))
+        if (!raw.startsWith("@")) return null
+        val name = sanitizeResName(raw.substringAfterLast('/'))
+        val v = repo.definitions(ResourceType.COLOR, name).firstOrNull()?.value ?: return null
+        return when {
+            v.startsWith("#") -> AndroidColor.parseHex(v)
+            v.startsWith("@") -> resolveColorRef(v, repo, depth + 1)
+            else -> null
+        }
+    }
+
+    private val DIMEN_LITERAL = Regex("""(-?\d+(?:\.\d+)?)""")
 
     /** Names of every indexed resource of [type], falling back to the repository if the index isn't built
      *  yet. Used by resource-reference completion. */

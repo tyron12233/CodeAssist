@@ -118,6 +118,19 @@ interface IdeBackend {
     suspend fun projectBlocks(path: String, text: String): UiBlockNode? = null
 
     /**
+     * A render-ready model of the drawable XML in [path] (live buffer [text]) for the Preview view — with
+     * every `@color`/`@dimen`/`@drawable` reference resolved against the project's resources. Null when the
+     * file isn't an Android drawable/color/mipmap resource (or the backend has no Android support).
+     */
+    suspend fun drawablePreview(path: String, text: String): UiDrawable? = null
+
+    /** The `<color>` swatches of a `res/values` color file ([path], live buffer [text]) — empty if none. */
+    suspend fun colorResources(path: String, text: String): List<UiColorEntry> = emptyList()
+
+    /** Raw bytes of an image resource at [path] (png/webp/jpg/…) for bitmap preview; null if unreadable. */
+    suspend fun resourceImageBytes(path: String): ByteArray? = null
+
+    /**
      * Compile a block edit against [path]'s current buffer [text] into surgical [UiTextEdit]s. The UI
      * applies them to its text buffer (in descending offset order) — reparse + re-projection then follow
      * through the normal text path, so the two views never sync to each other. Empty ⇒ not applicable.

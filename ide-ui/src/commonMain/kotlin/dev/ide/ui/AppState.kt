@@ -26,7 +26,7 @@ enum class Screen { Projects, CreateProject, Editor, Dependencies, ModuleConfig,
 enum class RailDestination { Files, Search, Source, More }
 
 /** Editor surface for a tab: the plain text editor, or the projectional block editor over the same AST. */
-enum class EditorViewMode { Text, Blocks }
+enum class EditorViewMode { Text, Blocks, Preview }
 
 /**
  * One open editor tab. Its buffer-of-record is the [EditorSession] (the rope-backed model both the text
@@ -38,8 +38,12 @@ class OpenFile(val path: String, val name: String, initial: String) {
     val session = EditorSession(initial, languageFor(name))
     var modified by mutableStateOf(false)
         private set
-    /** Which surface this tab shows — text or blocks (both edit the one [session]). */
-    var viewMode by mutableStateOf(EditorViewMode.Text)
+    /** Which surface this tab shows — text, blocks, or resource preview (text/blocks edit the one [session]).
+     *  Image resources open straight into Preview (their bytes aren't editable text). */
+    var viewMode by mutableStateOf(
+        if (dev.ide.ui.editor.preview.previewKindOf(path) == dev.ide.ui.editor.preview.PreviewKind.BITMAP)
+            EditorViewMode.Preview else EditorViewMode.Text,
+    )
     /** The content this tab was opened/last-saved with — [modified] tracks divergence from it. */
     var savedText: String = initial
         private set

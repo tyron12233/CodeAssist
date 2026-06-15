@@ -4,6 +4,7 @@ import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.android.support.metadata.AttributeSpec
 import dev.ide.android.support.metadata.LayoutMetadata
 import dev.ide.android.support.resources.AndroidManifestCatalog
+import dev.ide.android.support.resources.DrawableXmlCatalog
 import dev.ide.android.support.resources.ResourceType
 import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItem
@@ -30,22 +31,44 @@ class AndroidXmlContributor(
 ) : XmlCompletionContributor {
 
     override fun contribute(position: XmlCompletionPosition): List<CompletionItem> {
-        val manifest = position.filePath.replace('\\', '/').endsWith("AndroidManifest.xml")
+        val path = position.filePath.replace('\\', '/')
+        val flavor = when {
+            path.endsWith("AndroidManifest.xml") -> Flavor.MANIFEST
+            DrawableXmlCatalog.appliesTo(path) -> Flavor.DRAWABLE
+            else -> Flavor.LAYOUT
+        }
         return when (position.kind) {
-            XmlCompletionKind.TAG_NAME -> if (manifest) manifestTagItems(position) else tagItems(position)
+            XmlCompletionKind.TAG_NAME -> when (flavor) {
+                Flavor.MANIFEST -> manifestTagItems(position)
+                Flavor.DRAWABLE -> drawableTagItems(position)
+                Flavor.LAYOUT -> tagItems(position)
+            }
             XmlCompletionKind.ATTRIBUTE_NAME -> {
-                val specs = if (manifest) AndroidManifestCatalog.attributesFor(position.tag)
-                else mergedAttributes(position)
+                val specs = when (flavor) {
+                    Flavor.MANIFEST -> AndroidManifestCatalog.attributesFor(position.tag)
+                    Flavor.DRAWABLE -> DrawableXmlCatalog.attributesFor(position.tag)
+                    Flavor.LAYOUT -> mergedAttributes(position)
+                }
                 specs.filter { it.name !in position.existingAttributes }.map(::attributeItem)
             }
             XmlCompletionKind.ATTRIBUTE_VALUE -> {
-                val spec = if (manifest) AndroidManifestCatalog.attribute(position.tag, position.attributeName)
-                else mergedAttributes(position).firstOrNull { it.name == position.attributeName }
+                val spec = when (flavor) {
+                    Flavor.MANIFEST -> AndroidManifestCatalog.attribute(position.tag, position.attributeName)
+                    Flavor.DRAWABLE -> DrawableXmlCatalog.attribute(position.tag, position.attributeName)
+                    Flavor.LAYOUT -> mergedAttributes(position).firstOrNull { it.name == position.attributeName }
+                }
                 spec?.let(::valueItemsFor) ?: emptyList()
             }
             else -> emptyList()
         }
     }
+
+    private enum class Flavor { MANIFEST, DRAWABLE, LAYOUT }
+
+    private fun drawableTagItems(pos: XmlCompletionPosition): List<CompletionItem> =
+        DrawableXmlCatalog.childrenOf(pos.parentTag).map { tag ->
+            CompletionItem(label = tag, insertText = tag, kind = CompletionItemKind.CLASS, detail = "drawable")
+        }
 
     /** Framework (SDK or curated) attributes for the tag + its custom-view attributes, deduped by name. */
     private fun mergedAttributes(pos: XmlCompletionPosition): List<AttributeSpec> {
