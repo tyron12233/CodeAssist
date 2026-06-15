@@ -19,21 +19,53 @@ internal object AndroidTemplateSupport {
         label = "Minimum SDK",
         options = listOf(
             TemplateParameter.Choice.Option("21", "API 21 · Android 5.0"),
+            TemplateParameter.Choice.Option("23", "API 23 · Android 6.0"),
             TemplateParameter.Choice.Option("24", "API 24 · Android 7.0"),
             TemplateParameter.Choice.Option("26", "API 26 · Android 8.0"),
+            TemplateParameter.Choice.Option("28", "API 28 · Android 9.0"),
+            TemplateParameter.Choice.Option("30", "API 30 · Android 11"),
+            TemplateParameter.Choice.Option("33", "API 33 · Android 13"),
             TemplateParameter.Choice.Option("34", "API 34 · Android 14"),
         ),
-        defaultIndex = 1,
+        defaultIndex = 2,
         help = "Lowest Android version the app supports.",
     )
 
+    /** The targetSdk picker — the API level the app is tested/optimised against. */
+    val targetSdkParam = TemplateParameter.Choice(
+        key = "targetSdk",
+        label = "Target SDK",
+        options = listOf(
+            TemplateParameter.Choice.Option("30", "API 30 · Android 11"),
+            TemplateParameter.Choice.Option("33", "API 33 · Android 13"),
+            TemplateParameter.Choice.Option("34", "API 34 · Android 14"),
+        ),
+        defaultIndex = 2,
+        help = "The API level the app is built and optimised against.",
+    )
+
+    /** Source language for the generated starter code. */
+    val languageParam = TemplateParameter.Choice(
+        key = "language",
+        label = "Language",
+        options = listOf(
+            TemplateParameter.Choice.Option("java", "Java"),
+            TemplateParameter.Choice.Option("kotlin", "Kotlin"),
+        ),
+        defaultIndex = 0,
+        help = "Language of the starter source files.",
+    )
+
     const val COMPILE_SDK = 34
+
+    fun isKotlin(args: TemplateArgs): Boolean = args.string("language", "java").equals("kotlin", ignoreCase = true)
 }
 
 /**
  * A native Android application: one `app` module (android-app) with an `AndroidFacet`, an editable
- * `AndroidManifest.xml`, `res/` (strings, colors, theme), and a `MainActivity`. Assembles to a signed
- * APK through the existing `AndroidBuildSystem` pipeline.
+ * `AndroidManifest.xml`, `res/` (strings, colors, theme, and an `activity_main` layout), and a
+ * `MainActivity` that inflates that layout to show a "Hello, World!" page. A complete, dependency-free
+ * starter app that assembles to a signed APK through the existing `AndroidBuildSystem` pipeline.
  */
 object AndroidAppTemplate : ProjectTemplate {
     override val id = TemplateId("android-app")
@@ -42,11 +74,17 @@ object AndroidAppTemplate : ProjectTemplate {
     override val category = TemplateCategory.ANDROID
     override val iconId = "module.android"
 
-    override fun parameters(): List<TemplateParameter> = listOf(AndroidTemplateSupport.minSdkParam)
+    override fun parameters(): List<TemplateParameter> = listOf(
+        AndroidTemplateSupport.languageParam,
+        AndroidTemplateSupport.minSdkParam,
+        AndroidTemplateSupport.targetSdkParam,
+    )
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
         val pkg = args.packageName
-        val minSdk = args.int("minSdk", 24)
+        val minSdk = args.int("minSdk", 26)
+        val targetSdk = args.int("targetSdk", AndroidTemplateSupport.COMPILE_SDK)
+        val kotlin = AndroidTemplateSupport.isKotlin(args)
         scaffold.workspace.beginModification().apply {
             addProject(args.name, BuildSystemId.NATIVE, scaffold.rootDir)
             commit()
@@ -60,7 +98,7 @@ object AndroidAppTemplate : ProjectTemplate {
                         namespace = pkg,
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
                         minSdk = minSdk,
-                        targetSdk = AndroidTemplateSupport.COMPILE_SDK,
+                        targetSdk = targetSdk,
                     ),
                 )
             }
@@ -90,7 +128,7 @@ object AndroidAppTemplate : ProjectTemplate {
             <?xml version="1.0" encoding="utf-8"?>
             <resources>
                 <string name="app_name">${args.name}</string>
-                <string name="greeting">Hello, Android</string>
+                <string name="hello_world">Hello, World!</string>
             </resources>
             """,
         )
@@ -116,25 +154,58 @@ object AndroidAppTemplate : ProjectTemplate {
             """,
         )
         scaffold.writeText(
-            "app/src/main/java/$path/MainActivity.java",
+            "app/src/main/res/layout/activity_main.xml",
             """
-            package $pkg;
-
-            import android.app.Activity;
-            import android.os.Bundle;
-            import android.widget.TextView;
-
-            public class MainActivity extends Activity {
-                @Override
-                protected void onCreate(Bundle savedInstanceState) {
-                    super.onCreate(savedInstanceState);
-                    TextView tv = new TextView(this);
-                    tv.setText(getString(R.string.greeting));
-                    setContentView(tv);
-                }
-            }
+            <?xml version="1.0" encoding="utf-8"?>
+            <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/hello_world"
+                    android:textSize="24sp"/>
+            </LinearLayout>
             """,
         )
+        if (kotlin) {
+            scaffold.writeText(
+                "app/src/main/kotlin/$path/MainActivity.kt",
+                """
+                package $pkg
+
+                import android.app.Activity
+                import android.os.Bundle
+
+                class MainActivity : Activity() {
+                    override fun onCreate(savedInstanceState: Bundle?) {
+                        super.onCreate(savedInstanceState)
+                        setContentView(R.layout.activity_main)
+                    }
+                }
+                """,
+            )
+        } else {
+            scaffold.writeText(
+                "app/src/main/java/$path/MainActivity.java",
+                """
+                package $pkg;
+
+                import android.app.Activity;
+                import android.os.Bundle;
+
+                public class MainActivity extends Activity {
+                    @Override
+                    protected void onCreate(Bundle savedInstanceState) {
+                        super.onCreate(savedInstanceState);
+                        setContentView(R.layout.activity_main);
+                    }
+                }
+                """,
+            )
+        }
     }
 }
 
@@ -149,11 +220,15 @@ object AndroidLibraryTemplate : ProjectTemplate {
     override val category = TemplateCategory.ANDROID
     override val iconId = "module.android"
 
-    override fun parameters(): List<TemplateParameter> = listOf(AndroidTemplateSupport.minSdkParam)
+    override fun parameters(): List<TemplateParameter> = listOf(
+        AndroidTemplateSupport.languageParam,
+        AndroidTemplateSupport.minSdkParam,
+    )
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
         val pkg = args.packageName
-        val minSdk = args.int("minSdk", 24)
+        val minSdk = args.int("minSdk", 26)
+        val kotlin = AndroidTemplateSupport.isKotlin(args)
         scaffold.workspace.beginModification().apply {
             addProject(args.name, BuildSystemId.NATIVE, scaffold.rootDir)
             commit()
@@ -190,16 +265,30 @@ object AndroidLibraryTemplate : ProjectTemplate {
             </resources>
             """,
         )
-        scaffold.writeText(
-            "lib/src/main/java/$path/LibraryText.java",
-            """
-            package $pkg;
+        if (kotlin) {
+            scaffold.writeText(
+                "lib/src/main/kotlin/$path/LibraryText.kt",
+                """
+                package $pkg
 
-            /** Library code resolving its OWN R (merged into a consuming app's R). */
-            public final class LibraryText {
-                public static int titleRes() { return R.string.lib_title; }
-            }
-            """,
-        )
+                /** Library code resolving its OWN R (merged into a consuming app's R). */
+                object LibraryText {
+                    fun titleRes(): Int = R.string.lib_title
+                }
+                """,
+            )
+        } else {
+            scaffold.writeText(
+                "lib/src/main/java/$path/LibraryText.java",
+                """
+                package $pkg;
+
+                /** Library code resolving its OWN R (merged into a consuming app's R). */
+                public final class LibraryText {
+                    public static int titleRes() { return R.string.lib_title; }
+                }
+                """,
+            )
+        }
     }
 }

@@ -203,7 +203,12 @@ private fun ParamControl(param: UiTemplateParam, value: String, onChange: (Strin
         is UiTemplateParam.Text -> FormField(param.label, value, param.placeholder, onChange)
         is UiTemplateParam.Choice -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             FieldLabel(param.label)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // FlowRow wraps the chips onto further lines on a narrow (phone) screen instead of squishing
+            // them into a single overflowing row.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 param.options.forEach { opt ->
                     Chip(opt.label, selected = value == opt.value, onClick = { onChange(opt.value) })
                 }

@@ -1,7 +1,10 @@
-# Gradle
+# Gradle — ignore the module-level output dirs only, NOT source packages named `build`
+# (e.g. dev/ide/build/ in build-api/build-engine). `**/build/` would wrongly exclude that source.
 .gradle/
-build/
-**/build/
+.kotlin/
+/build/
+/*/build/
+/*/*/build/
 !gradle/wrapper/gradle-wrapper.jar
 
 # IDE-derived / OS
