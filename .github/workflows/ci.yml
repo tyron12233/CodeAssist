@@ -63,13 +63,11 @@ jobs:
       - name: Build engine — large multi-module build & incremental scaling
         run: ./gradlew :build-engine:regressionTest --console=plain --stacktrace
 
-      # 3) Latency / memory / large-project benchmarks — informational only. These compare against baselines
-      #    recorded on the maintainer's machine; a CI runner has different perf characteristics, so a drift
-      #    failure here is expected and must NOT block the build. The point is to surface the numbers (and
-      #    the Δ% vs the committed baseline) in the log. Re-record real baselines on a stable machine.
-      - name: Benchmarks (informational)
-        continue-on-error: true
-        run: ./gradlew :lang-jdt:regressionTest :index-impl:regressionTest --console=plain
+      # Latency / memory / per-query benchmarks are intentionally NOT gated in CI: they measure wall-clock
+      # time and retained heap, which are machine-dependent (a shared CI runner is far slower than the
+      # machine the baselines were recorded on, and the heap probe is unreliable under CI's JVM). Run them
+      # locally on a stable machine via `./gradlew :lang-jdt:regressionTest :index-impl:regressionTest`.
+      # CI keeps only the deterministic, machine-independent gates above (quality, ranking, build correctness).
 
       - name: Upload test & benchmark reports
         if: ${{ always() }}
