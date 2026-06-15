@@ -6,6 +6,7 @@ import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import java.io.File
 import java.nio.file.Path
+import java.util.zip.ZipInputStream
 
 /**
  * On-device bootstrap for the IDE engine, the Android counterpart to :ide-desktop's wiring. ART has no
@@ -22,6 +23,13 @@ object AndroidIde {
     fun bootstrap(context: Context): Session {
         val home = File(context.filesDir, "codeassist").apply { mkdirs() }
         val androidJar = copyAsset(context, "android.jar", File(home, "android.jar"))
+        // The on-device Kotlin compiler (K2JVMCompiler) is dexed, but IntelliJ-core boots its extension
+        // registry by reading XML descriptors (META-INF/extensions/*.xml) from a real filesystem path, which
+        // a dex APK doesn't expose. Extract the bundled kotlinc-resources.zip (the compiler jar minus its
+        // .class entries) to a home dir and publish it via `kotlinc.art.home` — the value the ASM-patched
+        // PathUtil reads (see build-logic dev.ide.build.kotlinc.PathUtilSelfLocatePass). Without this, the
+        // first Kotlin compile throws "Unable to find extension point configuration .../compiler-cli-root.xml".
+        provisionKotlincHome(context, File(home, "kotlinc-home"))
         // The debug keystore is a shared, non-secret credential; ART has no `keytool`, so a prebuilt
         // PKCS12 keystore ships as an asset and is copied out for apksig (in-process) to sign with.
         val debugKeystore = copyAsset(context, "debug.keystore", File(home, "debug.keystore"))
@@ -74,6 +82,47 @@ object AndroidIde {
             }
         }
         return dest
+    }
+
+    /**
+     * Extract the bundled kotlinc-resources.zip asset (the compiler's non-class resources) into [home] and
+     * set the `kotlinc.art.home` system property to that path. Idempotent and re-extracts only when the app
+     * has been updated since the last extraction (a new APK may carry a new compiler), tracked by a marker
+     * holding the package's `lastUpdateTime`.
+     */
+    private fun provisionKotlincHome(context: Context, home: File) {
+        val stamp = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L).toString()
+        val marker = File(home, ".provisioned")
+        if (marker.exists() && marker.readText() == stamp) {
+            System.setProperty("kotlinc.art.home", home.absolutePath)
+            return
+        }
+
+        home.deleteRecursively()
+        home.mkdirs()
+        val canonicalHome = home.canonicalPath + File.separator
+        context.assets.open("kotlinc-resources.zip").use { input ->
+            ZipInputStream(input).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    val outFile = File(home, entry.name)
+                    // Zip-slip guard (a controlled archive, but cheap to be safe).
+                    if (outFile.canonicalPath.startsWith(canonicalHome)) {
+                        if (entry.isDirectory) {
+                            outFile.mkdirs()
+                        } else {
+                            outFile.parentFile?.mkdirs()
+                            outFile.outputStream().use { zis.copyTo(it) }
+                        }
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+        }
+        marker.writeText(stamp)
+        System.setProperty("kotlinc.art.home", home.absolutePath)
     }
 
     /** The live engine + its UI-port adapter; [backend] is held so the Activity can close it on teardown. */
