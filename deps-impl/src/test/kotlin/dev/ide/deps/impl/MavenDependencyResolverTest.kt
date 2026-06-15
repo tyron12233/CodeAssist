@@ -1,0 +1,224 @@
+package dev.ide.deps.impl
+
+import dev.ide.deps.ArtifactKind
+import dev.ide.deps.ConflictPolicy
+import dev.ide.deps.Repository
+import dev.ide.model.Coordinate
+import dev.ide.platform.ProgressReporter
+import dev.ide.vfs.local.LocalFileSystem
+import kotlinx.coroutines.runBlocking
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+import kotlin.io.path.createTempDirectory
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class MavenDependencyResolverTest {
+
+    private val noProgress = object : ProgressReporter {
+        override fun report(fraction: Double, message: String?) {}
+        override fun checkCanceled() {}
+        override val isCanceled: Boolean = false
+    }
+
+    private val repo = Repository("fixture", BASE)
+
+    @Test
+    fun resolvesTransitivesAndPicksNewestOnConflict() {
+        // a → common:1.0 ; b → common:2.0  (diamond). NEWEST must win for common.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "common", "1.0")))
+        files.put("b", "1.0", deps = listOf(Dep("g", "common", "2.0")))
+        files.put("common", "1.0")
+        files.put("common", "2.0")
+
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("a", "1.0"), coord("b", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("a", "b", "common"), byName.keys)
+        assertEquals("2.0", byName.getValue("common").coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+
+        val conflict = result.conflicts.single()
+        assertEquals("g:common", conflict.coordinate)
+        assertEquals(listOf("1.0", "2.0"), conflict.requested)
+        assertEquals("2.0", conflict.chosen)
+
+        // The dependsOn edges expose the diamond for the UI graph.
+        assertEquals(listOf(coord("common", "2.0")), byName.getValue("a").dependsOn)
+        assertEquals(listOf(coord("common", "2.0")), byName.getValue("b").dependsOn)
+    }
+
+    @Test
+    fun pinnedPolicyKeepsTheDirectlyDeclaredVersion() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "common", "2.0")))
+        files.put("common", "1.0")
+        files.put("common", "2.0")
+        val (resolver, _) = newResolver(files)
+
+        // common is declared directly at 1.0 but a pulls 2.0 transitively → PINNED keeps 1.0.
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("a", "1.0"), coord("common", "1.0")), listOf(repo), ConflictPolicy.PINNED, noProgress)
+        }
+        assertEquals("1.0", result.resolved.single { it.coordinate.name == "common" }.coordinate.version)
+    }
+
+    @Test
+    fun extractsClassesJarAndResFromAar() {
+        val files = FakeRepo()
+        files.put("widget", "1.0", packaging = "aar", jarBytes = aarWithRes())
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single()
+        assertEquals(ArtifactKind.AAR, art.kind)
+        assertEquals("classes.jar", art.classesRoot.name)
+        assertTrue(art.classesRoot.exists)
+        // the AAR's res/ is exploded next to classes.jar, for the IDE's resource model
+        val res = Path.of(art.classesRoot.path).parent.resolve("res/values/strings.xml")
+        assertTrue(Files.isRegularFile(res), "AAR res/ should be extracted next to classes.jar: $res")
+    }
+
+    @Test
+    fun terminatesAndRecordsEdgesOnCyclicMetadata() {
+        // a → b → a : a cyclic POM graph must not loop forever; both edges must survive for cycle detection.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "b", "1.0")))
+        files.put("b", "1.0", deps = listOf(Dep("g", "a", "1.0")))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("a", "b"), byName.keys)
+        assertEquals(listOf(coord("b", "1.0")), byName.getValue("a").dependsOn)
+        assertEquals(listOf(coord("a", "1.0")), byName.getValue("b").dependsOn)
+    }
+
+    @Test
+    fun dropsTestScopeAndExcludedTransitives() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(
+            Dep("g", "testonly", "1.0", scope = "test"),
+            Dep("g", "b", "1.0", exclusions = listOf("g" to "c")),
+        ))
+        files.put("b", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("testonly", "1.0")
+        files.put("b", "1.0") // overwrite ok
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val names = result.resolved.map { it.coordinate.name }.toSet()
+        assertEquals(setOf("a", "b"), names) // testonly (test scope) and c (excluded) are gone
+    }
+
+    @Test
+    fun resolvesOfflineFromCacheAfterFirstFetch() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "common", "1.0")))
+        files.put("common", "1.0")
+
+        val tmp = createTempDirectory("deps-offline")
+        val lfs = LocalFileSystem(tmp)
+        val cache = ResolverCache(tmp)
+        val warm = MavenDependencyResolver(cache, lfs::fileFor, files)
+        runBlocking { warm.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+
+        // Second run with a fetcher that refuses everything — must still resolve from the populated cache.
+        val offline = MavenDependencyResolver(cache, lfs::fileFor, ArtifactFetcher { null })
+        val result = runBlocking { offline.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertEquals(setOf("a", "common"), result.resolved.map { it.coordinate.name }.toSet())
+    }
+
+    @Test
+    fun unresolvedWhenRepoLacksTheArtifact() {
+        val (resolver, _) = newResolver(FakeRepo())
+        val result = runBlocking { resolver.resolve(listOf(coord("ghost", "9.9")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(result.resolved.isEmpty())
+        assertEquals(listOf(coord("ghost", "9.9")), result.unresolved)
+    }
+
+    // ---- fixture helpers ----------------------------------------------------------------------
+
+    private fun newResolver(files: FakeRepo): Pair<MavenDependencyResolver, Path> {
+        val tmp = createTempDirectory("deps-test")
+        val lfs = LocalFileSystem(tmp)
+        return MavenDependencyResolver(ResolverCache(tmp), lfs::fileFor, files) to tmp
+    }
+
+    private fun coord(name: String, version: String) = Coordinate("g", name, version)
+
+    private data class Dep(
+        val g: String, val a: String, val v: String,
+        val scope: String? = null, val optional: Boolean = false,
+        val exclusions: List<Pair<String, String>> = emptyList(),
+    )
+
+    /** An in-memory Maven repo keyed by request URL; missing entries return null (404). */
+    private inner class FakeRepo : ArtifactFetcher {
+        private val byUrl = HashMap<String, ByteArray>()
+        override fun fetch(url: String): ByteArray? = byUrl[url]
+
+        fun put(name: String, version: String, packaging: String = "jar", deps: List<Dep> = emptyList(), jarBytes: ByteArray = emptyJar()) {
+            byUrl[url("g", name, version, "pom")] = pom("g", name, version, packaging, deps).toByteArray()
+            val ext = if (packaging == "aar") "aar" else "jar"
+            byUrl[url("g", name, version, ext)] = jarBytes
+        }
+    }
+
+    private fun url(g: String, a: String, v: String, ext: String): String =
+        "$BASE/${g.replace('.', '/')}/$a/$v/$a-$v.$ext"
+
+    private fun pom(g: String, a: String, v: String, packaging: String, deps: List<Dep>): String = buildString {
+        append("""<?xml version="1.0" encoding="UTF-8"?><project>""")
+        append("<groupId>$g</groupId><artifactId>$a</artifactId><version>$v</version>")
+        if (packaging != "jar") append("<packaging>$packaging</packaging>")
+        if (deps.isNotEmpty()) {
+            append("<dependencies>")
+            for (d in deps) {
+                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId><version>${d.v}</version>")
+                d.scope?.let { append("<scope>$it</scope>") }
+                if (d.optional) append("<optional>true</optional>")
+                if (d.exclusions.isNotEmpty()) {
+                    append("<exclusions>")
+                    d.exclusions.forEach { (eg, ea) -> append("<exclusion><groupId>$eg</groupId><artifactId>$ea</artifactId></exclusion>") }
+                    append("</exclusions>")
+                }
+                append("</dependency>")
+            }
+            append("</dependencies>")
+        }
+        append("</project>")
+    }
+
+    private fun emptyJar(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { }
+        return out.toByteArray()
+    }
+
+    private fun aarWithRes(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { zos ->
+            zos.putNextEntry(ZipEntry("classes.jar")); zos.write(emptyJar()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("AndroidManifest.xml")); zos.write("<manifest/>".toByteArray()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("res/values/strings.xml"))
+            zos.write("""<resources><string name="widget_label">W</string></resources>""".toByteArray())
+            zos.closeEntry()
+        }
+        return out.toByteArray()
+    }
+
+    private companion object {
+        const val BASE = "https://fixture/repo"
+    }
+}

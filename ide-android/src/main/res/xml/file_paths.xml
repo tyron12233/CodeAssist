@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paths the FileProvider may expose as content:// URIs. Projects live under filesDir/codeassist;
+     `files-path` maps internal app storage (Context.getFilesDir()). -->
+<paths>
+    <files-path name="codeassist" path="codeassist/" />
+</paths>

@@ -1,0 +1,11 @@
+{
+  "files": 300,
+  "member-access.bytes": 1108784,
+  "member-access.ns": 1856141.6,
+  "member-value.bytes": 1108616,
+  "member-value.ns": 1579458.2,
+  "name-ref.bytes": 2955248,
+  "name-ref.ns": 2573591.8,
+  "recall": 1,
+  "retainedHeap.bytes": 23280728
+}

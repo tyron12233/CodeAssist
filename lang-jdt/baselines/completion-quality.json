@@ -1,0 +1,21 @@
+{
+  "category.broken-code.mrr": 1,
+  "category.broken-code.recall": 1,
+  "category.member-instance.mrr": 0.875,
+  "category.member-instance.recall": 1,
+  "category.member-static.mrr": 1,
+  "category.member-static.recall": 1,
+  "category.name-ref.mrr": 1,
+  "category.name-ref.recall": 1,
+  "category.package-ref.mrr": 0.5,
+  "category.package-ref.recall": 1,
+  "category.smart-rank.mrr": 0.5,
+  "category.smart-rank.recall": 1,
+  "category.type-ref.mrr": 0.8333333333333334,
+  "category.type-ref.recall": 1,
+  "corpus.size": 16,
+  "overall.mrr": 0.875,
+  "overall.recall": 1,
+  "overall.top1": 0.75,
+  "overall.top5": 1
+}

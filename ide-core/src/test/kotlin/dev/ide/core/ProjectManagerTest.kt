@@ -1,0 +1,124 @@
+package dev.ide.core
+
+import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+class ProjectManagerTest {
+
+    /** Create a Java console app from the template, reopen it, and confirm the model round-trips + runs. */
+    @Test
+    fun createsListsAndReopensJavaConsoleProject() {
+        val root = Files.createTempDirectory("cm-test")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            assertTrue(manager.isEmpty(), "a fresh projects root has no projects")
+
+            manager.create("java-console", mapOf("name" to "Demo CLI", "packageName" to "com.acme.demo")).use { ide ->
+                assertEquals(listOf("app"), ide.moduleNames())
+                assertEquals("Demo CLI", ide.projectDisplayName())
+                // a Main with `static void main` produces a `run:` task offered.
+                assertTrue(ide.runTasks().any { it.id.startsWith("run:") }, "expected a runnable main")
+            }
+
+            val listed = manager.list()
+            assertEquals(1, listed.size)
+            assertEquals("Demo CLI", listed.first().name)
+            assertEquals(1, listed.first().moduleCount)
+
+            // Reopen the saved workspace: identical module snapshot.
+            manager.open(listed.first().rootPath).use { reopened ->
+                assertEquals(listOf("app"), reopened.moduleNames())
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    /** A backup zips project sources (and skips build outputs). */
+    @Test
+    fun backsUpProjectSourcesToZip() {
+        val root = Files.createTempDirectory("cm-backup")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            manager.create("java-console", mapOf("name" to "Zip Me", "packageName" to "com.acme.zip")).use { }
+            val zip = manager.exportBackup()
+            assertTrue(Files.exists(zip), "backup zip was created")
+            java.util.zip.ZipFile(zip.toFile()).use { zf ->
+                val names = zf.entries().asSequence().map { it.name }.toList()
+                assertTrue(names.any { it.endsWith("Main.java") }, "sources in backup; got $names")
+                assertTrue(names.none { it.contains("/build/") }, "build outputs excluded")
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    /** The built-in template gallery exposes the shipped Java, Kotlin, and Android templates. */
+    @Test
+    fun exposesBuiltInTemplates() {
+        val root = Files.createTempDirectory("cm-templates")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            manager.create("java-library", mapOf("name" to "Lib", "packageName" to "com.acme.lib")).use { ide ->
+                val ids = ide.projectTemplates().map { it.id.value }.toSet()
+                assertTrue(
+                    ids.containsAll(
+                        setOf(
+                            "java-console", "java-library",
+                            "kotlin-console", "kotlin-library",
+                            "android-app", "android-library",
+                        ),
+                    ),
+                    "got $ids",
+                )
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    /** A valid `.kt` file must NOT be analyzed by the Java/JDT pipeline (which would report bogus
+     *  "Syntax error / insert ';'" on `package`/`println`). Kotlin routes to its own tolerant parser. */
+    @Test
+    fun kotlinFileGetsNoJavaDiagnostics() {
+        val root = Files.createTempDirectory("cm-kdiag")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            manager.create("kotlin-console", mapOf("name" to "KDiag", "packageName" to "com.acme.kt")).use { ide ->
+                val main = java.nio.file.Path.of(manager.list().first().rootPath)
+                    .resolve("app/src/main/kotlin/com/acme/kt/Main.kt")
+                val text = Files.readString(main)
+                val diags = ide.analyzeDiagnostics(main, text)
+                assertTrue(
+                    diags.none { it.severity == dev.ide.lang.dom.Severity.ERROR },
+                    "valid Kotlin should produce no error diagnostics; got $diags",
+                )
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    /** Create a Kotlin console project: a `src/main/kotlin` tree with a top-level `fun main()`. */
+    @Test
+    fun createsKotlinConsoleProject() {
+        val root = Files.createTempDirectory("cm-kotlin")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            manager.create("kotlin-console", mapOf("name" to "KDemo", "packageName" to "com.acme.kt")).use { ide ->
+                assertEquals(listOf("app"), ide.moduleNames())
+                assertEquals("KDemo", ide.projectDisplayName())
+            }
+            val proj = manager.list().first()
+            val main = java.nio.file.Path.of(proj.rootPath).resolve("app/src/main/kotlin/com/acme/kt/Main.kt")
+            assertTrue(Files.exists(main), "Main.kt generated at $main")
+            val text = Files.readString(main)
+            assertTrue("fun main" in text, "has a top-level main(); got:\n$text")
+            assertTrue(text.startsWith("package com.acme.kt"), "kotlin package header (no semicolon); got:\n$text")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+}

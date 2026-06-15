@@ -1,0 +1,39 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE-derived / OS
+*.log
+.DS_Store
+.idea/
+.kotlin/
+
+# Android (machine-local SDK path)
+local.properties
+
+# Release signing — never commit
+keystore/
+keystore.properties
+
+# Internal / agent working files — not part of the public project
+.claude/
+CLAUDE.md
+RELEASE_NOTES.md
+
+# Internal design docs and scratch material (public docs live in docs/, tracked explicitly below)
+docs/architecture-core-foundation.md
+docs/completion-and-incremental-ast.md
+docs/analysis-api.md
+docs/android-support.md
+docs/block-based-editing.md
+docs/completion-regression-benchmarks.md
+docs/indexing-infrastructure.md
+docs/jdt-name-environment.md
+docs/kotlin-compiler-on-art.md
+docs/kotlin-completion-backend.md
+docs/xml-language-support.md
+docs/handoff_onboarding_compose/
+docs/design/
+docs/*.png

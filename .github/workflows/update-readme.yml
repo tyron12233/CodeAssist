@@ -1,0 +1,59 @@
+name: Update README (badges + benchmarks)
+
+# Regenerates the auto-updated README sections (test counts, benchmark table) and the shields.io
+# endpoint badges, then commits them back to main. Runs on each published release; can also be run
+# manually from the Actions tab.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-readme
+  cancel-in-progress: false
+
+env:
+  CI_CORE_ONLY: "true"
+  # Match the JDK the committed completion baselines were recorded on (see ci.yml).
+  JAVA_VERSION: "25"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Produce JUnit XML results for the test counts. Benchmark numbers are read from the committed
+      # regression baselines, so they don't depend on this runner's performance.
+      - name: Run framework tests
+        run: ./gradlew test --console=plain
+
+      - name: Regenerate README sections + badges
+        run: python3 .github/scripts/update_readme.py
+
+      - name: Commit changes if any
+        run: |
+          if git diff --quiet -- README.md .github/badges; then
+            echo "No README/badge changes."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md .github/badges
+          git commit -m "docs: auto-update README badges & benchmarks [skip ci]"
+          git push origin main

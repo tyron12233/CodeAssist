@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+# Build and test only the pure-Kotlin/JVM framework. The IDE shells (:ide-ui/:ide-core/:ide-desktop/
+# :ide-android) apply the Compose/Android Gradle plugins, which need the Android SDK even to configure;
+# CI_CORE_ONLY drops them from settings.gradle.kts so CI needs no SDK provisioning. The framework is the
+# part carrying the unit tests + completion regression suites, and nothing in it depends on the shells.
+env:
+  CI_CORE_ONLY: "true"
+  # The completion quality baselines come from the platform `jrt` class library, so they're tied to the JDK
+  # MAJOR version. Pin it to match the version the committed baselines were recorded on (JBR 25 locally).
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Framework tests + completion quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # 1) The fast correctness gate: every framework unit test. Regression suites are @Tag("regression")
+      #    and excluded from `test`, so this stays quick.
+      - name: Unit tests
+        run: ./gradlew test --console=plain --stacktrace
+
+      # 2) The quality gates: deterministic given the pinned JDK (same `jrt` class library + fixed indexes),
+      #    so they gate ranking/recall regressions. One unambiguous invocation per module.
+      - name: Completion quality (lang-jdt)
+        run: ./gradlew :lang-jdt:regressionTest --tests '*CompletionQualityTest*' --console=plain --stacktrace
+
+      - name: Index ranking quality (index-impl)
+        run: ./gradlew :index-impl:regressionTest --tests '*IndexQualityTest*' --console=plain --stacktrace
+
+      # The dogfooding milestone: the IDE's own build engine compiles + runs a large multi-module Java
+      # project and rebuilds it incrementally. Correctness + incremental task count are deterministic
+      # (machine-independent); the full-build wall time is gated only by a wide trend + catastrophe ceiling.
+      - name: Build engine — large multi-module build & incremental scaling
+        run: ./gradlew :build-engine:regressionTest --console=plain --stacktrace
+
+      # 3) Latency / memory / large-project benchmarks — informational only. These compare against baselines
+      #    recorded on the maintainer's machine; a CI runner has different perf characteristics, so a drift
+      #    failure here is expected and must NOT block the build. The point is to surface the numbers (and
+      #    the Δ% vs the committed baseline) in the log. Re-record real baselines on a stable machine.
+      - name: Benchmarks (informational)
+        continue-on-error: true
+        run: ./gradlew :lang-jdt:regressionTest :index-impl:regressionTest --console=plain
+
+      - name: Upload test & benchmark reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-and-benchmark-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+          if-no-files-found: ignore
+          retention-days: 14

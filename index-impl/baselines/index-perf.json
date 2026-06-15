@@ -1,0 +1,10 @@
+{
+  "query.fuzzy.ALi.bytes": 240,
+  "query.fuzzy.ALi.ns": 55.65,
+  "query.fuzzy.Bufrd.bytes": 62760,
+  "query.fuzzy.Bufrd.ns": 120345,
+  "query.prefix.A.bytes": 11600,
+  "query.prefix.A.ns": 4402.1584,
+  "query.prefix.Arr.bytes": 11600,
+  "query.prefix.Arr.ns": 5134.675
+}

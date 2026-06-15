@@ -1,0 +1,394 @@
+package dev.ide.index.impl
+
+import dev.ide.index.Hit
+import dev.ide.index.IndexExtension
+import dev.ide.index.IndexId
+import dev.ide.index.IndexInput
+import dev.ide.index.IndexOrigin
+import dev.ide.index.IndexScope
+import dev.ide.index.IndexService
+import dev.ide.index.IndexStatus
+import dev.ide.lang.dom.ParsedFile
+import dev.ide.platform.ContentHash
+import dev.ide.platform.Disposable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import java.io.Closeable
+import java.net.URI
+import java.nio.file.FileSystem
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.ZipFile
+
+/**
+ * The [IndexService]: per index, a **static side** (SDK + libraries) of immutable on-disk [Segment]s — one
+ * per artifact, keyed by content hash, built once and reused across launches — and an in-memory
+ * **source side** ([IndexData], rebuilt incrementally on edit). Queries merge both.
+ *
+ * The static side is the low-RAM win: a library/SDK index is never resident; its [Segment] is read from
+ * disk on demand through a bounded [BlockCache] (default [DEFAULT_BLOCK_CACHE_BYTES]), so total resident
+ * memory is the cache cap + each segment's tiny sparse term index — flat regardless of how large the
+ * indexes grow. The source side stays in RAM because it is project-sized and changes every keystroke.
+ *
+ * Heavy building is blocking work driven from a background coroutine; it yields so the caller can cancel.
+ */
+class IndexServiceImpl(
+    extensions: List<IndexExtension<*, *>>,
+    private val cacheRoot: Path,
+    private val parse: (Path, String) -> ParsedFile? = { _, _ -> null },
+    blockCacheBytes: Long = DEFAULT_BLOCK_CACHE_BYTES,
+    blockSize: Int = 4096,
+) : IndexService, Closeable {
+
+    private class State(val ext: IndexExtension<*, *>) {
+        /** Static (SDK + library) partitions, read from disk on demand. CopyOnWrite ⇒ lock-free query reads. */
+        val segments = CopyOnWriteArrayList<Segment>()
+        /** Content hashes whose segment is already open, so a repeated build doesn't open it twice. */
+        val openHashes = HashSet<String>()
+        /** Project source: in-memory + incremental. */
+        val source = IndexData(ext.matching)
+        val sourceByFile = LinkedHashMap<String, List<IndexEntry>>()
+    }
+
+    private val states: Map<IndexId, State> = extensions.associate { it.id to State(it) }
+    private val blockCache = BlockCache(blockCacheBytes, blockSize)
+    private val segIds = AtomicInteger(0)
+
+    @Volatile
+    override var status: IndexStatus = IndexStatus()
+        private set
+    private val listeners = CopyOnWriteArrayList<(IndexStatus) -> Unit>()
+
+    override fun observeStatus(listener: (IndexStatus) -> Unit): Disposable {
+        listeners.add(listener)
+        listener(status)
+        return Disposable { listeners.remove(listener) }
+    }
+
+    private fun setStatus(s: IndexStatus) {
+        status = s
+        listeners.forEach { runCatching { it(s) } }
+    }
+
+    // ---- queries ----
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <V : Any> exact(id: IndexId, key: String): Sequence<V> {
+        val st = states[id] ?: return emptySequence()
+        val out = ArrayList<Any>()
+        st.segments.forEach { it.exact(key, out) }
+        out.addAll(st.source.exact(key))
+        return out.asSequence().map { it as V }
+    }
+
+    override fun <V : Any> prefix(id: IndexId, prefix: String, limit: Int): Sequence<Hit<V>> =
+        query(id, prefix, fuzzy = false, limit)
+
+    override fun <V : Any> fuzzy(id: IndexId, pattern: String, limit: Int): Sequence<Hit<V>> =
+        query(id, pattern, fuzzy = true, limit)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <V : Any> query(id: IndexId, q: String, fuzzy: Boolean, limit: Int): Sequence<Hit<V>> {
+        val st = states[id] ?: return emptySequence()
+        if (q.isEmpty()) return emptySequence()
+        val cap = (limit * 8).coerceAtLeast(64)
+        val out = ArrayList<Hit<Any>>()
+        // Each source gets its own `cap` budget (the union is re-ranked below) so a large segment can't
+        // starve the others by filling the shared buffer first.
+        for (seg in st.segments) {
+            val tmp = ArrayList<Hit<Any>>()
+            if (fuzzy) seg.fuzzy(q, tmp, cap) else seg.prefix(q, tmp, cap)
+            out.addAll(tmp)
+        }
+        val src = ArrayList<Hit<Any>>()
+        if (fuzzy) st.source.fuzzy(q, src, cap) else st.source.prefix(q, src, cap)
+        out.addAll(src)
+        return out.asSequence()
+            .sortedByDescending { it.score }
+            .distinctBy { it.value }
+            .take(limit)
+            .map { Hit(it.key, it.value as V, it.score) }
+    }
+
+    // ---- build ----
+
+    override suspend fun ensureUpToDate(scope: IndexScope) {
+        setStatus(IndexStatus(building = true, message = "Indexing…", fraction = -1.0))
+        try {
+            val artifacts = buildList {
+                scope.jdkHome?.let { add(Artifact.Jrt(it)) }
+                scope.libraryJars.forEach { add(Artifact.Jar(it)) }
+            }
+            val total = artifacts.size + 1
+            artifacts.forEachIndexed { i, art ->
+                setStatus(IndexStatus(true, "Indexing ${art.label}", i.toDouble() / total))
+                indexArtifact(art)
+            }
+            setStatus(IndexStatus(true, "Indexing project source", artifacts.size.toDouble() / total))
+            indexSource(scope.sourceRoots, scope.resourceRoots)
+            setStatus(IndexStatus(false, "Indexed", 1.0))
+        } catch (t: Throwable) {
+            setStatus(IndexStatus(false, "Indexing failed: ${t.message}", 1.0))
+            throw t
+        }
+    }
+
+    override suspend fun invalidate() {
+        closeSegments()
+        states.values.forEach { it.source.clear(); it.sourceByFile.clear() }
+        blockCache.clear()
+        runCatching {
+            if (Files.isDirectory(cacheRoot)) Files.walk(cacheRoot).use { stream ->
+                stream.sorted(compareByDescending { it.toString() }) // children before their parents
+                    .forEach { p -> if (p != cacheRoot) Files.deleteIfExists(p) }
+            }
+        }
+        setStatus(IndexStatus(building = false, message = "Index cleared", fraction = -1.0))
+    }
+
+    /** Close every open segment (releases file channels + their cached blocks). */
+    private fun closeSegments() {
+        states.values.forEach { st ->
+            st.segments.forEach { runCatching { it.close() } }
+            st.segments.clear()
+            st.openHashes.clear()
+        }
+    }
+
+    override fun close() {
+        closeSegments()
+        blockCache.clear()
+    }
+
+    private suspend fun indexArtifact(art: Artifact) {
+        val hash = art.contentHash()
+        val key = sanitize(hash.value)
+
+        // Already built on a prior run? Just open the segment — no re-indexing, nothing loaded into RAM.
+        for (st in states.values) {
+            if (key in st.openHashes) continue
+            val f = segmentFile(st.ext, hash)
+            if (Files.exists(f)) {
+                runCatching { Segment.open(f, st.ext, blockCache, segIds.getAndIncrement()) }
+                    .onSuccess { st.segments.add(it); st.openHashes.add(key) }
+            }
+        }
+        val needBuild = states.values.filter { key !in it.openHashes }
+        if (needBuild.isEmpty()) return
+
+        val acc = needBuild.associateWith { ArrayList<IndexEntry>() }
+        val (inputs, closeable) = art.open()
+        try {
+            for (input in inputs) {
+                for (st in needBuild) {
+                    @Suppress("UNCHECKED_CAST")
+                    val e = st.ext as IndexExtension<Any, Any>
+                    if (!e.inputFilter.accepts(input)) continue
+                    runCatching {
+                        for ((k, vs) in e.index(input)) {
+                            val term = e.keyDescriptor.asTerm(k)
+                            for (v in vs) acc.getValue(st).add(IndexEntry(term, v, input.origin))
+                        }
+                    }
+                }
+                yield()
+            }
+        } finally {
+            runCatching { closeable.close() }
+        }
+        for (st in needBuild) {
+            val f = segmentFile(st.ext, hash)
+            runCatching {
+                Segment.write(f, st.ext, acc.getValue(st))
+                val seg = Segment.open(f, st.ext, blockCache, segIds.getAndIncrement())
+                st.segments.add(seg)
+                st.openHashes.add(key)
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun indexSource(roots: List<Path>, resourceRoots: List<Path> = emptyList()) {
+        states.values.forEach { it.source.clear(); it.sourceByFile.clear() }
+        // Source roots: Java/Kotlin. Resource roots: Android res XML. Inputs are disjoint — each extension's
+        // inputFilter selects its own, so the Java indexes ignore .xml and the resource index ignores .java.
+        val groups = roots.map { it to setOf(".java", ".kt") } + resourceRoots.map { it to setOf(".xml") }
+        for ((root, exts) in groups) {
+            if (!Files.isDirectory(root)) continue
+            val files = Files.walk(root).use { s ->
+                s.filter { f -> Files.isRegularFile(f) && exts.any { f.toString().endsWith(it) } }.toList()
+            }
+            for (file in files) {
+                val text = runCatching { Files.readString(file) }.getOrNull() ?: continue
+                indexSourceFile(file, text, root)
+                yield()
+            }
+        }
+        states.values.forEach { st -> st.sourceByFile.values.forEach { it.forEach { e -> st.source.add(e.term, e.value, e.origin) } } }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun indexSourceFile(file: Path, text: String, root: Path?) {
+        val input = SourceInput(file, root, text, parse)
+        for (st in states.values) {
+            val e = st.ext as IndexExtension<Any, Any>
+            if (!e.inputFilter.accepts(input)) { st.sourceByFile.remove(file.toString()); continue }
+            val entries = ArrayList<IndexEntry>()
+            runCatching {
+                for ((k, vs) in e.index(input)) {
+                    val term = e.keyDescriptor.asTerm(k)
+                    for (v in vs) entries.add(IndexEntry(term, v, IndexOrigin.SOURCE))
+                }
+            }
+            st.sourceByFile[file.toString()] = entries
+        }
+    }
+
+    override suspend fun reindexSource(path: Path, text: String) {
+        indexSourceFile(path, text, null)
+        // rebuild each affected source IndexData from the per-file partitions
+        states.values.forEach { st ->
+            st.source.clear()
+            st.sourceByFile.values.forEach { it.forEach { e -> st.source.add(e.term, e.value, e.origin) } }
+        }
+    }
+
+    // ---- segment files ----
+
+    private fun segmentFile(ext: IndexExtension<*, *>, hash: ContentHash): Path =
+        cacheRoot.resolve(ext.id.value).resolve("v${ext.version}").resolve(sanitize(hash.value) + ".seg")
+
+    private fun sanitize(s: String) = s.map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("")
+
+    // ---- artifacts ----
+
+    private sealed class Artifact {
+        abstract val label: String
+        abstract fun contentHash(): ContentHash
+        abstract fun open(): Pair<Sequence<IndexInput>, Closeable>
+
+        class Jar(val path: Path) : Artifact() {
+            override val label get() = path.fileName?.toString() ?: "jar"
+            override fun contentHash(): ContentHash {
+                val attrs = runCatching { Files.size(path) to Files.getLastModifiedTime(path).toMillis() }.getOrDefault(0L to 0L)
+                return ContentHash("jar-${path.fileName}-${attrs.first}-${attrs.second}")
+            }
+            override fun open(): Pair<Sequence<IndexInput>, Closeable> {
+                val zip = ZipFile(path.toFile())
+                val hash = contentHash()
+                val seq = zip.entries().asSequence().filter { !it.isDirectory && it.name.endsWith(".class") }
+                    .map { entry -> LibraryInput(IndexOrigin.LIBRARY, hash, entry.name) { zip.getInputStream(entry).readBytes() } }
+                return seq to Closeable { zip.close() }
+            }
+        }
+
+        class Jrt(val home: Path) : Artifact() {
+            override val label get() = "JDK"
+            override fun contentHash() = ContentHash("jrt-${home}-${System.getProperty("java.version")}")
+            override fun open(): Pair<Sequence<IndexInput>, Closeable> {
+                val (fs, ownFs) = openJrt(home)
+                if (fs == null) return emptySequence<IndexInput>() to Closeable {}
+                val hash = contentHash()
+                val modules = fs.getPath("/modules")
+                // Only index classes in packages a module actually EXPORTS — real JPMS visibility, so
+                // jdk.internal.*, sun.* (non-exported), and other inaccessible internals never appear.
+                val exported = exportedPackages(home)
+                val inputs = if (Files.exists(modules)) {
+                    Files.walk(modules).use { stream ->
+                        stream.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }
+                            .map { p -> modules.relativize(p).toString().substringAfter('/') to p } // strip <module>/
+                            .filter { accessible(it.first, exported) }
+                            .map { np -> LibraryInput(IndexOrigin.SDK, hash, np.first) { Files.readAllBytes(np.second) } as IndexInput }
+                            .toList()
+                    }
+                } else emptyList()
+                return inputs.asSequence() to Closeable { if (ownFs) runCatching { fs.close() } }
+            }
+        }
+    }
+
+    private class LibraryInput(
+        override val origin: IndexOrigin,
+        override val contentHash: ContentHash,
+        override val unitName: String?,
+        private val readBytes: () -> ByteArray,
+    ) : IndexInput {
+        override val sourcePath: Path? = null
+        override fun bytes(): ByteArray = readBytes()
+        override fun text(): String? = null
+        override fun dom(): ParsedFile? = null
+    }
+
+    private class SourceInput(
+        private val file: Path,
+        root: Path?,
+        private val text: String,
+        private val parse: (Path, String) -> ParsedFile?,
+    ) : IndexInput {
+        override val origin = IndexOrigin.SOURCE
+        override val contentHash = ContentHash("src-${file}")
+        override val unitName: String? = (root?.let { runCatching { it.relativize(file).toString() }.getOrNull() } ?: file.fileName?.toString())
+        override val sourcePath: Path = file
+        override fun bytes(): ByteArray = text.toByteArray()
+        override fun text(): String = text
+        override fun dom(): ParsedFile? = parse(file, text)
+    }
+
+    companion object {
+        /**
+         * Default resident cap for hot index blocks (desktop). The static side's *entire* RAM cost is this
+         * cap + each open segment's tiny sparse term index — flat no matter how large the on-disk indexes
+         * grow. Misses just re-read from disk through the kernel page cache.
+         */
+        const val DEFAULT_BLOCK_CACHE_BYTES = 4L * 1024 * 1024
+
+        /**
+         * A tighter cap for memory-constrained devices (on-device/ART). 1 MB ≈ 256 hot 4 KB blocks — ample
+         * for a completion query's working set — at a quarter of the desktop heap floor; cold blocks just
+         * re-read. The caller, which knows the platform (`isMobilePlatform`), passes this for `blockCacheBytes`.
+         */
+        const val CONSTRAINED_BLOCK_CACHE_BYTES = 1L * 1024 * 1024
+
+        /** Packages unqualified-exported (or open) by the JDK's modules — the accessible surface. */
+        private fun exportedPackages(home: Path): Set<String> {
+            val finder = runCatching {
+                val current = Path.of(System.getProperty("java.home")).toAbsolutePath().normalize()
+                if (home.toAbsolutePath().normalize() == current) java.lang.module.ModuleFinder.ofSystem()
+                else java.lang.module.ModuleFinder.of(home.resolve("jmods"))
+            }.getOrNull() ?: return emptySet()
+            val out = HashSet<String>()
+            runCatching {
+                for (ref in finder.findAll()) {
+                    val d = ref.descriptor()
+                    if (d.isAutomatic || d.isOpen) { out.addAll(d.packages()); continue }
+                    for (e in d.exports()) if (!e.isQualified) out.add(e.source())
+                }
+            }
+            return out
+        }
+
+        /** A class entry path "java/util/List.class" is accessible if its package is exported (or, with no
+         *  export info, not an obvious internal package). */
+        private fun accessible(entry: String, exported: Set<String>): Boolean {
+            val pkg = entry.substringBeforeLast('/', "").replace('/', '.')
+            if (pkg.isEmpty()) return false
+            if (exported.isNotEmpty()) return pkg in exported
+            return !(pkg.startsWith("sun.") || pkg == "sun" || pkg.startsWith("jdk.internal") ||
+                pkg.startsWith("com.sun.") || ".internal." in ".$pkg.")
+        }
+
+        /** Open the jrt image of [home]; returns (fs, weOwnIt). The current JVM's jrt FS must not be closed. */
+        private fun openJrt(home: Path): Pair<FileSystem?, Boolean> = runCatching {
+            val current = runCatching { Path.of(System.getProperty("java.home")).toAbsolutePath().normalize() }.getOrNull()
+            if (home.toAbsolutePath().normalize() == current) {
+                FileSystems.getFileSystem(URI.create("jrt:/")) to false
+            } else {
+                FileSystems.newFileSystem(URI.create("jrt:/"), mapOf("java.home" to home.toString())) to true
+            }
+        }.getOrElse { runCatching { FileSystems.getFileSystem(URI.create("jrt:/")) to false }.getOrDefault(null to false) }
+    }
+}

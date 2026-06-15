@@ -1,0 +1,13 @@
+{
+  "category.fuzzy.mrr": 0.9,
+  "category.fuzzy.recall": 1,
+  "category.origin.mrr": 1,
+  "category.origin.recall": 1,
+  "category.prefix.mrr": 1,
+  "category.prefix.recall": 1,
+  "corpus.size": 10,
+  "overall.mrr": 0.95,
+  "overall.recall": 1,
+  "overall.top1": 0.9,
+  "overall.top5": 1
+}

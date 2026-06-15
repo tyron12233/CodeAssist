@@ -1,0 +1,12 @@
+{
+  "alloc.analysis.bytes": 3351782,
+  "alloc.member-access.bytes": 3659936,
+  "alloc.name-ref.bytes": 9299754,
+  "alloc.package-ref.bytes": 3041201,
+  "alloc.type-ref.bytes": 3548425,
+  "latency.analysis.ns": 3485983.4,
+  "latency.member-access.ns": 4316916.666666667,
+  "latency.name-ref.ns": 8030562.5,
+  "latency.package-ref.ns": 2442347.1666666665,
+  "latency.type-ref.ns": 2798666.6666666665
+}
