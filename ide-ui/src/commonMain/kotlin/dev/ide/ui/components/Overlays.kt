@@ -6,14 +6,19 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -24,7 +29,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -32,6 +39,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
+import kotlinx.coroutines.launch
 
 /**
  * An iOS-style bottom sheet — the `Sheet` primitive from the design (primitives.jsx). The scrim
@@ -42,7 +50,11 @@ import dev.ide.ui.theme.Motion
  * On phone, the file navigator and build console dock here (the README's "compact" reflow:
  * navigator/console are **sheets**, nav at the bottom).
  *
- * @param heightFraction sheet height as a fraction of the screen (~0.7 navigator, ~0.6 console).
+ * The sheet opens at [heightFraction] but is **draggable**: dragging the handle up expands it (up to
+ * full screen), dragging down collapses it back to the resting height or — past it — dismisses. On
+ * release it settles to the nearest of resting / full, snapping past the midpoint.
+ *
+ * @param heightFraction resting sheet height as a fraction of the screen (~0.7 navigator, ~0.6 console).
  * @param content laid out in a [ColumnScope] below the drag handle — use `Modifier.weight(1f)` to
  *   fill the remaining sheet height.
  */
@@ -62,24 +74,58 @@ fun BottomSheet(
         ) {
             Scrim(onDismiss)
         }
-        AnimatedVisibility(
-            visible = visible,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            // transform-only entrance: the body slides up from fully below its resting position.
-            enter = slideInVertically(tween(Motion.SLOW, easing = Motion.quiet)) { it },
-            exit = slideOutVertically(tween(Motion.SLOW, easing = Motion.quiet)) { it },
-        ) {
-            val shape = RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)
-            Column(
-                modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(heightFraction)
-                    .shadow(24.dp, shape, clip = false)
-                    .background(Ca.colors.glassThick, shape)
-                    .border(1.dp, Ca.colors.glassEdgeTop, shape),
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val heightPx = constraints.maxHeight.toFloat()
+            val scope = rememberCoroutineScope()
+            // The live sheet height, as a fraction of the screen. Driven by the drag gesture and
+            // animated on settle; reset to the resting height each time the sheet reopens.
+            val fraction = remember { Animatable(heightFraction) }
+            LaunchedEffect(visible) { if (visible) fraction.snapTo(heightFraction) }
+
+            val dragState = rememberDraggableState { delta ->
+                // delta > 0 is a downward drag → shrink the sheet; up → grow it. Floor below the
+                // resting height so an over-drag down still reads as "dismiss" on release.
+                val next = (fraction.value - delta / heightPx).coerceIn(0.2f, 1f)
+                scope.launch { fraction.snapTo(next) }
+            }
+            val settle: suspend (Float) -> Unit = { velocity ->
+                val midpoint = (heightFraction + 1f) / 2f
+                when {
+                    // Dragged (or flung) well below the resting height → close the sheet.
+                    fraction.value < heightFraction * 0.7f || velocity > heightPx ->
+                        onDismiss()
+                    fraction.value >= midpoint || velocity < -heightPx ->
+                        fraction.animateTo(1f, tween(Motion.BASE, easing = Motion.quiet))
+                    else ->
+                        fraction.animateTo(heightFraction, tween(Motion.BASE, easing = Motion.quiet))
+                }
+            }
+
+            AnimatedVisibility(
+                visible = visible,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                // transform-only entrance: the body slides up from fully below its resting position.
+                enter = slideInVertically(tween(Motion.SLOW, easing = Motion.quiet)) { it },
+                exit = slideOutVertically(tween(Motion.SLOW, easing = Motion.quiet)) { it },
             ) {
-                DragHandle()
-                content()
+                val shape = RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)
+                Column(
+                    modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(fraction.value)
+                        .shadow(24.dp, shape, clip = false)
+                        .background(Ca.colors.glassThick, shape)
+                        .border(1.dp, Ca.colors.glassEdgeTop, shape),
+                ) {
+                    DragHandle(
+                        Modifier.draggable(
+                            state = dragState,
+                            orientation = Orientation.Vertical,
+                            onDragStopped = { velocity -> settle(velocity) },
+                        ),
+                    )
+                    content()
+                }
             }
         }
     }
@@ -163,10 +209,13 @@ private fun BoxScope.Scrim(onDismiss: () -> Unit) {
     )
 }
 
-/** The 38×5 grab handle centered at the top of a sheet. */
+/** The 38×5 grab handle centered at the top of a sheet; [modifier] carries the drag gesture. */
 @Composable
-private fun DragHandle() {
-    Box(Modifier.fillMaxWidth().padding(top = 9.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+private fun DragHandle(modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth().padding(top = 9.dp, bottom = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Box(
             Modifier
                 .width(38.dp)
