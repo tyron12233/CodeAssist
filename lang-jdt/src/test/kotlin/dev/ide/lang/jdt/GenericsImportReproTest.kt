@@ -60,7 +60,13 @@ class GenericsImportReproTest {
         val map = result("package app; class T { void m() { java.util.List.of(1).stream().|CARET| } }")
             .items.firstOrNull { it.label.startsWith("map(") }
         assertNotNull(map, "expected a map() candidate")
-        assertEquals("map(Function<Integer,R>)", map.label, "parameter should show substituted T=Integer with simplified wildcards: ${map.label}")
+        // Depending on whether the JDK image carries method parameter names, the label may end with a
+        // parameter name ("map(Function<Integer,R> mapper)") or without one ("map(Function<Integer,R>)").
+        // The assertion is about the substituted generics (T -> Integer, simplified wildcards), so accept either.
+        assertTrue(
+            map.label.startsWith("map(Function<Integer,R>"),
+            "parameter should show substituted T=Integer with simplified wildcards: ${map.label}",
+        )
         assertEquals("Stream<R>", map.detail, "return type should carry the method's own type variable: ${map.detail}")
     }
 
