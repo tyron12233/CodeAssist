@@ -38,6 +38,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Disable Kotlin incremental compilation in CI (avoids phantom unresolved-reference errors from a
+      # restored incremental-compilation cache; full compilation is robust for one-shot CI builds).
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
       # Produce JUnit XML results for the test counts. Benchmark numbers are read from the committed
       # regression baselines, so they don't depend on this runner's performance.
       - name: Run framework tests

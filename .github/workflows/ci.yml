@@ -36,6 +36,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Disable Kotlin incremental compilation for CI. One-shot CI builds gain nothing from it, and a
+      # restored incremental-compilation cache can produce phantom "unresolved reference" errors after the
+      # classpath changes (a clean build of the same commit compiles fine). Full compilation is robust.
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
       # 1) The fast correctness gate: every framework unit test. Regression suites are @Tag("regression")
       #    and excluded from `test`, so this stays quick.
       - name: Unit tests
