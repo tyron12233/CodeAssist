@@ -33,6 +33,9 @@ class KotlinSymbol(
     val signature: String? = null,
     /** Own declared type parameters (a generic function's `<T, R>`), for call-site type inference. */
     val typeParameters: List<String> = emptyList(),
+    /** Each own type parameter's erased upper bound (positional with [typeParameters]); used to erase a
+     *  parameter that argument inference couldn't bind (a raw `findViewById` → its `View` bound). */
+    val typeParameterBounds: List<TypeRef> = emptyList(),
     /** Value-parameter types (vararg → element type), for inferring type arguments from call arguments. */
     val paramTypes: List<TypeRef?> = emptyList(),
     /** Type arguments of the extension receiver type (e.g. `[T]` for `Iterable<T>.first`), for binding from

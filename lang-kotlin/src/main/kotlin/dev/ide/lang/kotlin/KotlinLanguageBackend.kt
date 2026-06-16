@@ -28,6 +28,7 @@ class KotlinLanguageBackend : LanguageBackend {
         BackendCapability.ERROR_RECOVERY,
         BackendCapability.BINDINGS,
         BackendCapability.COMPLETION,
+        BackendCapability.INLAY_HINTS,
         BackendCapability.COMPILE,
     )
 

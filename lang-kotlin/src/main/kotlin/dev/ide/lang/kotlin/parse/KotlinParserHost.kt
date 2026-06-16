@@ -1,10 +1,12 @@
 package dev.ide.lang.kotlin.parse
 
+import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.diagnostics.impl.BaseDiagnosticsCollector
 import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.psi.KtFile
 // kotlin-compiler-embeddable relocates the bundled IntelliJ platform under org.jetbrains.kotlin.com.intellij.*
@@ -45,6 +47,12 @@ object KotlinParserHost {
             put(CommonConfigurationKeys.MODULE_NAME, "lang-kotlin-parser")
             // Compiler diagnostics are discarded entirely (diagnostics come from PsiErrorElements), so silence it.
             put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
+            // ProjectEnvironment.<init> reports through the CLI diagnostics collector — e.g. the "JDK doesn't
+            // support mapped buffer unmapping" warning, which fires on ART but never on a desktop JDK (hence
+            // this only broke on device). Its getter throws "diagnostic collector is not initialized" when the
+            // config never set one, so install a no-op collector. Without it, standing up the parse host throws
+            // and every Kotlin completion silently returns nothing.
+            put(CLIConfigurationKeys.DIAGNOSTICS_COLLECTOR, BaseDiagnosticsCollector.DoNothing)
         }
         // JVM_CONFIG_FILES registers the JVM parser definitions (so the KtFile actually parses). No
         // classpath is configured: parsing only, never resolution.

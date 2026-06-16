@@ -126,6 +126,10 @@ class KotlinJvmCompiler {
                 return
             }
             if (severity.isError) errors = true
+            // Drop LOGGING/INFO chatter from the build console: the scripting-plugin ClassNotFoundException
+            // (we ship no scripting jars), "Using Kotlin home directory", "Configuring the compilation
+            // environment", etc. They are diagnostics, not build output; warnings and errors are kept.
+            if (severity == CompilerMessageSeverity.LOGGING || severity == CompilerMessageSeverity.INFO) return
             val where = location?.let { " (${it.path}:${it.line}:${it.column})" } ?: ""
             messages += "[$severity] $message$where"
         }

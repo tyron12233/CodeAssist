@@ -140,6 +140,7 @@ import dev.ide.android.support.index.ResourceDeclValue
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
+import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticClassContext
 import dev.ide.platform.ProgressReporter
 import dev.ide.ui.backend.BuildState
@@ -270,7 +271,8 @@ class IdeServices private constructor(
         listOf(
             JavaClassNamesIndex, JavaPackagesIndex, JavaPackageTypesIndex, JavaSourceSymbolsIndex, JavaMembersIndex,
             JavaMembersByOwnerIndex, // cross-language: a Kotlin file enumerating a Java SOURCE class's members
-            dev.ide.android.support.index.AndroidResourceIndex, // Android resource declarations
+            dev.ide.lang.kotlin.index.KotlinTypeShapeIndex, // Kotlin backend: persistent owner-keyed member shapes
+            AndroidResourceIndex, // Android resource declarations
         ).forEach { platform.extensions.register(INDEX_EP, it, plugin) }
         IndexServiceImpl(
             platform.extensions.extensions(INDEX_EP),
@@ -396,6 +398,17 @@ class IdeServices private constructor(
                 indexService.ensureUpToDate(buildIndexScope())
             }
         }
+    }
+
+    /**
+     * Re-sync the index to the current model WITHOUT the destructive full rebuild [reindex] does: [ensureUpToDate]
+     * reopens unchanged artifacts' on-disk segments (cheap) and builds only new/changed ones, while segments for
+     * removed dependencies fall out. Used for automatic model-change triggers — on device this is the difference
+     * between reopening the android.jar segment and re-scanning its ~40k classes on every dependency/facet edit.
+     */
+    private fun resyncIndex() {
+        invalidateSyntheticClasses()
+        indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
     }
 
     // ---- SDK / toolchain manager (download Android SDK packages + JDK sources) ----
@@ -967,7 +980,7 @@ class IdeServices private constructor(
         }
         store.save()
         invalidateAnalyzers()   // dependents' classpaths include this module's exported (api) libraries
-        reindex()
+        resyncIndex()
         val transitiveCount = result.resolved.size - 1
         val suffix = if (transitiveCount > 0) " (+$transitiveCount transitive)" else ""
         return UiAddResult(true, "Added $coordinate$suffix", result.resolved.size)
@@ -984,7 +997,7 @@ class IdeServices private constructor(
         }
         store.save()
         invalidateAnalyzers()
-        reindex()
+        resyncIndex()
         return true
     }
 
@@ -1043,7 +1056,7 @@ class IdeServices private constructor(
         store.save()
         invalidateAnalyzers()       // language level + facets affect the compile classpath/source sets
         invalidateSyntheticClasses() // an Android facet change can move the R package
-        reindex()
+        resyncIndex()
         return UiConfigResult(true, "Saved ${module.name}")
     }
 
@@ -1181,8 +1194,30 @@ class IdeServices private constructor(
         return out.also { syntheticCache = it }
     }
 
+    // Structured synthetic classes a KOTLIN file in a module should see (the Kotlin backend resolves them
+    // directly, not via rendered Java source). Cached per module, swapped out (fresh list) on invalidation so
+    // the symbol service — which caches by list identity — picks up resource changes.
+    private val kotlinSyntheticCache = ConcurrentHashMap<String, List<SyntheticClass>>()
+
+    /**
+     * The synthetic ("light") classes a Kotlin file in [module] should resolve — Android `R`/`BuildConfig`,
+     * ViewBinding, etc. — but NOT the Kotlin `<File>Kt` facades: those are Java-visible shapes of this
+     * module's own Kotlin source, and a Kotlin file references its top-level declarations directly (seeing the
+     * facade would be wrong and duplicate). Excludes the [KotlinSyntheticClassProvider] for exactly that reason.
+     */
+    private fun kotlinSyntheticClasses(module: Module): List<SyntheticClass> =
+        kotlinSyntheticCache.getOrPut(module.id.value) {
+            val ctx = object : SyntheticClassContext {
+                override val module = module
+                override val workspace = store.workspace
+            }
+            platform.extensions.extensions(SYNTHETIC_CLASS_EP)
+                .filterNot { it is dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider }
+                .flatMap { runCatching { it.classesFor(ctx) }.getOrDefault(emptyList()) }
+        }
+
     /** Drop the cached synthetic classes so the next analyze/complete regenerates them (e.g. after a res edit). */
-    fun invalidateSyntheticClasses() { syntheticCache = null }
+    fun invalidateSyntheticClasses() { syntheticCache = null; kotlinSyntheticCache.clear() }
 
     /** The open buffers as an FQCN -> source overlay for the name environment, plus synthetic light classes. */
     private fun overlay(): Map<String, CharArray> {
@@ -1274,6 +1309,8 @@ class IdeServices private constructor(
                         // the classpath extension scan persists alongside the index caches.
                         it.indexService = indexService
                         it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
+                        // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
+                        it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
                     }
                     is XmlSourceAnalyzer -> {
                         // Inject the Android knowledge: layout metadata (SDK attrs.xml asset when present, else
@@ -1289,9 +1326,11 @@ class IdeServices private constructor(
                         )
                     }
                 }
-                // Tie the analyzer to the platform lifecycle: close() releases its per-module environment
-                // cache (the open library-jar handles), torn down LIFO when the workspace closes.
-                (it as? Disposable)?.let(platform::register)
+                // NB: disposal is driven by invalidateAnalyzers()/close() below, NOT platform.register — an
+                // evicted analyzer must be disposed promptly so its cached library-jar handles (the Kotlin
+                // ClasspathReader's ZipFiles, the JDT env cache) are released. Registering them with the
+                // platform only disposed at workspace close, so every eviction leaked open jars until GC —
+                // surfacing on ART as a flood of "A ZipFile failed to close" CloseGuard warnings.
             }
         }
 
@@ -1299,9 +1338,14 @@ class IdeServices private constructor(
      * Drop every cached per-module analyzer. A dependency change on one module affects the compile
      * classpath of every module that depends on it (an exported (`api`) library flows downstream), so a
      * per-module eviction would leave dependents analyzing against a stale classpath. Analyzers rebuild
-     * lazily on the next analyze/complete.
+     * lazily on the next analyze/complete. Each evicted analyzer is disposed so its open library-jar
+     * handles are closed immediately (dispose is idempotent — a final close() pass is harmless).
      */
-    private fun invalidateAnalyzers() = analyzers.clear()
+    private fun invalidateAnalyzers() {
+        val evicted = analyzers.values.toList()
+        analyzers.clear()
+        evicted.forEach { (it as? Disposable)?.let { d -> runCatching { d.dispose() } } }
+    }
 
     /**
      * The module that owns [file] for editing purposes — a source/generated root (Java), an Android `res/`
@@ -1326,7 +1370,15 @@ class IdeServices private constructor(
         val service = analyzer.completion
             ?: return CompletionResult(emptyList(), false, TextRange(offset, offset))
         val snapshot = EditorDocument(store.vfs.fileFor(file), docVersion.incrementAndGet(), text)
-        return runSync { service.complete(CompletionRequest(snapshot, offset, CompletionTrigger.Explicit)) }
+        // A backend that throws mid-completion (e.g. the Kotlin parse host on ART) would otherwise propagate
+        // out to the UI and surface as a silent empty popup with no trace. Log the cause (logcat/stderr) and
+        // degrade to no suggestions, so one failing file can't disable completion and the failure is diagnosable.
+        return runCatching {
+            runSync { service.complete(CompletionRequest(snapshot, offset, CompletionTrigger.Explicit)) }
+        }.getOrElse { e ->
+            System.err.println("[IdeServices] completion failed for $file (${languageFor(file).id}): ${e.stackTraceToString()}")
+            CompletionResult(emptyList(), false, TextRange(offset, offset))
+        }
     }
 
     /** Inlay hints for [text] (the live buffer) in `[startOffset, endOffset)`, bound to [file]'s module +
@@ -1945,6 +1997,8 @@ class IdeServices private constructor(
     override fun close() {
         analysisEngine.dispose()
         indexScope.cancel()
+        // Dispose the live analyzers so their cached library-jar handles close (no longer platform-registered).
+        analyzers.values.toList().also { analyzers.clear() }.forEach { (it as? Disposable)?.let { d -> runCatching { d.dispose() } } }
         runCatching { (indexService as? AutoCloseable)?.close() } // release the on-disk index segment file channels
         platform.dispose()
     }

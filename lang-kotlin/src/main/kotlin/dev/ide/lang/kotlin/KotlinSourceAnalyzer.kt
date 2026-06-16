@@ -50,8 +50,10 @@ import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
+import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtProperty
@@ -85,13 +87,21 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var extensionCacheDir: Path? = null
 
+    /** Injected by the host: synthetic ("light") classes this module should resolve (Android `R`/`BuildConfig`,
+     *  ViewBinding, …). The host excludes the Kotlin `<File>Kt` facades (a Kotlin file uses its own top-level
+     *  declarations directly). Queried lazily so a resource change is picked up without rebuilding the analyzer. */
+    @Volatile
+    var syntheticClassProvider: () -> List<dev.ide.lang.synthetic.SyntheticClass> = { emptyList() }
+
     private val sourceRoots: List<VirtualFile> = ctx.sourceRoots
     private val classpathJars: List<Path> =
         (ctx.classpath.entries + ctx.bootClasspath.entries)
             .mapNotNull { runCatching { Path.of(it.root.path) }.getOrNull() }
             .filter { Files.exists(it) }
 
-    private val serviceLazy = lazy { KotlinSymbolService(sourceRoots, classpathJars, indexService, extensionCacheDir) }
+    private val serviceLazy = lazy {
+        KotlinSymbolService(sourceRoots, classpathJars, indexService, extensionCacheDir) { syntheticClassProvider() }
+    }
     private val service: KotlinSymbolService get() = serviceLazy.value
 
     private val backing = KotlinIncrementalParser()
@@ -106,6 +116,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }
 
     override val completion: CompletionService by lazy { KotlinCompletionService(service) }
+
+    override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
+        KotlinInlayHintService(
+            parsedFor = { lastByFile[it.path] },
+            resolverFor = { KotlinResolver(it.ktFile, it, service) },
+        )
+    }
 
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))
@@ -156,7 +173,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                 }
                 is KtReturnExpression -> returnTypeMismatch(psi, resolver)?.let { out += it }
                 is KtBinaryExpression -> valReassignment(psi)?.let { out += it }
-                is KtCallExpression -> argumentCountMismatch(psi)?.let { out += it }
+                is KtCallExpression -> {
+                    argumentCountMismatch(psi)?.let { out += it }
+                    (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it }
+                }
                 is KtDotQualifiedExpression -> unsafeNullableAccess(psi, resolver)?.let { out += it }
                 // Conflicting declarations: same-name (and, for functions, same-signature) declarations in
                 // one scope — a parameter list, a block (locals), a class body, or the file (top level).
@@ -486,6 +506,121 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }
 
     /**
+     * A constructor call (`TextView(this)`, `Foo(1, 2)`) whose arguments don't fit any of the type's
+     * constructors. Conservative — designed to never false-positive over the parse-only model:
+     *  - only a capitalized callee that resolves to a KNOWN type whose constructors are enumerable;
+     *  - **count**: flagged only when NO constructor has the argument count AND none could be variadic
+     *    (an array/vararg param makes the arity open); skipped entirely for binary Kotlin classes (their
+     *    metadata doesn't surface default arguments, so a same-arity check would be unsound);
+     *  - **type**: only PRIMITIVE/String-family mismatches against the unique arity-matching constructor —
+     *    reference-type subtyping is left alone (the supertype chain may be incomplete here, so an
+     *    `isAssignableFrom` could wrongly report a mismatch). Named/spread arguments are skipped.
+     */
+    private fun constructorCallMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+        if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return null
+        // The type name: a bare `Foo(…)`, or a qualified `pkg.Foo(…)`/`Outer.Inner(…)` where the call is the
+        // selector (the receiver text + the callee name). `constructorTypeFqn` rejects it unless it resolves to
+        // a known type, so a real member call (`list.add(x)`, `obj.method()`) is left to other checks.
+        val parent = call.parent
+        val name = if (parent is KtQualifiedExpression && parent.selectorExpression === call) {
+            parent.receiverExpression.text + "." + callee.getReferencedName()
+        } else {
+            callee.getReferencedName()
+        }
+        val fqn = resolver.constructorTypeFqn(name, callee.textRange.startOffset) ?: return null
+        if (service.hasKotlinMetadata(fqn)) return null // binary Kotlin: default args not visible → don't guess
+        val ctors = service.constructorsOf(fqn)
+        if (ctors.isEmpty()) return null
+        val n = call.valueArguments.size
+        // A vararg/array parameter (the display keeps `[]`) makes the arity open — don't flag the count.
+        val variadic = ctors.any { it.signature?.contains("[]") == true }
+        if (!variadic && ctors.none { it.paramTypes.size == n }) {
+            val arities = ctors.map { it.paramTypes.size }.toSortedSet().joinToString("/")
+            val r = call.valueArgumentList?.textRange ?: callee.textRange
+            return Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "No constructor of '$name' takes $n argument(s) (expected $arities)", "kt.constructorArgs",
+            )
+        }
+        // Per-argument type check against the unique arity-matching constructor.
+        val match = ctors.singleOrNull { it.paramTypes.size == n } ?: return null
+        for ((i, arg) in call.valueArguments.withIndex()) {
+            val expr = arg.getArgumentExpression() ?: continue
+            val pt = match.paramTypes.getOrNull(i) as? KotlinType ?: continue
+            val at = resolver.inferType(expr) ?: continue
+            if (isPrimitiveFamilyMismatch(pt, at)) {
+                val r = expr.textRange
+                return mismatchDiagnostic(r.startOffset, r.endOffset, at, pt)
+            }
+        }
+        return null
+    }
+
+    /**
+     * The same check as [constructorCallMismatch] but for a class declared in THIS file, where the PSI gives
+     * exact arity (default values + varargs) — the binary path can't (the typeShape index/decode has no source
+     * class, and binary metadata hides defaults). A bare `Foo(args)` whose callee is a same-file top-level
+     * `KtClass`: its argument count must fit some constructor's required..max, and primitive/String-family arg
+     * types must match the unique arity-fitting constructor. Backs off on overloads it can't reason about: a
+     * companion object (a possible `invoke` operator), any variadic constructor, and non-instantiable kinds.
+     */
+    private fun sameFileConstructorMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+        if (call.parent is KtQualifiedExpression && (call.parent as KtQualifiedExpression).selectorExpression === call) return null
+        if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return null
+        val name = callee.getReferencedName()
+        if (name.firstOrNull()?.isUpperCase() != true) return null
+        val cls = call.containingKtFile.declarations.filterIsInstance<KtClass>().firstOrNull { it.name == name } ?: return null
+        if (cls.isInterface() || cls.isAnnotation() || cls.isEnum() || cls.companionObjects.isNotEmpty()) return null
+        val ctors = constructorParameterLists(cls)
+        if (ctors.any { params -> params.any { it.isVarArg } }) return null // open arity → don't guess
+        val n = call.valueArguments.size
+        if (ctors.none { n in it.count { p -> !p.hasDefaultValue() }..it.size }) {
+            val arities = ctors.flatMap { it.count { p -> !p.hasDefaultValue() }..it.size }.toSortedSet().joinToString("/")
+            val r = call.valueArgumentList?.textRange ?: callee.textRange
+            return Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "No constructor of '$name' takes $n argument(s) (expected $arities)", "kt.constructorArgs",
+            )
+        }
+        // Type-check against the unique constructor whose arity fits.
+        val match = ctors.singleOrNull { n in it.count { p -> !p.hasDefaultValue() }..it.size } ?: return null
+        for ((i, arg) in call.valueArguments.withIndex()) {
+            val expr = arg.getArgumentExpression() ?: continue
+            val pt = service.typeFromText(match.getOrNull(i)?.typeReference?.text, resolver.fileContext) ?: continue
+            val at = resolver.inferType(expr) ?: continue
+            if (isPrimitiveFamilyMismatch(pt, at)) {
+                val r = expr.textRange
+                return mismatchDiagnostic(r.startOffset, r.endOffset, at, pt)
+            }
+        }
+        return null
+    }
+
+    /** A same-file class's constructor parameter lists: the primary (or an implicit no-arg when there are no
+     *  explicit constructors at all) plus every secondary constructor. */
+    private fun constructorParameterLists(cls: KtClass): List<List<KtParameter>> {
+        val lists = ArrayList<List<KtParameter>>()
+        cls.primaryConstructor?.let { lists.add(it.valueParameters) }
+        cls.secondaryConstructors.forEach { c: KtSecondaryConstructor -> lists.add(c.valueParameters) }
+        if (lists.isEmpty()) lists.add(emptyList()) // no explicit constructor → implicit no-arg
+        return lists
+    }
+
+    /** A confident, subtyping-free mismatch between two primitive/String-family types (a `String` where an
+     *  `Int` is expected, etc.). Numeric/numeric is excused (a literal adapts), and `String`→`CharSequence`
+     *  is assignable. Reference types are never compared here (their hierarchy may be incompletely modeled). */
+    private fun isPrimitiveFamilyMismatch(param: KotlinType, arg: KotlinType): Boolean {
+        val p = param.qualifiedName
+        val a = arg.qualifiedName
+        if (p !in PRIMITIVE_FAMILY || a !in PRIMITIVE_FAMILY || p == a) return false
+        if (p in NUMERIC && a in NUMERIC) return false
+        if (p == "kotlin.CharSequence" && a == "kotlin.String") return false
+        return true
+    }
+
+    /**
      * `recv.member` on a nullable receiver without `?.`/`!!` (`val s: String? = …; s.length`). Conservative:
      * smart-casts are not modeled, so if the receiver is a simple name with any null-guard in the enclosing
      * function (`s != null`, `s ?:`, `s?.`, `s!!`), this backs off entirely to avoid the common false positive.
@@ -503,12 +638,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         )
     }
 
-    /** Heuristic: does the enclosing function reference [name] alongside a null-related token, implying a
-     *  unmodeled guard/smart-cast? Keeps [unsafeNullableAccess] from firing on `if (s != null) s.foo()`. */
+    /** Heuristic: does the enclosing function reference [name] alongside a null-related token that could
+     *  smart-cast it to non-null, implying an unmodeled guard? Keeps [unsafeNullableAccess] from firing on
+     *  `if (s != null) s.foo()` / `s!!.foo(); s.bar()` / `s ?: return; s.foo()`. A SAFE call (`s?.…`) is NOT
+     *  a smart-cast — `val a = s?.x; s.y` leaves `s` nullable at `s.y` — so `?.` does not count as a guard. */
     private fun mayBeNullChecked(from: PsiElement, name: String): Boolean {
         val fn = from.getStrictParentOfType<KtNamedFunction>() ?: from.containingFile
         val text = fn.text ?: return true
-        return Regex("\\b${Regex.escape(name)}\\b\\s*(!!|\\?\\.|\\?:|[!=]=\\s*null)").containsMatchIn(text) ||
+        return Regex("\\b${Regex.escape(name)}\\b\\s*(!!|\\?:|[!=]=\\s*null)").containsMatchIn(text) ||
             Regex("null\\s*[!=]=\\s*\\b${Regex.escape(name)}\\b").containsMatchIn(text)
     }
 
@@ -523,6 +660,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val NUMERIC = setOf(
         "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Double", "kotlin.Float",
     )
+
+    // Types with no subtype relationships (so an exact-name comparison is sound), for constructor arg checking.
+    private val PRIMITIVE_FAMILY = NUMERIC + setOf("kotlin.Boolean", "kotlin.Char", "kotlin.String", "kotlin.CharSequence")
 
     private val ASSIGN_OPS = setOf(
         KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ,
@@ -605,6 +745,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         // `x.foo` / `x.foo()` — the receiver `x` could be a package or a type (static access); back off.
         if (parent is KtQualifiedExpression && parent.receiverExpression === expr) return null
         if (parent is KtValueArgumentName) return null // a named-argument label, not a reference
+        // `this`/`super` parse as a KtNameReferenceExpression under a KtInstanceExpressionWithLabel — they are
+        // keywords (a receiver, typed by the resolver), never an unresolved name.
+        if (parent is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel) return null
         if (inImportOrPackage(expr) || inTypeReference(expr)) return null
         val name = expr.getReferencedName()
         if (name.isEmpty() || name.first().isUpperCase()) return null

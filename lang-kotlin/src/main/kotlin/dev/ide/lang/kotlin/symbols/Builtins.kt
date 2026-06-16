@@ -79,7 +79,43 @@ object Builtins {
         ).forEach { put(it, "kotlin.collections.$it") }
     }
 
+    /**
+     * The REVERSE map (JVM type → its Kotlin classifier), so a value whose type came from Java bytecode
+     * (`CharSequence.toString()` → `java.lang.String`, `List` API → `java.util.List`) is enumerated AS the
+     * Kotlin type — getting its real Kotlin members AND its extensions (`String.uppercase`, `Iterable.map`),
+     * which are keyed on the Kotlin FQN. Mutable variants are chosen for the collections (a JVM collection is
+     * mutable), since they expose the superset of members + the same extensions. This is the
+     * `JavaToKotlinClassMap` direction; `boolean`/`int`/… primitives are already mapped at the bytecode reader.
+     */
+    val JAVA_TO_KOTLIN: Map<String, String> = mapOf(
+        "java.lang.Object" to "kotlin.Any",
+        "java.lang.String" to "kotlin.String",
+        "java.lang.CharSequence" to "kotlin.CharSequence",
+        "java.lang.Comparable" to "kotlin.Comparable",
+        "java.lang.Number" to "kotlin.Number",
+        "java.lang.Throwable" to "kotlin.Throwable",
+        "java.lang.Cloneable" to "kotlin.Cloneable",
+        "java.lang.Enum" to "kotlin.Enum",
+        "java.lang.Integer" to "kotlin.Int",
+        "java.lang.Long" to "kotlin.Long",
+        "java.lang.Short" to "kotlin.Short",
+        "java.lang.Byte" to "kotlin.Byte",
+        "java.lang.Double" to "kotlin.Double",
+        "java.lang.Float" to "kotlin.Float",
+        "java.lang.Boolean" to "kotlin.Boolean",
+        "java.lang.Character" to "kotlin.Char",
+        "java.lang.Iterable" to "kotlin.collections.MutableIterable",
+        "java.util.Collection" to "kotlin.collections.MutableCollection",
+        "java.util.List" to "kotlin.collections.MutableList",
+        "java.util.Set" to "kotlin.collections.MutableSet",
+        "java.util.Map" to "kotlin.collections.MutableMap",
+        "java.util.Map\$Entry" to "kotlin.collections.MutableMap.MutableEntry",
+    )
+
     fun javaTypeFor(kotlinFqn: String): String? = KOTLIN_TO_JAVA[kotlinFqn]
+
+    /** The Kotlin classifier a JVM type maps to (`java.lang.String` → `kotlin.String`), or null if unmapped. */
+    fun kotlinTypeFor(javaFqn: String): String? = JAVA_TO_KOTLIN[javaFqn]
 
     fun builtinSupertypes(fqn: String): List<String> = SUPERTYPES[fqn] ?: emptyList()
 

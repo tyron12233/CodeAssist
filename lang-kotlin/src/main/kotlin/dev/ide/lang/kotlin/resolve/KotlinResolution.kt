@@ -30,6 +30,8 @@ import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtSuperExpression
+import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.KtWhenExpression
@@ -64,7 +66,26 @@ class KotlinResolver(
         is KtNameReferenceExpression -> typeOfName(expr.getReferencedName(), expr.textRange.startOffset)
         is KtCallExpression -> typeOfCall(expr, null)
         is KtQualifiedExpression -> typeOfQualified(expr)
+        is KtThisExpression -> thisType(expr)
+        is KtSuperExpression -> superType(expr)
         else -> null
+    }
+
+    /** `this` (optionally `this@Label`) → the matching implicit receiver in scope (innermost when unlabeled). */
+    private fun thisType(expr: KtThisExpression): KotlinType? {
+        val receivers = implicitReceiversAt(expr.textRange.startOffset)
+        val label = expr.getLabelName()
+        return if (label == null) receivers.firstOrNull()
+        else receivers.firstOrNull { it.qualifiedName.substringAfterLast('.') == label }
+    }
+
+    /** `super` (optionally `super<Base>`) → the enclosing class's supertype, so `super.member` lists inherited
+     *  members. With no explicit supertype, `kotlin.Any` (whose members `toString`/`hashCode`/… are inherited). */
+    private fun superType(expr: KtSuperExpression): KotlinType? {
+        expr.superTypeQualifier?.text?.let { service.typeFromText(it, fileContext)?.let { t -> return t } }
+        val cls = enclosingClassOrObject(expr.textRange.startOffset) ?: return null
+        val superText = cls.superTypeListEntries.firstNotNullOfOrNull { it.typeReference?.text }
+        return superText?.let { service.typeFromText(it, fileContext) } ?: service.typeByFqn("kotlin.Any")
     }
 
     private fun constType(e: KtConstantExpression): KotlinType? {
@@ -83,6 +104,8 @@ class KotlinResolver(
     }
 
     private fun typeOfQualified(q: KtQualifiedExpression): KotlinType? {
+        // A fully-qualified type used directly (`android.R`, `java.util.Locale`) — resolve the whole text.
+        if (service.isKnownType(q.text)) return service.typeByFqn(q.text)
         val receiverType = inferType(q.receiverExpression)
             ?: typeOfTypeName(q.receiverExpression) // receiver may be a class name (companion/static access)
             ?: return null
@@ -101,9 +124,19 @@ class KotlinResolver(
         }
         val sym = resolveCalleeFunction(call) ?: return null
         // Bind the function's OWN type parameters from the arguments (listOf("") -> List<String>; a lambda's
-        // result binds R in `(…) -> R`), then substitute into the return type.
-        val bindings = inferTypeArguments(sym, call)
+        // result binds R in `(…) -> R`), falling back to each parameter's erased bound when an argument can't
+        // pin it (a raw `findViewById(): T` → `View`), then substitute into the return type.
+        val bindings = methodTypeParamErasure(sym) + inferTypeArguments(sym, call)
         return (sym.type as? KotlinType)?.let { service.substitute(it, bindings) as? KotlinType }
+    }
+
+    /** Each of a function's own type parameters mapped to its erased upper bound, so any that argument
+     *  inference leaves unbound still resolves to a concrete type rather than a member-less `T`. */
+    private fun methodTypeParamErasure(sym: KotlinSymbol): Map<String, TypeRef> {
+        if (sym.typeParameters.isEmpty() || sym.typeParameterBounds.isEmpty()) return emptyMap()
+        val out = HashMap<String, TypeRef>(sym.typeParameters.size)
+        sym.typeParameters.forEachIndexed { i, name -> sym.typeParameterBounds.getOrNull(i)?.let { out[name] = it } }
+        return out
     }
 
     /** Resolve a call's callee to the best-fitting function overload (member/extension via its receiver, or
@@ -137,10 +170,10 @@ class KotlinResolver(
         return bindings
     }
 
-    /** A lambda fills a `(…) -> R` parameter; bind R from the lambda's inferred result type (let/run). */
+    /** A lambda fills a functional parameter (a Kotlin `(…) -> R` or a Java SAM); bind its result type
+     *  parameter from the lambda's inferred result (`map { … }`'s `R`, `let`'s `R`). */
     private fun bindLambdaReturn(pt: KotlinType, lambda: KtLambdaExpression, bindings: MutableMap<String, TypeRef>) {
-        if (!TypeRendering.isFunctionType(pt.qualifiedName)) return
-        val r = pt.typeArguments.lastOrNull() as? KotlinType ?: return
+        val r = service.functionalShape(pt)?.returnType as? KotlinType ?: return
         if (r.isTypeParameter) inferLambdaResult(lambda)?.let { bindings.putIfAbsent(r.qualifiedName, it) }
     }
 
@@ -157,6 +190,23 @@ class KotlinResolver(
         // Bind the function's type params from the NON-lambda value args (with(x){…} binds T from x), so the
         // block's receiver/params are concrete. (Skip lambdas to avoid recursing back into this lambda.)
         return service.substitute(raw, bindingsFromValueArgs(sym, call)) as? KotlinType
+    }
+
+    /** The value-parameter types a lambda receives (in order), from the functional parameter it fills — for
+     *  inlay hints on `{ x -> … }` / the implicit `it`. Handles both a Kotlin function-type parameter and a
+     *  Java SAM (`stream().map { it }`). Empty when the expected type is unknown. */
+    fun lambdaParameterTypes(lambda: KtLambdaExpression): List<TypeRef?> =
+        expectedLambdaShape(lambda)?.parameterTypes ?: emptyList()
+
+    /** The functional shape (value-param types + result) a lambda is expected to satisfy — its parameter slot
+     *  in the enclosing call, resolved to a Kotlin function type or a Java SAM, with the call's non-lambda
+     *  arguments already used to bind the function's type parameters. */
+    private fun expectedLambdaShape(lambda: KtLambdaExpression): KotlinSymbolService.FunctionalShape? {
+        val (call, paramIndex) = enclosingCallAndParamIndex(lambda) ?: return null
+        val sym = resolveCalleeFunction(call) ?: return null
+        val raw = sym.paramTypes.getOrNull(paramIndex) as? KotlinType ?: return null
+        val bound = service.substitute(raw, bindingsFromValueArgs(sym, call)) as? KotlinType ?: return null
+        return service.functionalShape(bound)
     }
 
     private fun bindingsFromValueArgs(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
@@ -208,6 +258,13 @@ class KotlinResolver(
 
     private fun unify(param: KotlinType, arg: KotlinType, bindings: MutableMap<String, TypeRef>) {
         if (param.isTypeParameter) { bindings.putIfAbsent(param.qualifiedName, arg); return }
+        // A vararg parameter (`of(E...)`) is an `Array<E>`; a single scalar argument unifies with the element.
+        if (param.qualifiedName == "kotlin.Array" && param.typeArguments.size == 1 &&
+            arg.qualifiedName != "kotlin.Array"
+        ) {
+            (param.typeArguments.first() as? KotlinType)?.let { unify(it, arg, bindings) }
+            return
+        }
         param.typeArguments.zip(arg.typeArguments).forEach { (p, a) ->
             if (p is KotlinType && a is KotlinType) unify(p, a, bindings)
         }
@@ -261,18 +318,16 @@ class KotlinResolver(
                 is KtCatchClause -> node.catchParameter?.let { out += param(it) }
                 is KtWhenExpression -> node.subjectVariable?.let { out += localVar(it) }
                 is KtLambdaExpression -> {
-                    // Type the lambda's `it` / named params from the function-type parameter it fills, so
-                    // completion inside `"".let { it.<caret> }` knows `it` is String. For a RECEIVER lambda
-                    // (`T.() -> R`), the first type arg is the receiver (an implicit `this`, handled by
-                    // implicitReceiversAt) — not a value param — so drop it.
-                    val fnType = expectedFunctionTypeFor(node)
-                    val all = fnType?.typeArguments?.dropLast(1).orEmpty()
-                    val inputs = if (fnType?.isExtensionFunctionType == true) all.drop(1) else all
+                    // Type the lambda's `it` / named params from the functional parameter it fills, so
+                    // completion inside `"".let { it.<caret> }` knows `it` is String and `stream().map { it }`
+                    // knows `it` is the element type. A RECEIVER lambda (`T.() -> R`) has its receiver dropped
+                    // (an implicit `this`, handled by implicitReceiversAt), so it contributes no value param.
+                    val inputs = expectedLambdaShape(node)?.parameterTypes.orEmpty()
                     val params = node.valueParameters
                     if (params.isEmpty()) {
-                        // A receiver lambda with no value params has no `it`; otherwise `it` is the sole input.
-                        if (fnType?.isExtensionFunctionType != true || inputs.isNotEmpty()) {
-                            out += KotlinSymbol("it", SymbolKind.PARAMETER, type = inputs.firstOrNull(), origin = SOURCE)
+                        // The implicit `it` exists only for a single-value-parameter functional type.
+                        if (inputs.size == 1) {
+                            out += KotlinSymbol("it", SymbolKind.PARAMETER, type = inputs.first(), origin = SOURCE)
                         }
                     } else {
                         params.forEachIndexed { i, p ->
@@ -296,21 +351,42 @@ class KotlinResolver(
      * rather than a value/instance (`listOf("").`, `someVar.`, a call, a literal). Drives instance-vs-static
      * member filtering at the `.`: a value is shadowing if a local/param of that name is in scope.
      */
-    fun isTypeReceiver(expr: KtExpression): Boolean {
-        val name: String
-        val fqnGuess: String?
-        when (expr) {
-            is KtNameReferenceExpression -> { name = expr.getReferencedName(); fqnGuess = null }
-            is KtQualifiedExpression -> {
-                name = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
-                fqnGuess = expr.text
+    fun isTypeReceiver(expr: KtExpression): Boolean = typeDenotationFqn(expr) != null
+
+    /**
+     * If [expr] denotes a TYPE / static reference (`String`, `java.util.Locale`, the Android `R.layout`, an
+     * `Outer.Inner`) rather than a value/instance, the resolved FQN; else null. A simple capitalized name
+     * resolves through imports/classpath (unless a local of that name shadows it); a qualified expression
+     * resolves either as a fully-qualified type by its own text or as a nested type through a resolved outer
+     * — so `R.layout.<caret>` (where `layout` is lower-case) is still recognized as static navigation.
+     */
+    fun typeDenotationFqn(expr: KtExpression): String? = when (expr) {
+        is KtParenthesizedExpression -> expr.expression?.let { typeDenotationFqn(it) }
+        is KtNameReferenceExpression -> {
+            val name = expr.getReferencedName()
+            when {
+                name.firstOrNull()?.isUpperCase() != true -> null // type names are capitalized
+                localsAt(expr.textRange.startOffset).any { it.name == name } -> null // a value shadows the type
+                else -> service.resolveTypeName(name, fileContext)?.takeIf { service.isKnownType(it) }
             }
-            else -> return false // calls, literals, `this`, parenthesized → instances
         }
-        if (name.firstOrNull()?.isUpperCase() != true) return false // type names are capitalized
-        if (localsAt(expr.textRange.startOffset).any { it.name == name }) return false // a value shadows the type
-        val fqn = fqnGuess ?: service.resolveTypeName(name, fileContext) ?: return false
-        return service.isKnownType(fqn)
+        is KtQualifiedExpression -> {
+            val sel = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
+            when {
+                sel == null -> null
+                // (a) fully-qualified type by its own text: `java.util.Locale`
+                sel.firstOrNull()?.isUpperCase() == true && service.isKnownType(expr.text) -> expr.text
+                // (b) nested type through a resolved outer: `R.layout`, `Outer.Inner`
+                else -> typeDenotationFqn(expr.receiverExpression)?.let { "$it.$sel".takeIf { f -> service.isKnownType(f) } }
+            }
+        }
+        else -> null // calls, literals, `this`, `super` → instances
+    }
+
+    private fun enclosingClassOrObject(offset: Int): KtClassOrObject? {
+        var node: PsiElement? = elementAt(offset)
+        while (node != null) { if (node is KtClassOrObject) return node; node = node.parent }
+        return null
     }
 
     /** Whether a bare [name] resolves to anything in scope (local, implicit-receiver member, top-level,
@@ -354,6 +430,15 @@ class KotlinResolver(
             node = node.parent
         }
         return false
+    }
+
+    /** A [name] used as a constructor call (a simple `Foo` or a qualified `pkg.Foo`/`Outer.Inner`, its last
+     *  segment capitalized) → the resolved type FQN (a known type not shadowed by a local), else null. Drives
+     *  constructor-argument validation. */
+    fun constructorTypeFqn(name: String, offset: Int): String? {
+        if (name.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) return null
+        if ('.' !in name && localsAt(offset).any { it.name == name }) return null
+        return service.resolveTypeName(name, fileContext)?.takeIf { service.isKnownType(it) }
     }
 
     fun enclosingClassFqn(offset: Int): String? {

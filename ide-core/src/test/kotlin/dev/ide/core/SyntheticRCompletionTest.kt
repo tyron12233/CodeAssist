@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -48,6 +49,69 @@ class SyntheticRCompletionTest {
         val labels = s.complete(probe, text, offset).items.map { it.insertText.substringBefore('(') }
         assertTrue("string" in labels, "R.string type expected: $labels")
         assertTrue("color" in labels, "R.color (from app colors.xml) expected: $labels")
+    }
+
+    @Test
+    fun kotlinSeesSyntheticRButNotKotlinFacades() {
+        // The SAME synthetic R must resolve for a KOTLIN file (the Kotlin backend, not JDT): `R.string.`
+        // lists the app's own + dependency resources. And the Kotlin `<File>Kt` facades are NOT contributed
+        // to the Kotlin backend, so `MainActivityKt` (a facade of the demo's own Kotlin, were one emitted)
+        // never appears as a type — a Kotlin file calls its top-level declarations directly.
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        val probe = root.resolve("app/src/main/kotlin/com/example/app/Probe.kt")
+
+        val rText = "package com.example.app\nfun m() { val x = R.string. }"
+        val rOffset = rText.indexOf("R.string.") + "R.string.".length
+        val rLabels = s.complete(probe, rText, rOffset).items.map { it.symbol?.name ?: it.label }
+        assertTrue("greeting" in rLabels, "Kotlin: app's own R.string.greeting expected: $rLabels")
+        assertTrue("feature_title" in rLabels, "Kotlin: dependency R.string.feature_title expected: $rLabels")
+
+        // No Kotlin file facade leaks into Kotlin type completion.
+        val fText = "package com.example.app\nfun m() { val x = MainActivityK }"
+        val fOffset = fText.indexOf("MainActivityK") + "MainActivityK".length
+        val fLabels = s.complete(probe, fText, fOffset).items.map { it.symbol?.name ?: it.label }
+        assertTrue(fLabels.none { it.endsWith("Kt") }, "no Kotlin file facade as a Kotlin type: $fLabels")
+    }
+
+    @Test
+    fun kotlinResolvesFrameworkAndroidR() {
+        // `android.R` is the FRAMEWORK R from android.jar (distinct from the app's synthetic `com.example.app.R`).
+        // A package-qualified type used directly must resolve, exposing its nested resource-type classes and
+        // their fields — entirely from classpath bytecode (no index, no synthetic provider).
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        val probe = root.resolve("app/src/main/kotlin/com/example/app/Probe.kt")
+
+        val onR = kotlinLabels(s, probe, "package com.example.app\nfun m() { val x = android.R. }", "android.R.")
+        assertTrue("string" in onR, "android.R.string nested class expected: $onR")
+        assertTrue("layout" in onR, "android.R.layout nested class expected: $onR")
+
+        val onString = kotlinLabels(s, probe, "package com.example.app\nfun m() { val x = android.R.string. }", "android.R.string.")
+        assertTrue(onString.isNotEmpty(), "android.R.string.* framework ids expected, got none")
+    }
+
+    @Test
+    fun kotlinPackageCompletion() {
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        awaitIndexed(s)
+        val probe = root.resolve("app/src/main/kotlin/com/example/app/Probe.kt")
+
+        // `java.ut<caret>` → the sub-package `util`.
+        val subPkgs = kotlinLabels(s, probe, "package com.example.app\nfun m() { val x = java.ut }", "java.ut")
+        assertTrue("util" in subPkgs, "java.ut should complete the sub-package 'util': $subPkgs")
+
+        // `java.util.<caret>` → types in the package (and sub-packages).
+        val inUtil = kotlinLabels(s, probe, "package com.example.app\nfun m() { val x = java.util. }", "java.util.")
+        assertTrue("List" in inUtil, "java.util. should list the type 'List': ${inUtil.take(30)}")
+    }
+
+    private fun kotlinLabels(s: IdeServices, probe: Path, text: String, anchor: String): List<String> {
+        val offset = text.indexOf(anchor) + anchor.length
+        return s.complete(probe, text, offset).items.map { it.insertText.substringBefore('(') }
+    }
+
+    private fun awaitIndexed(ide: IdeServices, timeoutMs: Long = 180_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (ide.indexStatus.value.message != "Indexed" && System.currentTimeMillis() < deadline) Thread.sleep(50)
     }
 
     @Test

@@ -109,6 +109,10 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
         val cleanDir = stateDir.resolve("clean")
         val stagingDir = stateDir.resolve("staging")
         clearDir(cleanDir); clearDir(stagingDir)
+        // Materialize cleanDir even when no clean classes get copied below (a single-source module, or every
+        // class owned by a dirty source): it goes on the compile classpath and into -Xfriend-paths, and kotlinc
+        // emits "Classpath entry points to a non-existent location" for a missing dir. An empty dir is silent.
+        Files.createDirectories(cleanDir)
         // Copy every output class NOT owned by a dirty source: the binary view of the unchanged module half.
         for (rel in currentClasses(outputDir)) {
             if (rel in dirtyOwned) continue

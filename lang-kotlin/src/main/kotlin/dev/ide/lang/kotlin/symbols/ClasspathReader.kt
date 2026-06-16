@@ -40,9 +40,22 @@ class ClasspathReader(
     private fun zipFor(path: Path): ZipFile? =
         zips.getOrPut(path.toString()) { runCatching { ZipFile(path.toFile()) }.getOrElse { return null } }
 
-    /** Raw bytes of [fqn]'s class file, searching jars then directories. */
+    /** Raw bytes of [fqn]'s class file, searching jars then directories. A nested type may be written with
+     *  `.` (`android.R.string`) instead of the binary `$` (`android/R$string`), so when the direct path
+     *  misses, retry converting trailing `.`-boundaries to `$` (right to left) — handles arbitrary nesting. */
     fun classBytes(fqn: String): ByteArray? {
-        val rel = fqn.replace('.', '/') + ".class"
+        readEntry(fqn.replace('.', '/') + ".class")?.let { return it }
+        var dot = fqn.lastIndexOf('.')
+        val chars = fqn.toCharArray()
+        while (dot > 0) {
+            chars[dot] = '$'
+            readEntry(String(chars).replace('.', '/') + ".class")?.let { return it }
+            dot = fqn.lastIndexOf('.', dot - 1)
+        }
+        return null
+    }
+
+    private fun readEntry(rel: String): ByteArray? {
         for (c in containers) {
             if (Files.isDirectory(c)) {
                 val f = c.resolve(rel)

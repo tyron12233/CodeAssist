@@ -58,6 +58,7 @@ class KotlinCompletionService(private val service: KotlinSymbolService) : Comple
         }
         val nameRef = climbTo<KtNameReferenceExpression>(markerLeaf)
 
+        var packageCompletion = false
         val raw: List<KotlinSymbol> = when {
             nameRef != null && isSelectorOfQualified(nameRef) -> {
                 val qualified = nameRef.parent as KtQualifiedExpression
@@ -73,7 +74,11 @@ class KotlinCompletionService(private val service: KotlinSymbolService) : Comple
                         .filterIsInstance<KotlinSymbol>()
                         .filter { memberVisibleOn(it, typeReceiver) }
                 } else {
-                    emptyList() // unknown receiver -> degrade to nothing rather than a wrong set
+                    // Receiver is a package/FQN prefix (`java.util.`, `android.`) — complete its sub-packages
+                    // + the types in it. (A type-or-instance receiver was handled above; this is the package
+                    // path, inserted fully-qualified, so it needs no auto-import.)
+                    val pkg = packagePathOf(receiver)
+                    if (pkg != null) { packageCompletion = true; service.packageMembers(pkg, prefix) } else emptyList()
                 }
             }
             inTypePosition(markerLeaf) -> service.typeNamesByPrefix(prefix)
@@ -107,7 +112,7 @@ class KotlinCompletionService(private val service: KotlinSymbolService) : Comple
         val candidates = raw.asSequence()
             .filter { it.name != "_" && it.name.startsWith(prefix, ignoreCase = true) && MARKER !in it.name }
             .distinctBy { it.name + "#" + it.kind + "#" + (it.signature ?: "") }
-            .map { Candidate(it, importEditFor(it)) }
+            .map { Candidate(it, if (packageCompletion) emptyList() else importEditFor(it)) }
             .sortedWith(rank(prefix))
             .take(MAX_ITEMS)
             .toList()
@@ -221,6 +226,18 @@ class KotlinCompletionService(private val service: KotlinSymbolService) : Comple
         climbTo<KtStringTemplateExpression>(leaf) ?: return false
         val entry = climbTo<KtStringTemplateEntry>(leaf)
         return !(entry is KtBlockStringTemplateEntry || entry is KtSimpleNameStringTemplateEntry)
+    }
+
+    /** The dotted path of a receiver that is a pure name/qualified-name chain (`java`, `java.util`), for
+     *  package completion. Null for anything else (a call, literal, indexing — not a package prefix). */
+    private fun packagePathOf(expr: org.jetbrains.kotlin.psi.KtExpression): String? = when (expr) {
+        is KtNameReferenceExpression -> expr.getReferencedName()
+        is KtQualifiedExpression -> {
+            val r = packagePathOf(expr.receiverExpression)
+            val s = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
+            if (r != null && s != null) "$r.$s" else null
+        }
+        else -> null
     }
 
     private fun isSelectorOfQualified(nameRef: KtNameReferenceExpression): Boolean {

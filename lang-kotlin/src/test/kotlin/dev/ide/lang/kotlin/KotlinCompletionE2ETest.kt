@@ -262,9 +262,29 @@ class KotlinCompletionE2ETest {
     @Test
     fun unsafeNullableAccessIsFlagged() {
         assertTrue("kt.unsafeNullable" in codes("fun f(s: String?) { s.length }"), "dot-access on a nullable")
+        // A safe call earlier (`s?.…`) does NOT smart-cast, so a later unsafe access must still flag.
+        assertTrue(
+            "kt.unsafeNullable" in codes("fun f(s: String?) { val a = s?.length; val b = s.length }"),
+            "an unsafe access after a safe call must still flag",
+        )
         for (ok in listOf("fun f(s: String?) { s?.length }", "fun f(s: String?) { if (s != null) s.length }", "fun f(s: String) { s.length }")) {
             assertTrue("kt.unsafeNullable" !in codes(ok), "`$ok` must not flag; got ${diagnostics(ok)}")
         }
+    }
+
+    @Test
+    fun sameFileConstructorArgsAreValidated() {
+        // A same-file class: arity comes from the PSI, so defaults (age) and exact counts are known.
+        val p = "class P(val name: String, val age: Int = 0)\n"
+        assertTrue("kt.constructorArgs" !in codes(p + "fun f() { P(\"a\") }"), "1 arg OK — age has a default")
+        assertTrue("kt.constructorArgs" !in codes(p + "fun f() { P(\"a\", 1) }"), "2 args OK")
+        assertTrue("kt.constructorArgs" in codes(p + "fun f() { P() }"), "0 args: 'name' is required")
+        assertTrue("kt.constructorArgs" in codes(p + "fun f() { P(\"a\", 1, 2) }"), "3 args: too many")
+        // a class with no explicit constructor → implicit no-arg
+        assertTrue("kt.constructorArgs" in codes("class Q\nfun f() { Q(1) }"), "Q has only an implicit no-arg constructor")
+        // primitive/String-family argument type mismatch against the primary constructor
+        assertTrue("kt.typeMismatch" in codes(p + "fun f() { P(1) }"), "Int where String expected")
+        assertTrue("kt.typeMismatch" !in codes(p + "fun f() { P(\"a\", 2) }"), "matching arg types are fine")
     }
 
     @Test

@@ -119,6 +119,12 @@ class IndexServiceImpl(
     override suspend fun ensureUpToDate(scope: IndexScope) {
         setStatus(IndexStatus(building = true, message = "Indexing…", fraction = -1.0))
         try {
+            // Soft reset: drop the in-memory open segments (but KEEP the on-disk `.seg` files) so this call
+            // re-syncs to the current scope — segments for artifacts no longer on the classpath fall out, and
+            // unchanged artifacts are RE-OPENED from disk (cheap) rather than rebuilt. This is what makes a
+            // model-change re-index cheap: a 40k-class android.jar is segmented once and reopened thereafter,
+            // not re-scanned every time. A full rebuild is still available via invalidate() (deletes the .seg).
+            closeSegments()
             val artifacts = buildList {
                 scope.jdkHome?.let { add(Artifact.Jrt(it)) }
                 scope.libraryJars.forEach { add(Artifact.Jar(it)) }
