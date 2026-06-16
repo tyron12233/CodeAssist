@@ -2,6 +2,7 @@ package dev.ide.android.support.tools
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * Resolved locations of the Android build toolchain. android-support never links any of these at compile
@@ -16,7 +17,7 @@ class AndroidSdk(
     /** `build-tools/<version>` — holds the native binaries and `lib/{d8,apksigner}.jar`. */
     val buildToolsDir: Path,
     /** JVM home used to launch the pure-Java tools; defaults to the running JVM. */
-    val javaHome: Path = Path.of(System.getProperty("java.home")),
+    val javaHome: Path = Paths.get(System.getProperty("java.home")),
     /**
      * The `aapt2` native binary. Defaults to the SDK build-tools location; on-device it is overridden to
      * the per-ABI prebuilt extracted into `nativeLibraryDir` (`libaapt2.so`) — see [forDevice].
@@ -92,7 +93,7 @@ class AndroidSdk(
             projectDir?.resolve("local.properties")?.takeIf { Files.isRegularFile(it) }?.let { props ->
                 Files.readAllLines(props).firstNotNullOfOrNull { line ->
                     line.trim().takeIf { l -> l.startsWith("sdk.dir=") }?.substringAfter('=')?.trim()
-                }?.let { return Path.of(it.replace("\\:", ":").replace("\\\\", "\\")) }
+                }?.let { return Paths.get(it.replace("\\:", ":").replace("\\\\", "\\")) }
             }
             val home = System.getProperty("user.home").orEmpty()
             return sequenceOf(
@@ -101,7 +102,7 @@ class AndroidSdk(
                 "$home/Library/Android/sdk",   // macOS
                 "$home/Android/Sdk",           // Linux
                 "$home/AppData/Local/Android/Sdk", // Windows
-            ).filterNotNull().map { Path.of(it) }.firstOrNull { Files.isDirectory(it.resolve("platforms")) }
+            ).filterNotNull().map { Paths.get(it) }.firstOrNull { Files.isDirectory(it.resolve("platforms")) }
         }
 
         private fun locatePlatformJar(platformsDir: Path, compileSdk: Int?): Path? {

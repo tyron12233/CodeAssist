@@ -75,8 +75,9 @@ object Guards {
     @JvmStatic fun filesReadAllBytes(p: Path): ByteArray { guard(GuardCategory.FILE_READ, p.toString()); return java.nio.file.Files.readAllBytes(p) }
     @JvmStatic fun filesReadAllLines(p: Path): MutableList<String> { guard(GuardCategory.FILE_READ, p.toString()); return java.nio.file.Files.readAllLines(p) }
     @JvmStatic fun filesReadAllLines(p: Path, cs: Charset): MutableList<String> { guard(GuardCategory.FILE_READ, p.toString()); return java.nio.file.Files.readAllLines(p, cs) }
-    @JvmStatic fun filesReadString(p: Path): String { guard(GuardCategory.FILE_READ, p.toString()); return java.nio.file.Files.readString(p) }
-    @JvmStatic fun filesReadString(p: Path, cs: Charset): String { guard(GuardCategory.FILE_READ, p.toString()); return java.nio.file.Files.readString(p, cs) }
+    // Files.readString is API 33; this runs on-device (min API 26), so read bytes and decode (API 26-safe).
+    @JvmStatic fun filesReadString(p: Path): String { guard(GuardCategory.FILE_READ, p.toString()); return String(java.nio.file.Files.readAllBytes(p), Charsets.UTF_8) }
+    @JvmStatic fun filesReadString(p: Path, cs: Charset): String { guard(GuardCategory.FILE_READ, p.toString()); return String(java.nio.file.Files.readAllBytes(p), cs) }
     @JvmStatic fun filesLines(p: Path): Stream<String> { guard(GuardCategory.FILE_READ, p.toString()); return java.nio.file.Files.lines(p) }
     @JvmStatic fun filesLines(p: Path, cs: Charset): Stream<String> { guard(GuardCategory.FILE_READ, p.toString()); return java.nio.file.Files.lines(p, cs) }
 
@@ -94,7 +95,8 @@ object Guards {
     @JvmStatic fun filesNewBufferedWriter(p: Path, cs: Charset, opts: Array<out OpenOption>): java.io.BufferedWriter { guard(GuardCategory.FILE_WRITE, p.toString()); return java.nio.file.Files.newBufferedWriter(p, cs, *opts) }
     @JvmStatic fun filesWrite(p: Path, bytes: ByteArray, opts: Array<out OpenOption>): Path { guard(GuardCategory.FILE_WRITE, p.toString()); return java.nio.file.Files.write(p, bytes, *opts) }
     @JvmStatic fun filesWrite(p: Path, lines: Iterable<CharSequence>, opts: Array<out OpenOption>): Path { guard(GuardCategory.FILE_WRITE, p.toString()); return java.nio.file.Files.write(p, lines, *opts) }
-    @JvmStatic fun filesWriteString(p: Path, csq: CharSequence, opts: Array<out OpenOption>): Path { guard(GuardCategory.FILE_WRITE, p.toString()); return java.nio.file.Files.writeString(p, csq, *opts) }
+    // Files.writeString is API 33; write the UTF-8 bytes instead (Files.write is API 26-safe, same default open options).
+    @JvmStatic fun filesWriteString(p: Path, csq: CharSequence, opts: Array<out OpenOption>): Path { guard(GuardCategory.FILE_WRITE, p.toString()); return java.nio.file.Files.write(p, csq.toString().toByteArray(Charsets.UTF_8), *opts) }
     @JvmStatic fun filesDelete(p: Path) { guard(GuardCategory.FILE_WRITE, p.toString()); java.nio.file.Files.delete(p) }
     @JvmStatic fun filesDeleteIfExists(p: Path): Boolean { guard(GuardCategory.FILE_WRITE, p.toString()); return java.nio.file.Files.deleteIfExists(p) }
     @JvmStatic fun newRandomAccessFile(f: File, mode: String): RandomAccessFile { guard(if (mode == "r") GuardCategory.FILE_READ else GuardCategory.FILE_WRITE, f.path); return RandomAccessFile(f, mode) }

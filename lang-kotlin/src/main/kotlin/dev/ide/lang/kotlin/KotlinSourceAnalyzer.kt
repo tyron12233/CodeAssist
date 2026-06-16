@@ -69,6 +69,7 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.nio.file.Paths
 
 /**
  * The editor-time engine for Kotlin. Tolerant PSI parse to neutral DOM, plus resolution, the inference
@@ -96,7 +97,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val sourceRoots: List<VirtualFile> = ctx.sourceRoots
     private val classpathJars: List<Path> =
         (ctx.classpath.entries + ctx.bootClasspath.entries)
-            .mapNotNull { runCatching { Path.of(it.root.path) }.getOrNull() }
+            .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
             .filter { Files.exists(it) }
 
     private val serviceLazy = lazy {

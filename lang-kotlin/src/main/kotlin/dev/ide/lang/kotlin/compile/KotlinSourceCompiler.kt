@@ -6,6 +6,7 @@ import dev.ide.lang.SourceCompiler
 import dev.ide.model.LanguageLevel
 import dev.ide.vfs.VirtualFile
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * The [SourceCompiler] for the Kotlin backend: K2 codegen of a module's Kotlin sources (with its Java
@@ -19,12 +20,12 @@ class KotlinSourceCompiler(private val ctx: CompilationContext) : SourceCompiler
     private val compiler = KotlinJvmCompiler()
 
     override suspend fun compile(sources: List<VirtualFile>): CompileResult {
-        val paths = sources.map { Path.of(it.path) }
+        val paths = sources.map { Paths.get(it.path) }
         val kotlin = paths.filter { it.toString().endsWith(".kt") }
         val java = paths.filter { it.toString().endsWith(".java") }
-        val classpath = ctx.classpath.entries.map { Path.of(it.root.path) }
-        val boot = ctx.bootClasspath.entries.map { Path.of(it.root.path) }
-        val r = compiler.compile(kotlin, java, classpath, Path.of(ctx.outputDir.path), levelOf(ctx.languageLevel), boot)
+        val classpath = ctx.classpath.entries.map { Paths.get(it.root.path) }
+        val boot = ctx.bootClasspath.entries.map { Paths.get(it.root.path) }
+        val r = compiler.compile(kotlin, java, classpath, Paths.get(ctx.outputDir.path), levelOf(ctx.languageLevel), boot)
         return CompileResult(success = r.success, diagnostics = emptyList(), outputClasses = emptyList())
     }
 

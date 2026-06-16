@@ -10,6 +10,7 @@ import dev.ide.model.ModuleType
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ProjectModelStore
 import java.nio.file.Files
+import kotlin.io.path.writeText
 
 /**
  * The IDE's default sample: an Android multi-module app `app (android-app) → feature (android-lib) →
@@ -67,7 +68,7 @@ object SampleAndroidProject {
     private fun write(store: ProjectModelStore, relPath: String, content: String) {
         val file = store.rootPath.resolve(relPath)
         Files.createDirectories(file.parent)
-        Files.writeString(file, content.trimIndent() + "\n")
+        file.writeText(content.trimIndent() + "\n")
     }
 
     private val CALC = """

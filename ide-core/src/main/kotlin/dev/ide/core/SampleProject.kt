@@ -11,6 +11,7 @@ import dev.ide.model.ModuleType
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ProjectModelStore
 import java.nio.file.Files
+import kotlin.io.path.writeText
 
 /** The Java module type the demo uses (real ones ship in a `java-support` plugin). */
 object JavaLibModuleType : ModuleType {
@@ -63,7 +64,7 @@ object SampleProject {
     private fun write(store: ProjectModelStore, relPath: String, content: String) {
         val file = store.rootPath.resolve(relPath)
         Files.createDirectories(file.parent)
-        Files.writeString(file, content.trimIndent())
+        file.writeText(content.trimIndent())
     }
 
     private val GREETER = """

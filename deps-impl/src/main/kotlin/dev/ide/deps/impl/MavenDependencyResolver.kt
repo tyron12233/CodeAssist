@@ -16,6 +16,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import kotlin.io.path.writeText
 
 /** A search hit from a repository's index: a coordinate plus its declared packaging (`jar`/`aar`/`pom`). */
 data class ArtifactCandidate(val coordinate: Coordinate, val packaging: String)
@@ -257,7 +258,7 @@ class MavenDependencyResolver(
             }
         }
         if (!foundClasses) ZipOutputStream(Files.newOutputStream(classesJar)).use { } // resource-only AAR → empty jar
-        Files.writeString(marker, "")
+        marker.writeText("")
         return classesJar
     }
 

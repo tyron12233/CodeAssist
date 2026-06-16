@@ -55,6 +55,7 @@ import dev.ide.model.Project
 import dev.ide.platform.ProgressReporter
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * The native, Gradle-free Android build system. It turns an
@@ -138,7 +139,7 @@ class AndroidBuildSystem(
 
         val libs = AndroidLibraries.resolve(app, layout.explodedAar)
         val appModuleOutputs = app.classpath(DependencyScope.IMPLEMENTATION).entries
-            .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Path.of(it.root.path) }
+            .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
 
         val closure = moduleClosure(app, byId)
         val depAndroidLibs = closure.filter { it.facets.get(AndroidFacet.KEY) != null }
@@ -268,11 +269,11 @@ class AndroidBuildSystem(
      * straight through [JavaPlugin.registerModule]; this is the android variant of that.
      */
     private fun registerAndroidLibrary(tasks: TaskContainer, m: Module, byId: Map<ModuleId, Module>, withJar: Boolean) {
-        val classesOut = Path.of(m.outputDir.path)
+        val classesOut = Paths.get(m.outputDir.path)
         val buildDir = classesOut.parent
         val libs = AndroidLibraries.resolve(m, buildDir.resolve("intermediates").resolve("exploded-aar"))
         val moduleOutputs = m.classpath(DependencyScope.IMPLEMENTATION).entries
-            .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Path.of(it.root.path) }
+            .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
         val level = levelOf(m.languageLevel)
         val facet = m.facets.get(AndroidFacet.KEY)!!
         // Upstream modules' Kotlin output (sibling of their Java output) joins this lib's compile classpath.
@@ -338,7 +339,7 @@ class AndroidBuildSystem(
         m.sourceSets.filter { it.scope != DependencyScope.TEST_IMPLEMENTATION }
             .flatMap { it.contentRoots }
             .filter { role in it.roles }
-            .map { Path.of(it.dir.path) }
+            .map { Paths.get(it.dir.path) }
 
     /** Every module transitively reached from [app] via module dependencies (excludes [app] itself). */
     private fun moduleClosure(app: Module, byId: Map<ModuleId, Module>): List<Module> {
@@ -353,11 +354,11 @@ class AndroidBuildSystem(
     private fun roots(variant: AndroidVariant, role: ContentRole): List<Path> =
         variant.activeSourceSets.flatMap { it.contentRoots }
             .filter { role in it.roles }
-            .map { Path.of(it.dir.path) }
+            .map { Paths.get(it.dir.path) }
 
     /** Per-(module, variant) build paths under `<module>/build/`. */
     private inner class Layout(module: Module, variantName: String) {
-        private val classesOut: Path = Path.of(module.outputDir.path)   // <module>/build/classes
+        private val classesOut: Path = Paths.get(module.outputDir.path)   // <module>/build/classes
         private val buildDir: Path = classesOut.parent                  // <module>/build
         private val moduleDir: Path = buildDir.parent                   // <module>
         private val inter: Path = buildDir.resolve("intermediates").resolve("android").resolve(variantName)
@@ -391,7 +392,7 @@ class AndroidBuildSystem(
         /** The signed-APK output path for [module] + [variantName] (matches [Layout.signedApk]) — so a host
          *  can locate the artifact to install after an `assemble`. */
         fun signedApkPath(module: Module, variantName: String): Path {
-            val buildDir = Path.of(module.outputDir.path).parent
+            val buildDir = Paths.get(module.outputDir.path).parent
             return buildDir.resolve("outputs").resolve("apk").resolve(variantName).resolve("${module.name}-$variantName.apk")
         }
 

@@ -91,6 +91,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 /**
  * Implements the UI's [IdeBackend] port over the JVM [IdeServices] facade.
@@ -255,13 +258,13 @@ class IdeServicesBackend(
     }
 
     override fun createFile(dirPath: String, fileName: String, content: String): String? =
-        writeNewFile(dirPath, fileName) { Files.writeString(it, content) }
+        writeNewFile(dirPath, fileName) { it.writeText(content) }
 
     override fun createFileBytes(dirPath: String, fileName: String, bytes: ByteArray): String? =
         writeNewFile(dirPath, fileName) { Files.write(it, bytes) }
 
     override fun createDirectory(parentPath: String, name: String): String? = runCatching {
-        val target = Path.of(parentPath).resolve(name)
+        val target = Paths.get(parentPath).resolve(name)
         if (Files.exists(target)) null
         else {
             Files.createDirectories(target)
@@ -272,7 +275,7 @@ class IdeServicesBackend(
 
     /** Create `[dirPath]/[fileName]` via [write] (fails if it exists); refresh R on `res/`, bump the fs epoch. */
     private fun writeNewFile(dirPath: String, fileName: String, write: (Path) -> Unit): String? = runCatching {
-        val dir = Path.of(dirPath)
+        val dir = Paths.get(dirPath)
         Files.createDirectories(dir)
         val target = dir.resolve(fileName)
         if (Files.exists(target)) null
@@ -285,25 +288,25 @@ class IdeServicesBackend(
     }.getOrNull()
 
     override fun readFile(path: String): String =
-        runCatching { Files.readString(Path.of(path)) }.getOrDefault("")
+        runCatching { (Paths.get(path)).readText() }.getOrDefault("")
 
     override fun moduleNameForFile(path: String): String? =
-        services.moduleForFile(Path.of(path))?.name
+        services.moduleForFile(Paths.get(path))?.name
 
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> =
-        services.breadcrumbAt(Path.of(path), text, offset)
+        services.breadcrumbAt(Paths.get(path), text, offset)
 
     override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
-        services.definitionAt(Path.of(path), text, offset)?.let { (p, o) -> UiDefinition(p.toString(), o) }
+        services.definitionAt(Paths.get(path), text, offset)?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
     override fun updateDocument(path: String, text: String) =
-        services.updateDocument(Path.of(path), text)
+        services.updateDocument(Paths.get(path), text)
 
     override fun saveFile(path: String, text: String) =
-        services.save(Path.of(path), text)
+        services.save(Paths.get(path), text)
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
-        val result = services.complete(Path.of(path), text, offset)
+        val result = services.complete(Paths.get(path), text, offset)
         return UiCompletionResult(
             items = result.items.map { item ->
                 UiCompletionItem(
@@ -383,7 +386,7 @@ class IdeServicesBackend(
         val mgr = manager ?: return false
         return withContext(Dispatchers.IO) {
             runCatching {
-                if (Path.of(rootPath) == services.workspaceRoot) return@runCatching true
+                if (Paths.get(rootPath) == services.workspaceRoot) return@runCatching true
                 swap(mgr.open(rootPath)); true
             }.getOrDefault(false)
         }
@@ -459,7 +462,7 @@ class IdeServicesBackend(
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
         // Routes through the full analysis engine: JDT compiler errors + the Java analyzers, merged,
         // suppression-filtered, and profile-adjusted into one set.
-        return services.analyzeDiagnostics(Path.of(path), text).map { d ->
+        return services.analyzeDiagnostics(Paths.get(path), text).map { d ->
             val (line, col) = lineColOf(text, d.range.start)
             UiDiagnostic(
                 severity = when (d.severity) {
@@ -490,7 +493,7 @@ class IdeServicesBackend(
     override suspend fun downloadJdkSources(feature: Int): String = services.sdkManager.downloadJdkSources(feature)
 
     override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> =
-        services.inlayHints(Path.of(path), text, startOffset, endOffset).map { h ->
+        services.inlayHints(Paths.get(path), text, startOffset, endOffset).map { h ->
             UiInlayHint(
                 offset = h.offset,
                 parts = h.parts.map { UiInlayPart(it.text) },
@@ -509,11 +512,11 @@ class IdeServicesBackend(
     // ---- code actions (quick-fixes + intentions) ----
 
     override suspend fun actionsAt(path: String, text: String, selStart: Int, selEnd: Int): List<UiAction> =
-        services.editorActions(Path.of(path), text, selStart, selEnd)
+        services.editorActions(Paths.get(path), text, selStart, selEnd)
             .mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
 
     override suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): List<UiTextEdit> =
-        services.applyEditorAction(Path.of(path), text, selStart, selEnd, actionId)
+        services.applyEditorAction(Paths.get(path), text, selStart, selEnd, actionId)
             .map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
 
     private fun mapActionKind(k: dev.ide.analysis.CodeActionKind): UiActionKind = when (k) {
@@ -525,7 +528,7 @@ class IdeServicesBackend(
     // ---- block-based editing ----
 
     override suspend fun projectBlocks(path: String, text: String): UiBlockNode? =
-        services.projectBlocks(Path.of(path), text)?.let { toUiBlock(it.root) }
+        services.projectBlocks(Paths.get(path), text)?.let { toUiBlock(it.root) }
 
     override suspend fun applyBlockEdit(path: String, text: String, edit: UiBlockEdit): List<UiTextEdit> {
         val blockEdit: BlockEdit = when (edit) {
@@ -545,7 +548,7 @@ class IdeServicesBackend(
                 SlotRef(BlockId(edit.toOwnerBlockId), edit.toSlotIndex, edit.toIndex),
             )
         }
-        return services.computeBlockEdit(Path.of(path), text, blockEdit)
+        return services.computeBlockEdit(Paths.get(path), text, blockEdit)
             .map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
 
@@ -582,13 +585,13 @@ class IdeServicesBackend(
     // ---- resource preview ----
 
     override suspend fun drawablePreview(path: String, text: String): UiDrawable? =
-        services.drawablePreview(Path.of(path), text)?.let(::toUiDrawable)
+        services.drawablePreview(Paths.get(path), text)?.let(::toUiDrawable)
 
     override suspend fun colorResources(path: String, text: String): List<UiColorEntry> =
-        services.colorResources(Path.of(path), text).map { UiColorEntry(it.name, it.rawValue, it.argb) }
+        services.colorResources(Paths.get(path), text).map { UiColorEntry(it.name, it.rawValue, it.argb) }
 
     override suspend fun resourceImageBytes(path: String): ByteArray? =
-        services.resourceBytes(Path.of(path))
+        services.resourceBytes(Paths.get(path))
 
     /** Map the engine's [DrawablePreview] onto the UI's neutral [UiDrawable] DTO. */
     private fun toUiDrawable(d: DrawablePreview): UiDrawable = when (d) {

@@ -7,6 +7,7 @@ import dev.ide.model.impl.ProjectModelStore
 import dev.ide.model.template.ProjectScaffold
 import dev.ide.vfs.VirtualFile
 import java.nio.file.Files
+import kotlin.io.path.writeText
 
 /**
  * The [ProjectScaffold] a [dev.ide.model.template.ProjectTemplate] builds against, backed by a
@@ -26,6 +27,6 @@ internal class ScaffoldImpl(
         val file = store.rootPath.resolve(relPath)
         Files.createDirectories(file.parent)
         // trimIndent() drops the leading/trailing blank lines of a triple-quoted literal + common indent.
-        Files.writeString(file, content.trimIndent() + "\n")
+        file.writeText(content.trimIndent() + "\n")
     }
 }

@@ -185,6 +185,9 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
+import java.nio.file.Paths
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 /**
  * The UI-agnostic façade that wires the whole framework together: platform-core (extension registry,
@@ -343,7 +346,7 @@ class IdeServices private constructor(
                     val abs = file.toAbsolutePath().normalize()
                     if (!seen.add(abs.toString())) continue
                     if (isLikelyBinary(abs)) continue
-                    val text = openDocuments[abs] ?: runCatching { Files.readString(file) }.getOrNull() ?: continue
+                    val text = openDocuments[abs] ?: runCatching { file.readText() }.getOrNull() ?: continue
                     if (text.length > MAX_SEARCH_FILE_CHARS || text.any { it.code == 0 }) continue
                     val name = file.fileName.toString()
                     var lineStart = 0
@@ -687,7 +690,7 @@ class IdeServices private constructor(
     private fun moduleHasKotlin(module: Module): Boolean =
         module.sourceSets.flatMap { it.contentRoots }
             .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-            .map { Path.of(it.dir.path) }
+            .map { Paths.get(it.dir.path) }
             .filter { Files.isDirectory(it) }
             .any { root -> Files.walk(root).use { s -> s.anyMatch { p -> p.toString().endsWith(".kt") } } }
 
@@ -1119,7 +1122,7 @@ class IdeServices private constructor(
     }
 
     private fun mainClassIn(file: Path): String? {
-        val text = runCatching { Files.readString(file) }.getOrNull() ?: return null
+        val text = runCatching { file.readText() }.getOrNull() ?: return null
         if (!MAIN_METHOD.containsMatchIn(text)) return null
         val pkg = PACKAGE_DECL.find(text)?.groupValues?.get(1)
         val cls = file.fileName.toString().removeSuffix(".java")
@@ -1141,7 +1144,7 @@ class IdeServices private constructor(
         val path = file.toAbsolutePath().normalize()
         openDocuments[path] = text
         path.parent?.let { Files.createDirectories(it) }
-        Files.writeString(path, text)
+        path.writeText(text)
         if (isResourcePath(path)) {
             invalidateSyntheticClasses() // an edited res file changes R
             if (path.toString().endsWith(".xml")) {
@@ -1163,9 +1166,9 @@ class IdeServices private constructor(
     private fun flushOpenDocuments() {
         for ((path, content) in openDocuments) {
             runCatching {
-                if (!Files.exists(path) || Files.readString(path) != content) {
+                if (!Files.exists(path) || path.readText() != content) {
                     path.parent?.let { Files.createDirectories(it) }
-                    Files.writeString(path, content)
+                    path.writeText(content)
                 }
             }
         }
@@ -1255,14 +1258,14 @@ class IdeServices private constructor(
         module.sourceSets
             .flatMap { it.contentRoots }
             .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-            .map { Path.of(it.dir.path) }
+            .map { Paths.get(it.dir.path) }
 
     /** Content roots to surface in the project tree — code, resources, and assets (so `res/` is editable). */
     fun treeRoots(module: Module): List<Path> {
         return module.sourceSets
             .flatMap { it.contentRoots }
             .filter { cr -> cr.roles.any { it in TREE_ROOT_ROLES } }
-            .map { Path.of(it.dir.path) }
+            .map { Paths.get(it.dir.path) }
     }
 
     /**
@@ -1274,7 +1277,7 @@ class IdeServices private constructor(
         module.sourceSets.flatMap { ss ->
             ss.contentRoots
                 .filter { cr -> cr.roles.any { it in TREE_ROOT_ROLES } }
-                .map { TreeRootInfo(Path.of(it.dir.path), ss.name, it.roles) }
+                .map { TreeRootInfo(Paths.get(it.dir.path), ss.name, it.roles) }
         }
 
     /**
@@ -1284,7 +1287,7 @@ class IdeServices private constructor(
      */
     fun manifestPath(module: Module): Path? {
         val facet = module.facets.get(dev.ide.android.support.AndroidFacet.KEY) ?: return null
-        val moduleDir = Path.of(module.outputDir.path).parent?.parent ?: return null
+        val moduleDir = Paths.get(module.outputDir.path).parent?.parent ?: return null
         return moduleDir.resolve(facet.manifest)
     }
 
@@ -1561,7 +1564,7 @@ class IdeServices private constructor(
         sdkMetadata?.let { return it }
         val path = store.rootPath.resolve(".platform/android-sdk-metadata.txt")
         val md = runCatching {
-            if (Files.exists(path)) SdkMetadataCodec.read(Files.readString(path)) else null
+            if (Files.exists(path)) SdkMetadataCodec.read(path.readText()) else null
         }.getOrNull() ?: AndroidSdkMetadata.bundled()
         return md.also { sdkMetadata = it }
     }
@@ -1585,7 +1588,7 @@ class IdeServices private constructor(
                 val files = runCatching { Files.list(vd).use { it.toList() } }.getOrDefault(emptyList())
                     .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".xml") }
                 for (f in files) {
-                    val text = runCatching { Files.readString(f) }.getOrNull() ?: continue
+                    val text = runCatching { f.readText() }.getOrNull() ?: continue
                     if (!text.contains("declare-styleable") && !text.contains("<attr")) continue
                     val parsed = AttrsXmlParser.parse(text)
                     attrs.putAll(parsed.attrs)
@@ -1709,21 +1712,21 @@ class IdeServices private constructor(
     private fun appendValueResource(module: Module, type: ResourceType, name: String, value: String): String {
         val valuesDir = resourceRoots(module).firstOrNull()?.resolve("values") ?: return name
         val target = valuesDir.resolve(valuesFileName(type))
-        val existing = runCatching { if (Files.exists(target)) Files.readString(target) else null }.getOrNull()
+        val existing = runCatching { if (Files.exists(target)) target.readText() else null }.getOrNull()
         var unique = name; var i = 1
         while (existing != null && Regex("name\\s*=\\s*\"${Regex.escape(unique)}\"").containsMatchIn(existing)) unique = "${name}_${i++}"
         val entry = "    <${type.rClass} name=\"$unique\">${escapeXml(value)}</${type.rClass}>\n"
         runCatching {
             Files.createDirectories(valuesDir)
             if (existing == null) {
-                Files.writeString(target, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n$entry</resources>\n")
+                target.writeText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n$entry</resources>\n")
             } else {
                 val idx = existing.lastIndexOf("</resources>")
                 val merged = if (idx >= 0) existing.substring(0, idx) + entry + existing.substring(idx) else existing + entry
-                Files.writeString(target, merged)
+                target.writeText(merged)
             }
             invalidateSyntheticClasses()
-            indexScope.launch { runCatching { indexService.reindexSource(target, Files.readString(target)) } }
+            indexScope.launch { runCatching { indexService.reindexSource(target, target.readText()) } }
         }
         return unique
     }
@@ -1821,7 +1824,7 @@ class IdeServices private constructor(
     /** Resolve a resource to its declaration (file + offset) via the resource index, or null. */
     private fun indexDefinition(type: ResourceType, name: String): Pair<Path, Int>? =
         indexService.exact<ResourceDeclValue>(AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, name))
-            .firstOrNull()?.let { Path.of(it.filePath) to it.offset }
+            .firstOrNull()?.let { Paths.get(it.filePath) to it.offset }
 
     // --- resource preview ------------------------------------------------------------------------------
 
@@ -1869,7 +1872,7 @@ class IdeServices private constructor(
                 val src = item.source ?: return null
                 val p = src.toString()
                 return if (p.endsWith(".xml")) {
-                    runCatching { Files.readString(src) }.getOrNull()?.let { ResolvedDrawable.Xml(it) }
+                    runCatching { src.readText() }.getOrNull()?.let { ResolvedDrawable.Xml(it) }
                 } else {
                     ResolvedDrawable.BitmapFile(item.type.rClass, name, p)
                 }
@@ -1927,7 +1930,7 @@ class IdeServices private constructor(
     private fun sanitizeResName(s: String): String = s.replace('.', '_').replace('-', '_').trim()
 
     private fun resourceRoots(m: Module): List<Path> =
-        m.sourceSets.flatMap { it.contentRoots }.filter { ContentRole.ANDROID_RES in it.roles }.map { Path.of(it.dir.path) }
+        m.sourceSets.flatMap { it.contentRoots }.filter { ContentRole.ANDROID_RES in it.roles }.map { Paths.get(it.dir.path) }
 
     /** The Android module whose `res/` tree contains [file] (an XML resource), or null. */
     private fun moduleForResourceFile(file: Path): Module? {
@@ -1941,10 +1944,10 @@ class IdeServices private constructor(
     /** Builds each per-file analysis target off the live overlay (true working copies, as completion does). */
     private inner class IdeAnalysisEnvironment : AnalysisEnvironment {
         override suspend fun targetFor(file: VirtualFile, needsBindings: Boolean): AnalysisTarget? {
-            val path = Path.of(file.path)
+            val path = Paths.get(file.path)
             val module = moduleForFile(path) ?: return null
             val key = path.toAbsolutePath().normalize()
-            val text = openDocuments[key] ?: runCatching { Files.readString(key) }.getOrNull() ?: return null
+            val text = openDocuments[key] ?: runCatching { key.readText() }.getOrNull() ?: return null
             val analyzer = analyzerFor(module)
             // Tier gate: a SEMANTIC+ pass gets the binding-resolved tree (so analyzers can resolve types/
             // symbols and the one pass also yields the compiler diagnostics); a SYNTAX-only pass gets the
@@ -1962,8 +1965,8 @@ class IdeServices private constructor(
 
         override suspend fun applyEdit(edit: WorkspaceEdit): WorkspaceEdit {
             for ((vf, edits) in edit.edits) {
-                val p = Path.of(vf.path).toAbsolutePath().normalize()
-                val current = openDocuments[p] ?: runCatching { Files.readString(p) }.getOrDefault("")
+                val p = Paths.get(vf.path).toAbsolutePath().normalize()
+                val current = openDocuments[p] ?: runCatching { p.readText() }.getOrDefault("")
                 val sb = StringBuilder(current)
                 for (e in edits.sortedByDescending { it.offset }) {
                     val s = e.offset.coerceIn(0, sb.length)
@@ -2118,7 +2121,7 @@ class IdeServices private constructor(
             // On-device the launcher supplies the native build tools + keystore (the android.jar is the first
             // boot-classpath entry); the in-process Android build (AndroidBuildSystem.inProcess) runs off these.
             val androidTools = if (androidToolsDir != null && debugKeystore != null && bootClasspath.isNotEmpty())
-                AndroidDeviceTools(Path.of(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel) else null
+                AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel) else null
             return IdeServices(platform, store, androidTools, dexRunner, apkInstaller)
         }
 

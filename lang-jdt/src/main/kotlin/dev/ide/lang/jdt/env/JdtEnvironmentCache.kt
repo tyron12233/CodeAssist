@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
+import java.nio.file.Paths
 
 /**
  * The keystroke-invariant environment state for one analyzer, split by what each part actually depends on:
@@ -175,7 +176,7 @@ internal class JrtImage private constructor(private val fs: FileSystem?) {
          * the [images] cache (so `newFileSystem` cannot collide with an already-open one).
          */
         private fun openJrt(home: Path): FileSystem? = runCatching {
-            val current = Path.of(System.getProperty("java.home")).toAbsolutePath().normalize()
+            val current = Paths.get(System.getProperty("java.home")).toAbsolutePath().normalize()
             if (home.toAbsolutePath().normalize() == current) FileSystems.getFileSystem(URI.create("jrt:/"))
             else FileSystems.newFileSystem(URI.create("jrt:/"), mapOf("java.home" to home.toString()))
         }.getOrElse { runCatching { FileSystems.getFileSystem(URI.create("jrt:/")) }.getOrNull() }

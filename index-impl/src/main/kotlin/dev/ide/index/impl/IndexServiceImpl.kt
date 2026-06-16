@@ -23,6 +23,8 @@ import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipFile
+import java.nio.file.Paths
+import kotlin.io.path.readText
 
 /**
  * The [IndexService]: per index, a **static side** (SDK + libraries) of immutable on-disk [Segment]s — one
@@ -229,7 +231,7 @@ class IndexServiceImpl(
                 s.filter { f -> Files.isRegularFile(f) && exts.any { f.toString().endsWith(it) } }.toList()
             }
             for (file in files) {
-                val text = runCatching { Files.readString(file) }.getOrNull() ?: continue
+                val text = runCatching { file.readText() }.getOrNull() ?: continue
                 indexSourceFile(file, text, root)
                 yield()
             }
@@ -362,7 +364,7 @@ class IndexServiceImpl(
         /** Packages unqualified-exported (or open) by the JDK's modules — the accessible surface. */
         private fun exportedPackages(home: Path): Set<String> {
             val finder = runCatching {
-                val current = Path.of(System.getProperty("java.home")).toAbsolutePath().normalize()
+                val current = Paths.get(System.getProperty("java.home")).toAbsolutePath().normalize()
                 if (home.toAbsolutePath().normalize() == current) java.lang.module.ModuleFinder.ofSystem()
                 else java.lang.module.ModuleFinder.of(home.resolve("jmods"))
             }.getOrNull() ?: return emptySet()
@@ -389,7 +391,7 @@ class IndexServiceImpl(
 
         /** Open the jrt image of [home]; returns (fs, weOwnIt). The current JVM's jrt FS must not be closed. */
         private fun openJrt(home: Path): Pair<FileSystem?, Boolean> = runCatching {
-            val current = runCatching { Path.of(System.getProperty("java.home")).toAbsolutePath().normalize() }.getOrNull()
+            val current = runCatching { Paths.get(System.getProperty("java.home")).toAbsolutePath().normalize() }.getOrNull()
             if (home.toAbsolutePath().normalize() == current) {
                 FileSystems.getFileSystem(URI.create("jrt:/")) to false
             } else {

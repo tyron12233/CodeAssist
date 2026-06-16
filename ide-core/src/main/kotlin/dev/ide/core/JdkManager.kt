@@ -7,6 +7,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipInputStream
+import java.nio.file.Paths
 
 /**
  * JDK source support for the editor's parameter-name + javadoc resolution. The running JDK usually ships its
@@ -31,7 +32,7 @@ class JdkManager(private val platformDir: Path, private val fetcher: SdkNetFetch
     )
 
     private fun currentSrcZip(): Path? =
-        runCatching { Path.of(System.getProperty("java.home")).resolve("lib").resolve("src.zip") }
+        runCatching { Paths.get(System.getProperty("java.home")).resolve("lib").resolve("src.zip") }
             .getOrNull()?.takeIf { Files.isRegularFile(it) }
 
     /** A previously-downloaded JDK `src.zip` kept under `.platform`, if any. */

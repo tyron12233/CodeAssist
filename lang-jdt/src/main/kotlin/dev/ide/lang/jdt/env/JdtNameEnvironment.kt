@@ -6,6 +6,7 @@ import org.eclipse.jdt.internal.compiler.env.INameEnvironment
 import org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
 
 /**
  * A custom Eclipse-JDT [INameEnvironment] backed entirely by the **project model + in-memory editor
@@ -110,7 +111,7 @@ class JdtNameEnvironment internal constructor(
         val rel = fqcn.replace('.', '/') + ".java"
         for (root in sourceRoots) {
             val p = root.resolve(rel)
-            if (Files.isRegularFile(p)) return runCatching { Files.readString(p).toCharArray() }.getOrNull()
+            if (Files.isRegularFile(p)) return runCatching { p.readText().toCharArray() }.getOrNull()
         }
         return null
     }

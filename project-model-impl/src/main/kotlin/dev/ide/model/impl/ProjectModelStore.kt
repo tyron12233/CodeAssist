@@ -12,6 +12,7 @@ import dev.ide.vfs.local.LocalFileSystem
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.nio.file.Paths
 
 /**
  * Holds the current immutable [WorkspaceData] snapshot and brokers atomic mutation. A commit installs
@@ -76,7 +77,7 @@ class ProjectModelStore internal constructor(
     internal fun fileFromWorkspace(rel: String): VirtualFile = vfs.fileFor(resolveRel(rootPath, rel))
 
     internal fun relativizeToWorkspace(file: VirtualFile): String {
-        val p = Path.of(file.path).toAbsolutePath().normalize()
+        val p = Paths.get(file.path).toAbsolutePath().normalize()
         return if (p == rootPath) "" else rootPath.relativize(p).toString().replace(File.separatorChar, '/')
     }
 }

@@ -8,6 +8,7 @@ import dev.ide.vfs.VirtualFile
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.nio.file.Paths
 
 internal fun sha256(): MessageDigest = MessageDigest.getInstance("SHA-256")
 internal fun MessageDigest.hex(): String = digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
@@ -40,9 +41,9 @@ class TaskInputsImpl : TaskInputs {
     private val props = sortedMapOf<String, String>()
     private val cps = sortedMapOf<String, String>()
 
-    override fun files(key: String, files: Iterable<VirtualFile>) { fileGroups[key] = files.map { Path.of(it.path) } }
+    override fun files(key: String, files: Iterable<VirtualFile>) { fileGroups[key] = files.map { Paths.get(it.path) } }
     /** Directories whose recursive content is part of the input (e.g. a dependency's compiled output). */
-    fun dirs(key: String, dirs: Iterable<VirtualFile>) { dirGroups[key] = dirs.map { Path.of(it.path) } }
+    fun dirs(key: String, dirs: Iterable<VirtualFile>) { dirGroups[key] = dirs.map { Paths.get(it.path) } }
     fun filePaths(key: String, paths: Iterable<Path>) { fileGroups[key] = paths.toList() }
     fun dirPaths(key: String, paths: Iterable<Path>) { dirGroups[key] = paths.toList() }
     override fun property(key: String, value: Any?) { props[key] = value.toString() }
@@ -68,8 +69,8 @@ class TaskOutputsImpl : TaskOutputs {
     private val fileGroups = sortedMapOf<String, List<Path>>()
     private val dirGroups = sortedMapOf<String, Path>()
 
-    override fun files(key: String, files: Iterable<VirtualFile>) { fileGroups[key] = files.map { Path.of(it.path) } }
-    override fun dir(key: String, dir: VirtualFile) { dirGroups[key] = Path.of(dir.path) }
+    override fun files(key: String, files: Iterable<VirtualFile>) { fileGroups[key] = files.map { Paths.get(it.path) } }
+    override fun dir(key: String, dir: VirtualFile) { dirGroups[key] = Paths.get(dir.path) }
     fun filePath(key: String, path: Path) { fileGroups[key] = listOf(path) }
     fun dirPath(key: String, path: Path) { dirGroups[key] = path }
 

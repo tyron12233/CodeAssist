@@ -19,6 +19,7 @@ import dev.ide.model.Project
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.Paths
 
 /** A plain [BuildConfiguration] for a plugin to contribute tasks to (the host realizes [tasks] afterwards). */
 class SimpleBuildConfiguration(
@@ -104,7 +105,7 @@ internal fun directModuleDeps(module: Module, byId: Map<ModuleId, Module>): List
     module.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
 
 internal fun resourceRoots(module: Module): List<Path> = module.sourceSets
-    .flatMap { it.contentRoots }.filter { ContentRole.RESOURCE in it.roles }.map { Path.of(it.dir.path) }
+    .flatMap { it.contentRoots }.filter { ContentRole.RESOURCE in it.roles }.map { Paths.get(it.dir.path) }
 
 internal fun resourcesDir(module: Module): Path = outputDir(module).resolveSibling("resources")
 

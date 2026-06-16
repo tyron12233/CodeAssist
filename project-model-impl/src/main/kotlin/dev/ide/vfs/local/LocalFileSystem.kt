@@ -7,6 +7,7 @@ import dev.ide.vfs.VirtualFileSystem
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.nio.file.Paths
 
 /**
  * A minimal [VirtualFileSystem] backed directly by the real local filesystem (`java.nio`).
@@ -25,10 +26,10 @@ class LocalFileSystem(root: Path) : VirtualFileSystem {
 
     fun fileFor(path: Path): VirtualFile = LocalVirtualFile(this, path.toAbsolutePath().normalize())
 
-    fun fileFor(path: String): VirtualFile = fileFor(Path.of(path))
+    fun fileFor(path: String): VirtualFile = fileFor(Paths.get(path))
 
     override fun findByPath(path: String): VirtualFile? {
-        val p = Path.of(path).toAbsolutePath().normalize()
+        val p = Paths.get(path).toAbsolutePath().normalize()
         return if (Files.exists(p)) LocalVirtualFile(this, p) else null
     }
 

@@ -10,6 +10,7 @@ import org.eclipse.jdt.core.dom.SingleVariableDeclaration
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
+import kotlin.io.path.readText
 
 /**
  * Recovers method **parameter names** and **javadoc** by parsing Java source — information the compiled
@@ -53,7 +54,7 @@ class SourceMethodResolver(
     }
 
     private fun entryForFile(file: Path): FileEntry? {
-        val text = runCatching { Files.readString(file) }.getOrNull() ?: return null
+        val text = runCatching { file.readText() }.getOrNull() ?: return null
         val hash = text.hashCode()
         dirCache[file]?.let { if (it.hash == hash) return it }
         return FileEntry(hash, parse(text)).also { dirCache[file] = it }

@@ -11,6 +11,7 @@ import java.nio.file.Path
 import java.util.Properties
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import java.nio.file.Paths
 
 /** A project listed in the picker, read cheaply from disk without opening the full engine. */
 data class ProjectSummary(val name: String, val rootPath: String, val moduleCount: Int)
@@ -64,14 +65,14 @@ class ProjectManager private constructor(
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. */
-    fun open(rootPath: String): IdeServices = IdeServices.openAt(Path.of(rootPath), sdk(), androidTools, dexRunner, apkInstaller)
+    fun open(rootPath: String): IdeServices = IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller)
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
      * [projectsRoot] so a stray path can never wipe an unrelated directory; a missing project is a no-op.
      */
     fun delete(rootPath: String) {
-        val dir = Path.of(rootPath).toAbsolutePath().normalize()
+        val dir = Paths.get(rootPath).toAbsolutePath().normalize()
         val root = projectsRoot.toAbsolutePath().normalize()
         require(dir.parent == root && dir != root) { "Refusing to delete a path outside the projects directory: $dir" }
         if (!Files.exists(dir)) return
@@ -175,7 +176,7 @@ class ProjectManager private constructor(
             apkInstaller: ApkInstaller? = null,
         ): ProjectManager {
             val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
-            val tools = AndroidDeviceTools(Path.of(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel)
+            val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel)
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,

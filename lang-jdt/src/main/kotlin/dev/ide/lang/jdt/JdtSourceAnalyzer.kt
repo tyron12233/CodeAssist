@@ -41,6 +41,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.Paths
 
 /**
  * Editor-time analyzer on Eclipse JDT. Each parse builds a fresh, error-tolerant [ASTParser]
@@ -53,7 +54,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     /** Project source roots only (this module + dependencies) — for unit-name/FQCN derivation. */
     val sourceRootPaths: List<Path> =
-        ctx.sourceRoots.mapNotNull { runCatching { Path.of(it.path) }.getOrNull() }.filter { Files.isDirectory(it) }
+        ctx.sourceRoots.mapNotNull { runCatching { Paths.get(it.path) }.getOrNull() }.filter { Files.isDirectory(it) }
 
     /** Source roots for the name environment: project roots + any synthetic-stub platform dir. */
     val completionSourceRoots: List<Path>
@@ -84,17 +85,17 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     private val compilerOptions: Map<String, String>
 
     init {
-        val bootDirs = ctx.bootClasspath.entries.mapNotNull { runCatching { Path.of(it.root.path) }.getOrNull() }.filter { Files.isDirectory(it) }
+        val bootDirs = ctx.bootClasspath.entries.mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }.filter { Files.isDirectory(it) }
         val isJdkImage = { p: Path -> Files.exists(p.resolve("lib/modules")) || Files.isDirectory(p.resolve("jmods")) }
         val syntheticStubDirs = bootDirs.filter { !isJdkImage(it) } // a dir of .java platform stubs
         val jars = (ctx.classpath.entries + ctx.bootClasspath.entries)
-            .mapNotNull { runCatching { Path.of(it.root.path) }.getOrNull() }
+            .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
             .filter { it.toString().endsWith(".jar") && Files.isRegularFile(it) }
 
         completionSourceRoots = sourceRootPaths + syntheticStubDirs
         classpathJarPaths = jars
         jdkHome = bootDirs.firstOrNull(isJdkImage)
-            ?: if (jars.isEmpty() && syntheticStubDirs.isEmpty()) runCatching { Path.of(System.getProperty("java.home")) }.getOrNull() else null
+            ?: if (jars.isEmpty() && syntheticStubDirs.isEmpty()) runCatching { Paths.get(System.getProperty("java.home")) }.getOrNull() else null
         complianceLevel = complianceLevelOf(ctx.languageLevel)
 
         sourcepath = (sourceRootPaths + syntheticStubDirs).map { it.toString() }.toTypedArray()
@@ -118,12 +119,12 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
         // Source attachments for names/javadoc: library -sources.jars (+ exploded source dirs), the JDK
         // src.zip (under the boot JDK image), and the Android platform sources dir (sibling of android.jar).
-        val attachments = ctx.sourceAttachments.mapNotNull { runCatching { Path.of(it.path) }.getOrNull() }
+        val attachments = ctx.sourceAttachments.mapNotNull { runCatching { Paths.get(it.path) }.getOrNull() }
         val attachmentJars = attachments.filter { val s = it.toString(); (s.endsWith(".jar") || s.endsWith(".zip")) && Files.isRegularFile(it) }
         val attachmentDirs = attachments.filter { Files.isDirectory(it) }
         val jdkSrcZip = jdkHome?.resolve("lib")?.resolve("src.zip")?.takeIf { Files.isRegularFile(it) }
         val androidSources = (ctx.classpath.entries + ctx.bootClasspath.entries)
-            .mapNotNull { runCatching { Path.of(it.root.path) }.getOrNull() }
+            .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
             .firstOrNull { it.fileName?.toString() == "android.jar" }
             ?.let { jar -> // …/platforms/android-NN/android.jar  →  …/sources/android-NN
                 val platformDir = jar.parent
@@ -239,7 +240,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     }
 
     private fun onSourcepathFile(file: VirtualFile): Path? {
-        val p = runCatching { Path.of(file.path).toAbsolutePath().normalize() }.getOrNull() ?: return null
+        val p = runCatching { Paths.get(file.path).toAbsolutePath().normalize() }.getOrNull() ?: return null
         val underRoot = sourceRootPaths.any { p.startsWith(it.toAbsolutePath().normalize()) }
         return if (underRoot && Files.isRegularFile(p)) p else null
     }
@@ -322,7 +323,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     }
 
     private fun unitNameFor(file: VirtualFile): String {
-        val p = runCatching { Path.of(file.path).toAbsolutePath().normalize() }.getOrNull() ?: return file.name
+        val p = runCatching { Paths.get(file.path).toAbsolutePath().normalize() }.getOrNull() ?: return file.name
         for (root in sourceRootPaths) {
             val r = root.toAbsolutePath().normalize()
             if (p.startsWith(r)) return r.relativize(p).toString().replace(File.separatorChar, '/')

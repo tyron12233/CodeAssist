@@ -7,6 +7,7 @@ import dev.ide.core.ProjectManager
 import java.io.File
 import java.nio.file.Path
 import java.util.zip.ZipInputStream
+import java.nio.file.Paths
 
 /**
  * On-device bootstrap for the IDE engine, the Android counterpart to :ide-desktop's wiring. ART has no
@@ -35,7 +36,7 @@ object AndroidIde {
         val debugKeystore = copyAsset(context, "debug.keystore", File(home, "debug.keystore"))
         // The aapt2/zipalign prebuilts are packaged as lib*.so and extracted here at install time — the only
         // directory ART permits executing binaries from.
-        val nativeLibDir = Path.of(context.applicationInfo.nativeLibraryDir)
+        val nativeLibDir = Paths.get(context.applicationInfo.nativeLibraryDir)
 
         val projectsRoot = File(home, "projects").toPath()
         val bootClasspath = listOf(androidJar.absolutePath)

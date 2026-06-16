@@ -17,6 +17,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import kotlin.io.path.readText
 
 /**
  * Crash-safe single-file writer: write to a sibling temp file, then atomically rename it over
@@ -153,7 +154,7 @@ object ModelPersistence {
 
     fun load(root: Path): WorkspaceData {
         val platformDir = root.resolve(PLATFORM_DIR)
-        val wsObj = Json.parse(Files.readString(platformDir.resolve(WORKSPACE_FILE))).asObject()
+        val wsObj = Json.parse((platformDir.resolve(WORKSPACE_FILE)).readText()).asObject()
         val version = (wsObj["version"] as Number).toInt()
         require(version <= WORKSPACE_SCHEMA_VERSION) {
             "workspace.json schema version $version is newer than supported $WORKSPACE_SCHEMA_VERSION"
@@ -166,7 +167,7 @@ object ModelPersistence {
             val modules = (p["modules"] as List<*>).map { mAny ->
                 val m = mAny.asObject()
                 val dir = m["dir"] as String
-                val toml = Toml.parse(Files.readString(resolveRel(projectRoot, dir).resolve(MODULE_FILE)))
+                val toml = Toml.parse((resolveRel(projectRoot, dir).resolve(MODULE_FILE)).readText())
                 tomlToModule(m["id"] as String, m["name"] as String, dir, toml)
             }
             ProjectData(
@@ -190,13 +191,13 @@ object ModelPersistence {
 
     private fun loadLibraries(path: Path): List<LibraryData> {
         if (!Files.exists(path)) return emptyList()
-        val obj = Json.parse(Files.readString(path)).asObject()
+        val obj = Json.parse(path.readText()).asObject()
         return (obj["libraries"] as? List<*>)?.map { libraryFromJson(it) } ?: emptyList()
     }
 
     private fun loadSdks(path: Path): List<SdkData> {
         if (!Files.exists(path)) return emptyList()
-        val obj = Json.parse(Files.readString(path)).asObject()
+        val obj = Json.parse(path.readText()).asObject()
         return (obj["sdks"] as? List<*>)?.map { sAny ->
             val s = sAny.asObject()
             SdkData(

@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin.compile
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.Paths
 
 /**
  * Supplies the Kotlin standard-library jar WITHOUT borrowing it from the host runtime.
@@ -52,7 +53,7 @@ object BundledKotlinStdlib {
      */
     fun cached(): Path? {
         cachedPath?.let { if (Files.isRegularFile(it)) return it }
-        val dir = Path.of(System.getProperty("java.io.tmpdir"), "codeassist", "kotlin-stdlib")
+        val dir = Paths.get(System.getProperty("java.io.tmpdir"), "codeassist", "kotlin-stdlib")
         return extractTo(dir)?.also { cachedPath = it }
     }
 
@@ -62,7 +63,7 @@ object BundledKotlinStdlib {
      */
     fun hostJar(): Path? = runCatching {
         val loc = Unit::class.java.protectionDomain?.codeSource?.location ?: return null
-        Path.of(loc.toURI()).takeIf { it.toString().endsWith(".jar") && Files.isRegularFile(it) }
+        Paths.get(loc.toURI()).takeIf { it.toString().endsWith(".jar") && Files.isRegularFile(it) }
     }.getOrNull()
 
     /** Best available stdlib jar: the bundled+extracted copy, else the host jar (desktop/tests). */

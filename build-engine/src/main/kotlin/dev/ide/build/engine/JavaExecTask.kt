@@ -11,6 +11,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /** Marker for tasks that must run every time (never up-to-date) — like Gradle's `JavaExec`/`run`. */
 interface AlwaysRun
@@ -25,7 +26,7 @@ class JavaExecTask(
     private val mainClass: String,
     private val runtimeClasspath: () -> List<Path>,
     private val programArgs: List<String> = emptyList(),
-    private val javaLauncher: () -> Path = { Path.of(System.getProperty("java.home"), "bin", "java") },
+    private val javaLauncher: () -> Path = { Paths.get(System.getProperty("java.home"), "bin", "java") },
 ) : Task, AlwaysRun {
 
     override val inputs: TaskInputs get() = TaskInputsImpl()

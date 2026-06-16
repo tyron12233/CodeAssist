@@ -10,6 +10,7 @@ import dev.ide.model.ContentRole
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * The Kotlin compile step, injected so build-engine never links the Kotlin compiler (the mirror of
@@ -44,7 +45,7 @@ internal fun hasKotlinSources(module: Module): Boolean = sourceRootDirs(module)
 private fun sourceRootDirs(module: Module): List<Path> = module.sourceSets
     .flatMap { it.contentRoots }
     .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-    .map { Path.of(it.dir.path) }
+    .map { Paths.get(it.dir.path) }
     .filter { Files.isDirectory(it) }
 
 /** Where a module's Kotlin `.class` output lands — a sibling of the Java [outputDir] so the two compilers

@@ -10,6 +10,7 @@ import dev.ide.model.ModuleDependency
 import dev.ide.model.Workspace
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /** Assembles a module's merged [ResourceRepository] from the project model (own res + dependency res). */
 object AndroidResources {
@@ -32,7 +33,7 @@ object AndroidResources {
             if (m.facets.get(AndroidFacet.KEY) != null) {
                 m.sourceSets.flatMap { it.contentRoots }
                     .filter { ContentRole.ANDROID_RES in it.roles }
-                    .forEach { runCatching { ordered.add(Path.of(it.dir.path)) } }
+                    .forEach { runCatching { ordered.add(Paths.get(it.dir.path)) } }
             }
         }
         visit(root)
@@ -49,7 +50,7 @@ object AndroidResources {
         val out = ArrayList<Path>()
         val entries = runCatching { module.classpath(DependencyScope.IMPLEMENTATION).entries }.getOrDefault(emptyList())
             .filter { it.kind == ClasspathEntryKind.LIBRARY }
-            .mapNotNull { runCatching { Path.of(it.root.path) }.getOrNull() }
+            .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
         for (entry in entries) {
             val sibling = entry.parent?.resolve("res")
             when {
@@ -64,7 +65,7 @@ object AndroidResources {
     /** Where local `.aar`s are exploded for the IDE: `<projectRoot>/.platform/caches/aar-res`. */
     private fun explodeRoot(module: Module, workspace: Workspace): Path? =
         workspace.projects.firstOrNull { p -> p.modules.any { it.id == module.id } }
-            ?.let { runCatching { Path.of(it.rootDir.path).resolve(".platform/caches/aar-res") }.getOrNull() }
+            ?.let { runCatching { Paths.get(it.rootDir.path).resolve(".platform/caches/aar-res") }.getOrNull() }
 
     private fun stem(p: Path): String = p.fileName.toString().substringBeforeLast('.')
 

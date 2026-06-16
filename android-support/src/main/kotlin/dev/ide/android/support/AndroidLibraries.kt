@@ -5,6 +5,7 @@ import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.Module
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /** A module's resolved library dependencies, split into the forms the Android pipeline consumes. */
 class ResolvedLibraries(
@@ -62,7 +63,7 @@ object AndroidLibraries {
     private fun libraryRoots(module: Module, scope: DependencyScope): List<Path> =
         module.classpath(scope).entries
             .filter { it.kind == ClasspathEntryKind.LIBRARY }
-            .map { Path.of(it.root.path) }
+            .map { Paths.get(it.root.path) }
 
     private fun isAar(p: Path) = p.toString().endsWith(".aar", ignoreCase = true)
     private fun isJar(p: Path) = p.toString().endsWith(".jar", ignoreCase = true)

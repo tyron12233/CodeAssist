@@ -20,6 +20,7 @@ import kotlinx.coroutines.sync.withPermit
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Collections
+import java.nio.file.Paths
 
 /**
  * A task DAG with batched [topologicalLevels] (Kahn's algorithm); tasks in a level are independent.
@@ -99,10 +100,10 @@ class TaskGraphImpl(
      * dependent on `jar`, producing `classes -> jar -> classes`.
      */
     private fun inferOutputDeps(explicit: Map<TaskName, Set<TaskName>>): Map<TaskName, Set<TaskName>> {
-        val producers = tasks.flatMap { t -> t.outputs.declaredPaths().map { Path.of(it).normalize() to t.name } }
+        val producers = tasks.flatMap { t -> t.outputs.declaredPaths().map { Paths.get(it).normalize() to t.name } }
         if (producers.isEmpty()) return emptyMap()
         return tasks.associate { t ->
-            val ins = t.inputs.declaredPaths().map { Path.of(it).normalize() }
+            val ins = t.inputs.declaredPaths().map { Paths.get(it).normalize() }
             t.name to producers.filterTo(LinkedHashSet()) { (out, producer) ->
                 producer != t.name &&
                     t.name !in explicit[producer].orEmpty() &&   // don't reverse an explicit dependency

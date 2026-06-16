@@ -3,6 +3,7 @@ package dev.ide.model.impl.jdk
 import dev.ide.model.impl.SdkData
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * Discovers the platform classpath the project model should expose as a boot-classpath [SdkData],
@@ -19,7 +20,7 @@ import java.nio.file.Path
 object JdkSdkProvider {
 
     /** Inspect [javaHome] (defaults to the running JDK) and produce the platform SDK. */
-    fun detect(javaHome: Path = Path.of(System.getProperty("java.home"))): SdkData {
+    fun detect(javaHome: Path = Paths.get(System.getProperty("java.home"))): SdkData {
         val rtJar = javaHome.resolve("lib").resolve("rt.jar")
         val jreRtJar = javaHome.resolve("jre").resolve("lib").resolve("rt.jar")
         val modules = javaHome.resolve("lib").resolve("modules")

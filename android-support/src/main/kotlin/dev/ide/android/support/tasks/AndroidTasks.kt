@@ -21,6 +21,7 @@ import java.security.MessageDigest
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import java.util.zip.ZipFile
+import kotlin.io.path.writeText
 
 /**
  * The native Android pipeline as discrete, independently-incremental [Task]s. Each
@@ -117,11 +118,8 @@ internal class GenerateLibraryRTask(
 
     private fun synthesizeManifest(): Path {
         synthManifest.parent?.let { Files.createDirectories(it) }
-        Files.writeString(
-            synthManifest,
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
-                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$packageName\"/>\n",
-        )
+        synthManifest.writeText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$packageName\"/>\n")
         return synthManifest
     }
 }

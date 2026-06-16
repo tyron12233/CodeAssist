@@ -28,6 +28,7 @@ import java.nio.file.Path
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import java.util.zip.ZipInputStream
+import java.nio.file.Paths
 
 /** The compile step, injected so the engine stays decoupled from any backend (JDT wires it in). */
 fun interface JavaCompile {
@@ -74,7 +75,7 @@ class JavaBuildSystem(
         module: Module,
         mainClass: String,
         programArgs: List<String> = emptyList(),
-        javaLauncher: () -> Path = { Path.of(System.getProperty("java.home"), "bin", "java") },
+        javaLauncher: () -> Path = { Paths.get(System.getProperty("java.home"), "bin", "java") },
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
@@ -119,7 +120,7 @@ class JavaBuildSystem(
     /** Runtime classpath for running [module]: its own output (Java + Kotlin) + the full runtime dependency
      *  closure (each module output paired with its sibling `kotlin-classes`, present only for Kotlin modules). */
     private fun runtimeClasspath(module: Module): List<Path> {
-        val depEntries = module.classpath(DependencyScope.RUNTIME_ONLY).entries.map { Path.of(it.root.path) }
+        val depEntries = module.classpath(DependencyScope.RUNTIME_ONLY).entries.map { Paths.get(it.root.path) }
         return (classOutputs(module) + depEntries + kotlinSiblings(depEntries))
             .filter { Files.isDirectory(it) || Files.isRegularFile(it) }
             .distinct()
@@ -163,24 +164,24 @@ internal class JavaCompileTask(
 internal fun sourceFiles(module: Module): List<Path> = module.sourceSets
     .flatMap { it.contentRoots }
     .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-    .map { Path.of(it.dir.path) }
+    .map { Paths.get(it.dir.path) }
     .filter { Files.isDirectory(it) }
     .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.toList() } }
 
 internal fun depOutputDirs(module: Module): List<Path> =
     module.classpath(DependencyScope.IMPLEMENTATION).entries
-        .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Path.of(it.root.path) }
+        .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
 
 internal fun libJars(module: Module): List<Path> =
     module.classpath(DependencyScope.IMPLEMENTATION).entries
-        .filter { it.kind == ClasspathEntryKind.LIBRARY }.map { Path.of(it.root.path) }
+        .filter { it.kind == ClasspathEntryKind.LIBRARY }.map { Paths.get(it.root.path) }
 
-internal fun outputDir(module: Module): Path = Path.of(module.outputDir.path)
+internal fun outputDir(module: Module): Path = Paths.get(module.outputDir.path)
 
 /** Convention path of a module's `jar` artifact (`build/libs/<name>.jar`, Gradle-style) — shared so other
  *  plugins (Android) can consume it by the same path. */
 fun jarPath(module: Module): Path =
-    Path.of(module.outputDir.path).resolveSibling("libs").resolve("${module.name}.jar")
+    Paths.get(module.outputDir.path).resolveSibling("libs").resolve("${module.name}.jar")
 
 internal fun levelOf(level: LanguageLevel): String = when (level) {
     LanguageLevel.JAVA_8 -> "8"

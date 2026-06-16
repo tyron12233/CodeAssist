@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
+import kotlin.io.path.writeText
 
 /**
  * Explodes an Android `.aar` (a zip) into its parts. An AAR
@@ -59,6 +60,6 @@ object AarExtractor {
                 }
             }
         }
-        Files.writeString(into.resolve(".exploded"), aar.fileName.toString())
+        (into.resolve(".exploded")).writeText(aar.fileName.toString())
     }
 }

@@ -2,6 +2,7 @@ package dev.ide.model.impl.jdk
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.writeText
 
 /**
  * Generates a minimal, self-consistent set of `java.lang` source stubs — a fallback platform when no
@@ -15,7 +16,7 @@ object SyntheticJdk {
         for ((relPath, content) in STUBS) {
             val file = dir.resolve(relPath)
             Files.createDirectories(file.parent)
-            Files.writeString(file, content)
+            file.writeText(content)
         }
         return dir
     }

@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin.compile
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.nio.file.Paths
 
 /**
  * Incremental Kotlin compilation below the task level. The build engine already skips `compileKotlin` whole
@@ -249,8 +250,8 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
                     val p = line.split('\t')
                     when (p.getOrNull(0)) {
                         "ctx" -> context = p.getOrElse(1) { "" }
-                        "s" -> srcHash[Path.of(p[1])] = p[2]
-                        "o" -> srcToOut[Path.of(p[1])] = if (p.size > 2 && p[2].isNotEmpty()) p[2].split(',') else emptyList()
+                        "s" -> srcHash[Paths.get(p[1])] = p[2]
+                        "o" -> srcToOut[Paths.get(p[1])] = if (p.size > 2 && p[2].isNotEmpty()) p[2].split(',') else emptyList()
                         "a" -> abi[p[1]] = p[2]
                     }
                 }

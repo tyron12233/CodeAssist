@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * Orchestrates the Android SDK package downloader ([AndroidSdkInstaller]) and the [JdkManager] behind one
@@ -91,9 +92,9 @@ class SdkManagerService(
         val home = System.getProperty("user.home").orEmpty()
         val os = System.getProperty("os.name").orEmpty().lowercase()
         return when {
-            os.contains("mac") -> Path.of(home, "Library", "Android", "sdk")
-            os.contains("win") -> Path.of(home, "AppData", "Local", "Android", "Sdk")
-            else -> Path.of(home, "Android", "Sdk")
+            os.contains("mac") -> Paths.get(home, "Library", "Android", "sdk")
+            os.contains("win") -> Paths.get(home, "AppData", "Local", "Android", "Sdk")
+            else -> Paths.get(home, "Android", "Sdk")
         }
     }
 }
