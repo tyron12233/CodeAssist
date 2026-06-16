@@ -1,0 +1,39 @@
+CodeAssist is an on-device IDE that compiles and runs real Android and Java
+projects directly on your phone or tablet — no PC, no server, and no Gradle
+daemon required.
+
+Version 3.0 is a complete rewrite. The entire IDE — editor, build system, and
+Android toolchain — was re-engineered from scratch to be fast, incremental, and
+fully offline.
+
+<b>A real on-device build system</b>
+* Native incremental build engine — only what changed is rebuilt.
+* Full Android APK pipeline on-device: resource compilation (aapt2), R
+  generation, D8 dexing, packaging and signing, all in-process.
+* Build, install and launch a debug APK straight from your device.
+
+<b>Java and Kotlin</b>
+* First-class Java support backed by the Eclipse compiler.
+* End-to-end Kotlin: edit, compile and run mixed Kotlin/Java modules with the
+  Kotlin compiler running on-device.
+* Multi-module projects, Android app and library modules, build variants, and
+  JAR/AAR library dependencies resolved from Maven.
+
+<b>A smarter editor</b>
+* Fast, error-tolerant code completion that works on half-typed code.
+* Android XML intelligence for layouts, manifests, values and drawables, driven
+  by the real Android SDK, with resource references and go-to-definition.
+* Inline diagnostics, quick-fixes and intentions.
+* Go-to-symbol and auto-import powered by a low-memory on-device index.
+
+<b>Block editor</b>
+* A Scratch/Blockly-style projectional editor with typed sockets — a live
+  projection of your real code, so switching between Code and Blocks loses
+  nothing.
+
+<b>Safe runs</b>
+* A run sandbox prompts you before code you run touches the network, files,
+  reflection or other processes.
+
+CodeAssist is free and open-source software, licensed under the GNU General
+Public License v3.0 or later.
