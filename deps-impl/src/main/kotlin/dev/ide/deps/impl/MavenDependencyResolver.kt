@@ -41,6 +41,7 @@ class MavenDependencyResolver(
         repositories: List<Repository>,
         conflict: ConflictPolicy,
         progress: ProgressReporter,
+        platforms: List<Coordinate>,
     ): ResolutionResult {
         val repos = repositories.ifEmpty { DEFAULT_REPOSITORIES }
         val pomMemo = HashMap<Coordinate, EffPom?>()
@@ -54,8 +55,23 @@ class MavenDependencyResolver(
         val unresolved = LinkedHashSet<Coordinate>()
         val directGAs = LinkedHashSet<GA>()
 
+        // Imported BOMs (Gradle `platform(...)`): merge their dependencyManagement into one version source
+        // for versionless coordinates. Earlier platforms win on overlap (putIfAbsent); a BOM that can't be
+        // fetched is surfaced as unresolved so the caller can flag it.
+        val platformManaged = LinkedHashMap<GA, String>()
+        for (p in platforms) {
+            val eff = loadEffective(p, repos, HashSet())
+            if (eff == null) { unresolved += p; continue }
+            eff.managed.forEach { (ga, v) -> platformManaged.putIfAbsent(ga, v) }
+        }
+
         val queue = ArrayDeque<Req>()
-        for (c in coordinates) {
+        for (c0 in coordinates) {
+            // A blank version means "take it from a platform BOM" — fill it, or record it unresolved.
+            val c = if (c0.version.isBlank()) {
+                val v = platformManaged[c0.ga] ?: run { unresolved += c0; continue }
+                c0.copy(version = v)
+            } else c0
             directVersions[c.ga] = c.version
             directGAs += c.ga
             queue.add(Req(c, emptySet(), direct = true))
@@ -89,13 +105,15 @@ class MavenDependencyResolver(
             }
             packagingByGa[ga] = eff.packaging
             for (d in eff.dependencies) {
-                if (d.version.isNullOrBlank()) continue            // unmanaged version → can't place it
                 if (!d.isTransitivelyIncluded()) continue          // drop test/provided/system/optional
                 val childGa = GA(d.groupId, d.artifactId)
+                // A versionless transitive (one whose own POM left the version to dependencyManagement it
+                // didn't carry) is placeable iff a platform BOM manages it.
+                val version = d.version?.ifBlank { null } ?: platformManaged[childGa] ?: continue
                 if (childGa.excludedBy(req.exclusions)) continue
                 edges.getOrPut(ga) { linkedSetOf() }.add(childGa)
                 if (d.type.equals("aar", ignoreCase = true)) packagingByGa.putIfAbsent(childGa, "aar")
-                queue.add(Req(Coordinate(d.groupId, d.artifactId, d.version), req.exclusions + d.exclusions, direct = false))
+                queue.add(Req(Coordinate(d.groupId, d.artifactId, version), req.exclusions + d.exclusions, direct = false))
             }
             if (++processed % 4 == 0) progress.report(-1.0, "Resolving ${req.coord.name}…")
         }
@@ -224,16 +242,18 @@ class MavenDependencyResolver(
     }
 
     /**
-     * Explode an `.aar` into the cache, returning its `classes.jar`. Alongside it, the AAR's `res/` and
-     * `assets/` are unpacked into the same exploded dir — so a consumer (the IDE's resource model) can find
-     * a library's resources as a `res/` sibling of its `classes.jar`, with no further unzip at use time.
+     * Explode an `.aar` into the cache, returning its `classes.jar`. Alongside it, the AAR's `res/`,
+     * `assets/`, `jni/` and `AndroidManifest.xml` are unpacked into the same exploded dir — so a consumer
+     * (the IDE's resource model / Android build) can find a library's resources as a `res/` sibling of its
+     * `classes.jar` and its package name in the sibling manifest, with no further unzip at use time.
      */
     private fun extractClassesJar(coord: Coordinate, aar: Path): Path {
         val dir = cache.explodedDir(coord)
         Files.createDirectories(dir)
         val classesJar = dir.resolve("classes.jar")
         val marker = dir.resolve(".extracted")
-        if (Files.isRegularFile(marker)) return classesJar // already fully exploded (classes + res + assets)
+        // Re-extract if a prior (pre-manifest) explosion left no manifest, so the package name is available.
+        if (Files.isRegularFile(marker) && Files.isRegularFile(dir.resolve("AndroidManifest.xml"))) return classesJar
 
         var foundClasses = false
         ZipInputStream(Files.newInputStream(aar)).use { zin ->
@@ -245,7 +265,8 @@ class MavenDependencyResolver(
                         Files.copy(zin, classesJar, StandardCopyOption.REPLACE_EXISTING)
                         foundClasses = true
                     }
-                    !entry.isDirectory && (name.startsWith("res/") || name.startsWith("assets/")) -> {
+                    !entry.isDirectory && (name.startsWith("res/") || name.startsWith("assets/") ||
+                        name.startsWith("jni/") || name == "AndroidManifest.xml") -> {
                         val target = dir.resolve(name).normalize()
                         if (target.startsWith(dir)) { // zip-slip guard
                             Files.createDirectories(target.parent)

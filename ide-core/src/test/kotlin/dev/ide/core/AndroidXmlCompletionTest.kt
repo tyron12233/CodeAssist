@@ -81,6 +81,23 @@ class AndroidXmlCompletionTest {
     }
 
     @Test
+    fun completesCustomViewTagsFromLibrariesByFqnAndSimpleName() {
+        val views = listOf(
+            dev.ide.android.support.metadata.Widget("com.google.android.material.button.MaterialButton", false),
+            dev.ide.android.support.metadata.Widget("androidx.constraintlayout.widget.ConstraintLayout", true),
+        )
+        val svc = XmlCompletionService(contributors = {
+            listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, customViews = { views }))
+        })
+        // Typing the simple name matches the fully-qualified custom view (which is what gets inserted).
+        assertTrue("com.google.android.material.button.MaterialButton" in complete("<Material|", svc = svc),
+            "library custom view should be suggested by its simple name")
+        // Framework widgets and custom views coexist.
+        val all = complete("<C|", svc = svc)
+        assertTrue("androidx.constraintlayout.widget.ConstraintLayout" in all, "got $all")
+    }
+
+    @Test
     fun completesAttributeNames() {
         val labels = complete("<TextView android:tex|")
         assertTrue("android:text" in labels, "got $labels")

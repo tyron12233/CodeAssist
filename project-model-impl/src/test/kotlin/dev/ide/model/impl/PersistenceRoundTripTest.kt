@@ -2,6 +2,7 @@ package dev.ide.model.impl
 
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
+import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
@@ -9,6 +10,7 @@ import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
+import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
 import dev.ide.model.SourceSetTemplate
@@ -58,6 +60,7 @@ class PersistenceRoundTripTest {
                     addSourceSet(SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE))))
                     addDependency(ModuleDependency(ModuleId("shared"), DependencyScope.API, exported = true))
                     addDependency(LibraryDependency(LibraryRef("com.squareup.okhttp3:okhttp:4.12.0"), DependencyScope.IMPLEMENTATION))
+                    addDependency(PlatformDependency(Coordinate("androidx.compose", "compose-bom", "2024.09.00")))
                     putFacet(JavaFacet(listOf("dagger.internal.codegen.ComponentProcessor"), preview = false))
                 }
                 addModule("app", javaCli).apply {
@@ -96,6 +99,10 @@ class PersistenceRoundTripTest {
                 assertEquals(
                     listOf("dagger.internal.codegen.ComponentProcessor"),
                     core.facets.get(JavaFacet.KEY)?.annotationProcessors,
+                )
+                assertEquals(
+                    Coordinate("androidx.compose", "compose-bom", "2024.09.00"),
+                    core.dependencies.filterIsInstance<PlatformDependency>().single().bom,
                 )
                 assertEquals(LibraryKind.JAR, store2.workspace.libraryTable.byName("com.squareup.okhttp3:okhttp:4.12.0")?.kind)
                 assertEquals("jdk-17", store2.workspace.sdkTable.byName("jdk-17")?.name)

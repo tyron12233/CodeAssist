@@ -44,6 +44,11 @@ object AndroidIde {
         val dexRunner = DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
+        // Renders live custom views in the layout preview: D8-dex the instrumented classes + DexClassLoader.
+        val previewRuntime = dev.ide.preview.bridge.DexCustomViewRuntime(
+            context.applicationContext, androidJar.toPath(),
+            File(context.cacheDir, "preview"), android.os.Build.VERSION.SDK_INT,
+        )
         // dataDir = the whole app filesDir, so a backup also sweeps up project files left by a previous
         // (incompatible) app version that still live in app storage after the update.
         val manager = ProjectManager.onDevice(
@@ -67,6 +72,7 @@ object AndroidIde {
                 dexRunner = dexRunner,
                 deviceApiLevel = android.os.Build.VERSION.SDK_INT,
                 apkInstaller = apkInstaller,
+                customViewRuntime = previewRuntime,
             )
         } else {
             manager.open(manager.list().first().rootPath)

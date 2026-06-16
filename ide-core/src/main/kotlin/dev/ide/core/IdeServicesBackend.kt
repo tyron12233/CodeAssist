@@ -69,6 +69,8 @@ import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiRenameResult
+import dev.ide.ui.backend.UiRenameTarget
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.UiTextEdit
@@ -107,7 +109,7 @@ import kotlin.io.path.writeText
 class IdeServicesBackend(
     initial: IdeServices,
     private val manager: ProjectManager? = null,
-) : IdeBackend {
+) : IdeBackend, dev.ide.preview.LayoutPreviewBackend {
 
     @Volatile
     private var services: IdeServices = initial
@@ -299,6 +301,16 @@ class IdeServicesBackend(
     override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
         services.definitionAt(Paths.get(path), text, offset)?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
+    override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
+        withContext(Dispatchers.IO) { services.prepareRename(Paths.get(path), text, offset)?.let { UiRenameTarget(it.oldName, it.kind) } }
+
+    override suspend fun rename(path: String, text: String, offset: Int, newName: String): UiRenameResult =
+        withContext(Dispatchers.IO) {
+            val r = services.rename(Paths.get(path), text, offset, newName)
+            if (r.success) _fsEpoch.value += 1 // the multi-file edit / file rename changed the tree + other buffers
+            UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
+        }
+
     override fun updateDocument(path: String, text: String) =
         services.updateDocument(Paths.get(path), text)
 
@@ -348,6 +360,9 @@ class IdeServicesBackend(
 
     override suspend fun addDependency(moduleName: String, coordinate: String, scope: String): UiAddResult =
         withContext(Dispatchers.IO) { services.addDependency(moduleName, coordinate, scope) }
+
+    override suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
+        withContext(Dispatchers.IO) { services.addPlatform(moduleName, coordinate) }
 
     override fun removeDependency(moduleName: String, coordinate: String): Boolean =
         services.removeDependency(moduleName, coordinate)
@@ -592,6 +607,9 @@ class IdeServicesBackend(
 
     override suspend fun resourceImageBytes(path: String): ByteArray? =
         services.resourceBytes(Paths.get(path))
+
+    override suspend fun layoutPreview(path: String, text: String, request: dev.ide.preview.PreviewRequest): dev.ide.preview.LayoutPreviewResult? =
+        services.layoutPreview(Paths.get(path), text, request)
 
     /** Map the engine's [DrawablePreview] onto the UI's neutral [UiDrawable] DTO. */
     private fun toUiDrawable(d: DrawablePreview): UiDrawable = when (d) {

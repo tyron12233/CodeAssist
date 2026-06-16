@@ -157,6 +157,27 @@ class IdeUiState(val backend: IdeBackend) {
     /** Re-read the workspace tree from the backend (after a file is created/removed). */
     fun refreshTree() { tree = backend.fileTree() }
 
+    /**
+     * Reflect a completed project-wide rename in the open tabs. The rename wrote every reference site to
+     * disk, so each clean tab is re-read (a no-op for files it didn't touch — those keep their session, undo
+     * and caret). The active tab follows the backing-file rename to [newPath] when the file itself was
+     * renamed. Tabs with unsaved edits are left untouched so a rename never clobbers in-progress work.
+     */
+    fun reloadAfterRename(activePath: String?, newPath: String?) {
+        for (i in openFiles.indices) {
+            val f = openFiles[i]
+            val followsFileRename = newPath != null && f.path == activePath
+            if (!followsFileRename && f.modified) continue
+            val diskPath = if (followsFileRename) newPath!! else f.path
+            val text = runCatching { backend.readFile(diskPath) }.getOrNull() ?: continue
+            if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
+            val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
+            openFiles[i] = OpenFile(diskPath, name, text)
+            backend.updateDocument(diskPath, text)
+        }
+        refreshTree()
+    }
+
     /** Create a new file through the backend, refresh the tree, and open it in the editor. */
     fun createFile(dirPath: String, fileName: String, content: String) {
         val path = backend.createFile(dirPath, fileName, content) ?: return

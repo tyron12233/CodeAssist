@@ -5,6 +5,11 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -38,8 +44,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -74,6 +83,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
@@ -132,6 +142,7 @@ fun CodeEditor(
     modifier: Modifier = Modifier,
     onSave: () -> Unit = {},
     onNavigate: (path: String, offset: Int) -> Unit = { _, _ -> },
+    onRenamed: (newPath: String?) -> Unit = {},
     showInlayHints: Boolean = true,
 ) {
     val colors = Ca.colors
@@ -304,6 +315,35 @@ fun CodeEditor(
     var actions by remember(path) { mutableStateOf<List<UiAction>>(emptyList()) }
     var actionsOpen by remember(path) { mutableStateOf(false) }
     var actionSelected by remember(path) { mutableIntStateOf(0) }
+
+    // ---- rename refactoring (F2 / Shift-F6): prompt for a new name, then a project-wide rename ----
+    var rename by remember(path) { mutableStateOf<RenameUiState?>(null) }
+    var renameBusy by remember(path) { mutableStateOf(false) }
+    var renameError by remember(path) { mutableStateOf<String?>(null) }
+
+    fun startRename() {
+        if (renameBusy) return
+        val text = editorSession.doc.text
+        val caret = editorSession.selection.start
+        scope.launch {
+            val target = runCatching { backend.prepareRename(path, text, caret) }.getOrNull()
+            if (target != null) { renameError = null; rename = RenameUiState(caret, target.oldName, target.kind, target.oldName) }
+        }
+    }
+
+    fun commitRename() {
+        val r = rename ?: return
+        if (renameBusy || r.newName.isBlank() || r.newName == r.oldName) { rename = null; return }
+        renameBusy = true; renameError = null
+        val text = editorSession.doc.text
+        scope.launch {
+            val result = runCatching { backend.rename(path, text, r.offset, r.newName) }
+                .getOrElse { dev.ide.ui.backend.UiRenameResult(false, it.message ?: "Rename failed") }
+            renameBusy = false
+            if (result.success) { rename = null; onRenamed(result.newPath) }
+            else renameError = result.message
+        }
+    }
 
     // Read the document + selection straight off the session (snapshot reads → this body recomposes on
     // edit), but derive everything from the rope's O(log N) random access / small substrings — the body
@@ -623,6 +663,10 @@ fun CodeEditor(
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Spacebar) {
                         dismissed = false; refresh(immediate = true); return@onPreviewKeyEvent true
                     }
+                    // Rename (F2, or Shift-F6 a la IntelliJ): prompt for a new name → project-wide rename.
+                    if (ev.key == Key.F2 || (ev.isShiftPressed && ev.key == Key.F6)) {
+                        startRename(); return@onPreviewKeyEvent true
+                    }
                     // Code actions: Alt+Enter (or Ctrl/Cmd-.) opens the lightbulb menu; when it's open the
                     // arrows + Enter/Tab drive it and Esc closes it (checked before completion's own keys).
                     if ((ev.isAltPressed && ev.key == Key.Enter) || ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Period)) {
@@ -924,6 +968,77 @@ fun CodeEditor(
                 }
             }
         }
+
+        // rename prompt — a small centered card over the editor
+        rename?.let { r ->
+            RenamePopup(
+                state = r,
+                busy = renameBusy,
+                error = renameError,
+                onChange = { rename = r.copy(newName = it) },
+                onCommit = { commitRename() },
+                onCancel = { if (!renameBusy) { rename = null; renameError = null } },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
+    }
+}
+
+/** What the rename prompt is editing: where the caret was, the symbol's old name + kind, and the typed name. */
+private data class RenameUiState(val offset: Int, val oldName: String, val kind: String, val newName: String)
+
+/** A centered prompt for the new identifier; Enter renames, Esc cancels. Auto-focused, with the name selected. */
+@Composable
+private fun RenamePopup(
+    state: RenameUiState,
+    busy: Boolean,
+    error: String?,
+    onChange: (String) -> Unit,
+    onCommit: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focus = remember { FocusRequester() }
+    // Prefill with the old name, fully selected, so typing replaces it (the IntelliJ rename feel).
+    var field by remember { mutableStateOf(TextFieldValue(state.newName, androidx.compose.ui.text.TextRange(0, state.newName.length))) }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    Column(
+        modifier.padding(top = 48.dp).width(320.dp)
+            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .padding(16.dp),
+    ) {
+        Text("Rename ${state.kind}", color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.size(8.dp))
+        Box(
+            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, if (error != null) Ca.colors.error else Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            BasicTextField(
+                value = field,
+                onValueChange = { field = it; onChange(it.text) },
+                singleLine = true,
+                enabled = !busy,
+                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary, fontFamily = FontFamily.Monospace),
+                cursorBrush = SolidColor(Ca.colors.accent),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (ev.key) {
+                        Key.Enter -> { onCommit(); true }
+                        Key.Escape -> { onCancel(); true }
+                        else -> false
+                    }
+                },
+            )
+        }
+        if (error != null) {
+            Spacer(Modifier.size(6.dp))
+            Text(error, color = Ca.colors.error, style = Ca.type.caption2)
+        }
+        Spacer(Modifier.size(6.dp))
+        Text(if (busy) "Renaming…" else "Enter to rename '${state.oldName}', Esc to cancel",
+            color = Ca.colors.textTertiary, style = Ca.type.caption2)
     }
 }
 

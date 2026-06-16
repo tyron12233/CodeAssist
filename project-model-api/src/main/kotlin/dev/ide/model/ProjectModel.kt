@@ -164,6 +164,18 @@ data class SdkDependency(
     override val exported: Boolean get() = false
 }
 
+/**
+ * A Maven BOM ("bill of materials") imported for its `dependencyManagement` only — the Gradle
+ * `platform(...)` semantics. Contributes NO classpath artifact; it is a version source that fills in
+ * the version for any versionless [LibraryDependency] when its closure is resolved. Held in the model
+ * (and persisted) so the IDE knows which BOMs constrain a module's versionless dependencies.
+ */
+data class PlatformDependency(
+    val bom: Coordinate,
+    override val scope: DependencyScope = DependencyScope.IMPLEMENTATION,
+    override val exported: Boolean = false,
+) : OrderEntry
+
 enum class DependencyScope(val onCompile: Boolean, val onRuntime: Boolean, val onTest: Boolean) {
     API(true, true, true),
     IMPLEMENTATION(true, true, true),

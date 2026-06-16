@@ -49,6 +49,8 @@ include(
     ":deps-impl",
     ":block-api",
     ":block-impl",
+    ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
+    ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
 )
 

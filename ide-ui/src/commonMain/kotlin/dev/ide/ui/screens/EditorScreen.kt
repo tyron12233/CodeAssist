@@ -311,7 +311,7 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) { Breadcrumb(crumbs) }
-                ViewModeToggle(active.viewMode, dev.ide.ui.editor.preview.isPreviewable(active.path)) { active.viewMode = it }
+                ViewModeToggle(active.viewMode, dev.ide.ui.editor.preview.isPreviewable(active.path) || dev.ide.ui.editor.preview.isLayoutPreviewable(active.path)) { active.viewMode = it }
             }
             AndroidSourcesBanner(state)
             when (active.viewMode) {
@@ -321,12 +321,21 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                     backend = state.backend,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
-                dev.ide.ui.EditorViewMode.Preview -> dev.ide.ui.editor.preview.ResourcePreviewPane(
-                    path = active.path,
-                    text = active.text,
-                    backend = state.backend,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
+                dev.ide.ui.EditorViewMode.Preview -> if (dev.ide.ui.editor.preview.isLayoutPreviewable(active.path)) {
+                    dev.ide.ui.editor.preview.LayoutPreviewPane(
+                        path = active.path,
+                        text = active.text,
+                        backend = state.backend,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                } else {
+                    dev.ide.ui.editor.preview.ResourcePreviewPane(
+                        path = active.path,
+                        text = active.text,
+                        backend = state.backend,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
                 else -> CodeEditor(
                     path = active.path,
                     session = active.session,
@@ -334,6 +343,7 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     onSave = { state.save(active) },
                     onNavigate = { p, o -> state.openAt(p, o) },
+                    onRenamed = { newPath -> state.reloadAfterRename(active.path, newPath) },
                     showInlayHints = state.inlayHintsEnabled,
                 )
             }

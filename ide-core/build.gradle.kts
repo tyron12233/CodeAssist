@@ -26,6 +26,8 @@ dependencies {
     implementation(project(":build-api"))
     implementation(project(":build-engine"))
     implementation(project(":android-support")) // android-app/-lib module types + AndroidFacet codec
+    api(project(":layout-preview-api")) // owned XML-layout preview contracts; `api` because IdeServicesBackend implements LayoutPreviewBackend (public supertype, must be on consumers' classpath)
+    implementation(project(":layout-preview-impl")) // the preview engine (inflater + resolver + chrome)
     implementation(project(":deps-api"))
     implementation(project(":deps-impl")) // Maven dependency resolver (download/transitive/conflict)
     implementation(project(":vfs-api"))

@@ -85,6 +85,13 @@ private enum class DepView(val label: String, val icon: ImageVector) {
     List("List", CaIcons.resources), Tree("Tree", CaIcons.layers), Graph("Graph", CaIcons.gitBranch)
 }
 
+/** The Add flow can add a normal library/AAR or import a BOM as a platform (Gradle `platform(...)`). */
+private enum class AddMode(val label: String) { Library("Library"), Platform("Platform (BOM)") }
+
+/** A typed string is treated as a direct coordinate when it carries a `:` — `group:name[:version]`. */
+private fun looksLikeCoordinate(s: String): Boolean =
+    s.split(":").let { it.size in 2..3 && it.all { p -> p.isNotBlank() } }
+
 /** A transient confirmation/result toast. */
 private data class ToastMsg(val text: String, val error: Boolean)
 
@@ -131,7 +138,7 @@ fun DependenciesScreen(
     BoxWithConstraints(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         val expanded = maxWidth >= DEPS_EXPANDED_BREAKPOINT
         Column(Modifier.fillMaxSize()) {
-            DepsHeader(onBack, view, { view = it }, { addOpen = true }, resolving, resolveState.message)
+            DepsHeader(onBack, view, { view = it }, { addOpen = true }, resolving, resolveState.message, compact = !expanded)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
 
             if (expanded) {
@@ -198,6 +205,7 @@ private fun DepsHeader(
     onAdd: () -> Unit,
     resolving: Boolean,
     resolveMessage: String,
+    compact: Boolean,
 ) {
     GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
         Row(
@@ -206,9 +214,12 @@ private fun DepsHeader(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, "Back", onBack)
-            Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-            Text("Dependencies", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
-            AnimatedVisibility(resolving, enter = fadeIn(tween(Motion.FAST)), exit = fadeOut(tween(Motion.FAST))) {
+            if (!compact) Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+            // On compact widths the title yields space (ellipsizes) so the toggle + Add never clip off-screen.
+            Text("Dependencies", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = if (compact) Modifier.weight(1f, fill = false) else Modifier)
+            AnimatedVisibility(resolving && !compact, enter = fadeIn(tween(Motion.FAST)), exit = fadeOut(tween(Motion.FAST))) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(start = 4.dp).background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 10.dp, vertical = 4.dp)) {
                     CircularProgressIndicator(Modifier.size(12.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
@@ -216,9 +227,11 @@ private fun DepsHeader(
                 }
             }
             Spacer(Modifier.weight(1f))
-            ViewToggle(view, onView)
+            // Compact: a spinning indicator stands in for the resolving pill (which is hidden to save room).
+            if (compact && resolving) CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            ViewToggle(view, onView, compact = compact)
             Spacer(Modifier.width(4.dp))
-            PrimaryButton("Add", onClick = onAdd, icon = CaIcons.plus)
+            PrimaryButton("Add", onClick = onAdd, icon = CaIcons.plus, iconOnly = compact)
         }
     }
 }
@@ -491,6 +504,7 @@ private fun AddDependencyContent(
     onResult: (UiAddResult) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var mode by remember { mutableStateOf(AddMode.Library) }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<UiArtifactHit>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
@@ -502,7 +516,7 @@ private fun AddDependencyContent(
     val scopeOptions = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
     val coroutine = rememberCoroutineScope()
 
-    LaunchedEffect(query) {
+    LaunchedEffect(query, mode) {
         val q = query.trim()
         if (q.length < 2 || moduleName == null) { results = emptyList(); return@LaunchedEffect }
         searching = true
@@ -511,8 +525,25 @@ private fun AddDependencyContent(
         searching = false
     }
 
+    // Add either a versioned library/AAR or, in Platform mode, import a BOM via addPlatform.
+    val performAdd: (String) -> Unit = add@{ coordinate ->
+        if (moduleName == null) return@add
+        busy = true; error = null; adding = coordinate
+        coroutine.launch {
+            val result = if (mode == AddMode.Platform) backend.addPlatform(moduleName, coordinate)
+                else backend.addDependency(moduleName, coordinate, scope)
+            busy = false; adding = null
+            if (result.success) onResult(result) else error = result.message
+        }
+    }
+
     Column(modifier) {
         Text("Add dependency", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
+
+        // Library vs Platform (BOM) toggle
+        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AddMode.entries.forEach { m -> ModeChip(m.label, m == mode) { if (!busy) { mode = m; error = null } } }
+        }
 
         // search field
         Row(
@@ -522,7 +553,9 @@ private fun AddDependencyContent(
         ) {
             Icon(CaIcons.search, null, Modifier.size(18.dp), tint = Ca.colors.accent)
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text("Search Maven Central — e.g. okhttp, com.google.guava…", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                val hint = if (mode == AddMode.Platform) "Search a BOM, or type group:name:version — e.g. androidx.compose:compose-bom:…"
+                    else "Search Maven Central, or type group:name[:version]…"
+                if (query.isEmpty()) Text(hint, color = Ca.colors.textTertiary, style = Ca.type.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicTextField(query, { query = it; error = null }, singleLine = true, enabled = !busy,
                     textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
                     cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
@@ -530,11 +563,11 @@ private fun AddDependencyContent(
             if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
         }
 
-        // scope selector
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // scope selector — libraries only (a platform carries no scope)
+        if (mode == AddMode.Library) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("scope", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
             scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
-        }
+        } else Spacer(Modifier.height(10.dp))
 
         error?.let { msg ->
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Ca.colors.error.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm)).padding(10.dp),
@@ -555,23 +588,57 @@ private fun AddDependencyContent(
                     ResolveBar(resolveState.fraction)
                 }
             } else {
+                val typed = query.trim()
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                    items(results, key = { it.coordinate }) { hit ->
-                        AddResultRow(hit, codeFont, Modifier.animateItem()) {
-                            if (moduleName == null) return@AddResultRow
-                            busy = true; error = null; adding = hit.coordinate
-                            coroutine.launch {
-                                val result = backend.addDependency(moduleName, hit.coordinate, scope)
-                                busy = false; adding = null
-                                if (result.success) onResult(result) else error = result.message
-                            }
-                        }
+                    // Direct add of a typed coordinate — the only way to add a versionless `group:name`
+                    // (resolved against the module's imported platforms) or a coordinate not in the index.
+                    if (looksLikeCoordinate(typed)) item("direct:$typed") {
+                        DirectAddRow(typed, mode, codeFont, Modifier.animateItem()) { performAdd(typed) }
                     }
-                    if (query.trim().length >= 2 && results.isEmpty() && !searching) item { EmptyRow("No results.") }
-                    if (query.trim().length < 2) item { EmptyRow("Type at least 2 characters to search.") }
+                    items(results, key = { it.coordinate }) { hit ->
+                        AddResultRow(hit, codeFont, Modifier.animateItem()) { performAdd(hit.coordinate) }
+                    }
+                    if (typed.length >= 2 && results.isEmpty() && !searching && !looksLikeCoordinate(typed)) item { EmptyRow("No results.") }
+                    if (typed.length < 2) item { EmptyRow("Type at least 2 characters to search, or a full group:name[:version].") }
                 }
             }
         }
+    }
+}
+
+/** A row offering to add the literally-typed coordinate (handles versionless `group:name` + BOMs). */
+@Composable
+private fun DirectAddRow(coordinate: String, mode: AddMode, codeFont: FontFamily, modifier: Modifier, onAdd: () -> Unit) {
+    val versionless = coordinate.count { it == ':' } == 1
+    val color = if (mode == AddMode.Platform) Ca.colors.info else Ca.colors.accent
+    Row(
+        modifier.fillMaxWidth().height(52.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAdd).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LetterBox(if (mode == AddMode.Platform) "B" else "+", color)
+        Column(Modifier.weight(1f)) {
+            Text(coordinate, color = Ca.colors.textPrimary, style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                when {
+                    mode == AddMode.Platform -> "Import as a platform (BOM)"
+                    versionless -> "Add versionless — version from a platform"
+                    else -> "Add this exact coordinate"
+                },
+                color = Ca.colors.textTertiary, style = Ca.type.caption2,
+            )
+        }
+        IconButtonCa(CaIcons.plus, "Add $coordinate", onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
+    }
+}
+
+@Composable
+private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (selected) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "modeBg")
+    Box(
+        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    ) {
+        Text(label, color = if (selected) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -659,14 +726,14 @@ private fun ToastHost(toast: ToastMsg?, modifier: Modifier) {
 // ---- small shared pieces ------------------------------------------------------------------------
 
 @Composable
-private fun ViewToggle(view: DepView, onSelect: (DepView) -> Unit) {
+private fun ViewToggle(view: DepView, onSelect: (DepView) -> Unit, compact: Boolean = false) {
     Row(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        DepView.entries.forEach { v -> SegItem(v.icon, v.label, v == view) { onSelect(v) } }
+        DepView.entries.forEach { v -> SegItem(v.icon, v.label, v == view, compact) { onSelect(v) } }
     }
 }
 
 @Composable
-private fun SegItem(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+private fun SegItem(icon: ImageVector, label: String, active: Boolean, compact: Boolean, onClick: () -> Unit) {
     val bg by animateColorAsState(if (active) Ca.colors.accentSoft else Color.Transparent, tween(Motion.FAST), label = "segBg")
     Row(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.xs)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
@@ -674,7 +741,7 @@ private fun SegItem(icon: ImageVector, label: String, active: Boolean, onClick: 
         horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, label, Modifier.size(14.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary)
-        Text(label, color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        if (!compact) Text(label, color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -696,6 +763,7 @@ private fun DepBadge(node: UiDependencyNode, small: Boolean = false) {
         UiDepKind.Aar -> "A" to Ca.colors.run
         UiDepKind.Module -> "M" to Ca.colors.accent
         UiDepKind.Sdk -> "S" to Ca.colors.info
+        UiDepKind.Platform -> "B" to Ca.colors.info   // a BOM (bill of materials) — version source, no artifact
     }
     LetterBox(letter, if (node.compatible) color else Ca.colors.error, size = if (small) 16 else 20)
 }

@@ -14,11 +14,21 @@ import dev.ide.vfs.VirtualFile
  * resolve offline from cache when possible.
  */
 interface DependencyResolver {
+    /**
+     * Resolve [coordinates] into their transitive closure.
+     *
+     * [platforms] are BOM coordinates (Maven `pom`-packaged "bill of materials") imported for their
+     * `dependencyManagement` only — the Gradle `platform(...)` semantics. They contribute no artifact;
+     * they supply versions to any [coordinates] (or transitive dependency) declared *without* a version
+     * (a blank [Coordinate.version]). Plain-platform semantics: a BOM never overrides a version that was
+     * stated explicitly — it only fills the blanks. Earlier platforms win when two manage the same artifact.
+     */
     suspend fun resolve(
         coordinates: List<Coordinate>,
         repositories: List<Repository>,
         conflict: ConflictPolicy = ConflictPolicy.NEWEST,
         progress: ProgressReporter,
+        platforms: List<Coordinate> = emptyList(),
     ): ResolutionResult
 }
 

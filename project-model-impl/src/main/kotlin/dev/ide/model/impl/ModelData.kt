@@ -7,6 +7,7 @@ import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.ModuleDependency
 import dev.ide.model.OrderEntry
+import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 
 /**
@@ -99,6 +100,7 @@ private fun OrderEntry.normalizedExported(): OrderEntry {
     return when (this) {
         is ModuleDependency -> if (this.exported == exported) this else copy(exported = exported)
         is LibraryDependency -> if (this.exported == exported) this else copy(exported = exported)
+        is PlatformDependency -> if (this.exported == exported) this else copy(exported = exported)
         is SdkDependency -> this // exported is always false
     }
 }

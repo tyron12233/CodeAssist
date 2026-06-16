@@ -73,6 +73,7 @@ import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.lang.xml.XmlLanguageBackend
 import dev.ide.lang.xml.XmlSourceAnalyzer
 import dev.ide.lang.jdt.context.ModuleCompilationContext
+import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.index.JavaClassNamesIndex
 import dev.ide.lang.jdt.index.JavaMembersByOwnerIndex
 import dev.ide.lang.jdt.index.JavaMembersIndex
@@ -117,6 +118,7 @@ import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleDependency
+import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 import dev.ide.android.support.resources.AndroidResources
 import dev.ide.android.support.resources.DrawableXmlCatalog
@@ -233,6 +235,8 @@ class IdeServices private constructor(
     private val dexRunner: DexRunner? = null,
     /** Non-null only on-device (supplied by :ide-android): installs + launches a built APK (the android Run). */
     private val apkInstaller: ApkInstaller? = null,
+    /** Optional platform runtime that renders *live* custom views in the layout preview (device dex / desktop shim). */
+    private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
 ) : AutoCloseable {
 
     // Language backends are contributed through the `platform.languageBackend` EP and selected per file by
@@ -787,6 +791,23 @@ class IdeServices private constructor(
     private fun parseCoordinate(name: String): Coordinate? =
         name.split(":").takeIf { it.size >= 3 }?.let { Coordinate(it[0], it[1], it[2]) }
 
+    /**
+     * Parse a user-entered dependency coordinate. Accepts `group:name:version` and the versionless
+     * `group:name` form (version filled from an imported platform BOM at resolve time → blank here).
+     */
+    private fun parseInputCoordinate(name: String): Coordinate? =
+        name.split(":").map { it.trim() }.let {
+            when (it.size) {
+                2 -> Coordinate(it[0], it[1], "")
+                3 -> Coordinate(it[0], it[1], it[2])
+                else -> null
+            }
+        }
+
+    /** The BOM coordinates [module] imports as platforms — the version source for its versionless deps. */
+    private fun declaredPlatforms(module: Module): List<Coordinate> =
+        module.dependencies.filterIsInstance<PlatformDependency>().map { it.bom }
+
     private fun findLibrary(name: String) =
         store.workspace.libraryTable.byName(name)
             ?: store.workspace.projects.firstNotNullOfOrNull { it.libraryTable.byName(name) }
@@ -842,7 +863,7 @@ class IdeServices private constructor(
 
         val result = if (externalCoords.isEmpty()) null else {
             _depsState.value = DepsResolveState(resolving = true, message = "Resolving ${module.name}…")
-            runCatching { depsResolver.resolve(externalCoords, DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, depsProgress()) }
+            runCatching { depsResolver.resolve(externalCoords, DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, depsProgress(), platforms = declaredPlatforms(module)) }
                 .getOrNull()
                 .also { _depsState.update { s -> s.copy(resolving = false) } }
         }
@@ -915,6 +936,17 @@ class IdeServices private constructor(
                 declaredRoots += node
                 nodes.putIfAbsent(node.coordinate, node)
             }
+            is PlatformDependency -> {
+                // A BOM contributes no artifact — show it as a declared root so the user sees the
+                // version source for their versionless dependencies.
+                val node = UiDependencyNode(
+                    coordinate = entry.bom.toString(),
+                    group = entry.bom.group, name = entry.bom.name, version = entry.bom.version,
+                    kind = UiDepKind.Platform, declared = true, scope = "platform",
+                )
+                declaredRoots += node
+                nodes.putIfAbsent(node.coordinate, node)
+            }
             is SdkDependency -> { /* the SDK is shown by the project tree, not as a managed dependency */ }
         }
 
@@ -952,13 +984,17 @@ class IdeServices private constructor(
      */
     suspend fun addDependency(moduleName: String, coordinate: String, scope: String): UiAddResult {
         val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(false, "No module '$moduleName'.")
-        val coord = parseCoordinate(coordinate) ?: return UiAddResult(false, "Invalid coordinate — expected group:name:version.")
+        val coord = parseInputCoordinate(coordinate) ?: return UiAddResult(false, "Invalid coordinate — expected group:name[:version].")
+        val versionless = coord.version.isBlank()
+        val platforms = declaredPlatforms(module)
+        if (versionless && platforms.isEmpty())
+            return UiAddResult(false, "$coordinate has no version — import a platform (BOM) first, or give an explicit version.")
         if (module.dependencies.any { it is LibraryDependency && it.library.name == coordinate })
             return UiAddResult(false, "$coordinate is already a dependency of '$moduleName'.")
 
         _depsState.value = DepsResolveState(resolving = true, message = "Resolving $coordinate…")
         val result = try {
-            depsResolver.resolve(listOf(coord), DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, depsProgress())
+            depsResolver.resolve(listOf(coord), DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, depsProgress(), platforms = platforms)
         } catch (e: Exception) {
             return UiAddResult(false, "Resolution failed: ${e.message}")
         } finally {
@@ -966,11 +1002,19 @@ class IdeServices private constructor(
         }
 
         val primary = result.resolved.firstOrNull { it.coordinate.group == coord.group && it.coordinate.name == coord.name }
-            ?: return UiAddResult(false, "Couldn't find $coordinate in the configured repositories.")
+            ?: return UiAddResult(false, if (versionless)
+                "No imported platform provides a version for ${coord.group}:${coord.name}."
+            else "Couldn't find $coordinate in the configured repositories.")
         if (primary.kind == ArtifactKind.AAR && !acceptsAar(module))
             return UiAddResult(false, "$coordinate is an Android library (.aar) — ${aarReason(module)}.")
 
-        store.workspace.libraryTable.create(coordinate).apply {
+        // Persist with the resolved, concrete coordinate — a versionless declaration is pinned to the
+        // version the platform supplied at add time (a later BOM bump won't move it; re-add to update).
+        val libraryName = primary.coordinate.toString()
+        if (libraryName != coordinate && module.dependencies.any { it is LibraryDependency && it.library.name == libraryName })
+            return UiAddResult(false, "$libraryName is already a dependency of '$moduleName'.")
+
+        store.workspace.libraryTable.create(libraryName).apply {
             kind = if (primary.kind == ArtifactKind.AAR) LibraryKind.AAR else LibraryKind.JAR
             result.resolved.forEach { addClassesRoot(it.classesRoot) }   // declared + its whole transitive closure
             primary.sourcesRoot?.let { addSourcesRoot(it) }
@@ -978,7 +1022,7 @@ class IdeServices private constructor(
         }
         val project = projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
         project.beginModification().apply {
-            module(module.id).addDependency(LibraryDependency(LibraryRef(coordinate), parseScope(scope)))
+            module(module.id).addDependency(LibraryDependency(LibraryRef(libraryName), parseScope(scope)))
             commit()
         }
         store.save()
@@ -986,13 +1030,47 @@ class IdeServices private constructor(
         resyncIndex()
         val transitiveCount = result.resolved.size - 1
         val suffix = if (transitiveCount > 0) " (+$transitiveCount transitive)" else ""
-        return UiAddResult(true, "Added $coordinate$suffix", result.resolved.size)
+        return UiAddResult(true, "Added $libraryName$suffix", result.resolved.size)
     }
 
-    /** Remove the declared library dependency [coordinate] from [moduleName] (returns false if absent). */
+    /**
+     * Import a Maven BOM ([coordinate], `group:name:version`) as a platform of [moduleName] — the Gradle
+     * `platform(...)` semantics. It contributes no artifact; it supplies versions to versionless
+     * dependencies added afterwards. Verified resolvable before it's persisted.
+     */
+    suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(false, "No module '$moduleName'.")
+        val bom = parseCoordinate(coordinate) ?: return UiAddResult(false, "A platform BOM needs a version — expected group:name:version.")
+        if (module.dependencies.any { it is PlatformDependency && it.bom == bom })
+            return UiAddResult(false, "$coordinate is already a platform of '$moduleName'.")
+
+        _depsState.value = DepsResolveState(resolving = true, message = "Importing BOM $coordinate…")
+        val result = try {
+            depsResolver.resolve(emptyList(), DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, depsProgress(), platforms = listOf(bom))
+        } catch (e: Exception) {
+            return UiAddResult(false, "Couldn't import BOM: ${e.message}")
+        } finally {
+            _depsState.update { it.copy(resolving = false) }
+        }
+        if (bom in result.unresolved)
+            return UiAddResult(false, "Couldn't find the BOM $coordinate in the configured repositories.")
+
+        val project = projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
+        project.beginModification().apply {
+            module(module.id).addDependency(PlatformDependency(bom))
+            commit()
+        }
+        store.save()
+        return UiAddResult(true, "Imported platform $coordinate", 0)
+    }
+
+    /** Remove the declared library dependency or platform BOM [coordinate] from [moduleName] (false if absent). */
     fun removeDependency(moduleName: String, coordinate: String): Boolean {
         val module = modules().firstOrNull { it.name == moduleName } ?: return false
-        val entry = module.dependencies.firstOrNull { it is LibraryDependency && it.library.name == coordinate } ?: return false
+        val entry = module.dependencies.firstOrNull {
+            (it is LibraryDependency && it.library.name == coordinate) ||
+                (it is PlatformDependency && it.bom.toString() == coordinate)
+        } ?: return false
         val project = projectOf(module) ?: return false
         project.beginModification().apply {
             module(module.id).removeDependency(entry)
@@ -1320,11 +1398,13 @@ class IdeServices private constructor(
                         // the curated catalog) + custom-view attributes (project/AAR attrs.xml, parsed once per
                         // analyzer) + resource references (the module's merged repository, rebuilt per request).
                         val custom = runCatching { customAttrsMetadata(module) }.getOrNull()
+                        val customViews = runCatching { customViewWidgets(module) }.getOrDefault(emptyList())
                         it.contributors = listOf(
                             AndroidXmlContributor(
                                 resourceNames = { type -> resourceNamesFor(module, type) },
                                 layout = { sdkLayoutMetadata() },
                                 customAttrs = { custom },
+                                customViews = { customViews },
                             )
                         )
                     }
@@ -1551,6 +1631,112 @@ class IdeServices private constructor(
         }
     }
 
+    // ---- rename refactoring ----------------------------------------------------------------------
+
+    /** The renameable symbol under the caret (its current name + a kind label), or null. Java only. */
+    fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? {
+        if (analysisUnavailable || !file.toString().endsWith(".java")) return null
+        val module = moduleForFile(file) ?: return null
+        val analyzer = analyzerFor(module) as? JdtSourceAnalyzer ?: return null
+        return try {
+            JdtRename.targetAt(analyzer.parse(store.vfs.fileFor(file), text), offset)?.let { RenameInfo(it.oldName, it.kind) }
+        } catch (e: LinkageError) {
+            analysisUnavailable = true; null
+        }
+    }
+
+    /**
+     * Rename the symbol under the caret to [newName] across the whole project: resolve the target, find every
+     * reference (binding-key match; a file-local symbol stays in its own file, otherwise project `.java` files
+     * are pre-filtered by name then parsed), then apply a multi-file edit to disk + the editor overlay. When a
+     * top-level public type whose name matches its file is renamed, the backing `.java` file is renamed too
+     * (its new path is returned so the editor can reopen it). Re-indexes and invalidates analyzers.
+     */
+    suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome {
+        val name = newName.trim()
+        if (!isValidJavaIdentifier(name)) return RenameOutcome(false, "'$newName' is not a valid Java identifier.")
+        if (analysisUnavailable) return RenameOutcome(false, "Java analysis is unavailable.")
+        val module = moduleForFile(file) ?: return RenameOutcome(false, "This file is not in a source module.")
+        val analyzer = analyzerFor(module) as? JdtSourceAnalyzer ?: return RenameOutcome(false, "Rename is only supported for Java.")
+        val fileAbs = file.toAbsolutePath().normalize()
+
+        val target: dev.ide.lang.jdt.rename.RenameTarget
+        val editsByPath = LinkedHashMap<Path, List<DocumentEdit>>()
+        var occurrences = 0
+        try {
+            val parsed = analyzer.parse(store.vfs.fileFor(file), text)
+            target = JdtRename.targetAt(parsed, offset) ?: return RenameOutcome(false, "Place the caret on a symbol to rename.")
+            if (name == target.oldName) return RenameOutcome(false, "The new name is the same as the current one.")
+
+            fun editsFor(ranges: List<TextRange>) = ranges.map { DocumentEdit(it.start, it.end - it.start, name) }
+            if (target.fileLocal) {
+                val ranges = JdtRename.referencesIn(parsed, target)
+                if (ranges.isNotEmpty()) { editsByPath[fileAbs] = editsFor(ranges); occurrences += ranges.size }
+            } else {
+                for (cand in projectJavaFiles()) {
+                    val candAbs = cand.toAbsolutePath().normalize()
+                    val candText = openDocuments[candAbs] ?: runCatching { cand.readText() }.getOrNull() ?: continue
+                    if (!candText.contains(target.oldName)) continue // cheap pre-filter before the binding parse
+                    val candParsed = if (candAbs == fileAbs) parsed else {
+                        val m = moduleForFile(cand) ?: continue
+                        val a = analyzerFor(m) as? JdtSourceAnalyzer ?: continue
+                        a.parse(store.vfs.fileFor(cand), candText)
+                    }
+                    val ranges = JdtRename.referencesIn(candParsed, target)
+                    if (ranges.isNotEmpty()) { editsByPath[candAbs] = editsFor(ranges); occurrences += ranges.size }
+                }
+            }
+        } catch (e: LinkageError) {
+            analysisUnavailable = true
+            return RenameOutcome(false, "Java analysis is unavailable.")
+        }
+        if (editsByPath.isEmpty()) return RenameOutcome(false, "No occurrences of '${target.oldName}' found.")
+
+        // Apply each file's edits descending (offsets stay valid), writing disk + the live overlay together.
+        for ((path, edits) in editsByPath) {
+            val current = openDocuments[path] ?: runCatching { path.readText() }.getOrNull() ?: continue
+            val sb = StringBuilder(current)
+            for (e in edits.sortedByDescending { it.offset }) {
+                val s = e.offset.coerceIn(0, sb.length)
+                val en = (e.offset + e.oldLength).coerceIn(s, sb.length)
+                sb.replace(s, en, e.newText.toString())
+            }
+            val updated = sb.toString()
+            openDocuments[path] = updated
+            runCatching { path.parent?.let { Files.createDirectories(it) }; path.writeText(updated) }
+        }
+
+        // Rename the backing file when a top-level public type's name matched the file name (Java convention).
+        var newPath: Path? = null
+        if (target.isType && fileAbs.fileName?.toString() == "${target.oldName}.java") {
+            val dest = fileAbs.resolveSibling("$name.java")
+            if (!Files.exists(dest)) runCatching {
+                Files.move(fileAbs, dest)
+                openDocuments.remove(fileAbs)?.let { openDocuments[dest] = it }
+                newPath = dest
+            }
+        }
+
+        invalidateAnalyzers()
+        invalidateSyntheticClasses()
+        resyncIndex()
+        return RenameOutcome(true, "Renamed '${target.oldName}' to '$name'", occurrences, editsByPath.size, newPath?.toString())
+    }
+
+    /** Every `.java` file across the workspace's modules (for the project-wide reference sweep). */
+    private fun projectJavaFiles(): List<Path> {
+        val out = ArrayList<Path>()
+        for (m in modules()) for (root in sourceRoots(m)) {
+            if (!Files.isDirectory(root)) continue
+            runCatching { Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.forEach { out.add(it) } } }
+        }
+        return out
+    }
+
+    private fun isValidJavaIdentifier(s: String): Boolean =
+        s.isNotEmpty() && Character.isJavaIdentifierStart(s[0]) &&
+            s.drop(1).all { Character.isJavaIdentifierPart(it) } && s !in JAVA_RESERVED
+
     // ---- XML layout completion metadata ----
 
     // The SDK-derived metadata (widget/attribute set from attrs.xml + the android.jar hierarchy).
@@ -1598,6 +1784,29 @@ class IdeServices private constructor(
         }
         if (attrs.isEmpty() && styleables.isEmpty()) return null
         return AndroidSdkMetadata(0, attrs, styleables, emptyMap(), emptyList(), attrPrefix = "app:")
+    }
+
+    /**
+     * Custom `android.view.View` subclasses on [module]'s library classpath (Maven jars + AAR `classes.jar`),
+     * so the layout editor suggests them as element tags by their fully-qualified name (e.g.
+     * `com.google.android.material.button.MaterialButton`). Framework widgets come from the SDK metadata; this
+     * fills the rest. The bytecode scan is content-fingerprint cached on disk — it only re-runs when the jar
+     * set changes — so it does not repeat per analyzer rebuild.
+     */
+    private fun customViewWidgets(module: Module): List<dev.ide.android.support.metadata.Widget> {
+        val jars = runCatching { ModuleCompilationContext.create(store.workspace, module).classpath.entries }
+            .getOrDefault(emptyList())
+            .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
+            .filter { it.toString().endsWith(".jar") && Files.exists(it) }
+            .distinct()
+        if (jars.isEmpty()) return emptyList()
+        // Seed the scanner with the framework View hierarchy (a library view's chain bottoms out at a
+        // framework base class that isn't in any jar) — simple name → is-it-a-ViewGroup.
+        val frameworkWidgets = runCatching {
+            sdkLayoutMetadata().childTagsFor(null).associate { it.tag to it.isViewGroup }
+        }.getOrDefault(emptyMap())
+        val cacheFile = store.rootPath.resolve(".platform/caches/custom-views/${module.id.value}.txt")
+        return dev.ide.android.support.metadata.CustomViewScanner.cached(jars, cacheFile, frameworkWidgets)
     }
 
     /**
@@ -1849,6 +2058,121 @@ class IdeServices private constructor(
     /** Raw bytes of a resource file (for bitmap preview); null if unreadable. */
     fun resourceBytes(file: Path): ByteArray? = runCatching { Files.readAllBytes(file) }.getOrNull()
 
+    /**
+     * Build the owned render tree + system chrome for a layout XML [file] (live buffer [text]) at the given
+     * device viewport, for the Preview view. Null if [file] isn't an Android `res/layout` file. Custom views
+     * currently render as placeholders (the live bridge is the next phase); built-ins + chrome are rendered.
+     */
+    fun layoutPreview(file: Path, text: String, request: dev.ide.preview.PreviewRequest): dev.ide.preview.LayoutPreviewResult? {
+        if (!file.toString().replace('\\', '/').contains("/res/layout")) return null
+        val module = moduleForResourceFile(file) ?: return null
+        if (module.facets.get(AndroidFacet.KEY) == null) return null
+        val repo = runCatching { AndroidResources.repository(module, store.workspace) }.getOrNull() ?: return null
+        val (themeName, title) = manifestThemeAndLabel(module, repo)
+        val customViews = if (referencesCustomView(text)) buildCustomViewFactory(module, repo) else null
+        return runCatching {
+            dev.ide.preview.impl.LayoutPreviewService(customViewFactory = customViews ?: dev.ide.preview.impl.CustomViewFactory.NONE).preview(
+                xml = text, repo = repo, themeName = themeName, title = title,
+                density = request.density, scaledDensity = request.density,
+                showChrome = request.showChrome, night = request.night,
+                layoutProvider = { name ->
+                    repo.definitions(ResourceType.LAYOUT, name).firstOrNull()?.source
+                        ?.let { runCatching { it.readText() }.getOrNull() }
+                },
+            )
+        }.getOrNull()
+    }
+
+    /** Cheap check: does the layout reference a `pkg.Custom` view tag (lower-case pkg + Capitalised class)? */
+    private val customViewTagRegex = Regex("""<[a-z][\w.]*\.[A-Z]\w*[\s/>]""")
+    private fun referencesCustomView(xml: String): Boolean = customViewTagRegex.containsMatchIn(xml)
+
+    /**
+     * Preview-compile the module's Java sources + synthetic `R`/`BuildConfig` against `android.jar`, instrument
+     * each class with [dev.ide.preview.impl.BridgeRemapper], and hand the result to the platform
+     * [dev.ide.preview.impl.CustomViewRuntime] to produce a live custom-view factory. Null when there's no
+     * runtime, no `android.jar`, or compilation fails (the inflater then shows placeholders).
+     */
+    private fun buildCustomViewFactory(module: Module, repo: dev.ide.android.support.resources.ResourceRepository): dev.ide.preview.impl.CustomViewFactory? {
+        val runtime = customViewRuntime ?: return null
+        val androidJar = previewAndroidJar() ?: return null
+        return runCatching {
+            val work = store.rootPath.resolve(".platform/caches/preview/${module.id.value}")
+            val srcDir = work.resolve("src"); val outDir = work.resolve("classes")
+            outDir.toFile().deleteRecursively(); Files.createDirectories(srcDir); Files.createDirectories(outDir)
+
+            // Synthetic R/BuildConfig as compilable Java so R.styleable.* etc. resolve at preview-compile time.
+            val sources = ArrayList<Path>()
+            for ((fqn, src) in syntheticOverlay()) {
+                val f = srcDir.resolve(fqn.replace('.', '/') + ".java")
+                Files.createDirectories(f.parent); Files.write(f, String(src).toByteArray()); sources.add(f)
+            }
+            // Compile the whole project's Java closure together so cross-module refs (the custom view's
+            // siblings/deps) resolve; library jars come from each module's analysis classpath.
+            modules().forEach { m ->
+                sourceRoots(m).forEach { root ->
+                    if (Files.isDirectory(root)) Files.walk(root).use { w -> w.filter { it.toString().endsWith(".java") }.forEach { sources.add(it) } }
+                }
+            }
+            val deps = modules().flatMap { m ->
+                runCatching { ModuleCompilationContext.create(store.workspace, m).classpath.entries.map { Paths.get(it.root.path) } }.getOrDefault(emptyList())
+            }.filter { Files.exists(it) }.distinct()
+            val result = JdtBatchCompiler.compile(sources, deps, outDir, sourceLevel = "17", bootClasspath = listOf(androidJar))
+            if (!result.success) return@runCatching null
+
+            // Instrument every compiled .class in place (reparent View bases, redirect obtainStyledAttributes).
+            val remapper = dev.ide.preview.impl.bridge.BridgeRemapper()
+            Files.walk(outDir).use { w ->
+                w.filter { it.toString().endsWith(".class") }.forEach { p ->
+                    runCatching { Files.write(p, remapper.transform(Files.readAllBytes(p))) }
+                }
+            }
+
+            val ids = dev.ide.android.support.resources.RIdAssignment(repo)
+            val resolver = dev.ide.preview.impl.ProjectPreviewResources(repo)
+            val styled = dev.ide.preview.impl.StyledAttrResolver { rawAttrs, styleableIds ->
+                styleableIds.map { id ->
+                    val (type, name) = ids.nameOf(id) ?: return@map null
+                    if (type != ResourceType.ATTR) return@map null
+                    val raw = rawAttrs[name] ?: return@map null
+                    resolver.resolve(raw, attrFormatOf(repo, name))
+                }
+            }
+            runtime.createFactory(outDir, deps, styled)
+        }.getOrNull()
+    }
+
+    /** Map a project attr's declared `format` (or an inference) to a preview [dev.ide.preview.ValueFormat]. */
+    private fun attrFormatOf(repo: dev.ide.android.support.resources.ResourceRepository, name: String): dev.ide.preview.ValueFormat =
+        when (repo.attrFormat(name)) {
+            "color" -> dev.ide.preview.ValueFormat.COLOR
+            "dimension" -> dev.ide.preview.ValueFormat.DIMENSION
+            "integer" -> dev.ide.preview.ValueFormat.INTEGER
+            "boolean" -> dev.ide.preview.ValueFormat.BOOLEAN
+            "float", "fraction" -> dev.ide.preview.ValueFormat.FLOAT
+            "string" -> dev.ide.preview.ValueFormat.STRING
+            "reference" -> dev.ide.preview.ValueFormat.REFERENCE
+            else -> dev.ide.preview.ValueFormat.ANY
+        }
+
+    /** The `android.jar` for the preview compile — the device's bundled jar, else a detected desktop SDK's. */
+    private fun previewAndroidJar(): Path? = androidTools?.androidJar
+        ?: (dev.ide.android.support.tools.AndroidSdk.findSdkRoot()?.let { dev.ide.android.support.tools.AndroidSdk.detect(it) }?.androidJar)
+
+    /** The activity/application theme name (raw dotted, sans `@style/`) and window title from the manifest. */
+    private fun manifestThemeAndLabel(module: Module, repo: dev.ide.android.support.resources.ResourceRepository): Pair<String?, String> {
+        val manifest = manifestPath(module)?.let { runCatching { it.readText() }.getOrNull() } ?: ""
+        val themeName = Regex("""android:theme\s*=\s*"@style/([^"]+)"""").find(manifest)?.groupValues?.get(1)
+        val labelRaw = Regex("""android:label\s*=\s*"([^"]+)"""").find(manifest)?.groupValues?.get(1)
+        val title = when {
+            labelRaw == null -> module.name
+            labelRaw.startsWith("@string/") ->
+                repo.definitions(ResourceType.STRING, sanitizeResName(labelRaw.removePrefix("@string/"))).firstOrNull()?.value ?: module.name
+            else -> labelRaw
+        }
+        return themeName to title
+    }
+
     /** A [DrawableResolver] backed by [module]'s merged resource repository (colors/dimens/nested drawables). */
     private fun drawableResolver(module: Module): DrawableResolver {
         val repo = runCatching { AndroidResources.repository(module, store.workspace) }.getOrNull()
@@ -2019,6 +2343,16 @@ class IdeServices private constructor(
         private val MAIN_METHOD = Regex("""\bstatic\s+void\s+main\s*\(""")
         private val NAME_ATTR = Regex("""name\s*=\s*"([^"]+)"""")
 
+        /** Java reserved words + literals, rejected as rename targets (a valid identifier can't be one). */
+        private val JAVA_RESERVED = setOf(
+            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
+            "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
+            "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
+            "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
+            "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
+            "volatile", "while", "true", "false", "null", "var", "record", "yield", "sealed", "permits",
+        )
+
         /** Cap on a single file's size for find-in-files (skip generated/huge blobs). */
         private const val MAX_SEARCH_FILE_CHARS = 2_000_000
 
@@ -2100,6 +2434,8 @@ class IdeServices private constructor(
             deviceApiLevel: Int = 21,
             /** On-device APK installer (from :ide-android) — enables the android Run (build + install + launch). */
             apkInstaller: ApkInstaller? = null,
+            /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
+            customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
         ): IdeServices {
             if (generateDemo && Files.exists(root)) root.toFile().deleteRecursively()
             Files.createDirectories(root)
@@ -2122,7 +2458,7 @@ class IdeServices private constructor(
             // boot-classpath entry); the in-process Android build (AndroidBuildSystem.inProcess) runs off these.
             val androidTools = if (androidToolsDir != null && debugKeystore != null && bootClasspath.isNotEmpty())
                 AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel) else null
-            return IdeServices(platform, store, androidTools, dexRunner, apkInstaller)
+            return IdeServices(platform, store, androidTools, dexRunner, apkInstaller, customViewRuntime)
         }
 
         private fun openStore(root: Path): Pair<PlatformCore, ProjectModelStore> {
@@ -2222,3 +2558,18 @@ private fun <T> runSync(block: suspend () -> T): T {
 
 /** Whether the Android platform sources (parameter names + javadoc for `android.*`) are installed/obtainable. */
 data class AndroidSourcesInfo(val platform: String, val installed: Boolean, val downloadable: Boolean)
+
+/** The renameable symbol under the caret: its current [oldName] and a human [kind] label (e.g. "method"). */
+data class RenameInfo(val oldName: String, val kind: String)
+
+/**
+ * Outcome of a project-wide rename: [occurrences] identifiers across [filesChanged] files were rewritten;
+ * [newPath] is set when the backing `.java` file was itself renamed (so the editor can reopen it).
+ */
+data class RenameOutcome(
+    val success: Boolean,
+    val message: String,
+    val occurrences: Int = 0,
+    val filesChanged: Int = 0,
+    val newPath: String? = null,
+)

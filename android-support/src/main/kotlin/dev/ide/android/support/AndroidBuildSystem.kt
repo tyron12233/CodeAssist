@@ -143,7 +143,10 @@ class AndroidBuildSystem(
 
         val closure = moduleClosure(app, byId)
         val depAndroidLibs = closure.filter { it.facets.get(AndroidFacet.KEY) != null }
-        val extraPackages = depAndroidLibs.mapNotNull { it.facets.get(AndroidFacet.KEY)?.namespace }.distinct()
+        // R is generated for every dependency-lib package AND every external AAR package (so an AAR's own
+        // classes + custom-view attrs resolve against the app-linked resource table).
+        val extraPackages = (depAndroidLibs.mapNotNull { it.facets.get(AndroidFacet.KEY)?.namespace } +
+            libs.aarPackages).distinct()
 
         val mergeResInputs = depAndroidLibs.flatMap { moduleRoots(it, ContentRole.ANDROID_RES) } +
             libs.resDirs + roots(variant, ContentRole.ANDROID_RES)

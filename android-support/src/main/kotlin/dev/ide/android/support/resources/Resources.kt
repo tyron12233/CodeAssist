@@ -8,6 +8,9 @@ import java.nio.file.Path
  * resource (for hover), null for a file resource. The same [type]/[name] may have several items (one per
  * config); [ResourceRepository] dedups by type+name for `R` and reference resolution.
  */
+/** A parsed `<style>`/theme: its [parent] (explicit `parent="…"`, raw) and `<item name>` → value map. */
+data class StyleData(val parent: String?, val items: Map<String, String>)
+
 data class ResourceItem(
     val type: ResourceType,
     val name: String,
@@ -21,12 +24,29 @@ data class ResourceItem(
  * Built from one or more `res/` roots in overlay order (later roots win, like a
  * build's source-set/dependency merge). Backs the synthetic `R` class and XML reference resolution.
  */
-class ResourceRepository(items: List<ResourceItem>) {
+class ResourceRepository(
+    items: List<ResourceItem>,
+    /** `<declare-styleable>` name → its child `<attr>` names in declaration order. Backs `R.styleable.*` arrays. */
+    private val styleableAttrs: Map<String, List<String>> = emptyMap(),
+    /** Raw (unsanitized) `<style>`/theme name → its parent + `<item>` map. Backs theme/chrome resolution. */
+    private val styles: Map<String, StyleData> = emptyMap(),
+    /** `<attr>` name → its `format` token (color/dimension/integer/…), for typing styled-attribute lookups. */
+    private val attrFormats: Map<String, String> = emptyMap(),
+) {
+
+    /** The declared `format` of `<attr name=…>` (e.g. `color`), or null if unknown. */
+    fun attrFormat(name: String): String? = attrFormats[name]
     private val items: List<ResourceItem> = items
     private val byType: Map<ResourceType, List<ResourceItem>> = items.groupBy { it.type }
 
     fun all(): List<ResourceItem> = items
     fun types(): Set<ResourceType> = byType.keys
+
+    /** The attr names of `<declare-styleable name=[styleableName]>`, in declaration order (empty if unknown). */
+    fun styleableAttrs(styleableName: String): List<String> = styleableAttrs[styleableName] ?: emptyList()
+
+    /** The `<style name=[styleName]>` definition (parent + items), keyed by its raw dotted name, or null. */
+    fun style(styleName: String): StyleData? = styles[styleName]
 
     /** Distinct resource names of [type] (what `R.<type>` exposes). */
     fun names(type: ResourceType): Set<String> =
