@@ -1,6 +1,7 @@
 package dev.ide.ui.editor.core
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.KeyEvent
 
 /**
  * Platform IME integration for the custom editor surface.
@@ -18,3 +19,16 @@ import androidx.compose.ui.Modifier
  * focus target's events.
  */
 expect fun Modifier.editorTextInput(session: EditorSession): Modifier
+
+/**
+ * The Unicode code point to insert for a hardware key-down [event], or **-1** when the event is not text
+ * input — a modifier/lock/function/navigation key, or a command-key chord (Ctrl/⌘). The editor's key
+ * handler calls this for the printable-character fall-through.
+ *
+ * Platform-specific because classifying a modifier key robustly needs the native event: Compose's
+ * [androidx.compose.ui.input.key.Key] doesn't expose "is this a modifier", and Bluetooth keyboards can
+ * report key codes its enum leaves as `Key.Unknown`. Android defers to `android.view.KeyEvent.isModifierKey`
+ * (which knows every modifier keycode regardless of Compose's mapping); desktop mirrors the old
+ * `utf16CodePoint` path with a modifier blocklist.
+ */
+expect fun textInputCodePoint(event: KeyEvent): Int

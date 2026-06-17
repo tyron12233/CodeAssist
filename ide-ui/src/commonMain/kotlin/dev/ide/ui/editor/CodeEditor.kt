@@ -15,6 +15,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.rememberScrollableState
@@ -40,6 +41,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -68,7 +70,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -108,6 +109,7 @@ import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.TokenType
 import dev.ide.ui.editor.core.editorTextInput
+import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.SyntaxColors
@@ -144,6 +146,11 @@ fun CodeEditor(
     onNavigate: (path: String, offset: Int) -> Unit = { _, _ -> },
     onRenamed: (newPath: String?) -> Unit = {},
     showInlayHints: Boolean = true,
+    /** Bump from the host (a toolbar Find button) to open the in-file find bar; 0 = no request. */
+    findEpoch: Int = 0,
+    /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
+    fontScale: Float = 1f,
+    onFontScaleChange: (Float) -> Unit = {},
 ) {
     val colors = Ca.colors
     val syntax = colors.syntax
@@ -160,8 +167,14 @@ fun CodeEditor(
     // ---- text metrics + per-line layout cache ----
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val typography = Ca.type
-    val codeStyle = remember(syntax, typography) { typography.code.copy(color = syntax.default) }
-    val gutterStyle = typography.codeSmall
+    // Zoom scales the code + gutter text size; the metrics/render-cache below key on these styles, so a zoom
+    // recomputes line metrics and re-shapes lines at the new size (the cache is rebuilt — expected on zoom).
+    val zoom = clampFontScale(fontScale)
+    val liveScale = rememberUpdatedState(zoom) // read inside the pinch gesture (pointerInput captures once)
+    val codeStyle = remember(syntax, typography, zoom) {
+        typography.code.copy(color = syntax.default, fontSize = typography.code.fontSize * zoom)
+    }
+    val gutterStyle = remember(typography, zoom) { typography.codeSmall.copy(fontSize = typography.codeSmall.fontSize * zoom) }
     val metrics = remember(measurer, codeStyle, density) {
         val probe = measurer.measure(AnnotatedString("MMMMMMMMMM"), style = codeStyle, softWrap = false, maxLines = 1)
         with(density) {
@@ -250,6 +263,9 @@ fun CodeEditor(
         val x = layoutFor(line).getHorizontalPosition(renderCache.rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
         return Triple(line, textLeft() + x, lineTop(line))
     }
+    fun lineAtY(y: Float): Int =
+        floor((y + vOffset.floatValue - metrics.padTop) / metrics.lineHeight)
+            .toInt().coerceIn(0, editorSession.doc.lineCount - 1)
     fun offsetAt(pos: Offset): Int {
         val doc = editorSession.doc
         val line = floor((pos.y + vOffset.floatValue - metrics.padTop) / metrics.lineHeight)
@@ -300,6 +316,11 @@ fun CodeEditor(
     }
     var lastInputWasTouch by remember { mutableStateOf(false) }
     var handlesVisible by remember(path) { mutableStateOf(false) }
+    // triple-tap → select line: a double-tap "arms" this for a brief window; the next quick tap nearby then
+    // selects the whole line instead of placing the caret. Keeps detectTapGestures' single/double logic intact.
+    var tripleArmed by remember(path) { mutableStateOf(false) }
+    var tripleArmPos by remember(path) { mutableStateOf(Offset.Zero) }
+    var tripleArmJob by remember(path) { mutableStateOf<Job?>(null) }
 
     // ---- completion (same session/cache/filter machinery as before) ----
     var completion by remember(path) { mutableStateOf<CompletionSession?>(null) }
@@ -315,6 +336,44 @@ fun CodeEditor(
     var actions by remember(path) { mutableStateOf<List<UiAction>>(emptyList()) }
     var actionsOpen by remember(path) { mutableStateOf(false) }
     var actionSelected by remember(path) { mutableIntStateOf(0) }
+
+    // ---- diagnostic sheet: tap a gutter glyph / inline chip → full (scrollable) message + its fixes ----
+    var diagnosticSheet by remember(path) { mutableStateOf<UiDiagnostic?>(null) }
+    var sheetActions by remember(path) { mutableStateOf<List<UiAction>>(emptyList()) }
+
+    // ---- in-file find / replace (Ctrl-F / Ctrl-R; or the toolbar Find button via findEpoch) ----
+    var findOpen by remember(path) { mutableStateOf(false) }
+    var replaceMode by remember(path) { mutableStateOf(false) }
+    var findQuery by remember(path) { mutableStateOf("") }
+    var replaceText by remember(path) { mutableStateOf("") }
+    var findOptions by remember(path) { mutableStateOf(FindOptions()) }
+    var matches by remember(path) { mutableStateOf<List<Match>>(emptyList()) }
+    var currentMatch by remember(path) { mutableIntStateOf(0) }
+    var regexError by remember(path) { mutableStateOf(false) }
+
+    fun gotoMatch(index: Int) {
+        if (matches.isEmpty()) return
+        val i = ((index % matches.size) + matches.size) % matches.size
+        currentMatch = i
+        val m = matches[i]
+        editorSession.setSelectionRange(m.start, m.end) // selects + scrolls the match into view
+    }
+
+    fun replaceCurrent() {
+        val m = matches.getOrNull(currentMatch) ?: return
+        editorSession.applyEdits(
+            listOf(RangeEdit(m.start, m.end, replaceText, m.start + replaceText.length)),
+            TextRange(m.start + replaceText.length),
+        )
+        // matches recompute on the textRevision bump; currentMatch then points at the following occurrence
+    }
+
+    fun replaceAll() {
+        if (matches.isEmpty()) return
+        val edits = matches.map { RangeEdit(it.start, it.end, replaceText, it.start + replaceText.length) }
+        editorSession.applyEdits(edits, TextRange(matches.first().start + replaceText.length))
+        currentMatch = 0
+    }
 
     // ---- rename refactoring (F2 / Shift-F6): prompt for a new name, then a project-wide rename ----
     var rename by remember(path) { mutableStateOf<RenameUiState?>(null) }
@@ -435,26 +494,59 @@ fun CodeEditor(
         job?.cancel()
     }
 
-    // Apply the chosen code action: ask the backend for its edits over the current buffer + selection, then
+    // Apply [act]: ask the backend for its edits over the buffer at the context range [ctxStart,ctxEnd), then
     // splice them in (the editor round-trip — reparse + re-analyze follow the normal text path). The caret is
     // kept on its logical spot by shifting it by the net delta of edits that land at/before it.
-    fun applyActionAt(index: Int) {
-        val act = actions.getOrNull(index) ?: return
-        actionsOpen = false
+    fun runAction(act: UiAction, ctxStart: Int, ctxEnd: Int) {
         val text = editorSession.doc.text
-        val selAtCall = editorSession.selection
         scope.launch {
-            val raw = runCatching { backend.applyAction(path, text, selAtCall.min, selAtCall.max, act.id) }.getOrNull().orEmpty()
+            val raw = runCatching { backend.applyAction(path, text, ctxStart, ctxEnd, act.id) }.getOrNull().orEmpty()
             if (raw.isEmpty()) return@launch
             val len = editorSession.doc.length
             val edits = raw.map { e ->
                 val st = e.start.coerceIn(0, len)
                 RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
             }
-            var caret = selAtCall.min
+            var caret = ctxStart
             for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
             editorSession.applyEdits(edits, TextRange(caret.coerceAtLeast(0)))
         }
+    }
+
+    fun applyActionAt(index: Int) {
+        val act = actions.getOrNull(index) ?: return
+        actionsOpen = false
+        val sel = editorSession.selection
+        runAction(act, sel.min, sel.max)
+    }
+
+    // The most-severe diagnostic whose start sits on [line], or null — drives gutter-glyph and chip taps.
+    fun diagnosticOnLine(line: Int): UiDiagnostic? {
+        var best: UiDiagnostic? = null
+        for (d in editorSession.diagnostics) {
+            if (editorSession.doc.lineForOffset(d.startOffset.coerceIn(0, editorSession.doc.length)) != line) continue
+            val cur = best
+            if (cur == null || d.severity.ordinal < cur.severity.ordinal) best = d
+        }
+        return best
+    }
+
+    // Open the diagnostic sheet for [d] and fetch the quick-fixes registered for its range.
+    fun openDiagnosticSheet(d: UiDiagnostic) {
+        dismissed = true; job?.cancel(); actionsOpen = false
+        diagnosticSheet = d
+        sheetActions = emptyList()
+        val text = editorSession.doc.text
+        scope.launch {
+            sheetActions = runCatching { backend.actionsAt(path, text, d.startOffset, d.endOffset) }.getOrNull().orEmpty()
+        }
+    }
+
+    fun applySheetFix(index: Int) {
+        val d = diagnosticSheet ?: return
+        val act = sheetActions.getOrNull(index) ?: return
+        diagnosticSheet = null
+        runAction(act, d.startOffset, d.endOffset)
     }
 
     // keep the per-line render cache aligned with line splices (a render concern, owned by this surface)
@@ -521,6 +613,26 @@ fun CodeEditor(
         when {
             result.isEmpty() -> actionsOpen = false
             actionSelected >= result.size -> actionSelected = 0
+        }
+    }
+
+    // host (toolbar Find button) requested the find bar
+    LaunchedEffect(findEpoch) {
+        if (findEpoch > 0) { findOpen = true; replaceMode = false }
+    }
+
+    // recompute find matches when the query/options change or the buffer edits (debounced); select the match
+    // nearest the caret so it scrolls into view. Closed or empty query ⇒ no matches (nothing highlights).
+    LaunchedEffect(findOpen, findQuery, findOptions, editorSession.textRevision) {
+        if (!findOpen || findQuery.isEmpty()) { matches = emptyList(); regexError = false; return@LaunchedEffect }
+        delay(120.milliseconds)
+        regexError = findOptions.regex && runCatching { Regex(findQuery) }.isFailure
+        val found = findMatches(editorSession.doc.text, findQuery, findOptions)
+        matches = found
+        if (found.isEmpty()) currentMatch = 0
+        else {
+            currentMatch = matchIndexFrom(found, editorSession.selection.start).coerceIn(0, found.size - 1)
+            editorSession.setSelectionRange(found[currentMatch].start, found[currentMatch].end)
         }
     }
 
@@ -607,21 +719,24 @@ fun CodeEditor(
                     clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) }
                     return true
                 }
+                // Undo (⌘/Ctrl-Z), redo (⌘/Ctrl-Shift-Z or Ctrl-Y). Dismiss the popup/snippet first so they
+                // don't act on the reverted buffer.
+                Key.Z -> { dismissed = true; job?.cancel(); snippet = null; if (ev.isShiftPressed) editorSession.redo() else editorSession.undo(); return true }
+                Key.Y -> { dismissed = true; job?.cancel(); snippet = null; editorSession.redo(); return true }
+                // Zoom: ⌘/Ctrl with +/-/0 (mirrors the pinch gesture).
+                Key.Equals, Key.Plus, Key.NumPadAdd -> { onFontScaleChange(clampFontScale(fontScale * 1.1f)); return true }
+                Key.Minus, Key.NumPadSubtract -> { onFontScaleChange(clampFontScale(fontScale / 1.1f)); return true }
+                Key.Zero -> { onFontScaleChange(1f); return true }
             }
             return false
         }
 
-        when (ev.key) {
-            Key.ShiftLeft, Key.ShiftRight,
-            Key.CtrlLeft, Key.CtrlRight,
-            Key.AltLeft, Key.AltRight,
-            Key.MetaLeft, Key.MetaRight,
-            Key.CapsLock, Key.NumLock, Key.ScrollLock -> return false
-            else -> Unit
-        }
-
-        val cp = ev.utf16CodePoint
-        if (cp >= 32 && cp != 127) {
+        // Printable-character insert. Whether a key is text — versus a modifier/lock/function/navigation
+        // key or an unhandled command chord — is decided per-platform (Android consults the native
+        // KeyEvent's isModifierKey/unicodeChar, robust against Bluetooth keycodes Compose's Key enum doesn't
+        // name; desktop mirrors the utf16CodePoint path). Returns the code point to insert, or -1.
+        val cp = textInputCodePoint(ev)
+        if (cp >= 0) {
             editorSession.commitText(codePointToString(cp))
             return true
         }
@@ -649,6 +764,14 @@ fun CodeEditor(
                     if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.S) {
                         onSave(); return@onPreviewKeyEvent true
+                    }
+                    // Find (⌘/Ctrl-F) / find+replace (⌘/Ctrl-R); seed the query from the current selection.
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && (ev.key == Key.F || ev.key == Key.R)) {
+                        editorSession.selectedText()?.takeIf { it.isNotEmpty() && '\n' !in it }?.let { findQuery = it }
+                        replaceMode = ev.key == Key.R
+                        findOpen = true
+                        dismissed = true; job?.cancel()
+                        return@onPreviewKeyEvent true
                     }
                     // Go to definition (⌘/Ctrl-B): resolve the resource/symbol at the caret and jump to it.
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.B) {
@@ -703,6 +826,23 @@ fun CodeEditor(
                     }
                 }
                 .onKeyEvent { handleKey(it) }
+                // pinch-to-zoom: a 2-finger gesture scales the editor font. Consumes ONLY when ≥2 fingers are
+                // down, so single-finger scroll/selection still flow to the detectors below.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        do {
+                            val event = awaitPointerEvent()
+                            if (event.changes.count { it.pressed } >= 2) {
+                                val z = event.calculateZoom()
+                                if (z != 1f) {
+                                    onFontScaleChange(clampFontScale(liveScale.value * z))
+                                    event.changes.forEach { if (it.pressed) it.consume() }
+                                }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
                 // selection-handle and mouse-selection drags claim the pointer before the scrollables
                 .pointerInput(editorSession) {
                     awaitEachGesture {
@@ -726,8 +866,11 @@ fun CodeEditor(
                         when {
                             hit != null -> {
                                 down.consume()
+                                // The handle sits ~a line below its anchor, so the finger covers the row below.
+                                // Lift the hit-point back up to the anchored line so dragging tracks what you see.
+                                val lift = metrics.lineHeight * 0.5f + handleRadius * 0.6f
                                 drag(down.id) { change ->
-                                    val off = offsetAt(change.position)
+                                    val off = offsetAt(change.position.copy(y = change.position.y - lift))
                                     when (hit) {
                                         'a' -> editorSession.setSelectionRange(editorSession.selection.max, off)
                                         'b' -> editorSession.setSelectionRange(editorSession.selection.min, off)
@@ -763,10 +906,25 @@ fun CodeEditor(
                             val released = tryAwaitRelease()
                             if (released && !longPressed) {
                                 focus.requestFocus()
-                                editorSession.setCaret(offsetAt(pos))
-                                if (lastInputWasTouch) {
-                                    handlesVisible = true
-                                    keyboard?.show()
+                                // Third quick tap near the double-tap → select the whole line.
+                                val triple = tripleArmed && (pos - tripleArmPos).getDistance() < 60f
+                                // A tap on a gutter error/warning glyph opens that line's diagnostic sheet
+                                // (full message + fixes) instead of moving the caret.
+                                val gutterDiag = if (pos.x < gutterWidthPx) diagnosticOnLine(lineAtY(pos.y)) else null
+                                when {
+                                    triple -> {
+                                        tripleArmed = false; tripleArmJob?.cancel()
+                                        editorSession.selectLineAt(offsetAt(pos))
+                                        if (lastInputWasTouch) handlesVisible = true
+                                    }
+                                    gutterDiag != null -> openDiagnosticSheet(gutterDiag)
+                                    else -> {
+                                        editorSession.setCaret(offsetAt(pos))
+                                        if (lastInputWasTouch) {
+                                            handlesVisible = true
+                                            keyboard?.show()
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -774,14 +932,34 @@ fun CodeEditor(
                             focus.requestFocus()
                             editorSession.selectWordAt(offsetAt(pos))
                             if (lastInputWasTouch) handlesVisible = true
+                            // arm triple-tap: a quick third tap nearby (within the window below) selects the line
+                            tripleArmed = true; tripleArmPos = pos
+                            tripleArmJob?.cancel()
+                            tripleArmJob = scope.launch { delay(320.milliseconds); tripleArmed = false }
                         },
                         onLongPress = { pos ->
                             longPressed = true
                             focus.requestFocus()
-                            editorSession.selectWordAt(offsetAt(pos))
-                            if (lastInputWasTouch) {
-                                handlesVisible = true
-                                keyboard?.show()
+                            // Long-press → caret-position intentions/fixes (Alt-Enter on a phone). Fetch the
+                            // actions for that spot; if there are none, fall back to selecting the word so the
+                            // gesture is never wasted.
+                            val off = offsetAt(pos)
+                            editorSession.setCaret(off)
+                            dismissed = true; job?.cancel()
+                            scope.launch {
+                                val text = editorSession.doc.text
+                                val acts = runCatching { backend.actionsAt(path, text, off, off) }.getOrNull().orEmpty()
+                                if (acts.isNotEmpty()) {
+                                    actions = acts
+                                    actionSelected = 0
+                                    actionsOpen = true
+                                } else {
+                                    editorSession.selectWordAt(off)
+                                    if (lastInputWasTouch) {
+                                        handlesVisible = true
+                                        keyboard?.show()
+                                    }
+                                }
                             }
                         },
                     )
@@ -798,6 +976,8 @@ fun CodeEditor(
                         numberLayout = ::numberLayout,
                         diagByLine = diagByLine,
                         bracketPair = bracketPair,
+                        findMatches = if (findOpen) matches else emptyList(),
+                        currentMatch = currentMatch,
                         colors = EditorDrawColors(
                             background = colors.editorBg,
                             currentLine = colors.currentLine,
@@ -811,6 +991,8 @@ fun CodeEditor(
                             muted = colors.textTertiary,
                             composing = colors.textSecondary,
                             indentGuide = colors.hairline,
+                            findMatch = colors.warning.copy(alpha = 0.28f),
+                            findCurrent = colors.accent.copy(alpha = 0.5f),
                         ),
                         caretVisible = isFocused && (blinkOn || !editorSession.selection.collapsed),
                         caretContent = caretAnim.value, // animated, content-space; read here → redraw per frame
@@ -839,7 +1021,8 @@ fun CodeEditor(
                     d.severity,
                     d.unused,
                     d.message,
-                    Modifier.offset {
+                    onClick = { openDiagnosticSheet(d) },
+                    modifier = Modifier.offset {
                         IntOffset(
                             (gutterWidthPx + metrics.padLeft + lineWidth + 24f - hOffset.floatValue).roundToInt(),
                             (metrics.padTop + ln * metrics.lineHeight - vOffset.floatValue).roundToInt(),
@@ -981,6 +1164,41 @@ fun CodeEditor(
                 modifier = Modifier.align(Alignment.TopCenter),
             )
         }
+
+        // diagnostic sheet — full (scrollable) message + that diagnostic's fixes, docked at the pane bottom
+        diagnosticSheet?.let { d ->
+            DiagnosticSheet(
+                severity = d.severity,
+                unused = d.unused,
+                message = d.message,
+                actions = sheetActions,
+                onPick = { applySheetFix(it) },
+                onDismiss = { diagnosticSheet = null },
+            )
+        }
+
+        // find / replace bar, docked at the top of the editor
+        if (findOpen) {
+            FindReplaceBar(
+                query = findQuery,
+                replace = replaceText,
+                replaceMode = replaceMode,
+                options = findOptions,
+                matchCount = matches.size,
+                currentIndex = if (matches.isEmpty()) -1 else currentMatch,
+                regexError = regexError,
+                onQueryChange = { findQuery = it },
+                onReplaceChange = { replaceText = it },
+                onToggleReplaceMode = { replaceMode = !replaceMode },
+                onOptionsChange = { findOptions = it },
+                onPrev = { gotoMatch(currentMatch - 1) },
+                onNext = { gotoMatch(currentMatch + 1) },
+                onReplaceOne = { replaceCurrent() },
+                onReplaceAll = { replaceAll() },
+                onClose = { findOpen = false; runCatching { focus.requestFocus() } },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
     }
 }
 
@@ -1066,6 +1284,8 @@ private class EditorDrawColors(
     val muted: Color,
     val composing: Color,
     val indentGuide: Color,
+    val findMatch: Color,
+    val findCurrent: Color,
 )
 
 /**
@@ -1121,6 +1341,8 @@ private fun DrawScope.drawEditor(
     numberLayout: (Int) -> TextLayoutResult,
     diagByLine: Map<Int, List<DiagSeg>>,
     bracketPair: Pair<Int, Int>?,
+    findMatches: List<Match>,
+    currentMatch: Int,
     colors: EditorDrawColors,
     caretVisible: Boolean,
     caretContent: Offset,
@@ -1145,6 +1367,21 @@ private fun DrawScope.drawEditor(
     }
 
     clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
+        // find-match highlights (under the selection/text): every match tinted, the current one stronger.
+        if (findMatches.isNotEmpty()) {
+            for ((idx, m) in findMatches.withIndex()) {
+                val sLine = doc.lineForOffset(m.start)
+                val eLine = doc.lineForOffset(m.end)
+                if (eLine < firstVisible || sLine > lastVisible) continue
+                val color = if (idx == currentMatch) colors.findCurrent else colors.findMatch
+                for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
+                    val x0 = if (line == sLine) xOf(line, m.start) else textLeft
+                    val x1 = if (line == eLine) xOf(line, m.end) else textLeft + layoutFor(line).size.width
+                    if (x1 > x0) drawRect(color, Offset(x0, lineTop(line)), Size(x1 - x0, lineH))
+                }
+            }
+        }
+
         // selection background
         if (!sel.collapsed) {
             val sLine = doc.lineForOffset(sel.min)
@@ -1337,7 +1574,7 @@ private fun DrawScope.wavyUnderline(color: Color, x1: Float, x2: Float, y: Float
 /** The inline diagnostic chip: a pill at the right of a diagnostic line — severity-tinted fill, icon,
  *  message. Colour/icon follow [severity]; an [unused] warning is muted rather than alarming. */
 @Composable
-private fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: String, modifier: Modifier) {
+private fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: String, onClick: () -> Unit, modifier: Modifier) {
     val color = when (severity) {
         UiSeverity.Error -> Ca.colors.error
         UiSeverity.Warning -> if (unused) Ca.colors.textTertiary else Ca.colors.warning
@@ -1352,6 +1589,7 @@ private fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: Strin
     Row(
         modifier
             .background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+            .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -1469,6 +1707,11 @@ private fun paletteFor(syntax: SyntaxColors): Array<SpanStyle?> {
     palette[TokenType.PROPERTY.ordinal] = SpanStyle(color = syntax.property)
     return palette
 }
+
+/** Editor zoom limits (× the theme code size) and the clamp the pinch/keyboard zoom both go through. */
+private const val MIN_FONT_SCALE = 0.6f
+private const val MAX_FONT_SCALE = 2.6f
+private fun clampFontScale(s: Float): Float = s.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE)
 
 private fun codePointToString(cp: Int): String = when {
     cp < 0x10000 -> cp.toChar().toString()

@@ -86,8 +86,18 @@ class LayoutInflater(
     }
 
     private fun customNode(fqName: String, attrs: AttrReader, ctx: RenderContext): RenderNode {
-        val node = runCatching { customViewFactory.create(fqName, attrs, ctx) }.getOrNull()
-            ?: return placeholder(fqName).also { problem(fqName, "Custom view not rendered (no preview runtime)") }
+        val outcome = runCatching { customViewFactory.create(fqName, attrs, ctx) }
+        val node = outcome.getOrNull()
+        if (node == null) {
+            // Surface the real reason (compile/dex failure, throwing constructor, missing runtime, …) so the
+            // preview pane's problems chip is actionable; CustomViewPreviewException already carries a message.
+            val reason = when (val t = outcome.exceptionOrNull()) {
+                null -> "no preview runtime"
+                is CustomViewPreviewException -> t.message ?: t.javaClass.simpleName
+                else -> "${t.javaClass.simpleName}: ${t.message ?: "(no message)"}"
+            }
+            return placeholder(fqName).also { problem(fqName, "Custom view not rendered — $reason") }
+        }
         node.renderer = CustomViewRenderer
         return node
     }

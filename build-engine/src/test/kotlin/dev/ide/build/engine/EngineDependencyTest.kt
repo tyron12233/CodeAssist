@@ -141,6 +141,40 @@ class EngineDependencyTest {
     }
 
     @Test
+    fun outputInferenceNeverFormsACrossModuleCycle() {
+        // Issue #993: the reported demo cycle was four tasks across TWO modules —
+        // `:feature:classes -> :core:jar -> :core:classes -> :feature:jar -> :feature:classes`.
+        // It arises when each module's `classes` lifecycle tracks a dir that the OTHER module's `jar`
+        // artifact lands inside (overlapping/shared output roots), so inference wants BOTH reverse edges
+        // `feature:classes -> core:jar` and `core:classes -> feature:jar`. Neither is a *direct* reversal of
+        // an explicit dep, so the one-hop guard misses them — together with the two explicit `jar -> classes`
+        // edges they close a cycle. Inferred edges are a convenience, never required for correctness, so an
+        // inferred edge must never close a cycle over the authoritative explicit graph.
+        val dir = Files.createTempDirectory("infer-xmod")
+        try {
+            val shared = dir.resolve("build")                       // a shared/overlapping output root
+            val coreJar = shared.resolve("libs/core.jar")
+            val featureJar = shared.resolve("libs/feature.jar")     // both jars land UNDER `shared`
+
+            val coreCompile = TestTask(TaskName(":core:compileJava"), outPaths = listOf(shared.resolve("core/Calc.class")))
+            val coreClasses = TestTask(TaskName(":core:classes"), inPaths = listOf(shared), dependsOn = listOf(TaskName(":core:compileJava")))
+            val coreJarT = TestTask(TaskName(":core:jar"), inPaths = listOf(shared), outPaths = listOf(coreJar), dependsOn = listOf(TaskName(":core:classes")))
+            val featCompile = TestTask(TaskName(":feature:compileJava"), outPaths = listOf(shared.resolve("feature/Feat.class")))
+            val featClasses = TestTask(TaskName(":feature:classes"), inPaths = listOf(shared), dependsOn = listOf(TaskName(":feature:compileJava")))
+            val featJarT = TestTask(TaskName(":feature:jar"), inPaths = listOf(shared), outPaths = listOf(featureJar), dependsOn = listOf(TaskName(":feature:classes")))
+
+            val graph = TaskGraphImpl(listOf(featJarT, featClasses, featCompile, coreJarT, coreClasses, coreCompile))
+            graph.topologicalLevels()   // must NOT throw CyclicTaskDependencyException — the cycle is broken
+            // The authoritative explicit ordering is preserved within each module (no `jar -> classes` reversal):
+            // a `classes` lifecycle never ends up depending on its OWN module's jar.
+            assertFalse(graph.dependencies(coreClasses).any { it.name.value == ":core:jar" }, "core:classes must not depend on core:jar")
+            assertFalse(graph.dependencies(featClasses).any { it.name.value == ":feature:jar" }, "feature:classes must not depend on feature:jar")
+            assertTrue(levelOf(graph, ":core:classes") < levelOf(graph, ":core:jar"))
+            assertTrue(levelOf(graph, ":feature:classes") < levelOf(graph, ":feature:jar"))
+        } finally { dir.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun taskWithNoInputsIsSkippedAsNoSource() = runBlocking {
         val dir = Files.createTempDirectory("nosrc")
         try {

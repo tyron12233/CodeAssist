@@ -10,7 +10,9 @@ import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.node.ModifierNodeElement
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.establishTextInputSession
@@ -25,6 +27,20 @@ import kotlinx.coroutines.launch
  */
 actual fun Modifier.editorTextInput(session: EditorSession): Modifier =
     this then EditorTextInputElement(session)
+
+actual fun textInputCodePoint(event: KeyEvent): Int {
+    val native = event.nativeKeyEvent
+    // Android's own keycode classification catches every modifier/lock/function/sym key — including the
+    // non-standard codes some Bluetooth keyboards emit that Compose's Key enum leaves as Key.Unknown
+    // (the "shift / combos typed as text" bug). This is why we go through the native event, not Compose's Key.
+    if (AndroidKeyEvent.isModifierKey(native.keyCode)) return -1
+    // Ctrl/Meta chords are shortcuts, never text. AltGr is reported as Alt (not Ctrl), so it still types.
+    if (native.isCtrlPressed || native.isMetaPressed) return -1
+    // unicodeChar folds in Shift/AltGr; 0 = a non-printable key (arrows, F-keys, …), and a dead-key accent
+    // has its COMBINING_ACCENT high bit set (a negative Int here) so the range check drops it — as before.
+    val cp = native.unicodeChar
+    return if (cp in 32..0x10FFFF && cp != 127) cp else -1
+}
 
 private data class EditorTextInputElement(val session: EditorSession) : ModifierNodeElement<EditorTextInputNode>() {
     override fun create() = EditorTextInputNode(session)

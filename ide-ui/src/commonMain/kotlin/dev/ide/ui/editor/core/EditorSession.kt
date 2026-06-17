@@ -92,6 +92,23 @@ class EditorSession(
     private var pendingIme = false // an IME state push was deferred while a batch was open
     private var goalColumn = -1 // sticky column for consecutive vertical caret moves
 
+    // ---- undo / redo ----
+    // Each step stores the *inverse-able* edits (only the changed substrings, so memory is O(edited text), not
+    // O(document)) plus the selection before/after. A batch (completion accept, IME multi-delete) records into
+    // ONE step; consecutive single-char typing/backspacing coalesces into the step on top so undo removes a
+    // run, not one char. undo/redo replay through [replaceRange] with [applyingUndo] set so they don't re-record.
+    private val undoStack = ArrayDeque<UndoStep>()
+    private val redoStack = ArrayDeque<UndoStep>()
+    private var currentGroup: UndoStep? = null   // open while a batch accumulates into one step
+    private var applyingUndo = false             // suppress recording while undo/redo replays edits
+    private var coalesceTyping = false           // may the next 1-char edit merge into the top step?
+
+    /** Whether [undo]/[redo] would do something — observable so a toolbar can enable/disable its buttons. */
+    var canUndo by mutableStateOf(false)
+        private set
+    var canRedo by mutableStateOf(false)
+        private set
+
     init {
         styles.reset(doc)
         var m = 0
@@ -109,6 +126,8 @@ class EditorSession(
             updateSelectionAndComposing(newSelection, newComposing)
             return
         }
+        val removedText = if (applyingUndo) "" else doc.substring(s, e)
+        val selBefore = selection
         val firstLine = doc.lineForOffset(s)
         val lastLine = doc.lineForOffset(e)
         doc = doc.replace(s, e, text)
@@ -129,6 +148,7 @@ class EditorSession(
         // order (multi-edit ops re-map each diagnostic correctly), O(diagnostics), no String diff. Just like
         // the line index and token spans above, the buffer keeps its own decorations in sync.
         if (diagnostics.isNotEmpty()) diagnostics = shiftDiagnostics(diagnostics, edit, doc)
+        if (!applyingUndo) recordEdit(s, removedText, text, selBefore)
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
         onSnippetEdit?.invoke(edit)
@@ -147,6 +167,7 @@ class EditorSession(
         selection = ns
         composing = nc
         goalColumn = -1
+        coalesceTyping = false // a caret/selection move ends the current typing run → next type is a new undo step
         editCount++
         notifyIme()
     }
@@ -165,16 +186,126 @@ class EditorSession(
         imeListener?.onStateChanged()
     }
 
-    /** IME batch edits (and multi-edit completion accepts): one IME push for the whole group. */
+    /** IME batch edits (and multi-edit completion accepts): one IME push for the whole group, and ONE undo step. */
     fun beginBatch() {
+        if (batchDepth == 0 && !applyingUndo) {
+            currentGroup = UndoStep(ArrayList(), selection, selection)
+            coalesceTyping = false
+        }
         batchDepth++
     }
 
     fun endBatch() {
-        if (batchDepth > 0 && --batchDepth == 0 && pendingIme) {
-            pendingIme = false
-            imeListener?.onStateChanged()
+        if (batchDepth > 0 && --batchDepth == 0) {
+            val g = currentGroup
+            currentGroup = null
+            if (g != null && g.edits.isNotEmpty()) {
+                g.selAfter = selection
+                redoStack.clear()
+                undoStack.addLast(g)
+                trimUndo()
+                refreshUndoState()
+            }
+            if (pendingIme) {
+                pendingIme = false
+                imeListener?.onStateChanged()
+            }
         }
+    }
+
+    // ---- undo / redo ----
+
+    private fun recordEdit(start: Int, removed: String, inserted: String, selBefore: TextRange) {
+        val group = currentGroup
+        if (group != null) {
+            group.edits.add(UndoEdit(start, removed, inserted)) // inside a batch → one finalized step in endBatch
+            coalesceTyping = false
+            return
+        }
+        redoStack.clear()
+        val top = undoStack.lastOrNull()
+        if (!(coalesceTyping && top != null && tryCoalesce(top, start, removed, inserted))) {
+            undoStack.addLast(UndoStep(arrayListOf(UndoEdit(start, removed, inserted)), selBefore, selection))
+            trimUndo()
+        }
+        coalesceTyping = isCoalescable(removed, inserted)
+        refreshUndoState()
+    }
+
+    /** Merge a single-char edit into [top] if it continues a forward typing run or a backspace run. */
+    private fun tryCoalesce(top: UndoStep, start: Int, removed: String, inserted: String): Boolean {
+        if (top.edits.size != 1) return false
+        val ed = top.edits[0]
+        if (removed.isEmpty() && inserted.length == 1 && ed.removed.isEmpty() && start == ed.start + ed.inserted.length) {
+            ed.inserted += inserted // typing one more char right after the run
+            top.selAfter = selection
+            return true
+        }
+        if (inserted.isEmpty() && removed.length == 1 && ed.inserted.isEmpty() && start + removed.length == ed.start) {
+            ed.start = start // backspacing one more char right before the run
+            ed.removed = removed + ed.removed
+            top.selAfter = selection
+            return true
+        }
+        return false
+    }
+
+    private fun isCoalescable(removed: String, inserted: String): Boolean {
+        val pureInsert = removed.isEmpty() && inserted.length == 1 && inserted[0] != '\n'
+        val pureDelete = inserted.isEmpty() && removed.length == 1 && removed[0] != '\n'
+        return pureInsert || pureDelete
+    }
+
+    /** Revert the most recent edit step. Returns false if there's nothing to undo (or a batch is open). */
+    fun undo(): Boolean {
+        if (currentGroup != null || undoStack.isEmpty()) return false
+        val step = undoStack.removeLast()
+        replayStep(step, undoing = true)
+        redoStack.addLast(step)
+        coalesceTyping = false
+        refreshUndoState()
+        return true
+    }
+
+    /** Re-apply the most recently undone step. Returns false if there's nothing to redo. */
+    fun redo(): Boolean {
+        if (currentGroup != null || redoStack.isEmpty()) return false
+        val step = redoStack.removeLast()
+        replayStep(step, undoing = false)
+        undoStack.addLast(step)
+        coalesceTyping = false
+        refreshUndoState()
+        return true
+    }
+
+    private fun replayStep(step: UndoStep, undoing: Boolean) {
+        applyingUndo = true
+        beginBatch() // coalesces the IME push; records nothing while applyingUndo is set
+        composing = null
+        if (undoing) {
+            // invert edits in REVERSE application order: each stored start is valid in the state it restores
+            for (i in step.edits.indices.reversed()) {
+                val ed = step.edits[i]
+                replaceRange(ed.start, ed.start + ed.inserted.length, ed.removed, TextRange(ed.start + ed.removed.length))
+            }
+            updateSelectionAndComposing(step.selBefore.coercedIn(doc.length), null)
+        } else {
+            for (ed in step.edits) {
+                replaceRange(ed.start, ed.start + ed.removed.length, ed.inserted, TextRange(ed.start + ed.inserted.length))
+            }
+            updateSelectionAndComposing(step.selAfter.coercedIn(doc.length), null)
+        }
+        endBatch()
+        applyingUndo = false
+    }
+
+    private fun trimUndo() {
+        while (undoStack.size > MAX_UNDO_STEPS) undoStack.removeFirst()
+    }
+
+    private fun refreshUndoState() {
+        canUndo = undoStack.isNotEmpty()
+        canRedo = redoStack.isNotEmpty()
     }
 
     // ---- external replacement ----
@@ -194,6 +325,9 @@ class EditorSession(
         composing = null
         diagnostics = emptyList() // a wholesale replace invalidates the old anchors; re-analysis will refill
         goalColumn = -1
+        // a wholesale replace invalidates the inverse-edit history (offsets no longer mean anything)
+        undoStack.clear(); redoStack.clear(); currentGroup = null; coalesceTyping = false
+        refreshUndoState()
         editCount++
         textRevision++
         imeListener?.onRestartInput()
@@ -309,6 +443,12 @@ class EditorSession(
         else setCaret(offset)
     }
 
+    /** Select the whole line containing [offset] (excluding the trailing newline) — the triple-tap gesture. */
+    fun selectLineAt(offset: Int) {
+        val line = doc.lineForOffset(offset.coerceIn(0, doc.length))
+        updateSelectionAndComposing(TextRange(doc.lineStart(line), doc.lineEnd(line)), null)
+    }
+
     fun selectedText(): String? =
         if (selection.collapsed) null else doc.substring(selection.min, selection.max)
 
@@ -404,8 +544,17 @@ class EditorSession(
     private companion object {
         /** Cap for IME text queries — never ship megabytes across the binder (sora's maxIPCTextLength). */
         const val MAX_IPC_TEXT = 4096
+
+        /** Undo-stack depth cap. With coalescing each step can be a whole run, so this is generous. */
+        const val MAX_UNDO_STEPS = 300
     }
 }
+
+/** One reversible change: at [start], the [removed] text was replaced by [inserted]. Coalescing mutates these. */
+private class UndoEdit(var start: Int, var removed: String, var inserted: String)
+
+/** One undo unit: its edits in application order, plus the selection to restore before ([selBefore]) and after. */
+private class UndoStep(val edits: MutableList<UndoEdit>, val selBefore: TextRange, var selAfter: TextRange)
 
 private fun TextRange.coercedIn(length: Int): TextRange =
     TextRange(start.coerceIn(0, length), end.coerceIn(0, length))

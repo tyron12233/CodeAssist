@@ -305,6 +305,25 @@ class IdeServicesBackend(
         }
     }.getOrNull()
 
+    override fun deletePath(path: String): Boolean {
+        val ok = services.deletePath(Paths.get(path))
+        if (ok) _fsEpoch.value += 1
+        return ok
+    }
+
+    override suspend fun renamePath(path: String, newName: String): UiRenameResult =
+        withContext(engineDispatcher) {
+            val r = services.renameFile(Paths.get(path), newName)
+            if (r.success) _fsEpoch.value += 1
+            UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
+        }
+
+    override fun movePath(path: String, destDir: String): String? =
+        services.movePath(Paths.get(path), Paths.get(destDir))?.toString()?.also { _fsEpoch.value += 1 }
+
+    override fun copyPath(path: String, destDir: String): String? =
+        services.copyPath(Paths.get(path), Paths.get(destDir))?.toString()?.also { _fsEpoch.value += 1 }
+
     override fun readFile(path: String): String =
         runCatching { (Paths.get(path)).readText() }.getOrDefault("")
 

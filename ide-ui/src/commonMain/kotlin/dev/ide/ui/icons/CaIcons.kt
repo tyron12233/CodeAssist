@@ -117,6 +117,8 @@ object CaIcons {
         s("M9.7 19.5h4.6M10.3 21.5h3.4"),
     )
     val refresh = build("refresh", s("M19 7a8 8 0 1 0 1.5 5M19 4v3.5h-3.5"))
+    val undo = build("undo", s("M4 12h8.5a5.5 5.5 0 0 1 5.5 5.5"), s("M8 8l-4 4 4 4"))
+    val redo = build("redo", s("M20 12h-8.5a5.5 5.5 0 0 0-5.5 5.5"), s("M16 8l4 4-4 4"))
     val arrowRight = build("arrow-right", s("M5 12h13M13 6l6 6-6 6"))
     /** Arrow into a tray — import files from outside the app. */
     val download = build("download", s("M12 4v10M8 10.5l4 4 4-4"), s("M5 18.5h14"))

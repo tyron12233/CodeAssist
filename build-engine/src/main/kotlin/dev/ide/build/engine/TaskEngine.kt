@@ -42,15 +42,35 @@ class TaskGraphImpl(
 
     /** Hard dependencies per task (external + declared + inferred), restricted to tasks in this graph. */
     private val hardDeps: Map<TaskName, Set<TaskName>> = run {
-        // Explicit (author-declared) deps first; inference must not reverse these (see inferOutputDeps).
+        // Explicit (author-declared) deps are authoritative; inference must not reverse them (see inferOutputDeps).
         val explicit = tasks.associate { t ->
             t.name to (deps[t.name].orEmpty() + t.dependsOn).filterTo(LinkedHashSet()) { it != t.name && it in byName }
         }
         val inferred = inferOutputDeps(explicit)
-        tasks.associate { t ->
-            t.name to (explicit.getValue(t.name) + inferred[t.name].orEmpty())
-                .filterTo(LinkedHashSet()) { it != t.name && it in byName }
+        // Start from the explicit graph, then fold in inferred edges one at a time, DROPPING any that would
+        // close a cycle. An inferred edge (t depends on producer) is only a scheduling convenience — the real
+        // data dependency is always also declared explicitly — so refusing the few that conflict can never
+        // break correctness, but it guarantees no path-overlap coincidence can forge a cycle (issue #993:
+        // two cross-module `classes`/`jar` reverse edges that the one-hop guard alone cannot catch).
+        val acc = tasks.associateTo(HashMap()) { it.name to LinkedHashSet(explicit.getValue(it.name)) }
+        // True if `target` is reachable from `from` by following current dependency edges in [acc].
+        fun reaches(from: TaskName, target: TaskName): Boolean {
+            val seen = HashSet<TaskName>()
+            val stack = ArrayDeque<TaskName>().apply { add(from) }
+            while (stack.isNotEmpty()) {
+                val n = stack.removeLast()
+                if (n == target) return true
+                if (!seen.add(n)) continue
+                acc[n]?.let { stack.addAll(it) }
+            }
+            return false
         }
+        for (t in tasks) for (producer in inferred[t.name].orEmpty()) {
+            if (producer == t.name || producer !in byName || producer in acc.getValue(t.name)) continue
+            // Adding `t -> producer` closes a cycle iff `t` is already reachable from `producer`; if so, drop it.
+            if (!reaches(producer, t.name)) acc.getValue(t.name).add(producer)
+        }
+        acc
     }
 
     /** Predecessors per task = hard deps + ordering-only edges (mustRunAfter / mustRunBefore, declared on

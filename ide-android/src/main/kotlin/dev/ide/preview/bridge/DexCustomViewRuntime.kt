@@ -9,9 +9,11 @@ import dev.ide.preview.RenderContext
 import dev.ide.preview.RenderNode
 import dev.ide.preview.bridge.widget.BridgeView
 import dev.ide.preview.impl.CustomViewFactory
+import dev.ide.preview.impl.CustomViewPreviewException
 import dev.ide.preview.impl.CustomViewRuntime
 import dev.ide.preview.impl.StyledAttrResolver
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -33,14 +35,17 @@ class DexCustomViewRuntime(
         val inputs = ArrayList<Path>()
         Files.walk(classesDir).use { w -> w.filter { it.toString().endsWith(".class") }.forEach { inputs.add(it) } }
         deps.filter { it.toString().endsWith(".jar") }.forEach { inputs.add(it) }
-        if (inputs.isEmpty()) return null
+        if (inputs.isEmpty()) throw CustomViewPreviewException("nothing to dex for preview (no compiled classes)")
 
         val dexOut = File(cacheDir, "preview-dex").apply { deleteRecursively(); mkdirs() }
-        val result = runCatching { D8InProcessDexer().dex(inputs, androidJar, minApi, false, dexOut.toPath()) }.getOrNull()
-        if (result == null || !result.success) return null
+        val result = runCatching { D8InProcessDexer().dex(inputs, androidJar, minApi, false, dexOut.toPath()) }
+            .getOrElse { throw CustomViewPreviewException("D8 dexing of preview classes threw: ${it.message ?: it.javaClass.simpleName}", it) }
+        if (!result.success) {
+            throw CustomViewPreviewException("D8 dexing of preview classes failed: ${result.log.takeLast(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
+        }
 
         val dexes = dexOut.walkTopDown().filter { it.extension == "dex" }.map { it.absolutePath }.toList()
-        if (dexes.isEmpty()) return null
+        if (dexes.isEmpty()) throw CustomViewPreviewException("D8 produced no .dex output for preview classes")
         val optimized = File(cacheDir, "preview-oat").apply { mkdirs() }
         val loader = DexClassLoader(dexes.joinToString(File.pathSeparator), optimized.absolutePath, null, javaClass.classLoader)
 
@@ -50,12 +55,25 @@ class DexCustomViewRuntime(
                 for (i in 0 until attrs.count) rawAttrs[attrs.name(i)] = attrs.value(i)
                 Bridges.styledResolver.set(styled)
                 return try {
-                    val cls = loader.loadClass(fqName)
-                    val ctor = cls.getConstructor(Context::class.java, AttributeSet::class.java)
-                    val view = ctor.newInstance(context, BridgeAttributeSet(rawAttrs)) as? BridgeView ?: return null
+                    val cls = try {
+                        loader.loadClass(fqName)
+                    } catch (e: Throwable) {
+                        throw CustomViewPreviewException("class $fqName not found in preview dex (${e.javaClass.simpleName})", e)
+                    }
+                    val ctor = try {
+                        cls.getConstructor(Context::class.java, AttributeSet::class.java)
+                    } catch (e: NoSuchMethodException) {
+                        throw CustomViewPreviewException("$fqName has no (Context, AttributeSet) constructor", e)
+                    }
+                    val instance = try {
+                        ctor.newInstance(context, BridgeAttributeSet(rawAttrs))
+                    } catch (e: InvocationTargetException) {
+                        val cause = e.targetException ?: e
+                        throw CustomViewPreviewException("$fqName constructor threw ${cause.javaClass.simpleName}: ${cause.message ?: "(no message)"}", cause)
+                    }
+                    val view = instance as? BridgeView
+                        ?: throw CustomViewPreviewException("$fqName is not a bridged View subclass (got ${instance.javaClass.name}) — its base may not have been instrumented")
                     RenderNode(host = AndroidViewHost(view)).also { it.tag = fqName }
-                } catch (t: Throwable) {
-                    null
                 } finally {
                     Bridges.styledResolver.remove()
                 }

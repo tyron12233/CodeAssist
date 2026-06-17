@@ -2,6 +2,8 @@ package dev.ide.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,6 +49,10 @@ import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.EditorTopBar
 import dev.ide.ui.components.FileNavigator
+import dev.ide.ui.components.FileOpKind
+import dev.ide.ui.components.FileOpRequest
+import dev.ide.ui.components.FileOperationDialog
+import dev.ide.ui.components.fileOpPath
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
@@ -84,18 +90,21 @@ fun EditorScreen(
 ) {
     val indexStatus by state.backend.indexStatus.collectAsState()
     val buildState by state.backend.buildState.collectAsState()
+    val scope = rememberCoroutineScope()
     var newFileTarget by remember { mutableStateOf<NewFileTarget?>(null) }
     var newXmlTarget by remember { mutableStateOf<NewXmlTarget?>(null) }
+    var fileOp by remember { mutableStateOf<FileOpRequest?>(null) }
     // A res/ folder node opens the XML resource dialog; a Java source/package node opens New-Class.
     val onNewFile: (TreeNode) -> Unit = { node ->
         val xml = xmlTargetOf(node)
         if (xml != null) newXmlTarget = xml else newFileTargetOf(node)?.let { newFileTarget = it }
     }
     val onNewFileRoot: () -> Unit = { state.defaultNewFileTarget()?.let { newFileTarget = it } }
+    val onFileOp: (TreeNode, FileOpKind) -> Unit = { node, kind -> fileOp = FileOpRequest(node, kind) }
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFileRoot, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
-            else ExpandedLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFileRoot, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
+            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFileRoot, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
+            else ExpandedLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFileRoot, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
         }
         NewFileDialog(
             visible = newFileTarget != null,
@@ -110,6 +119,15 @@ fun EditorScreen(
             onCreate = { dir, fileName, content -> state.createFile(dir, fileName, content) },
             onCreateDir = { parent, dirName -> state.createDirectory(parent, dirName) },
         )
+        FileOperationDialog(
+            request = fileOp,
+            tree = state.tree,
+            onRename = { node, newName -> node.fileOpPath()?.let { p -> scope.launch { state.renamePath(p, newName) } } },
+            onMove = { node, dest -> node.fileOpPath()?.let { state.movePath(it, dest) } },
+            onCopy = { node, dest -> node.fileOpPath()?.let { state.copyPath(it, dest) } },
+            onDelete = { node -> node.fileOpPath()?.let { state.deletePath(it) } },
+            onDismiss = { fileOp = null },
+        )
     }
 }
 
@@ -121,6 +139,7 @@ private fun ExpandedLayout(
     buildState: BuildState,
     onNewFile: (TreeNode) -> Unit,
     onNewFileRoot: () -> Unit,
+    onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
     onOpenSdkManager: () -> Unit,
@@ -153,6 +172,11 @@ private fun ExpandedLayout(
                         onImport = { doImport(state, fileActions) },
                         canShare = fileActions.canShare,
                         onShare = { node -> node.filePath?.let { fileActions.share(it) } },
+                        canModify = true,
+                        onRename = { onFileOp(it, FileOpKind.Rename) },
+                        onMove = { onFileOp(it, FileOpKind.Move) },
+                        onCopy = { onFileOp(it, FileOpKind.Copy) },
+                        onDelete = { onFileOp(it, FileOpKind.Delete) },
                     )
                 }
                 VerticalDivider()
@@ -196,6 +220,7 @@ private fun CompactLayout(
     buildState: BuildState,
     onNewFile: (TreeNode) -> Unit,
     onNewFileRoot: () -> Unit,
+    onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
     onOpenSdkManager: () -> Unit,
@@ -299,6 +324,8 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
             // Breadcrumb tracks the caret: module › enclosing type(s) › method. Debounced (a reparse), and
             // falls back to the file path when the caret is outside any declaration (imports, blank lines).
             var crumbs by remember(active.path) { mutableStateOf(breadcrumbFor(state, active)) }
+            // Bumped by the Find button to open the editor's in-file find bar (Ctrl/⌘-F is the keyboard path).
+            var findEpoch by remember(active.path) { mutableStateOf(0) }
             val caretOffset = active.session.selection.start
             LaunchedEffect(active.path, active.session.textRevision, caretOffset) {
                 delay(200)
@@ -311,6 +338,14 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) { Breadcrumb(crumbs) }
+                // Undo/redo — a touch affordance for the history that Ctrl/⌘-Z also drives; reads the
+                // session's observable canUndo/canRedo so the glyphs dim when there's nothing to do.
+                val canUndo = active.session.canUndo
+                val canRedo = active.session.canRedo
+                val dim = Ca.colors.textTertiary.copy(alpha = 0.35f)
+                IconButtonCa(CaIcons.undo, "Undo", onClick = { active.session.undo() }, iconSize = 18, boxSize = 32, tint = if (canUndo) null else dim)
+                IconButtonCa(CaIcons.redo, "Redo", onClick = { active.session.redo() }, iconSize = 18, boxSize = 32, tint = if (canRedo) null else dim)
+                IconButtonCa(CaIcons.search, "Find / replace", onClick = { findEpoch++ }, iconSize = 18, boxSize = 32)
                 ViewModeToggle(active.viewMode, dev.ide.ui.editor.preview.isPreviewable(active.path) || dev.ide.ui.editor.preview.isLayoutPreviewable(active.path)) { active.viewMode = it }
             }
             AndroidSourcesBanner(state)
@@ -345,6 +380,9 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                     onNavigate = { p, o -> state.openAt(p, o) },
                     onRenamed = { newPath -> state.reloadAfterRename(active.path, newPath) },
                     showInlayHints = state.inlayHintsEnabled,
+                    findEpoch = findEpoch,
+                    fontScale = state.editorFontScale,
+                    onFontScaleChange = { state.editorFontScale = it },
                 )
             }
         } else {
@@ -473,7 +511,9 @@ private fun MoreSheetContent(
     onCloseProject: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+    // Scrollable so every row (incl. "Close project") is reachable when the sheet is short — e.g. the soft
+    // keyboard is up and the sheet has been lifted above it (issue #994).
+    Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
         Text("More", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
         MoreRow(CaIcons.gear, "Module Settings", "Java version, Android config, source sets", onModuleSettings)

@@ -180,6 +180,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -1723,6 +1724,108 @@ class IdeServices private constructor(
         return RenameOutcome(true, "Renamed '${target.oldName}' to '$name'", occurrences, editsByPath.size, newPath?.toString())
     }
 
+    // ---- file & package operations (delete / rename / move / copy), for files AND directories/packages ----
+
+    /** Absolute-normalized form, matching how [openDocuments] is keyed. */
+    private fun normPath(p: Path): Path = p.toAbsolutePath().normalize()
+
+    /** Drop every open-document overlay at [root] or under it (after a delete). */
+    private fun dropOverlaysUnder(root: Path) {
+        val r = normPath(root)
+        openDocuments.keys.filter { it == r || it.startsWith(r) }.forEach { openDocuments.remove(it) }
+    }
+
+    /** Re-point open-document overlays from [from] (a file or directory) to [to] after a move/rename. */
+    private fun rekeyOverlays(from: Path, to: Path) {
+        val f = normPath(from); val t = normPath(to)
+        for (k in openDocuments.keys.filter { it == f || it.startsWith(f) }) {
+            val dest = if (k == f) t else t.resolve(f.relativize(k))
+            openDocuments.remove(k)?.let { openDocuments[normPath(dest)] = it }
+        }
+    }
+
+    /** Offset of the identifier in a top-level `class/interface/enum/record TypeName` declaration, or null. */
+    private fun javaTypeNameOffset(text: String, typeName: String): Int? =
+        Regex("\\b(?:class|interface|enum|record)\\s+(${Regex.escape(typeName)})\\b")
+            .find(text)?.groups?.get(1)?.range?.first
+
+    /**
+     * Delete a file or directory (recursively). Drops any open-document overlays under it, then invalidates
+     * analyzers and resyncs the index. Returns true on success.
+     */
+    fun deletePath(target: Path): Boolean {
+        val abs = normPath(target)
+        val ok = runCatching {
+            if (Files.isDirectory(abs)) abs.toFile().deleteRecursively() else Files.deleteIfExists(abs)
+        }.getOrDefault(false)
+        if (ok) { dropOverlaysUnder(abs); invalidateAnalyzers(); resyncIndex() }
+        return ok
+    }
+
+    /**
+     * Rename a file or directory in place (same parent) to [newName]. For a Java source file whose public type
+     * matches the file name, this delegates to the symbol [rename] so the type and all references update too
+     * (the backing file is renamed as part of that). Otherwise it is a plain filesystem rename. [newName] is
+     * the full new name (with extension for files).
+     */
+    suspend fun renameFile(target: Path, newName: String): RenameOutcome {
+        val name = newName.trim()
+        if (name.isEmpty() || name.contains('/') || name.contains('\\')) return RenameOutcome(false, "'$newName' is not a valid name.")
+        val abs = normPath(target)
+        if (!Files.exists(abs)) return RenameOutcome(false, "'${abs.fileName}' no longer exists.")
+        val parent = abs.parent ?: return RenameOutcome(false, "Can't rename the workspace root.")
+
+        // Java class-aware path: when the file actually declares a top-level type matching its name, rename the
+        // type (and every reference) — which also moves the backing file — instead of a bare filesystem rename.
+        if (!analysisUnavailable && abs.toString().endsWith(".java")) {
+            val oldType = abs.fileName.toString().removeSuffix(".java")
+            val newType = name.removeSuffix(".java")
+            if (isValidJavaIdentifier(newType)) {
+                val text = openDocuments[abs] ?: runCatching { abs.readText() }.getOrNull()
+                val offset = text?.let { javaTypeNameOffset(it, oldType) }
+                if (text != null && offset != null) return rename(abs, text, offset, newType)
+            }
+        }
+
+        val dest = parent.resolve(name)
+        if (dest == abs) return RenameOutcome(false, "The new name is the same as the current one.")
+        if (Files.exists(dest)) return RenameOutcome(false, "'$name' already exists here.")
+        return runCatching {
+            Files.move(abs, dest)
+            rekeyOverlays(abs, dest)
+            invalidateAnalyzers(); resyncIndex()
+            RenameOutcome(true, "Renamed to '$name'", newPath = dest.toString())
+        }.getOrElse { RenameOutcome(false, "Rename failed: ${it.message}") }
+    }
+
+    /** Move a file or directory into [destDir]. Returns the new path, or null on conflict/failure. */
+    fun movePath(target: Path, destDir: Path): Path? {
+        val abs = normPath(target); val dir = normPath(destDir)
+        val dest = dir.resolve(abs.fileName)
+        if (Files.exists(dest) || dest == abs || dir == abs || dir.startsWith(abs)) return null // no overwrite / move-into-self
+        return runCatching {
+            Files.createDirectories(dir)
+            Files.move(abs, dest)
+            rekeyOverlays(abs, dest)
+            invalidateAnalyzers(); resyncIndex()
+            dest
+        }.getOrNull()
+    }
+
+    /** Copy a file or directory into [destDir]. Returns the new path, or null on conflict/failure. */
+    fun copyPath(target: Path, destDir: Path): Path? {
+        val abs = normPath(target); val dir = normPath(destDir)
+        val dest = dir.resolve(abs.fileName)
+        if (Files.exists(dest) || dest.startsWith(abs)) return null
+        return runCatching {
+            Files.createDirectories(dir)
+            if (Files.isDirectory(abs)) abs.toFile().copyRecursively(dest.toFile(), overwrite = false)
+            else Files.copy(abs, dest)
+            invalidateAnalyzers(); resyncIndex()
+            dest
+        }.getOrNull()
+    }
+
     /** Every `.java` file across the workspace's modules (for the project-wide reference sweep). */
     private fun projectJavaFiles(): List<Path> {
         val out = ArrayList<Path>()
@@ -2094,8 +2197,8 @@ class IdeServices private constructor(
      * runtime, no `android.jar`, or compilation fails (the inflater then shows placeholders).
      */
     private fun buildCustomViewFactory(module: Module, repo: dev.ide.android.support.resources.ResourceRepository): dev.ide.preview.impl.CustomViewFactory? {
-        val runtime = customViewRuntime ?: return null
-        val androidJar = previewAndroidJar() ?: return null
+        val runtime = customViewRuntime ?: return failingCustomViewFactory("no custom-view preview runtime on this platform")
+        val androidJar = previewAndroidJar() ?: return failingCustomViewFactory("no android.jar available for the preview compile")
         return runCatching {
             val work = store.rootPath.resolve(".platform/caches/preview/${module.id.value}")
             val srcDir = work.resolve("src"); val outDir = work.resolve("classes")
@@ -2118,7 +2221,10 @@ class IdeServices private constructor(
                 runCatching { ModuleCompilationContext.create(store.workspace, m).classpath.entries.map { Paths.get(it.root.path) } }.getOrDefault(emptyList())
             }.filter { Files.exists(it) }.distinct()
             val result = JdtBatchCompiler.compile(sources, deps, outDir, sourceLevel = "17", bootClasspath = listOf(androidJar))
-            if (!result.success) return@runCatching null
+            if (!result.success) {
+                val errs = result.messages.filter { it.contains("ERROR", ignoreCase = true) }.ifEmpty { result.messages }
+                return@runCatching failingCustomViewFactory("preview compile failed: ${errs.take(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
+            }
 
             // Instrument every compiled .class in place (reparent View bases, redirect obtainStyledAttributes).
             val remapper = dev.ide.preview.impl.bridge.BridgeRemapper()
@@ -2139,8 +2245,21 @@ class IdeServices private constructor(
                 }
             }
             runtime.createFactory(outDir, deps, styled)
-        }.getOrNull()
+                ?: failingCustomViewFactory("the custom-view runtime returned no factory")
+        }.getOrElse { t ->
+            // Surface the reason (incl. a CustomViewPreviewException thrown by createFactory, e.g. a dex
+            // failure) through a factory that fails every create() with it, rather than a silent null →
+            // generic "no preview runtime" message in the preview pane.
+            failingCustomViewFactory(t.message ?: "preview setup failed (${t.javaClass.simpleName})")
+        }
     }
+
+    /** A [CustomViewFactory] whose every [create] fails with [reason], so the preview pane shows it. */
+    private fun failingCustomViewFactory(reason: String): dev.ide.preview.impl.CustomViewFactory =
+        object : dev.ide.preview.impl.CustomViewFactory {
+            override fun create(fqName: String, attrs: dev.ide.preview.AttrReader, ctx: dev.ide.preview.RenderContext): dev.ide.preview.RenderNode =
+                throw dev.ide.preview.impl.CustomViewPreviewException(reason)
+        }
 
     /** Map a project attr's declared `format` (or an inference) to a preview [dev.ide.preview.ValueFormat]. */
     private fun attrFormatOf(repo: dev.ide.android.support.resources.ResourceRepository, name: String): dev.ide.preview.ValueFormat =
@@ -2515,9 +2634,19 @@ class IdeServices private constructor(
             store.replaceSdks(listOf(sdk))
             val template = ProjectTemplateRegistry(platform.extensions).byId(TemplateId(templateId))
                 ?: error("Unknown project template '$templateId'")
-            template.generate(ScaffoldImpl(store, languageLevel), TemplateArgs(args))
+            val templateArgs = TemplateArgs(args)
+            template.generate(ScaffoldImpl(store, languageLevel), templateArgs)
             store.save()
-            return IdeServices(platform, store, androidTools, dexRunner, apkInstaller)
+            val services = IdeServices(platform, store, androidTools, dexRunner, apkInstaller)
+            // Resolve + attach the template's declared Maven dependencies (e.g. Material You's
+            // com.google.android.material:material). Resolution is suspend/network, so it runs here after the
+            // synchronous generate rather than inside the scaffold. A failure (offline, no cache) is left to
+            // surface at build time — the project is still created.
+            val templateDeps = template.dependencies(templateArgs)
+            if (templateDeps.isNotEmpty()) runBlocking {
+                for (dep in templateDeps) services.addDependency(dep.module, dep.coordinate, dep.scope)
+            }
+            return services
         }
 
         /** Open the existing workspace at [root] (seeding [sdk] only if it has none). The [ProjectManager.open] core. */
