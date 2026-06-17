@@ -11,6 +11,7 @@ import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.stream.Collectors
 
 /**
  * The Kotlin compile step, injected so build-engine never links the Kotlin compiler (the mirror of
@@ -36,7 +37,7 @@ data class KotlinCompileResult(val success: Boolean, val messages: List<String> 
 
 /** The `.kt` files in a module's SOURCE/GENERATED roots — kotlinc's program inputs. */
 internal fun kotlinSourceFiles(module: Module): List<Path> = sourceRootDirs(module)
-    .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".kt") }.toList() } }
+    .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".kt") }.collect(Collectors.toList()) } }
 
 /** True when a module carries any Kotlin source (so it needs a `compileKotlin` step). */
 internal fun hasKotlinSources(module: Module): Boolean = sourceRootDirs(module)

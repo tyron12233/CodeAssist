@@ -58,6 +58,8 @@ kotlin {
         // both the Android (Studio) and desktop (IntelliJ) preview renderers can find it.
         androidMain.dependencies {
             implementation(compose.uiTooling)
+            // androidx.activity.compose.BackHandler — backs the platform back handler (PlatformBackHandler).
+            implementation(libs.androidx.activity.compose)
         }
         val desktopMain by getting {
             dependencies {

@@ -7,6 +7,7 @@ import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.stream.Collectors
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -189,7 +190,7 @@ object AndroidSdkInstaller {
     /** Place the extracted [staging] content at [installDir], flattening the archive's single root dir
      *  (repo zips wrap their payload in one folder, like `android-14/` or `cmdline-tools/`). */
     private fun placeInto(staging: Path, installDir: Path) {
-        val roots = Files.list(staging).use { it.toList() }
+        val roots = Files.list(staging).use { it.collect(Collectors.toList()) }
         val src = if (roots.size == 1 && Files.isDirectory(roots[0])) roots[0] else staging
         if (Files.exists(installDir)) deleteRecursively(installDir)
         Files.createDirectories(installDir.parent)

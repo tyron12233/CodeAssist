@@ -23,6 +23,7 @@ import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.components.PermissionDialog
 import dev.ide.ui.navigation.ScreenHost
+import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.DependenciesScreen
 import dev.ide.ui.screens.EditorScreen
@@ -80,6 +81,21 @@ fun CodeAssistApp(
 
     // Accent is fixed to violet (the brand accent).
     CodeAssistTheme(dark = dark, accent = CaAccent.Violet, uiFont = uiFont, codeFont = codeFont) {
+        // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
+        // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the
+        // deeper handler wins); this one only fires for screen-level back: pop a sub-screen to the editor, the
+        // editor to the project picker, or dismiss the first-launch sheets. On the picker it stays disabled so
+        // back exits the app as usual.
+        PlatformBackHandler(enabled = screen != Screen.Projects || showOnboarding || showMigration) {
+            when {
+                showOnboarding -> { showOnboarding = false; backend.setPreference("onboarding.seen", "true") }
+                showMigration -> { showMigration = false; backend.setPreference("migration.acknowledged", "true") }
+                screen == Screen.Dependencies || screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen = Screen.Editor
+                screen == Screen.CreateProject -> screen = Screen.Projects
+                screen == Screen.Editor -> screen = Screen.Projects
+                else -> {}
+            }
+        }
         // The brand background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
         Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {

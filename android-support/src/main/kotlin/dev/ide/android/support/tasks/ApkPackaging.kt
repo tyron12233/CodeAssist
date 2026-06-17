@@ -2,6 +2,7 @@ package dev.ide.android.support.tasks
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.stream.Collectors
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -64,7 +65,7 @@ internal object ApkPackaging {
             // 2) classes.dex / classes2.dex … — collect every .dex across the dex dirs (native multidex packages
             // the project / lib / external layers separately) and renumber into one contiguous sequence.
             val dexFiles = dexDirs.filter { Files.isDirectory(it) }.flatMap { dir ->
-                Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().toList() }
+                Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
             }
             dexFiles.forEachIndexed { i, dex ->
                 val name = if (i == 0) "classes.dex" else "classes${i + 1}.dex"
@@ -97,8 +98,8 @@ internal object ApkPackaging {
     }
 
     private fun classFiles(root: Path): List<Path> =
-        Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }.sorted().toList() }
+        Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }.sorted().collect(Collectors.toList()) }
 
     private fun allFiles(root: Path): List<Path> =
-        Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) }.sorted().toList() }
+        Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) }.sorted().collect(Collectors.toList()) }
 }

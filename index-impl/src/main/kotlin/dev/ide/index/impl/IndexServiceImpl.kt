@@ -22,6 +22,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.stream.Collectors
 import java.util.zip.ZipFile
 import java.nio.file.Paths
 import kotlin.io.path.readText
@@ -228,7 +229,7 @@ class IndexServiceImpl(
         for ((root, exts) in groups) {
             if (!Files.isDirectory(root)) continue
             val files = Files.walk(root).use { s ->
-                s.filter { f -> Files.isRegularFile(f) && exts.any { f.toString().endsWith(it) } }.toList()
+                s.filter { f -> Files.isRegularFile(f) && exts.any { f.toString().endsWith(it) } }.collect(Collectors.toList())
             }
             for (file in files) {
                 val text = runCatching { file.readText() }.getOrNull() ?: continue
@@ -311,7 +312,7 @@ class IndexServiceImpl(
                             .map { p -> modules.relativize(p).toString().substringAfter('/') to p } // strip <module>/
                             .filter { accessible(it.first, exported) }
                             .map { np -> LibraryInput(IndexOrigin.SDK, hash, np.first) { Files.readAllBytes(np.second) } as IndexInput }
-                            .toList()
+                            .collect(Collectors.toList())
                     }
                 } else emptyList()
                 return inputs.asSequence() to Closeable { if (ownFs) runCatching { fs.close() } }

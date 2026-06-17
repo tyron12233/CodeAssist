@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.nio.file.Paths
+import java.util.stream.Collectors
 
 /**
  * Incremental Kotlin compilation below the task level. The build engine already skips `compileKotlin` whole
@@ -169,7 +170,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
         if (!Files.isDirectory(dir)) return emptyList()
         return Files.walk(dir).use { s ->
             s.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }
-                .map { dir.relativize(it).toString().replace('\\', '/') }.toList()
+                .map { dir.relativize(it).toString().replace('\\', '/') }.collect(Collectors.toList())
         }
     }
 

@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.nio.file.Paths
+import java.util.stream.Collectors
 
 /**
  * A minimal [VirtualFileSystem] backed directly by the real local filesystem (`java.nio`).
@@ -59,7 +60,7 @@ class LocalVirtualFile internal constructor(
     override fun children(): List<VirtualFile> =
         if (isDirectory) {
             Files.list(nioPath).use { stream ->
-                stream.sorted().map { LocalVirtualFile(fs, it) }.toList()
+                stream.sorted().map { LocalVirtualFile(fs, it) }.collect(Collectors.toList())
             }
         } else {
             emptyList()

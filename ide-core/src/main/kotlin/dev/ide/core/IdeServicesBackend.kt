@@ -94,6 +94,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.stream.Collectors
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
@@ -259,7 +260,7 @@ class IdeServicesBackend(
 
     /** Visible entries of [dir], split into (sorted subdirectories, sorted files); dotfiles dropped. */
     private fun childPartition(dir: Path): Pair<List<Path>, List<Path>> {
-        val entries = runCatching { Files.list(dir).use { it.toList() } }.getOrDefault(emptyList())
+        val entries = runCatching { Files.list(dir).use { it.collect(Collectors.toList()) } }.getOrDefault(emptyList())
             .filterNot { it.fileName.toString().startsWith(".") }
         val dirs = entries.filter { Files.isDirectory(it) }.sortedBy { it.fileName.toString() }
         val files = entries.filter { Files.isRegularFile(it) }.sortedBy { it.fileName.toString() }
