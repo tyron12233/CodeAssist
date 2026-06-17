@@ -1,0 +1,13 @@
+CodeAssist 3.0 — rebuilt from the ground up.
+
+* New native incremental build engine and on-device Android APK pipeline
+  (aapt2, R, D8 dexing, packaging, signing) — build and install on-device.
+* Build and run mixed Kotlin/Java projects; the Kotlin compiler now runs on
+  device.
+* Multi-module projects, Android app/library modules, variants and JAR/AAR
+  Maven dependencies.
+* Error-tolerant code completion, Android XML intelligence, inline diagnostics
+  and quick-fixes, go-to-symbol and auto-import.
+* New Scratch/Blockly-style block editor that projects your real code.
+* Run sandbox that prompts before code accesses network, files or processes.
+* Rebuilt Compose UI shared across desktop and Android.

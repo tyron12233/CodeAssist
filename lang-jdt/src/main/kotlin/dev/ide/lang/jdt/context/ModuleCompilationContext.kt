@@ -12,6 +12,7 @@ import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.Sdk
+import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 import dev.ide.model.Workspace
 import dev.ide.platform.ContentHash
@@ -87,6 +88,7 @@ object ModuleCompilationContext {
                         collect(workspace, it, isRoot = false, sources, libraries, sourceAttachments, sdkNames, libIndex, visited)
                     }
                 }
+                is PlatformDependency -> { /* a BOM contributes no classes to the compile classpath */ }
             }
         }
     }

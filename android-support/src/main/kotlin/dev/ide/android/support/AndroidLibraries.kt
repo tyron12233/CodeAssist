@@ -4,6 +4,7 @@ import dev.ide.android.support.tools.AarExtractor
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.Module
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -14,6 +15,7 @@ class ResolvedLibraries(
     val resDirs: List<Path>,       // AAR `res/` merged by aapt2
     val assetsDirs: List<Path>,    // AAR `assets/` packaged under `assets/`
     val jniLibDirs: List<Path>,    // AAR `jni/<abi>/` packaged under `lib/`
+    val aarPackages: List<String>, // AAR manifest packages → aapt2 `--extra-packages` (their `R` + custom attrs)
 )
 
 /**
@@ -37,26 +39,36 @@ object AndroidLibraries {
         val resDirs = ArrayList<Path>()
         val assetsDirs = ArrayList<Path>()
         val jniLibDirs = ArrayList<Path>()
+        val aarPackages = ArrayList<String>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
         fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(dirNameOf(aar))) }
 
+        fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, manifest: Path?) {
+            compileJars.addAll(classesJars)
+            res?.let { resDirs.add(it) }
+            assets?.let { assetsDirs.add(it) }
+            jni?.let { jniLibDirs.add(it) }
+            manifest?.let { manifestPackage(it)?.let(aarPackages::add) }
+        }
+
         for (root in compileRoots) when {
-            isAar(root) -> {
-                val e = explode(root)
-                compileJars.addAll(e.classesJars)
-                e.resDir?.let { resDirs.add(it) }
-                e.assetsDir?.let { assetsDirs.add(it) }
-                e.jniDir?.let { jniLibDirs.add(it) }
+            isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.manifest) }
+            // A Maven-resolved AAR is stored as its exploded `classes.jar`; its res/assets/jni/manifest are siblings.
+            isExplodedAar(root) -> root.parent.let { dir ->
+                addAarParts(listOf(root), dirOrNull(dir, "res"), dirOrNull(dir, "assets"), dirOrNull(dir, "jni"),
+                    dir.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) })
             }
             isJar(root) -> compileJars.add(root)
         }
         for (root in runtimeRoots) when {
             isAar(root) -> dexJars.addAll(explode(root).classesJars)
+            isExplodedAar(root) -> dexJars.add(root)
             isJar(root) -> dexJars.add(root)
         }
         return ResolvedLibraries(
-            compileJars.distinct(), dexJars.distinct(), resDirs.distinct(), assetsDirs.distinct(), jniLibDirs.distinct(),
+            compileJars.distinct(), dexJars.distinct(), resDirs.distinct(), assetsDirs.distinct(),
+            jniLibDirs.distinct(), aarPackages.distinct(),
         )
     }
 
@@ -68,4 +80,22 @@ object AndroidLibraries {
     private fun isAar(p: Path) = p.toString().endsWith(".aar", ignoreCase = true)
     private fun isJar(p: Path) = p.toString().endsWith(".jar", ignoreCase = true)
     private fun dirNameOf(aar: Path): String = aar.fileName.toString().substringBeforeLast('.')
+
+    /**
+     * A `classes.jar` that the dependency resolver already exploded out of an AAR — recognised by the
+     * `res/`/`assets/`/manifest siblings (or the resolver's `.extracted` marker) sitting next to it. The
+     * model stores AARs by this exploded jar (not the `.aar`), so this is the common Maven-dependency form.
+     */
+    private fun isExplodedAar(p: Path): Boolean = p.fileName?.toString() == "classes.jar" && p.parent?.let { dir ->
+        Files.isRegularFile(dir.resolve(".extracted")) || Files.isDirectory(dir.resolve("res")) ||
+            Files.isRegularFile(dir.resolve("AndroidManifest.xml"))
+    } == true
+
+    private fun dirOrNull(parent: Path, name: String): Path? = parent.resolve(name).takeIf { Files.isDirectory(it) }
+
+    /** The `package` attribute of an AAR's bundled `AndroidManifest.xml`, fed to aapt2 `--extra-packages`. */
+    private fun manifestPackage(manifest: Path): String? = runCatching {
+        val text = Files.readAllBytes(manifest).toString(Charsets.UTF_8)
+        Regex("""<manifest\b[^>]*\bpackage\s*=\s*"([^"]+)"""").find(text)?.groupValues?.get(1)
+    }.getOrNull()
 }

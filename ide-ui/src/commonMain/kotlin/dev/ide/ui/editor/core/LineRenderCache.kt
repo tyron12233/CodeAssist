@@ -34,30 +34,27 @@ class LineRenderCache(
     private val cache = HashMap<Int, Entry>()
     private var tick = 0L
 
-    private var inlays: Map<Int, List<InlayPiece>> = emptyMap()
+    private val inlayRevs = InlayRevisions()
     private var inlayStyle: SpanStyle = SpanStyle()
-    private var inlayRev = 0
 
     /** Widest line laid out so far, px — feeds the horizontal scroll range as lines get measured. */
     var measuredMaxWidth = 0f
         private set
 
     /**
-     * Set the inlay hints to weave into lines (document-column keyed) and their span style. A no-op when the
-     * content is unchanged; otherwise bumps the inlay revision so affected lines re-shape lazily on next draw.
+     * Set the inlay hints to weave into lines (document-column keyed) and their span style. Delegates to
+     * [InlayRevisions], which bumps a per-line stamp only for lines whose pieces changed, so only those
+     * re-shape on the next draw. A theme change (the [style]) rebuilds this whole cache instance (it's
+     * remembered on the palette/style), so we don't track style for invalidation here — only inlay content.
      */
     fun setInlays(newInlays: Map<Int, List<InlayPiece>>, style: SpanStyle) {
-        if (newInlays == inlays && style == inlayStyle) return
-        inlays = newInlays
         inlayStyle = style
-        inlayRev++
+        inlayRevs.update(newInlays)
     }
-
-    private fun piecesFor(line: Int): List<InlayPiece> = inlays[line]?.sortedBy { it.col } ?: emptyList()
 
     /** Document column → visual (laid-out) column for [line] — accounts for inlays inserted before [rawCol]. */
     fun rawToVisual(line: Int, rawCol: Int): Int {
-        val pieces = piecesFor(line)
+        val pieces = inlayRevs.piecesFor(line)
         if (pieces.isEmpty()) return rawCol
         var add = 0
         for (p in pieces) if (p.col < rawCol) add += p.text.length
@@ -66,7 +63,7 @@ class LineRenderCache(
 
     /** Visual (laid-out) column → document column for [line]; a hit inside an inlay snaps to its anchor. */
     fun visualToRaw(line: Int, visualCol: Int): Int {
-        val pieces = piecesFor(line)
+        val pieces = inlayRevs.piecesFor(line)
         if (pieces.isEmpty()) return visualCol
         var add = 0
         for (p in pieces) {
@@ -80,15 +77,16 @@ class LineRenderCache(
 
     fun layoutFor(line: Int, doc: EditorDocument, styles: LineStyles): TextLayoutResult {
         val rev = styles.revOf(line)
+        val irev = inlayRevs.stampOf(line)
         cache[line]?.let { e ->
-            if (e.rev == rev && e.inlayRev == inlayRev) {
+            if (e.rev == rev && e.inlayRev == irev) {
                 e.lastUsed = ++tick
                 return e.layout
             }
         }
         val text = doc.lineText(line)
         val spans = styles.spansFor(line)
-        val pieces = piecesFor(line)
+        val pieces = inlayRevs.piecesFor(line)
         val annotated = when {
             pieces.isEmpty() && spans.isEmpty() -> AnnotatedString(text)
             pieces.isEmpty() -> AnnotatedString(
@@ -101,7 +99,7 @@ class LineRenderCache(
         }
         val layout = measurer.measure(annotated, style = baseStyle, softWrap = false, maxLines = 1)
         if (layout.size.width > measuredMaxWidth) measuredMaxWidth = layout.size.width.toFloat()
-        cache[line] = Entry(rev, inlayRev, layout, ++tick)
+        cache[line] = Entry(rev, irev, layout, ++tick)
         if (cache.size > MAX_ENTRIES) evict()
         return layout
     }
@@ -140,20 +138,17 @@ class LineRenderCache(
         return rawCol + add
     }
 
-    /** Mirror a document splice: cache keys at/after [fromOldLine] move by [delta] (Enter stays O(1)-ish). */
+    /** Mirror a document splice: keys at/after [fromOldLine] move by [delta] (Enter stays O(1)-ish). Both the
+     *  layout cache and the per-line inlay stamps shift together so a moved line keeps its validation pair. */
     fun shiftKeys(fromOldLine: Int, delta: Int) {
-        if (delta == 0 || cache.isEmpty()) return
-        val moved = cache.entries.filter { it.key >= fromOldLine }
-        if (moved.isEmpty()) return
-        for (e in moved) cache.remove(e.key)
-        for (e in moved) {
-            val k = e.key + delta
-            if (k >= 0) cache[k] = e.value
-        }
+        if (delta == 0) return
+        shiftIntKeyed(cache, fromOldLine, delta)
+        inlayRevs.shift(fromOldLine, delta)
     }
 
     fun clear() {
         cache.clear()
+        inlayRevs.clear()
         measuredMaxWidth = 0f
     }
 
@@ -166,5 +161,60 @@ class LineRenderCache(
     private companion object {
         /** ~4 viewports of lines; beyond this, scroll-back re-measures (µs per line). */
         const val MAX_ENTRIES = 512
+    }
+}
+
+/** Shift the [Int]-keyed [map]'s entries at/after [fromOldLine] by [delta], dropping any that go negative. */
+internal fun <V> shiftIntKeyed(map: HashMap<Int, V>, fromOldLine: Int, delta: Int) {
+    if (map.isEmpty()) return
+    val moved = map.entries.filter { it.key >= fromOldLine }.map { it.key to it.value }
+    if (moved.isEmpty()) return
+    for ((k, _) in moved) map.remove(k)
+    for ((k, v) in moved) { val nk = k + delta; if (nk >= 0) map[nk] = v }
+}
+
+/**
+ * Per-line inlay revision tracking, split out of [LineRenderCache] so it's testable without a `TextMeasurer`
+ * (which can't be constructed headlessly). Holds the current inlay map and a **unique-forever stamp per
+ * line**, bumped ONLY for lines whose pieces actually change.
+ *
+ * The point: a single global counter (the old design) invalidated EVERY cached line on any inlay edit — and
+ * the host re-anchors inlay offsets on every keystroke, so that re-shaped the whole viewport on each key.
+ * With a per-line stamp, a hint change re-shapes only its own line; lines after the caret stay cached.
+ */
+internal class InlayRevisions {
+    private var inlays: Map<Int, List<InlayPiece>> = emptyMap()
+    private val stampByLine = HashMap<Int, Int>()
+    private var stamp = 0
+
+    /** The unique stamp for [line]; 0 when the line has never carried an inlay. */
+    fun stampOf(line: Int): Int = stampByLine[line] ?: 0
+
+    fun piecesFor(line: Int): List<InlayPiece> = inlays[line]?.sortedBy { it.col } ?: emptyList()
+
+    /** Adopt [newInlays], bumping the stamp for each line whose pieces changed, were added, or were removed. */
+    fun update(newInlays: Map<Int, List<InlayPiece>>) {
+        if (newInlays == inlays) return
+        // lines present before whose pieces changed (or were removed: newInlays[line] becomes null)
+        for ((line, pieces) in inlays) if (newInlays[line] != pieces) stampByLine[line] = ++stamp
+        // lines newly present
+        for (line in newInlays.keys) if (line !in inlays) stampByLine[line] = ++stamp
+        inlays = newInlays
+    }
+
+    /** Mirror a line splice so a moved line keeps its stamp (paired with the layout cache shift). */
+    fun shift(fromOldLine: Int, delta: Int) {
+        if (delta == 0) return
+        shiftIntKeyed(stampByLine, fromOldLine, delta)
+        // The inlay map is document-column keyed by line; the host rebuilds it post-edit, so we only need the
+        // stamps to move. Drop the stale map so a moved line's pieces aren't read from the wrong line until then.
+        if (inlays.isNotEmpty()) inlays = inlays.mapKeys { (k, _) -> if (k >= fromOldLine) k + delta else k }
+            .filterKeys { it >= 0 }
+    }
+
+    fun clear() {
+        inlays = emptyMap()
+        stampByLine.clear()
+        stamp = 0
     }
 }

@@ -36,7 +36,26 @@ interface ProjectTemplate {
      * ([ProjectScaffold.rootDir]) already exists and is empty; the SDK is already seeded.
      */
     fun generate(scaffold: ProjectScaffold, args: TemplateArgs)
+
+    /**
+     * Maven dependencies the generated project needs (e.g. a Material You app declares
+     * `com.google.android.material:material`). The host resolves and attaches each one *after* [generate]
+     * (resolution is a `suspend`/network step the synchronous scaffold can't do), reusing the same Maven
+     * resolver + offline cache as the Dependencies screen. Empty for the dependency-free templates.
+     */
+    fun dependencies(args: TemplateArgs): List<TemplateDependency> = emptyList()
 }
+
+/**
+ * A Maven dependency a [ProjectTemplate] declares for the project it scaffolds. The host resolves
+ * [coordinate] (`group:name:version`) against the configured repositories and adds it to the named
+ * [module] with [scope] (`implementation`/`api`/`compileOnly`/…) once generation has run.
+ */
+data class TemplateDependency(
+    val module: String,
+    val coordinate: String,
+    val scope: String = "implementation",
+)
 
 /** The `platform.projectTemplate` extension point. Plugins contribute their [ProjectTemplate]s here. */
 val ProjectTemplateExtensionPoint: ExtensionPoint<ProjectTemplate> = ExtensionPoint("platform.projectTemplate")

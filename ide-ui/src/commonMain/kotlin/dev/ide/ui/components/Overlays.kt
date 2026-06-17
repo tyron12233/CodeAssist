@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -113,6 +114,11 @@ fun BottomSheet(
                     modifier
                         .fillMaxWidth()
                         .fillMaxHeight(fraction.value)
+                        // Keep the sheet above the soft keyboard. The app root already insets `safeDrawing`
+                        // (which includes the IME) and consumes it, so this is a no-op there — but it makes
+                        // the sheet self-sufficient if ever hosted outside that box. Scrollable content
+                        // (e.g. the More sheet) handles whatever vertical space remains (issue #994).
+                        .imePadding()
                         .shadow(24.dp, shape, clip = false)
                         .background(Ca.colors.glassThick, shape)
                         .border(1.dp, Ca.colors.glassEdgeTop, shape),

@@ -59,10 +59,13 @@ object SampleAndroidProject {
         write(store, "app/src/main/res/values/colors.xml", APP_COLORS)
         write(store, "app/src/main/res/values/themes.xml", dev.ide.android.support.templates.AndroidAppAssets.themesXml)
         write(store, "app/src/main/res/values-night/themes.xml", dev.ide.android.support.templates.AndroidAppAssets.themesNightXml)
+        write(store, "app/src/main/res/values/attrs.xml", APP_ATTRS)
+        write(store, "app/src/main/res/layout/activity_main.xml", APP_LAYOUT)
         for ((rel, content) in dev.ide.android.support.templates.AndroidAppAssets.launcherIconResFiles) {
             write(store, "app/src/main/res/$rel", content)
         }
         write(store, "app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+        write(store, "app/src/main/java/com/example/app/MyChart.java", APP_CUSTOM_VIEW)
     }
 
     private fun write(store: ProjectModelStore, relPath: String, content: String) {
@@ -134,6 +137,81 @@ object SampleAndroidProject {
             <color name="on_primary">#FFFFFFFF</color>
             <color name="ic_launcher_background">#3DDC84</color>
         </resources>
+    """
+
+    private val APP_ATTRS = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <declare-styleable name="MyChart">
+                <attr name="barColor" format="color"/>
+                <attr name="maxValue" format="integer"/>
+                <attr name="chartLabel" format="string"/>
+            </declare-styleable>
+        </resources>
+    """
+
+    private val APP_LAYOUT = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            xmlns:app="http://schemas.android.com/apk/res-auto"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:background="@color/on_primary">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/greeting"
+                android:textColor="@color/primary"
+                android:textSize="20sp"/>
+            <com.example.app.MyChart
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                app:barColor="@color/primary"
+                app:maxValue="100"
+                app:chartLabel="Revenue"/>
+        </LinearLayout>
+    """
+
+    private val APP_CUSTOM_VIEW = """
+        package com.example.app;
+
+        import android.content.Context;
+        import android.content.res.TypedArray;
+        import android.graphics.Canvas;
+        import android.graphics.Paint;
+        import android.util.AttributeSet;
+        import android.view.View;
+
+        /** A tiny custom view with custom app: attributes — the layout-preview acceptance fixture. */
+        public class MyChart extends View {
+            private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private int barColor = 0xFF6200EE;
+            private int maxValue = 100;
+
+            public MyChart(Context context, AttributeSet attrs) {
+                super(context, attrs);
+                TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.MyChart, 0, 0);
+                barColor = a.getColor(R.styleable.MyChart_barColor, barColor);
+                maxValue = a.getInt(R.styleable.MyChart_maxValue, maxValue);
+                a.recycle();
+                paint.setColor(barColor);
+            }
+
+            @Override
+            protected void onDraw(Canvas canvas) {
+                int w = getWidth();
+                int h = getHeight();
+                int bars = 5;
+                float bw = w / (bars * 2f);
+                for (int i = 0; i < bars; i++) {
+                    float bh = h * ((i + 1) / (float) bars);
+                    float left = i * 2 * bw + bw / 2f;
+                    canvas.drawRect(left, h - bh, left + bw, h, paint);
+                }
+            }
+        }
     """
 
     private val APP_ACTIVITY = """

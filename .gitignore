@@ -37,6 +37,7 @@ docs/jdt-name-environment.md
 docs/kotlin-compiler-on-art.md
 docs/kotlin-completion-backend.md
 docs/xml-language-support.md
+docs/codeassist-layout-preview-design.md
 docs/handoff_onboarding_compose/
 docs/design/
 docs/*.png

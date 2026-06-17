@@ -116,8 +116,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 30
-        versionName = "2.0.0"
+        versionCode = 31
+        versionName = "3.0.0"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -168,6 +168,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Temporarily enabled: backports newer java.* APIs (java.time, java.nio.file.Files.readString, …)
+        // below their native API level via desugar_jdk_libs (see the coreLibraryDesugaring dep below).
+        isCoreLibraryDesugaringEnabled = true
     }
 
     // The Eclipse/OSGi jars (jdt.core, ecj, core.runtime, equinox.*, osgi, …) ship lots of overlapping
@@ -323,6 +326,11 @@ dependencies {
     implementation(project(":ide-core")) {
         exclude(group = "org.eclipse.jdt", module = "ecj")
     }
+    // Layout-preview live custom-view runtime: the Bridge classes + DexClassLoader factory live here and
+    // need the contracts (api), the CustomViewRuntime/StyledAttrResolver seam (impl), and D8InProcessDexer.
+    implementation(project(":layout-preview-api"))
+    implementation(project(":layout-preview-impl"))
+    implementation(project(":android-support"))
     implementation(files(relocateEcjForArt.flatMap { it.outputJar }))
 
     // The JDK `java.compiler` module's javax.* classes (javax.lang.model / .tools / .annotation.processing),
@@ -349,6 +357,9 @@ dependencies {
     // here — they ship as jniLibs prebuilts (see fetchAndroidBuildTools below).
     implementation(libs.android.r8)
     implementation(libs.android.apksig)
+
+    // Core-library desugaring runtime (temporarily enabled — see isCoreLibraryDesugaringEnabled above).
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(compose.runtime)
     implementation(compose.foundation)

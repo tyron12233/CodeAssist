@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.components.NewFileTarget
 import dev.ide.ui.components.newFileTargetOf
 import dev.ide.ui.editor.core.EditorSession
@@ -91,6 +92,8 @@ class IdeUiState(val backend: IdeBackend) {
     var paletteOpen by mutableStateOf(false)
     /** Editor inlay hints (inferred types, parameter names) — on by default; toggled from the editor top bar. */
     var inlayHintsEnabled by mutableStateOf(true)
+    /** Editor text zoom (pinch / Ctrl-+ / Ctrl--), 1.0 = the theme's default code size. Shared across tabs. */
+    var editorFontScale by mutableStateOf(1f)
 
     /** A transient destination shown as a sheet/overlay (Source, More) — null when none is open. */
     var sheetDest by mutableStateOf<RailDestination?>(null)
@@ -157,6 +160,27 @@ class IdeUiState(val backend: IdeBackend) {
     /** Re-read the workspace tree from the backend (after a file is created/removed). */
     fun refreshTree() { tree = backend.fileTree() }
 
+    /**
+     * Reflect a completed project-wide rename in the open tabs. The rename wrote every reference site to
+     * disk, so each clean tab is re-read (a no-op for files it didn't touch — those keep their session, undo
+     * and caret). The active tab follows the backing-file rename to [newPath] when the file itself was
+     * renamed. Tabs with unsaved edits are left untouched so a rename never clobbers in-progress work.
+     */
+    fun reloadAfterRename(activePath: String?, newPath: String?) {
+        for (i in openFiles.indices) {
+            val f = openFiles[i]
+            val followsFileRename = newPath != null && f.path == activePath
+            if (!followsFileRename && f.modified) continue
+            val diskPath = if (followsFileRename) newPath!! else f.path
+            val text = runCatching { backend.readFile(diskPath) }.getOrNull() ?: continue
+            if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
+            val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
+            openFiles[i] = OpenFile(diskPath, name, text)
+            backend.updateDocument(diskPath, text)
+        }
+        refreshTree()
+    }
+
     /** Create a new file through the backend, refresh the tree, and open it in the editor. */
     fun createFile(dirPath: String, fileName: String, content: String) {
         val path = backend.createFile(dirPath, fileName, content) ?: return
@@ -167,6 +191,73 @@ class IdeUiState(val backend: IdeBackend) {
     /** Create a new directory through the backend and refresh the tree (nothing to open). */
     fun createDirectory(parentPath: String, name: String) {
         if (backend.createDirectory(parentPath, name) != null) refreshTree()
+    }
+
+    // ---- file & package operations (delete / rename / move / copy) ----
+
+    /** Delete a file or directory/package: close any open tabs under it, then refresh the tree. */
+    fun deletePath(path: String) {
+        if (!backend.deletePath(path)) return
+        closeTabsUnder(path)
+        refreshTree()
+    }
+
+    /** Rename a file/directory to [newName]; rebase open tabs onto the new path + refresh. Returns the result. */
+    suspend fun renamePath(path: String, newName: String): UiRenameResult {
+        val r = backend.renamePath(path, newName)
+        if (r.success) { rebaseTabs(path, r.newPath ?: path); refreshCleanTabs(); refreshTree() }
+        return r
+    }
+
+    /** Move a file/directory into [destDir]; rebase open tabs + refresh. Returns true on success. */
+    fun movePath(path: String, destDir: String): Boolean {
+        val newPath = backend.movePath(path, destDir) ?: return false
+        rebaseTabs(path, newPath); refreshTree()
+        return true
+    }
+
+    /** Copy a file/directory into [destDir]; refresh the tree. Returns true on success. */
+    fun copyPath(path: String, destDir: String): Boolean {
+        if (backend.copyPath(path, destDir) == null) return false
+        refreshTree()
+        return true
+    }
+
+    /** True if [p] is [root] or lives under it (matching on either path separator). */
+    private fun underPath(p: String, root: String): Boolean =
+        p == root || p.startsWith("$root/") || p.startsWith("$root\\")
+
+    /** Close every open tab at [path] or under it (after a delete). */
+    private fun closeTabsUnder(path: String) {
+        openFiles.filter { underPath(it.path, path) }.forEach(::close)
+    }
+
+    /** Re-point open tabs at [oldPath] (or under it, for a directory) to [newPath], re-reading from disk. */
+    private fun rebaseTabs(oldPath: String, newPath: String) {
+        for (i in openFiles.indices) {
+            val p = openFiles[i].path
+            val rebased = when {
+                p == oldPath -> newPath
+                underPath(p, oldPath) -> newPath + p.substring(oldPath.length)
+                else -> continue
+            }
+            val text = runCatching { backend.readFile(rebased) }.getOrNull() ?: continue
+            val name = rebased.substringAfterLast('/').substringAfterLast('\\')
+            openFiles[i] = OpenFile(rebased, name, text)
+            backend.updateDocument(rebased, text)
+        }
+    }
+
+    /** Re-read clean (unmodified) tabs whose disk content changed — e.g. references rewritten by a rename. */
+    private fun refreshCleanTabs() {
+        for (i in openFiles.indices) {
+            val f = openFiles[i]
+            if (f.modified) continue
+            val text = runCatching { backend.readFile(f.path) }.getOrNull() ?: continue
+            if (text == f.savedText) continue
+            openFiles[i] = OpenFile(f.path, f.name, text)
+            backend.updateDocument(f.path, text)
+        }
     }
 
     /** A sensible default New-Class target: the first Java/Kotlin source root in the tree. */

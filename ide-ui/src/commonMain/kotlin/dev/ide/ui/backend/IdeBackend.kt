@@ -35,6 +35,33 @@ interface IdeBackend {
      */
     fun createDirectory(parentPath: String, name: String): String? = null
 
+    /**
+     * Delete a file or directory/package (recursively). Returns true on success. Bumps [fileSystemEpoch] so
+     * the tree refreshes. The default is a no-op for read-only backends.
+     */
+    fun deletePath(path: String): Boolean = false
+
+    /**
+     * Rename a file or directory/package in place (same parent) to [newName] (the full new name, with
+     * extension for files). For a Java source file whose public type matches the file name, the type and all
+     * its references are renamed too (and the backing file moved). On success [UiRenameResult.newPath] is the
+     * new path so the UI can reopen it. Bumps [fileSystemEpoch].
+     */
+    suspend fun renamePath(path: String, newName: String): UiRenameResult =
+        UiRenameResult(false, "Rename is not supported by this backend")
+
+    /**
+     * Move a file or directory/package into [destDir]. Returns the new path, or null on conflict/failure.
+     * Bumps [fileSystemEpoch].
+     */
+    fun movePath(path: String, destDir: String): String? = null
+
+    /**
+     * Copy a file or directory/package into [destDir]. Returns the new path, or null on conflict/failure.
+     * Bumps [fileSystemEpoch].
+     */
+    fun copyPath(path: String, destDir: String): String? = null
+
     /** Read a file's current on-disk text. */
     fun readFile(path: String): String
 
@@ -107,6 +134,20 @@ interface IdeBackend {
      * there's nothing to navigate to (or the host doesn't resolve definitions).
      */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
+
+    /**
+     * The renameable symbol under the caret at [offset] in [path]'s buffer [text] (its current name + a kind
+     * label), or null when the caret isn't on one. The UI uses this to prompt for the new name. Java only.
+     */
+    suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? = null
+
+    /**
+     * Rename the symbol under [offset] to [newName] across the whole project, applying the multi-file edit
+     * to disk and bumping [fileSystemEpoch] so open editors/the tree refresh. On success [UiRenameResult.newPath]
+     * is set when the backing file was renamed too (the UI should reopen it).
+     */
+    suspend fun rename(path: String, text: String, offset: Int, newName: String): UiRenameResult =
+        UiRenameResult(false, "Rename is not supported by this backend")
 
     // ---- block-based editing (projectional editor) ----
 
@@ -204,14 +245,23 @@ interface IdeBackend {
     suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> = emptyList()
 
     /**
-     * Resolve and add `group:name:version` ([coordinate]) to [moduleName] at [scope] (e.g. `implementation`),
-     * bundling its resolved transitive closure onto the module classpath. Blocked (with a reason) when the
-     * artifact is incompatible — e.g. an `.aar` on a pure-Java module.
+     * Resolve and add [coordinate] to [moduleName] at [scope] (e.g. `implementation`), bundling its resolved
+     * transitive closure onto the module classpath. [coordinate] is `group:name:version`, or the versionless
+     * `group:name` when a platform (BOM) imported via [addPlatform] supplies the version. Blocked (with a
+     * reason) when the artifact is incompatible — e.g. an `.aar` on a pure-Java module.
      */
     suspend fun addDependency(moduleName: String, coordinate: String, scope: String): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
-    /** Remove the declared dependency [coordinate] from [moduleName]. Returns false if it wasn't present. */
+    /**
+     * Import a Maven BOM ([coordinate], `group:name:version`) as a platform of [moduleName] — Gradle
+     * `platform(...)` semantics. It adds no artifact; it supplies the version for versionless dependencies
+     * (added via [addDependency] with a `group:name` coordinate). Verified resolvable before it's added.
+     */
+    suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
+    /** Remove the declared dependency or platform [coordinate] from [moduleName]. False if it wasn't present. */
     fun removeDependency(moduleName: String, coordinate: String): Boolean = false
 
     // ---- module configuration (the Module Settings editor) ----
@@ -367,7 +417,7 @@ data class UiArtifactHit(
 )
 
 /** What a node in the dependency graph *is* — drives its icon and the compatibility rules. */
-enum class UiDepKind { Jar, Aar, Module, Sdk }
+enum class UiDepKind { Jar, Aar, Module, Sdk, Platform }
 
 /**
  * One node in a module's dependency picture — a declared dependency or one pulled in transitively. The
@@ -630,6 +680,18 @@ data class UiCompletionResult(
 
 /** A go-to-definition target: open [path] and move the caret to [offset]. */
 data class UiDefinition(val path: String, val offset: Int)
+
+/** The renameable symbol under the caret: its current [oldName] and a human [kind] label (e.g. "method"). */
+data class UiRenameTarget(val oldName: String, val kind: String)
+
+/** Outcome of a project-wide rename. [newPath] is set when the edited file was itself renamed (reopen it). */
+data class UiRenameResult(
+    val success: Boolean,
+    val message: String,
+    val occurrences: Int = 0,
+    val filesChanged: Int = 0,
+    val newPath: String? = null,
+)
 
 /** Whether an action fixes a problem ([QUICK_FIX]), is a context action with no diagnostic ([INTENTION]), or refactors ([REFACTOR]). Drives the menu icon. */
 enum class UiActionKind { QUICK_FIX, INTENTION, REFACTOR }

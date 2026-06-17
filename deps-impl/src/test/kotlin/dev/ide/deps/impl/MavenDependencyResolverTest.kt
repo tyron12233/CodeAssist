@@ -140,6 +140,55 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun platformBomSuppliesVersionForVersionlessDependency() {
+        // A BOM manages common:1.5; the user declares `common` with no version + imports the BOM.
+        val files = FakeRepo()
+        files.put("common", "1.5")
+        files.putBom("bom", "1.0", manages = listOf(Dep("g", "common", "1.5")))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(coord("common", "")), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                platforms = listOf(coord("bom", "1.0")),
+            )
+        }
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+        assertEquals("1.5", result.resolved.single { it.coordinate.name == "common" }.coordinate.version)
+    }
+
+    @Test
+    fun platformDoesNotOverrideAnExplicitVersion() {
+        // Plain-platform semantics: an explicitly-declared version wins over the BOM's managed version.
+        val files = FakeRepo()
+        files.put("common", "1.0")
+        files.put("common", "2.0")
+        files.putBom("bom", "1.0", manages = listOf(Dep("g", "common", "2.0")))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(coord("common", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                platforms = listOf(coord("bom", "1.0")),
+            )
+        }
+        assertEquals("1.0", result.resolved.single { it.coordinate.name == "common" }.coordinate.version)
+    }
+
+    @Test
+    fun versionlessDependencyWithoutPlatformIsUnresolved() {
+        val files = FakeRepo()
+        files.put("common", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("common", "")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertTrue(result.resolved.isEmpty(), "nothing should resolve: ${result.resolved.map { it.coordinate }}")
+        assertEquals(listOf(coord("common", "")), result.unresolved)
+    }
+
+    @Test
     fun unresolvedWhenRepoLacksTheArtifact() {
         val (resolver, _) = newResolver(FakeRepo())
         val result = runBlocking { resolver.resolve(listOf(coord("ghost", "9.9")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
@@ -173,15 +222,27 @@ class MavenDependencyResolverTest {
             val ext = if (packaging == "aar") "aar" else "jar"
             byUrl[url("g", name, version, ext)] = jarBytes
         }
+
+        /** A `pom`-packaged BOM: only a POM with a `<dependencyManagement>` block, no artifact. */
+        fun putBom(name: String, version: String, manages: List<Dep>) {
+            byUrl[url("g", name, version, "pom")] = pom("g", name, version, "pom", emptyList(), manages).toByteArray()
+        }
     }
 
     private fun url(g: String, a: String, v: String, ext: String): String =
         "$BASE/${g.replace('.', '/')}/$a/$v/$a-$v.$ext"
 
-    private fun pom(g: String, a: String, v: String, packaging: String, deps: List<Dep>): String = buildString {
+    private fun pom(g: String, a: String, v: String, packaging: String, deps: List<Dep>, managed: List<Dep> = emptyList()): String = buildString {
         append("""<?xml version="1.0" encoding="UTF-8"?><project>""")
         append("<groupId>$g</groupId><artifactId>$a</artifactId><version>$v</version>")
         if (packaging != "jar") append("<packaging>$packaging</packaging>")
+        if (managed.isNotEmpty()) {
+            append("<dependencyManagement><dependencies>")
+            for (d in managed) {
+                append("<dependency><groupId>${d.g}</groupId><artifactId>${d.a}</artifactId><version>${d.v}</version></dependency>")
+            }
+            append("</dependencies></dependencyManagement>")
+        }
         if (deps.isNotEmpty()) {
             append("<dependencies>")
             for (d in deps) {

@@ -7,8 +7,10 @@ import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleDependency
+import dev.ide.model.Coordinate
 import dev.ide.model.ModuleId
 import dev.ide.model.OrderEntry
+import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
 import dev.ide.model.impl.format.Json
@@ -147,6 +149,7 @@ object ModelPersistence {
     private fun orderEntryToToml(e: OrderEntry): Any = when (e) {
         is LibraryDependency -> e.library.name
         is ModuleDependency -> linkedMapOf("module" to e.target.value)
+        is PlatformDependency -> linkedMapOf("platform" to e.bom.toString())
         is SdkDependency -> linkedMapOf("sdk" to e.sdk.name)
     }
 
@@ -263,6 +266,7 @@ object ModelPersistence {
             is String -> LibraryDependency(LibraryRef(item), scope, exported)
             is Map<*, *> -> when {
                 item.containsKey("module") -> ModuleDependency(ModuleId(item["module"] as String), scope, exported)
+                item.containsKey("platform") -> PlatformDependency(parseCoordinate(item["platform"] as String), scope, exported)
                 item.containsKey("sdk") -> SdkDependency(SdkRef(item["sdk"] as String), scope)
                 else -> error("unrecognized dependency entry: $item")
             }
@@ -271,6 +275,12 @@ object ModelPersistence {
     }
 
     // --- helpers ---
+
+    /** Parse a persisted `group:name:version` BOM coordinate (a missing version tolerated as blank). */
+    private fun parseCoordinate(s: String): Coordinate {
+        val parts = s.split(":")
+        return Coordinate(parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" }, parts.getOrElse(2) { "" })
+    }
 
     private fun resolveRel(base: Path, rel: String): Path =
         if (rel.isEmpty() || rel == ".") base else base.resolve(rel).normalize()

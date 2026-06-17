@@ -25,6 +25,7 @@ import dev.ide.model.ProjectId
 import dev.ide.model.ProjectModelTransaction
 import dev.ide.model.ProjectSettings
 import dev.ide.model.Sdk
+import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
 import dev.ide.model.SdkTable
@@ -130,6 +131,7 @@ internal class ModuleImpl(
     ) {
         when (entry) {
             is LibraryDependency -> resolveLibrary(entry.library)?.classesRoots?.forEach { put(out, it, ClasspathEntryKind.LIBRARY) }
+            is PlatformDependency -> { /* a BOM is a version source only — no classpath artifact */ }
             is SdkDependency -> resolveSdk(entry.sdk)?.bootClasspath?.forEach { put(out, it, ClasspathEntryKind.SDK_BOOTCLASSPATH) }
             is ModuleDependency -> {
                 val target = findModule(entry.target) ?: return

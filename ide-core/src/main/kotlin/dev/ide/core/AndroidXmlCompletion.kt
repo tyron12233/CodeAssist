@@ -3,6 +3,7 @@ package dev.ide.core
 import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.android.support.metadata.AttributeSpec
 import dev.ide.android.support.metadata.LayoutMetadata
+import dev.ide.android.support.metadata.Widget
 import dev.ide.android.support.resources.AndroidManifestCatalog
 import dev.ide.android.support.resources.DrawableXmlCatalog
 import dev.ide.android.support.resources.ResourceType
@@ -28,6 +29,8 @@ class AndroidXmlContributor(
     private val resourceNames: (ResourceType) -> List<String>,
     private val layout: () -> LayoutMetadata = { AndroidSdkMetadata.bundled() },
     private val customAttrs: () -> LayoutMetadata? = { null },
+    /** Custom View subclasses from the module's library classpath (FQN tags); offered alongside framework widgets. */
+    private val customViews: () -> List<Widget> = { emptyList() },
 ) : XmlCompletionContributor {
 
     override fun contribute(position: XmlCompletionPosition): List<CompletionItem> {
@@ -77,15 +80,23 @@ class AndroidXmlContributor(
         return (framework + custom).distinctBy { it.name }
     }
 
-    private fun tagItems(pos: XmlCompletionPosition): List<CompletionItem> =
-        layout().childTagsFor(pos.parentTag).map { w ->
-            CompletionItem(
-                label = w.tag,
-                insertText = w.tag,
-                kind = CompletionItemKind.CLASS,
-                detail = if (w.isViewGroup) "ViewGroup" else "View",
-            )
-        }
+    private fun tagItems(pos: XmlCompletionPosition): List<CompletionItem> {
+        // Framework widgets (simple names, from the SDK metadata) + custom views from the library classpath
+        // (fully-qualified names — a layout must spell a non-framework view with its FQN). Deduped by tag.
+        val seen = HashSet<String>()
+        val out = ArrayList<CompletionItem>()
+        for (w in layout().childTagsFor(pos.parentTag)) if (seen.add(w.tag)) out += widgetItem(w)
+        for (w in customViews()) if (seen.add(w.tag)) out += widgetItem(w)
+        return out
+    }
+
+    private fun widgetItem(w: Widget): CompletionItem =
+        CompletionItem(
+            label = w.tag,
+            insertText = w.tag,
+            kind = CompletionItemKind.CLASS,
+            detail = if (w.isViewGroup) "ViewGroup" else "View",
+        )
 
     private fun manifestTagItems(pos: XmlCompletionPosition): List<CompletionItem> =
         AndroidManifestCatalog.childrenOf(pos.parentTag).map { tag ->

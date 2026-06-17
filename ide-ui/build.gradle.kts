@@ -42,6 +42,16 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
         }
 
+        // An intermediate JVM-only source set shared by the desktop + android targets, so it can depend on
+        // the plain-JVM `layout-preview-api` (which commonMain — platform-agnostic — cannot). The layout
+        // preview pane + its Compose-backed RCanvas live here; commonMain reaches them via an expect/actual.
+        val jvmShared = create("jvmShared") {
+            dependsOn(getByName("commonMain"))
+            dependencies { implementation(project(":layout-preview-api")) }
+        }
+        getByName("desktopMain").dependsOn(jvmShared)
+        getByName("androidMain").dependsOn(jvmShared)
+
         // `compose.uiTooling` carries `ComposeViewAdapter`, the harness the preview pane instantiates to
         // render an @Preview. Without it on the target's classpath, Studio/IntelliJ fail with
         // `ClassNotFoundException: androidx.compose.ui.tooling.ComposeViewAdapter`. Added per target so

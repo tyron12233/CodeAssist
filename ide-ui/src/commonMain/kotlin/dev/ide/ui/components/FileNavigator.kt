@@ -1,7 +1,8 @@
 package dev.ide.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -18,11 +19,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,10 +68,16 @@ fun FileNavigator(
     onImport: () -> Unit = {},
     canShare: Boolean = false,
     onShare: (TreeNode) -> Unit = {},
+    canModify: Boolean = false,
+    onRename: (TreeNode) -> Unit = {},
+    onMove: (TreeNode) -> Unit = {},
+    onCopy: (TreeNode) -> Unit = {},
+    onDelete: (TreeNode) -> Unit = {},
 ) {
     val expanded = remember {
         mutableSetExpandedDefaults(root)
     }
+    val ctx = FileRowActions(canModify, onRename, onMove, onCopy, onDelete)
     Column(modifier) {
         // header
         Row(
@@ -85,10 +96,21 @@ fun FileNavigator(
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
-            root.children.forEach { TreeRow(it, 0, expanded, activePath, onOpen, onNewFile, onViewDependencies, onConfigureModule, canShare, onShare) }
+            root.children.forEach { TreeRow(it, 0, expanded, activePath, onOpen, onNewFile, onViewDependencies, onConfigureModule, canShare, onShare, ctx) }
         }
     }
 }
+
+/** The delete/rename/move/copy callbacks the per-row context menu invokes (bundled to avoid threading five
+ *  parameters through the recursive [TreeRow]). [enabled] gates whether the menu is offered at all. */
+private class FileRowActions(
+    val enabled: Boolean,
+    val onRename: (TreeNode) -> Unit,
+    val onMove: (TreeNode) -> Unit,
+    val onCopy: (TreeNode) -> Unit,
+    val onDelete: (TreeNode) -> Unit,
+)
+
 
 private fun mutableSetExpandedDefaults(root: TreeNode): androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean> {
     val map = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
@@ -100,6 +122,7 @@ private fun mutableSetExpandedDefaults(root: TreeNode): androidx.compose.runtime
     return map
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TreeRow(
     node: TreeNode,
@@ -112,6 +135,7 @@ private fun TreeRow(
     onConfigureModule: (TreeNode) -> Unit,
     canShare: Boolean = false,
     onShare: (TreeNode) -> Unit = {},
+    ctx: FileRowActions,
 ) {
     val isExpandable = node.children.isNotEmpty()
     val isOpen = expanded[node.id] == true
@@ -120,19 +144,27 @@ private fun TreeRow(
     val canNewFile = (node.sourceRootPath != null &&
         (node.kind == NodeKind.SourceRoot || node.kind == NodeKind.Package)) ||
         node.resDirPath != null
+    // Long-press / right-click opens delete/rename/move/copy for files, packages, and res/ folders.
+    val canContext = ctx.enabled && node.fileOpPath() != null &&
+        (node.kind == NodeKind.File || node.kind == NodeKind.Package || node.kind == NodeKind.Folder)
+    var menuOpen by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
 
+    Box {
     Row(
         Modifier
             .fillMaxWidth()
             .height(30.dp)
             .background(if (isActive) Ca.colors.accentSoft else Color.Transparent)
             .hoverable(interaction)
-            .clickable {
-                if (node.filePath != null) onOpen(node)
-                else expanded[node.id] = !isOpen
-            }
+            .combinedClickable(
+                onClick = {
+                    if (node.filePath != null) onOpen(node)
+                    else expanded[node.id] = !isOpen
+                },
+                onLongClick = if (canContext) ({ menuOpen = true }) else null,
+            )
             .padding(start = (8 + depth * 16).dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -173,8 +205,29 @@ private fun TreeRow(
                 Box(Modifier.size(6.dp).background(gitColor(node.gitStatus), RoundedCornerShape(Ca.radius.pill)))
         }
     }
+        if (canContext) DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            modifier = Modifier.background(Ca.colors.surface2),
+        ) {
+            FileActionItem(CaIcons.docText, "Rename…") { menuOpen = false; ctx.onRename(node) }
+            FileActionItem(CaIcons.arrowRight, "Move…") { menuOpen = false; ctx.onMove(node) }
+            FileActionItem(CaIcons.copy, "Copy…") { menuOpen = false; ctx.onCopy(node) }
+            FileActionItem(CaIcons.close, "Delete", danger = true) { menuOpen = false; ctx.onDelete(node) }
+        }
+    }
 
-    if (isOpen) node.children.forEach { TreeRow(it, depth + 1, expanded, activePath, onOpen, onNewFile, onViewDependencies, onConfigureModule, canShare, onShare) }
+    if (isOpen) node.children.forEach { TreeRow(it, depth + 1, expanded, activePath, onOpen, onNewFile, onViewDependencies, onConfigureModule, canShare, onShare, ctx) }
+}
+
+@Composable
+private fun FileActionItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
+    val tint = if (danger) Ca.colors.error else Ca.colors.textSecondary
+    DropdownMenuItem(
+        text = { Text(label, color = if (danger) Ca.colors.error else Ca.colors.textPrimary, style = Ca.type.footnote) },
+        leadingIcon = { Icon(icon, null, Modifier.size(15.dp), tint = tint) },
+        onClick = onClick,
+    )
 }
 
 @Composable

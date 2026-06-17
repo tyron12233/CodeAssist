@@ -2,6 +2,7 @@ package dev.ide.android.support
 
 import dev.ide.android.support.templates.AndroidAppTemplate
 import dev.ide.android.support.templates.AndroidLibraryTemplate
+import dev.ide.android.support.templates.MaterialYouAppTemplate
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
@@ -28,9 +29,10 @@ object AndroidSupport {
         icons.register(AndroidFileIconProvider, PLUGIN)
     }
 
-    /** Contribute the Android project templates (app + library) to a host's Create-Project gallery. */
+    /** Contribute the Android project templates (app, Material You app, library) to a host's Create-Project gallery. */
     fun registerTemplates(templates: ProjectTemplateRegistry) {
         templates.register(AndroidAppTemplate, PLUGIN)
+        templates.register(MaterialYouAppTemplate, PLUGIN)
         templates.register(AndroidLibraryTemplate, PLUGIN)
     }
 }

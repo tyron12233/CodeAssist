@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":project-model-impl")) // FacetCodec / FacetCodecRegistry / ModuleTypeRegistry
     implementation(project(":language-api"))   // SyntheticClassProvider — the light `R` class for completion/analysis
     implementation(project(":index-api"))       // resource-declaration IndexExtension
+    implementation(libs.ow2.asm)                 // ClassReader — scan the classpath for custom View subclasses (no class loading)
     implementation(libs.kotlinx.coroutines.core)
 
     // D8 (r8) + apksigner (apksig) are invoked IN-PROCESS by the on-device wiring, so they're statically

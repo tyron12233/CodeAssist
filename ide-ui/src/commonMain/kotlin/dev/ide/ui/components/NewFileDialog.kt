@@ -402,13 +402,13 @@ private fun kotlinStub(pkg: String, kind: NewFileKind, name: String): String {
 }
 
 @Composable
-private fun FieldLabel(text: String) {
+internal fun FieldLabel(text: String) {
     Text(text, color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(4.dp))
 }
 
 @Composable
-private fun DialogField(
+internal fun DialogField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
@@ -462,7 +462,7 @@ private fun SelectChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun DialogButton(label: String, primary: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun DialogButton(label: String, primary: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val fill = when {
         primary && enabled -> Ca.colors.accent
         primary -> Ca.colors.accent.copy(alpha = 0.4f)
@@ -479,8 +479,8 @@ private fun DialogButton(label: String, primary: Boolean, enabled: Boolean, onCl
     }
 }
 
-@Composable private fun Spacer8() = Spacer(Modifier.height(8.dp))
-@Composable private fun Spacer12() = Spacer(Modifier.height(12.dp))
+@Composable internal fun Spacer8() = Spacer(Modifier.height(8.dp))
+@Composable internal fun Spacer12() = Spacer(Modifier.height(12.dp))
 
 // Compose Multiplatform commonMain has no java.lang.Character — minimal Java-identifier checks.
 private fun Char.isJavaIdentifierStartCompat(): Boolean = isLetter() || this == '_' || this == '$'
