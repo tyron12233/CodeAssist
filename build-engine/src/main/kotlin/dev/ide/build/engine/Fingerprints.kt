@@ -9,6 +9,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.nio.file.Paths
+import java.util.stream.Collectors
 
 internal fun sha256(): MessageDigest = MessageDigest.getInstance("SHA-256")
 internal fun MessageDigest.hex(): String = digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
@@ -24,7 +25,7 @@ private fun MessageDigest.putFileContent(path: Path) {
 private fun MessageDigest.putDirContent(dir: Path) {
     if (!Files.isDirectory(dir)) return
     val files = runCatching {
-        Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) }.sorted().toList() }
+        Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) }.sorted().collect(Collectors.toList()) }
     }.getOrDefault(emptyList())
     for (f in files) putFileContent(f)
 }

@@ -101,6 +101,54 @@ class IdeFileOperationsTest {
     }
 
     @Test
+    fun movingAJavaFileRewritesItsPackageAndUpdatesImports() {
+        val dir = Files.createTempDirectory("fileops-pkgmove")
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val root = ide.sourceRoots(core).first()
+            val from = root.resolve("com/example/core")
+            val to = root.resolve("com/example/core/sub"); Files.createDirectories(to)
+
+            val moved = from.resolve("Widget.java")
+            Files.writeString(moved, "package com.example.core;\n\npublic class Widget {}\n")
+            // A user in a different package that imports the moved type by its old FQN.
+            val userPkg = root.resolve("com/example/app"); Files.createDirectories(userPkg)
+            val user = userPkg.resolve("User.java")
+            Files.writeString(user, "package com.example.app;\n\nimport com.example.core.Widget;\n\npublic class User { Widget w; }\n")
+
+            val newPath = ide.movePath(moved, to)
+            assertNotNull(newPath, "move succeeds")
+            val movedText = Files.readString(to.resolve("Widget.java"))
+            assertTrue("package com.example.core.sub;" in movedText, "moved file's package line is rewritten: $movedText")
+            assertFalse("package com.example.core;" in movedText, "old package declaration is gone")
+
+            val userText = Files.readString(user)
+            assertTrue("import com.example.core.sub.Widget;" in userText, "the importing file is updated: $userText")
+            assertFalse("import com.example.core.Widget;" in userText, "the old import is gone")
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun copyingAJavaFileRewritesTheCopysPackageOnly() {
+        val dir = Files.createTempDirectory("fileops-pkgcopy")
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val core = ide.modules().first { it.name == "core" }
+            val root = ide.sourceRoots(core).first()
+            val from = root.resolve("com/example/core")
+            val to = root.resolve("com/example/core/sub"); Files.createDirectories(to)
+
+            val src = from.resolve("Gadget.java")
+            Files.writeString(src, "package com.example.core;\n\npublic class Gadget {}\n")
+
+            assertNotNull(ide.copyPath(src, to), "copy succeeds")
+            assertTrue("package com.example.core.sub;" in Files.readString(to.resolve("Gadget.java")), "the copy's package is rewritten")
+            assertTrue("package com.example.core;" in Files.readString(src), "the original keeps its package")
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    @Test
     fun renamesAndDeletesADirectory() {
         val dir = Files.createTempDirectory("fileops-dir")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->

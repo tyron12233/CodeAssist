@@ -12,6 +12,7 @@ import java.io.PrintStream
 import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.stream.Collectors
 
 /**
  * On-device [DexRunner]: runs a dexed console program in-process via [dalvik.system.DexClassLoader] — the
@@ -32,7 +33,7 @@ class DexClassLoaderRunner(private val cacheDir: File) : DexRunner {
     override suspend fun run(dexDir: Path, mainClass: String, args: List<String>, log: (String) -> Unit): Int =
         withContext(Dispatchers.IO) {
             val dexes = if (Files.isDirectory(dexDir))
-                Files.walk(dexDir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().toList() }
+                Files.walk(dexDir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
             else emptyList()
             if (dexes.isEmpty()) { log("No dex to run."); return@withContext 1 }
 

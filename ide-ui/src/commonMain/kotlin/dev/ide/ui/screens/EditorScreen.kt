@@ -67,6 +67,8 @@ import dev.ide.ui.components.TabsStrip
 import dev.ide.ui.components.newFileTargetOf
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.platform.PlatformBackHandler
+import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
 
@@ -101,6 +103,26 @@ fun EditorScreen(
     }
     val onNewFileRoot: () -> Unit = { state.defaultNewFileTarget()?.let { newFileTarget = it } }
     val onFileOp: (TreeNode, FileOpKind) -> Unit = { node, kind -> fileOp = FileOpRequest(node, kind) }
+
+    // Back closes an open editor overlay (dialog, palette, or — on mobile — a navigator/console/search/more
+    // sheet) before the app-level handler pops the screen (#997). Desktop has no system back, so this is inert
+    // there; the mobile-only panes are gated on [isMobilePlatform] since on wide layouts they're docked panes.
+    PlatformBackHandler(
+        enabled = newFileTarget != null || newXmlTarget != null || fileOp != null ||
+            state.paletteOpen || state.sheetDest != null || state.searchOpen ||
+            (isMobilePlatform && (state.navOpen || state.consoleOpen)),
+    ) {
+        when {
+            fileOp != null -> fileOp = null
+            newFileTarget != null -> newFileTarget = null
+            newXmlTarget != null -> newXmlTarget = null
+            state.paletteOpen -> state.paletteOpen = false
+            state.sheetDest != null -> state.sheetDest = null
+            state.searchOpen -> state.searchOpen = false
+            isMobilePlatform && state.consoleOpen -> state.consoleOpen = false
+            isMobilePlatform && state.navOpen -> state.navOpen = false
+        }
+    }
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFileRoot, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)

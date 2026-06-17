@@ -20,6 +20,7 @@ import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
+import java.util.stream.Collectors
 import java.util.zip.ZipFile
 import kotlin.io.path.writeText
 
@@ -159,7 +160,7 @@ internal class Aapt2LinkTask(
 ) : Task {
     private fun archives(): List<Path> =
         if (Files.isDirectory(compiledDir))
-            Files.list(compiledDir).use { s -> s.filter { it.toString().endsWith(".zip") }.sorted().toList() }
+            Files.list(compiledDir).use { s -> s.filter { it.toString().endsWith(".zip") }.sorted().collect(Collectors.toList()) }
         else emptyList()
 
     override val inputs: TaskInputs get() = TaskInputsImpl().apply {
@@ -198,7 +199,7 @@ internal class AndroidCompileTask(
     // of its name components — and silently scatter the gen dir into segments. Append as a single element.
     private fun sources(): List<Path> = (sourceRoots + listOf(genJavaDir))
         .filter { Files.isDirectory(it) }
-        .flatMap { root -> Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".java") }.toList() } }
+        .flatMap { root -> Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
 
     override val inputs: TaskInputs get() = TaskInputsImpl().apply {
         filePaths("sources", sources())
@@ -235,7 +236,7 @@ internal class AndroidKotlinCompileTask(
     private val compile: KotlinCompile,
 ) : Task {
     private fun walk(roots: List<Path>, ext: String): List<Path> = roots.filter { Files.isDirectory(it) }
-        .flatMap { root -> Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(ext) }.toList() } }
+        .flatMap { root -> Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(ext) }.collect(Collectors.toList()) } }
 
     private fun kotlinSources(): List<Path> = walk(sourceRoots, ".kt")
     private fun javaSources(): List<Path> = walk(sourceRoots + listOf(genJavaDir), ".java")
@@ -382,7 +383,7 @@ private object DexArchives {
         val md = MessageDigest.getInstance("SHA-256")
         when {
             Files.isDirectory(path) -> {
-                val files = Files.walk(path).use { s -> s.filter { Files.isRegularFile(it) }.sorted().toList() }
+                val files = Files.walk(path).use { s -> s.filter { Files.isRegularFile(it) }.sorted().collect(Collectors.toList()) }
                 for (f in files) {
                     md.update(path.relativize(f).toString().replace('\\', '/').toByteArray(Charsets.UTF_8))
                     md.update(runCatching { Files.readAllBytes(f) }.getOrDefault(ByteArray(0)))
@@ -437,7 +438,7 @@ private object DexArchives {
     fun clearClassDex(root: Path) {
         if (!Files.isDirectory(root)) return
         Files.walk(root).use { s ->
-            s.filter { Files.isRegularFile(it) && (it.toString().endsWith(".dex") || it.fileName.toString() == CLASS_MANIFEST) }.toList()
+            s.filter { Files.isRegularFile(it) && (it.toString().endsWith(".dex") || it.fileName.toString() == CLASS_MANIFEST) }.collect(Collectors.toList())
         }.forEach { runCatching { Files.deleteIfExists(it) } }
     }
 
@@ -455,7 +456,7 @@ private object DexArchives {
     /** Delete immediate child buckets of [root] whose name is not in [keep] (removed/changed inputs). */
     fun prune(root: Path, keep: Set<String>) {
         if (!Files.isDirectory(root)) return
-        Files.list(root).use { s -> s.filter { Files.isDirectory(it) && it.fileName.toString() !in keep }.toList() }
+        Files.list(root).use { s -> s.filter { Files.isDirectory(it) && it.fileName.toString() !in keep }.collect(Collectors.toList()) }
             .forEach { clearDir(it) }
     }
 
@@ -492,7 +493,7 @@ internal class DexMergeTask(
     private val groupPerBucket: Boolean = false,
 ) : Task {
     private fun dexFiles(roots: List<Path>): List<Path> = roots.filter { Files.isDirectory(it) }.flatMap { dir ->
-        Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().toList() }
+        Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
     }
 
     override val inputs: TaskInputs get() = TaskInputsImpl().apply {
@@ -509,7 +510,7 @@ internal class DexMergeTask(
         if (groupPerBucket) {
             // One indexed group per archive bucket (each input library stays its own set of dex files).
             val buckets = dexArchives.filter { Files.isDirectory(it) }
-                .flatMap { Files.list(it).use { s -> s.filter { c -> Files.isDirectory(c) }.sorted().toList() } }
+                .flatMap { Files.list(it).use { s -> s.filter { c -> Files.isDirectory(c) }.sorted().collect(Collectors.toList()) } }
             var i = 0
             for (b in buckets) {
                 val dexes = dexFiles(listOf(b))

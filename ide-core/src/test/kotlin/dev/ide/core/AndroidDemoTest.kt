@@ -29,7 +29,7 @@ class AndroidDemoTest {
 
             assertTrue("AndroidManifest.xml" in names, "manifest must be visible in the tree: $names")
             assertTrue("strings.xml" in names, "res/strings must be visible: $names")
-            assertTrue("colors.xml" in names && "styles.xml" in names, "editable res (colors/styles) must be visible: $names")
+            assertTrue("colors.xml" in names && ("themes.xml" in names || "styles.xml" in names), "editable res (colors + themes/styles) must be visible: $names")
 
             // The manifest is an openable file (has a path) and reads back its content.
             val manifest = nodes.first { it.name == "AndroidManifest.xml" }

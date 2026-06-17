@@ -27,6 +27,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
+import java.util.stream.Collectors
 import java.util.zip.ZipInputStream
 import java.nio.file.Paths
 
@@ -166,7 +167,7 @@ internal fun sourceFiles(module: Module): List<Path> = module.sourceSets
     .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
     .map { Paths.get(it.dir.path) }
     .filter { Files.isDirectory(it) }
-    .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.toList() } }
+    .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
 
 internal fun depOutputDirs(module: Module): List<Path> =
     module.classpath(DependencyScope.IMPLEMENTATION).entries

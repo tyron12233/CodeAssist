@@ -79,6 +79,7 @@ import dev.ide.lang.jdt.index.JavaMembersByOwnerIndex
 import dev.ide.lang.jdt.index.JavaMembersIndex
 import dev.ide.lang.jdt.index.JavaPackageTypesIndex
 import dev.ide.lang.jdt.index.JavaPackagesIndex
+import dev.ide.lang.jdt.index.JavaSourceIndexer
 import dev.ide.lang.jdt.index.JavaSourceSymbolsIndex
 import dev.ide.model.ContentRole
 import dev.ide.model.IconTarget
@@ -185,6 +186,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.stream.Collectors
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
@@ -345,7 +347,7 @@ class IdeServices private constructor(
             for (root in treeRoots(module)) {
                 if (!Files.isDirectory(root)) continue
                 val files = runCatching {
-                    Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) }.toList() }
+                    Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) }.collect(Collectors.toList()) }
                 }.getOrDefault(emptyList())
                 for (file in files) {
                     val abs = file.toAbsolutePath().normalize()
@@ -1192,7 +1194,7 @@ class IdeServices private constructor(
         for (module in modules()) {
             for (root in sourceRoots(module)) {
                 if (!Files.isDirectory(root)) continue
-                val files = runCatching { Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.toList() } }
+                val files = runCatching { Files.walk(root).use { s -> s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
                     .getOrDefault(emptyList())
                 files.firstNotNullOfOrNull { mainClassIn(it) }?.let { return module to it }
             }
@@ -1749,6 +1751,104 @@ class IdeServices private constructor(
         Regex("\\b(?:class|interface|enum|record)\\s+(${Regex.escape(typeName)})\\b")
             .find(text)?.groups?.get(1)?.range?.first
 
+    // A leading `package a.b.c;` declaration (the first one; package must precede all type decls in Java).
+    private val PACKAGE_DECL = Regex("""(?m)^[ \t]*package[ \t]+([\w.]+)[ \t]*;[ \t]*\r?\n?""")
+
+    /**
+     * The Java package a directory maps to, by its position under the most-specific source root that contains
+     * it: `<root>/com/example` → `com.example`. Returns `""` for a source root itself (the default package),
+     * or null when [dir] sits under no source root (so the package can't be derived — leave the file alone).
+     */
+    private fun packageForDir(dir: Path): String? {
+        val d = normPath(dir)
+        val root = modules().asSequence()
+            .flatMap { sourceRoots(it).asSequence() }
+            .map { normPath(it) }
+            .filter { d == it || d.startsWith(it) }
+            .maxByOrNull { it.nameCount } ?: return null
+        if (d == root) return ""
+        val rel = root.relativize(d)
+        return (0 until rel.nameCount).joinToString(".") { rel.getName(it).toString() }
+    }
+
+    /** [text] with its `package` declaration set to [pkg] (`""` = default package), or null if already so. */
+    private fun withPackageDeclaration(text: String, pkg: String): String? {
+        val existing = PACKAGE_DECL.find(text)
+        return when {
+            existing != null && existing.groupValues[1] == pkg -> null
+            existing != null && pkg.isEmpty() -> text.removeRange(existing.range) // → default package: drop the line
+            existing != null -> text.replaceRange(existing.groups[1]!!.range, pkg)
+            pkg.isEmpty() -> null // no declaration and the default package is wanted → nothing to do
+            else -> "package $pkg;\n\n$text"
+        }
+    }
+
+    /**
+     * After a `.java` file (or a directory of them) lands at [dest], rewrite each moved file's `package`
+     * declaration to match its new source-root-relative location, and — when [updateReferences] (a move, not a
+     * copy) — rewrite explicit `import old.Type;` / `import static old.Type.…;` statements across the project to
+     * the new package. A file outside any source root, or already in the right package, is left untouched.
+     * Fully-qualified usages and same-package (un-imported) references are not rewritten — the compiler flags
+     * those for the import quick-fix. Touches disk and the live overlay together; callers do the reindex.
+     */
+    private fun fixPackagesAfterRelocation(dest: Path, updateReferences: Boolean) {
+        val movedFiles = when {
+            Files.isDirectory(dest) ->
+                runCatching { Files.walk(dest).use { s -> s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
+                    .getOrDefault(emptyList())
+            dest.toString().endsWith(".java") -> listOf(dest)
+            else -> return
+        }
+        val typeRenames = LinkedHashMap<String, String>() // old FQN → new FQN, for the import sweep
+        val movedKeys = HashSet<Path>()
+        for (f in movedFiles) {
+            val parent = f.parent ?: continue
+            val newPkg = packageForDir(parent) ?: continue // outside a source root → can't derive a package
+            val key = normPath(f)
+            movedKeys.add(key)
+            val text = openDocuments[key] ?: runCatching { f.readText() }.getOrNull() ?: continue
+            val oldPkg = PACKAGE_DECL.find(text)?.groupValues?.get(1) ?: ""
+            if (oldPkg == newPkg) continue
+            val updated = withPackageDeclaration(text, newPkg) ?: continue
+            openDocuments[key] = updated
+            runCatching { f.writeText(updated) }
+            if (updateReferences) for (type in topLevelTypeNames(text, f)) {
+                val oldFqn = if (oldPkg.isEmpty()) type else "$oldPkg.$type"
+                val newFqn = if (newPkg.isEmpty()) type else "$newPkg.$type"
+                typeRenames[oldFqn] = newFqn
+            }
+        }
+        if (updateReferences && typeRenames.isNotEmpty()) updateImportsForMovedTypes(typeRenames, movedKeys)
+    }
+
+    /** Top-level type names declared in [text] (binding-free JDT parse), falling back to the file-name type. */
+    private fun topLevelTypeNames(text: String, file: Path): List<String> =
+        runCatching {
+            JavaSourceIndexer.parse(text).decls
+                .filter { it.container == null && it.kind in TOP_LEVEL_TYPE_KINDS }
+                .map { it.name }
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+            ?: listOf(file.fileName.toString().removeSuffix(".java")).filter { isValidJavaIdentifier(it) }
+
+    /** Rewrite explicit imports of the moved types ([renames]: old FQN → new FQN) across the project. */
+    private fun updateImportsForMovedTypes(renames: Map<String, String>, skip: Set<Path>) {
+        for (file in projectJavaFiles()) {
+            val key = normPath(file)
+            if (key in skip) continue
+            val text = openDocuments[key] ?: runCatching { file.readText() }.getOrNull() ?: continue
+            var updated = text
+            for ((oldFqn, newFqn) in renames) {
+                updated = updated
+                    .replace("import $oldFqn;", "import $newFqn;")
+                    .replace("import static $oldFqn.", "import static $newFqn.")
+            }
+            if (updated != text) {
+                openDocuments[key] = updated
+                runCatching { file.writeText(updated) }
+            }
+        }
+    }
+
     /**
      * Delete a file or directory (recursively). Drops any open-document overlays under it, then invalidates
      * analyzers and resyncs the index. Returns true on success.
@@ -1807,7 +1907,8 @@ class IdeServices private constructor(
             Files.createDirectories(dir)
             Files.move(abs, dest)
             rekeyOverlays(abs, dest)
-            invalidateAnalyzers(); resyncIndex()
+            fixPackagesAfterRelocation(dest, updateReferences = true)
+            invalidateAnalyzers(); invalidateSyntheticClasses(); resyncIndex()
             dest
         }.getOrNull()
     }
@@ -1821,7 +1922,10 @@ class IdeServices private constructor(
             Files.createDirectories(dir)
             if (Files.isDirectory(abs)) abs.toFile().copyRecursively(dest.toFile(), overwrite = false)
             else Files.copy(abs, dest)
-            invalidateAnalyzers(); resyncIndex()
+            // The copy lands in a new package; fix its own `package` line, but leave references to the
+            // original alone (a copy is a new type, not a moved one).
+            fixPackagesAfterRelocation(dest, updateReferences = false)
+            invalidateAnalyzers(); invalidateSyntheticClasses(); resyncIndex()
             dest
         }.getOrNull()
     }
@@ -1870,11 +1974,11 @@ class IdeServices private constructor(
         val styleables = LinkedHashMap<String, StyleableEntry>()
         for (dir in dirs) {
             val valuesDirs = runCatching {
-                Files.list(dir).use { it.toList() }
+                Files.list(dir).use { it.collect(Collectors.toList()) }
             }.getOrDefault(emptyList())
                 .filter { Files.isDirectory(it) && it.fileName.toString().startsWith("values") }
             for (vd in valuesDirs) {
-                val files = runCatching { Files.list(vd).use { it.toList() } }.getOrDefault(emptyList())
+                val files = runCatching { Files.list(vd).use { it.collect(Collectors.toList()) } }.getOrDefault(emptyList())
                     .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".xml") }
                 for (f in files) {
                     val text = runCatching { f.readText() }.getOrNull() ?: continue
@@ -2470,6 +2574,13 @@ class IdeServices private constructor(
             "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
             "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
             "volatile", "while", "true", "false", "null", "var", "record", "yield", "sealed", "permits",
+        )
+
+        /** Declaration kinds that name a top-level type (for the import sweep on a package move). */
+        private val TOP_LEVEL_TYPE_KINDS = setOf(
+            JavaSourceIndexer.DeclKind.CLASS, JavaSourceIndexer.DeclKind.INTERFACE,
+            JavaSourceIndexer.DeclKind.ENUM, JavaSourceIndexer.DeclKind.RECORD,
+            JavaSourceIndexer.DeclKind.ANNOTATION,
         )
 
         /** Cap on a single file's size for find-in-files (skip generated/huge blobs). */
