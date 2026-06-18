@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkPackage
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.icons.CaIcons
@@ -38,8 +39,9 @@ import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
 
 /**
- * The SDK / toolchain manager: download Android SDK packages (platforms, build-tools, sources, command-line
- * tools) and JDK sources. Talks only to [IdeBackend]; the download work + progress live in the backend.
+ * The SDK / toolchain manager: download **sources and documentation** (Android platform sources, JDK
+ * `src.zip`) so the editor can show javadoc, parameter names, and go-to-source. Downloads run in the backend
+ * and keep going after this screen is closed — the screen only observes [IdeBackend.sdkManagerState].
  */
 @Composable
 fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
@@ -52,6 +54,11 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
 
     suspend fun reload() { loading = true; packages = runCatching { backend.sdkPackages() }.getOrDefault(emptyList()); loading = false }
     LaunchedEffect(Unit) { reload() }
+    // Refresh the installed/incomplete flags whenever a download finishes (it ran in the background).
+    val finishedCount = progress.downloads.count { it.status == "DONE" }
+    LaunchedEffect(finishedCount) { if (finishedCount > 0) reload() }
+
+    val activeIds = progress.downloads.filter { it.status != "DONE" && it.status != "FAILED" }.map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         Row(
@@ -63,18 +70,38 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             Text("SDK Manager", style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
             IconButtonCa(CaIcons.refresh, "Refresh", { scope.launch { reload() } })
         }
-
-        if (progress.busy) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(progress.message, style = Ca.type.footnote, color = Ca.colors.textSecondary)
-                Spacer(Modifier.height(4.dp))
-                if (progress.fraction in 0.0..1.0) LinearProgressIndicator(progress = { progress.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
-                else LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-        }
         status?.let { Text(it, style = Ca.type.footnote, color = Ca.colors.accent, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            // Purpose — these downloads power editor docs, not building.
+            Card {
+                Text("Sources & documentation", style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Download SDK platform sources and JDK sources so the editor can show javadoc, parameter " +
+                        "names, and go-to-source into the SDK. Downloads continue in the background — you can " +
+                        "leave this screen and keep working.",
+                    style = Ca.type.footnote, color = Ca.colors.textSecondary,
+                )
+            }
+
+            // Active / recent downloads queue.
+            if (progress.downloads.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionHeader("Downloads", small = true)
+                    Spacer(Modifier.weight(1f))
+                    if (progress.downloads.any { it.status == "DONE" || it.status == "FAILED" }) {
+                        ActionPill("Clear finished", enabled = true) { backend.clearSdkDownloads() }
+                    }
+                }
+                Card {
+                    progress.downloads.forEachIndexed { i, d ->
+                        if (i > 0) Spacer(Modifier.height(10.dp))
+                        DownloadRow(d) { backend.cancelSdkDownload(d.id) }
+                    }
+                }
+            }
+
             // JDK sources
             SectionHeader("JDK")
             Card {
@@ -88,7 +115,8 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (feature in listOf(17, 21)) {
-                            ActionPill("Download JDK $feature sources", enabled = !progress.busy) {
+                            val downloading = "jdk-$feature" in activeIds
+                            ActionPill(if (downloading) "Downloading…" else "Download JDK $feature sources", enabled = !downloading) {
                                 scope.launch { status = backend.downloadJdkSources(feature) }
                             }
                         }
@@ -96,8 +124,8 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                 }
             }
 
-            // Android packages, grouped
-            SectionHeader("Android SDK")
+            // Android platform sources (the documentation payload — platforms/build-tools live elsewhere).
+            SectionHeader("Android SDK sources")
             if (loading && packages.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -106,15 +134,14 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             } else if (packages.isEmpty()) {
                 Text("No packages — check your connection, then Refresh.", style = Ca.type.footnote, color = Ca.colors.textTertiary)
             } else {
-                for ((label, cat) in CATEGORIES) {
+                for ((_, cat) in CATEGORIES) {
                     val group = packages.filter { it.category == cat }.sortedByDescending { it.path }
                     if (group.isEmpty()) continue
-                    SectionHeader(label, small = true)
                     Card {
                         group.take(40).forEachIndexed { i, p ->
                             if (i > 0) Spacer(Modifier.height(6.dp))
-                            PackageRow(p, enabled = !progress.busy && p.installable) {
-                                scope.launch { status = backend.installSdkPackage(p.path); reload() }
+                            PackageRow(p, downloading = p.path in activeIds) {
+                                scope.launch { status = backend.installSdkPackage(p.path) }
                             }
                         }
                     }
@@ -124,11 +151,9 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
     }
 }
 
+// The SDK Manager surfaces *sources only* (docs/go-to-source); the backend filters to the SOURCES category.
 private val CATEGORIES = listOf(
-    "Platforms" to "PLATFORM",
     "Sources" to "SOURCES",
-    "Build tools" to "BUILD_TOOLS",
-    "Command-line tools" to "CMDLINE_TOOLS",
 )
 
 @Composable
@@ -151,15 +176,50 @@ private fun Card(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun PackageRow(p: UiSdkPackage, enabled: Boolean, onInstall: () -> Unit) {
+private fun DownloadRow(d: UiSdkDownload, onCancel: () -> Unit) {
+    val active = d.status != "DONE" && d.status != "FAILED"
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(d.label, style = Ca.type.body, color = Ca.colors.textPrimary)
+                val sub = when (d.status) {
+                    "DONE" -> "Installed"
+                    "FAILED" -> d.detail.ifEmpty { "Failed" }
+                    "DOWNLOADING" -> "Downloading${if (d.detail.isNotEmpty()) " · ${d.detail}" else ""}"
+                    "EXTRACTING" -> "Extracting…"
+                    "INSTALLING" -> "Installing…"
+                    else -> d.status
+                }
+                Text(
+                    sub, style = Ca.type.caption,
+                    color = when (d.status) { "DONE" -> Ca.colors.run; "FAILED" -> Ca.colors.error; else -> Ca.colors.textTertiary },
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            if (active) ActionPill("Cancel", enabled = true, onClick = onCancel)
+        }
+        if (active) {
+            Spacer(Modifier.height(6.dp))
+            if (d.fraction in 0.0..1.0) LinearProgressIndicator(progress = { d.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
+            else LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun PackageRow(p: UiSdkPackage, downloading: Boolean, onInstall: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(p.displayName, style = Ca.type.body, color = Ca.colors.textPrimary)
             Text(p.path + (if (p.sizeBytes > 0) "  ·  ${p.sizeBytes / 1_048_576} MB" else ""), style = Ca.type.caption, color = Ca.colors.textTertiary)
         }
         Spacer(Modifier.width(8.dp))
-        if (p.installed) Text("Installed", style = Ca.type.footnote, color = Ca.colors.run)
-        else ActionPill("Install", enabled = enabled, onClick = onInstall)
+        when {
+            downloading -> Text("Downloading…", style = Ca.type.footnote, color = Ca.colors.textSecondary)
+            p.incomplete -> ActionPill("Resume", enabled = p.installable, onClick = onInstall)
+            p.installed -> Text("Installed", style = Ca.type.footnote, color = Ca.colors.run)
+            else -> ActionPill("Install", enabled = p.installable, onClick = onInstall)
+        }
     }
 }
 

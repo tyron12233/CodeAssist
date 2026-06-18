@@ -84,14 +84,20 @@ data class Aapt2CompileResult(val archives: List<Path>, val result: ToolResult)
  *    both roles — the archive step defers cross-class desugaring as intermediate dex, the merger resolves it.
  */
 interface Dexer {
-    fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path): ToolResult
+    /**
+     * [threads] caps D8's internal worker count for this invocation (0 = D8's default = all cores). The dex
+     * pipeline runs many invocations in parallel and sets this so `workers × threads` doesn't oversubscribe
+     * cores or multiply peak memory on a phone; see `DexConcurrency`.
+     */
+    fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int = 0): ToolResult
 
     /**
      * Archive [inputs] per-class. [classpath] supplies types needed to desugar [inputs] without dexing them
      * (D8 `--classpath`) — used when archiving only a *subset* of a scope's classes incrementally, so a
-     * changed class can still see its unchanged siblings; pass empty when archiving a whole jar.
+     * changed class can still see its unchanged siblings; pass empty when archiving a whole jar. [threads] as
+     * in [dex].
      */
-    fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path): ToolResult
+    fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int = 0): ToolResult
 }
 
 /**
@@ -100,7 +106,10 @@ interface Dexer {
  * shrinking; with none, R8 runs pass-through (`-dontshrink`) so the dex is still correct, just not smaller.
  */
 fun interface Shrinker {
-    fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path): ToolResult
+    /** [threads] caps R8's worker pool (0 = default = all cores). R8 is the heaviest, whole-program step, so
+     *  a lower count trades wall-time for a smaller peak working set — the in-process OOM lever on a phone.
+     *  (No default: a `fun interface` SAM method can't have one; the sole caller passes it explicitly.) */
+    fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult
 }
 
 /** zipalign + apksigner: produce an aligned, signed APK. */

@@ -7,6 +7,7 @@ import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.util.stream.Collectors
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
@@ -67,13 +68,20 @@ object AndroidSdkInstaller {
         return out
     }
 
-    /** sdkmanager-style ids already installed under [sdkRoot] (so the UI can mark them). */
-    fun installedPackages(sdkRoot: Path): Set<String> {
+    /** sdkmanager-style ids fully installed under [sdkRoot] (so the UI can mark them). A dir left with an
+     *  `.installing` marker (an interrupted install) is reported by [incompletePackages] instead. */
+    fun installedPackages(sdkRoot: Path): Set<String> = scanPackages(sdkRoot) { dir -> !Files.exists(markerFor(dir)) }
+
+    /** sdkmanager-style ids whose install dir exists but is incomplete (an `.installing` marker survived an
+     *  interrupted install). Re-installing resumes the cached download and repairs the dir. */
+    fun incompletePackages(sdkRoot: Path): Set<String> = scanPackages(sdkRoot) { dir -> Files.exists(markerFor(dir)) }
+
+    private fun scanPackages(sdkRoot: Path, accept: (Path) -> Boolean): Set<String> {
         val out = HashSet<String>()
         fun listDirs(rel: String, idPrefix: String) {
             val d = sdkRoot.resolve(rel)
             if (!Files.isDirectory(d)) return
-            Files.list(d).use { s -> s.filter { Files.isDirectory(it) }.forEach { out += "$idPrefix${it.fileName}" } }
+            Files.list(d).use { s -> s.filter { Files.isDirectory(it) && accept(it) }.forEach { out += "$idPrefix${it.fileName}" } }
         }
         listDirs("platforms", "platforms;")
         listDirs("build-tools", "build-tools;")
@@ -82,28 +90,55 @@ object AndroidSdkInstaller {
         return out
     }
 
+    /** The sibling marker file flagging an install dir as in-progress (created during install, deleted on success). */
+    private fun markerFor(installDir: Path): Path =
+        installDir.resolveSibling("${installDir.fileName}.installing")
+
     /**
-     * Install [pkg] into [sdkRoot]: download its archive, extract it, and place the contents at the package's
-     * install dir. [onProgress] receives (bytesRead, totalBytes) during the download. Returns null on success,
-     * or an error message.
+     * Install [pkg] into [sdkRoot]: download its archive (into [downloadsDir], a stable per-id cache so an
+     * interrupted download *resumes* on retry rather than restarting), extract it, and place the contents at
+     * the package's install dir. An `.installing` marker guards the dir until the place step completes, so an
+     * interrupted install is detectable ([incompletePackages]) and never looks installed. [onProgress] gets
+     * (bytesRead, totalBytes) during the download; [onStage] gets DOWNLOADING/EXTRACTING/INSTALLING. Returns
+     * null on success, or an error message.
      */
-    fun install(pkg: RepoPackage, sdkRoot: Path, fetcher: SdkNetFetcher = HttpSdkNetFetcher, onProgress: (Long, Long) -> Unit = { _, _ -> }): String? {
+    fun install(
+        pkg: RepoPackage,
+        sdkRoot: Path,
+        downloadsDir: Path,
+        fetcher: SdkNetFetcher = HttpSdkNetFetcher,
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
+        onStage: (String) -> Unit = {},
+    ): String? {
         val url = pkg.archiveUrl ?: return "No archive available for this host."
-        val tmpZip = Files.createTempFile("sdkpkg", ".zip")
+        Files.createDirectories(downloadsDir)
+        val archive = downloadsDir.resolve(pkg.path.replace(';', '_').replace('/', '_') + ".zip")
+        val installDir = pkg.installDir(sdkRoot)
+        val marker = markerFor(installDir)
         try {
-            if (!fetcher.download(url, tmpZip, onProgress)) return "Download failed."
+            onStage("DOWNLOADING")
+            if (!fetcher.download(url, archive, onProgress)) return "Download failed."
+            onStage("EXTRACTING")
             val staging = Files.createTempDirectory("sdkpkg-extract")
             try {
-                extractZip(tmpZip, staging)
-                placeInto(staging, pkg.installDir(sdkRoot))
+                try {
+                    extractZip(archive, staging)
+                } catch (e: Exception) {
+                    runCatching { Files.deleteIfExists(archive) } // corrupt/partial cache → drop so a retry re-downloads clean
+                    return "Downloaded archive was incomplete; retry to re-download. (${e.message})"
+                }
+                onStage("INSTALLING")
+                Files.createDirectories(installDir.parent)
+                runCatching { if (!Files.exists(marker)) Files.createFile(marker) }
+                placeInto(staging, installDir)
+                Files.deleteIfExists(marker)
             } finally {
                 deleteRecursively(staging)
             }
+            runCatching { Files.deleteIfExists(archive) } // installed → drop the cached archive
             return null
         } catch (e: Exception) {
             return "Install failed: ${e.message}"
-        } finally {
-            runCatching { Files.deleteIfExists(tmpZip) }
         }
     }
 
@@ -231,14 +266,23 @@ object HttpSdkNetFetcher : SdkNetFetcher {
     }.getOrNull()
 
     override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean = runCatching {
+        // Resume a partial download: ask for the remaining bytes (HTTP Range) and append. If the server
+        // ignores the range (200 OK) or the partial already covers the file (416), fall back cleanly.
+        val existing = if (Files.isRegularFile(dest)) Files.size(dest) else 0L
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000; readTimeout = 60_000; instanceFollowRedirects = true
+            if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
         }
-        val total = conn.contentLengthLong
+        val code = conn.responseCode
+        if (code == 416) return@runCatching true // requested range past EOF ⇒ already fully downloaded
+        val resume = code == HttpURLConnection.HTTP_PARTIAL && existing > 0
+        val total = if (resume) existing + conn.contentLengthLong else conn.contentLengthLong
+        val opts = if (resume) arrayOf(StandardOpenOption.WRITE, StandardOpenOption.APPEND)
+                   else arrayOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
         conn.inputStream.use { input ->
-            Files.newOutputStream(dest).use { out ->
+            Files.newOutputStream(dest, *opts).use { out ->
                 val buf = ByteArray(64 * 1024)
-                var read = 0L
+                var read = if (resume) existing else 0L
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break

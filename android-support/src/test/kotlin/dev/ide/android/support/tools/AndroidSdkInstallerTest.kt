@@ -1,10 +1,14 @@
 package dev.ide.android.support.tools
 
 import org.w3c.dom.Element
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -86,6 +90,55 @@ class AndroidSdkInstallerTest {
         assertEquals(AndroidSdkInstaller.Category.SOURCES, AndroidSdkInstaller.categoryOf("sources;android-34"))
         assertEquals(AndroidSdkInstaller.Category.CMDLINE_TOOLS, AndroidSdkInstaller.categoryOf("cmdline-tools;latest"))
         assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("ndk;26.0.0"))
+    }
+
+    @Test
+    fun installPlacesPackageAndTracksCompletion() {
+        val tmp = Files.createTempDirectory("sdktest")
+        val sdkRoot = tmp.resolve("sdk")
+        val downloads = tmp.resolve("dl")
+        val pkg = AndroidSdkInstaller.parsePackages(xml).first { it.path == "sources;android-34" }
+
+        val err = AndroidSdkInstaller.install(pkg, sdkRoot, downloads, zipFetcher("Foo.java", "class Foo {}"))
+
+        assertNull(err)
+        assertTrue(Files.isRegularFile(sdkRoot.resolve("sources").resolve("android-34").resolve("Foo.java")))
+        assertEquals(setOf("sources;android-34"), AndroidSdkInstaller.installedPackages(sdkRoot))
+        assertTrue(AndroidSdkInstaller.incompletePackages(sdkRoot).isEmpty())
+        // The cached archive is dropped once installed.
+        assertTrue(Files.list(downloads).use { it.findAny().isEmpty })
+    }
+
+    @Test
+    fun interruptedInstallReportsIncompleteNotInstalled() {
+        val sdkRoot = Files.createTempDirectory("sdktest2").resolve("sdk")
+        val dir = sdkRoot.resolve("sources").resolve("android-34")
+        Files.createDirectories(dir)
+        // An interrupted install leaves the dir plus its `.installing` marker.
+        Files.createFile(sdkRoot.resolve("sources").resolve("android-34.installing"))
+
+        assertFalse("sources;android-34" in AndroidSdkInstaller.installedPackages(sdkRoot))
+        assertEquals(setOf("sources;android-34"), AndroidSdkInstaller.incompletePackages(sdkRoot))
+
+        // Re-installing repairs it: the marker clears, and it's now reported installed.
+        val pkg = AndroidSdkInstaller.parsePackages(xml).first { it.path == "sources;android-34" }
+        assertNull(AndroidSdkInstaller.install(pkg, sdkRoot, sdkRoot.resolve("dl"), zipFetcher("Foo.java", "class Foo {}")))
+        assertTrue(AndroidSdkInstaller.incompletePackages(sdkRoot).isEmpty())
+        assertEquals(setOf("sources;android-34"), AndroidSdkInstaller.installedPackages(sdkRoot))
+    }
+
+    /** A fetcher that "downloads" a one-entry zip (wrapped in a single root dir, as the SDK repo zips are). */
+    private fun zipFetcher(entryName: String, content: String) = object : SdkNetFetcher {
+        override fun fetchText(url: String): String = xml
+        override fun download(url: String, dest: Path, onProgress: (Long, Long) -> Unit): Boolean {
+            ZipOutputStream(Files.newOutputStream(dest)).use { z ->
+                z.putNextEntry(ZipEntry("android-34/$entryName"))
+                z.write(content.toByteArray())
+                z.closeEntry()
+            }
+            onProgress(content.length.toLong(), content.length.toLong())
+            return true
+        }
     }
 
     private fun packageElement(path: String): Element {
