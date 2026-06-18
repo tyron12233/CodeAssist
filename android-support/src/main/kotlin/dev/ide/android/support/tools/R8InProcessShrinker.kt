@@ -7,6 +7,7 @@ import com.android.tools.r8.R8Command
 import com.android.tools.r8.origin.Origin
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.Executors
 
 /**
  * Shrinks + dexes in-process via the R8 API (`com.android.tools.r8.R8`) — the on-device counterpart to
@@ -17,7 +18,7 @@ import java.nio.file.Path
  */
 class R8InProcessShrinker : Shrinker {
 
-    override fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path): ToolResult {
+    override fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult {
         Files.createDirectories(outDir)
         val progs = programs.filter { Files.exists(it) }
         if (progs.isEmpty()) return ToolResult.fail("no inputs to shrink")
@@ -30,7 +31,15 @@ class R8InProcessShrinker : Shrinker {
             if (Files.exists(library)) builder.addLibraryFiles(library)
             val rules = keepRules.ifEmpty { listOf("-dontshrink", "-dontoptimize", "-dontobfuscate", "-ignorewarnings") }
             builder.addProguardConfiguration(rules, Origin.unknown())
-            R8.run(builder.build())
+            val command = builder.build()
+            // Bound R8's worker pool to keep peak memory down (R8 has no setThreadCount on this version, so
+            // cap via the executor overload — the same approach as the dexer).
+            if (threads > 0) {
+                val pool = Executors.newFixedThreadPool(threads)
+                try { R8.run(command, pool) } finally { pool.shutdown() }
+            } else {
+                R8.run(command)
+            }
             ToolResult.ok(listOf("R8 (in-process) minified ${progs.size} input(s) -> ${outDir.fileName}"))
         } catch (t: Throwable) {
             ToolResult.fail("R8 in-process failed: ${t.message}")

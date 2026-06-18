@@ -28,7 +28,12 @@ dependencies {
     // Tests build a real workspace + classpath to exercise the Module -> CompilationContext bridge and the
     // parser/symbol/completion pipeline end to end.
     testImplementation(project(":project-model-impl"))
+    testImplementation(project(":index-impl")) // wire the real persistent index to reproduce the device path
     testImplementation(libs.kotlinx.coroutines.test)
+    // Real Compose runtime jar on the test classpath: KotlinComposeBuildTest compiles a @Composable against
+    // it (with the bundled Compose plugin) and asserts the synthetic-param transform. The test self-gates
+    // (assumeTrue) when the jar isn't resolvable, so CI without the Compose repo just skips it.
+    testImplementation(libs.compose.runtime.desktop)
 }
 
 // Bundle the kotlin-stdlib JAR — the SAME version the editor/compiler target (`libs.versions.toml` `kotlin`)
@@ -39,8 +44,16 @@ dependencies {
 // compile AND run/dex classpaths through the normal classpath machinery).
 val bundledStdlib: Configuration by configurations.creating { isTransitive = false }
 dependencies { bundledStdlib(libs.kotlin.stdlib) }
+
+// Bundle the Compose compiler-plugin JAR (`/kotlin-compose-compiler-plugin.jar`) the same way: when a module
+// depends on the Compose runtime, the in-process K2JVMCompiler is fed this jar via `-Xplugin` so @Composable
+// functions get the plugin transform. `ComposeCompilerPlugin` extracts it; the host applies it per-module.
+val bundledComposePlugin: Configuration by configurations.creating { isTransitive = false }
+dependencies { bundledComposePlugin(libs.kotlin.compose.compiler.plugin) }
+
 tasks.processResources {
     from(bundledStdlib) { rename { "kotlin-stdlib.jar" } }
+    from(bundledComposePlugin) { rename { "kotlin-compose-compiler-plugin.jar" } }
 }
 
 // `src/test/.../Test.kt` is a scratch file for manually comparing completion against IntelliJ in the IDE.

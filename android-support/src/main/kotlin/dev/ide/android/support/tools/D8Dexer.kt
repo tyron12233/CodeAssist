@@ -15,13 +15,13 @@ class D8Dexer(
     private val javaLauncher: Path,
 ) : Dexer {
 
-    override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path): ToolResult =
-        run(inputs, emptyList(), androidJar, minApi, release, outDir, archive = false)
+    override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
+        run(inputs, emptyList(), androidJar, minApi, release, outDir, archive = false, threads = threads)
 
-    override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path): ToolResult =
-        run(inputs, classpath, androidJar, minApi, release, outDir, archive = true)
+    override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
+        run(inputs, classpath, androidJar, minApi, release, outDir, archive = true, threads = threads)
 
-    private fun run(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, archive: Boolean): ToolResult {
+    private fun run(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, archive: Boolean, threads: Int): ToolResult {
         Files.createDirectories(outDir)
         val existing = inputs.filter { Files.exists(it) }
         if (existing.isEmpty()) return ToolResult.fail("no class inputs to dex")
@@ -34,6 +34,7 @@ class D8Dexer(
             // Desugaring classpath for an incremental subset (types not (re-)dexed but needed to desugar).
             classpath.filter { Files.exists(it) }.forEach { add("--classpath"); add(it.toString()) }
             add("--min-api"); add(minApi.toString())
+            if (threads > 0) { add("--thread-count"); add(threads.toString()) }
             add("--lib"); add(androidJar.toString())
             add("--output"); add(outDir.toString())
             addAll(existing.map { it.toString() })

@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":project-model-api"))
     implementation(project(":platform-core"))
     implementation(project(":vfs-api"))
+    implementation(libs.kotlinx.coroutines.core) // bounded-parallel POM resolution + artifact downloads
 
     testImplementation(project(":project-model-impl")) // LocalFileSystem for the VirtualFile factory in tests
     testImplementation(libs.kotlinx.coroutines.test)

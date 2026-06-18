@@ -13,7 +13,7 @@ class R8Subprocess(
     private val javaLauncher: Path,
 ) : Shrinker {
 
-    override fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path): ToolResult {
+    override fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult {
         Files.createDirectories(outDir)
         val existing = programs.filter { Files.exists(it) }
         if (existing.isEmpty()) return ToolResult.fail("no inputs to shrink")
@@ -24,6 +24,7 @@ class R8Subprocess(
                 add(javaLauncher.toString()); add("-cp"); add(d8Jar.toString()); add("com.android.tools.r8.R8")
                 if (release) add("--release") else add("--debug")
                 add("--min-api"); add(minApi.toString())
+                if (threads > 0) { add("--thread-count"); add(threads.toString()) }
                 if (Files.exists(library)) { add("--lib"); add(library.toString()) }
                 add("--pg-conf"); add(pgConf.toString())
                 add("--output"); add(outDir.toString())

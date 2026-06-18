@@ -62,6 +62,68 @@ the surrounding context to decide the candidate set: member completion after `.`
 scope, or type completion in a type position. Candidates are ranked with the shared prefix/fuzzy scorer,
 and default Kotlin imports are taken into account.
 
+## Performance with large classpaths (Compose / AndroidX)
+
+Type-name completion is served from the disk-backed index (`java.classNames`/`kotlin.typeShape`) — prefix-
+queried and capped, so it scales with the number of *matches*, not the size of the classpath. **Extensions
+and top-level callables** were the exception: they came from an in-memory scan (`ClasspathReader.scan`,
+backed by a per-jar `.kxt` cache) that was loaded whole and returned whole, with the prefix filter applied
+only afterward. With a large Kotlin classpath that made every keystroke do work proportional to the *entire*
+library surface.
+
+### Shipped — prefix pushdown + memoization
+
+The completion path now pushes the typed prefix down into the symbol service so a keystroke is O(matches):
+
+- **Top-level callables** (`KotlinSymbolService.topLevelCallables(prefix)`): the by-name map is walked for
+  buckets whose name starts with the prefix instead of `values.flatten()`-ing the whole top-level universe.
+  `KotlinResolver.scopeSymbolsAt(offset, namePrefix)` threads the prefix through (and `callTargets` passes
+  the known callee name as the prefix).
+- **Members + extensions** (`membersForCompletion(fqn, args, prefix)` / `extensionsFor(fqn, args, prefix)`):
+  extensions are filtered by name **before** `bindExtensionReceiver` allocates a bound symbol per generic
+  receiver, so the large per-receiver and `kotlin.Any` buckets no longer materialize in full each keystroke.
+  `companionMembersFor` is prefix-aware too.
+- **Supertype memo** (`supertypeMemo`): the recursive Kotlin supertype walk (the hot part of
+  `extensionsFor`/`supertypesOf`) is memoized per receiver FQN, dropped on any edit (`setOverlay`), since a
+  source type's chain can change but a classpath type's cannot.
+
+These keep the analyzer's existing serialization/correctness (the same single engine thread; see the editor
+threading notes) and don't change the non-completion `membersOf` path, so analysis/resolution are unaffected.
+
+### Shipped — extensions + top-level moved into the persistent disk index
+
+The remaining cost was the **first** member/name completion after launch (or after the analyzer is rebuilt):
+it triggered `ClasspathReader.scan`, which decodes the `@Metadata` of every class in every Kotlin jar to
+harvest extensions + top-level callables — a blocking decode storm, and even warm it stayed fully
+heap-resident.
+
+This now flows through ONE new `IndexExtension` (`KotlinCallableIndex`, id `kotlin.callables`) on
+`platform.index`, mirroring `KotlinTypeShapeIndex`: the engine builds it during indexing (per `.class`,
+content-hashed, persisted, block-cached, incremental) and the symbol service queries it instead of the
+scan. Keys are **tagged so one ordered index serves both query shapes**:
+
+- **top-level callable** -> key `top:<name>`. Completion prefix-queries `top:<namePrefix>`; resolution
+  exact-queries `top:<name>`. Nothing is fully resident.
+- **extension** -> key `ext:<receiverFqn> <name>`. Completion expands the receiver to
+  `{ fqn, kotlin.Any, ...supertypes }` and prefix-queries `ext:<target> <namePrefix>` per target, so BOTH
+  dimensions (receiver and name) are filtered on disk; the large `kotlin.Any` bucket no longer loads in full.
+  The space separator (FQNs/identifiers contain none) keeps each receiver's extensions contiguous in the
+  ordered terms.
+
+The value is a context-free `CallableShape` (the `KotlinSymbol` fields the completion item + auto-import +
+interpreter need); the consumer rebinds the live resolution context via `toSymbol(ctx)` at query time, like
+`kotlin.typeShape`. Per-class `index(input)` decodes the file/multi-file facade (`FooKt`) and emits
+`decoded.topLevel` / `decoded.extensions`, reusing the engine's existing `.class` traversal.
+
+`KotlinSymbolService.extensionsFor`/`topLevelCallables`/`topLevelByName` query the index WHEN ONE IS WIRED
+(the prefix-pushdown work above was shaped so this is just a data-source swap behind unchanged signatures)
+and fall back to the in-memory `ClasspathReader.scan`/`.kxt` ONLY when there is no index -- the standalone /
+unit-test path, exactly as `kotlin.typeShape` keeps a live-decode fallback. So the cold build of the
+in-memory scan no longer happens in the wired (IDE) configuration; extension completion instead degrades to
+empty while the index is still building (the same graceful-degrade contract as type-name completion).
+Verified by `KotlinCallableIndexTest` (producer entries, codec round-trip, and an index-wired analyzer
+resolving an stdlib extension + top-level callable through the index, not the scan).
+
 ## Compilation
 
 Editor completion is independent of code generation. Kotlin-to-bytecode compilation for the build is a

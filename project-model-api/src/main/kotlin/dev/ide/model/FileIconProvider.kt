@@ -29,8 +29,15 @@ sealed interface IconTarget {
     /** A leaf file (e.g. `Main.java`, `AndroidManifest.xml`). [module] is its owning module if known. */
     data class File(val fileName: String, val module: Module?) : IconTarget
 
-    /** A source/content root surfaced in the tree, with the [roles] it carries and its source-set name. */
-    data class SourceRoot(val sourceSetName: String, val roles: Set<ContentRole>, val module: Module?) : IconTarget
+    /** A source/content root surfaced in the tree, with the [roles] it carries and its source-set name.
+     *  [leafName] is the root's leaf directory (e.g. `java`/`kotlin`/`resources`) so a provider can tell a
+     *  Kotlin source root from a Java one (both carry [ContentRole.SOURCE]). */
+    data class SourceRoot(
+        val sourceSetName: String,
+        val roles: Set<ContentRole>,
+        val module: Module?,
+        val leafName: String = "",
+    ) : IconTarget
 
     /** A Java/Kotlin package directory (possibly a compacted chain); [packageName] is its dotted fqn. */
     data class PackageDir(val packageName: String) : IconTarget

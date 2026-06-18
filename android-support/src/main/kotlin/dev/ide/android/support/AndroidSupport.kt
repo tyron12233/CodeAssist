@@ -2,6 +2,7 @@ package dev.ide.android.support
 
 import dev.ide.android.support.templates.AndroidAppTemplate
 import dev.ide.android.support.templates.AndroidLibraryTemplate
+import dev.ide.android.support.templates.JetpackComposeAppTemplate
 import dev.ide.android.support.templates.MaterialYouAppTemplate
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.FileIconRegistry
@@ -33,6 +34,7 @@ object AndroidSupport {
     fun registerTemplates(templates: ProjectTemplateRegistry) {
         templates.register(AndroidAppTemplate, PLUGIN)
         templates.register(MaterialYouAppTemplate, PLUGIN)
+        templates.register(JetpackComposeAppTemplate, PLUGIN)
         templates.register(AndroidLibraryTemplate, PLUGIN)
     }
 }

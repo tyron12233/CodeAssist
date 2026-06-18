@@ -41,6 +41,7 @@ object DefaultFileIconProvider : FileIconProvider {
         is IconTarget.SourceRoot -> when {
             ContentRole.GENERATED in target.roles -> "sourceset.generated"
             ContentRole.RESOURCE in target.roles -> "sourceset.resources"
+            ContentRole.SOURCE in target.roles && target.leafName == "kotlin" -> "sourceset.kotlin"
             ContentRole.SOURCE in target.roles -> "sourceset.java"
             else -> "sourceset.java"
         }

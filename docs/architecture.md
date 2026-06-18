@@ -94,6 +94,11 @@ content-hashed `ClasspathSnapshot`:
 2. For each module dependency, include its outputs and recurse into its *exported* entries only.
 3. A `COMPILE_ONLY` SDK dependency (such as `android.jar`) is placed on the compile classpath and
    filtered out of the packaged/runtime classpath.
+4. Resolve version conflicts across the assembled set: because each module is resolved independently and
+   a library dependency carries its whole transitive closure, two modules can contribute different
+   versions of the same Maven artifact. The snapshot keeps the newest version of each artifact (Gradle's
+   "newest wins"), keyed off the resolver's Maven-layout cache path. This prevents two copies of a class on
+   the compile path and, critically, two dex archives of the same type colliding in the Android dex merge.
 
 Because classpath correctness lives in the model, build systems and language backends simply consume a
 `ClasspathSnapshot` — they never re-derive dependency semantics. The snapshot's content hash is a

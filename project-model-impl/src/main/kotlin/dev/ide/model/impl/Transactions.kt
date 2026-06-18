@@ -2,6 +2,7 @@ package dev.ide.model.impl
 
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
+import dev.ide.model.DependencyScope
 import dev.ide.model.Facet
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModifiableModule
@@ -175,8 +176,48 @@ internal class ModuleBuilder(
 
     override fun addSourceSet(template: SourceSetTemplate) {
         val roots = template.roots.map { (dir, roles): Map.Entry<String, Set<ContentRole>> -> ContentRootData(dir, roles) }
-        sourceSets.add(SourceSetData(template.name, template.scope, roots))
+        val idx = sourceSets.indexOfFirst { it.name == template.name }
+        if (idx >= 0) {
+            // Merge into the existing set rather than producing a duplicate SourceSetData.
+            roots.forEach { mergeRoot(idx, it.dirRelPath, it.roles) }
+        } else {
+            sourceSets.add(SourceSetData(template.name, template.scope, roots))
+        }
         sourceSetsChanged = true
+    }
+
+    override fun addContentRoot(sourceSetName: String, dirRelPath: String, roles: Set<ContentRole>) {
+        val idx = sourceSets.indexOfFirst { it.name == sourceSetName }
+        if (idx >= 0) {
+            mergeRoot(idx, dirRelPath, roles)
+        } else {
+            sourceSets.add(SourceSetData(sourceSetName, DependencyScope.IMPLEMENTATION, listOf(ContentRootData(dirRelPath, roles))))
+        }
+        sourceSetsChanged = true
+    }
+
+    override fun removeContentRoot(sourceSetName: String, dirRelPath: String) {
+        val idx = sourceSets.indexOfFirst { it.name == sourceSetName }
+        if (idx < 0) return
+        val ss = sourceSets[idx]
+        val remaining = ss.contentRoots.filterNot { it.dirRelPath == dirRelPath }
+        if (remaining.size != ss.contentRoots.size) {
+            sourceSets[idx] = ss.copy(contentRoots = remaining)
+            sourceSetsChanged = true
+        }
+    }
+
+    /** Append [dirRelPath] to the set at [idx], merging [roles] into a root with the same path if present. */
+    private fun mergeRoot(idx: Int, dirRelPath: String, roles: Set<ContentRole>) {
+        val ss = sourceSets[idx]
+        val existing = ss.contentRoots.indexOfFirst { it.dirRelPath == dirRelPath }
+        val roots = ss.contentRoots.toMutableList()
+        if (existing >= 0) {
+            roots[existing] = roots[existing].copy(roles = roots[existing].roles + roles)
+        } else {
+            roots.add(ContentRootData(dirRelPath, roles))
+        }
+        sourceSets[idx] = ss.copy(contentRoots = roots)
     }
 
     override fun <T : Facet> putFacet(facet: T) {

@@ -8,6 +8,7 @@ import com.android.tools.r8.DiagnosticsHandler
 import com.android.tools.r8.OutputMode
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.Executors
 
 /**
  * Dexes in-process by calling the D8 API directly (`com.android.tools.r8.D8`), the on-device path.
@@ -20,13 +21,13 @@ import java.nio.file.Path
  */
 class D8InProcessDexer : Dexer {
 
-    override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path): ToolResult =
-        run(inputs, emptyList(), androidJar, minApi, release, outDir, OutputMode.DexIndexed)
+    override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
+        run(inputs, emptyList(), androidJar, minApi, release, outDir, OutputMode.DexIndexed, threads)
 
-    override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path): ToolResult =
-        run(inputs, classpath, androidJar, minApi, release, outDir, OutputMode.DexFilePerClassFile)
+    override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
+        run(inputs, classpath, androidJar, minApi, release, outDir, OutputMode.DexFilePerClassFile, threads)
 
-    private fun run(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, mode: OutputMode): ToolResult {
+    private fun run(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, mode: OutputMode, threads: Int): ToolResult {
         Files.createDirectories(outDir)
         val programs = inputs.filter { Files.exists(it) }
         if (programs.isEmpty()) return ToolResult.fail("no class inputs to dex")
@@ -52,7 +53,15 @@ class D8InProcessDexer : Dexer {
             if (mode == OutputMode.DexFilePerClassFile) builder.setIntermediate(true)
             classpath.filter { Files.exists(it) }.takeIf { it.isNotEmpty() }?.let { builder.addClasspathFiles(it) }
             if (Files.exists(androidJar)) builder.addLibraryFiles(androidJar)
-            D8.run(builder.build())
+            val command = builder.build()
+            // Bound D8's internal worker pool when the dex pipeline runs many invocations in parallel (the
+            // builder has no setThreadCount on this r8 version, so cap via the executor overload instead).
+            if (threads > 0) {
+                val pool = Executors.newFixedThreadPool(threads)
+                try { D8.run(command, pool) } finally { pool.shutdown() }
+            } else {
+                D8.run(command)
+            }
             val role = if (mode == OutputMode.DexFilePerClassFile) "archived" else "dexed"
             val summary = buildList {
                 add("D8 (in-process) $role ${programs.size} input(s) -> ${outDir.fileName}")

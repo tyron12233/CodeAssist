@@ -32,12 +32,20 @@ jdt-ecj = { module = "org.eclipse.jdt:ecj", version.ref = "jdt" }
 # signatures (extensions, properties, default args, nullability). Both track the Kotlin version.
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
 kotlin-metadata-jvm = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", version.ref = "kotlin" }
+# The Jetpack Compose kotlinc compiler plugin (ships with Kotlin since 2.0, so version.ref = `kotlin`).
+# Fed to the in-process K2JVMCompiler via `-Xplugin` when a module depends on the Compose runtime, so a real
+# @Composable build emits the plugin-transformed bytecode. Bundled as a lang-kotlin resource jar (for the
+# service descriptor + desktop class-load) AND dexed into :ide-android (so its registrar resolves on ART).
+kotlin-compose-compiler-plugin = { module = "org.jetbrains.kotlin:kotlin-compose-compiler-plugin-embeddable", version.ref = "kotlin" }
 # The Kotlin standard library JAR, bundled as an :ide-android asset so the on-device K2JVMCompiler spike has
 # stdlib on its compile classpath (the dexed app classes aren't usable as a -classpath input). Tracks `kotlin`.
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 # gnu.trove.* — IntelliJ-core (and thus the embedded Kotlin compiler) references it un-relocated but does
 # not bundle it; dexed into :ide-android so the on-device compiler resolves it.
 trove4j = { module = "org.jetbrains.intellij.deps:trove4j", version.ref = "trove4j" }
+# Compose Multiplatform runtime (JVM/desktop variant), used as a test-only compile classpath so the
+# KotlinJvmCompiler @Composable-transform test has the real `androidx.compose.runtime.*` to compile against.
+compose-runtime-desktop = { module = "org.jetbrains.compose.runtime:runtime-desktop", version.ref = "compose" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-core = { module = "androidx.core:core", version.ref = "androidxCore" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }

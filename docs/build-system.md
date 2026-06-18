@@ -65,6 +65,22 @@ containing `.kt`. Kotlin emits to a sibling classes directory that joins the Jav
 the jar/run classpath, while Kotlin is fed the module's `.java` for resolution — interop in both
 directions. Incremental compilation holds across edits.
 
+### Jetpack Compose
+
+Compose code can't be compiled like ordinary Kotlin: the Compose compiler plugin rewrites every
+`@Composable` function (threading a synthetic `Composer` + `$changed`/`$default` ints, wrapping bodies in
+restart groups). Without it the emitted bytecode is unusable at runtime. So the in-process K2 compiler
+(`KotlinJvmCompiler`) takes a generic *compiler-plugin* input — plugin classpaths + `-P` options — and the
+host applies the Compose plugin to any module that depends on the Compose runtime (detected by
+`androidx.compose.runtime.Composable` on the compile classpath). The plugin jar is bundled as a resource
+(`ComposeCompilerPlugin`), the same way the Kotlin stdlib is.
+
+On ART the plugin's `ComposePluginRegistrar` is also dexed into the app: kotlinc reads the plugin's
+`META-INF/services` descriptor from the jar but resolves the registrar *class* through parent delegation to
+the app classloader, since a jar's bytecode can't be defined at runtime on ART — the same arrangement that
+lets the bundled compiler itself run on device. (Note: this is distinct from the on-device Compose
+*interpreter* used for live `@Preview`, which doesn't compile user code — see `docs/compose-interpreter.md`.)
+
 ## The native Android pipeline
 
 The Android build expresses the APK build as an incremental task DAG, faithful to the Android Gradle
@@ -76,13 +92,32 @@ mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compi
 ```
 
 - **Resources.** A real `mergeResources` folds dependency library, AAR, and app resources; aapt2
-  compiles and links them and emits the R class.
+  compiles and links them and emits the R class. `values` resources are merged **by entry** — each
+  `<resources>` child keyed by (qualifier, tag, type, name), last source wins — so a resource that arrives
+  from more than one source (the same library reached through two cache paths, a wrapper AAR plus the AAR it
+  forwards to) collapses to one definition instead of reaching `aapt2 link` as a conflict.
 - **Dexing.** One dex-builder task archives three scopes (project / sub-module / external) into
   per-class dex archives. The project scope is per-class-file incremental (only changed classes
   re-dex, with the unchanged ones as the desugaring classpath); sub-module and external scopes are
   per-jar content-hash buckets (an unchanged library is reused). Scope merges run only when their
   scope changed. `minSdk ≥ 21` uses native multidex; below that, a single merge produces one
-  `classes.dex`.
+  `classes.dex`. Library jars are dexed **in parallel** (a worker pool sized from cores and free heap,
+  with each D8 invocation's thread count capped so `workers × threads` doesn't oversubscribe — small,
+  memory-safe fan-out on a phone; wide on a desktop), reusing three tiers before doing any work: the
+  module's own bucket (unchanged since last build), a **shared cross-project content-addressed cache**
+  (so a given AndroidX/Compose jar is dexed once per machine, not once per project), then D8. Jar content
+  hashes are themselves cached by path+size+mtime so unchanged libraries aren't re-read each build.
+  Each library is dexed against the **rest of the library universe as a desugaring classpath** (D8
+  `--classpath`, the jar itself excluded), so D8 can resolve the interface hierarchies that default/static
+  interface-method desugaring needs — eliminating the "Type … not found, required for … desugaring"
+  warnings. The shared cache key folds a digest of that whole library universe, so a cached bucket is only
+  reused under an identical desugaring classpath; the app's own (project) classes are kept out of the
+  universe, so an app edit never invalidates a library bucket. The key also carries a `DEX_CACHE_FORMAT`
+  stamp that must be bumped whenever the bundled r8 version changes.
+- **In-process memory budget.** On a phone every in-process D8/R8 invocation runs in the IDE's own small,
+  shared ART heap, so OOM — not cores — is the limit. The worker/thread plan is sized from `maxMemory()`
+  (collapsing to a single worker on a tight heap), R8 (the heaviest whole-program pass) runs with a capped
+  worker pool, and the on-device launcher requests `android:largeHeap` to raise the per-app ceiling.
 - **Library-aware.** JAR and AAR dependencies are routed: code to compile/dex, AAR resources into the
   merged app R, AAR assets and JNI into the package.
 - **Decoupled library R.** Each library module gets a non-final R from its own resources (kept out of

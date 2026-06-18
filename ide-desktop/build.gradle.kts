@@ -15,7 +15,15 @@ dependencies {
     // Compose-window main() on top. The framework impls come transitively from :ide-core.
     implementation(project(":ide-core"))
 
+    // The Compose @Preview render surface (the interpreter's render half): on desktop it drives Compose for
+    // Desktop, so a @Preview using standard material/foundation composables renders live (the same bridge
+    // :ide-android uses on device). Re-exports :interp-core's ResolvedFunction, which the host consumes.
+    implementation(project(":interp-compose"))
+
     implementation(compose.desktop.currentOs)
+    // material3 for the preview host's progress/empty-state chrome (compose.desktop.currentOs bundles M2;
+    // :ide-ui keeps material3 as a non-transitive `implementation`).
+    implementation(compose.material3)
     implementation(libs.kotlinx.coroutines.swing) // Dispatchers.Main for the Compose/AWT thread
 }
 

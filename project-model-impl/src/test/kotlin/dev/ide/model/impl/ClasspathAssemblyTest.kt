@@ -70,6 +70,43 @@ class ClasspathAssemblyTest {
     }
 
     @Test
+    fun crossModuleVersionConflictKeepsOnlyTheNewestLibraryVersion() = withWorkspace { platform, store ->
+        val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+        // Two libraries' closures each carry a different version of the SAME artifact at its Maven-layout path
+        // (`…/<name>/<version>/<name>-<version>.jar`) — exactly how independent resolution stores them. The
+        // conflicting jar is a *transitive* member named under a different primary, so only the path identifies it.
+        val cache = "caches/resolved-deps/androidx/activity/activity"
+        store.workspace.libraryTable.create("com.example:old-feature:1.0").apply {
+            kind = LibraryKind.JAR
+            addClassesRoot(store.vfs.fileFor(store.rootPath.resolve("$cache/1.7.0/activity-1.7.0.jar")))
+            commit()
+        }
+        store.workspace.libraryTable.create("com.example:new-feature:1.0").apply {
+            kind = LibraryKind.JAR
+            addClassesRoot(store.vfs.fileFor(store.rootPath.resolve("$cache/1.8.0/activity-1.8.0.jar")))
+            commit()
+        }
+        store.workspace.beginModification().apply { addProject("app", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("old", javaLib).apply {
+                addDependency(LibraryDependency(LibraryRef("com.example:old-feature:1.0"), DependencyScope.API, exported = true))
+            }
+            addModule("new", javaLib).apply {
+                addDependency(LibraryDependency(LibraryRef("com.example:new-feature:1.0"), DependencyScope.API, exported = true))
+            }
+            addModule("consumer", javaLib).apply {
+                addDependency(ModuleDependency(ModuleId("old"), DependencyScope.API, exported = true))
+                addDependency(ModuleDependency(ModuleId("new"), DependencyScope.API, exported = true))
+            }
+            commit()
+        }
+        val consumer = store.workspace.projects.single().modules.first { it.name == "consumer" }
+        val runtime = consumer.classpath(DependencyScope.RUNTIME_ONLY).entries.map { it.root.path }
+        assertTrue(runtime.any { it.contains("activity/1.8.0/activity-1.8.0.jar") }, "newest version must win: $runtime")
+        assertTrue(runtime.none { it.contains("activity/1.7.0/activity-1.7.0.jar") }, "superseded version must be dropped: $runtime")
+    }
+
+    @Test
     fun fingerprintIsDeterministicAndDistinguishesClasspaths() = withWorkspace { platform, store ->
         build(store, platform)
         val consumer = store.consumer()

@@ -37,20 +37,26 @@ class HttpArtifactFetcher(
                 setRequestProperty("User-Agent", userAgent)
                 setRequestProperty("Accept", "*/*")
             }
-            try {
-                val code = conn.responseCode
-                when {
-                    code == HttpURLConnection.HTTP_OK -> return conn.inputStream.use { it.readBytes() }
-                    code == HttpURLConnection.HTTP_NOT_FOUND || code == HttpURLConnection.HTTP_FORBIDDEN -> return null
-                    code in REDIRECT_CODES -> {
-                        val location = conn.getHeaderField("Location") ?: return null
-                        current = if (location.startsWith("http")) location else URL(URL(current), location).toString()
-                        return@repeat
-                    }
-                    else -> throw java.io.IOException("GET $current failed: HTTP $code")
+            // NB: never `disconnect()` — draining the body and letting the stream close returns the socket
+            // to the JVM's keep-alive pool, so the many parallel fetches against one repo reuse connections
+            // instead of paying a fresh TCP+TLS handshake each time. disconnect() would defeat that pooling.
+            val code = conn.responseCode
+            when {
+                code == HttpURLConnection.HTTP_OK -> return conn.inputStream.use { it.readBytes() }
+                code == HttpURLConnection.HTTP_NOT_FOUND || code == HttpURLConnection.HTTP_FORBIDDEN -> {
+                    conn.errorStream?.use { it.readBytes() }   // drain so the connection can be reused
+                    return null
                 }
-            } finally {
-                conn.disconnect()
+                code in REDIRECT_CODES -> {
+                    conn.errorStream?.use { it.readBytes() }
+                    val location = conn.getHeaderField("Location") ?: return null
+                    current = if (location.startsWith("http")) location else URL(URL(current), location).toString()
+                    return@repeat
+                }
+                else -> {
+                    conn.errorStream?.use { it.readBytes() }
+                    throw java.io.IOException("GET $current failed: HTTP $code")
+                }
             }
         }
         throw java.io.IOException("too many redirects for $url")

@@ -114,29 +114,29 @@ internal class ModuleImpl(
      * deduplicated, and content-hashed (the fingerprint keys both the build cache and analyzer caches).
      */
     override fun classpath(scope: DependencyScope, transitive: Boolean): ClasspathSnapshot {
-        val out = LinkedHashMap<String, ClasspathEntry>()
+        val items = ArrayList<ClasspathEntry>()
         val visitedModules = hashSetOf(data.id)
         for (entry in data.dependencies) {
-            if (directInPhase(scope, entry.scope)) addEntry(entry, scope, transitive, out, visitedModules)
+            if (directInPhase(scope, entry.scope)) addEntry(entry, scope, transitive, items, visitedModules)
         }
-        return ClasspathSnapshotImpl(out.values.toList())
+        return ClasspathSnapshotImpl(resolveVersionConflicts(items))
     }
 
     private fun addEntry(
         entry: OrderEntry,
         scope: DependencyScope,
         transitive: Boolean,
-        out: MutableMap<String, ClasspathEntry>,
+        out: MutableList<ClasspathEntry>,
         visited: MutableSet<String>,
     ) {
         when (entry) {
-            is LibraryDependency -> resolveLibrary(entry.library)?.classesRoots?.forEach { put(out, it, ClasspathEntryKind.LIBRARY) }
+            is LibraryDependency -> resolveLibrary(entry.library)?.classesRoots?.forEach { out.add(ClasspathEntry(it, ClasspathEntryKind.LIBRARY)) }
             is PlatformDependency -> { /* a BOM is a version source only — no classpath artifact */ }
-            is SdkDependency -> resolveSdk(entry.sdk)?.bootClasspath?.forEach { put(out, it, ClasspathEntryKind.SDK_BOOTCLASSPATH) }
+            is SdkDependency -> resolveSdk(entry.sdk)?.bootClasspath?.forEach { out.add(ClasspathEntry(it, ClasspathEntryKind.SDK_BOOTCLASSPATH)) }
             is ModuleDependency -> {
                 val target = findModule(entry.target) ?: return
                 if (!visited.add(target.module.id)) return
-                put(out, moduleOutput(target.project, target.module), ClasspathEntryKind.MODULE_OUTPUT)
+                out.add(ClasspathEntry(moduleOutput(target.project, target.module), ClasspathEntryKind.MODULE_OUTPUT))
                 if (transitive) {
                     for (te in target.module.dependencies) {
                         if (propagates(scope, te)) addEntry(te, scope, transitive, out, visited)
@@ -144,6 +144,63 @@ internal class ModuleImpl(
                 }
             }
         }
+    }
+
+    /**
+     * Collapse the assembled classpath to one version per Maven artifact, then dedup by path. A single
+     * `LibraryDependency` carries its whole resolved transitive closure as jars, and the modules across a
+     * build are resolved independently — so two of them can drag in different versions of the same artifact
+     * (e.g. `androidx.activity:activity` at 1.7.0 via one library's closure, 1.8.0 via another's). Two copies
+     * on the compile path are merely wasteful, but two dex archives of the same class are FATAL to the Android
+     * dex merge. Mirror Gradle/Maven "newest wins": for an artifact seen at more than one version, keep only
+     * the newest. The version is read from the jar's Maven-layout path (`…/<name>/<version>/<name>-<version>.jar`,
+     * the resolver cache); entries whose path isn't Maven-shaped (local jars, module outputs, the SDK) carry no
+     * coordinate and pass through untouched.
+     */
+    private fun resolveVersionConflicts(items: List<ClasspathEntry>): List<ClasspathEntry> {
+        val winner = HashMap<String, String>()
+        for (e in items) {
+            val c = mavenCoordinateOf(e.root.path) ?: continue
+            val cur = winner[c.artifactKey]
+            if (cur == null || isNewer(c.version, cur)) winner[c.artifactKey] = c.version
+        }
+        val out = LinkedHashMap<String, ClasspathEntry>()
+        for (e in items) {
+            val c = mavenCoordinateOf(e.root.path)
+            if (c != null && winner[c.artifactKey] != c.version) continue   // a superseded version of this artifact — drop it
+            out.putIfAbsent("${e.kind.name}|${e.root.path}", ClasspathEntry(e.root, e.kind))
+        }
+        return out.values.toList()
+    }
+
+    /**
+     * Read a `(artifactKey, version)` from a jar path laid out the way the dependency resolver writes its
+     * cache — Maven repository layout: `<base>/<group/as/path>/<name>/<version>/<name>-<version>[-cls].jar`, or
+     * an exploded AAR's `…/<name>/<version>/<name>-<version>-exploded/classes.jar`. The *artifact directory*
+     * (`<base>/…/<name>`) is identical for every version of one `group:name`, so its path is a stable conflict
+     * key without needing to recover the group string; the version is its child directory. Returns null for any
+     * path that doesn't match (local jars, module output dirs, the SDK) so those are never wrongly collapsed.
+     */
+    private fun mavenCoordinateOf(path: String): MavenArtifact? {
+        val p = runCatching { java.nio.file.Paths.get(path) }.getOrNull() ?: return null
+        val file = p.fileName?.toString() ?: return null
+        if (!file.endsWith(".jar", ignoreCase = true)) return null
+        val parent = p.parent ?: return null
+        val versionDir: java.nio.file.Path
+        if (file.equals("classes.jar", ignoreCase = true) && (parent.fileName?.toString()?.endsWith("-exploded") == true)) {
+            versionDir = parent.parent ?: return null   // …/<version>/<name>-<version>-exploded/classes.jar
+        } else {
+            versionDir = parent                          // …/<version>/<name>-<version>.jar
+        }
+        val artifactDir = versionDir.parent ?: return null
+        val version = versionDir.fileName?.toString() ?: return null
+        val name = artifactDir.fileName?.toString() ?: return null
+        // Confirm the Maven naming convention so an arbitrary `a/b/c.jar` tree isn't misread as a coordinate.
+        val matchesConvention = if (file.equals("classes.jar", ignoreCase = true))
+            parent.fileName?.toString() == "$name-$version-exploded"
+        else file.removeSuffix(".jar").startsWith("$name-$version")
+        if (!matchesConvention) return null
+        return MavenArtifact(artifactDir.toString(), version)
     }
 
     /** Which of this module's own direct entries belong on the requested classpath. */
@@ -159,8 +216,29 @@ internal class ModuleImpl(
         else -> entry.exported // compile/test: only `api` (exported) propagates
     }
 
-    private fun put(out: MutableMap<String, ClasspathEntry>, root: VirtualFile, kind: ClasspathEntryKind) {
-        out.putIfAbsent("${kind.name}|${root.path}", ClasspathEntry(root, kind))
+    /**
+     * Coarse "is [a] a newer version than [b]" — segment-wise numeric compare, a numeric segment outranking a
+     * qualifier so a release beats a pre-release with the same prefix (`1.8.0` > `1.8.0-alpha`). The dependency
+     * resolver applies precise Maven ordering when it picks a version; this only has to break a cross-module
+     * tie between two versions that were each already deemed valid, so an approximation is sufficient.
+     */
+    private fun isNewer(a: String, b: String): Boolean {
+        val pa = a.split('.', '-', '_'); val pb = b.split('.', '-', '_')
+        for (i in 0 until maxOf(pa.size, pb.size)) {
+            val x = pa.getOrNull(i); val y = pb.getOrNull(i)
+            if (x == y) continue
+            if (x == null) return y!!.toIntOrNull() == null   // a is the shorter (release) form; newer iff b's extra is a qualifier
+            if (y == null) return x.toIntOrNull() != null     // a has an extra segment; newer iff it's numeric, older iff a qualifier
+            val xi = x.toIntOrNull(); val yi = y.toIntOrNull()
+            val cmp = when {
+                xi != null && yi != null -> xi.compareTo(yi)
+                xi != null -> 1                                // a numeric segment outranks b's qualifier
+                yi != null -> -1
+                else -> x.compareTo(y)
+            }
+            if (cmp != 0) return cmp > 0
+        }
+        return false
     }
 
     private fun findModule(id: ModuleId): ResolvedModule? =
@@ -230,6 +308,12 @@ internal class FacetContainerImpl(
 
     override val all: List<Facet> get() = facets.mapNotNull { codecs.decode(it) }
 }
+
+/**
+ * A Maven artifact recovered from a classpath jar's path: [artifactKey] is the artifact directory (stable
+ * across versions of one `group:name`), [version] its per-version child — the inputs to "newest wins".
+ */
+private class MavenArtifact(val artifactKey: String, val version: String)
 
 internal class ClasspathSnapshotImpl(override val entries: List<ClasspathEntry>) : ClasspathSnapshot {
     override fun fingerprint(): ContentHash {

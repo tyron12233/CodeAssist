@@ -39,6 +39,7 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.ui)
             implementation(compose.preview) // the @Preview annotation (BlockEditor.kt previews)
+            implementation(compose.components.resources) // bundled fonts (JetBrains Mono) via composeResources/
             implementation(libs.kotlinx.coroutines.core)
         }
 
@@ -74,4 +75,12 @@ kotlin {
             }
         }
     }
+}
+
+// Generated accessor for the bundled fonts (JetBrains Mono lives under commonMain/composeResources/font/).
+// Pinned package + non-public so it stays an internal `dev.ide.ui` detail the theme reads.
+compose.resources {
+    publicResClass = false
+    packageOfResClass = "dev.ide.ui.generated.resources"
+    generateResClass = always
 }

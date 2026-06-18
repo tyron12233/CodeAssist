@@ -10,10 +10,19 @@ import dev.ide.deps.VersionConflict
 import dev.ide.model.Coordinate
 import dev.ide.platform.ProgressReporter
 import dev.ide.vfs.VirtualFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.Optional
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.writeText
@@ -34,7 +43,17 @@ class MavenDependencyResolver(
     private val fileFor: (Path) -> VirtualFile,
     private val fetcher: ArtifactFetcher = HttpArtifactFetcher(),
     private val searchEndpoint: String = MAVEN_CENTRAL_SEARCH,
+    /** Max concurrent network fetches (POM metadata + artifact downloads). */
+    private val concurrency: Int = 12,
 ) : DependencyResolver {
+
+    /**
+     * Effective-POM cache, keyed by coordinate and shared across `resolve` calls (released POMs are
+     * immutable, so this is safe). A single Compose graph re-fetches the same AndroidX parent POMs and
+     * the Compose BOM hundreds of times; memoizing the *effective* POM collapses that to one fetch+parse
+     * each. `Optional.empty()` records a genuinely-absent POM so we don't keep re-probing the network.
+     */
+    private val effCache = ConcurrentHashMap<Coordinate, Optional<EffPom>>()
 
     override suspend fun resolve(
         coordinates: List<Coordinate>,
@@ -44,7 +63,6 @@ class MavenDependencyResolver(
         platforms: List<Coordinate>,
     ): ResolutionResult {
         val repos = repositories.ifEmpty { DEFAULT_REPOSITORIES }
-        val pomMemo = HashMap<Coordinate, EffPom?>()
 
         val seenVersions = LinkedHashMap<GA, MutableSet<String>>()  // every requested version, per artifact
         val directVersions = HashMap<GA, String>()                  // the version the user declared (for PINNED)
@@ -85,60 +103,102 @@ class MavenDependencyResolver(
             }
         }
 
-        var processed = 0
-        while (queue.isNotEmpty() && chosen.size < MAX_NODES) {
-            progress.checkCanceled()
-            val req = queue.removeFirst()
-            val ga = req.coord.ga
-            seenVersions.getOrPut(ga) { linkedSetOf() }.add(req.coord.version)
-            edges.getOrPut(ga) { linkedSetOf() }
+        // --- transitive walk ---------------------------------------------------------------------
+        // BFS, but processed one *frontier wave* at a time: all graph bookkeeping (version pick, edges,
+        // exclusions, the `walked` dedup) stays single-threaded — only the blocking POM fetch/parse of a
+        // wave's coordinates runs in parallel. Folding the whole frontier's versions before picking is
+        // equivalent to (and on diamonds, slightly tighter than) the old node-at-a-time walk: a GA still
+        // resolves to the newest version requested, and the first req to reach a chosen (ga,version) owns
+        // its exclusions — so resolution outcomes are unchanged, just far less wall-clock on big graphs.
+        val processed = AtomicInteger(0)
+        coroutineScope {
+            val sem = Semaphore(concurrency)
+            while (queue.isNotEmpty() && chosen.size < MAX_NODES) {
+                progress.checkCanceled()
+                val frontier = ArrayList<Req>(queue.size)
+                while (queue.isNotEmpty()) frontier += queue.removeFirst()
 
-            val chosenCoord = Coordinate(ga.group, ga.name, pick(ga))
-            chosen[ga] = chosenCoord.version
-            if (chosenCoord in walked) continue
-            walked += chosenCoord
+                // Record every version this frontier requests before picking, so a wave-mate's newer
+                // version wins immediately (Maven newest-wins) rather than being walked redundantly.
+                for (req in frontier) {
+                    val ga = req.coord.ga
+                    seenVersions.getOrPut(ga) { linkedSetOf() }.add(req.coord.version)
+                    edges.getOrPut(ga) { linkedSetOf() }
+                }
 
-            val eff = pomMemo.getOrPut(chosenCoord) { loadEffective(chosenCoord, repos, HashSet()) }
-            if (eff == null) {
-                if (req.direct) unresolved += req.coord
-                continue
+                // Pick winners; collect the not-yet-walked coordinates (first req to reach each owns it).
+                val toWalk = LinkedHashMap<Coordinate, Req>()
+                for (req in frontier) {
+                    if (chosen.size >= MAX_NODES) break
+                    val ga = req.coord.ga
+                    val chosenCoord = Coordinate(ga.group, ga.name, pick(ga))
+                    chosen[ga] = chosenCoord.version
+                    if (chosenCoord in walked) continue
+                    walked += chosenCoord
+                    toWalk.putIfAbsent(chosenCoord, req)
+                }
+                if (toWalk.isEmpty()) continue
+
+                // Fetch + parse this wave's effective POMs in parallel (the actual bottleneck).
+                val loaded = toWalk.entries.map { (coord, req) ->
+                    async(Dispatchers.IO) { sem.withPermit { Triple(coord, req, loadEffective(coord, repos, HashSet())) } }
+                }.awaitAll()
+
+                // Fold the results back into the graph single-threaded, in frontier order.
+                for ((coord, req, eff) in loaded) {
+                    val ga = coord.ga
+                    if (eff == null) {
+                        if (req.direct) unresolved += req.coord
+                        continue
+                    }
+                    packagingByGa[ga] = eff.packaging
+                    for (d in eff.dependencies) {
+                        if (!d.isTransitivelyIncluded()) continue      // drop test/provided/system/optional
+                        val childGa = GA(d.groupId, d.artifactId)
+                        // A versionless transitive (one whose own POM left the version to dependencyManagement
+                        // it didn't carry) is placeable iff a platform BOM manages it.
+                        val version = d.version?.ifBlank { null } ?: platformManaged[childGa] ?: continue
+                        if (childGa.excludedBy(req.exclusions)) continue
+                        edges.getOrPut(ga) { linkedSetOf() }.add(childGa)
+                        if (d.type.equals("aar", ignoreCase = true)) packagingByGa.putIfAbsent(childGa, "aar")
+                        queue.add(Req(Coordinate(d.groupId, d.artifactId, version), req.exclusions + d.exclusions, direct = false))
+                    }
+                    if (processed.incrementAndGet() % 4 == 0) progress.report(-1.0, "Resolving ${coord.name}…")
+                }
             }
-            packagingByGa[ga] = eff.packaging
-            for (d in eff.dependencies) {
-                if (!d.isTransitivelyIncluded()) continue          // drop test/provided/system/optional
-                val childGa = GA(d.groupId, d.artifactId)
-                // A versionless transitive (one whose own POM left the version to dependencyManagement it
-                // didn't carry) is placeable iff a platform BOM manages it.
-                val version = d.version?.ifBlank { null } ?: platformManaged[childGa] ?: continue
-                if (childGa.excludedBy(req.exclusions)) continue
-                edges.getOrPut(ga) { linkedSetOf() }.add(childGa)
-                if (d.type.equals("aar", ignoreCase = true)) packagingByGa.putIfAbsent(childGa, "aar")
-                queue.add(Req(Coordinate(d.groupId, d.artifactId, version), req.exclusions + d.exclusions, direct = false))
-            }
-            if (++processed % 4 == 0) progress.report(-1.0, "Resolving ${req.coord.name}…")
         }
 
-        // --- download + assemble results -------------------------------------------------------
-        val resolved = ArrayList<ResolvedArtifact>()
+        // --- download + assemble results ---------------------------------------------------------
+        // Every chosen artifact is independent, so download + AAR-explode them in parallel too.
         val total = chosen.size.coerceAtLeast(1)
-        chosen.entries.forEachIndexed { i, (ga, ver) ->
-            progress.checkCanceled()
-            val coord = Coordinate(ga.group, ga.name, ver)
-            val packaging = packagingByGa[ga] ?: "jar"
-            if (packaging.equals("pom", ignoreCase = true)) return@forEachIndexed   // BOM/metadata-only
-            val kind = if (packaging.equals("aar", ignoreCase = true)) ArtifactKind.AAR else ArtifactKind.JAR
-            val ext = if (kind == ArtifactKind.AAR) "aar" else "jar"
+        val downloaded = AtomicInteger(0)
+        val outcomes = coroutineScope {
+            val sem = Semaphore(concurrency)
+            chosen.entries.map { (ga, ver) ->
+                async(Dispatchers.IO) {
+                    sem.withPermit {
+                        progress.checkCanceled()
+                        val coord = Coordinate(ga.group, ga.name, ver)
+                        val packaging = packagingByGa[ga] ?: "jar"
+                        if (packaging.equals("pom", ignoreCase = true)) return@withPermit null  // BOM/metadata-only
+                        val kind = if (packaging.equals("aar", ignoreCase = true)) ArtifactKind.AAR else ArtifactKind.JAR
+                        val ext = if (kind == ArtifactKind.AAR) "aar" else "jar"
 
-            val artifact = fetchArtifact(coord, ext, repos)
-            if (artifact == null) {
-                if (ga in directGAs) unresolved += coord
-                return@forEachIndexed
-            }
-            val classesRoot = if (kind == ArtifactKind.AAR) fileFor(extractClassesJar(coord, artifact)) else fileFor(artifact)
-            val sources = fetchArtifact(coord, "jar", repos, classifier = "sources")?.let { fileFor(it) }
-            val dependsOn = edges[ga].orEmpty().mapNotNull { c -> chosen[c]?.let { Coordinate(c.group, c.name, it) } }
-            resolved += ResolvedArtifact(coord, kind, classesRoot, sources, dependsOn)
-            progress.report((i + 1).toDouble() / total, "Downloaded ${coord.name}")
+                        val artifact = fetchArtifact(coord, ext, repos)
+                        if (artifact == null) return@withPermit DownloadOutcome(coord, null, ga in directGAs)
+                        val classesRoot = if (kind == ArtifactKind.AAR) fileFor(extractClassesJar(coord, artifact)) else fileFor(artifact)
+                        val sources = fetchArtifact(coord, "jar", repos, classifier = "sources")?.let { fileFor(it) }
+                        val dependsOn = edges[ga].orEmpty().mapNotNull { c -> chosen[c]?.let { Coordinate(c.group, c.name, it) } }
+                        progress.report(downloaded.incrementAndGet().toDouble() / total, "Downloaded ${coord.name}")
+                        DownloadOutcome(coord, ResolvedArtifact(coord, kind, classesRoot, sources, dependsOn), false)
+                    }
+                }
+            }.awaitAll()
+        }
+        val resolved = ArrayList<ResolvedArtifact>()
+        for (o in outcomes) {
+            if (o == null) continue
+            if (o.artifact != null) resolved += o.artifact else if (o.directUnresolved) unresolved += o.coord
         }
 
         val conflicts = seenVersions
@@ -175,48 +235,72 @@ class MavenDependencyResolver(
     )
 
     private fun loadEffective(coord: Coordinate, repos: List<Repository>, visiting: MutableSet<Coordinate>): EffPom? {
-        if (!visiting.add(coord)) return null   // guard against parent/import cycles
-        val raw = parseRawPom(coord, repos) ?: return null.also { visiting.remove(coord) }
+        effCache[coord]?.let { return it.orElse(null) }   // immutable released POMs → safe to memoize
+        if (!visiting.add(coord)) return null   // parent/import cycle — return without caching the broken result
+        try {
+            val raw = parseRawPom(coord, repos) ?: run { effCache[coord] = Optional.empty(); return null }
 
-        val props = LinkedHashMap<String, String>()
-        val managed = LinkedHashMap<GA, String>()
+            val props = LinkedHashMap<String, String>()
+            val managed = LinkedHashMap<GA, String>()
 
-        raw.parent?.let { parent ->
-            loadEffective(parent, repos, visiting)?.let { p ->
-                props.putAll(p.properties)
-                managed.putAll(p.managed)
+            raw.parent?.let { parent ->
+                loadEffective(parent, repos, visiting)?.let { p ->
+                    props.putAll(p.properties)
+                    managed.putAll(p.managed)
+                }
             }
-        }
-        props.putAll(raw.properties)
+            props.putAll(raw.properties)
 
-        for (m in raw.managed) {
-            val g = resolveProperties(m.ga.group, props, coord) ?: continue
-            val a = resolveProperties(m.ga.name, props, coord) ?: continue
-            val v = resolveProperties(m.version, props, coord)
-            if (m.scope.equals("import", ignoreCase = true) && v != null) {
-                loadEffective(Coordinate(g, a, v), repos, visiting)?.managed?.forEach { (ga, ver) -> managed.putIfAbsent(ga, ver) }
-            } else if (v != null) {
-                managed[GA(g, a)] = v   // local management overrides inherited
+            for (m in raw.managed) {
+                val g = resolveProperties(m.ga.group, props, coord) ?: continue
+                val a = resolveProperties(m.ga.name, props, coord) ?: continue
+                val v = normalizeVersion(resolveProperties(m.version, props, coord))
+                if (m.scope.equals("import", ignoreCase = true) && v != null) {
+                    loadEffective(Coordinate(g, a, v), repos, visiting)?.managed?.forEach { (ga, ver) -> managed.putIfAbsent(ga, ver) }
+                } else if (v != null) {
+                    managed[GA(g, a)] = v   // local management overrides inherited
+                }
             }
-        }
 
-        val deps = raw.dependencies.mapNotNull { d ->
-            val g = resolveProperties(d.groupId, props, coord) ?: return@mapNotNull null
-            val a = resolveProperties(d.artifactId, props, coord) ?: return@mapNotNull null
-            val v = resolveProperties(d.version, props, coord) ?: managed[GA(g, a)]
-            d.copy(
-                groupId = g,
-                artifactId = a,
-                version = v,
-                type = resolveProperties(d.type, props, coord) ?: "jar",
-            )
+            val deps = raw.dependencies.mapNotNull { d ->
+                val g = resolveProperties(d.groupId, props, coord) ?: return@mapNotNull null
+                val a = resolveProperties(d.artifactId, props, coord) ?: return@mapNotNull null
+                val v = normalizeVersion(resolveProperties(d.version, props, coord)) ?: managed[GA(g, a)]
+                d.copy(
+                    groupId = g,
+                    artifactId = a,
+                    version = v,
+                    type = resolveProperties(d.type, props, coord) ?: "jar",
+                )
+            }
+            val eff = EffPom(coord, raw.packaging, props, managed, deps)
+            effCache[coord] = Optional.of(eff)
+            return eff
+        } finally {
+            visiting.remove(coord)
         }
-        visiting.remove(coord)
-        return EffPom(coord, raw.packaging, props, managed, deps)
+    }
+
+    /**
+     * Reduce a Maven version *specification* to a single concrete version this resolver can fetch. A plain
+     * version (`1.9.3`) passes through. A range or hard-pin — AndroidX pins every same-group dependency as
+     * `[1.9.3]`, and others use `[a,b)` etc. — is collapsed: a single value (`[V]`) becomes `V`; a comma
+     * range yields its lower bound (else upper), a real version that conflict resolution can still bump.
+     * Without this, `[1.9.3]` is treated as a literal version, its POM URL 404s, and the whole subtree
+     * (e.g. `androidx.activity:activity`, which carries `ComponentActivity`) is silently dropped.
+     */
+    private fun normalizeVersion(raw: String?): String? {
+        val v = raw?.trim()?.ifBlank { null } ?: return null
+        if (v.first() != '[' && v.first() != '(') return v
+        val inner = v.trim('[', ']', '(', ')', ' ')
+        if (inner.isEmpty()) return null
+        if (!inner.contains(',')) return inner          // hard pin: [V]
+        val (lower, upper) = inner.split(',', limit = 2).let { it[0].trim() to it.getOrElse(1) { "" }.trim() }
+        return lower.ifBlank { upper.ifBlank { null } }
     }
 
     private fun parseRawPom(coord: Coordinate, repos: List<Repository>): RawPom? {
-        val bytes = fetchBytes(cache.relativePath(coord, "pom"), repos) ?: return null
+        val bytes = fetchBytes(cache.relativePath(coord, "pom"), reposFor(coord, repos)) ?: return null
         return runCatching { PomParser.parse(bytes) }.getOrNull()
     }
 
@@ -226,8 +310,22 @@ class MavenDependencyResolver(
     private fun fetchArtifact(coord: Coordinate, ext: String, repos: List<Repository>, classifier: String? = null): Path? {
         val rel = cache.relativePath(coord, ext, classifier)
         if (cache.exists(rel)) return cache.fileFor(rel)
-        val bytes = fetchBytes(rel, repos) ?: return null
+        val bytes = fetchBytes(rel, reposFor(coord, repos)) ?: return null
         return cache.write(rel, bytes)
+    }
+
+    /**
+     * Order [repos] by where [coord] most likely lives, so the first probe is usually a hit instead of a
+     * wasted 404. AndroidX / Google / Firebase artifacts only exist on Google Maven — trying Maven Central
+     * first for the whole Compose graph burns one round-trip per artifact. Stable: a non-Google coordinate
+     * keeps the caller's order. The fallthrough still tries every repo, so nothing becomes unresolvable.
+     */
+    private fun reposFor(coord: Coordinate, repos: List<Repository>): List<Repository> {
+        val g = coord.group
+        val googleHosted = g.startsWith("androidx.") || g.startsWith("com.android") ||
+            g.startsWith("com.google.android") || g.startsWith("com.google.firebase")
+        if (!googleHosted) return repos
+        return repos.sortedByDescending { it.url.contains("dl.google.com") }   // stable: Google repos move to front
     }
 
     /** Cache-first byte fetch of a Maven-layout [rel]ative path: try the disk store, then each repo. */
@@ -284,6 +382,9 @@ class MavenDependencyResolver(
     }
 
     private data class Req(val coord: Coordinate, val exclusions: Set<GA>, val direct: Boolean)
+
+    /** Result of one parallel download slot: a resolved artifact, or a direct coord that failed to fetch. */
+    private data class DownloadOutcome(val coord: Coordinate, val artifact: ResolvedArtifact?, val directUnresolved: Boolean)
 
     private companion object {
         const val MAX_NODES = 4000

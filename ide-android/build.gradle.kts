@@ -63,6 +63,26 @@ val bundleKotlinStdlibAsset = tasks.register<Copy>("bundleKotlinStdlibAsset") {
     rename { "kotlin-stdlib.jar" }
 }
 
+// --- Compose runtime asset (on-device Compose-compile spike) -------------------------------------
+// The Compose-on-ART spike (KotlinCompilerArtSpikeTest.composeCompilesOnArt) compiles a @Composable with
+// the Compose plugin and needs the `androidx.compose.runtime.*` shapes on its compile -classpath. The app's
+// own compose runtime is dexed (not a usable .jar input), so stage the JVM/desktop runtime JAR as an asset
+// (its class signatures are what the plugin's codegen resolves against — Android-specific bodies are
+// irrelevant to producing transformed .class). The Compose *plugin* jar itself is the lang-kotlin bundled
+// resource (`ComposeCompilerPlugin.jar()`), which works on device, so it needs no separate asset.
+val composeRuntimeArtifact: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { composeRuntimeArtifact(libs.compose.runtime.desktop) { isTransitive = false } }
+
+val bundleComposeRuntimeAsset = tasks.register<Copy>("bundleComposeRuntimeAsset") {
+    description = "Stage the Compose runtime JAR as an asset for the on-device Compose-compile spike."
+    from(composeRuntimeArtifact.elements.map { it.single().asFile })
+    into(layout.buildDirectory.dir("compose-runtime-asset"))
+    rename { "compose-runtime.jar" }
+}
+
 // --- kotlinc resources asset (extension-point descriptors for on-device K2) ----------------------
 // The K2 compiler's classes are dexed into the app, but IntelliJ-core boots its extension registry by
 // reading XML descriptors (META-INF/extensions/*.xml, plugin.xml, …) from a real filesystem path — a dex
@@ -102,6 +122,23 @@ val bundleKotlincResourcesAsset = tasks.register("bundleKotlincResourcesAsset") 
     }
 }
 
+// --- JetBrains Mono fonts as Compose-resource assets ----------------------------------------------
+// Compose Multiplatform's resource→Android-assets packaging isn't wired for :ide-ui's AGP-9
+// `com.android.kotlin.multiplatform.library` target: the generated `Res.font.*` accessors exist, but the
+// bundled JetBrains Mono .ttf files (in :ide-ui/src/commonMain/composeResources/font) are never copied into
+// the AAR/APK assets, so on device the loader can't find them and the editor falls back to the system
+// monospace. Stage them into the app's assets at the exact path the Compose resource runtime reads —
+// `composeResources/<resClass-package>/font/…` — so `Res.font.*` / rememberJetBrainsMono() resolve on device
+// with no code change. (Desktop gets these via the JVM resources route and is unaffected.)
+// NOTE: the `dev.ide.ui.generated.resources` segment must match :ide-ui's `packageOfResClass`.
+val bundleComposeFontsAsset = tasks.register<Copy>("bundleComposeFontsAsset") {
+    description = "Stage :ide-ui's JetBrains Mono compose-resource fonts into the APK assets (Android packaging gap)."
+    from(project(":ide-ui").layout.projectDirectory.dir("src/commonMain/composeResources/font")) {
+        include("*.ttf")
+    }
+    into(layout.buildDirectory.dir("compose-fonts-asset/composeResources/dev.ide.ui.generated.resources/font"))
+}
+
 android {
     namespace = "dev.ide.android"
     compileSdk = 36
@@ -127,6 +164,8 @@ android {
     // tasks write to; ordering is carried by the `preBuild.dependsOn(...)` below (same pattern as aapt2).
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("kotlin-stdlib-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("kotlinc-resources-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-runtime-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
 
     // Release signing, never committed. Resolution order per field: keystore.properties (gitignored,
     // alongside this build script) → Gradle property (-PRELEASE_*) → env var (RELEASE_*). With no keystore
@@ -161,6 +200,16 @@ android {
             // download size becomes a concern.
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
+        }
+        // A release-like, non-debuggable build that's still installable locally (signed with the debug key).
+        // Use this — never `debug` — to judge runtime/typing/recomposition performance: a `debuggable` app
+        // runs with ART optimizations off and the Compose runtime is disproportionately slow in that mode,
+        // so debug timings are not representative. Mirrors `release` (R8 stays off for the reflection/runtime-
+        // dexing reasons above); only the signing differs so `adb install` works without the release keystore.
+        create("profile") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
@@ -308,7 +357,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset)
 }
 
 dependencies {
@@ -347,6 +396,14 @@ dependencies {
     // it; dex it so the on-device compiler's FileUtil/VFS classes resolve (matches CodeAssist's approach).
     implementation(libs.trove4j)
 
+    // The Jetpack Compose kotlinc plugin's classes — dexed into the app so kotlinc can resolve its
+    // `ComposePluginRegistrar` on ART. The build feeds the plugin to the in-process K2JVMCompiler via
+    // `-Xplugin` (the jar is the lang-kotlin bundled resource); kotlinc reads the service descriptor from
+    // that jar but defines the registrar class through parent delegation to the app classloader (a jar's
+    // bytecode can't be loaded at runtime on ART), so the class must live here. Non-transitive: it needs
+    // only its own classes — the (embeddable) Kotlin compiler it builds on is already dexed via :lang-kotlin.
+    implementation(libs.kotlin.compose.compiler.plugin) { isTransitive = false }
+
     // build-engine's DexRunner/DexBackend ports (kept `implementation` in :ide-core, so not transitive):
     // :ide-android supplies the on-device DexClassLoader runner that backs the Java `run` on ART.
     implementation(project(":build-engine"))
@@ -371,6 +428,12 @@ dependencies {
     implementation(libs.androidx.core)
     implementation(libs.kotlinx.coroutines.core)
 
+    // The on-device Kotlin interpreter (:interp-core) + its Compose bridge/render surface (:interp-compose,
+    // dev.ide.interp.compose — KMP, re-exporting :interp-core): drives a ResolvedTree against the real
+    // Compose runtime so the editor's @Preview renders live (docs/compose-interpreter.md, step 4).
+    implementation(project(":interp-core"))
+    implementation(project(":interp-compose"))
+
     // On-device instrumentation: the Kotlin-compiler-on-ART discovery spike.
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
@@ -379,4 +442,8 @@ dependencies {
     // which doesn't leak to the androidTest *compile* classpath — and at runtime the app's dexed copy
     // already provides it — so compileOnly is exactly right: types to compile, no second dexed copy.
     androidTestCompileOnly(libs.kotlin.compiler.embeddable)
+    // The spike's Compose case references ComposeCompilerPlugin (lang-kotlin) to locate the bundled plugin
+    // jar. Like the compiler API, lang-kotlin reaches the app only transitively, so add it compileOnly: the
+    // type to compile against, with the app's dexed copy providing it at runtime.
+    androidTestCompileOnly(project(":lang-kotlin"))
 }

@@ -15,9 +15,17 @@ import dev.ide.build.engine.JavaCompile
 import dev.ide.build.engine.KotlinCompile
 import dev.ide.build.engine.TaskInputsImpl
 import dev.ide.build.engine.TaskOutputsImpl
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import java.util.stream.Collectors
@@ -33,10 +41,16 @@ import kotlin.io.path.writeText
 
 /**
  * `mergeResources`: merge resource directories from all sources — dependency `android-lib` modules, AAR
- * libraries, then the app's own source sets — into one merged `res/` dir. [resDirs]
- * is in *ascending* priority, so a later (higher-priority) source overrides an earlier one for the same
- * resource. Non-`values` files overlay by path (higher wins); `values*` files are all kept under unique
- * names so aapt2 merges their entries. The merged dir is the single input to aapt2 compile.
+ * libraries, then the app's own source sets — into one merged `res/` dir. [resDirs] is in *ascending*
+ * priority, so a later (higher-priority) source overrides an earlier one for the same resource.
+ *
+ * Non-`values` files overlay by path (higher priority wins). `values*` files are **merged by entry**, AGP-
+ * style: every `<resources>` child is keyed by (qualifier, tag, type, name) and a later source overrides an
+ * earlier one, emitting ONE `values.xml` per qualifier. This deduplicates a resource that arrives from more
+ * than one source — e.g. the same library reached through two cache paths, or a wrapper AAR plus the AAR it
+ * forwards to — which would otherwise reach `aapt2 link` as two definitions and fail with "resource X has a
+ * conflicting value for configuration". (The previous approach copied every contribution under a unique name
+ * and relied on aapt2 to overlay them, which it does not do across a single linked source set.)
  */
 internal class MergeResourcesTask(
     override val name: TaskName,
@@ -50,27 +64,99 @@ internal class MergeResourcesTask(
         ctx.checkCanceled()
         clear(outDir)
         Files.createDirectories(outDir)
-        resDirs.filter { Files.isDirectory(it) }.forEachIndexed { idx, dir ->
+        val values = ValuesMerger()
+        resDirs.filter { Files.isDirectory(it) }.forEach { dir ->
             Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) }.forEach { f ->
                 val rel = dir.relativize(f)
                 val qualifier = rel.getName(0).toString()
-                val target = if (qualifier.startsWith("values")) {
-                    // keep every contribution so aapt2 merges value entries (filenames would otherwise clash)
-                    outDir.resolve(qualifier).resolve("merged_${idx}_${f.fileName}")
+                if (qualifier.startsWith("values")) {
+                    // Accumulate entries; ascending priority means a later source's entry wins.
+                    if (!values.add(qualifier, f)) copyRaw(f, outDir.resolve(qualifier).resolve("unparsed_${values.bump()}_${f.fileName}"))
                 } else {
-                    outDir.resolve(rel) // overlay: a higher-priority source (later idx) overwrites
+                    copyRaw(f, outDir.resolve(rel)) // overlay: a higher-priority source overwrites
                 }
-                target.parent?.let { Files.createDirectories(it) }
-                Files.copy(f, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             } }
         }
+        values.writeTo(outDir)
         ctx.logger()("mergeResources -> ${outDir.fileName}")
         return TaskResult.Success
+    }
+
+    private fun copyRaw(from: Path, to: Path) {
+        to.parent?.let { Files.createDirectories(it) }
+        Files.copy(from, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
 
     private fun clear(dir: Path) {
         if (!Files.exists(dir)) return
         Files.walk(dir).use { s -> s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } } }
+    }
+}
+
+/**
+ * Accumulates `<resources>` entries across all merged sources, keyed by (qualifier, tag, type, name) so a
+ * later source overrides an earlier one (last-wins overlay), then emits one `values.xml` per qualifier with
+ * the deduplicated set. Uses javax.xml DOM (available on both desktop and ART). A file that fails to parse
+ * is reported via [add] returning false so the caller can fall back to copying it verbatim.
+ */
+private class ValuesMerger {
+    // qualifier -> (entry key -> imported element); LinkedHashMap keeps a stable, insertion-ordered output.
+    private val byQualifier = LinkedHashMap<String, LinkedHashMap<String, org.w3c.dom.Element>>()
+    private val rootAttrs = LinkedHashMap<String, String>()   // xmlns:* (and other root attrs) seen on any <resources>
+    private val doc = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+        .apply { isNamespaceAware = true }.newDocumentBuilder().newDocument()
+    private var counter = 0
+
+    fun bump(): Int = counter++
+
+    /** Parse [file] and fold its entries into [qualifier]. Returns false if it could not be parsed as values XML. */
+    fun add(qualifier: String, file: Path): Boolean {
+        val parsed = runCatching {
+            javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+                .newDocumentBuilder().parse(file.toFile())
+        }.getOrNull() ?: return false
+        val root = parsed.documentElement ?: return false
+        if (root.tagName != "resources") return false
+        // Preserve namespace declarations (xliff:, tools:, …) so imported entries that use them stay valid.
+        val attrs = root.attributes
+        for (i in 0 until attrs.length) {
+            val a = attrs.item(i)
+            if (a.nodeName.startsWith("xmlns")) rootAttrs.putIfAbsent(a.nodeName, a.nodeValue)
+        }
+        val bucket = byQualifier.getOrPut(qualifier) { LinkedHashMap() }
+        val children = root.childNodes
+        for (i in 0 until children.length) {
+            val n = children.item(i)
+            if (n.nodeType != org.w3c.dom.Node.ELEMENT_NODE) continue
+            val el = n as org.w3c.dom.Element
+            val name = el.getAttribute("name")
+            val type = el.getAttribute("type")   // <item type="id" name="…">; empty for typed tags
+            // Nameless entries (e.g. <eat-comment/>) can't be keyed for override — keep each uniquely.
+            val key = if (name.isEmpty()) "${el.tagName}#${counter++}" else "${el.tagName}|$type|$name"
+            bucket[key] = doc.importNode(el, true) as org.w3c.dom.Element   // last source wins
+        }
+        return true
+    }
+
+    /** Emit `<qualifier>/values.xml` for every accumulated qualifier. */
+    fun writeTo(outDir: Path) {
+        if (byQualifier.isEmpty()) return
+        val tf = javax.xml.transform.TransformerFactory.newInstance().newTransformer().apply {
+            setOutputProperty(javax.xml.transform.OutputKeys.INDENT, "yes")
+            setOutputProperty(javax.xml.transform.OutputKeys.ENCODING, "utf-8")
+        }
+        for ((qualifier, entries) in byQualifier) {
+            val out = doc.createElement("resources")
+            rootAttrs.forEach { (k, v) -> out.setAttribute(k, v) }
+            entries.values.forEach { out.appendChild(it) }
+            val dir = outDir.resolve(qualifier)
+            Files.createDirectories(dir)
+            val target = dir.resolve("values.xml")
+            Files.newOutputStream(target).use { os ->
+                tf.transform(javax.xml.transform.dom.DOMSource(out), javax.xml.transform.stream.StreamResult(os))
+            }
+            // appendChild moves nodes out of `out`; rebuild not needed since each entry is written once.
+        }
     }
 }
 
@@ -288,6 +374,7 @@ internal class DexArchiveBuilderTask(
     private val subDexRoot: Path,
     private val extDexRoot: Path,
     private val dexer: Dexer,
+    private val dexCacheRoot: Path? = null,   // global content-addressed library-dex cache (null = per-project only)
 ) : Task {
     override val inputs: TaskInputs get() = TaskInputsImpl().apply {
         dirPaths("project", projectClasses)
@@ -305,10 +392,35 @@ internal class DexArchiveBuilderTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        var ok = archiveProject(ctx)
+        // The library type-universe (sub-module + external jars) is D8's desugaring classpath when archiving a
+        // library, so it can resolve interface hierarchies for default/static-interface-method (and lambda)
+        // desugaring below the native API level — without it D8 warns "Type ... was not found ...". Project
+        // (app) classes are deliberately excluded: nothing a library dexes depends on them (deps point down),
+        // and folding them in would invalidate the library cache on every app edit.
+        val libUniverse = (subProjectJars + externalJars).filter { Files.exists(it) && Files.size(it) > 0L }
+        val hashCache = DexArchives.HashCache(subDexRoot.parent ?: subDexRoot)
+        val hashOf = libUniverse.associateWith { hashCache.hashOf(it) }
+        hashCache.flush()
+        // Deduplicate the desugaring classpath by content hash. The same artifact can reach the dexer via more
+        // than one path (two resolver cache paths, the shared dex cache, or as both a sub-module and an external
+        // jar), and D8's `addClasspathFiles` aborts when a type is defined by two classpath entries ("Classpath
+        // type already present: kotlin.sequences.SequencesKt"). Collapse byte-identical jars to one
+        // representative — the same content-hash dedup the program inputs already get below.
+        val universeByHash = LinkedHashMap<String, Path>()   // content hash -> representative jar
+        for (j in libUniverse) hashOf[j]?.let { universeByHash.putIfAbsent(it, j) }
+        // Content-hash dedup above only collapses byte-identical jars. Two *distinct* jars can still define the
+        // same type — two resolved kotlin-stdlib versions, or a library that bundles stdlib classes — which D8
+        // also rejects ("Classpath type already present: kotlin.jvm.internal.Intrinsics"). So index each jar's
+        // class entries and dedupe the desugaring classpath at the class level (see [classpathFor]).
+        val classesOf = universeByHash.values.associateWith { DexArchives.classNamesOf(it) }
+        // A library's dexed output can depend on this classpath, so a shared-cache bucket is only safe to reuse
+        // under an identical universe — fold the deduped digest into the cache namespace.
+        val desugarDigest = DexArchives.digestOf(universeByHash.keys)
+
+        var ok = archiveProject(ctx, universeByHash, classesOf)
         // Libraries are atomic jars → per-jar content-hash buckets (a changed lib re-dexes alone).
-        ok = dexJars(ctx, subDexRoot, subProjectJars) && ok
-        ok = dexJars(ctx, extDexRoot, externalJars) && ok
+        ok = dexJars(ctx, subDexRoot, subProjectJars, hashOf, universeByHash, classesOf, desugarDigest) && ok
+        ok = dexJars(ctx, extDexRoot, externalJars, hashOf, universeByHash, classesOf, desugarDigest) && ok
         return if (ok) TaskResult.Success else TaskResult.Failed("dexBuilder failed")
     }
 
@@ -318,7 +430,7 @@ internal class DexArchiveBuilderTask(
      * unchanged ones + library jars are the desugaring *classpath* so a changed class still sees its siblings.
      * D8's `DexFilePerClassFile` writes `<class>.dex` straight into [projectDexRoot]; the merge resolves them.
      */
-    private fun archiveProject(ctx: TaskContext): Boolean {
+    private fun archiveProject(ctx: TaskContext, universeByHash: Map<String, Path>): Boolean {
         Files.createDirectories(projectDexRoot)
         // Collect across every project-class root (Java output + Kotlin output) keyed by package-relative
         // path; a later root wins a (rare) name clash. Relpaths from distinct roots don't otherwise collide.
@@ -345,32 +457,85 @@ internal class DexArchiveBuilderTask(
             val unchanged = current.keys - changed.toSet()
             val classpath = ArrayList<Path>()
             if (unchanged.isNotEmpty()) { DexArchives.jarClasses(byRel, unchanged, restJar); classpath.add(restJar) }
-            classpath.addAll(subProjectJars.filter { Files.exists(it) })
-            classpath.addAll(externalJars.filter { Files.exists(it) })
-            val r = dexer.dexArchive(listOf(changedJar), classpath, androidJar, minApi, release, projectDexRoot)
+            // Library universe, deduped by content hash (see execute) so D8 never sees a type twice.
+            classpath.addAll(universeByHash.values)
+            val r = dexer.dexArchive(listOf(changedJar), classpath, androidJar, minApi, release, projectDexRoot,
+                threads = DexConcurrency.plan(1).threadsPerInvocation)
             r.log.forEach(ctx.logger()); if (!r.success) { ok = false; ctx.logger()("dex archive failed for project classes") }
         }
         DexArchives.writeClassManifest(projectDexRoot, current)
         return ok
     }
 
-    /** Archive each jar into `<root>/<contentHash>/`, reusing unchanged buckets and pruning stale ones. */
-    private fun dexJars(ctx: TaskContext, root: Path, jars: List<Path>): Boolean {
+    /**
+     * Archive each jar into `<root>/<contentHash>/`. Three tiers of reuse, then dex only the true misses —
+     * and dex those in parallel, bounded by [DexConcurrency]:
+     *  1. the module bucket already has dex (unchanged since last build here) → reuse, no work;
+     *  2. the shared cross-project cache has it (another project/clean already dexed this exact jar) → copy;
+     *  3. otherwise dex it once, then seed the shared cache so every other project skips it next time.
+     * Jar content hashes ([hashOf], precomputed once) come from a path+size+mtime cache so unchanged libraries
+     * aren't re-hashed each build. [universeByHash] is the content-hash-deduped desugaring classpath universe
+     * (hash -> representative jar) and [desugarDigest] keys the shared cache to it (see [execute]).
+     */
+    private suspend fun dexJars(
+        ctx: TaskContext, root: Path, jars: List<Path>,
+        hashOf: Map<Path, String>, universeByHash: Map<String, Path>, desugarDigest: String,
+    ): Boolean {
         Files.createDirectories(root)
-        val keep = HashSet<String>()
-        var ok = true
-        for (jar in jars.filter { Files.exists(it) && Files.size(it) > 0L }) {
-            val h = DexArchives.contentHash(jar); keep.add(h)
-            val bucket = root.resolve(h)
-            if (DexArchives.hasDex(bucket)) continue            // unchanged input → reuse its archive
-            DexArchives.clearDir(bucket); Files.createDirectories(bucket)
-            val r = dexer.dexArchive(listOf(jar), emptyList(), androidJar, minApi, release, bucket)
-            r.log.forEach(ctx.logger()); if (!r.success) { ok = false; ctx.logger()("dex archive failed for ${jar.fileName}") }
+        val byHash = LinkedHashMap<String, Path>()                       // content hash -> a jar (dedups copies)
+        for (jar in jars) hashOf[jar]?.let { byHash.putIfAbsent(it, jar) }
+        val keep = byHash.keys.toHashSet()
+        val todo = byHash.entries.filter { !DexArchives.hasDex(root.resolve(it.key)) }   // tier-1 reuse drops the rest
+        if (todo.isEmpty()) { DexArchives.prune(root, keep); return true }
+
+        val plan = DexConcurrency.plan(todo.size)
+        val sem = Semaphore(plan.workers)
+        val ok = AtomicBoolean(true)
+        coroutineScope {
+            todo.map { (hash, jar) ->
+                async(Dispatchers.IO) {
+                    sem.withPermit {
+                        ctx.checkCanceled()
+                        // Desugaring classpath = the deduped library universe minus this jar's own content (keyed
+                        // by hash, not path, so a second path to the same jar can't put its classes back on).
+                        val classpath = universeByHash.filterKeys { it != hash }.values.toList()
+                        if (!dexOneLibrary(ctx, jar, root.resolve(hash), hash, classpath, desugarDigest, plan.threadsPerInvocation)) ok.set(false)
+                    }
+                }
+            }.awaitAll()
         }
         DexArchives.prune(root, keep)
-        return ok
+        return ok.get()
     }
+
+    /** Tier 2/3 for one library: copy from the shared cache on a hit, else dex it (with [classpath] as the
+     *  desugaring classpath) and seed the cache under the [desugarDigest]-keyed namespace. */
+    private fun dexOneLibrary(ctx: TaskContext, jar: Path, bucket: Path, hash: String, classpath: List<Path>, desugarDigest: String, threads: Int): Boolean {
+        val shared = dexCacheRoot?.resolve(cacheTag(desugarDigest))?.resolve(hash)
+        if (shared != null && DexArchives.hasDex(shared)) {
+            DexArchives.clearDir(bucket); DexArchives.copyDir(shared, bucket)
+            ctx.logger()("dex cache hit: ${jar.fileName}")
+            return true
+        }
+        DexArchives.clearDir(bucket); Files.createDirectories(bucket)
+        val r = dexer.dexArchive(listOf(jar), classpath, androidJar, minApi, release, bucket, threads)
+        r.log.forEach(ctx.logger())
+        if (!r.success) { ctx.logger()("dex archive failed for ${jar.fileName}"); return false }
+        if (shared != null && !DexArchives.hasDex(shared)) DexArchives.publishToCache(bucket, shared)
+        return true
+    }
+
+    /** Shared-cache namespace: a dexed archive is only reusable for the same min-api, mode, dex format, and
+     *  desugaring classpath (the library universe, [desugarDigest]). */
+    private fun cacheTag(desugarDigest: String): String =
+        "minApi$minApi-${if (release) "release" else "debug"}-$DEX_CACHE_FORMAT-cp$desugarDigest"
 }
+
+/**
+ * Bumped whenever the bundled D8/R8 (`libs.versions.toml` `r8`) or the archive layout changes, so a tool
+ * upgrade can't reuse stale dex from the shared cache. Folded into the cache namespace (see `cacheTag`).
+ */
+private const val DEX_CACHE_FORMAT = "v1-r8-8.13.19"
 
 /** Content-addressing + bucket bookkeeping for [DexArchiveBuilderTask]'s per-scope dex archives. */
 private object DexArchives {
@@ -398,6 +563,14 @@ private object DexArchives {
             Files.isRegularFile(path) -> md.update(Files.readAllBytes(path))
         }
         return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }.substring(0, 24)
+    }
+
+    /** A short, order-independent digest of a set of content hashes — used to key the shared cache to the
+     *  library desugaring universe (so a bucket isn't reused under a different classpath). */
+    fun digestOf(hashes: Collection<String>): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        hashes.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)); md.update(0) }
+        return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }.substring(0, 16)
     }
 
     /** Content hash of a single file's bytes (`.class` files are deterministic — no timestamps). */
@@ -465,6 +638,73 @@ private object DexArchives {
         Files.walk(dir).use { s -> s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } } }
     }
 
+    /** Recursively copy [src] dir into [dst] (cheap — moves a few per-class `.dex`, vs re-running D8). */
+    fun copyDir(src: Path, dst: Path) {
+        if (!Files.isDirectory(src)) return
+        Files.createDirectories(dst)
+        Files.walk(src).use { s ->
+            s.forEach { p ->
+                val target = dst.resolve(src.relativize(p).toString())
+                if (Files.isDirectory(p)) Files.createDirectories(target)
+                else { target.parent?.let { Files.createDirectories(it) }; Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING) }
+            }
+        }
+    }
+
+    /**
+     * Seed the shared cache with a freshly-dexed [bucket] at [shared]. Stage to a temp dir then atomically
+     * move it into place, so a half-written bucket is never visible — and a lost race with another project
+     * dexing the same jar concurrently just discards our copy (the winner's is already valid).
+     */
+    fun publishToCache(bucket: Path, shared: Path) {
+        runCatching {
+            shared.parent?.let { Files.createDirectories(it) }
+            val tmp = shared.resolveSibling(shared.fileName.toString() + ".tmp-" + java.util.UUID.randomUUID())
+            clearDir(tmp); copyDir(bucket, tmp)
+            try {
+                Files.move(tmp, shared, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: Exception) {
+                if (!hasDex(shared)) runCatching { Files.move(tmp, shared) }.onFailure { clearDir(tmp) } else clearDir(tmp)
+            }
+        }
+    }
+
+    /**
+     * A jar's content hash, cached by (absolute path, size, mtime) in a `.hashcache` sidecar so an unchanged
+     * library isn't re-read byte-for-byte every build (the cost that scaled with library count).
+     */
+    class HashCache(root: Path) {
+        private val file = root.resolve(".hashcache")
+        private val entries = LinkedHashMap<String, String>()   // absPath -> "size:mtime:hash"
+        private var dirty = false
+
+        init {
+            if (Files.isRegularFile(file)) runCatching {
+                Files.readAllLines(file).forEach { line ->
+                    val t = line.indexOf('\t'); if (t > 0) entries[line.substring(0, t)] = line.substring(t + 1)
+                }
+            }
+        }
+
+        fun hashOf(jar: Path): String {
+            val key = jar.toAbsolutePath().toString()
+            val mtime = runCatching { Files.getLastModifiedTime(jar).toMillis() }.getOrDefault(0L)
+            val sig = "${runCatching { Files.size(jar) }.getOrDefault(-1L)}:$mtime"
+            entries[key]?.let { v ->
+                val sep = v.lastIndexOf(':')                    // value is "size:mtime:hash"; hash has no ':'
+                if (sep > 0 && v.substring(0, sep) == sig) return v.substring(sep + 1)
+            }
+            val h = contentHash(jar)
+            entries[key] = "$sig:$h"; dirty = true
+            return h
+        }
+
+        fun flush() {
+            if (!dirty) return
+            runCatching { file.parent?.let { Files.createDirectories(it) }; Files.write(file, entries.map { "${it.key}\t${it.value}" }) }
+        }
+    }
+
     private fun isZip(p: Path): Boolean = Files.isRegularFile(p) &&
         p.toString().let { it.endsWith(".jar", true) || it.endsWith(".zip", true) || it.endsWith(".aar", true) }
 }
@@ -508,24 +748,37 @@ internal class DexMergeTask(
         ctx.checkCanceled()
         DexArchives.clearDir(outDexDir); Files.createDirectories(outDexDir)
         if (groupPerBucket) {
-            // One indexed group per archive bucket (each input library stays its own set of dex files).
+            // One indexed group per archive bucket (each input library stays its own set of dex files). Buckets
+            // are independent, so merge them in parallel; the group index is the bucket's sorted position, so
+            // the output is deterministic regardless of completion order (an empty bucket just leaves a gap —
+            // the packager globs every `g*/` dex).
             val buckets = dexArchives.filter { Files.isDirectory(it) }
                 .flatMap { Files.list(it).use { s -> s.filter { c -> Files.isDirectory(c) }.sorted().collect(Collectors.toList()) } }
-            var i = 0
-            for (b in buckets) {
-                val dexes = dexFiles(listOf(b))
-                if (dexes.isEmpty()) continue
-                val group = outDexDir.resolve("g${i++}"); Files.createDirectories(group)
-                val r = dexer.dex(dexes, androidJar, minApi, release, group)
-                r.log.forEach(ctx.logger())
-                if (!r.success) return TaskResult.Failed("dex merge failed")
+            val plan = DexConcurrency.plan(buckets.size)
+            val sem = Semaphore(plan.workers)
+            val ok = AtomicBoolean(true)
+            coroutineScope {
+                buckets.mapIndexed { i, b ->
+                    async(Dispatchers.IO) {
+                        sem.withPermit {
+                            ctx.checkCanceled()
+                            val dexes = dexFiles(listOf(b))
+                            if (dexes.isNotEmpty()) {
+                                val group = outDexDir.resolve("g$i"); Files.createDirectories(group)
+                                val r = dexer.dex(dexes, androidJar, minApi, release, group, plan.threadsPerInvocation)
+                                r.log.forEach(ctx.logger())
+                                if (!r.success) ok.set(false)
+                            }
+                        }
+                    }
+                }.awaitAll()
             }
-            return TaskResult.Success
+            return if (ok.get()) TaskResult.Success else TaskResult.Failed("dex merge failed")
         }
         val dexes = dexFiles(dexArchives)
         // An empty layer is valid (e.g. mergeLibDex with no sub-module deps) — produce an empty dex dir.
         if (dexes.isEmpty()) return TaskResult.Success
-        val r = dexer.dex(dexes, androidJar, minApi, release, outDexDir)
+        val r = dexer.dex(dexes, androidJar, minApi, release, outDexDir, DexConcurrency.plan(1).threadsPerInvocation)
         r.log.forEach(ctx.logger())
         return if (r.success) TaskResult.Success else TaskResult.Failed("dex merge failed")
     }
@@ -565,7 +818,9 @@ internal class R8MinifyTask(
         }
         if (inputs.isEmpty()) return TaskResult.Failed("nothing to minify")
         val keepRules = if (Files.exists(keepRulesFile)) Files.readAllLines(keepRulesFile) else emptyList()
-        val r = shrinker.shrink(inputs, androidJar, keepRules, minApi, release = true, outDexDir)
+        // Cap R8's worker pool: it's the heaviest in-process step, so fewer threads = a smaller peak heap.
+        val r = shrinker.shrink(inputs, androidJar, keepRules, minApi, release = true, outDexDir,
+            threads = DexConcurrency.plan(1).threadsPerInvocation)
         r.log.forEach(ctx.logger())
         return if (r.success) TaskResult.Success else TaskResult.Failed("R8 minify failed")
     }

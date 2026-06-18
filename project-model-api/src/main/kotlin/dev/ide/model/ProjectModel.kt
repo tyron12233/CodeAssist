@@ -266,5 +266,10 @@ interface ModifiableModule {
     fun addDependency(entry: OrderEntry)
     fun removeDependency(entry: OrderEntry)
     fun addSourceSet(template: SourceSetTemplate)
+    /** Append a typed content root to the [sourceSetName] source set (creating the set if it doesn't
+     *  exist). [dirRelPath] is relative to the module dir; re-adding the same dir merges [roles]. */
+    fun addContentRoot(sourceSetName: String, dirRelPath: String, roles: Set<ContentRole>)
+    /** Drop the content root at [dirRelPath] from [sourceSetName] (model-only; doesn't touch disk). */
+    fun removeContentRoot(sourceSetName: String, dirRelPath: String)
     fun <T : Facet> putFacet(facet: T)
 }

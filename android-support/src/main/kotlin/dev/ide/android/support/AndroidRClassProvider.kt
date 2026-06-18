@@ -8,6 +8,7 @@ import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticClassContext
 import dev.ide.lang.synthetic.SyntheticClassProvider
 import dev.ide.lang.synthetic.SyntheticField
+import dev.ide.lang.synthetic.SyntheticModifier
 
 /**
  * Contributes the light `R` class for an Android module — `<namespace>.R` with a nested class per resource
@@ -35,6 +36,7 @@ class AndroidRClassProvider(private val model: ResourceModel = ResourceModel.DEF
             if (type == ResourceType.STYLEABLE) styleableClass(facet.namespace, repo, ids)
             else SyntheticClass(
                 fqName = "${facet.namespace}.R.${type.rClass}",
+                modifiers = NESTED_MODIFIERS,
                 fields = repo.names(type).sorted().map { name ->
                     SyntheticField(name, constant = hex(ids.id(type, name)))
                 },
@@ -58,8 +60,16 @@ class AndroidRClassProvider(private val model: ResourceModel = ResourceModel.DEF
                 fields += SyntheticField("${styleable}_$attr", constant = index.toString())
             }
         }
-        return SyntheticClass(fqName = "$namespace.R.styleable", fields = fields)
+        return SyntheticClass(fqName = "$namespace.R.styleable", modifiers = NESTED_MODIFIERS, fields = fields)
     }
 
     private fun hex(id: Int?): String = if (id == null) "0" else "0x%08x".format(id)
+
+    private companion object {
+        // Nested R subclasses must be `public static final` — like real R.java. Without STATIC they are inner
+        // (non-static) classes, where a static field that isn't a constant variable is illegal below Java 16;
+        // R.styleable's `int[]` arrays are exactly that, so the layout-preview compile (pinned to source 8 to
+        // feed android.jar as -bootclasspath) rejects the synthetic R and no custom view renders.
+        val NESTED_MODIFIERS = setOf(SyntheticModifier.PUBLIC, SyntheticModifier.STATIC, SyntheticModifier.FINAL)
+    }
 }

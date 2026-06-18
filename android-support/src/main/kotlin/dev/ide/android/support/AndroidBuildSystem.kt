@@ -76,6 +76,8 @@ class AndroidBuildSystem(
     private val shrinker: Shrinker = R8Subprocess(sdk.d8Jar, sdk.javaLauncher),
     private val signer: ApkSigner = ApkSignerTool(sdk.apksignerJar, sdk.zipalign, sdk.javaLauncher),
     private val kotlinCompile: KotlinCompile? = null,
+    /** Global content-addressed library-dex cache (e.g. the host's shared caches dir); null = per-project only. */
+    private val dexCacheRoot: Path? = null,
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -220,7 +222,7 @@ class AndroidBuildSystem(
             tasks.task(dexBuilder, listOf(compile) + moduleJarProducers) {
                 DexArchiveBuilderTask(dexBuilder, appProjectClasses, subProjectJars, externalJars, sdk.androidJar,
                     facet.minSdk, release, layout.dexArchives.resolve("project.jar"),
-                    layout.projectArchives, layout.subArchives, layout.extArchives, dexer)
+                    layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot)
             }
             if (facet.minSdk >= 21) {
                 // Native multidex: ART loads many dex, so keep the scopes split for the best incrementality.
@@ -417,8 +419,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(javaCompile: JavaCompile, sdk: AndroidSdk, signing: SigningConfig, kotlinCompile: KotlinCompile? = null): AndroidBuildSystem =
-            AndroidBuildSystem(javaCompile, sdk, signing, kotlinCompile = kotlinCompile)
+        fun subprocess(javaCompile: JavaCompile, sdk: AndroidSdk, signing: SigningConfig, kotlinCompile: KotlinCompile? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
+            AndroidBuildSystem(javaCompile, sdk, signing, kotlinCompile = kotlinCompile, dexCacheRoot = dexCacheRoot)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -427,13 +429,14 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(javaCompile: JavaCompile, sdk: AndroidSdk, signing: SigningConfig, kotlinCompile: KotlinCompile? = null): AndroidBuildSystem =
+        fun inProcess(javaCompile: JavaCompile, sdk: AndroidSdk, signing: SigningConfig, kotlinCompile: KotlinCompile? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
             AndroidBuildSystem(
                 javaCompile, sdk, signing,
                 dexer = D8InProcessDexer(),
                 shrinker = R8InProcessShrinker(),
                 signer = ApksigSigner(sdk.zipalign),
                 kotlinCompile = kotlinCompile,
+                dexCacheRoot = dexCacheRoot,
             )
 
         /** A debug-signed [subprocess] build system, creating the shared debug keystore on demand. */

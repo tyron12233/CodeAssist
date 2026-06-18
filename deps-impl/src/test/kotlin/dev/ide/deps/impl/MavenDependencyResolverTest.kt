@@ -58,6 +58,27 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun normalizesHardPinAndRangeVersionsOnTransitives() {
+        // AndroidX pins same-group deps as `[1.0]` (a Maven hard-pin range). The literal brackets must not
+        // leak into the fetch URL, else the dep's POM 404s and its whole subtree is silently dropped — which
+        // is how `androidx.activity:activity` (ComponentActivity) went missing from the Compose classpath.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "mid", "[1.0]")))   // hard pin
+        files.put("mid", "1.0", deps = listOf(Dep("g", "leaf", "[1.0,2.0)")))   // range → lower bound
+        files.put("leaf", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("a", "mid", "leaf"), byName.keys, "range-pinned transitives must resolve: ${result.unresolved}")
+        assertEquals("1.0", byName.getValue("mid").coordinate.version)
+        assertEquals("1.0", byName.getValue("leaf").coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
     fun pinnedPolicyKeepsTheDirectlyDeclaredVersion() {
         val files = FakeRepo()
         files.put("a", "1.0", deps = listOf(Dep("g", "common", "2.0")))
