@@ -38,79 +38,54 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.UiNewFileTemplate
+import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.theme.Ca
 
-/** Where a new file will be created: the owning source root, a starting package, and the package levels
- *  offered as quick-pick chips (for a compacted package, one chip per level — e.g. `com`, `com.tyron`). */
-data class NewFileTarget(
-    val sourceRootPath: String,
-    val initialPackage: String,
-    val packageChips: List<String>,
-)
-
-/** Build a [NewFileTarget] from a tree node, or null if it isn't a Java/Kotlin new-class context. */
-fun newFileTargetOf(node: TreeNode): NewFileTarget? {
-    val root = node.sourceRootPath ?: return null
-    val chips = node.packageSegments.map { it.packageName }
-    return NewFileTarget(root, chips.lastOrNull() ?: "", chips)
-}
-
-private enum class NewFileLang(val label: String, val ext: String) { Java("Java", "java"), Kotlin("Kotlin", "kt") }
-
-private enum class NewFileKind(val label: String, val inJava: Boolean, val inKotlin: Boolean) {
-    Class("Class", inJava = true, inKotlin = true),
-    Interface("Interface", inJava = true, inKotlin = true),
-    Enum("Enum", inJava = true, inKotlin = true),
-    Record("Record", inJava = true, inKotlin = false),
-    Object("Object", inJava = false, inKotlin = true),
-    DataClass("Data class", inJava = false, inKotlin = true),
-}
+/** What a unified "New…" action creates, and where. [dirLabel] is a short path shown to the user. */
+enum class NewEntryKind { File, Folder }
+data class NewEntryRequest(val dirPath: String, val kind: NewEntryKind, val dirLabel: String)
 
 /**
- * The New-Class dialog: drops from the top (reusing [DropdownOverlay]). Picks a type kind, names it, and
- * chooses/types the package — the chips target an intermediate level of a compacted package (e.g.
- * `com.tyron` inside `com.tyron.codeassist`). On create it computes the target directory under the
- * source root and emits a Java stub via [onCreate]. The last target is retained so the exit animation
+ * The unified New-File / New-Folder dialog — create *anything, anywhere*. Drops from the top (reusing
+ * [DropdownOverlay]). One name field: the name may include nested folders (`a/b/Helper.kt`), all created
+ * along the way, and for a file the backend scaffolds content from the extension (`.java`/`.kt` → a class
+ * stub with the resolved package, `.xml` → a root element, else empty). [onCreate] hands the target dir +
+ * the (possibly nested) name + the kind to the host. The last request is retained so the exit animation
  * doesn't flash empty.
  */
 @Composable
-fun NewFileDialog(
-    visible: Boolean,
-    target: NewFileTarget?,
+fun NewEntryDialog(
+    request: NewEntryRequest?,
     onDismiss: () -> Unit,
-    onCreate: (dirPath: String, fileName: String, content: String) -> Unit,
+    onCreate: (dirPath: String, name: String, kind: NewEntryKind) -> Unit,
 ) {
-    var shown by remember { mutableStateOf<NewFileTarget?>(null) }
-    if (target != null) shown = target
-    DropdownOverlay(visible = visible, onDismiss = onDismiss, topPadding = 110.dp) {
-        shown?.let { NewFilePanel(it, onDismiss, onCreate) }
+    var shown by remember { mutableStateOf<NewEntryRequest?>(null) }
+    if (request != null) shown = request
+    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp) {
+        shown?.let { NewEntryPanel(it, onDismiss, onCreate) }
     }
 }
 
 @Composable
-private fun NewFilePanel(
-    target: NewFileTarget,
+private fun NewEntryPanel(
+    req: NewEntryRequest,
     onDismiss: () -> Unit,
-    onCreate: (String, String, String) -> Unit,
+    onCreate: (String, String, NewEntryKind) -> Unit,
 ) {
-    var lang by remember { mutableStateOf(NewFileLang.Java) }
-    var kind by remember { mutableStateOf(NewFileKind.Class) }
-    var name by remember(target) { mutableStateOf("") }
-    var pkg by remember(target) { mutableStateOf(target.initialPackage) }
+    val isFolder = req.kind == NewEntryKind.Folder
+    var name by remember(req) { mutableStateOf("") }
     val focus = remember { FocusRequester() }
-    LaunchedEffect(target) { runCatching { focus.requestFocus() } }
+    LaunchedEffect(req) { runCatching { focus.requestFocus() } }
 
-    val kinds = NewFileKind.entries.filter { if (lang == NewFileLang.Kotlin) it.inKotlin else it.inJava }
-    val valid = name.isNotEmpty() && name.first().isJavaIdentifierStartCompat() &&
-        name.all { it.isJavaIdentifierPartCompat() }
+    // Non-empty; allow nested segments split by '/'; reject characters illegal in a path component.
+    val trimmed = name.trim().replace('\\', '/').trim('/')
+    val illegal = charArrayOf(':', '*', '?', '"', '<', '>', '|')
+    val valid = trimmed.isNotEmpty() && trimmed.split('/').all { seg -> seg.isNotEmpty() && seg.none { it in illegal } }
 
     fun submit() {
         if (!valid) return
-        val p = pkg.trim().trim('.')
-        val dir = if (p.isEmpty()) target.sourceRootPath
-        else target.sourceRootPath.trimEnd('/') + "/" + p.replace('.', '/')
-        val content = if (lang == NewFileLang.Kotlin) kotlinStub(p, kind, name) else javaStub(p, kind, name)
-        onCreate(dir, "$name.${lang.ext}", content)
+        onCreate(req.dirPath, trimmed, req.kind)
         onDismiss()
     }
 
@@ -123,22 +98,126 @@ private fun NewFilePanel(
             .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text("New ${lang.label} file", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-        Spacer8()
+        Text(if (isFolder) "New folder" else "New file", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text("in ${req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Spacer12()
 
-        // language selector (Java / Kotlin) — switching resets the kind so it stays valid for the language.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            NewFileLang.entries.forEach { l ->
-                SelectChip(l.label, selected = l == lang, onClick = { lang = l; kind = NewFileKind.Class })
-            }
+        FieldLabel(if (isFolder) "Folder name" else "File name")
+        DialogField(
+            value = name,
+            onValueChange = { name = it },
+            placeholder = if (isFolder) "utils  ·  or  com/example/utils" else "Helper.kt  ·  or  res/raw/data.json",
+            focusRequester = focus,
+            onSubmit = ::submit,
+            onCancel = onDismiss,
+        )
+        Spacer8()
+        Text(
+            if (isFolder) "Use / to nest folders."
+            else "Use / for nested folders. .java/.kt scaffold a class; .xml a root element; anything else is empty.",
+            color = Ca.colors.textTertiary,
+            style = Ca.type.caption2,
+        )
+        Spacer12()
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Spacer(Modifier.weight(1f))
+            DialogButton("Cancel", primary = false, enabled = true, onClick = onDismiss)
+            DialogButton("Create", primary = true, enabled = valid, onClick = ::submit)
         }
-        Spacer8()
+    }
+}
 
-        // kind selector (filtered to the kinds the chosen language supports)
+// ---------------------------------------------------------------------------
+// New typed source file (Java class / Kotlin file, with a kind selector)
+// ---------------------------------------------------------------------------
+
+/** Which language a typed "New …" action scaffolds, and where. [dirLabel] is a short path shown to the user. */
+enum class NewSourceLang { Java, Kotlin }
+data class NewSourceRequest(val dirPath: String, val lang: NewSourceLang, val dirLabel: String)
+
+/** A kind offered in the typed-source dialog → the backend template it scaffolds. */
+private enum class SourceKind(val label: String, val template: UiNewFileTemplate) {
+    JClass("Class", UiNewFileTemplate.JavaClass),
+    JInterface("Interface", UiNewFileTemplate.JavaInterface),
+    JEnum("Enum", UiNewFileTemplate.JavaEnum),
+    JAbstract("Abstract Class", UiNewFileTemplate.JavaAbstractClass),
+    JAnnotation("Annotation", UiNewFileTemplate.JavaAnnotation),
+    KClass("Class", UiNewFileTemplate.KotlinClass),
+    KFile("File", UiNewFileTemplate.KotlinFile),
+    KInterface("Interface", UiNewFileTemplate.KotlinInterface),
+    KData("Data Class", UiNewFileTemplate.KotlinDataClass),
+    KEnum("Enum", UiNewFileTemplate.KotlinEnum),
+    KObject("Object", UiNewFileTemplate.KotlinObject),
+}
+
+private fun kindsFor(lang: NewSourceLang): List<SourceKind> = when (lang) {
+    NewSourceLang.Java -> listOf(SourceKind.JClass, SourceKind.JInterface, SourceKind.JEnum, SourceKind.JAbstract, SourceKind.JAnnotation)
+    NewSourceLang.Kotlin -> listOf(SourceKind.KClass, SourceKind.KFile, SourceKind.KInterface, SourceKind.KData, SourceKind.KEnum, SourceKind.KObject)
+}
+
+/**
+ * The typed New-Java-class / New-Kotlin-file dialog: a kind selector (Class/Interface/Enum/… for Java;
+ * Class/File/Interface/Data class/… for Kotlin) + a bare type-name field (no extension). The backend
+ * scaffolds the stub with the package resolved from the target directory and picks the `.java`/`.kt`
+ * extension. Hands `(dir, name, template)` to [onCreate].
+ */
+@Composable
+fun NewSourceFileDialog(
+    request: NewSourceRequest?,
+    onDismiss: () -> Unit,
+    onCreate: (dirPath: String, name: String, template: UiNewFileTemplate) -> Unit,
+) {
+    var shown by remember { mutableStateOf<NewSourceRequest?>(null) }
+    if (request != null) shown = request
+    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp) {
+        shown?.let { NewSourcePanel(it, onDismiss, onCreate) }
+    }
+}
+
+@Composable
+private fun NewSourcePanel(
+    req: NewSourceRequest,
+    onDismiss: () -> Unit,
+    onCreate: (String, String, UiNewFileTemplate) -> Unit,
+) {
+    val kinds = remember(req) { kindsFor(req.lang) }
+    var kind by remember(req) { mutableStateOf(kinds.first()) }
+    var name by remember(req) { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(req) { runCatching { focus.requestFocus() } }
+
+    // A bare type name: a letter, then letters/digits/underscore (no extension, no path separators).
+    val trimmed = name.trim()
+    val valid = trimmed.isNotEmpty() && trimmed.first().isLetter() && trimmed.all { it.isLetterOrDigit() || it == '_' }
+
+    fun submit() {
+        if (!valid) return
+        onCreate(req.dirPath, trimmed, kind.template)
+        onDismiss()
+    }
+
+    Column(
+        Modifier
+            .widthIn(max = 520.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .padding(20.dp),
+    ) {
+        Text(
+            if (req.lang == NewSourceLang.Java) "New Java class" else "New Kotlin file",
+            color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text("in ${req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Spacer12()
+
+        FieldLabel("Kind")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            kinds.forEach { k ->
-                SelectChip(k.label, selected = k == kind, onClick = { kind = k })
-            }
+            kinds.forEach { k -> SelectChip(k.label, selected = k == kind, onClick = { kind = k }) }
         }
         Spacer12()
 
@@ -146,27 +225,11 @@ private fun NewFilePanel(
         DialogField(
             value = name,
             onValueChange = { name = it },
-            placeholder = "MyClass",
+            placeholder = if (req.lang == NewSourceLang.Java) "MyClass" else "MyFile",
             focusRequester = focus,
             onSubmit = ::submit,
             onCancel = onDismiss,
         )
-        Spacer12()
-
-        FieldLabel("Package")
-        DialogField(
-            value = pkg,
-            onValueChange = { pkg = it },
-            placeholder = "(default package)",
-            onSubmit = ::submit,
-            onCancel = onDismiss,
-        )
-        if (target.packageChips.size > 1) {
-            Spacer8()
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                target.packageChips.forEach { p -> SelectChip(p, selected = p == pkg.trim(), onClick = { pkg = p }) }
-            }
-        }
         Spacer12()
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -378,27 +441,153 @@ private fun xmlStub(kind: XmlResKind, root: String): String = when (kind) {
 """
 }
 
-private fun javaStub(pkg: String, kind: NewFileKind, name: String): String {
-    val header = if (pkg.isEmpty()) "" else "package $pkg;\n\n"
-    val body = when (kind) {
-        NewFileKind.Interface -> "public interface $name {\n}\n"
-        NewFileKind.Enum -> "public enum $name {\n}\n"
-        NewFileKind.Record -> "public record $name() {\n}\n"
-        else -> "public class $name {\n}\n" // Class (+ any non-Java kind, unreachable from the Java toggle)
-    }
-    return header + body
+// ---------------------------------------------------------------------------
+// Add source root / source set (Java · Kotlin · resources · res · assets · custom)
+// ---------------------------------------------------------------------------
+
+/** A request to add a source root to [moduleName]; [sourceSets] are its existing set names (for the picker). */
+data class AddSourceRootRequest(val moduleName: String, val sourceSets: List<String>)
+
+/** A preset source-root kind → the leaf folder it creates and the role it carries. [Custom] is free-form. */
+private enum class RootPreset(val label: String, val dirName: String, val role: UiSourceRootRole) {
+    Java("Java", "java", UiSourceRootRole.Source),
+    Kotlin("Kotlin", "kotlin", UiSourceRootRole.Source),
+    Resources("Resources", "resources", UiSourceRootRole.Resource),
+    AndroidRes("Android res", "res", UiSourceRootRole.AndroidRes),
+    Assets("Assets", "assets", UiSourceRootRole.Assets),
+    Aidl("AIDL", "aidl", UiSourceRootRole.Aidl),
+    Custom("Custom", "", UiSourceRootRole.Source),
 }
 
-private fun kotlinStub(pkg: String, kind: NewFileKind, name: String): String {
-    val header = if (pkg.isEmpty()) "" else "package $pkg\n\n"
-    val body = when (kind) {
-        NewFileKind.Interface -> "interface $name {\n}\n"
-        NewFileKind.Object -> "object $name {\n}\n"
-        NewFileKind.DataClass -> "data class $name(val value: String)\n"
-        NewFileKind.Enum -> "enum class $name {\n}\n"
-        else -> "class $name {\n}\n" // Class (+ any non-Kotlin kind, unreachable from the Kotlin toggle)
+private fun roleLabel(role: UiSourceRootRole): String = when (role) {
+    UiSourceRootRole.Source -> "Sources"
+    UiSourceRootRole.Resource -> "Resources"
+    UiSourceRootRole.AndroidRes -> "Android res"
+    UiSourceRootRole.Assets -> "Assets"
+    UiSourceRootRole.Aidl -> "AIDL"
+}
+
+/**
+ * The Add-Source-Root dialog: pick a target source set (an existing one or a new name) and a kind. A preset
+ * fixes the folder name + role (Java→`java`/sources, Resources→`resources`/resources, …); **Custom** reveals
+ * a free folder-name field + an explicit role picker. Hands `(module, set, dirName, role)` to [onAdd];
+ * [dev.ide.ui.AppState.addSourceRoot] places it at `src/<set>/<dirName>` and refreshes the tree.
+ */
+@Composable
+fun AddSourceRootDialog(
+    request: AddSourceRootRequest?,
+    onDismiss: () -> Unit,
+    onAdd: (moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole) -> Unit,
+) {
+    var shown by remember { mutableStateOf<AddSourceRootRequest?>(null) }
+    if (request != null) shown = request
+    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp) {
+        shown?.let { AddSourceRootPanel(it, onDismiss, onAdd) }
     }
-    return header + body
+}
+
+@Composable
+private fun AddSourceRootPanel(
+    req: AddSourceRootRequest,
+    onDismiss: () -> Unit,
+    onAdd: (String, String, String, UiSourceRootRole) -> Unit,
+) {
+    var preset by remember(req) { mutableStateOf(RootPreset.Java) }
+    var customRole by remember(req) { mutableStateOf(UiSourceRootRole.Source) }
+    var customName by remember(req) { mutableStateOf("") }
+    var newSet by remember(req) { mutableStateOf(req.sourceSets.isEmpty()) }
+    var setName by remember(req) { mutableStateOf(req.sourceSets.firstOrNull() ?: "main") }
+    val focus = remember { FocusRequester() }
+
+    val isCustom = preset == RootPreset.Custom
+    val dirName = (if (isCustom) customName else preset.dirName).trim().trim('/')
+    val role = if (isCustom) customRole else preset.role
+    val effectiveSet = setName.trim()
+    val illegal = charArrayOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
+    val nameOk = dirName.isNotEmpty() && dirName.none { it in illegal }
+    val setOk = effectiveSet.isNotEmpty() && effectiveSet.none { it in illegal }
+    val valid = nameOk && setOk
+
+    fun submit() {
+        if (!valid) return
+        onAdd(req.moduleName, effectiveSet, dirName, role)
+        onDismiss()
+    }
+
+    Column(
+        Modifier
+            .widthIn(max = 520.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .padding(20.dp),
+    ) {
+        Text("Add source root", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text("to ${req.moduleName}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Spacer12()
+
+        // Source-set selector: existing sets + a "New set…" toggle that reveals a name field.
+        FieldLabel("Source set")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            req.sourceSets.forEach { s ->
+                SelectChip(s, selected = !newSet && s == setName, onClick = { newSet = false; setName = s })
+            }
+            SelectChip("New set…", selected = newSet, onClick = { newSet = true; setName = "" })
+        }
+        if (newSet) {
+            Spacer8()
+            DialogField(
+                value = setName,
+                onValueChange = { setName = it },
+                placeholder = "e.g. test  ·  debug",
+                onSubmit = ::submit,
+                onCancel = onDismiss,
+            )
+        }
+        Spacer12()
+
+        // Kind presets.
+        FieldLabel("Kind")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RootPreset.entries.forEach { p -> SelectChip(p.label, selected = p == preset, onClick = { preset = p }) }
+        }
+
+        if (isCustom) {
+            Spacer12()
+            FieldLabel("Folder name")
+            DialogField(
+                value = customName,
+                onValueChange = { customName = it },
+                placeholder = "e.g. proto  ·  templates",
+                focusRequester = focus,
+                onSubmit = ::submit,
+                onCancel = onDismiss,
+            )
+            Spacer8()
+            FieldLabel("Treat as")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                UiSourceRootRole.entries.forEach { r ->
+                    SelectChip(roleLabel(r), selected = r == customRole, onClick = { customRole = r })
+                }
+            }
+        }
+        Spacer8()
+        Text(
+            if (isCustom) "Created at src/$effectiveSet/${dirName.ifEmpty { "…" }}"
+            else "Created at src/$effectiveSet/${preset.dirName}",
+            color = Ca.colors.textTertiary,
+            style = Ca.type.caption2,
+        )
+        Spacer12()
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Spacer(Modifier.weight(1f))
+            DialogButton("Cancel", primary = false, enabled = true, onClick = onDismiss)
+            DialogButton("Add", primary = true, enabled = valid, onClick = ::submit)
+        }
+    }
 }
 
 @Composable
@@ -481,7 +670,3 @@ internal fun DialogButton(label: String, primary: Boolean, enabled: Boolean, onC
 
 @Composable internal fun Spacer8() = Spacer(Modifier.height(8.dp))
 @Composable internal fun Spacer12() = Spacer(Modifier.height(12.dp))
-
-// Compose Multiplatform commonMain has no java.lang.Character — minimal Java-identifier checks.
-private fun Char.isJavaIdentifierStartCompat(): Boolean = isLetter() || this == '_' || this == '$'
-private fun Char.isJavaIdentifierPartCompat(): Boolean = isLetterOrDigit() || this == '_' || this == '$'
