@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.icons.CaIcons
@@ -146,9 +147,11 @@ internal fun LegacyCodeEditor(
         }
     }
 
-    fun accept() {
+    // Pass [picked] from a click/tap (a same-frame `selected = …; accept()` reads the stale composition-time
+    // `safeSelected` and would accept the wrong row); the keyboard path passes nothing and uses the selection.
+    fun accept(picked: UiCompletionItem? = null) {
         val s = liveSession ?: return
-        val item = displayed.getOrNull(safeSelected) ?: return
+        val item = picked ?: displayed.getOrNull(safeSelected) ?: return
         val len = value.text.length
         val mainStart = s.tokenStart.coerceIn(0, len)
         val mainEnd = caretOffset.coerceIn(mainStart, len) // replace the token typed so far: [start, caret]
@@ -361,7 +364,7 @@ internal fun LegacyCodeEditor(
                                 maxListHeight = listMax,
                                 onPick = { item ->
                                     selected = displayed.indexOf(item).coerceAtLeast(0)
-                                    accept()
+                                    accept(item) // accept the tapped row, not the (stale) selected index
                                 },
                                 onHover = { selected = it },
                             )

@@ -2,11 +2,11 @@ package dev.ide.ui.editor
 
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import dev.ide.ui.editor.core.newlineHandlerFor
 
 private val OPEN_TO_CLOSE = mapOf('(' to ')', '[' to ']', '{' to '}')
 private val CLOSE_TO_OPEN = OPEN_TO_CLOSE.entries.associate { (k, v) -> v to k }
 private val QUOTES = setOf('"', '\'')
-private const val INDENT_UNIT = "    " // 4 spaces
 
 /**
  * A single-character insertion, located by the *caret* rather than by prefix-diffing the strings. The
@@ -41,6 +41,28 @@ private fun shouldAutoClose(nextChar: Char?): Boolean =
 private fun isIdentChar(c: Char?) = c != null && (c.isLetterOrDigit() || c == '_')
 
 /**
+ * Whether typing [open] should also insert its closing partner, given the surrounding [text]. Counts
+ * the document-wide balance of that bracket type (bounded by [BRACKET_SCAN_LIMIT]): when the closers
+ * already outnumber the openers, the just-typed opener will be matched by one of those stray closers
+ * (e.g. typing `{` on `fun main() <caret>\n  …\n}` — the trailing `}` is its partner), so inserting
+ * another closer would leave a dangling one. Over the limit we fall back to always auto-closing.
+ */
+private fun shouldInsertClosingBracket(text: CharSequence, open: Char): Boolean {
+    val close = OPEN_TO_CLOSE.getValue(open)
+    val n = text.length
+    if (n > BRACKET_SCAN_LIMIT) return true
+    var opens = 0
+    var closes = 0
+    var i = 0
+    while (i < n) {
+        val c = text[i]
+        if (c == open) opens++ else if (c == close) closes++
+        i++
+    }
+    return opens >= closes
+}
+
+/**
  * IDE smart editing applied to a just-produced [new] value relative to [old]: auto-close brackets and
  * quotes, skip over an auto-inserted closing char when the user types it, and smart Enter (continue the
  * current indent, and expand a `{}` / `()` / `[]` pair the caret sits inside onto three lines). Returns
@@ -64,8 +86,8 @@ fun applySmartEdit(old: TextFieldValue, new: TextFieldValue, language: CodeLangu
         return TextFieldValue(text, TextRange(pos + 1))
     }
 
-    // 2. Auto-close brackets.
-    if (ch in OPEN_TO_CLOSE && shouldAutoClose(nextChar)) {
+    // 2. Auto-close brackets — but only when a matching closer doesn't already exist further on.
+    if (ch in OPEN_TO_CLOSE && shouldAutoClose(nextChar) && shouldInsertClosingBracket(text, ch)) {
         val close = OPEN_TO_CLOSE.getValue(ch)
         val merged = text.substring(0, pos) + ch + close + text.substring(pos)
         return TextFieldValue(merged, TextRange(pos + 1))
@@ -77,31 +99,14 @@ fun applySmartEdit(old: TextFieldValue, new: TextFieldValue, language: CodeLangu
         return TextFieldValue(merged, TextRange(pos + 1))
     }
 
-    // 4. Smart Enter.
-    if (ch == '\n') return smartEnter(text, pos)
+    // 4. Smart Enter — delegate to the shared per-language handler (same logic as the canvas editor's path).
+    if (ch == '\n') {
+        val e = newlineHandlerFor(language).onEnter(text, pos)
+        val merged = text.substring(0, e.start) + e.text + text.substring(e.end)
+        return TextFieldValue(merged, TextRange(e.caret))
+    }
 
     return new
-}
-
-private fun smartEnter(text: String, pos: Int): TextFieldValue {
-    val lineStart = text.lastIndexOf('\n', pos - 1) + 1
-    val indent = buildString {
-        var i = lineStart
-        while (i < pos && (text[i] == ' ' || text[i] == '\t')) { append(text[i]); i++ }
-    }
-    val before = text.getOrNull(pos - 1)
-    val after = text.getOrNull(pos)
-
-    // caret sits inside an empty pair -> open the block onto three lines.
-    if (before != null && before in OPEN_TO_CLOSE && after == OPEN_TO_CLOSE[before]) {
-        val mid = "\n" + indent + INDENT_UNIT
-        val merged = text.substring(0, pos) + mid + "\n" + indent + text.substring(pos)
-        return TextFieldValue(merged, TextRange(pos + mid.length))
-    }
-    // after an opening bracket -> one deeper.
-    val newIndent = if (before != null && before in OPEN_TO_CLOSE) indent + INDENT_UNIT else indent
-    val merged = text.substring(0, pos) + "\n" + newIndent + text.substring(pos)
-    return TextFieldValue(merged, TextRange(pos + 1 + newIndent.length))
 }
 
 /** Cap on the bracket-match scan so an unmatched bracket in a huge file can't cost O(N) per keystroke. */

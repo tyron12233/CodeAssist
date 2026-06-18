@@ -69,6 +69,7 @@ object TreeIcons {
         register("module", TreeIcon.Glyph(CaIcons.layers, IconTint.Accent))
         register("module.android", TreeIcon.Glyph(CaIcons.androidLogo, IconTint.Fixed(androidGreen)))
         register("sourceset.java", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Accent))
+        register("sourceset.kotlin", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Fixed(Color(0xFFCD7EE0))))
         register("sourceset.resources", TreeIcon.Glyph(CaIcons.resources, IconTint.Info))
         register("sourceset.android-res", TreeIcon.Glyph(CaIcons.image, IconTint.Fixed(androidGreen)))
         register("sourceset.assets", TreeIcon.Glyph(CaIcons.box, IconTint.Warning))

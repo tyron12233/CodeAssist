@@ -29,7 +29,8 @@ fun main(args: Array<String>) {
 
     // Active engine: the most recent existing project, or a freshly-seeded sample on first launch.
     val services = if (manager.isEmpty()) {
-        IdeServices.bootstrapDemo(projectsRoot.resolve("android-sample"))
+        // Share the download cache with every later project (sibling of projects/, so deps resolve once).
+        IdeServices.bootstrapDemo(projectsRoot.resolve("android-sample"), sharedCachesRoot = projectsRoot.parent ?: projectsRoot)
     } else {
         manager.open(manager.list().first().rootPath)
     }
@@ -49,7 +50,13 @@ fun main(args: Array<String>) {
             state = state,
             title = "CodeAssist",
         ) {
-            CodeAssistApp(backend, fileActions = DesktopFileActions(backend))
+            CodeAssistApp(
+                backend,
+                fileActions = DesktopFileActions(backend),
+                // Live @Preview rendering on desktop: the interpreter drives Compose for Desktop (see
+                // DesktopComposePreviewHost). The backend instance is stable across project switches.
+                composePreviewHost = DesktopComposePreviewHost(backend),
+            )
         }
     }
     backend.close()

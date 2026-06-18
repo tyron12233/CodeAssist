@@ -35,6 +35,7 @@ private fun metaFor(kind: UiCompletionKind): KindMeta = when (kind) {
     UiCompletionKind.Package -> KindMeta("p", Color(0xFFA0A1AA))
     UiCompletionKind.Keyword -> KindMeta("K", Color(0xFFCD7EE0))
     UiCompletionKind.Snippet -> KindMeta("{}", Color(0xFF98C97A))
+    UiCompletionKind.Word -> KindMeta("w", Color(0xFFA0A1AA))
 }
 
 /** Completion kind badge: a rounded-6 square tinted by kind with a code-font glyph (per icons.jsx). */

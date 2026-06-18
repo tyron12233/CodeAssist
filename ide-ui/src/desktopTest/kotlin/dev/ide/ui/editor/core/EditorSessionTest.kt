@@ -44,6 +44,34 @@ class EditorSessionTest {
     }
 
     @Test
+    fun smartBraceParity() {
+        // typing `{` where a stray closer already exists must NOT auto-close (it would dangle)
+        assertTypingParity("fun main() \n  println(\"x\")\n}", 11, '{')
+        // typing `{` in a balanced doc DOES auto-close (its own pair is needed)
+        assertTypingParity("class A {\n    if (x) \n}", 21, '{')
+        // empty doc: auto-close
+        assertTypingParity("", 0, '{')
+    }
+
+    /** The smart heuristic: typing `{` before an already-unmatched `}` inserts a lone `{`, not a pair. */
+    @Test
+    fun typingBraceBeforeUnmatchedCloserDoesNotAutoClose() {
+        val s = session("fun main() \n  println()\n}", 11)
+        s.commitText("{")
+        assertEquals("fun main() {\n  println()\n}", s.doc.text)
+        assertEquals(TextRange(12), s.selection)
+    }
+
+    /** With braces balanced, the nested `{` still gets its own auto-closed pair. */
+    @Test
+    fun typingBraceInBalancedDocAutoCloses() {
+        val s = session("class A {\n    if (x) \n}", 21)
+        s.commitText("{")
+        assertEquals("class A {\n    if (x) {}\n}", s.doc.text)
+        assertEquals(TextRange(22), s.selection)
+    }
+
+    @Test
     fun backspaceRemovesEmptyPair() {
         val s = session("foo()", 4)
         s.backspace()
@@ -205,5 +233,294 @@ class EditorSessionTest {
         )
         s.applyEdits(edits, TextRange(26 + 24))
         assertEquals("package p;\n\nimport java.util.List;\n\nclass A { List }", s.doc.text)
+    }
+
+    // ---- Tab: indent to the next tab stop, Shift-Tab dedents ----
+
+    @Test
+    fun indentFillsToNextTabStop() {
+        // caret at column 0 → full tab width
+        val s0 = session("ab", 0)
+        s0.indent()
+        assertEquals("    ab", s0.doc.text)
+        assertEquals(TextRange(4), s0.selection)
+
+        // caret at column 2 → only 2 spaces to reach column 4
+        val s2 = session("ab", 2)
+        s2.indent()
+        assertEquals("ab  ", s2.doc.text)
+        assertEquals(TextRange(4), s2.selection)
+
+        // already on a tab stop (column 4) → a full tab width to the next
+        val s4 = session("    x", 4)
+        s4.indent()
+        assertEquals("        x", s4.doc.text)
+    }
+
+    @Test
+    fun indentCountsExistingTabsAsTabStops() {
+        // a leading '\t' is column 4; caret after it → next stop is column 8 → 4 spaces
+        val s = session("\tx", 1)
+        s.indent()
+        assertEquals("\t    x", s.doc.text)
+    }
+
+    @Test
+    fun indentMultiLineSelectionIndentsEachNonBlankLine() {
+        val text = "a\n\nb"
+        val s = session(text, 0)
+        s.setSelectionRange(0, text.length)
+        s.indent()
+        assertEquals("    a\n\n    b", s.doc.text) // blank middle line untouched
+        assertEquals(TextRange(0, "    a\n\n    b".length), s.selection)
+    }
+
+    @Test
+    fun dedentRemovesOneIndentLevel() {
+        val s = session("      x", 7) // 6 leading spaces
+        s.dedent()
+        assertEquals("  x", s.doc.text) // removed up to one tab width (4)
+    }
+
+    @Test
+    fun dedentRemovesLeadingTab() {
+        val s = session("\tx", 2)
+        s.dedent()
+        assertEquals("x", s.doc.text)
+    }
+
+    @Test
+    fun dedentMultiLineKeepsBlockSelected() {
+        val text = "    a\n    b"
+        val s = session(text, 0)
+        s.setSelectionRange(0, text.length)
+        s.dedent()
+        assertEquals("a\nb", s.doc.text)
+        assertEquals(TextRange(0, "a\nb".length), s.selection)
+    }
+
+    // ---- per-language smart Enter (newline handlers) ----
+
+    /** Insert a newline at the caret and return (text, caretOffset). */
+    private fun enter(s: EditorSession): Pair<String, Int> {
+        s.commitText("\n")
+        return s.doc.text to s.selection.start
+    }
+
+    @Test
+    fun enterContinuesIndent() {
+        val s = session("    foo();", 10, CodeLanguage.Java) // caret at end
+        val (text, caret) = enter(s)
+        assertEquals("    foo();\n    ", text)
+        assertEquals(text.length, caret)
+    }
+
+    @Test
+    fun enterIndentsDeeperAfterOpenBrace() {
+        val s = session("class A {", 9, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("class A {\n    ", text)
+    }
+
+    @Test
+    fun enterIndentsDeeperAfterBraceWithTrailingSpaceAndComment() {
+        // last non-ws (ignoring a trailing line comment) is the brace → still go deeper
+        val s = session("class A {  // start", 19, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("class A {  // start\n    ", text)
+    }
+
+    @Test
+    fun enterExpandsEmptyBracePairWithDedentedClose() {
+        // caret between the auto-closed braces: `{|}`
+        val s = session("class A {}", 9, CodeLanguage.Java)
+        val (text, caret) = enter(s)
+        assertEquals("class A {\n    \n}", text)
+        assertEquals("class A {\n    ".length, caret) // caret on the middle (deeper) line
+    }
+
+    @Test
+    fun enterIndentsAfterBracelessIf() {
+        val s = session("        if (x)", 14, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("        if (x)\n            ", text) // one level deeper than the 8-space header
+    }
+
+    @Test
+    fun enterIndentsAfterElseIf() {
+        val s = session("    } else if (x)", 17, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    } else if (x)\n        ", text)
+    }
+
+    @Test
+    fun enterDoesNotIndentAfterCompletedStatement() {
+        val s = session("    foo();", 10, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    foo();\n    ", text) // same indent, not deeper
+    }
+
+    @Test
+    fun enterContinuesBlockComment() {
+        // inside a Javadoc continuation line → new line gets an aligned `* `
+        val s = session("    /**\n     * foo", 18, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    /**\n     * foo\n     * ", text)
+    }
+
+    @Test
+    fun enterAutoClosesJavadoc() {
+        // caret right after `/**` on an unclosed comment → insert ` * ` line + closing ` */`
+        val s = session("    /**", 7, CodeLanguage.Java)
+        val (text, caret) = enter(s)
+        assertEquals("    /**\n     * \n     */", text)
+        assertEquals("    /**\n     * ".length, caret)
+    }
+
+    @Test
+    fun kotlinEntersDeeperAfterArrow() {
+        val s = session("    items.map {", 15, CodeLanguage.Kotlin)
+        // after `{` → deeper anyway; check the `->` rule on its own line
+        val s2 = session("    1 ->", 8, CodeLanguage.Kotlin)
+        val (text, _) = enter(s2)
+        assertEquals("    1 ->\n        ", text)
+        // sanity: brace still deepens in Kotlin
+        val (t1, _) = enter(s)
+        assertEquals("    items.map {\n        ", t1)
+    }
+
+    @Test
+    fun kotlinExpandsLambdaArrowBeforeCloser() {
+        // `listOf().filter { it -> |}` → body on a deeper line, `}` dropped to the base indent
+        val src = "    listOf().filter { it -> }"
+        val caret = src.indexOf("-> ") + 3 // right after "-> ", before the space + "}"
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, c) = enter(s)
+        assertEquals("    listOf().filter { it ->\n        \n    }", text)
+        assertEquals("    listOf().filter { it ->\n        ".length, c) // caret on the deeper body line
+    }
+
+    @Test
+    fun kotlinExpandsBraceBeforeCloserSwallowingBlanks() {
+        // `map {  |  }` → the blanks around the caret are swallowed; `}` lands de-dented
+        val s = session("    map {   }", "    map {".length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    map {\n        \n    }", text)
+    }
+
+    // ---- #4 switch/case indent (Java) ----
+
+    @Test
+    fun enterIndentsDeeperAfterCaseLabel() {
+        val s = session("    case FOO:", 13, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    case FOO:\n        ", text)
+    }
+
+    @Test
+    fun enterIndentsDeeperAfterDefaultLabel() {
+        val s = session("    default:", 12, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    default:\n        ", text)
+    }
+
+    @Test
+    fun enterDoesNotTreatPlainLabelAsCase() {
+        // a ternary or a `foo:` label must not be mistaken for a case label
+        val s = session("    int x = a ? b : c;", 22, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    int x = a ? b : c;\n    ", text) // same indent
+    }
+
+    // ---- #2/#3 continuation indent ----
+
+    @Test
+    fun enterContinuationIndentsAfterOperator() {
+        val s = session("    int x = a +", 15, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    int x = a +\n        ", text) // one level deeper
+    }
+
+    @Test
+    fun enterContinuationDoesNotCompound() {
+        // second wrap of a continued statement stays at one level (prev line already ends on an operator)
+        val s = session("    int x = a +\n        b +", "    int x = a +\n        b +".length, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    int x = a +\n        b +\n        ", text) // still 8, not 12
+    }
+
+    @Test
+    fun kotlinChainContinuationIndents() {
+        val s = session("    something", 13, CodeLanguage.Kotlin)
+        // a trailing `.` wraps the chain one level deeper
+        val s2 = session("    builder.append(x).", "    builder.append(x).".length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s2)
+        assertEquals("    builder.append(x).\n        ", text)
+        // a plain identifier line just continues the indent
+        val (t1, _) = enter(s)
+        assertEquals("    something\n    ", t1)
+    }
+
+    // ---- #6 Java string-literal split ----
+
+    @Test
+    fun enterSplitsJavaStringWithConcatenation() {
+        val src = "    String s = \"foobar\";"
+        val caret = src.indexOf("foo") + 3 // between "foo" and "bar"
+        val s = session(src, caret, CodeLanguage.Java)
+        val (text, c) = enter(s)
+        assertEquals("    String s = \"foo\" +\n        \"bar\";", text)
+        assertEquals("    String s = \"foo\" +\n        \"".length, c) // caret before "bar"
+    }
+
+    @Test
+    fun enterDoesNotSplitOutsideString() {
+        val src = "    String s = \"x\";" // caret after the literal, before ;
+        val caret = src.indexOf(";")
+        val s = session(src, caret, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    String s = \"x\";".substring(0, caret) + "\n    " + ";", text)
+    }
+
+    @Test
+    fun kotlinDoesNotSplitStrings() {
+        // Kotlin string-split is off (templates) → a normal newline inside the string
+        val src = "    val s = \"foobar\""
+        val caret = src.indexOf("foo") + 3
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    val s = \"foo\n    bar\"", text)
+    }
+
+    // ---- #7 Javadoc/KDoc tag alignment ----
+
+    @Test
+    fun enterAlignsJavadocParamDescription() {
+        // wrapping a @param line aligns the continuation under the description ("a") — the `*` stays put
+        val src = "    /**\n     * @param name a desc"
+        val s = session(src, src.length, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        val descCol = "     * @param name ".length // column where "a" starts (19)
+        val cont = "     *" + " ".repeat(descCol - "     *".length) // star at col 5, padded to descCol
+        assertEquals("$src\n$cont", text)
+    }
+
+    @Test
+    fun enterAlignsJavadocReturnDescription() {
+        val src = "    /**\n     * @return the value"
+        val s = session(src, src.length, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        val descCol = "     * @return ".length // "the" column (15)
+        val cont = "     *" + " ".repeat(descCol - "     *".length)
+        assertEquals("$src\n$cont", text)
+    }
+
+    @Test
+    fun enterContinuesPlainJavadocLineWithSingleSpace() {
+        // a non-tag doc line keeps the usual `* ` (regression for the unified alignment path)
+        val src = "    /**\n     * hello"
+        val s = session(src, src.length, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("$src\n     * ", text)
     }
 }

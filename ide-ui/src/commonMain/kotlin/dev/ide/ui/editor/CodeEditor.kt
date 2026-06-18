@@ -33,11 +33,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,6 +72,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -77,7 +80,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalLayoutDirection
+import dev.ide.ui.editor.core.EditorImeHandle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -96,8 +100,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAction
+import dev.ide.ui.backend.UiComposePreview
+import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.editor.core.EditorDocument
@@ -151,12 +158,44 @@ fun CodeEditor(
     /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
+    /** Tapped a `@Preview` gutter icon — the host switches to the Preview surface rendering this function. */
+    onPreview: (functionName: String) -> Unit = {},
+) {
+    // Source code is intrinsically left-to-right: the gutter sits at the left edge and lines flow right.
+    // On an RTL system locale (e.g. Arabic) Compose flips `LocalLayoutDirection`, which would make
+    // `rememberTextMeasurer` shape lines right-to-left (right-aligned/mirrored text) and mirror the
+    // `Modifier.offset`/`Popup` anchoring for the gutter chips, lightbulb, and completion popup. Pin the
+    // whole editor subtree to LTR so it renders identically regardless of the device language.
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        CodeEditorContent(
+            path, session, backend, modifier, onSave, onNavigate, onRenamed,
+            showInlayHints, findEpoch, fontScale, onFontScaleChange, onPreview,
+        )
+    }
+}
+
+@Composable
+private fun CodeEditorContent(
+    path: String,
+    session: EditorSession,
+    backend: IdeBackend,
+    modifier: Modifier = Modifier,
+    onSave: () -> Unit = {},
+    onNavigate: (path: String, offset: Int) -> Unit = { _, _ -> },
+    onRenamed: (newPath: String?) -> Unit = {},
+    showInlayHints: Boolean = true,
+    findEpoch: Int = 0,
+    fontScale: Float = 1f,
+    onFontScaleChange: (Float) -> Unit = {},
+    onPreview: (functionName: String) -> Unit = {},
 ) {
     val colors = Ca.colors
     val syntax = colors.syntax
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
+    // The soft keyboard is raised only through this handle (on a deliberate tap) — never on focus alone, so
+    // tab switches, returning to the screen, or closing a sheet don't pop it open. See [EditorImeHandle].
+    val editorIme = remember { EditorImeHandle() }
     @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
     val density = LocalDensity.current
 
@@ -200,7 +239,34 @@ fun CodeEditor(
         if (!showInlayHints) { inlayHints = emptyList(); return@LaunchedEffect }
         delay(300.milliseconds)
         val text = editorSession.doc.text
-        inlayHints = runCatching { backend.hintsAt(path, text, 0, text.length) }.getOrDefault(emptyList())
+        // Hints share the one engine thread with completion/analysis; a completion request preempts this pass
+        // (surfaced as AnalysisPreempted). Retry a few times — keeping the current hints in the meantime —
+        // so a pass that loses the race to a keystroke still lands once typing settles, rather than the hints
+        // going missing until the next edit (the old behavior was: clear on preempt, only retrigger on an edit).
+        var attempt = 0
+        while (attempt++ < 8) {
+            try {
+                inlayHints = backend.hintsAt(path, text, 0, text.length)
+                break
+            } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
+                delay(150.milliseconds) // let the interactive call finish, then try again
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel // the effect itself was cancelled (new edit/file) — don't swallow
+            } catch (e: Throwable) {
+                inlayHints = emptyList()
+                break
+            }
+        }
+    }
+    // ---- @Preview gutter markers: the file's Compose @Preview functions, fetched debounced. Each draws a
+    // tappable glyph in the gutter on its line → switch this tab to the Preview surface for that function.
+    // Kotlin-only (the backend is a no-op elsewhere); cheap, so it just rides the edit cadence.
+    var composePreviews by remember(path) { mutableStateOf<List<UiComposePreview>>(emptyList()) }
+    LaunchedEffect(path, editorSession.textRevision) {
+        if (!path.endsWith(".kt") && !path.endsWith(".kts")) { composePreviews = emptyList(); return@LaunchedEffect }
+        delay(400.milliseconds)
+        val text = editorSession.doc.text
+        composePreviews = runCatching { backend.composePreviews(path, text) }.getOrDefault(emptyList())
     }
     val inlayStyle = remember(colors) { SpanStyle(color = colors.textTertiary, fontStyle = FontStyle.Italic) }
     val perLineInlays = remember(inlayHints, editorSession.doc) {
@@ -252,6 +318,13 @@ fun CodeEditor(
         hOffset.floatValue = new
         new - old
     }
+    // A zoom rescales the line metrics (hence the content size), and the viewport changes on resize/rotate;
+    // re-clamp the scroll so a zoom-out can't strand the viewport past the document end — where taps would
+    // map to a coerced position that no longer matches what's rendered.
+    LaunchedEffect(zoom, editorSession.doc.lineCount, viewport) {
+        vOffset.floatValue = vOffset.floatValue.coerceIn(0f, maxV())
+        hOffset.floatValue = hOffset.floatValue.coerceIn(0f, maxH())
+    }
 
     // ---- geometry helpers (viewport coordinates ↔ document offsets) ----
     fun lineTop(line: Int) = metrics.padTop + line * metrics.lineHeight - vOffset.floatValue
@@ -292,6 +365,9 @@ fun CodeEditor(
     // subtracts the scroll offsets. The Animatable is keyed on the session so switching tabs starts fresh.
     val caretAnim = remember(editorSession) { Animatable(Offset.Zero, Offset.VectorConverter) }
     var caretAnimReady by remember(editorSession) { mutableStateOf(false) }
+    // The last text revision the caret animation reacted to — lets it tell a typing-driven caret advance
+    // (text changed) from a navigation move (arrows/click/go-to), so typing snaps and only navigation glides.
+    var caretAnimRev by remember(editorSession) { mutableIntStateOf(editorSession.textRevision) }
     val caretTarget = run {
         val off = editorSession.selection.end
         val d = editorSession.doc
@@ -304,7 +380,12 @@ fun CodeEditor(
         // Snap on the first placement (file open) and across off-screen jumps (go-to-symbol, PageUp/Down) —
         // a glide across the whole document reads as a glitch; glide only for moves within a viewport.
         val far = viewport.height > 0 && kotlin.math.abs(caretTarget.y - caretAnim.value.y) > viewport.height
-        if (!caretAnimReady || far) {
+        // Typing advances the caret on (nearly) every keystroke; gliding then keeps a 60fps spring redraw loop
+        // running the whole time someone types — costly on a phone. Snap when the buffer changed (typing/edit),
+        // and reserve the glide for pure caret moves (arrows, taps, go-to) where it reads as intentional motion.
+        val edited = editorSession.textRevision != caretAnimRev
+        caretAnimRev = editorSession.textRevision
+        if (!caretAnimReady || far || edited) {
             caretAnimReady = true
             caretAnim.snapTo(caretTarget)
         } else {
@@ -321,6 +402,12 @@ fun CodeEditor(
     var tripleArmed by remember(path) { mutableStateOf(false) }
     var tripleArmPos by remember(path) { mutableStateOf(Offset.Zero) }
     var tripleArmJob by remember(path) { mutableStateOf<Job?>(null) }
+    // Mouse click-count tracking (single → caret, double → word, triple → line); reset across files.
+    // We count clicks ourselves rather than via detectTapGestures so the mouse path can own the whole
+    // gesture (click + drag-to-select) and consume the drag before the scroll containers steal it.
+    var mouseClicks by remember(path) { mutableIntStateOf(0) }
+    var mouseLastClickMs by remember(path) { mutableLongStateOf(0L) }
+    var mouseLastClickPos by remember(path) { mutableStateOf(Offset.Zero) }
 
     // ---- completion (same session/cache/filter machinery as before) ----
     var completion by remember(path) { mutableStateOf<CompletionSession?>(null) }
@@ -420,6 +507,30 @@ fun CodeEditor(
     val showPopup = !dismissed && displayed.isNotEmpty()
     val safeSelected = selected.coerceIn(0, (displayed.size - 1).coerceAtLeast(0))
 
+    // Keep the popup *window* mounted across the 1-frame gaps a keystroke opens up, instead of unmounting and
+    // recreating the Popup window each keystroke (the blink the user sees). It opens once there are items, and
+    // then stays open as long as the caret is still on the same token (`liveCompletion != null`) and the user
+    // hasn't dismissed it — a momentarily-empty `displayed` (a stale cached session between the debounced
+    // refreshes, which land ~110ms apart) does NOT close it. It closes only on an explicit dismiss
+    // (Esc/accept/click-away/non-identifier → `dismissed`) or when the caret leaves the token. No timer, so
+    // nothing races the refresh debounce. `shownCompletion` snapshots the last good render state (token +
+    // items + prefix), so while `displayed` is transiently empty the window shows real content, never an empty box.
+    var popupVisible by remember(path) { mutableStateOf(false) }
+    val onToken = liveCompletion != null
+    val hasItems = displayed.isNotEmpty()
+    LaunchedEffect(dismissed, onToken, hasItems) {
+        popupVisible = when {
+            dismissed || !onToken -> false
+            hasItems -> true
+            else -> popupVisible // transient empty while still on the token: hold the popup open
+        }
+    }
+    val shownCompletion = remember(path) { mutableStateOf<ShownCompletion?>(null) }
+    SideEffect {
+        val live = liveCompletion
+        if (live != null && hasItems) shownCompletion.value = ShownCompletion(live.tokenStart, displayed, activePrefix)
+    }
+
     fun refresh(immediate: Boolean = false) {
         job?.cancel()
         job = scope.launch {
@@ -434,9 +545,12 @@ fun CodeEditor(
         }
     }
 
-    fun accept() {
+    // Accept [picked], or — for the keyboard path — the currently-selected item. Callers that already know
+    // the item (a click/tap on a row) MUST pass it: `safeSelected` is captured at composition time, so a
+    // same-frame `selected = …; accept()` would still read the stale selection and accept the wrong row.
+    fun accept(picked: UiCompletionItem? = null) {
         val s = liveCompletion ?: return
-        val item = displayed.getOrNull(safeSelected) ?: return
+        val item = picked ?: displayed.getOrNull(safeSelected) ?: return
         val chars = editorSession.doc.chars
         val len = chars.length
         val mainStart = s.tokenStart.coerceIn(0, len)
@@ -706,7 +820,10 @@ fun CodeEditor(
             Key.Delete -> { editorSession.deleteForward(word); return true }
             Key.Enter, Key.NumPadEnter -> { editorSession.commitText("\n"); return true }
             Key.Tab -> {
-                if (!shortcut && !ev.isAltPressed) { editorSession.commitText("    "); return true }
+                if (!shortcut && !ev.isAltPressed) {
+                    if (ev.isShiftPressed) editorSession.dedent() else editorSession.indent()
+                    return true
+                }
                 return false
             }
         }
@@ -756,7 +873,7 @@ fun CodeEditor(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { viewport = it }
-                .editorTextInput(editorSession)
+                .editorTextInput(editorSession, editorIme)
                 .focusRequester(focus)
                 .onFocusChanged { isFocused = it.isFocused }
                 .focusable()
@@ -826,74 +943,33 @@ fun CodeEditor(
                     }
                 }
                 .onKeyEvent { handleKey(it) }
-                // pinch-to-zoom: a 2-finger gesture scales the editor font. Consumes ONLY when ≥2 fingers are
-                // down, so single-finger scroll/selection still flow to the detectors below.
+                // pinch-to-zoom: a 2-finger gesture scales the editor font. Watched on the Initial pass
+                // (outer→inner) so a pinch is claimed for zoom BEFORE the scroll containers below treat the
+                // two-finger movement as a pan — otherwise the editor scrolled/jittered (and a stray tap could
+                // land) while zooming. Acts ONLY when ≥2 fingers are down, so single-finger scroll/selection
+                // still flow unconsumed to the detectors below.
                 .pointerInput(Unit) {
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         do {
-                            val event = awaitPointerEvent()
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
                             if (event.changes.count { it.pressed } >= 2) {
                                 val z = event.calculateZoom()
-                                if (z != 1f) {
-                                    onFontScaleChange(clampFontScale(liveScale.value * z))
-                                    event.changes.forEach { if (it.pressed) it.consume() }
-                                }
+                                if (z != 1f) onFontScaleChange(clampFontScale(liveScale.value * z))
+                                // Consume the whole 2-finger gesture (even on a no-zoom frame) so it stays a
+                                // pure pinch — the scrollable/tap detectors below see consumed changes and
+                                // skip it, instead of stealing the pan as a scroll.
+                                event.changes.forEach { if (it.pressed) it.consume() }
                             }
                         } while (event.changes.any { it.pressed })
                     }
                 }
-                // selection-handle and mouse-selection drags claim the pointer before the scrollables
-                .pointerInput(editorSession) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = true)
-                        lastInputWasTouch = down.type != PointerType.Mouse
-                        val handleRadius = 14.dp.toPx()
-                        fun handleCenter(offset: Int): Offset {
-                            val (_, x, top) = caretGeometry(offset)
-                            return Offset(x, top + metrics.lineHeight + handleRadius * 0.6f)
-                        }
-                        val sel = editorSession.selection
-                        val hit: Char? = when {
-                            handlesVisible && !sel.collapsed &&
-                                (down.position - handleCenter(sel.min)).getDistance() < handleRadius -> 'a'
-                            handlesVisible && !sel.collapsed &&
-                                (down.position - handleCenter(sel.max)).getDistance() < handleRadius -> 'b'
-                            handlesVisible && sel.collapsed &&
-                                (down.position - handleCenter(sel.start)).getDistance() < handleRadius -> 'c'
-                            else -> null
-                        }
-                        when {
-                            hit != null -> {
-                                down.consume()
-                                // The handle sits ~a line below its anchor, so the finger covers the row below.
-                                // Lift the hit-point back up to the anchored line so dragging tracks what you see.
-                                val lift = metrics.lineHeight * 0.5f + handleRadius * 0.6f
-                                drag(down.id) { change ->
-                                    val off = offsetAt(change.position.copy(y = change.position.y - lift))
-                                    when (hit) {
-                                        'a' -> editorSession.setSelectionRange(editorSession.selection.max, off)
-                                        'b' -> editorSession.setSelectionRange(editorSession.selection.min, off)
-                                        else -> editorSession.setCaret(off)
-                                    }
-                                    change.consume()
-                                }
-                            }
-                            down.type == PointerType.Mouse -> {
-                                focus.requestFocus()
-                                val anchor = offsetAt(down.position)
-                                editorSession.setCaret(anchor)
-                                drag(down.id) { change ->
-                                    editorSession.extendSelectionTo(offsetAt(change.position))
-                                    change.consume()
-                                }
-                            }
-                        }
-                    }
-                }
                 .scrollable(vScroll, Orientation.Vertical, reverseDirection = true)
                 .scrollable(hScroll, Orientation.Horizontal, reverseDirection = true)
-                .pointerInput(editorSession) {
+                // Keyed on metrics/gutterWidth too: a gesture block captures the geometry helpers
+                // (offsetAt/lineAtY) once when it launches, so it must re-launch when a zoom rescales the
+                // line metrics — otherwise a post-zoom tap maps through stale lineHeight to the wrong line.
+                .pointerInput(editorSession, metrics, gutterWidthPx) {
                     // longPress flag, shared across this detector's callbacks within one gesture.
                     var longPressed = false
                     detectTapGestures(
@@ -922,7 +998,7 @@ fun CodeEditor(
                                         editorSession.setCaret(offsetAt(pos))
                                         if (lastInputWasTouch) {
                                             handlesVisible = true
-                                            keyboard?.show()
+                                            editorIme.show() // explicit tap → raise the keyboard
                                         }
                                     }
                                 }
@@ -940,29 +1016,90 @@ fun CodeEditor(
                         onLongPress = { pos ->
                             longPressed = true
                             focus.requestFocus()
-                            // Long-press → caret-position intentions/fixes (Alt-Enter on a phone). Fetch the
-                            // actions for that spot; if there are none, fall back to selecting the word so the
-                            // gesture is never wasted.
-                            val off = offsetAt(pos)
-                            editorSession.setCaret(off)
+                            // Long-press → select the word under the finger and raise the selection chrome
+                            // (handles + the floating toolbar), the standard Android text gesture. Code actions
+                            // are reached from the lightbulb in that toolbar (and the gutter bulb), so this
+                            // gesture is never overloaded.
                             dismissed = true; job?.cancel()
-                            scope.launch {
-                                val text = editorSession.doc.text
-                                val acts = runCatching { backend.actionsAt(path, text, off, off) }.getOrNull().orEmpty()
-                                if (acts.isNotEmpty()) {
-                                    actions = acts
-                                    actionSelected = 0
-                                    actionsOpen = true
-                                } else {
-                                    editorSession.selectWordAt(off)
-                                    if (lastInputWasTouch) {
-                                        handlesVisible = true
-                                        keyboard?.show()
-                                    }
-                                }
+                            editorSession.selectWordAt(offsetAt(pos))
+                            if (lastInputWasTouch) {
+                                handlesVisible = true
+                                editorIme.show() // explicit long-press → raise the keyboard
                             }
                         },
                     )
+                }
+                // Innermost pointer handler: it sees events first on the Main pass, so it can claim a
+                // mouse drag (and the touch selection-handle drags) BEFORE the scroll containers above
+                // swallow the movement. Mouse gestures are owned end-to-end here (click-count → caret/
+                // word/line + drag-to-select) and the down is consumed, so detectTapGestures stays
+                // touch-only. Touch taps fall through unconsumed to detectTapGestures.
+                .pointerInput(editorSession, metrics, gutterWidthPx) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = true)
+                        if (down.type == PointerType.Mouse) {
+                            lastInputWasTouch = false
+                            focus.requestFocus()
+                            down.consume() // keep the scroll containers + detectTapGestures out of it
+                            // Count consecutive clicks ourselves: 1 → caret, 2 → word, 3 → line, then wrap.
+                            val near = (down.position - mouseLastClickPos).getDistance() < 24f
+                            mouseClicks =
+                                if (near && down.uptimeMillis - mouseLastClickMs <= 300L) (mouseClicks % 3) + 1 else 1
+                            mouseLastClickMs = down.uptimeMillis
+                            mouseLastClickPos = down.position
+                            val anchor = offsetAt(down.position)
+                            // A click on a gutter error/warning glyph opens that line's diagnostic sheet.
+                            val gutterDiag = if (down.position.x < gutterWidthPx)
+                                diagnosticOnLine(lineAtY(down.position.y)) else null
+                            when {
+                                gutterDiag != null && mouseClicks == 1 -> openDiagnosticSheet(gutterDiag)
+                                mouseClicks == 2 -> editorSession.selectWordAt(anchor)
+                                mouseClicks == 3 -> editorSession.selectLineAt(anchor)
+                                else -> editorSession.setCaret(anchor)
+                            }
+                            // Anchor the drag at the current selection start so a drag after a double/
+                            // triple click still extends from where the click landed.
+                            val dragAnchor = editorSession.selection.start
+                            drag(down.id) { change ->
+                                editorSession.setSelectionRange(dragAnchor, offsetAt(change.position))
+                                change.consume()
+                            }
+                            return@awaitEachGesture
+                        }
+                        // Touch: only claim the gesture for a selection-handle drag; otherwise leave it
+                        // unconsumed so the scrollables and detectTapGestures (tap/double-tap) still run.
+                        lastInputWasTouch = true
+                        val handleRadius = 14.dp.toPx()
+                        fun handleCenter(offset: Int): Offset {
+                            val (_, x, top) = caretGeometry(offset)
+                            return Offset(x, top + metrics.lineHeight + handleRadius * 0.6f)
+                        }
+                        val sel = editorSession.selection
+                        val hit: Char? = when {
+                            handlesVisible && !sel.collapsed &&
+                                (down.position - handleCenter(sel.min)).getDistance() < handleRadius -> 'a'
+                            handlesVisible && !sel.collapsed &&
+                                (down.position - handleCenter(sel.max)).getDistance() < handleRadius -> 'b'
+                            handlesVisible && sel.collapsed &&
+                                (down.position - handleCenter(sel.start)).getDistance() < handleRadius -> 'c'
+                            else -> null
+                        }
+                        if (hit != null) {
+                            down.consume()
+                            // The handle sits ~a line below its anchor, so the finger covers the row below.
+                            // Lift the hit-point back up to the anchored line so dragging tracks what you see.
+                            val lift = metrics.lineHeight * 0.5f + handleRadius * 0.6f
+                            drag(down.id) { change ->
+                                val off = offsetAt(change.position.copy(y = change.position.y - lift))
+                                when (hit) {
+                                    'a' -> editorSession.setSelectionRange(editorSession.selection.max, off)
+                                    'b' -> editorSession.setSelectionRange(editorSession.selection.min, off)
+                                    else -> editorSession.setCaret(off)
+                                }
+                                change.consume()
+                            }
+                        }
+                    }
                 }
                 .drawBehind {
                     drawEditor(
@@ -1006,14 +1143,20 @@ fun CodeEditor(
         // positioned in the layout phase so scrolling moves them without recomposition. Only Error and
         // Warning get a chip (Info/Hint stay quiet: squiggle + gutter only).
         run {
-            val chipPerLine = HashMap<Int, UiDiagnostic>()
-            for (d in diagnostics) {
-                if (d.severity != UiSeverity.Error && d.severity != UiSeverity.Warning) continue
-                val off = d.startOffset.coerceIn(0, docLength)
-                val ln = doc.lineForOffset(off)
-                val cur = chipPerLine[ln]
-                // lower ordinal = more severe (Error before Warning)
-                if (cur == null || d.severity.ordinal < cur.severity.ordinal) chipPerLine[ln] = d
+            // The most-severe Error/Warning per line, memoized on (diagnostics, doc): a caret-only move
+            // recomposes the editor (editCount/selection bump the effects) but leaves the buffer untouched,
+            // so this is a cache hit then — no per-move HashMap rebuild. It changes only on an actual edit.
+            val chipPerLine = remember(diagnostics, doc) {
+                val m = HashMap<Int, UiDiagnostic>()
+                for (d in diagnostics) {
+                    if (d.severity != UiSeverity.Error && d.severity != UiSeverity.Warning) continue
+                    val off = d.startOffset.coerceIn(0, doc.length)
+                    val ln = doc.lineForOffset(off)
+                    val cur = m[ln]
+                    // lower ordinal = more severe (Error before Warning)
+                    if (cur == null || d.severity.ordinal < cur.severity.ordinal) m[ln] = d
+                }
+                m
             }
             for ((ln, d) in chipPerLine) {
                 val lineWidth = layoutFor(ln).size.width
@@ -1044,6 +1187,10 @@ fun CodeEditor(
             ) {
                 SelectionToolbar(
                     hasSelection = !editorSession.selection.collapsed,
+                    // The lightbulb appears in the toolbar whenever the caret/selection has actions available —
+                    // the easy, discoverable way to reach quick-fixes & intentions on a phone (tap → lightbulb).
+                    hasActions = actions.isNotEmpty(),
+                    onActions = { handlesVisible = false; dismissed = true; job?.cancel(); actionSelected = 0; actionsOpen = true },
                     onCopy = {
                         editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
                         handlesVisible = false
@@ -1061,10 +1208,12 @@ fun CodeEditor(
             }
         }
 
-        // completion popup, anchored at the live token start in viewport coordinates
-        val live = liveCompletion
-        if (showPopup && live != null) {
-            val anchor = live.tokenStart.coerceIn(0, docLength)
+        // completion popup, anchored at the token start in viewport coordinates. Mounted on `popupVisible`
+        // (the keep-alive latch) and rendered from `shownCompletion` (the last good state) so a keystroke's
+        // transient session swap / filter miss doesn't blink the window shut.
+        val shown = shownCompletion.value
+        if (popupVisible && shown != null) {
+            val anchor = shown.tokenStart.coerceIn(0, docLength)
             val (anchorLine, anchorX, anchorTop) = caretGeometry(anchor)
             val lineBottomPx = anchorTop + metrics.lineHeight
             val gapPx = with(density) { 6.dp.roundToPx() }
@@ -1084,21 +1233,28 @@ fun CodeEditor(
             Popup(
                 popupPositionProvider = positionProvider,
                 onDismissRequest = { dismissed = true; job?.cancel() },
+                // The popup is non-focusable (typing must reach the editor), but Compose still registers it
+                // for outside-touch dismissal — and every tap on the SOFT KEYBOARD is a touch outside the
+                // popup window, so it fired onDismissRequest on each keystroke and blinked the popup shut.
+                // Disable click-outside dismissal; the popup closes on Esc, accept, or the caret leaving the
+                // token (handled above), not on a stray outside touch.
+                properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
             ) {
                 BoxWithConstraints {
                     val compact = maxWidth < 600.dp
                     val popupWidth = if (compact) (maxWidth * 0.8f).coerceIn(220.dp, 300.dp) else 420.dp
                     val listCap = if (compact) 240.dp else 296.dp
                     val listMax = (roomBelowDp - DocStripReserve).coerceIn(MinListHeight, listCap)
+                    val items = shown.items
                     CompletionList(
-                        items = displayed,
-                        selectedIndex = safeSelected,
-                        prefix = activePrefix,
+                        items = items,
+                        selectedIndex = safeSelected.coerceIn(0, (items.size - 1).coerceAtLeast(0)),
+                        prefix = shown.prefix,
                         width = popupWidth,
                         maxListHeight = listMax,
                         onPick = { item ->
-                            selected = displayed.indexOf(item).coerceAtLeast(0)
-                            accept()
+                            selected = items.indexOf(item).coerceAtLeast(0)
+                            accept(item) // accept the tapped row, not the (stale) currently-selected index
                         },
                         onHover = { selected = it },
                     )
@@ -1116,6 +1272,22 @@ fun CodeEditor(
                     IntOffset(
                         (gutterWidthPx - 19.dp.toPx()).roundToInt(),
                         (lineTopPx + (metrics.lineHeight - 18.dp.toPx()) / 2f).roundToInt(),
+                    )
+                },
+            )
+        }
+
+        // @Preview gutter icons — a tappable glyph in the gutter beside each Compose @Preview function.
+        // Tapping switches this tab to the Preview surface rendering that specific composable. Positioned
+        // per line and read in the layout phase, so they scroll with the document like the diagnostic chips.
+        for (p in composePreviews) {
+            val ln = doc.lineForOffset(p.offset.coerceIn(0, docLength))
+            PreviewGutterIcon(
+                onClick = { onPreview(p.functionName) },
+                modifier = Modifier.offset {
+                    IntOffset(
+                        1.dp.roundToPx(),
+                        (metrics.padTop + ln * metrics.lineHeight - vOffset.floatValue + (metrics.lineHeight - 20.dp.toPx()) / 2f).roundToInt(),
                     )
                 },
             )
@@ -1205,6 +1377,9 @@ fun CodeEditor(
 /** What the rename prompt is editing: where the caret was, the symbol's old name + kind, and the typed name. */
 private data class RenameUiState(val offset: Int, val oldName: String, val kind: String, val newName: String)
 
+/** The last good completion render state, latched so the popup window survives a keystroke's transient gaps. */
+private data class ShownCompletion(val tokenStart: Int, val items: List<UiCompletionItem>, val prefix: String)
+
 /** A centered prompt for the new identifier; Enter renames, Esc cancels. Auto-focused, with the name selected. */
 @Composable
 private fun RenamePopup(
@@ -1238,7 +1413,7 @@ private fun RenamePopup(
                 onValueChange = { field = it; onChange(it.text) },
                 singleLine = true,
                 enabled = !busy,
-                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary, fontFamily = FontFamily.Monospace),
+                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary, fontFamily = Ca.type.codeFamily),
                 cursorBrush = SolidColor(Ca.colors.accent),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
                     if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -1609,6 +1784,8 @@ private fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: Strin
 @Composable
 private fun SelectionToolbar(
     hasSelection: Boolean,
+    hasActions: Boolean,
+    onActions: () -> Unit,
     onCopy: () -> Unit,
     onCut: () -> Unit,
     onPaste: () -> Unit,
@@ -1619,6 +1796,7 @@ private fun SelectionToolbar(
             .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
             .padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         if (hasSelection) {
             ToolbarAction("Copy", onCopy)
@@ -1626,6 +1804,17 @@ private fun SelectionToolbar(
         }
         ToolbarAction("Paste", onPaste)
         ToolbarAction("Select all", onSelectAll)
+        // Quick-fixes / intentions for the caret position, when any exist.
+        if (hasActions) {
+            Box(
+                Modifier
+                    .clickable(onClick = onActions)
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CaIcons.lightbulb, "Quick actions", Modifier.size(16.dp), tint = Ca.colors.warning)
+            }
+        }
     }
 }
 

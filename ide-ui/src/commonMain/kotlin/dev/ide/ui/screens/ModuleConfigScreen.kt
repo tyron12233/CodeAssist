@@ -64,6 +64,8 @@ import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiSourceSetInfo
+import dev.ide.ui.components.AddSourceRootDialog
+import dev.ide.ui.components.AddSourceRootRequest
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
@@ -100,7 +102,15 @@ fun ModuleConfigScreen(
     var loading by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
     var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    var addRootOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Add/remove typed content roots, then reload the form so the change shows.
+    val onAddSourceRoot: () -> Unit = { addRootOpen = true }
+    val onRemoveSourceRoot: (String, String) -> Unit = { set, root ->
+        val module = selected
+        if (module != null && backend.removeSourceRoot(module, set, root)) reloadKey++
+    }
 
     LaunchedEffect(selected, reloadKey) {
         val module = selected ?: return@LaunchedEffect
@@ -121,7 +131,7 @@ fun ModuleConfigScreen(
                         ModuleListPane(modules, selected) { selected = it }
                     }
                     Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
-                    ConfigBody(config, loading, codeFont, Modifier.weight(1f).fillMaxHeight()) { edit ->
+                    ConfigBody(config, loading, codeFont, Modifier.weight(1f).fillMaxHeight(), onAddSourceRoot, onRemoveSourceRoot) { edit ->
                         val module = selected ?: return@ConfigBody
                         scope.launch {
                             val r = backend.updateModuleConfig(module, edit)
@@ -132,7 +142,7 @@ fun ModuleConfigScreen(
                 }
             } else {
                 if (modules.size > 1) ModuleSwitcherChips(modules, selected) { selected = it }
-                ConfigBody(config, loading, codeFont, Modifier.weight(1f).fillMaxWidth()) { edit ->
+                ConfigBody(config, loading, codeFont, Modifier.weight(1f).fillMaxWidth(), onAddSourceRoot, onRemoveSourceRoot) { edit ->
                     val module = selected ?: return@ConfigBody
                     scope.launch {
                         val r = backend.updateModuleConfig(module, edit)
@@ -142,6 +152,13 @@ fun ModuleConfigScreen(
                 }
             }
         }
+        AddSourceRootDialog(
+            request = (selected.takeIf { addRootOpen })?.let { AddSourceRootRequest(it, backend.moduleSourceSets(it)) },
+            onDismiss = { addRootOpen = false },
+            onAdd = { module, set, dirName, role ->
+                if (backend.addSourceRoot(module, set, dirName, role) != null) reloadKey++
+            },
+        )
         ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
     }
 }
@@ -219,6 +236,8 @@ private fun ConfigBody(
     loading: Boolean,
     codeFont: FontFamily,
     modifier: Modifier,
+    onAddSourceRoot: () -> Unit,
+    onRemoveSourceRoot: (sourceSet: String, rootPath: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
 ) {
     Crossfade(targetState = loading, animationSpec = tween(Motion.BASE), label = "cfgBody", modifier = modifier) { isLoading ->
@@ -229,13 +248,19 @@ private fun ConfigBody(
             config == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Couldn't load module configuration.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
             }
-            else -> ConfigForm(config, codeFont, onSave)
+            else -> ConfigForm(config, codeFont, onAddSourceRoot, onRemoveSourceRoot, onSave)
         }
     }
 }
 
 @Composable
-private fun ConfigForm(config: UiModuleConfig, codeFont: FontFamily, onSave: (UiModuleConfigEdit) -> Unit) {
+private fun ConfigForm(
+    config: UiModuleConfig,
+    codeFont: FontFamily,
+    onAddSourceRoot: () -> Unit,
+    onRemoveSourceRoot: (sourceSet: String, rootPath: String) -> Unit,
+    onSave: (UiModuleConfigEdit) -> Unit,
+) {
     // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
     var level by remember(config) { mutableStateOf(config.languageLevel) }
     val forms = remember(config) { config.facets.map { it.toForm() } }
@@ -255,10 +280,15 @@ private fun ConfigForm(config: UiModuleConfig, codeFont: FontFamily, onSave: (Ui
             }
         }
 
-        // ---- Source sets (read-only) ----
-        if (config.sourceSets.isNotEmpty()) item("sourceSets") {
-            SectionCard("Source sets") {
-                config.sourceSets.forEach { ss -> SourceSetRow(ss, codeFont) }
+        // ---- Source sets (add / remove typed roots) ----
+        item("sourceSets") {
+            SectionCard("Source sets", action = {
+                IconButtonCa(CaIcons.plus, "Add source root", onClick = onAddSourceRoot, boxSize = 26, iconSize = 16)
+            }) {
+                if (config.sourceSets.isEmpty()) {
+                    Text("No source sets yet.", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                }
+                config.sourceSets.forEach { ss -> SourceSetRow(ss, codeFont) { root -> onRemoveSourceRoot(ss.name, root) } }
             }
         }
 
@@ -279,13 +309,16 @@ private fun ConfigForm(config: UiModuleConfig, codeFont: FontFamily, onSave: (Ui
 }
 
 @Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
+private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            action?.invoke()
+        }
         content()
     }
 }
@@ -300,15 +333,18 @@ private fun ReadOnlyRow(label: String, value: String, codeFont: FontFamily) {
 }
 
 @Composable
-private fun SourceSetRow(ss: UiSourceSetInfo, codeFont: FontFamily) {
+private fun SourceSetRow(ss: UiSourceSetInfo, codeFont: FontFamily, onRemoveRoot: (rootPath: String) -> Unit) {
     Column(Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(ss.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             Chip(ss.scope.lowercase(), fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
         }
         ss.roots.forEach { r ->
-            Text(r, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont),
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(r, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                IconButtonCa(CaIcons.close, "Remove $r", onClick = { onRemoveRoot(r) }, boxSize = 22, iconSize = 12)
+            }
         }
     }
 }

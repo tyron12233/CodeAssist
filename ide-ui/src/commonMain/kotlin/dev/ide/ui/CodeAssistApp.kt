@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import dev.ide.ui.backend.FileActions
@@ -33,6 +34,10 @@ import dev.ide.ui.screens.SdkManagerScreen
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaAccent
 import dev.ide.ui.theme.CodeAssistTheme
+import dev.ide.ui.theme.rememberJetBrainsMono
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -48,8 +53,9 @@ import kotlinx.coroutines.launch
 fun CodeAssistApp(
     backend: IdeBackend,
     uiFont: FontFamily = FontFamily.SansSerif,
-    codeFont: FontFamily = FontFamily.Monospace,
+    codeFont: FontFamily = rememberJetBrainsMono(),
     fileActions: FileActions = FileActions.None,
+    composePreviewHost: ComposePreviewHost? = null,
 ) {
     var dark by remember { mutableStateOf(true) }
     var screen by remember { mutableStateOf(Screen.Projects) }
@@ -66,11 +72,22 @@ fun CodeAssistApp(
 
     // The active project changes (create/open) bump the epoch; re-key per-project state on it.
     val epoch by backend.projectEpoch.collectAsState()
-    val state = remember(backend, epoch) { IdeUiState(backend) }
+    val state = remember(backend, epoch) { IdeUiState(backend, composePreviewHost) }
 
-    // Open a sensible first file once per project, so entering the editor lands on real code.
+    // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
+    // file so entering the editor shows real code. Then persist tab changes (debounced) so they reopen next
+    // launch — `drop(1)` skips the just-restored state, and `collectLatest` cancels the pending write when
+    // another tab change lands within the debounce window.
     LaunchedEffect(state) {
-        state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
+        if (!state.restoreTabs()) {
+            state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
+        }
+        snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }
+            .drop(1)
+            .collectLatest {
+                delay(300)
+                state.backend.saveOpenTabs(state.tabsSnapshot())
+            }
     }
     // A successful create/open advances the epoch — land in the editor on the new project.
     LaunchedEffect(epoch) { if (epoch > 0) screen = Screen.Editor }
@@ -112,6 +129,10 @@ fun CodeAssistApp(
                                 onBackup = { scope.launch { backupAndShare() } },
                                 onSubmitSuggestions = if (fileActions.canOpenUrl) {
                                     { fileActions.openUrl(BetaInfo.FEEDBACK_URL) }
+                                } else null,
+                                storagePath = backend.projectsRootPath(),
+                                onOpenInFiles = if (fileActions.canReveal) {
+                                    { backend.projectsRootPath()?.let { fileActions.reveal(it) } }
                                 } else null,
                             )
                         }

@@ -33,7 +33,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -151,7 +150,7 @@ private fun FieldBox(
             value = field,
             onValueChange = { field = it; onChange(it.text) },
             singleLine = true,
-            textStyle = Ca.type.code.copy(color = Ca.colors.textPrimary, fontFamily = FontFamily.Monospace),
+            textStyle = Ca.type.code.copy(color = Ca.colors.textPrimary),
             cursorBrush = SolidColor(Ca.colors.accent),
             modifier = Modifier
                 .fillMaxWidth()

@@ -39,6 +39,31 @@ private fun shouldAutoClose(nextChar: Char?): Boolean =
 
 private fun isIdentChar(c: Char?) = c != null && (c.isLetterOrDigit() || c == '_')
 
+/** Cap on the balance scan so an unmatched bracket in a huge file can't cost O(N) per keystroke. */
+private const val BRACKET_SCAN_LIMIT = 50_000
+
+/**
+ * Whether typing [open] should also insert its closing partner, given the surrounding [text]. Counts
+ * the document-wide balance of that bracket type (bounded by [BRACKET_SCAN_LIMIT]): when the closers
+ * already outnumber the openers, the just-typed opener will be matched by one of those stray closers
+ * (e.g. typing `{` on `fun main() <caret>\n  …\n}` — the trailing `}` is its partner), so inserting
+ * another closer would leave a dangling one. Over the limit we fall back to always auto-closing.
+ */
+private fun shouldInsertClosingBracket(text: CharSequence, open: Char): Boolean {
+    val close = OPEN_TO_CLOSE.getValue(open)
+    val n = text.length
+    if (n > BRACKET_SCAN_LIMIT) return true
+    var opens = 0
+    var closes = 0
+    var i = 0
+    while (i < n) {
+        val c = text[i]
+        if (c == open) opens++ else if (c == close) closes++
+        i++
+    }
+    return opens >= closes
+}
+
 /**
  * The edit for typing [ch] with the caret/selection at `[selStart, selEnd)`. A selection is replaced
  * plainly (parity with the old path, where smart rules only applied to collapsed single-char inserts).
@@ -55,37 +80,22 @@ fun smartInsert(text: CharSequence, selStart: Int, selEnd: Int, ch: Char, langua
     if ((ch in CLOSE_TO_OPEN || ch in QUOTES) && nextChar == ch) {
         return RangeEdit(pos, pos, "", pos + 1)
     }
-    // 2. Auto-close brackets.
+    // 2. Auto-close brackets — but only when a matching closer doesn't already exist further on.
     if (ch in OPEN_TO_CLOSE && shouldAutoClose(nextChar)) {
-        return RangeEdit(pos, pos, "$ch${OPEN_TO_CLOSE.getValue(ch)}", pos + 1)
+        return if (shouldInsertClosingBracket(text, ch)) {
+            RangeEdit(pos, pos, "$ch${OPEN_TO_CLOSE.getValue(ch)}", pos + 1)
+        } else {
+            RangeEdit(pos, pos, ch.toString(), pos + 1)
+        }
     }
     // 3. Auto-close quotes (not when finishing an identifier, not in plain text files).
     if (ch in QUOTES && language != CodeLanguage.Plain && shouldAutoClose(nextChar) && !isIdentChar(text.charOrNull(pos - 1))) {
         return RangeEdit(pos, pos, "$ch$ch", pos + 1)
     }
-    // 4. Smart Enter.
-    if (ch == '\n') return smartEnter(text, pos)
+    // 4. Smart Enter — per-language (indent continuation, deeper after openers, comment continuation, …).
+    if (ch == '\n') return newlineHandlerFor(language).onEnter(text, pos)
 
     return RangeEdit(pos, pos, ch.toString(), pos + 1)
-}
-
-private fun smartEnter(text: CharSequence, pos: Int): RangeEdit {
-    val lineStart = text.lastIndexOf('\n', pos - 1) + 1
-    val indent = buildString {
-        var i = lineStart
-        while (i < pos && (text[i] == ' ' || text[i] == '\t')) { append(text[i]); i++ }
-    }
-    val before = text.charOrNull(pos - 1)
-    val after = text.charOrNull(pos)
-
-    // caret sits inside an empty pair -> open the block onto three lines.
-    if (before != null && before in OPEN_TO_CLOSE && after == OPEN_TO_CLOSE[before]) {
-        val mid = "\n" + indent + INDENT_UNIT
-        return RangeEdit(pos, pos, mid + "\n" + indent, pos + mid.length)
-    }
-    // after an opening bracket -> one deeper.
-    val newIndent = if (before != null && before in OPEN_TO_CLOSE) indent + INDENT_UNIT else indent
-    return RangeEdit(pos, pos, "\n" + newIndent, pos + 1 + newIndent.length)
 }
 
 /**

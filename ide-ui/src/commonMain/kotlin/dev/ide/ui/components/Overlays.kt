@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
@@ -121,7 +123,9 @@ fun BottomSheet(
                         .imePadding()
                         .shadow(24.dp, shape, clip = false)
                         .background(Ca.colors.glassThick, shape)
-                        .border(1.dp, Ca.colors.glassEdgeTop, shape),
+                        .border(1.dp, Ca.colors.glassEdgeTop, shape)
+                        // A tap on the sheet body shouldn't dismiss it — only a tap on the scrim above does.
+                        .swallowTaps(),
                 ) {
                     DragHandle(
                         Modifier.draggable(
@@ -165,12 +169,20 @@ fun DropdownOverlay(
             exit = slideOutVertically(tween(Motion.FAST, easing = Motion.soft)) { -it / 6 } +
                 scaleOut(tween(Motion.FAST, easing = Motion.soft), targetScale = 0.97f, transformOrigin = TopOrigin),
         ) {
-            content()
+            Box(Modifier.swallowTaps()) { content() }
         }
     }
 }
 
 private val TopOrigin = TransformOrigin(0.5f, 0f)
+
+/**
+ * Swallow tap gestures so a click on the dialog body (its padding/background, not an interactive child)
+ * doesn't fall through to the dismiss [Scrim] behind it — the dialog then closes only on a tap truly
+ * *outside* it. Children still get the gesture first (their buttons/fields work), and non-tap gestures
+ * (scroll/drag) pass through untouched.
+ */
+private fun Modifier.swallowTaps(): Modifier = pointerInput(Unit) { detectTapGestures { } }
 
 /**
  * A centered modal dialog — scrim fade + a gentle scale/fade pop of the body about its center. The
@@ -199,7 +211,7 @@ fun CenteredDialog(
             exit = fadeOut(tween(Motion.FAST, easing = Motion.soft)) +
                 scaleOut(tween(Motion.FAST, easing = Motion.soft), targetScale = 0.94f),
         ) {
-            content()
+            Box(Modifier.swallowTaps()) { content() }
         }
     }
 }

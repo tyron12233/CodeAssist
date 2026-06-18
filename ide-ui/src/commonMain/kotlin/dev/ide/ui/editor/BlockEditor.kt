@@ -64,6 +64,7 @@ import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiBlockEdit
 import dev.ide.ui.backend.UiBlockNode
 import dev.ide.ui.backend.UiBlockPart
@@ -1136,7 +1137,7 @@ private fun typedSampleFile(): Pair<UiBlockNode, String> {
 /** A no-op backend so previews can build a [Ctx] (completion/search return nothing). */
 private object PreviewBackend : IdeBackend {
     override val project = ProjectInfo("preview", "/preview", 1)
-    override fun fileTree() = TreeNode("root", "preview", NodeKind.Workspace, null)
+    override fun fileTree(mode: TreeViewMode) = TreeNode("root", "preview", NodeKind.Workspace, null)
     override fun readFile(path: String) = ""
     override fun moduleNameForFile(path: String): String? = null
     override fun updateDocument(path: String, text: String) {}

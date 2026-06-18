@@ -89,6 +89,9 @@ class MainActivity : ComponentActivity() {
 
                     override val canOpenUrl: Boolean = true
                     override fun openUrl(url: String) = openInBrowser(url)
+
+                    override val canReveal: Boolean = true
+                    override fun reveal(path: String) = openProjectsInFiles()
                 }
             }
 
@@ -110,7 +113,14 @@ class MainActivity : ComponentActivity() {
 
             val b = backend
             when {
-                b != null -> CodeAssistApp(b, fileActions = fileActions)
+                b != null -> CodeAssistApp(
+                    b,
+                    fileActions = fileActions,
+                    // On-device Compose preview: render @Preview composables through the interpreter. The
+                    // backend instance is stable across project switches (it swaps services internally), so
+                    // one host suffices.
+                    composePreviewHost = (b as? dev.ide.core.IdeServicesBackend)?.let { dev.ide.android.AndroidComposePreviewHost(it) },
+                )
                 error != null -> Splash("Failed to start: $error")
                 else -> Splash("Starting CodeAssist…")
             }
@@ -146,6 +156,26 @@ class MainActivity : ComponentActivity() {
         }
         startActivity(Intent.createChooser(send, "Share ${File(path).name}"))
     }.getOrElse { Toast.makeText(this, "Can't share this file", Toast.LENGTH_SHORT).show() }
+
+    /**
+     * Open the system Files app at CodeAssist's projects root (served by [ProjectsDocumentsProvider]) so
+     * the user can browse/import there. Best-effort across OEM file managers: tries the DocumentsProvider
+     * root, then a generic Files launch, and finally explains where to look. Doesn't deep-link to a
+     * specific subfolder — file managers don't honor that uniformly — it opens the projects root.
+     */
+    private fun openProjectsInFiles() {
+        val rootId = AndroidIde.projectsDir(this).absolutePath
+        val rootUri = android.provider.DocumentsContract.buildRootUri("$packageName.documents", rootId)
+        val view = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(rootUri, "vnd.android.document/root")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        if (runCatching { startActivity(view); true }.getOrDefault(false)) return
+        // Fall back to whatever handles the storage/Files browse action, else tell the user where to look.
+        val browse = Intent("android.provider.action.BROWSE", rootUri)
+        runCatching { startActivity(browse) }.getOrElse {
+            Toast.makeText(this, "Open the Files app → CodeAssist to browse your projects", Toast.LENGTH_LONG).show()
+        }
+    }
 
     /** Open [url] in the device browser (the Beta "Submit suggestions" action). */
     private fun openInBrowser(url: String) = runCatching {

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -9,10 +10,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +33,7 @@ import dev.ide.ui.backend.UiAndroidSourcesInfo
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,6 +52,7 @@ import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.EditorTopBar
+import dev.ide.ui.components.DepsProgressBar
 import dev.ide.ui.components.FileNavigator
 import dev.ide.ui.components.FileOpKind
 import dev.ide.ui.components.FileOpRequest
@@ -57,14 +62,19 @@ import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.editor.BlockEditor
-import dev.ide.ui.components.NewFileDialog
+import dev.ide.ui.components.AddSourceRootDialog
+import dev.ide.ui.components.AddSourceRootRequest
+import dev.ide.ui.components.NewEntryDialog
+import dev.ide.ui.components.NewEntryKind
+import dev.ide.ui.components.NewEntryRequest
+import dev.ide.ui.components.NewSourceFileDialog
+import dev.ide.ui.components.NewSourceLang
+import dev.ide.ui.components.NewSourceRequest
 import dev.ide.ui.components.NewXmlFileDialog
 import dev.ide.ui.components.NewXmlTarget
 import dev.ide.ui.components.xmlTargetOf
-import dev.ide.ui.components.NewFileTarget
 import dev.ide.ui.components.SideRail
 import dev.ide.ui.components.TabsStrip
-import dev.ide.ui.components.newFileTargetOf
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.PlatformBackHandler
@@ -93,28 +103,37 @@ fun EditorScreen(
     val indexStatus by state.backend.indexStatus.collectAsState()
     val buildState by state.backend.buildState.collectAsState()
     val scope = rememberCoroutineScope()
-    var newFileTarget by remember { mutableStateOf<NewFileTarget?>(null) }
+    // The project is open now — kick off any deferred template-dependency resolution (e.g. the Compose AAR
+    // graph of a freshly-created project). Idempotent + a no-op for an opened existing project; progress
+    // streams on depsState so the user can work elsewhere while it resolves.
+    LaunchedEffect(state.backend) { state.backend.startPendingDependencyResolution() }
+    var newEntry by remember { mutableStateOf<NewEntryRequest?>(null) }
     var newXmlTarget by remember { mutableStateOf<NewXmlTarget?>(null) }
+    var newSource by remember { mutableStateOf<NewSourceRequest?>(null) }
     var fileOp by remember { mutableStateOf<FileOpRequest?>(null) }
-    // A res/ folder node opens the XML resource dialog; a Java source/package node opens New-Class.
-    val onNewFile: (TreeNode) -> Unit = { node ->
-        val xml = xmlTargetOf(node)
-        if (xml != null) newXmlTarget = xml else newFileTargetOf(node)?.let { newFileTarget = it }
-    }
-    val onNewFileRoot: () -> Unit = { state.defaultNewFileTarget()?.let { newFileTarget = it } }
+    // New File / New Folder can target any directory; res/ folders additionally offer the templated XML flow.
+    val rootPath = state.backend.project.rootPath
+    fun dirLabel(dir: String): String =
+        if (dir.startsWith(rootPath)) dir.removePrefix(rootPath).trim('/', '\\').ifEmpty { "project root" } else dir
+    val onNewFile: (String) -> Unit = { dir -> newEntry = NewEntryRequest(dir, NewEntryKind.File, dirLabel(dir)) }
+    val onNewFolder: (String) -> Unit = { dir -> newEntry = NewEntryRequest(dir, NewEntryKind.Folder, dirLabel(dir)) }
+    val onNewResource: (TreeNode) -> Unit = { node -> xmlTargetOf(node)?.let { newXmlTarget = it } }
+    val onNewSource: (String, NewSourceLang) -> Unit = { dir, lang -> newSource = NewSourceRequest(dir, lang, dirLabel(dir)) }
     val onFileOp: (TreeNode, FileOpKind) -> Unit = { node, kind -> fileOp = FileOpRequest(node, kind) }
 
     // Back closes an open editor overlay (dialog, palette, or — on mobile — a navigator/console/search/more
     // sheet) before the app-level handler pops the screen (#997). Desktop has no system back, so this is inert
     // there; the mobile-only panes are gated on [isMobilePlatform] since on wide layouts they're docked panes.
     PlatformBackHandler(
-        enabled = newFileTarget != null || newXmlTarget != null || fileOp != null ||
+        enabled = newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null ||
             state.paletteOpen || state.sheetDest != null || state.searchOpen ||
             (isMobilePlatform && (state.navOpen || state.consoleOpen)),
     ) {
         when {
             fileOp != null -> fileOp = null
-            newFileTarget != null -> newFileTarget = null
+            state.addSourceRootModule != null -> state.addSourceRootModule = null
+            newSource != null -> newSource = null
+            newEntry != null -> newEntry = null
             newXmlTarget != null -> newXmlTarget = null
             state.paletteOpen -> state.paletteOpen = false
             state.sheetDest != null -> state.sheetDest = null
@@ -125,14 +144,18 @@ fun EditorScreen(
     }
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFileRoot, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
-            else ExpandedLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFileRoot, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
+            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
+            else ExpandedLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
         }
-        NewFileDialog(
-            visible = newFileTarget != null,
-            target = newFileTarget,
-            onDismiss = { newFileTarget = null },
-            onCreate = { dir, fileName, content -> state.createFile(dir, fileName, content) },
+        NewEntryDialog(
+            request = newEntry,
+            onDismiss = { newEntry = null },
+            onCreate = { dir, name, kind ->
+                when (kind) {
+                    NewEntryKind.File -> state.createFileSmart(dir, name)
+                    NewEntryKind.Folder -> state.createDirectory(dir, name)
+                }
+            },
         )
         NewXmlFileDialog(
             visible = newXmlTarget != null,
@@ -141,9 +164,21 @@ fun EditorScreen(
             onCreate = { dir, fileName, content -> state.createFile(dir, fileName, content) },
             onCreateDir = { parent, dirName -> state.createDirectory(parent, dirName) },
         )
+        NewSourceFileDialog(
+            request = newSource,
+            onDismiss = { newSource = null },
+            onCreate = { dir, name, template -> state.createSourceFile(dir, name, template) },
+        )
+        AddSourceRootDialog(
+            request = state.addSourceRootModule?.let { AddSourceRootRequest(it, state.moduleSourceSets(it)) },
+            onDismiss = { state.addSourceRootModule = null },
+            onAdd = { module, set, dirName, role -> state.addSourceRoot(module, set, dirName, role) },
+        )
         FileOperationDialog(
             request = fileOp,
             tree = state.tree,
+            rootPath = state.backend.project.rootPath,
+            listDir = { state.backend.listDirectory(it) },
             onRename = { node, newName -> node.fileOpPath()?.let { p -> scope.launch { state.renamePath(p, newName) } } },
             onMove = { node, dest -> node.fileOpPath()?.let { state.movePath(it, dest) } },
             onCopy = { node, dest -> node.fileOpPath()?.let { state.copyPath(it, dest) } },
@@ -159,8 +194,10 @@ private fun ExpandedLayout(
     onToggleTheme: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
-    onNewFile: (TreeNode) -> Unit,
-    onNewFileRoot: () -> Unit,
+    onNewFile: (String) -> Unit,
+    onNewFolder: (String) -> Unit,
+    onNewResource: (TreeNode) -> Unit,
+    onNewSource: (String, NewSourceLang) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
@@ -187,9 +224,12 @@ private fun ExpandedLayout(
                         onOpen = { node -> node.filePath?.let { state.open(it, node.name) } },
                         modifier = Modifier.fillMaxSize(),
                         onNewFile = onNewFile,
-                        onNewFileRoot = onNewFileRoot,
-                        onViewDependencies = { node -> onOpenDependencies(node.name) },
-                        onConfigureModule = { node -> onOpenModuleConfig(node.name) },
+                        onNewFolder = onNewFolder,
+                        onNewResource = onNewResource,
+                        onNewSource = onNewSource,
+                        onViewDependencies = { node -> onOpenDependencies(node.moduleConfigName ?: node.name) },
+                        onConfigureModule = { node -> onOpenModuleConfig(node.moduleConfigName ?: node.name) },
+                        onAddSourceRoot = { node -> state.addSourceRootModule = node.moduleConfigName ?: node.name },
                         canImport = fileActions.canImport,
                         onImport = { doImport(state, fileActions) },
                         canShare = fileActions.canShare,
@@ -199,6 +239,11 @@ private fun ExpandedLayout(
                         onMove = { onFileOp(it, FileOpKind.Move) },
                         onCopy = { onFileOp(it, FileOpKind.Copy) },
                         onDelete = { onFileOp(it, FileOpKind.Delete) },
+                        canReveal = fileActions.canReveal,
+                        onReveal = { node -> node.fileOpPath()?.let { fileActions.reveal(it) } },
+                        onOpenInFiles = if (fileActions.canReveal) ({ state.tree.dirPath?.let { fileActions.reveal(it) } }) else null,
+                        mode = state.treeMode,
+                        onModeChange = { state.selectTreeMode(it) },
                     )
                 }
                 VerticalDivider()
@@ -240,8 +285,10 @@ private fun CompactLayout(
     onToggleTheme: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
-    onNewFile: (TreeNode) -> Unit,
-    onNewFileRoot: () -> Unit,
+    onNewFile: (String) -> Unit,
+    onNewFolder: (String) -> Unit,
+    onNewResource: (TreeNode) -> Unit,
+    onNewSource: (String, NewSourceLang) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
@@ -250,13 +297,19 @@ private fun CompactLayout(
     fileActions: FileActions,
 ) {
     val project = state.backend.project
+    // Hide the bottom nav while the soft keyboard is up, so the editor gets the full height and the user can
+    // focus on the code being typed (the nav is one swipe/back away). The IME inset is read raw — directly,
+    // not via a consuming modifier — so the app's `safeDrawing` padding doesn't zero it. Always 0 on desktop.
+    val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             EditorCenter(state, indexStatus, compact = true, Modifier.weight(1f).fillMaxWidth())
-            BottomNav(
-                selected = state.rail,
-                onSelect = state::selectRail,
-            )
+            AnimatedVisibility(visible = !keyboardOpen) {
+                BottomNav(
+                    selected = state.rail,
+                    onSelect = state::selectRail,
+                )
+            }
         }
 
         // File navigator as a bottom sheet — the compact reflow (on phone the navigator is a
@@ -273,13 +326,26 @@ private fun CompactLayout(
                 onOpen = { node -> node.filePath?.let { state.open(it, node.name); state.navOpen = false } },
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 onNewFile = onNewFile,
-                onNewFileRoot = onNewFileRoot,
-                onViewDependencies = { node -> state.navOpen = false; onOpenDependencies(node.name) },
-                onConfigureModule = { node -> state.navOpen = false; onOpenModuleConfig(node.name) },
+                onNewFolder = onNewFolder,
+                onNewResource = onNewResource,
+                onNewSource = onNewSource,
+                onViewDependencies = { node -> state.navOpen = false; onOpenDependencies(node.moduleConfigName ?: node.name) },
+                onConfigureModule = { node -> state.navOpen = false; onOpenModuleConfig(node.moduleConfigName ?: node.name) },
+                onAddSourceRoot = { node -> state.navOpen = false; state.addSourceRootModule = node.moduleConfigName ?: node.name },
                 canImport = fileActions.canImport,
                 onImport = { doImport(state, fileActions) },
                 canShare = fileActions.canShare,
                 onShare = { node -> node.filePath?.let { fileActions.share(it) } },
+                canModify = true,
+                onRename = { onFileOp(it, FileOpKind.Rename) },
+                onMove = { onFileOp(it, FileOpKind.Move) },
+                onCopy = { onFileOp(it, FileOpKind.Copy) },
+                onDelete = { onFileOp(it, FileOpKind.Delete) },
+                canReveal = fileActions.canReveal,
+                onReveal = { node -> node.fileOpPath()?.let { fileActions.reveal(it) } },
+                onOpenInFiles = if (fileActions.canReveal) ({ state.tree.dirPath?.let { fileActions.reveal(it) } }) else null,
+                mode = state.treeMode,
+                onModeChange = { state.selectTreeMode(it) },
             )
         }
         // Build console as a bottom sheet; a taller detent when a problem is present (design: 0.6 / 0.72).
@@ -306,6 +372,18 @@ private fun CompactLayout(
 @Composable
 private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact: Boolean, modifier: Modifier) {
     val project = state.backend.project
+    val depsState by state.backend.depsState.collectAsState()
+    // Compose preview: detect @Preview composables in the open Kotlin file (debounced on edit) → enable the
+    // Design view-mode toggle + the top-bar shortcut, which switch the tab to the live Compose preview pane.
+    val activeForPreview = state.active
+    var hasPreview by remember(activeForPreview?.path) { mutableStateOf(false) }
+    if (activeForPreview != null) {
+        LaunchedEffect(activeForPreview.path, activeForPreview.session.textRevision) {
+            delay(400)
+            hasPreview = runCatching { state.backend.composePreviews(activeForPreview.path, activeForPreview.text).isNotEmpty() }
+                .getOrDefault(false)
+        }
+    }
     Column(modifier) {
         EditorTopBar(
             projectName = project.name,
@@ -321,8 +399,12 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
             consoleOpen = state.consoleOpen,
             inlayHintsOn = state.inlayHintsEnabled,
             onToggleInlayHints = { state.inlayHintsEnabled = !state.inlayHintsEnabled },
+            showPreview = hasPreview,
+            previewBusy = state.active?.viewMode == dev.ide.ui.EditorViewMode.Preview,
+            onPreview = { state.active?.let { it.viewMode = dev.ide.ui.EditorViewMode.Preview } },
             compact = compact,
         )
+        DepsProgressBar(depsState)
         TabsStrip(
             openFiles = state.openFiles,
             activeIndex = state.activeIndex,
@@ -340,8 +422,25 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                 delay(350)
                 val text = active.text // one lazy rope materialization per pause
                 state.backend.updateDocument(active.path, text)
-                active.session.applyAnalysis(runCatching { state.backend.analyze(active.path, text) }.getOrDefault(emptyList()))
-                active.recomputeDirty() // precise dirty state (catches revert-to-saved); reuses the cached text
+                // analyze() shares one engine thread with completion and yields to it; a preempted pass throws
+                // AnalysisPreempted. Retry (bounded) so a settled buffer still gets diagnostics, keeping the
+                // previous set in the meantime rather than clearing them. Any other failure → no diagnostics.
+                var attempt = 0
+                while (attempt++ < 8) {
+                    try {
+                        active.session.applyAnalysis(state.backend.analyze(active.path, text))
+                        active.recomputeDirty() // precise dirty state (catches revert-to-saved); reuses the cached text
+                        break
+                    } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
+                        delay(150) // let the interactive call (completion) finish, then retry
+                    } catch (cancel: kotlinx.coroutines.CancellationException) {
+                        throw cancel // the effect itself was cancelled (new edit/file) — don't swallow
+                    } catch (e: Throwable) {
+                        active.session.applyAnalysis(emptyList())
+                        active.recomputeDirty()
+                        break
+                    }
+                }
             }
             // Breadcrumb tracks the caret: module › enclosing type(s) › method. Debounced (a reparse), and
             // falls back to the file path when the caret is outside any declaration (imports, blank lines).
@@ -355,20 +454,42 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                 crumbs = if (structure.isEmpty()) breadcrumbFor(state, active)
                 else listOfNotNull(state.backend.moduleNameForFile(active.path)) + structure
             }
+            // Tools are kept OFF the breadcrumb row so it stays a clean, readable location line. The
+            // breadcrumb sits alone with a single chevron that expands the editor toolbar below it — so
+            // undo/redo/find + the view-mode switch aren't on screen until asked for (persists across files).
+            var toolbarOpen by remember { mutableStateOf(false) }
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) { Breadcrumb(crumbs) }
-                // Undo/redo — a touch affordance for the history that Ctrl/⌘-Z also drives; reads the
-                // session's observable canUndo/canRedo so the glyphs dim when there's nothing to do.
+                IconButtonCa(
+                    if (toolbarOpen) CaIcons.chevronUp else CaIcons.chevronDown,
+                    if (toolbarOpen) "Hide editor tools" else "Show editor tools",
+                    onClick = { toolbarOpen = !toolbarOpen },
+                    iconSize = 18, boxSize = 32, active = toolbarOpen,
+                )
+            }
+            // The editor toolbar — revealed by the chevron. Edit actions (undo/redo/find) grouped in a pill on
+            // the left; the view-mode switch on the right. Animates open/closed so it never clutters by default.
+            AnimatedVisibility(visible = toolbarOpen) {
                 val canUndo = active.session.canUndo
                 val canRedo = active.session.canRedo
                 val dim = Ca.colors.textTertiary.copy(alpha = 0.35f)
-                IconButtonCa(CaIcons.undo, "Undo", onClick = { active.session.undo() }, iconSize = 18, boxSize = 32, tint = if (canUndo) null else dim)
-                IconButtonCa(CaIcons.redo, "Redo", onClick = { active.session.redo() }, iconSize = 18, boxSize = 32, tint = if (canRedo) null else dim)
-                IconButtonCa(CaIcons.search, "Find / replace", onClick = { findEpoch++ }, iconSize = 18, boxSize = 32)
-                ViewModeToggle(active.viewMode, dev.ide.ui.editor.preview.isPreviewable(active.path) || dev.ide.ui.editor.preview.isLayoutPreviewable(active.path)) { active.viewMode = it }
+                val canPreview = dev.ide.ui.editor.preview.isPreviewable(active.path) ||
+                    dev.ide.ui.editor.preview.isLayoutPreviewable(active.path) || hasPreview
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    ActionPill {
+                        IconButtonCa(CaIcons.undo, "Undo", onClick = { active.session.undo() }, iconSize = 17, boxSize = 30, tint = if (canUndo) null else dim)
+                        IconButtonCa(CaIcons.redo, "Redo", onClick = { active.session.redo() }, iconSize = 17, boxSize = 30, tint = if (canRedo) null else dim)
+                        IconButtonCa(CaIcons.search, "Find / replace", onClick = { findEpoch++ }, iconSize = 17, boxSize = 30)
+                    }
+                    ViewModeToggle(active.viewMode, canPreview, compact) { active.viewMode = it }
+                }
             }
             AndroidSourcesBanner(state)
             when (active.viewMode) {
@@ -378,19 +499,26 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                     backend = state.backend,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
-                dev.ide.ui.EditorViewMode.Preview -> if (dev.ide.ui.editor.preview.isLayoutPreviewable(active.path)) {
-                    dev.ide.ui.editor.preview.LayoutPreviewPane(
+                dev.ide.ui.EditorViewMode.Preview -> when {
+                    dev.ide.ui.editor.preview.isLayoutPreviewable(active.path) -> dev.ide.ui.editor.preview.LayoutPreviewPane(
                         path = active.path,
                         text = active.text,
                         backend = state.backend,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
-                } else {
-                    dev.ide.ui.editor.preview.ResourcePreviewPane(
+                    dev.ide.ui.editor.preview.isPreviewable(active.path) -> dev.ide.ui.editor.preview.ResourcePreviewPane(
                         path = active.path,
                         text = active.text,
                         backend = state.backend,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                    else -> dev.ide.ui.editor.preview.ComposePreviewPane(
+                        path = active.path,
+                        text = active.text,
+                        backend = state.backend,
+                        host = state.composePreviewHost,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        selected = active.previewTarget,
                     )
                 }
                 else -> CodeEditor(
@@ -405,6 +533,14 @@ private fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact:
                     findEpoch = findEpoch,
                     fontScale = state.editorFontScale,
                     onFontScaleChange = { state.editorFontScale = it },
+                    // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that
+                    // specific composable. Also expand the (collapsible) editor toolbar so the Code/Blocks/
+                    // Preview switch is visible — making it clear the view changed and how to get back to Code.
+                    onPreview = { fn ->
+                        active.previewTarget = fn
+                        active.viewMode = dev.ide.ui.EditorViewMode.Preview
+                        toolbarOpen = true
+                    },
                 )
             }
         } else {
@@ -611,33 +747,58 @@ private fun VerticalDivider() {
     Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
 }
 
-/** A compact `Code / Blocks` segmented control switching the active tab between the two editor surfaces. */
+/** Wraps a small set of icon buttons in a surface2 pill so they read as one grouped toolbar (matches the
+ *  view-mode toggle's styling), instead of loose floating glyphs. */
 @Composable
-private fun ViewModeToggle(mode: dev.ide.ui.EditorViewMode, canPreview: Boolean, onSelect: (dev.ide.ui.EditorViewMode) -> Unit) {
+private fun ActionPill(content: @Composable () -> Unit) {
     Row(
-        Modifier.background(Ca.colors.surface2, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm)).padding(2.dp),
+        Modifier.height(EditorToolbarHeight)
+            .background(Ca.colors.surface2, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm))
+            .padding(horizontal = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) { content() }
+}
+
+/** Shared height for the editor action-bar pills (edit-actions + view-mode), so they read as a matched set. */
+private val EditorToolbarHeight = 34.dp
+
+/**
+ * The `Code / Blocks / Preview` segmented control switching the active tab between editor surfaces. On a
+ * phone ([compact]) it shows a label only for the *selected* segment and collapses the rest to icons — so it
+ * stays narrow (leaving the breadcrumb room) while still naming the current mode.
+ */
+@Composable
+private fun ViewModeToggle(mode: dev.ide.ui.EditorViewMode, canPreview: Boolean, compact: Boolean, onSelect: (dev.ide.ui.EditorViewMode) -> Unit) {
+    Row(
+        Modifier.height(EditorToolbarHeight)
+            .background(Ca.colors.surface2, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm))
+            .padding(horizontal = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        SegmentItem(CaIcons.code, "Code", mode == dev.ide.ui.EditorViewMode.Text) { onSelect(dev.ide.ui.EditorViewMode.Text) }
-        SegmentItem(CaIcons.layers, "Blocks", mode == dev.ide.ui.EditorViewMode.Blocks) { onSelect(dev.ide.ui.EditorViewMode.Blocks) }
+        SegmentItem(CaIcons.code, "Code", mode == dev.ide.ui.EditorViewMode.Text, compact) { onSelect(dev.ide.ui.EditorViewMode.Text) }
+        SegmentItem(CaIcons.layers, "Blocks", mode == dev.ide.ui.EditorViewMode.Blocks, compact) { onSelect(dev.ide.ui.EditorViewMode.Blocks) }
         if (canPreview) {
-            SegmentItem(CaIcons.image, "Preview", mode == dev.ide.ui.EditorViewMode.Preview) { onSelect(dev.ide.ui.EditorViewMode.Preview) }
+            SegmentItem(CaIcons.image, "Preview", mode == dev.ide.ui.EditorViewMode.Preview, compact) { onSelect(dev.ide.ui.EditorViewMode.Preview) }
         }
     }
 }
 
 @Composable
-private fun SegmentItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+private fun SegmentItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, compact: Boolean, onClick: () -> Unit) {
+    // Full layout shows every label; compact shows it only for the active segment (icon-only otherwise).
+    val showLabel = !compact || active
     Row(
         Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.xs))
             .background(if (active) Ca.colors.accentSoft else androidx.compose.ui.graphics.Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.xs))
             .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null, onClick = onClick)
-            .padding(horizontal = 9.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+            .padding(horizontal = if (showLabel) 9.dp else 7.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (showLabel) 5.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         androidx.compose.material3.Icon(icon, label, Modifier.size(15.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary)
-        Text(label, color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        if (showLabel) Text(label, color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     }
 }
 
@@ -652,8 +813,15 @@ private fun breadcrumbFor(state: IdeUiState, file: OpenFile): List<String> {
  * Launch the host's file picker to import external file(s) into the first source root, then refresh the
  * tree and open the first imported file. No-op when there's no source root to target.
  */
+/** The first Java/Kotlin source root's directory in the tree (depth-first), or null if there is none. */
+private fun firstSourceRootDir(root: TreeNode): String? {
+    root.sourceRootPath?.let { return it }
+    for (c in root.children) firstSourceRootDir(c)?.let { return it }
+    return null
+}
+
 private fun doImport(state: IdeUiState, fileActions: FileActions) {
-    val dir = state.defaultNewFileTarget()?.sourceRootPath ?: return
+    val dir = firstSourceRootDir(state.tree) ?: state.tree.dirPath ?: return
     fileActions.importInto(dir) { paths ->
         state.refreshTree()
         paths.firstOrNull()?.let { p -> state.open(p, p.substringAfterLast('/').substringAfterLast('\\')) }

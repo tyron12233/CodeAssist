@@ -7,6 +7,7 @@ import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +23,7 @@ class SaveActionTest {
     private class FakeBackend(private val disk: MutableMap<String, String>) : IdeBackend {
         val saved = ArrayList<Pair<String, String>>()
         override val project = ProjectInfo("p", "/p", 1)
-        override fun fileTree() = TreeNode("root", "p", NodeKind.Workspace, null)
+        override fun fileTree(mode: TreeViewMode) = TreeNode("root", "p", NodeKind.Workspace, null)
         override fun readFile(path: String) = disk[path] ?: ""
         override fun moduleNameForFile(path: String): String? = null
         override fun updateDocument(path: String, text: String) {}

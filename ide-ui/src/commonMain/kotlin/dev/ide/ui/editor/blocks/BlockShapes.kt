@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -273,7 +272,7 @@ private fun ShapeSwatch(label: String, cat: BlockCat, notchTop: Boolean, bumpBot
             .background(color, shape)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Text(label, color = Ca.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace)
+        Text(label, color = Ca.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = Ca.type.codeFamily)
     }
 }
 
@@ -293,7 +292,7 @@ private fun CBlockSwatch(label: String) {
     )
     Column(Modifier.width(220.dp).background(color, shape)) {   // no clip: the child sits in the carved mouth
         Box(Modifier.height(headerH).padding(start = 16.dp, top = 8.dp)) {
-            Text(label, color = Ca.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace)
+            Text(label, color = Ca.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = Ca.type.codeFamily)
         }
         // The child sits in the mouth, pulled up by connDepth so its top notch meets the header's inner notch.
         Box(Modifier.offset(y = -BlockMetrics.connDepth).padding(start = BlockMetrics.arm)) {

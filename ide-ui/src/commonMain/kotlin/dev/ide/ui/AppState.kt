@@ -7,9 +7,10 @@ import androidx.compose.runtime.setValue
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiRenameResult
-import dev.ide.ui.components.NewFileTarget
-import dev.ide.ui.components.newFileTargetOf
+import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.languageFor
 import dev.ide.ui.platform.isMobilePlatform
@@ -45,6 +46,9 @@ class OpenFile(val path: String, val name: String, initial: String) {
         if (dev.ide.ui.editor.preview.previewKindOf(path) == dev.ide.ui.editor.preview.PreviewKind.BITMAP)
             EditorViewMode.Preview else EditorViewMode.Text,
     )
+    /** Which `@Preview` composable the Compose preview should render — set when the user taps a preview
+     *  gutter icon next to a specific function. Null falls back to the file's first `@Preview`. */
+    var previewTarget by mutableStateOf<String?>(null)
     /** The content this tab was opened/last-saved with — [modified] tracks divergence from it. */
     var savedText: String = initial
         private set
@@ -76,8 +80,11 @@ class OpenFile(val path: String, val name: String, initial: String) {
  * and the overlay/pane toggles. Editor text lives per [OpenFile]; edits are pushed to the backend's
  * document overlay so cross-file analysis stays live.
  */
-class IdeUiState(val backend: IdeBackend) {
-    var tree: TreeNode by mutableStateOf(backend.fileTree())
+class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreviewHost? = null) {
+    /** Which shape the file tree takes — curated Project view vs the raw All-Files view (IntelliJ-style). */
+    var treeMode by mutableStateOf(TreeViewMode.Project)
+        private set
+    var tree: TreeNode by mutableStateOf(backend.fileTree(treeMode))
         private set
 
     val openFiles = mutableStateListOf<OpenFile>()
@@ -97,6 +104,9 @@ class IdeUiState(val backend: IdeBackend) {
 
     /** A transient destination shown as a sheet/overlay (Source, More) — null when none is open. */
     var sheetDest by mutableStateOf<RailDestination?>(null)
+
+    /** The module whose Add-Source-Root dialog is open, or null when closed. */
+    var addSourceRootModule by mutableStateOf<String?>(null)
 
     /** Route to a rail destination: Files/Search toggle their side panes; Source/More open as a sheet. */
     fun selectRail(dest: RailDestination) {
@@ -147,6 +157,27 @@ class IdeUiState(val backend: IdeBackend) {
     /** Save the active tab (Cmd/Ctrl-S, toolbar). */
     fun saveActive() { active?.let(::save) }
 
+    /**
+     * Reopen the tabs persisted from a previous session with this project (paths in tab order + the active
+     * tab). Files that no longer exist on disk are skipped. Returns true if at least one tab was restored, so
+     * the caller can fall back to [defaultFile] when there was no remembered session.
+     */
+    fun restoreTabs(): Boolean {
+        val saved = backend.openTabs()
+        if (saved.paths.isEmpty()) return false
+        for (path in saved.paths) {
+            val name = path.substringAfterLast('/').substringAfterLast('\\')
+            runCatching { open(path, name) } // a deleted file throws in readFile — skip it
+        }
+        if (openFiles.isEmpty()) return false
+        activeIndex = saved.activeIndex.coerceIn(0, openFiles.lastIndex)
+        return true
+    }
+
+    /** The current open tabs as a persistable snapshot (paths in tab order + the active index). */
+    fun tabsSnapshot(): dev.ide.ui.backend.UiOpenTabs =
+        dev.ide.ui.backend.UiOpenTabs(openFiles.map { it.path }, activeIndex)
+
     /** Pick a sensible first file: a `Main.java`, else the first source file in the tree. */
     fun defaultFile(): TreeNode? {
         val all = ArrayList<TreeNode>()
@@ -158,7 +189,14 @@ class IdeUiState(val backend: IdeBackend) {
     }
 
     /** Re-read the workspace tree from the backend (after a file is created/removed). */
-    fun refreshTree() { tree = backend.fileTree() }
+    fun refreshTree() { tree = backend.fileTree(treeMode) }
+
+    /** Switch the tree view mode (Project ↔ All Files) and rebuild the tree. */
+    fun selectTreeMode(mode: TreeViewMode) {
+        if (mode == treeMode) return
+        treeMode = mode
+        refreshTree()
+    }
 
     /**
      * Reflect a completed project-wide rename in the open tabs. The rename wrote every reference site to
@@ -260,14 +298,43 @@ class IdeUiState(val backend: IdeBackend) {
         }
     }
 
-    /** A sensible default New-Class target: the first Java/Kotlin source root in the tree. */
-    fun defaultNewFileTarget(): NewFileTarget? {
-        var found: TreeNode? = null
-        fun walk(n: TreeNode) {
-            if (found == null && n.kind == NodeKind.SourceRoot && n.sourceRootPath != null) found = n
-            n.children.forEach(::walk)
-        }
-        walk(tree)
-        return found?.let(::newFileTargetOf)
+    /** Create a smart-scaffolded, nested-path-aware file under [dirPath], refresh the tree, and open it. */
+    fun createFileSmart(dirPath: String, name: String) {
+        val path = backend.createFileSmart(dirPath, name) ?: return
+        refreshTree()
+        open(path, name.substringAfterLast('/').substringAfterLast('\\'))
+    }
+
+    /** Create a typed source file ([template]) named [name] under [dirPath], refresh the tree, and open it. */
+    fun createSourceFile(dirPath: String, name: String, template: UiNewFileTemplate) {
+        val path = backend.createSourceFile(dirPath, name, template) ?: return
+        refreshTree()
+        open(path, path.substringAfterLast('/').substringAfterLast('\\'))
+    }
+
+    // ---- source-set / content-root management ----
+
+    /** Source-set names declared on [moduleName] (for the Add-Source-Root selector). */
+    fun moduleSourceSets(moduleName: String): List<String> = backend.moduleSourceSets(moduleName)
+
+    /** Add a typed source root to [moduleName] and refresh the tree. Returns true on success. */
+    fun addSourceRoot(moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole): Boolean {
+        val created = backend.addSourceRoot(moduleName, sourceSetName, dirName, role) != null
+        if (created) refreshTree()
+        return created
+    }
+
+    /** Unmark a content root (model-only) and refresh the tree. Returns true on success. */
+    fun removeSourceRoot(moduleName: String, sourceSetName: String, rootPath: String): Boolean {
+        val ok = backend.removeSourceRoot(moduleName, sourceSetName, rootPath)
+        if (ok) refreshTree()
+        return ok
+    }
+
+    /** Create an empty source set on [moduleName] and refresh the tree. Returns true on success. */
+    fun addSourceSet(moduleName: String, name: String): Boolean {
+        val ok = backend.addSourceSet(moduleName, name)
+        if (ok) refreshTree()
+        return ok
     }
 }

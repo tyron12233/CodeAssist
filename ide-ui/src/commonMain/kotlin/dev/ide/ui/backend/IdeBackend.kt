@@ -3,6 +3,14 @@ package dev.ide.ui.backend
 import kotlinx.coroutines.flow.StateFlow
 
 /**
+ * Thrown by [IdeBackend.analyze] when a higher-priority call (code completion) preempted the analysis pass
+ * before it finished — they share one serialized engine thread. The buffer's diagnostics are left unchanged;
+ * the caller should retry shortly (once the interactive call frees the engine), so a settled buffer still
+ * gets a full pass.
+ */
+class AnalysisPreempted : RuntimeException("analysis preempted by a higher-priority engine call")
+
+/**
  * The seam between the reusable Compose UI and whatever drives it. The UI never touches IdeServices,
  * the project model, JDT, or `java.nio` directly — it talks only to this port, in platform-neutral
  * terms (paths are opaque strings). The desktop host implements it over IdeServices; an Android host
@@ -11,8 +19,14 @@ import kotlinx.coroutines.flow.StateFlow
 interface IdeBackend {
     val project: ProjectInfo
 
-    /** The workspace as a tree: workspace → modules → source folders → packages → files. */
-    fun fileTree(): TreeNode
+    /**
+     * The workspace as a tree, shaped by [mode]:
+     *  - [TreeViewMode.Project]: a curated view — modules → source folders → packages → files, plus the
+     *    manifest and each module's root config files (`module.toml`, build scripts, README…).
+     *  - [TreeViewMode.AllFiles]: the raw on-disk tree from the workspace root (everything except bulky
+     *    derived output like `build/`, `.gradle/`, and the platform caches), IntelliJ "Project Files" style.
+     */
+    fun fileTree(mode: TreeViewMode = TreeViewMode.Project): TreeNode
 
     /**
      * Create a new file `[dirPath]/[fileName]` with [content] (creating intermediate directories).
@@ -29,6 +43,23 @@ interface IdeBackend {
     fun createFileBytes(dirPath: String, fileName: String, bytes: ByteArray): String? = null
 
     /**
+     * Create a file under [dirPath] where [name] may include nested folders (`a/b/Helper.kt`), all created
+     * along the way. Content is scaffolded from the extension: `.java`/`.kt` → a class stub with the package
+     * resolved from the target location; `.xml` → a root element; anything else → an empty file. Returns the
+     * new file's absolute path, or null if it already exists / creation failed. Bumps [fileSystemEpoch].
+     */
+    fun createFileSmart(dirPath: String, name: String): String? = null
+
+    /**
+     * Create a typed source file named [name] (a bare type name, no extension) under [dirPath] from
+     * [template] — a Java/Kotlin class/interface/enum/… stub whose `package` is resolved from the target
+     * location. The extension follows the template's language (`.java` / `.kt`). Returns the new file's
+     * absolute path, or null if it already exists / [name] is not a valid identifier / creation failed.
+     * Bumps [fileSystemEpoch]. The default is a no-op for read-only backends.
+     */
+    fun createSourceFile(dirPath: String, name: String, template: UiNewFileTemplate): String? = null
+
+    /**
      * Create directory `[parentPath]/[name]` (intermediate dirs included). Returns the new path, or null if
      * it already exists / failed. Used by the New-Directory flow (e.g. standard Android `res/` folders). A
      * successful create bumps [fileSystemEpoch] so the tree refreshes.
@@ -40,6 +71,24 @@ interface IdeBackend {
      * the tree refreshes. The default is a no-op for read-only backends.
      */
     fun deletePath(path: String): Boolean = false
+
+    /** Source-set names declared on [moduleName] (for the Add-Source-Root selector). */
+    fun moduleSourceSets(moduleName: String): List<String> = emptyList()
+
+    /**
+     * Add a typed source root named [dirName] (its leaf folder, e.g. `java`/`kotlin`/`resources`) to
+     * [sourceSetName] of [moduleName], placed under the set's base dir (`src/<set>/<dirName>`). Creates the
+     * source set if it doesn't exist. Returns the new directory path, or null on failure. Bumps
+     * [fileSystemEpoch]. The default is a no-op for read-only backends.
+     */
+    fun addSourceRoot(moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole): String? = null
+
+    /** Unmark the content root at [rootPath] from [sourceSetName] of [moduleName] (model-only; the folder on
+     *  disk is kept). Returns true on success. */
+    fun removeSourceRoot(moduleName: String, sourceSetName: String, rootPath: String): Boolean = false
+
+    /** Create an empty source set [name] on [moduleName]. Returns false if it already exists / failed. */
+    fun addSourceSet(moduleName: String, name: String): Boolean = false
 
     /**
      * Rename a file or directory/package in place (same parent) to [newName] (the full new name, with
@@ -62,6 +111,14 @@ interface IdeBackend {
      */
     fun copyPath(path: String, destDir: String): String? = null
 
+    /**
+     * Immediate children of [dirPath] — subdirectories and files — for the mobile move/copy directory
+     * browser (a file-manager-style picker that descends folder by folder). Derived/transient dirs
+     * (`build/`, `.gradle/`, platform caches) and dotfiles are excluded; directories sort before files,
+     * each alphabetical. Empty when [dirPath] isn't a readable directory.
+     */
+    fun listDirectory(dirPath: String): List<UiDirEntry> = emptyList()
+
     /** Read a file's current on-disk text. */
     fun readFile(path: String): String
 
@@ -81,20 +138,30 @@ interface IdeBackend {
     suspend fun downloadAndroidSources(): String = "Not supported."
 
     // ---- SDK / toolchain manager ----
+    // The SDK manager downloads *sources & documentation* for the editor (javadoc, parameter names,
+    // go-to-source into the SDK/JDK). Downloads run in the backend and keep going after the screen is
+    // closed — observe [sdkManagerState], don't block on the start call.
 
-    /** Progress of any in-flight SDK/JDK download. */
+    /** Live download queue + progress. Shared with the editor — observe, don't poll. */
     val sdkManagerState: StateFlow<UiSdkManagerState> get() = kotlinx.coroutines.flow.MutableStateFlow(UiSdkManagerState())
 
     /** The installable Android SDK packages (platforms, build-tools, sources, command-line tools). Empty offline. */
     suspend fun sdkPackages(): List<UiSdkPackage> = emptyList()
 
-    /** Install one Android package by its id (`platforms;android-34`); returns a status message. */
+    /** Start downloading one Android package by its id (`sources;android-34`). Returns immediately; the
+     *  download continues in the background and reports on [sdkManagerState]. */
     suspend fun installSdkPackage(path: String): String = "Not supported."
+
+    /** Cancel an in-flight SDK/JDK download by its id (the package path, or `jdk-<feature>`). */
+    fun cancelSdkDownload(id: String) {}
+
+    /** Drop the finished (done/failed) entries from the download queue. */
+    fun clearSdkDownloads() {}
 
     /** Current JDK + whether sources are available for docs, or null if unknown. */
     fun jdkInfo(): UiJdkInfo? = null
 
-    /** Download a JDK (Temurin) [feature] for its sources; returns a status message. Desktop only. */
+    /** Start downloading a JDK (Temurin) [feature] for its sources; returns immediately. Desktop only. */
     suspend fun downloadJdkSources(feature: Int): String = "Not supported."
 
     /** Persist the buffer [text] for [path] to disk (and keep it as the live buffer). */
@@ -103,13 +170,18 @@ interface IdeBackend {
     /** Code completion for the live buffer [text] at [offset], bound to [path]'s module. */
     suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult
 
-    /** Diagnostics for the live buffer [text], bound to [path]'s module. */
+    /** Diagnostics for the live buffer [text], bound to [path]'s module. May throw [AnalysisPreempted] when a
+     *  completion request took priority on the shared engine thread — the caller retries when it's free. */
     suspend fun analyze(path: String, text: String): List<UiDiagnostic>
 
     /**
      * Inlay hints for `[startOffset, endOffset)` of [path]'s live buffer [text] — inferred `var`/lambda
      * types, call-site parameter names, fluent-chain types. The editor renders them inline (between
      * characters); they never change the document. Default empty for backends without hint support.
+     *
+     * May throw [AnalysisPreempted] when a higher-priority engine call (completion) cuts ahead — the host
+     * should retry once the buffer settles, keeping the current hints in the meantime (an empty result would
+     * wrongly clear them until the next edit).
      */
     suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
 
@@ -172,6 +244,20 @@ interface IdeBackend {
     suspend fun resourceImageBytes(path: String): ByteArray? = null
 
     /**
+     * The `@Preview @Composable` functions in [path]'s live buffer [text] — the editor's Compose preview
+     * targets (drives the toolbar Preview button). Empty when the file has none or there's no Kotlin support.
+     */
+    suspend fun composePreviews(path: String, text: String): List<UiComposePreview> = emptyList()
+
+    /**
+     * Run the `@Preview` composable [functionName] in [path] (live buffer [text]) through the on-device
+     * Compose interpreter, returning a status: whether it is interpretable, and (when a render host is wired)
+     * the render outcome. See `docs/compose-interpreter.md`.
+     */
+    suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
+        UiPreviewResult(ok = false, message = "Compose preview is not available")
+
+    /**
      * Compile a block edit against [path]'s current buffer [text] into surgical [UiTextEdit]s. The UI
      * applies them to its text buffer (in descending offset order) — reparse + re-projection then follow
      * through the normal text path, so the two views never sync to each other. Empty ⇒ not applicable.
@@ -228,8 +314,16 @@ interface IdeBackend {
 
     // ---- dependency management (the Dependencies screen) ----
 
-    /** Live resolution progress (a spinner/message while downloading + walking transitives). */
-    val depsState: StateFlow<DepsResolveState> get() = kotlinx.coroutines.flow.MutableStateFlow(DepsResolveState())
+    /** Live resolution progress (a spinner/message while downloading + walking transitives). Shared across
+     *  the Dependencies screen and the editor's resolve bar — observe, don't poll. */
+    val depsState: StateFlow<DepsResolveState> get() = EMPTY_DEPS_STATE
+
+    /**
+     * Kick off resolving a newly-created project's template dependencies in the background — call once after
+     * the project is opened. Idempotent and a no-op when there's nothing pending (an opened existing project).
+     * Progress streams on [depsState], so the user can leave any screen while it resolves.
+     */
+    fun startPendingDependencyResolution() {}
 
     /** Modules that can declare dependencies, with their build system + whether they accept `.aar`s. */
     fun dependencyModules(): List<UiDepModule> = emptyList()
@@ -290,6 +384,13 @@ interface IdeBackend {
     /** Every project the host knows about (for the picker). Defaults to just the open [project]. */
     fun projects(): List<ProjectInfo> = listOf(project)
 
+    /**
+     * The on-disk directory that holds every project (one workspace dir each) — what the in-app "project
+     * folder" panel shows and what [FileActions.reveal] opens in a file manager. Null when the backend has
+     * no managed projects root (e.g. a single fixed-workspace host).
+     */
+    fun projectsRootPath(): String? = null
+
     /** The templates the Create-Project gallery offers, with the inputs each one collects. */
     fun projectTemplates(): List<UiProjectTemplate> = emptyList()
 
@@ -331,6 +432,18 @@ interface IdeBackend {
     /** Persist an app-global preference. */
     fun setPreference(key: String, value: String) {}
 
+    // ---- editor session (open tabs) ----
+
+    /**
+     * The editor tabs that were open the last time the active project was used — file paths in tab order
+     * plus the active tab's index. Empty when none were saved or the backend doesn't persist them. Scoped
+     * per project (the backend keys it off the active project), so it's re-read after every [projectEpoch] bump.
+     */
+    fun openTabs(): UiOpenTabs = UiOpenTabs()
+
+    /** Persist the open editor tabs for the active project so they reopen on the next launch. */
+    fun saveOpenTabs(tabs: UiOpenTabs) {}
+
     /**
      * Back up the user's projects (and any project files from a previous, incompatible app version) into
      * a single `.zip`, returning its path — the host then shares/saves it via [FileActions.share]. Null if
@@ -338,6 +451,11 @@ interface IdeBackend {
      */
     suspend fun backupProjects(): String? = null
 }
+
+// ---- editor-session DTOs ----
+
+/** The editor tabs persisted for a project: the open file paths in tab order + the active tab's index (-1 if none). */
+data class UiOpenTabs(val paths: List<String> = emptyList(), val activeIndex: Int = -1)
 
 // ---- project-management DTOs ----
 
@@ -390,13 +508,25 @@ sealed interface UiTemplateParam {
 /** Outcome of a create: [success] + a human message (the reason on failure) + the new project's root path. */
 data class UiProjectResult(val success: Boolean, val message: String, val rootPath: String? = null)
 
+/** A `@Preview @Composable` target in the open editor file. */
+data class UiComposePreview(val functionName: String, val offset: Int)
+
+/** The outcome of running a Compose preview: [ok] = interpretable/rendered; [message] explains the status. */
+data class UiPreviewResult(val ok: Boolean, val message: String)
+
 // ---- dependency-management DTOs ----
 
-/** Live resolve progress, mirrored from the engine (mirrors [BuildState]'s role for the console). */
+/** A stable empty progress flow for the [IdeBackend.depsState] default (a fresh flow per get would churn). */
+private val EMPTY_DEPS_STATE: StateFlow<DepsResolveState> = kotlinx.coroutines.flow.MutableStateFlow(DepsResolveState())
+
+/** Live resolve progress, mirrored from the engine (mirrors [BuildState]'s role for the console).
+ *  [log] is a bounded, ordered history of resolution activity (POMs walked, artifacts downloaded), surfaced
+ *  when the user expands the editor's resolve bar. */
 data class DepsResolveState(
     val resolving: Boolean = false,
     val message: String = "",
     val fraction: Double = -1.0,
+    val log: List<String> = emptyList(),
 )
 
 /** A dependency-declaring module for the screen's module switcher. */
@@ -581,6 +711,21 @@ data class ProjectInfo(
     val moduleCount: Int,
 )
 
+/** How the project tree is shaped — a curated module view, or the raw filesystem (see [IdeBackend.fileTree]). */
+enum class TreeViewMode { Project, AllFiles }
+
+/** The kind of a content/source root the user can add to a module (maps to a backend `ContentRole`). */
+enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl }
+
+/**
+ * A typed source-file template the file-tree "New" submenu can scaffold. The prefix names the language
+ * (Java → `.java`, Kotlin → `.kt`); the backend prepends the package resolved from the target directory.
+ */
+enum class UiNewFileTemplate {
+    JavaClass, JavaInterface, JavaEnum, JavaAbstractClass, JavaAnnotation,
+    KotlinFile, KotlinClass, KotlinInterface, KotlinDataClass, KotlinEnum, KotlinObject,
+}
+
 /** Structural role of a tree node. The *icon* is chosen separately via [TreeNode.iconId]. */
 enum class NodeKind { Workspace, Module, SourceRoot, Package, Folder, File }
 
@@ -609,16 +754,36 @@ data class TreeNode(
      * created in. Non-null marks an XML new-file target — the counterpart to [sourceRootPath] for Java.
      */
     val resDirPath: String? = null,
+    /**
+     * When non-null, opening this node opens the Module Settings editor for the named module instead of a
+     * text editor — set on a `module.toml` file (and the module node itself). The host only sets it for a
+     * module that actually resolves, so the UI can route on it without re-validating.
+     */
+    val moduleConfigName: String? = null,
+    /**
+     * The on-disk directory this node represents (workspace/module/source-root/package/folder), so the UI
+     * can create a new file or folder *anywhere* in the tree — into this dir for a directory node, or into a
+     * file node's parent. Null only when no directory applies.
+     */
+    val dirPath: String? = null,
 )
 
 /** One level of a (possibly compacted) package: its dotted [packageName] and the [dirPath] backing it. */
 data class PackageSegment(val packageName: String, val dirPath: String)
+
+/**
+ * One entry in the mobile move/copy directory browser: a subdirectory to descend into ([isDirectory] true)
+ * or a file shown for context. [iconId] resolves via the UI's `TreeIcons` registry (e.g. `folder`, `java`).
+ */
+data class UiDirEntry(val name: String, val path: String, val isDirectory: Boolean, val iconId: String = "file")
 
 enum class UiCompletionKind {
     Class, Interface, Enum, AnnotationType, Record,
     Method, Constructor, Field, EnumConstant,
     Variable, Parameter, TypeParameter,
     Package, Keyword, Snippet,
+    /** A word lifted from the current buffer (hippie/word completion). */
+    Word,
 }
 
 data class UiCompletionItem(
@@ -725,10 +890,27 @@ data class UiInlayHint(
  *  and whether they're [downloadable] (an sdkmanager is present). */
 data class UiAndroidSourcesInfo(val platform: String, val installed: Boolean, val downloadable: Boolean)
 
-/** Progress of an SDK/JDK download. [fraction] < 0 ⇒ indeterminate. */
-data class UiSdkManagerState(val busy: Boolean = false, val message: String = "", val fraction: Double = -1.0)
+/** Aggregate SDK/JDK download progress. [busy]/[message]/[fraction] summarise the active work (fraction < 0
+ *  ⇒ indeterminate); [downloads] is the per-item queue (active + recently finished). */
+data class UiSdkManagerState(
+    val busy: Boolean = false,
+    val message: String = "",
+    val fraction: Double = -1.0,
+    val downloads: List<UiSdkDownload> = emptyList(),
+)
 
-/** An installable Android SDK package. [category] ∈ {PLATFORM, BUILD_TOOLS, SOURCES, CMDLINE_TOOLS}. */
+/** One queued/in-flight/finished download. [id] is the package path or `jdk-<feature>`;
+ *  [status] ∈ {DOWNLOADING, EXTRACTING, INSTALLING, DONE, FAILED}; [fraction] < 0 ⇒ indeterminate. */
+data class UiSdkDownload(
+    val id: String,
+    val label: String,
+    val status: String,
+    val fraction: Double = -1.0,
+    val detail: String = "",
+)
+
+/** An installable Android SDK package. [category] ∈ {PLATFORM, BUILD_TOOLS, SOURCES, CMDLINE_TOOLS}.
+ *  [incomplete] ⇒ a previous install was interrupted; re-installing resumes/repairs it. */
 data class UiSdkPackage(
     val path: String,
     val displayName: String,
@@ -736,6 +918,7 @@ data class UiSdkPackage(
     val sizeBytes: Long,
     val installed: Boolean,
     val installable: Boolean,
+    val incomplete: Boolean = false,
 )
 
 /** The active JDK and whether its sources are available for docs. */

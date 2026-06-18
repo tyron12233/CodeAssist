@@ -123,6 +123,15 @@ private val STEPS: List<OnboardingStep> = listOf(
         hero = { XmlCompletionMock() },
     ),
     OnboardingStep(
+        kicker = "Your files",
+        icon = CaIcons.folder,
+        title = "Your projects, in a real folder.",
+        body = "Projects live in app storage you can open from any file manager — drop in icons, layouts, " +
+            "or assets, or edit from a PC. No special permissions, nothing hidden.",
+        cta = "Continue",
+        hero = { FilesAccessMock() },
+    ),
+    OnboardingStep(
         kicker = "Jetpack Compose",
         icon = CaIcons.eye,
         title = "Rebuilt on Jetpack Compose.",
@@ -134,7 +143,7 @@ private val STEPS: List<OnboardingStep> = listOf(
 
 /**
  * The first-launch feature tour: a glass bottom sheet (~74% on mobile, a
- * centered card on desktop) that pages through 8 full-bleed feature mocks with a segmented progress bar.
+ * centered card on desktop) that pages through the full-bleed feature mocks with a segmented progress bar.
  * The final page's CTA opens the bundled sample via [onOpenSample]; [onFinish] fires once on finish/skip
  * so the host can persist the "seen" flag and dismiss.
  */

@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,14 +26,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,10 +46,12 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.OpenFile
+import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.icons.CaIcons
@@ -76,6 +81,9 @@ fun EditorTopBar(
     consoleOpen: Boolean = false,
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
+    showPreview: Boolean = false,
+    onPreview: () -> Unit = {},
+    previewBusy: Boolean = false,
     compact: Boolean = false,
 ) {
     GlassSurface(modifier = Modifier.fillMaxWidth().height(52.dp), material = GlassMaterial.Regular) {
@@ -93,10 +101,127 @@ fun EditorTopBar(
             IndexStatusChip(indexStatus, compact = compact)
             // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
             IconButtonCa(CaIcons.save, "Save", onSave, active = hasUnsavedChanges)
-            if (!compact) IconButtonCa(CaIcons.command, "Command palette", onOpenPalette)
-            if (!compact) IconButtonCa(CaIcons.eye, "Toggle inlay hints", onToggleInlayHints, active = inlayHintsOn)
-            IconButtonCa(CaIcons.terminal, "Build console", onToggleConsole, active = consoleOpen)
-            RunControl(runTasks, onRun, onPickTask, compact = compact)
+            if (compact) {
+                // On a phone the bar can't hold every control, so Run stays inline and the rest collapse
+                // into a single ⋯ overflow menu — keeping the bar uncluttered yet everything one tap away.
+                RunControl(runTasks, onRun, onPickTask, compact = true)
+                EditorOverflowMenu(
+                    onOpenPalette = onOpenPalette,
+                    inlayHintsOn = inlayHintsOn,
+                    onToggleInlayHints = onToggleInlayHints,
+                    consoleOpen = consoleOpen,
+                    onToggleConsole = onToggleConsole,
+                    showPreview = showPreview,
+                    onPreview = onPreview,
+                )
+            } else {
+                IconButtonCa(CaIcons.command, "Command palette", onOpenPalette)
+                IconButtonCa(CaIcons.eye, "Toggle inlay hints", onToggleInlayHints, active = inlayHintsOn)
+                IconButtonCa(CaIcons.terminal, "Build console", onToggleConsole, active = consoleOpen)
+                // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
+                if (showPreview) IconButtonCa(CaIcons.image, "Compose preview", onPreview, active = previewBusy)
+                RunControl(runTasks, onRun, onPickTask, compact = false)
+            }
+        }
+    }
+}
+
+/**
+ * The compact-bar overflow: a ⋯ button opening a dropdown of the secondary controls that don't fit inline on
+ * a phone (command palette, inlay-hint toggle, build console, Compose preview). Toggled items show their
+ * on-state in the accent colour.
+ */
+@Composable
+private fun EditorOverflowMenu(
+    onOpenPalette: () -> Unit,
+    inlayHintsOn: Boolean,
+    onToggleInlayHints: () -> Unit,
+    consoleOpen: Boolean,
+    onToggleConsole: () -> Unit,
+    showPreview: Boolean,
+    onPreview: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButtonCa(CaIcons.ellipsis, "More actions", { open = true })
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            OverflowItem(CaIcons.command, "Command palette", active = false) { open = false; onOpenPalette() }
+            OverflowItem(
+                CaIcons.eye, if (inlayHintsOn) "Hide inlay hints" else "Show inlay hints", active = inlayHintsOn,
+            ) { open = false; onToggleInlayHints() }
+            OverflowItem(CaIcons.terminal, "Build console", active = consoleOpen) { open = false; onToggleConsole() }
+            if (showPreview) OverflowItem(CaIcons.image, "Compose preview", active = false) { open = false; onPreview() }
+        }
+    }
+}
+
+@Composable
+private fun OverflowItem(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                label,
+                color = if (active) Ca.colors.accent else Ca.colors.textPrimary,
+                style = Ca.type.footnote, fontWeight = FontWeight.Medium,
+            )
+        },
+        leadingIcon = { Icon(icon, null, Modifier.size(16.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary) },
+        onClick = onClick,
+    )
+}
+
+/**
+ * A thin progress strip under the top bar shown while the engine resolves dependencies (a newly-created
+ * project's template deps, or an add from the Dependencies screen). Backed by the shared `depsState`, so it
+ * shows everywhere in the app while resolution runs in the background — the user needn't stay on the
+ * Dependencies screen.
+ */
+@Composable
+fun DepsProgressBar(state: DepsResolveState) {
+    if (!state.resolving) return
+    var expanded by remember { mutableStateOf(false) }
+    GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(CaIcons.pkg, null, Modifier.size(14.dp), tint = Ca.colors.accent)
+                Text(
+                    state.message.ifBlank { "Resolving dependencies…" }, color = Ca.colors.textSecondary,
+                    style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(bottom = 4.dp),
+                )
+                // Expand to a live log of what the resolver is doing (POMs walked, artifacts downloaded).
+                if (state.log.isNotEmpty()) {
+                    IconButtonCa(
+                        if (expanded) CaIcons.caretDown else CaIcons.caretRight,
+                        if (expanded) "Hide resolution details" else "Show resolution details",
+                        { expanded = !expanded }, boxSize = 24, iconSize = 14,
+                    )
+                }
+            }
+            if (state.fraction in 0.0..1.0) {
+                LinearProgressIndicator(
+                    progress = { state.fraction.toFloat() }, modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = Ca.colors.accent, trackColor = Ca.colors.surface2,
+                )
+            } else {
+                LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+            }
+            AnimatedVisibility(expanded && state.log.isNotEmpty()) {
+                val scroll = rememberScrollState()
+                // Follow the tail as new lines stream in.
+                LaunchedEffect(state.log.size) { scroll.scrollTo(scroll.maxValue) }
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 160.dp).padding(top = 8.dp).verticalScroll(scroll),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    for (line in state.log) {
+                        Text(
+                            line, color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -117,10 +242,9 @@ private fun RunControl(
         Box {
             // Resolve the task list lazily on open (it scans sources), not on every recomposition.
             IconButtonCa(CaIcons.chevronDown, "Choose task to run", { query = ""; items = tasks(); open = true })
-            DropdownMenu(
+            CaDropdownMenu(
                 expanded = open,
                 onDismissRequest = { open = false },
-                modifier = Modifier.background(Ca.colors.surface2),
             ) {
                 if (items.size > 3) {
                     Box(

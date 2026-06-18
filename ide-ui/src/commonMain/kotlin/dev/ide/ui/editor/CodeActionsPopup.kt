@@ -61,6 +61,23 @@ fun ActionLightbulb(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The gutter affordance shown beside a Compose `@Preview` function: a small accent-tinted glyph the user
+ * taps to render that specific composable in the Preview surface. Positioned by [CodeEditor] in the gutter
+ * at the function's line; the touch target is a touch larger than the icon for comfortable tapping.
+ */
+@Composable
+fun PreviewGutterIcon(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(20.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(CaIcons.image, contentDescription = "Preview this composable", tint = Ca.colors.accent, modifier = Modifier.size(15.dp))
+    }
+}
+
 @Composable
 fun CodeActionsMenu(
     actions: List<UiAction>,

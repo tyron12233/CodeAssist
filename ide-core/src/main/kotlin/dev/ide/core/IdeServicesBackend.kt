@@ -18,6 +18,10 @@ import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.hints.InlayHintKind
 import dev.ide.ui.backend.UiColorEntry
+import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.backend.UiNewFileTemplate
+import dev.ide.ui.backend.UiComposePreview
+import dev.ide.ui.backend.UiPreviewResult
 import dev.ide.ui.backend.UiDrawable
 import dev.ide.ui.backend.UiGradient
 import dev.ide.ui.backend.UiLayer
@@ -64,11 +68,14 @@ import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.UiDirEntry
+import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiCaret
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiRenameTarget
 import dev.ide.ui.backend.UiDiagnostic
@@ -86,10 +93,15 @@ import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.backend.UiTemplateParam
+import dev.ide.platform.CancelToken
+import dev.ide.platform.EngineCancellation
+import dev.ide.platform.EngineCanceledException
+import dev.ide.ui.backend.AnalysisPreempted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -131,6 +143,48 @@ class IdeServicesBackend(
      */
     private val engineDispatcher = Dispatchers.Default.limitedParallelism(1)
 
+    /**
+     * Two priority lanes over the single [engineDispatcher], so the keystroke-critical call (completion)
+     * isn't stuck behind a heavy per-keystroke pass (full-file analysis/inference) on that one worker.
+     *
+     * [background] work runs under a [CancelToken] and polls [EngineCancellation.checkCanceled] at safe
+     * points; [interactive] work flips that token before it queues, so an in-flight background pass bails at
+     * its next poll and frees the worker. [backgroundToken] is the token of the pass currently executing;
+     * [interactivePending] catches the case where a background pass is about to start while a completion is
+     * already waiting (it bails immediately rather than making completion wait it out).
+     */
+    @Volatile
+    private var backgroundToken: CancelToken? = null
+    private val interactivePending = AtomicInteger(0)
+
+    /** Latency-critical engine work (completion): preempt any in-flight background pass, then run. */
+    private suspend fun <T> interactive(block: () -> T): T {
+        interactivePending.incrementAndGet()
+        backgroundToken?.cancel() // flip from the caller thread → seen by the engine thread at its next poll
+        try {
+            return withContext(engineDispatcher) { block() }
+        } finally {
+            interactivePending.decrementAndGet()
+        }
+    }
+
+    /**
+     * Preemptible per-keystroke engine work (analysis/hints/breadcrumb/preview-detection). Runs under a fresh
+     * cancel token; throws [EngineCanceledException] when a completion request preempts it — callers map that
+     * to their own "skipped" result (re-run on the next edit, or retried by the host).
+     */
+    private suspend fun <T> background(block: () -> T): T =
+        withContext(engineDispatcher) {
+            val token = CancelToken()
+            backgroundToken = token
+            if (interactivePending.get() > 0) token.cancel() // a completion is already waiting → don't start
+            try {
+                EngineCancellation.withToken(token) { block() }
+            } finally {
+                if (backgroundToken === token) backgroundToken = null
+            }
+        }
+
     private val _projectEpoch = MutableStateFlow(0)
     override val projectEpoch: StateFlow<Int> get() = _projectEpoch
 
@@ -144,9 +198,20 @@ class IdeServicesBackend(
             moduleCount = services.modules().size,
         )
 
-    override fun fileTree(): TreeNode {
+    override fun fileTree(mode: TreeViewMode): TreeNode = when (mode) {
+        TreeViewMode.Project -> projectTree()
+        TreeViewMode.AllFiles -> allFilesTree()
+    }
+
+    /** module-root dir → module name, for surfacing `module.toml` as a "open module settings" node. */
+    private fun moduleRoots(): Map<Path, String> =
+        services.modules().mapNotNull { m -> services.moduleRoot(m)?.let { it.normalize() to m.name } }.toMap()
+
+    /** Curated module view: manifest + code/res/assets roots, plus each module's root config files. */
+    private fun projectTree(): TreeNode {
         val root = services.workspaceRoot
         val moduleNodes = services.modules().sortedBy { it.name }.map { module ->
+            val moduleDir = services.moduleRoot(module)
             val children = ArrayList<TreeNode>()
             // The AndroidManifest sits above the source roots, so surface it explicitly (first, like Studio).
             services.manifestPath(module)?.takeIf { Files.isRegularFile(it) }?.let { mf -> children.add(fileNode(mf, module)) }
@@ -155,6 +220,9 @@ class IdeServicesBackend(
                 .filter { Files.isDirectory(it.path) }
                 .sortedWith(compareBy({ it.roles.rootRank() }, { it.path.toString() }))
                 .forEach { info -> children.add(sourceRootNode(info, module, root)) }
+            // The module's root-level files (module.toml, build scripts, README…) — visible config, not just
+            // creatable source files. `module.toml` opens the Module Settings editor instead of a text view.
+            if (moduleDir != null) moduleRootFiles(moduleDir, module).forEach { children.add(it) }
             TreeNode(
                 id = "module:${module.name}",
                 name = module.name,
@@ -162,6 +230,9 @@ class IdeServicesBackend(
                 filePath = null,
                 iconId = services.iconFor(IconTarget.ModuleNode(module)) ?: "module",
                 children = children,
+                // The module node itself opens its settings (the touch path; the gear icon is hover-only).
+                moduleConfigName = module.name,
+                dirPath = moduleDir?.toString(),
             )
         }
         return TreeNode(
@@ -171,7 +242,53 @@ class IdeServicesBackend(
             filePath = null,
             iconId = "workspace",
             children = moduleNodes,
+            dirPath = root.toString(),
         )
+    }
+
+    /** Regular files directly in a module's root dir (config/docs), excluding ones already shown as roots. */
+    private fun moduleRootFiles(moduleDir: Path, module: Module): List<TreeNode> {
+        val (_, files) = childPartition(moduleDir)
+        return files.map { fileNode(it, module) }
+    }
+
+    /** IntelliJ "Project Files"-style raw tree from the workspace root — everything but bulky derived output. */
+    private fun allFilesTree(): TreeNode {
+        val root = services.workspaceRoot
+        return TreeNode(
+            id = "workspace",
+            name = root.fileName?.toString() ?: "workspace",
+            kind = NodeKind.Workspace,
+            filePath = null,
+            iconId = "workspace",
+            children = rawChildren(root, moduleRoots()),
+        )
+    }
+
+    /** Recursive raw-filesystem children, skipping derived/transient dirs (build/.gradle/platform caches). */
+    private fun rawChildren(dir: Path, moduleRoots: Map<Path, String>): List<TreeNode> {
+        val entries = runCatching { Files.list(dir).use { it.collect(Collectors.toList()) } }.getOrDefault(emptyList())
+        val dirs = entries.filter { Files.isDirectory(it) && !isDerivedDir(it) }.sortedBy { it.fileName.toString().lowercase() }
+        val files = entries.filter { Files.isRegularFile(it) }.sortedBy { it.fileName.toString().lowercase() }
+        return dirs.map { d ->
+            TreeNode(
+                id = "dir:$d",
+                name = d.fileName.toString(),
+                kind = NodeKind.Folder,
+                filePath = null,
+                iconId = services.iconFor(IconTarget.Directory(d.fileName.toString(), emptySet())) ?: "folder",
+                children = rawChildren(d, moduleRoots),
+                dirPath = d.toString(),
+            )
+        } + files.map { fileNode(it, services.moduleForFile(it), moduleRoots) }
+    }
+
+    /** Bulky/derived directories not worth showing even in the All-Files view. */
+    private fun isDerivedDir(dir: Path): Boolean {
+        val name = dir.fileName?.toString() ?: return false
+        if (name == "build" || name == ".gradle" || name == ".idea") return true
+        // The platform caches can be large + transient; keep `.platform/workspace.json` etc. visible though.
+        return dir.parent?.fileName?.toString() == ".platform" && name == "caches"
     }
 
     /** A surfaced content root. `SOURCE`/`GENERATED` roots are package contexts (compactable, new-class
@@ -186,18 +303,19 @@ class IdeServicesBackend(
             name = label,
             kind = NodeKind.SourceRoot,
             filePath = null,
-            iconId = services.iconFor(IconTarget.SourceRoot(info.sourceSetName, info.roles, module)) ?: "sourceset.java",
+            iconId = services.iconFor(IconTarget.SourceRoot(info.sourceSetName, info.roles, module, info.path.fileName?.toString() ?: "")) ?: "sourceset.java",
             children = children,
             sourceRootPath = if (packageRoot) info.path.toString() else null,
             // The Android res root is an XML new-file target (the dialog routes into res/<kind>/).
             resDirPath = if (ContentRole.ANDROID_RES in info.roles) info.path.toString() else null,
+            dirPath = info.path.toString(),
         )
     }
 
     /** Direct children of a Java/Kotlin package context: package nodes + any default-package files. */
     private fun packageChildren(dir: Path, sourceRoot: Path, module: Module): List<TreeNode> {
         val (dirs, files) = childPartition(dir)
-        return dirs.map { packageNode(it, sourceRoot, module) } + files.map { fileNode(it, module) }
+        return dirs.map { packageNode(it, sourceRoot, module) } + files.map { fileNode(it, module, sourceRoot = sourceRoot) }
     }
 
     /**
@@ -217,7 +335,7 @@ class IdeServicesBackend(
         }
         val displayName = (startDir.parent ?: sourceRoot).relativize(cur).toString().replace(File.separatorChar, '.')
         val (dirs, files) = childPartition(cur)
-        val children = dirs.map { packageNode(it, sourceRoot, module) } + files.map { fileNode(it, module) }
+        val children = dirs.map { packageNode(it, sourceRoot, module) } + files.map { fileNode(it, module, sourceRoot = sourceRoot) }
         return TreeNode(
             id = "pkg:$cur",
             name = displayName,
@@ -227,6 +345,7 @@ class IdeServicesBackend(
             children = children,
             sourceRootPath = sourceRoot.toString(),
             packageSegments = segments,
+            dirPath = cur.toString(),
         )
     }
 
@@ -245,16 +364,27 @@ class IdeServicesBackend(
         children = resourceChildren(dir, roles, module),
         // A folder under an Android res root (layout/values/drawable/menu/…) is an XML new-file target.
         resDirPath = if (ContentRole.ANDROID_RES in roles) dir.toString() else null,
+        dirPath = dir.toString(),
     )
 
-    private fun fileNode(file: Path, module: Module?): TreeNode {
+    private fun fileNode(file: Path, module: Module?, moduleRoots: Map<Path, String> = emptyMap(), sourceRoot: Path? = null): TreeNode {
         val name = file.fileName.toString()
+        // A `module.toml` opens the Module Settings editor (not a text view) for the module it configures —
+        // resolved via the prebuilt root map (All-Files view) or the owning module (Project view).
+        val parent = file.parent?.normalize()
+        val configModule = if (name == "module.toml" && parent != null) {
+            moduleRoots[parent] ?: module?.takeIf { services.moduleRoot(it)?.normalize() == parent }?.name
+        } else null
         return TreeNode(
             id = "file:$file",
             name = name,
             kind = NodeKind.File,
             filePath = file.toString(),
             iconId = services.iconFor(IconTarget.File(name, module)) ?: "file",
+            moduleConfigName = configModule,
+            // A file in a Java/Kotlin package carries its source root so the "New ▸" menu can offer a typed
+            // class/file alongside it (created in the same package).
+            sourceRootPath = sourceRoot?.toString(),
         )
     }
 
@@ -282,15 +412,112 @@ class IdeServicesBackend(
     override fun createFileBytes(dirPath: String, fileName: String, bytes: ByteArray): String? =
         writeNewFile(dirPath, fileName) { Files.write(it, bytes) }
 
+    override fun createFileSmart(dirPath: String, name: String): String? {
+        // The name may carry intermediate folders (`a/b/Helper.kt`); split them off and create them.
+        val rel = name.trim().replace('\\', '/').trim('/')
+        if (rel.isEmpty()) return null
+        val fileName = rel.substringAfterLast('/')
+        val subDir = rel.substringBeforeLast('/', "")
+        val targetDir = if (subDir.isEmpty()) Paths.get(dirPath) else Paths.get(dirPath).resolve(subDir)
+        return writeNewFile(targetDir.toString(), fileName) { it.writeText(scaffoldContent(targetDir, fileName)) }
+    }
+
+    /** Starter content for a new file, chosen by extension: a class stub (with the resolved package) for
+     *  `.java`/`.kt`, a root element for `.xml`, otherwise empty. */
+    private fun scaffoldContent(dir: Path, fileName: String): String {
+        val base = fileName.substringBeforeLast('.')
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        val typeName = base.takeIf { it.isNotEmpty() && it.first().isLetter() && it.all { c -> c.isLetterOrDigit() || c == '_' } }
+        return when (ext) {
+            "java" -> {
+                if (typeName == null) return ""
+                val pkg = services.packageOf(dir).orEmpty()
+                (if (pkg.isEmpty()) "" else "package $pkg;\n\n") + "public class $typeName {\n}\n"
+            }
+            "kt" -> {
+                if (typeName == null) return ""
+                val pkg = services.packageOf(dir).orEmpty()
+                (if (pkg.isEmpty()) "" else "package $pkg\n\n") + "class $typeName {\n}\n"
+            }
+            "xml" -> "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<root>\n\n</root>\n"
+            else -> ""
+        }
+    }
+
+    override fun createSourceFile(dirPath: String, name: String, template: UiNewFileTemplate): String? {
+        val typeName = name.trim()
+        if (typeName.isEmpty() || !typeName.first().isLetter() || !typeName.all { it.isLetterOrDigit() || it == '_' }) return null
+        val isKotlin = template.name.startsWith("Kotlin")
+        val dir = Paths.get(dirPath)
+        val pkg = services.packageOf(dir).orEmpty()
+        val content = sourceTemplate(template, typeName, pkg)
+        return writeNewFile(dirPath, "$typeName.${if (isKotlin) "kt" else "java"}") { it.writeText(content) }
+    }
+
+    /** The body for a typed [UiNewFileTemplate], with the resolved [pkg] declaration prepended. */
+    private fun sourceTemplate(template: UiNewFileTemplate, name: String, pkg: String): String {
+        val javaPkg = if (pkg.isEmpty()) "" else "package $pkg;\n\n"
+        val ktPkg = if (pkg.isEmpty()) "" else "package $pkg\n\n"
+        return when (template) {
+            UiNewFileTemplate.JavaClass -> javaPkg + "public class $name {\n}\n"
+            UiNewFileTemplate.JavaInterface -> javaPkg + "public interface $name {\n}\n"
+            UiNewFileTemplate.JavaEnum -> javaPkg + "public enum $name {\n}\n"
+            UiNewFileTemplate.JavaAbstractClass -> javaPkg + "public abstract class $name {\n}\n"
+            UiNewFileTemplate.JavaAnnotation -> javaPkg + "public @interface $name {\n}\n"
+            UiNewFileTemplate.KotlinFile -> ktPkg
+            UiNewFileTemplate.KotlinClass -> ktPkg + "class $name {\n}\n"
+            UiNewFileTemplate.KotlinInterface -> ktPkg + "interface $name {\n}\n"
+            UiNewFileTemplate.KotlinDataClass -> ktPkg + "data class $name(\n)\n"
+            UiNewFileTemplate.KotlinEnum -> ktPkg + "enum class $name {\n}\n"
+            UiNewFileTemplate.KotlinObject -> ktPkg + "object $name\n"
+        }
+    }
+
     override fun createDirectory(parentPath: String, name: String): String? = runCatching {
         val target = Paths.get(parentPath).resolve(name)
         if (Files.exists(target)) null
         else {
             Files.createDirectories(target)
+            // A conventionally-named folder under a source-set base (e.g. `src/main/resources`) becomes a
+            // typed content root automatically, so the build engine + tree icon pick it up immediately.
+            services.maybeRegisterSourceRoot(target)
             _fsEpoch.value += 1
             target.toString()
         }
     }.getOrNull()
+
+    override fun moduleSourceSets(moduleName: String): List<String> =
+        services.modules().firstOrNull { it.name == moduleName }?.let { services.sourceSetNamesOf(it) } ?: emptyList()
+
+    override fun addSourceRoot(moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole): String? {
+        val roles = when (role) {
+            UiSourceRootRole.Source -> setOf(ContentRole.SOURCE)
+            UiSourceRootRole.Resource -> setOf(ContentRole.RESOURCE)
+            UiSourceRootRole.AndroidRes -> setOf(ContentRole.ANDROID_RES)
+            UiSourceRootRole.Assets -> setOf(ContentRole.ASSETS)
+            UiSourceRootRole.Aidl -> setOf(ContentRole.AIDL)
+        }
+        val created = services.addSourceRoot(moduleName, sourceSetName, dirName.trim().trim('/'), roles) ?: return null
+        _fsEpoch.value += 1
+        return created.toString()
+    }
+
+    override fun removeSourceRoot(moduleName: String, sourceSetName: String, rootPath: String): Boolean {
+        // The model stores roots relative to the module dir; translate the absolute tree path back.
+        val module = services.modules().firstOrNull { it.name == moduleName } ?: return false
+        val moduleDir = services.moduleRoot(module) ?: return false
+        val rel = runCatching { moduleDir.toAbsolutePath().normalize().relativize(Paths.get(rootPath).toAbsolutePath().normalize()).toString() }
+            .getOrNull() ?: rootPath
+        val ok = services.removeSourceRoot(moduleName, sourceSetName, rel)
+        if (ok) _fsEpoch.value += 1
+        return ok
+    }
+
+    override fun addSourceSet(moduleName: String, name: String): Boolean {
+        val ok = services.addSourceSet(moduleName, name.trim())
+        if (ok) _fsEpoch.value += 1
+        return ok
+    }
 
     /** Create `[dirPath]/[fileName]` via [write] (fails if it exists); refresh R on `res/`, bump the fs epoch. */
     private fun writeNewFile(dirPath: String, fileName: String, write: (Path) -> Unit): String? = runCatching {
@@ -325,6 +552,23 @@ class IdeServicesBackend(
     override fun copyPath(path: String, destDir: String): String? =
         services.copyPath(Paths.get(path), Paths.get(destDir))?.toString()?.also { _fsEpoch.value += 1 }
 
+    override fun listDirectory(dirPath: String): List<UiDirEntry> {
+        val dir = Paths.get(dirPath)
+        if (!Files.isDirectory(dir)) return emptyList()
+        val entries = runCatching { Files.list(dir).use { it.collect(Collectors.toList()) } }.getOrDefault(emptyList())
+            .filterNot { it.fileName.toString().startsWith(".") }
+        val dirs = entries.filter { Files.isDirectory(it) && !isDerivedDir(it) }.sortedBy { it.fileName.toString().lowercase() }
+        val files = entries.filter { Files.isRegularFile(it) }.sortedBy { it.fileName.toString().lowercase() }
+        val module = services.moduleForFile(dir)
+        return dirs.map {
+            UiDirEntry(it.fileName.toString(), it.toString(), true,
+                services.iconFor(IconTarget.Directory(it.fileName.toString(), emptySet())) ?: "folder")
+        } + files.map {
+            UiDirEntry(it.fileName.toString(), it.toString(), false,
+                services.iconFor(IconTarget.File(it.fileName.toString(), module)) ?: "file")
+        }
+    }
+
     override fun readFile(path: String): String =
         runCatching { (Paths.get(path)).readText() }.getOrDefault("")
 
@@ -332,7 +576,8 @@ class IdeServicesBackend(
         services.moduleForFile(Paths.get(path))?.name
 
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> =
-        withContext(engineDispatcher) { services.breadcrumbAt(Paths.get(path), text, offset) }
+        try { background { services.breadcrumbAt(Paths.get(path), text, offset) } }
+        catch (e: EngineCanceledException) { emptyList() } // re-runs on the next caret move
 
     override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
         withContext(engineDispatcher) { services.definitionAt(Paths.get(path), text, offset) }
@@ -355,7 +600,7 @@ class IdeServicesBackend(
         services.save(Paths.get(path), text)
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
-        val result = withContext(engineDispatcher) { services.complete(Paths.get(path), text, offset) }
+        val result = interactive { services.complete(Paths.get(path), text, offset) }
         return UiCompletionResult(
             items = result.items.map { item ->
                 UiCompletionItem(
@@ -386,6 +631,24 @@ class IdeServicesBackend(
     // ---- dependency management ----
 
     override val depsState: StateFlow<DepsResolveState> get() = services.depsState
+
+    override fun startPendingDependencyResolution() = services.startPendingDependencyResolution()
+
+    /** The lowered preview to render (serialized with other language work). Returns an ide-core type, so it
+     *  lives here on the concrete backend rather than the cross-platform [dev.ide.ui.backend.IdeBackend]. The
+     *  on-device preview host (`:ide-android`) calls this, then composes it via the interpreter. */
+    suspend fun lowerComposePreview(path: String, functionName: String, text: String): LoweredComposePreview? =
+        withContext(engineDispatcher) { services.lowerComposePreview(Paths.get(path), text, functionName) }
+
+    /** Why [functionName] isn't interpretable yet (lowering diagnostics + offending source), for the preview
+     *  panel's not-interpretable state. Off the UI thread, serialized with other language work. */
+    suspend fun composePreviewDiagnostics(path: String, functionName: String, text: String): List<String> =
+        withContext(engineDispatcher) { services.composePreviewDiagnostics(Paths.get(path), text, functionName) }
+
+    /** The project library inputs for the on-device Compose preview's `DexClassLoader` (see
+     *  [IdeServices.composePreviewLibs]). Off the UI thread — touches the model classpath. */
+    suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
+        withContext(engineDispatcher) { services.composePreviewLibs(Paths.get(path)) }
     override fun dependencyModules(): List<UiDepModule> = services.dependencyModules()
 
     // Resolution does blocking HTTP — keep it off the caller's (possibly UI) dispatcher.
@@ -421,6 +684,8 @@ class IdeServicesBackend(
     override fun projects(): List<ProjectInfo> =
         manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount) } ?: listOf(project)
 
+    override fun projectsRootPath(): String? = manager?.projectsRoot?.toString()
+
     override fun projectTemplates(): List<UiProjectTemplate> = services.projectTemplates().map(::toUiTemplate)
 
     override suspend fun createProject(templateId: String, args: Map<String, String>): UiProjectResult {
@@ -455,6 +720,35 @@ class IdeServicesBackend(
 
     override fun setPreference(key: String, value: String) {
         manager?.setPreference(key, value)
+    }
+
+    // Open tabs are persisted per project, alongside the other workspace state under `.platform/`. Format:
+    // line 1 = active index, each following line = one open file path (tab order). Best-effort — a missing or
+    // unreadable file just means "no remembered tabs". Kept out of `.platform/caches/` so a backup includes it.
+    private val openTabsFile: Path get() = services.workspaceRoot.resolve(".platform/open-tabs.txt")
+
+    override fun openTabs(): UiOpenTabs {
+        val file = openTabsFile.toFile()
+        if (!file.exists()) return UiOpenTabs()
+        return runCatching {
+            val lines = file.readText().split('\n')
+            val active = lines.firstOrNull()?.trim()?.toIntOrNull() ?: -1
+            val paths = lines.drop(1).map { it.trim() }.filter { it.isNotEmpty() }
+            UiOpenTabs(paths, active)
+        }.getOrDefault(UiOpenTabs())
+    }
+
+    override fun saveOpenTabs(tabs: UiOpenTabs) {
+        runCatching {
+            val file = openTabsFile
+            Files.createDirectories(file.parent)
+            file.toFile().writeText(
+                buildString {
+                    append(tabs.activeIndex).append('\n')
+                    tabs.paths.forEach { append(it).append('\n') }
+                },
+            )
+        }
     }
 
     override suspend fun backupProjects(): String? {
@@ -513,8 +807,14 @@ class IdeServicesBackend(
 
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
         // Routes through the full analysis engine: JDT compiler errors + the Java analyzers, merged,
-        // suppression-filtered, and profile-adjusted into one set.
-        return withContext(engineDispatcher) { services.analyzeDiagnostics(Paths.get(path), text) }.map { d ->
+        // suppression-filtered, and profile-adjusted into one set. Runs in the preemptible lane so a
+        // completion request can cut ahead; a preempted pass surfaces as AnalysisPreempted for the host to retry.
+        val diagnostics = try {
+            background { services.analyzeDiagnostics(Paths.get(path), text) }
+        } catch (e: EngineCanceledException) {
+            throw AnalysisPreempted()
+        }
+        return diagnostics.map { d ->
             val (line, col) = lineColOf(text, d.range.start)
             UiDiagnostic(
                 severity = when (d.severity) {
@@ -533,6 +833,20 @@ class IdeServicesBackend(
         }
     }
 
+    override suspend fun composePreviews(path: String, text: String): List<UiComposePreview> =
+        // Purely syntactic (scans for @Preview @Composable) — the interpreter only runs on the Preview button,
+        // never per keystroke. Preemptible so it can't block completion; re-runs on the next edit if skipped.
+        try {
+            background { services.composePreviews(Paths.get(path), text) }
+                .map { UiComposePreview(it.functionName, it.offset) }
+        } catch (e: EngineCanceledException) {
+            emptyList()
+        }
+
+    override suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
+        withContext(engineDispatcher) { services.runComposePreview(Paths.get(path), text, functionName) }
+            .let { UiPreviewResult(it.ok, it.message) }
+
     override fun androidSourcesInfo(): UiAndroidSourcesInfo? =
         services.androidSourcesInfo()?.let { UiAndroidSourcesInfo(it.platform, it.installed, it.downloadable) }
 
@@ -541,11 +855,21 @@ class IdeServicesBackend(
     override val sdkManagerState: StateFlow<UiSdkManagerState> get() = services.sdkManager.state
     override suspend fun sdkPackages(): List<UiSdkPackage> = services.sdkManager.androidPackages()
     override suspend fun installSdkPackage(path: String): String = services.sdkManager.installAndroidPackage(path)
+    override fun cancelSdkDownload(id: String) = services.sdkManager.cancelSdkDownload(id)
+    override fun clearSdkDownloads() = services.sdkManager.clearSdkDownloads()
     override fun jdkInfo(): UiJdkInfo = services.sdkManager.jdkInfo()
     override suspend fun downloadJdkSources(feature: Int): String = services.sdkManager.downloadJdkSources(feature)
 
-    override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> =
-        withContext(engineDispatcher) { services.inlayHints(Paths.get(path), text, startOffset, endOffset) }.map { h ->
+    override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> {
+        val hints = try {
+            background { services.inlayHints(Paths.get(path), text, startOffset, endOffset) }
+        } catch (e: EngineCanceledException) {
+            // Preempted by a higher-priority call (e.g. completion) on the shared engine thread. Surface it so
+            // the host retries once the buffer settles — returning empty here would CLEAR the hints and they'd
+            // only reappear on the next edit (the "type a space to get them back" bug).
+            throw AnalysisPreempted()
+        }
+        return hints.map { h ->
             UiInlayHint(
                 offset = h.offset,
                 parts = h.parts.map { UiInlayPart(it.text) },
@@ -560,6 +884,7 @@ class IdeServicesBackend(
                 paddingRight = h.paddingRight,
             )
         }
+    }
 
     // ---- code actions (quick-fixes + intentions) ----
 
@@ -758,5 +1083,6 @@ class IdeServicesBackend(
         CompletionItemKind.PACKAGE -> UiCompletionKind.Package
         CompletionItemKind.KEYWORD -> UiCompletionKind.Keyword
         CompletionItemKind.SNIPPET -> UiCompletionKind.Snippet
+        CompletionItemKind.WORD -> UiCompletionKind.Word
     }
 }

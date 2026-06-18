@@ -346,6 +346,89 @@ class EditorSession(
         }
     }
 
+    /**
+     * Tab: indent to the next tab stop so code aligns to [tabWidth]-column boundaries (spaces, not a raw
+     * `\t`). A collapsed caret (or a selection within one line) inserts just enough spaces to reach the next
+     * stop from the caret's visual column; a multi-line selection indents every non-blank line one level and
+     * keeps the block selected.
+     */
+    fun indent(tabWidth: Int = 4) {
+        val sel = selection
+        val firstLine = doc.lineForOffset(sel.min)
+        var lastLine = doc.lineForOffset(sel.max)
+        // A selection ending exactly at a line start doesn't include that trailing line.
+        if (lastLine > firstLine && sel.max == doc.lineStart(lastLine)) lastLine--
+
+        if (lastLine > firstLine) {
+            beginBatch()
+            val pad = " ".repeat(tabWidth)
+            // Edit bottom-up so earlier line offsets stay valid as we splice.
+            for (line in lastLine downTo firstLine) {
+                val ls = doc.lineStart(line)
+                if (doc.lineEnd(line) == ls) continue // leave blank lines un-indented
+                replaceRange(ls, ls, pad, TextRange(ls))
+            }
+            updateSelectionAndComposing(TextRange(doc.lineStart(firstLine), doc.lineEnd(lastLine)), null)
+            endBatch()
+            return
+        }
+
+        val ls = doc.lineStart(firstLine)
+        val col = visualColumn(ls, sel.min, tabWidth)
+        val spaces = tabWidth - (col % tabWidth)
+        val s = sel.min
+        replaceRange(s, sel.max, " ".repeat(spaces), TextRange(s + spaces))
+    }
+
+    /**
+     * Shift-Tab: remove one indent level (up to [tabWidth] leading spaces, or a single leading tab) from the
+     * caret's line, or from every line a selection touches — keeping the block selected.
+     */
+    fun dedent(tabWidth: Int = 4) {
+        val sel = selection
+        val firstLine = doc.lineForOffset(sel.min)
+        var lastLine = doc.lineForOffset(sel.max)
+        if (lastLine > firstLine && sel.max == doc.lineStart(lastLine)) lastLine--
+        val multi = lastLine > firstLine
+
+        beginBatch()
+        var removedOnFirst = 0
+        for (line in lastLine downTo firstLine) {
+            val ls = doc.lineStart(line)
+            val n = leadingIndentToRemove(ls, tabWidth)
+            if (n > 0) {
+                if (line == firstLine) removedOnFirst = n
+                replaceRange(ls, ls + n, "", TextRange(ls))
+            }
+        }
+        if (multi) {
+            updateSelectionAndComposing(TextRange(doc.lineStart(firstLine), doc.lineEnd(lastLine)), null)
+        } else {
+            val ls = doc.lineStart(firstLine)
+            updateSelectionAndComposing(TextRange((sel.start - removedOnFirst).coerceAtLeast(ls)), null)
+        }
+        endBatch()
+    }
+
+    /** Visual column of [offset] within its line starting at [lineStartOffset], expanding tabs to [tabWidth]. */
+    private fun visualColumn(lineStartOffset: Int, offset: Int, tabWidth: Int): Int {
+        var col = 0
+        val chars = doc.chars
+        for (i in lineStartOffset until offset) {
+            col += if (chars[i] == '\t') tabWidth - (col % tabWidth) else 1
+        }
+        return col
+    }
+
+    /** Number of leading chars to drop for one dedent on the line at [lineStartOffset]: one `\t`, else ≤[tabWidth] spaces. */
+    private fun leadingIndentToRemove(lineStartOffset: Int, tabWidth: Int): Int {
+        val chars = doc.chars
+        if (lineStartOffset < doc.length && chars[lineStartOffset] == '\t') return 1
+        var n = 0
+        while (n < tabWidth && lineStartOffset + n < doc.length && chars[lineStartOffset + n] == ' ') n++
+        return n
+    }
+
     fun backspace(word: Boolean = false) {
         if (word && selection.collapsed) {
             val s = wordBoundaryLeft(doc.chars, selection.start)

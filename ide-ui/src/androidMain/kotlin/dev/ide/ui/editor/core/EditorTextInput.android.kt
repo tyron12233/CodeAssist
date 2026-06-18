@@ -25,8 +25,8 @@ import kotlinx.coroutines.launch
  * line-indexed buffer synchronously (O(edited line)), and the session pushes selection updates back
  * through [InputMethodManager.updateSelection] so the keyboard's composing state stays coherent.
  */
-actual fun Modifier.editorTextInput(session: EditorSession): Modifier =
-    this then EditorTextInputElement(session)
+actual fun Modifier.editorTextInput(session: EditorSession, ime: EditorImeHandle): Modifier =
+    this then EditorTextInputElement(session, ime)
 
 actual fun textInputCodePoint(event: KeyEvent): Int {
     val native = event.nativeKeyEvent
@@ -42,32 +42,67 @@ actual fun textInputCodePoint(event: KeyEvent): Int {
     return if (cp in 32..0x10FFFF && cp != 127) cp else -1
 }
 
-private data class EditorTextInputElement(val session: EditorSession) : ModifierNodeElement<EditorTextInputNode>() {
-    override fun create() = EditorTextInputNode(session)
-    override fun update(node: EditorTextInputNode) = node.setSession(session)
+private data class EditorTextInputElement(
+    val session: EditorSession,
+    val ime: EditorImeHandle,
+) : ModifierNodeElement<EditorTextInputNode>() {
+    override fun create() = EditorTextInputNode(session, ime)
+    override fun update(node: EditorTextInputNode) = node.setSession(session, ime)
 }
 
 private class EditorTextInputNode(
     private var session: EditorSession,
+    private var ime: EditorImeHandle,
 ) : Modifier.Node(), PlatformTextInputModifierNode, FocusEventModifierNode {
 
     private var job: Job? = null
     private var focused = false
+    // Whether the user has explicitly asked for the soft keyboard (a tap). The input session — and thus the
+    // keyboard — starts only when this is set AND the surface is focused. Gaining focus on its own never
+    // raises the keyboard; losing focus clears the request so a later passive refocus stays silent.
+    private var wantsKeyboard = false
 
-    fun setSession(s: EditorSession) {
+    fun setSession(s: EditorSession, h: EditorImeHandle) {
+        if (h !== ime) { ime.onShow = null; ime.onHide = null; ime = h; registerHandle() }
         if (s === session) return
         session = s
-        if (focused) startSession() // new buffer (tab switch) → fresh session over it
+        // A new buffer means a tab switch — never carry the keyboard over; require a fresh tap.
+        wantsKeyboard = false
+        stopSession()
+    }
+
+    override fun onAttach() {
+        registerHandle()
+    }
+
+    private fun registerHandle() {
+        ime.onShow = {
+            wantsKeyboard = true
+            if (focused && job == null) startSession()
+        }
+        ime.onHide = {
+            wantsKeyboard = false
+            stopSession()
+        }
     }
 
     override fun onFocusEvent(focusState: FocusState) {
         val now = focusState.isFocused
         if (now == focused) return
         focused = now
-        if (now) startSession() else stopSession()
+        // Only the explicit request raises the keyboard — focus alone does not. Losing focus tears the
+        // session down and forgets the request (so closing a sheet / returning to the screen won't reopen it).
+        if (now) {
+            if (wantsKeyboard && job == null) startSession()
+        } else {
+            wantsKeyboard = false
+            stopSession()
+        }
     }
 
     override fun onDetach() {
+        ime.onShow = null
+        ime.onHide = null
         stopSession()
     }
 

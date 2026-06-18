@@ -17,8 +17,32 @@ import androidx.compose.ui.input.key.KeyEvent
  *
  * Must sit **before** `Modifier.focusable()` in the editor's modifier chain so the node observes the
  * focus target's events.
+ *
+ * The soft keyboard is shown **only** on an explicit [EditorImeHandle.show] (the editor calls it from a
+ * tap) — never merely because the surface gained focus. So programmatic focus (opening a file, switching
+ * tabs), focus restored when a sheet/overlay closes, or returning from another screen leaves the keyboard
+ * hidden; the caret is placed and hardware keys still work (those flow through the focusable's key handler,
+ * not the IME session). Losing focus drops the request, so the next passive refocus won't reopen it.
  */
-expect fun Modifier.editorTextInput(session: EditorSession): Modifier
+expect fun Modifier.editorTextInput(session: EditorSession, ime: EditorImeHandle): Modifier
+
+/**
+ * A small imperative handle the editor uses to ask the platform IME to show/hide. Showing the keyboard is
+ * an *event*, not a state derived from focus — so the editor fires [show] on a deliberate tap, and the
+ * platform node starts the input session (which raises the keyboard) only then. [hide] tears the session
+ * down. Created with `remember { EditorImeHandle() }` and passed to [editorTextInput]; the platform node
+ * registers its implementation on attach and clears it on detach.
+ */
+class EditorImeHandle {
+    internal var onShow: (() -> Unit)? = null
+    internal var onHide: (() -> Unit)? = null
+
+    /** Ask the platform to raise the soft keyboard for the editor (no-op until the node is attached/focused). */
+    fun show() { onShow?.invoke() }
+
+    /** Ask the platform to dismiss the soft keyboard / end the input session. */
+    fun hide() { onHide?.invoke() }
+}
 
 /**
  * The Unicode code point to insert for a hardware key-down [event], or **-1** when the event is not text

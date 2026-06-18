@@ -691,3 +691,49 @@ private fun NoteCard(pinned: Boolean) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Files access — projects live in a real folder, browsable from any file manager
+// ---------------------------------------------------------------------------
+
+/** A static mock of the "your files are accessible" story: a folder card with its on-disk path and an
+ *  "Open in Files" pill, over a couple of file-manager rows — conveying that other apps can browse it. */
+@Composable
+internal fun FilesAccessMock() {
+    Column(
+        Modifier.fillMaxSize().background(Ca.colors.bg).padding(horizontal = 22.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.lg)).background(Ca.colors.surface)
+                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(34.dp).clip(RoundedCornerShape(Ca.radius.sm)).background(Ca.colors.accentSoft),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(CaIcons.folder, null, Modifier.size(18.dp), tint = Ca.colors.accent) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Your project files", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                    Text("Open in any file manager — add icons, layouts, assets.", color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 2)
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(Ca.colors.surface2).padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(".../CodeAssist/projects", color = Ca.colors.textSecondary, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Icon(CaIcons.copy, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+            }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.pill)).background(Ca.colors.accentSoft).padding(vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(CaIcons.share, null, Modifier.size(15.dp), tint = Ca.colors.accent)
+                Spacer(Modifier.width(6.dp))
+                Text("Open in file manager", color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
