@@ -45,6 +45,7 @@ include(
     ":lang-jdt",
     ":lang-xml",
     ":lang-kotlin", // editor-only Kotlin LanguageBackend (PSI parse + our own symbols/inference/completion)
+    ":interp-core", // on-device Kotlin interpreter: tree-walks lang-kotlin's ResolvedTree (Compose interpreter, step 3)
     ":deps-api",
     ":deps-impl",
     ":block-api",
@@ -61,6 +62,7 @@ include(
 // excluding them is safe and keeps the acyclic graph intact.
 if (System.getenv("CI_CORE_ONLY") != "true") {
     include(
+        ":interp-compose", // Compose bridge + render surface (KMP: desktop+android) — needs the Compose plugin
         ":ide-ui",
         ":ide-core",
         ":ide-desktop",

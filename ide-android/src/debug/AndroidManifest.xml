@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- debug-only: declares the bare ComponentActivity the Compose-ABI spike (ComposeAbiSpikeTest) launches via
+     ActivityScenario. In the app's debug variant so it shares the instrumentation target process; never
+     shipped in release. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="dev.ide.android.spike.SpikeComposeActivity"
+            android:exported="true" />
+    </application>
+</manifest>

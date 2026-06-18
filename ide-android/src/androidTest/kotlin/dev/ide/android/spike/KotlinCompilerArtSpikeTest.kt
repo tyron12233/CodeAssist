@@ -121,6 +121,79 @@ class KotlinCompilerArtSpikeTest {
         )
     }
 
+    /**
+     * Compose-on-ART discovery: the same K2 compiler, now with the Jetpack Compose plugin applied (fed via
+     * `pluginClasspaths`, exactly as the build's `KotlinJvmCompiler` does it). Compiles a `@Composable`
+     * function and asserts the plugin ran on ART without throwing and produced transformed `.class` output.
+     * Any new ART breakage the Compose plugin trips (a class the existing [ArtPatchPasses] don't cover) shows
+     * up here as a thrown `LinkageError`/`NoClassDefFoundError`, the input to a new pass — same loop as the
+     * plain-compile spike above. The transform's *correctness* is proven on desktop (KotlinComposeBuildTest);
+     * here we only need it to run.
+     *
+     * The plugin jar is the lang-kotlin bundled resource (works on device); its `ComposePluginRegistrar`
+     * class is dexed into the app, so kotlinc's ServiceLoader resolves it through parent delegation.
+     */
+    @Test
+    fun composeCompilesOnArt() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val work = File(ctx.filesDir, "compose-art-spike").apply { deleteRecursively(); mkdirs() }
+
+        val home = provisionKotlincHome(ctx, File(work, "kotlinc-home"))
+        System.setProperty("kotlinc.art.home", home.absolutePath)
+
+        val androidJar = copyAsset(ctx, "android.jar", File(work, "android.jar"))
+        val stdlibJar = copyAsset(ctx, "kotlin-stdlib.jar", File(work, "kotlin-stdlib.jar"))
+        val composeRuntimeJar = copyAsset(ctx, "compose-runtime.jar", File(work, "compose-runtime.jar"))
+        val pluginJar = dev.ide.lang.kotlin.compile.ComposeCompilerPlugin.jar()
+            ?: fail("Compose plugin jar not bundled in the app (lang-kotlin resource missing)")
+        Log.i(TAG, "compose plugin jar = $pluginJar")
+
+        val srcDir = File(work, "src").apply { mkdirs() }
+        File(srcDir, "Screen.kt").writeText(
+            """
+            package spike
+
+            import androidx.compose.runtime.Composable
+
+            @Composable
+            fun Greeting() {}
+            """.trimIndent(),
+        )
+        val outDir = File(work, "out").apply { mkdirs() }
+
+        val args = K2JVMCompilerArguments().apply {
+            freeArgs = listOf(srcDir.absolutePath)
+            destination = outDir.absolutePath
+            classpath = listOf(androidJar, stdlibJar, composeRuntimeJar).joinToString(File.pathSeparator) { it.absolutePath }
+            pluginClasspaths = arrayOf(pluginJar.toString())
+            noJdk = true
+            noStdlib = true
+            noReflect = true
+            jvmTarget = "1.8"
+        }
+
+        val messages = RecordingMessageCollector()
+        val exit: ExitCode = try {
+            K2JVMCompiler().exec(messages, Services.EMPTY, args)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Compose plugin failed to RUN on ART — add an ArtPatchPass for this:", t)
+            Log.e(TAG, "compiler messages so far:\n${messages.dump()}")
+            fail(
+                "Compose compiler plugin failed to run on ART: ${t.javaClass.name}: ${t.message}\n" +
+                    "Add a pass to dev.ide.build.kotlinc.ArtPatchPasses targeting the class in this trace, " +
+                    "then re-run.\n${t.stackTraceToString()}",
+            )
+            return
+        }
+
+        Log.i(TAG, "Compose K2JVMCompiler exit=$exit\n${messages.dump()}")
+        val produced = outDir.walkTopDown().filter { it.isFile && it.extension == "class" }.toList()
+        assertTrue(
+            "Compose plugin ran but reported errors / produced no .class. Messages:\n${messages.dump()}",
+            exit == ExitCode.OK && produced.isNotEmpty(),
+        )
+    }
+
     private fun copyAsset(ctx: Context, assetName: String, dest: File): File {
         ctx.assets.open(assetName).use { input -> dest.outputStream().use { input.copyTo(it) } }
         return dest

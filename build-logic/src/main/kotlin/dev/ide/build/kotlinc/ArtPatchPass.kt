@@ -57,6 +57,7 @@ object ArtPatchPasses {
         // One pass per confirmed ART breakage, discovered via KotlinCompilerArtSpikeTest.
         ManagementStubPass(),    // java.lang.management.* absent on ART (PerformanceManager + 5 more)
         PathUtilSelfLocatePass(), // PathUtil.getResourcePathForClass → the runtime-provisioned resource dir
+        FastJarCleanerArtPass(),  // enable the mmap-backed fast JAR FS (ART can't unmap → no-op cleaner)
     )
 
     /** True if any registered pass rewrites [classFqn]. */
