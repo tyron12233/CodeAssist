@@ -627,6 +627,26 @@ class KotlinSymbolService(
         return src + cp
     }
 
+    /**
+     * Fully-qualified names worth importing for an unresolved simple [name]: top-level callables
+     * (functions/properties — `androidx.compose.runtime.remember`, `…mutableStateOf`) plus types
+     * (classes/objects/interfaces). De-duplicated and sorted; powers the "Import …" quick-fix on a
+     * `kt.unresolved` reference. Best-effort — a candidate without a derivable package is dropped.
+     */
+    fun importCandidates(name: String): List<String> {
+        if (name.isEmpty()) return emptyList()
+        val out = LinkedHashSet<String>()
+        topLevelByName(name).forEach { s ->
+            val pkg = s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
+            if (pkg != null) out += "$pkg.$name"
+        }
+        typeNamesByPrefix(name).forEach { s ->
+            val fqn = s.type?.qualifiedName
+            if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
+        }
+        return out.sorted()
+    }
+
     fun topLevelByName(name: String): List<KotlinSymbol> {
         val src = model().topLevel.filter { it.name == name }.map { toSymbol(it, null) }
         val idx = index

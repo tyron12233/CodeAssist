@@ -89,6 +89,53 @@ class KotlinDiagnosticsTest {
     }
 
     @Test
+    fun unimportedDelegateCallsAreUnresolved() {
+        // `val state by remember { mutableStateOf("") }` with neither call imported: both top-level callables
+        // are on the classpath but out of scope, so each must be flagged (the unimported-import case).
+        val diags = diagnose(
+            "UseRemember.kt",
+            "package demo\nfun f() { val state by remember { mutableStateOf(\"\") } }",
+        )
+        assertTrue(
+            diags.any { it.code == "kt.unresolved" && it.message.contains("remember") },
+            "unimported `remember` delegate call should be unresolved; got $diags",
+        )
+        assertTrue(
+            diags.any { it.code == "kt.unresolved" && it.message.contains("mutableStateOf") },
+            "unimported `mutableStateOf` should be unresolved; got $diags",
+        )
+    }
+
+    @Test
+    fun importedDelegateCallsResolve() {
+        val diags = diagnose(
+            "UseRememberImported.kt",
+            "package demo\n" +
+                "import androidx.compose.runtime.remember\n" +
+                "import androidx.compose.runtime.mutableStateOf\n" +
+                "fun f() { val state by remember { mutableStateOf(\"\") } }",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" },
+            "imported `remember`/`mutableStateOf` must not be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun importFixOfferedForUnresolvedDelegateCall() {
+        val code = "package demo\nfun f() { val state by remember { mutableStateOf(\"\") } }"
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("UseRememberFix.kt")))
+        val fixes = runBlocking {
+            analyzer.incrementalParser.parseFull(doc)
+            analyzer.importFixesAt(doc.file, code.indexOf("remember") + 1)
+        }
+        assertTrue(
+            fixes.any { it.title == "Import androidx.compose.runtime.remember" },
+            "should offer to import remember; got ${fixes.map { it.title }}",
+        )
+    }
+
+    @Test
     fun unknownNamedArgumentIsFlagged() {
         val diags = diagnose("UseGreet.kt", "package demo\nfun g() { greet(name = \"x\", bogus = 1) }")
         assertTrue(
@@ -118,6 +165,12 @@ class KotlinDiagnosticsTest {
                 "ListIcon.kt" to "package androidx.compose.material.icons.automirrored.filled\n" +
                     "import androidx.compose.material.icons.Icons\n" +
                     "val Icons.AutoMirrored.Filled.List: Int get() = 0",
+                // Mirrors the Compose runtime shape: top-level `remember`/`mutableStateOf` in their own
+                // package, so a bare delegate use without an import is out of scope (must be flagged).
+                "Compose.kt" to "package androidx.compose.runtime\n" +
+                    "interface MutableState<T> { var value: T }\n" +
+                    "fun <T> remember(calculation: () -> T): T = calculation()\n" +
+                    "fun <T> mutableStateOf(value: T): MutableState<T> = TODO()",
             ),
         )
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

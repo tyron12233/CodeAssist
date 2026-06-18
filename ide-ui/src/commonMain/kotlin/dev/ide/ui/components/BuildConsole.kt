@@ -70,8 +70,29 @@ fun BuildConsole(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Header(buildState, onRun, onStop, onCollapse)
         IndexingSection(indexStatus)
+        buildState.banner?.let { FirstBuildBanner(it) }
         StepGraph(buildState.steps, buildState.status)
         LogBody(buildState.log)
+    }
+}
+
+/**
+ * An informational notice above the step graph — currently the first-build warning that dexing has no
+ * cache yet, so this build is slower and the next one will be much faster. Quiet accent styling: it's
+ * reassurance, not an error.
+ */
+@Composable
+private fun FirstBuildBanner(text: String) {
+    Row(
+        Modifier.fillMaxWidth()
+            .background(Ca.colors.accent.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, Ca.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.md))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(CaIcons.info, null, Modifier.size(16.dp), tint = Ca.colors.accent)
+        Text(text, color = Ca.colors.textSecondary, style = Ca.type.footnote)
     }
 }
 

@@ -117,6 +117,7 @@ import dev.ide.deps.impl.DEFAULT_REPOSITORIES
 import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
 import dev.ide.model.Coordinate
+import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
@@ -687,7 +688,7 @@ class IdeServices private constructor(
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
                     val project = projectOf(module) ?: return
                     val graph = android.createBuildGraph(project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE))
-                    launch(module.name, graph, "> assemble $variant · ${module.name}")
+                    launch(module.name, graph, "> assemble $variant · ${module.name}", firstBuildDexBanner(module))
                 }
                 id.startsWith("androidRun:") -> {
                     val (modName, variant) = id.removePrefix("androidRun:").split(":").let { it[0] to it.getOrElse(1) { "debug" } }
@@ -699,7 +700,7 @@ class IdeServices private constructor(
                     val graph = android.createBuildGraph(project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE))
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
-                    launch(module.name, graph, "> Run $variant · ${module.name}") { log -> installer.installAndLaunch(apk, pkg, log) }
+                    launch(module.name, graph, "> Run $variant · ${module.name}", firstBuildDexBanner(module)) { log -> installer.installAndLaunch(apk, pkg, log) }
                 }
                 else -> fail("Unknown task: $id")
             }
@@ -768,11 +769,33 @@ class IdeServices private constructor(
         _buildState.value = BuildState(RunStatus.Failed, "", emptyList(), listOf(message), 0)
     }
 
+    /**
+     * The first-build dex notice, or null. The shared library-dex cache (the dir [androidBuild] dexes into)
+     * is empty on a machine's first Android build, so every library is dexed from scratch — the slow part of
+     * a cold build. We reassure the user the next build reuses the cache, but only when there are enough
+     * libraries that dexing is actually felt; a tiny app dexes fast and the notice would just be noise.
+     */
+    private fun firstBuildDexBanner(module: Module): String? {
+        val depCount = runCatching {
+            module.classpath(DependencyScope.RUNTIME_ONLY).entries.count { it.kind == ClasspathEntryKind.LIBRARY }
+        }.getOrDefault(0)
+        if (depCount < FIRST_BUILD_DEX_BANNER_THRESHOLD) return null
+        val dexCache = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("dex")
+        if (dexCacheHasEntries(dexCache)) return null
+        return "First build — dexing $depCount libraries from scratch (there's no dex cache yet), so this " +
+            "build is slower than usual. The next build reuses the cached dex and will be much faster."
+    }
+
+    /** Whether the shared dex cache already holds any dexed output (so a build isn't the cold first one). */
+    private fun dexCacheHasEntries(dir: Path): Boolean = Files.isDirectory(dir) && runCatching {
+        Files.walk(dir).use { s -> s.anyMatch { it.toString().endsWith(".dex") } }
+    }.getOrDefault(false)
+
     /** Stream [graph] execution into [buildState] (shared by run + assemble). [onSuccess] (e.g. install +
      *  launch an APK) runs after a successful build, receiving the console log appender. */
-    private fun launch(moduleName: String, graph: TaskGraph, header: String, onSuccess: (suspend (log: (String) -> Unit) -> Unit)? = null) {
+    private fun launch(moduleName: String, graph: TaskGraph, header: String, banner: String? = null, onSuccess: (suspend (log: (String) -> Unit) -> Unit)? = null) {
         val order = graph.topologicalLevels().flatten().map { BuildStepUi(it.name.value, StepStatus.Pending) }
-        _buildState.value = BuildState(RunStatus.Running, moduleName, order, listOf(header), 0)
+        _buildState.value = BuildState(RunStatus.Running, moduleName, order, listOf(header), 0, banner)
         val start = System.currentTimeMillis()
         val ctx = SimpleTaskContext(log = { line -> _buildState.update { it.copy(log = it.log + line) } })
         buildCtx = ctx
@@ -2056,7 +2079,8 @@ class IdeServices private constructor(
     fun editorActions(file: Path, text: String, start: Int, end: Int): List<dev.ide.analysis.QuickFix> {
         if (file.fileName?.toString()?.endsWith(".xml") == true)
             return xmlActionsAt(file, text, start).map { StaticQuickFix(it.title) } // XML quick-fixes
-        if (isKotlin(file)) return emptyList() // no Kotlin quick-fixes; keep the JDT engine off `.kt`
+        if (isKotlin(file)) // Kotlin quick-fixes (import unresolved refs); the JDT engine stays off `.kt`.
+            return runCatching { kotlinActionsAt(file, text, start) }.getOrDefault(emptyList()).map { StaticQuickFix(it.title) }
         if (analysisUnavailable || moduleForFile(file) == null) return emptyList()
         updateDocument(file, text)
         return try {
@@ -2076,7 +2100,8 @@ class IdeServices private constructor(
     fun applyEditorAction(file: Path, text: String, start: Int, end: Int, index: Int): List<DocumentEdit> {
         if (file.fileName?.toString()?.endsWith(".xml") == true)
             return runCatching { xmlActionsAt(file, text, start).getOrNull(index)?.apply() }.getOrNull() ?: emptyList()
-        if (isKotlin(file)) return emptyList()
+        if (isKotlin(file))
+            return runCatching { kotlinActionsAt(file, text, start).getOrNull(index)?.edits }.getOrNull() ?: emptyList()
         if (analysisUnavailable || moduleForFile(file) == null) return emptyList()
         updateDocument(file, text)
         val vf = store.vfs.fileFor(file)
@@ -2620,6 +2645,16 @@ class IdeServices private constructor(
         return xmlFindings(module, file, text, parsed).filter { offset in it.range }.flatMap { it.fixes }
     }
 
+    /** Kotlin code actions at the caret: "Import …" fixes for unresolved references overlapping [offset].
+     *  Recomputed (not cached) so [editorActions] and [applyEditorAction] agree on the stable list order. */
+    private fun kotlinActionsAt(file: Path, text: String, offset: Int): List<KotlinSourceAnalyzer.KotlinImportFix> {
+        val module = moduleForEditableFile(file) ?: return emptyList()
+        val analyzer = analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer ?: return emptyList()
+        val vf = store.vfs.fileFor(file)
+        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        return analyzer.importFixesAt(vf, offset)
+    }
+
     /** A title-only [dev.ide.analysis.QuickFix] for the XML lightbulb. Edits are applied via [applyEditorAction]
      *  (by list index), so [computeEdits] is never invoked through this object. */
     private class StaticQuickFix(override val title: String) : dev.ide.analysis.QuickFix {
@@ -3073,6 +3108,9 @@ class IdeServices private constructor(
     }
 
     companion object {
+        /** Below this many library deps, dexing is quick enough that the first-build notice is just noise. */
+        private const val FIRST_BUILD_DEX_BANNER_THRESHOLD = 8
+
         private val PACKAGE_DECL = Regex("""(?m)^\s*package\s+([\w.]+)\s*;""")
         private val MAIN_METHOD = Regex("""\bstatic\s+void\s+main\s*\(""")
         private val NAME_ATTR = Regex("""name\s*=\s*"([^"]+)"""")

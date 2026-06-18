@@ -608,9 +608,24 @@ class KotlinResolver(
                 service.membersOf(recv.qualifiedName, recv.typeArguments, null).any { it.name == name }
             }
         ) return true
-        if (service.topLevelByName(name).isNotEmpty()) return true
+        // A top-level callable (`remember`, `mutableStateOf`) resolves bare only when it is actually in
+        // scope — explicitly imported, star-imported, same-package, or default-imported. A classpath
+        // callable that was never imported stays unresolved, as Kotlin reports (mirrors the extension rule).
+        if (service.topLevelByName(name).any { topLevelInScope(it, fileContext) }) return true
         if (fileContext.imports.any { !it.isStar && it.simpleName == name }) return true
         return service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
+    }
+
+    /**
+     * Whether a top-level callable [sym] is in scope at the use site: Kotlin resolves a top-level
+     * function/property only when its package is imported (explicitly or via a star/default import) or is the
+     * file's own package. No package info → don't guess a rejection (treat as in scope). Mirrors the
+     * extension-visibility rule in [KotlinSourceAnalyzer.extensionInScope].
+     */
+    private fun topLevelInScope(sym: KotlinSymbol, ctx: FileContext): Boolean {
+        val pkg = sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null } ?: return true
+        if (pkg == ctx.packageName || dev.ide.lang.kotlin.symbols.DefaultImports.isDefaultImported(pkg)) return true
+        return ctx.imports.any { imp -> if (imp.isStar) imp.packageName == pkg else imp.fqn == "$pkg.${sym.name}" }
     }
 
     /** Whether [name] is a member (function/property or a constructor `val/var` param) of any class enclosing

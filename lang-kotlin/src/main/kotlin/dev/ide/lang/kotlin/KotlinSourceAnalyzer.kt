@@ -203,6 +203,48 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         return AnalysisResult(file, parsed.diagnostics + semanticDiagnostics(parsed))
     }
 
+    /** A single "Import …" code action: its lightbulb [title] and the document [edits] that apply it. */
+    class KotlinImportFix(val title: String, val edits: List<DocumentEdit>)
+
+    /**
+     * "Import …" quick-fixes for the unresolved references overlapping [offset] in [file]'s last parse — what
+     * the editor lightbulb / Alt-Enter offers on an unimported `remember`, `mutableStateOf`, a type, etc. For
+     * each `kt.unresolved` name under the caret, one fix per candidate fully-qualified name (top-level
+     * callable / type), inserting `import <fqn>` after the existing imports (else the package directive, else
+     * the file top). A candidate already imported contributes nothing; results are de-duplicated and capped.
+     */
+    fun importFixesAt(file: VirtualFile, offset: Int): List<KotlinImportFix> {
+        val parsed = lastByFile[file.path] ?: return emptyList()
+        val text = parsed.ktFile.text
+        val unresolved = semanticDiagnostics(parsed)
+            .filter { it.code == "kt.unresolved" && offset >= it.range.start && offset <= it.range.end }
+        if (unresolved.isEmpty()) return emptyList()
+        val insertOffset = importInsertOffset(parsed.ktFile)
+        val existing = parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
+        val seen = HashSet<String>()
+        val out = ArrayList<KotlinImportFix>()
+        for (d in unresolved) {
+            val name = text.substring(d.range.start.coerceIn(0, text.length), d.range.end.coerceIn(0, text.length))
+            for (fqn in service.importCandidates(name)) {
+                if (fqn in existing || !seen.add(fqn)) continue
+                out += KotlinImportFix("Import $fqn", listOf(DocumentEdit(insertOffset, 0, "import $fqn\n")))
+            }
+        }
+        return out.take(12)
+    }
+
+    /** Offset of a fresh line just after the last import (else the package directive, else the file start). */
+    private fun importInsertOffset(ktFile: KtFile): Int {
+        val text = ktFile.text
+        val anchor = ktFile.importDirectives.maxOfOrNull { it.textRange.endOffset }
+            ?: ktFile.packageDirective?.takeIf { it.text.isNotBlank() }?.textRange?.endOffset
+            ?: return 0
+        var i = anchor.coerceIn(0, text.length)
+        while (i < text.length && text[i] != '\n') i++  // to the end of the anchor's line
+        if (i < text.length) i++                          // past its newline → start of a fresh line
+        return i
+    }
+
     /**
      * Semantic diagnostics. Conservative to avoid false positives over an incomplete (parse-only) symbol
      * model. It flags:

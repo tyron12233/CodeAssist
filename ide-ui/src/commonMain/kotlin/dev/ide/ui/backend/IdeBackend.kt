@@ -608,6 +608,8 @@ data class BuildState(
     val steps: List<BuildStepUi> = emptyList(),
     val log: List<String> = emptyList(),
     val elapsedMs: Long = 0,
+    /** An informational notice shown above the step graph (e.g. the first-build dex-cache warning). */
+    val banner: String? = null,
 )
 
 /** A running program asking permission for a guarded operation. [category] is a guard-category id
