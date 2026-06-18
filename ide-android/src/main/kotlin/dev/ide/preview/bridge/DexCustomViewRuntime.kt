@@ -44,8 +44,12 @@ class DexCustomViewRuntime(
             throw CustomViewPreviewException("D8 dexing of preview classes failed: ${result.log.takeLast(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
         }
 
-        val dexes = dexOut.walkTopDown().filter { it.extension == "dex" }.map { it.absolutePath }.toList()
-        if (dexes.isEmpty()) throw CustomViewPreviewException("D8 produced no .dex output for preview classes")
+        val dexFiles = dexOut.walkTopDown().filter { it.extension == "dex" }.toList()
+        if (dexFiles.isEmpty()) throw CustomViewPreviewException("D8 produced no .dex output for preview classes")
+        // ART refuses to load a dex that is still writable ("Writable dex file '…' is not allowed", W^X);
+        // D8 emits owner-writable files, so clear every write bit before handing them to the class loader.
+        dexFiles.forEach { it.setWritable(false, false) }
+        val dexes = dexFiles.map { it.absolutePath }
         val optimized = File(cacheDir, "preview-oat").apply { mkdirs() }
         val loader = DexClassLoader(dexes.joinToString(File.pathSeparator), optimized.absolutePath, null, javaClass.classLoader)
 
