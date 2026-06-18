@@ -80,6 +80,41 @@ class EditorSessionTest {
     }
 
     @Test
+    fun backspaceOnBlankIndentedLineRemovesWholeIndentAndJoins() {
+        // caret sits at the end of a whitespace-only line; one Backspace hops to the prev line's end
+        val s = session("    foo\n        ", 16)
+        s.backspace()
+        assertEquals("    foo", s.doc.text)
+        assertEquals(TextRange(7), s.selection)
+    }
+
+    @Test
+    fun backspaceOnBlankLineWithTabsRemovesAll() {
+        val s = session("bar\n\t\t\t", 7)
+        s.backspace()
+        assertEquals("bar", s.doc.text)
+        assertEquals(TextRange(3), s.selection)
+    }
+
+    @Test
+    fun backspaceInIndentOfNonBlankLinePeelsOneChar() {
+        // line has real content after the indent — stays a normal single-char delete
+        val s = session("foo\n    bar", 7)
+        s.backspace()
+        assertEquals("foo\n   bar", s.doc.text)
+        assertEquals(TextRange(6), s.selection)
+    }
+
+    @Test
+    fun backspaceOnBlankFirstLineHasNoPrevLineToJoin() {
+        // no preceding line — falls back to a plain one-char delete
+        val s = session("    ", 4)
+        s.backspace()
+        assertEquals("   ", s.doc.text)
+        assertEquals(TextRange(3), s.selection)
+    }
+
+    @Test
     fun selectionTypingReplaces() {
         val s = session("hello world", 0)
         s.setSelectionRange(0, 5)

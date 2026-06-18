@@ -111,9 +111,35 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int): RangeEdit? {
     val emptyPair = (deleted in OPEN_TO_CLOSE && next == OPEN_TO_CLOSE[deleted]) ||
         (deleted in QUOTES && next == deleted)
     if (emptyPair) return RangeEdit(pos - 1, pos + 1, "", pos - 1)
+    // Smart-indent backspace (IntelliJ-style): on a blank, whitespace-only line, a single Backspace
+    // removes the whole leading indent together with the preceding line break, hopping the caret to
+    // the end of the previous line — rather than peeling off one space/tab at a time.
+    if ((deleted == ' ' || deleted == '\t') && pos > 1) {
+        val lineStart = lineStartOf(text, pos)
+        if (lineStart > 0 && isBlankLine(text, lineStart)) {
+            return RangeEdit(lineStart - 1, pos, "", lineStart - 1)
+        }
+    }
     // don't split a surrogate pair (emoji in string literals)
     val start = if (deleted.isLowSurrogate() && pos >= 2 && text[pos - 2].isHighSurrogate()) pos - 2 else pos - 1
     return RangeEdit(start, pos, "", start)
+}
+
+/** Offset of the start of the line containing [pos] (just after the previous '\n', or 0). */
+private fun lineStartOf(text: CharSequence, pos: Int): Int {
+    var i = pos
+    while (i > 0 && text[i - 1] != '\n') i--
+    return i
+}
+
+/** Whether the line beginning at [lineStart] holds only whitespace up to its end ('\n' or EOF). */
+private fun isBlankLine(text: CharSequence, lineStart: Int): Boolean {
+    var i = lineStart
+    while (i < text.length && text[i] != '\n') {
+        if (!text[i].isWhitespace()) return false
+        i++
+    }
+    return true
 }
 
 // ---- word boundaries (caret navigation / word delete / double-tap selection) ----
