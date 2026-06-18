@@ -21,6 +21,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         put("minSdk", facet.minSdk.toLong())
         put("targetSdk", facet.targetSdk.toLong())
         put("manifest", facet.manifest)
+        put("versionCode", facet.versionCode.toLong())
+        put("versionName", facet.versionName)
         put("isApplication", facet.isApplication)
         if (facet.flavorDimensions.isNotEmpty()) put("flavorDimensions", facet.flavorDimensions)
         put("buildTypes", facet.buildTypes.map { encodeBuildType(it) })
@@ -35,6 +37,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             minSdk = minSdk,
             targetSdk = values.int("targetSdk") ?: minSdk,
             manifest = values["manifest"] as? String ?: "src/main/AndroidManifest.xml",
+            versionCode = values.int("versionCode") ?: 1,
+            versionName = values["versionName"] as? String ?: "1.0",
             isApplication = values["isApplication"] as? Boolean ?: true,
             flavorDimensions = values.stringList("flavorDimensions"),
             buildTypes = values.tableList("buildTypes").map { decodeBuildType(it) }

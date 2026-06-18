@@ -52,6 +52,8 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
         targetSdk: Int,
         genJavaDir: Path,
         outApk: Path,
+        versionCode: Int?,
+        versionName: String?,
         nonFinalIds: Boolean,
     ): ToolResult {
         Files.createDirectories(genJavaDir)
@@ -64,6 +66,8 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
             add("--java"); add(genJavaDir.toString())
             add("--custom-package"); add(customPackage)
             if (extraPackages.isNotEmpty()) { add("--extra-packages"); add(extraPackages.joinToString(":")) }
+            versionCode?.let { add("--version-code"); add(it.toString()) }
+            versionName?.let { add("--version-name"); add(it) }
             if (nonFinalIds) add("--non-final-ids")
             add("--min-sdk-version"); add(minSdk.toString())
             add("--target-sdk-version"); add(targetSdk.toString())

@@ -66,6 +66,8 @@ interface Aapt2 {
         targetSdk: Int,
         genJavaDir: Path,
         outApk: Path,
+        versionCode: Int? = null,       // injected into the manifest when it declares none (AGP defaultConfig)
+        versionName: String? = null,
         nonFinalIds: Boolean = false,   // libraries generate a non-final R (IDs not inlined by the compiler)
     ): ToolResult
 }

@@ -21,6 +21,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import org.objectweb.asm.AnnotationVisitor
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Opcodes
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -240,6 +245,8 @@ internal class Aapt2LinkTask(
     private val extraPackages: List<String>,
     private val minSdk: Int,
     private val targetSdk: Int,
+    private val versionCode: Int,
+    private val versionName: String,
     private val genJavaDir: Path,
     private val resourcesAp: Path,
     private val aapt2: Aapt2,
@@ -256,6 +263,8 @@ internal class Aapt2LinkTask(
         property("extraPackages", extraPackages.joinToString(":"))
         property("minSdk", minSdk)
         property("targetSdk", targetSdk)
+        property("versionCode", versionCode)
+        property("versionName", versionName)
         property("androidJar", androidJar.toString())
     }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
@@ -265,7 +274,7 @@ internal class Aapt2LinkTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        val r = aapt2.link(archives(), manifest, androidJar, customPackage, extraPackages, minSdk, targetSdk, genJavaDir, resourcesAp)
+        val r = aapt2.link(archives(), manifest, androidJar, customPackage, extraPackages, minSdk, targetSdk, genJavaDir, resourcesAp, versionCode, versionName)
         r.log.forEach(ctx.logger())
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
@@ -435,25 +444,35 @@ internal class DexArchiveBuilderTask(
         // Collect across every project-class root (Java output + Kotlin output) keyed by package-relative
         // path; a later root wins a (rare) name clash. Relpaths from distinct roots don't otherwise collide.
         val byRel = LinkedHashMap<String, Path>()
+        val perRoot = LinkedHashMap<String, Int>()   // root name -> .class count contributed (Java vs Kotlin output)
         for (root in projectClasses.filter { Files.isDirectory(it) }) {
+            var n = 0
             Files.walk(root).use { s ->
                 s.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }.forEach { f ->
-                    byRel[root.relativize(f).toString().replace('\\', '/')] = f
+                    byRel[root.relativize(f).toString().replace('\\', '/')] = f; n++
                 }
             }
+            perRoot[root.fileName.toString()] = n
         }
-        if (byRel.isEmpty()) { DexArchives.clearClassDex(projectDexRoot); return true }
+        val rootSummary = projectClasses.joinToString(", ") { "${it.fileName}=${perRoot[it.fileName.toString()] ?: 0}" }
+        if (byRel.isEmpty()) {
+            ctx.logger()("dexBuilder project scope: no class files to dex ($rootSummary) — app code will be absent from the APK")
+            DexArchives.clearClassDex(projectDexRoot); return true
+        }
         val current = byRel.mapValues { (_, f) -> DexArchives.fileHash(f) }   // relpath -> content hash
         val previous = DexArchives.readClassManifest(projectDexRoot)
         val changed = current.keys.filter { previous[it] != current[it] }      // new or modified
         val removed = previous.keys - current.keys
         (changed + removed).forEach { DexArchives.deleteClassDex(projectDexRoot, it) }
+        ctx.logger()("dexBuilder project scope: ${byRel.size} class file(s) [$rootSummary]; ${changed.size} to (re)dex")
 
         var ok = true
         if (changed.isNotEmpty()) {
             val changedJar = stagingJar.resolveSibling("project-changed.jar")
             val restJar = stagingJar.resolveSibling("project-rest.jar")
-            DexArchives.jarClasses(byRel, changed.toSet(), changedJar)
+            // Strip @kotlin.Metadata from the program classes: the in-process D8/R8 crashes rewriting Kotlin
+            // metadata newer than it supports, which drops the dex output (see strippedKotlinMetadata).
+            DexArchives.jarClasses(byRel, changed.toSet(), changedJar, stripKotlinMetadata = true)
             val unchanged = current.keys - changed.toSet()
             val classpath = ArrayList<Path>()
             if (unchanged.isNotEmpty()) { DexArchives.jarClasses(byRel, unchanged, restJar); classpath.add(restJar) }
@@ -464,9 +483,30 @@ internal class DexArchiveBuilderTask(
                 threads = DexConcurrency.plan(1).threadsPerInvocation)
             r.log.forEach(ctx.logger()); if (!r.success) { ok = false; ctx.logger()("dex archive failed for project classes") }
         }
-        DexArchives.writeClassManifest(projectDexRoot, current)
+        // Verify every (re)dexed class actually produced a `.dex`. A dexer can report success yet silently drop
+        // a class it couldn't process (e.g. D8 choking on Kotlin metadata newer than it supports) — which would
+        // leave that class out of the APK (a launch-time ClassNotFoundException). Record ONLY classes whose
+        // `.dex` exists, so a dropped class is re-dexed next build instead of being remembered as done; fail the
+        // task (naming the casualties) rather than package an APK missing app code.
+        val produced = current.keys.filter { Files.isRegularFile(projectDexRoot.resolve(dexRelOf(it))) }.toSet()
+        // `module-info`/`package-info` carry no runtime code, so D8 emits no `.dex` for them — not a drop.
+        val dropped = current.keys.filter { dexable(it) && it !in produced }   // changed this run or a stale prior drop
+        if (dropped.isNotEmpty()) {
+            ok = false
+            ctx.logger()("dexBuilder project scope: ${dropped.size} class(es) produced no .dex and will be ABSENT from the APK " +
+                "(e.g. ${dropped.take(5).joinToString { it.removeSuffix(".class").replace('/', '.') }}) — the dexer dropped them, often Kotlin metadata it can't parse")
+        }
+        // Record a class as done only if it dexed (or never needed to), so a dropped class re-dexes next build.
+        DexArchives.writeClassManifest(projectDexRoot, current.filterKeys { it in produced || !dexable(it) })
         return ok
     }
+
+    /** The per-class `.dex` path a `DexFilePerClassFile` archive writes for a `.class` at [classRel]. */
+    private fun dexRelOf(classRel: String): String = classRel.removeSuffix(".class") + ".dex"
+
+    /** Whether D8 emits a `.dex` for [classRel] — `module-info`/`package-info` (no runtime code) it does not. */
+    private fun dexable(classRel: String): Boolean =
+        classRel.substringAfterLast('/').let { it != "module-info.class" && it != "package-info.class" }
 
     /**
      * Build a duplicate-free desugaring classpath from [candidates]. D8 aborts when two classpath entries
@@ -560,7 +600,7 @@ internal class DexArchiveBuilderTask(
 private const val DEX_CACHE_FORMAT = "v1-r8-8.13.19"
 
 /** Content-addressing + bucket bookkeeping for [DexArchiveBuilderTask]'s per-scope dex archives. */
-private object DexArchives {
+internal object DexArchives {
     /**
      * Content hash of [path] — a dir's sorted (relpath + bytes), a jar/zip's sorted (entryName + bytes),
      * else the raw file bytes. Hashing *content* (not the file/jar bytes, which carry timestamps) keeps an
@@ -655,14 +695,39 @@ private object DexArchives {
     }
 
     /** Jar the [keys] subset of [byRel] (relpath -> class file) into [jar], preserving package paths. */
-    fun jarClasses(byRel: Map<String, Path>, keys: Set<String>, jar: Path) {
+    fun jarClasses(byRel: Map<String, Path>, keys: Set<String>, jar: Path, stripKotlinMetadata: Boolean = false) {
         jar.parent?.let { Files.createDirectories(it) }
         JarOutputStream(Files.newOutputStream(jar)).use { jos ->
             keys.sorted().forEach { rel ->
                 val f = byRel[rel] ?: return@forEach
-                jos.putNextEntry(JarEntry(rel)); Files.copy(f, jos); jos.closeEntry()
+                jos.putNextEntry(JarEntry(rel))
+                if (stripKotlinMetadata) jos.write(strippedKotlinMetadata(Files.readAllBytes(f))) else Files.copy(f, jos)
+                jos.closeEntry()
             }
         }
+    }
+
+    /**
+     * Drop the `@kotlin.Metadata` annotation from a class. The bundled in-process D8/R8 ([D8InProcessDexer])
+     * crashes (`Should never be called`) trying to *rewrite* Kotlin metadata newer than its bundled
+     * `kotlin-metadata-jvm` understands — and that crash drops the dex output for the whole invocation, so a
+     * project compiled with a newer Kotlin (e.g. a Compose app on Kotlin 2.4) loses `MainActivity` and ships a
+     * `ClassNotFoundException` APK. The annotation only feeds Kotlin reflection (`kotlin-reflect`) over the
+     * app's own classes — irrelevant to execution and to Compose — so stripping it before dexing sidesteps the
+     * rewriter entirely, exactly as R8 release-mode does when it can't preserve metadata. A class with no such
+     * annotation passes through byte-for-byte.
+     */
+    fun strippedKotlinMetadata(bytes: ByteArray): ByteArray {
+        var found = false
+        val reader = ClassReader(bytes)
+        val writer = ClassWriter(0)   // remove only an annotation — frames/maxs are untouched, so no recompute
+        reader.accept(object : ClassVisitor(Opcodes.ASM9, writer) {
+            override fun visitAnnotation(descriptor: String, visible: Boolean): AnnotationVisitor? {
+                if (descriptor == "Lkotlin/Metadata;") { found = true; return null }
+                return super.visitAnnotation(descriptor, visible)
+            }
+        }, 0)
+        return if (found) writer.toByteArray() else bytes
     }
 
     /** Delete immediate child buckets of [root] whose name is not in [keep] (removed/changed inputs). */
@@ -771,9 +836,33 @@ internal class DexMergeTask(
     private val dexer: Dexer,
     private val groupPerBucket: Boolean = false,
 ) : Task {
-    private fun dexFiles(roots: List<Path>): List<Path> = roots.filter { Files.isDirectory(it) }.flatMap { dir ->
-        Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
+    /**
+     * The archive *buckets* under [roots]: a per-class archive ([DexArchiveBuilderTask]) lays its `.dex` out
+     * either directly under the root (the project scope) or under one content-hash subdir per library (the
+     * lib/ext scopes). Treat each hash subdir as a bucket, or the root itself when it holds no hash subdirs,
+     * so a `.dex`'s path *relative to its bucket* is the class path (`androidx/collection/ArrayMapKt.dex`) —
+     * stable across buckets, hence usable as a dedup key.
+     */
+    private fun bucketsOf(roots: List<Path>): List<Path> = roots.filter { Files.isDirectory(it) }.flatMap { root ->
+        val hashBuckets = Files.list(root).use { s ->
+            s.filter { Files.isDirectory(it) && HASH_BUCKET.matches(it.fileName.toString()) }.sorted().collect(Collectors.toList())
+        }
+        if (hashBuckets.isEmpty()) listOf(root) else hashBuckets
     }
+
+    private fun dexesIn(bucket: Path): List<Path> =
+        Files.walk(bucket).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
+
+    /**
+     * Collect the `.dex` to merge from [buckets], dropping a class that is defined by more than one bucket so
+     * D8 never sees it twice ("Type ... is defined multiple times"). This happens when two distinct library
+     * jars ship the same class — most often a Gradle *capability* conflict the Maven resolver doesn't model,
+     * e.g. `androidx.collection:collection` and `:collection-ktx` both defining `androidx.collection.ArrayMapKt`.
+     * Buckets are walked in sorted order so the winner is deterministic; only true duplicate definitions are
+     * dropped (every unique class is kept). [seen] carries the keys across buckets/groups.
+     */
+    private fun dedupedDexes(bucket: Path, seen: MutableSet<String>): List<Path> =
+        dexesIn(bucket).filter { dex -> seen.add(bucket.relativize(dex).toString().replace('\\', '/')) }
 
     override val inputs: TaskInputs get() = TaskInputsImpl().apply {
         dirPaths("archives", dexArchives)
@@ -786,22 +875,26 @@ internal class DexMergeTask(
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         DexArchives.clearDir(outDexDir); Files.createDirectories(outDexDir)
+        val buckets = bucketsOf(dexArchives)
+        // One global key set so a class defined in two buckets is merged once, whether grouped or merged-all.
+        val seen = HashSet<String>()
+        val perBucketDexes = buckets.map { dedupedDexes(it, seen) }   // sequential → deterministic first-wins
+        val dropped = buckets.sumOf { dexesIn(it).size } - seen.size
+        if (dropped > 0) ctx.logger()("dex merge: dropped $dropped duplicate class dex (defined by more than one library)")
+
         if (groupPerBucket) {
             // One indexed group per archive bucket (each input library stays its own set of dex files). Buckets
             // are independent, so merge them in parallel; the group index is the bucket's sorted position, so
             // the output is deterministic regardless of completion order (an empty bucket just leaves a gap —
             // the packager globs every `g*/` dex).
-            val buckets = dexArchives.filter { Files.isDirectory(it) }
-                .flatMap { Files.list(it).use { s -> s.filter { c -> Files.isDirectory(c) }.sorted().collect(Collectors.toList()) } }
             val plan = DexConcurrency.plan(buckets.size)
             val sem = Semaphore(plan.workers)
             val ok = AtomicBoolean(true)
             coroutineScope {
-                buckets.mapIndexed { i, b ->
+                perBucketDexes.mapIndexed { i, dexes ->
                     async(Dispatchers.IO) {
                         sem.withPermit {
                             ctx.checkCanceled()
-                            val dexes = dexFiles(listOf(b))
                             if (dexes.isNotEmpty()) {
                                 val group = outDexDir.resolve("g$i"); Files.createDirectories(group)
                                 val r = dexer.dex(dexes, androidJar, minApi, release, group, plan.threadsPerInvocation)
@@ -814,12 +907,20 @@ internal class DexMergeTask(
             }
             return if (ok.get()) TaskResult.Success else TaskResult.Failed("dex merge failed")
         }
-        val dexes = dexFiles(dexArchives)
+        val dexes = perBucketDexes.flatten()
         // An empty layer is valid (e.g. mergeLibDex with no sub-module deps) — produce an empty dex dir.
         if (dexes.isEmpty()) return TaskResult.Success
         val r = dexer.dex(dexes, androidJar, minApi, release, outDexDir, DexConcurrency.plan(1).threadsPerInvocation)
         r.log.forEach(ctx.logger())
-        return if (r.success) TaskResult.Success else TaskResult.Failed("dex merge failed")
+        if (!r.success) return TaskResult.Failed("dex merge failed")
+        val produced = dexesIn(outDexDir).size
+        ctx.logger()("${name.value}: merged ${dexes.size} class dex -> $produced output dex")
+        return TaskResult.Success
+    }
+
+    private companion object {
+        /** A [DexArchiveBuilderTask] content-hash bucket dir name (24-char lowercase hex; see DexArchives). */
+        val HASH_BUCKET = Regex("[0-9a-f]{24}")
     }
 }
 

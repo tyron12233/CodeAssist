@@ -24,6 +24,10 @@ data class AndroidFacet(
     val targetSdk: Int = minSdk,
     /** Manifest path relative to the module dir. */
     val manifest: String = "src/main/AndroidManifest.xml",
+    /** `defaultConfig.versionCode` — injected into the manifest at link (AGP defaults to 1). */
+    val versionCode: Int = 1,
+    /** `defaultConfig.versionName` — injected into the manifest at link (AGP defaults to "1.0"). */
+    val versionName: String = "1.0",
     /** true == `android-app` (produces an APK); false == `android-lib` (produces an AAR). */
     val isApplication: Boolean = true,
     /** Flavor dimension order; a variant picks one flavor per dimension in this order. */

@@ -17,6 +17,8 @@ class AndroidFacetCodecTest {
         minSdk = 24,
         targetSdk = 33,
         manifest = "src/main/AndroidManifest.xml",
+        versionCode = 12,
+        versionName = "3.4.1",
         isApplication = true,
         flavorDimensions = listOf("tier"),
         buildTypes = listOf(
@@ -41,6 +43,8 @@ class AndroidFacetCodecTest {
         // Integers must be Long (TOML's only integer) so an in-memory facet equals a reloaded one.
         assertEquals(34L, values["compileSdk"])
         assertEquals(24L, values["minSdk"])
+        assertEquals(12L, values["versionCode"])
+        assertEquals("3.4.1", values["versionName"])
         assertEquals(true, values["isApplication"])
         @Suppress("UNCHECKED_CAST")
         val bts = values["buildTypes"] as List<Map<String, Any?>>

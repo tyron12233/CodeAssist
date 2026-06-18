@@ -157,6 +157,14 @@ class AndroidBuildSystem(
             libs.assetsDirs + roots(variant, ContentRole.ASSETS)
         val level = levelOf(app.languageLevel)
         val release = facet.buildType(variant.buildTypeName)?.debuggable == false
+
+        // versionName composed as AGP does: flavor override (else defaultConfig) + build-type suffix.
+        val flavorVersionName = variant.flavorNames.firstNotNullOfOrNull { fn ->
+            facet.productFlavors.firstOrNull { it.name == fn }?.versionName
+        }
+        val versionName = (flavorVersionName ?: facet.versionName) +
+            (facet.buildType(variant.buildTypeName)?.versionNameSuffix ?: "")
+        val versionCode = facet.versionCode
         val directDepCompiles = directModuleDeps(app, byId).map { TaskName(":${it.name}:compileJava") }
 
         // Kotlin: upstream modules' `kotlin-classes` (sibling of their Java output) join the compile classpath;
@@ -177,7 +185,8 @@ class AndroidBuildSystem(
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
         tasks.task(aapt2Link, listOf(aapt2Compile)) {
             Aapt2LinkTask(aapt2Link, layout.compiledRes, layout.manifest(facet), sdk.androidJar,
-                facet.namespace, extraPackages, facet.minSdk, facet.targetSdk, layout.genJava, layout.resourcesAp, aapt2)
+                facet.namespace, extraPackages, facet.minSdk, facet.targetSdk, versionCode, versionName,
+                layout.genJava, layout.resourcesAp, aapt2)
         }
         if (appHasKotlin) {
             tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin) {
