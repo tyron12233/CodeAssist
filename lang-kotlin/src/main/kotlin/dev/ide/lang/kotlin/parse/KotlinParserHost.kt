@@ -43,6 +43,8 @@ object KotlinParserHost {
     // opt-in-gated. Internals: CompilerConfiguration.put.
     @OptIn(CompilerConfiguration.Internals::class, org.jetbrains.kotlin.K1Deprecation::class)
     private val environment: KotlinCoreEnvironment by lazy {
+        // Keep the application environment alive across compiles too — must be set before this first creation.
+        dev.ide.lang.kotlin.compile.KotlinEnvironmentKeepAlive.ensure()
         val configuration = CompilerConfiguration().apply {
             put(CommonConfigurationKeys.MODULE_NAME, "lang-kotlin-parser")
             // Compiler diagnostics are discarded entirely (diagnostics come from PsiErrorElements), so silence it.

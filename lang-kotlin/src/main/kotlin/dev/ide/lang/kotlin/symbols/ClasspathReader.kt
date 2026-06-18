@@ -132,8 +132,11 @@ class ClasspathReader(
             val bytes = runCatching { z.getInputStream(e).use { it.readBytes() } }.getOrNull() ?: continue
             val decoded = runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull() ?: continue
             val pkg = e.name.substringBeforeLast('/', "").replace('/', '.').ifEmpty { null }
-            decoded.extensions.forEach { s -> ext += RawCallableData.from(s, pkg) }
-            decoded.topLevel.forEach { s -> top += RawCallableData.from(s, pkg) }
+            // The .class being scanned IS the JVM facade these top-level/extension functions compile into
+            // (`kotlin/io/ConsoleKt` for println) — exactly what the interpreter reflects into.
+            val facade = e.name.removeSuffix(".class").replace('/', '.')
+            decoded.extensions.forEach { s -> ext += RawCallableData.from(s, pkg, facade) }
+            decoded.topLevel.forEach { s -> top += RawCallableData.from(s, pkg, facade) }
         }
         return if (ext.isEmpty() && top.isEmpty()) JarScanData.EMPTY else JarScanData(ext, top)
     }
@@ -176,6 +179,11 @@ class ClasspathReader(
         val returnType: KotlinType?,
         val paramTypes: List<KotlinType?>,
         val receiverTypeArgs: List<KotlinType>,
+        val declaringClassFqn: String?,
+        val paramNames: List<String>,
+        val isComposable: Boolean,
+        val isInline: Boolean,
+        val varargParamIndex: Int,
     ) {
         // Cached types are context-free; rebind the live context so members()/supertypes() work after reload.
         fun toSymbol(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymbol(
@@ -187,17 +195,28 @@ class ClasspathReader(
             signature = signature,
             typeParameters = typeParameters,
             paramTypes = paramTypes.map { it?.withContext(ctx) },
+            paramNames = paramNames,
             receiverTypeArgs = receiverTypeArgs.map { it.withContext(ctx) },
             receiverTypeParam = receiverTypeParam,
             packageName = packageName,
+            declaringClassFqn = declaringClassFqn,
+            isComposable = isComposable,
+            isInline = isInline,
+            varargParamIndex = varargParamIndex,
         )
 
         companion object {
-            fun from(s: KotlinSymbol, pkg: String?): RawCallableData = RawCallableData(
+            fun from(s: KotlinSymbol, pkg: String?, facade: String?): RawCallableData = RawCallableData(
                 s.name, s.kind, s.receiverTypeFqn, s.signature, pkg, s.receiverTypeParam, s.typeParameters,
                 s.type as? KotlinType,
                 s.paramTypes.map { it as? KotlinType },
                 s.receiverTypeArgs.mapNotNull { it as? KotlinType },
+                // The decode already set the facade for a multi-file class part; else use the .class entry.
+                s.declaringClassFqn ?: facade,
+                s.paramNames,
+                s.isComposable,
+                s.isInline,
+                s.varargParamIndex,
             )
         }
     }
@@ -229,6 +248,11 @@ class ClasspathReader(
             writeType(out, r.returnType)
             out.writeInt(r.paramTypes.size); r.paramTypes.forEach { writeType(out, it) }
             out.writeInt(r.receiverTypeArgs.size); r.receiverTypeArgs.forEach { writeType(out, it) }
+            out.writeUTF(r.declaringClassFqn ?: "")
+            out.writeInt(r.paramNames.size); r.paramNames.forEach { out.writeUTF(it) }
+            out.writeBoolean(r.isComposable)
+            out.writeBoolean(r.isInline)
+            out.writeInt(r.varargParamIndex)
         }
     }
 
@@ -246,7 +270,12 @@ class ClasspathReader(
             val ret = readType(inp)
             val params = List(inp.readInt()) { readType(inp) }
             val recvArgs = List(inp.readInt()) { readType(inp) }.filterNotNull()
-            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs)
+            val declaringFqn = inp.readUTF().ifEmpty { null }
+            val paramNames = List(inp.readInt()) { inp.readUTF() }
+            val isComposable = inp.readBoolean()
+            val isInline = inp.readBoolean()
+            val varargIdx = inp.readInt()
+            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, varargIdx)
         }
         return out
     }
@@ -259,6 +288,7 @@ class ClasspathReader(
         out.writeBoolean(t.nullable)
         out.writeBoolean(t.isTypeParameter)
         out.writeBoolean(t.isExtensionFunctionType)
+        out.writeBoolean(t.isComposable)
         out.writeInt(t.typeArguments.size)
         t.typeArguments.forEach { writeType(out, it as? KotlinType) }
     }
@@ -269,14 +299,15 @@ class ClasspathReader(
         val nullable = inp.readBoolean()
         val isTp = inp.readBoolean()
         val isExtFn = inp.readBoolean()
+        val isComposable = inp.readBoolean()
         val n = inp.readInt()
         val args = ArrayList<TypeRef>(n)
         repeat(n) { readType(inp)?.let { args.add(it) } }
-        return KotlinType(fqn, args, nullable, context = null, isTypeParameter = isTp, isExtensionFunctionType = isExtFn)
+        return KotlinType(fqn, args, nullable, context = null, isTypeParameter = isTp, isExtensionFunctionType = isExtFn, isComposable = isComposable)
     }
 
     private companion object {
-        const val FORMAT_VERSION = 5 // v5: + isExtensionFunctionType (T.() -> R receiver lambdas)
+        const val FORMAT_VERSION = 9 // v9: + KotlinSymbol.varargParamIndex (vararg-aware call resolution)
         val BINARY = SymbolOrigin(fromSource = false, file = null)
     }
 }

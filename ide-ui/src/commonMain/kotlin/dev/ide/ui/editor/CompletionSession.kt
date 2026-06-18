@@ -32,7 +32,13 @@ data class CompletionSession(
      */
     fun filtered(prefix: String): List<UiCompletionItem> {
         if (prefix.isEmpty() || !canFilterLocally) return base
-        return base.filter { fuzzyMatches(it.label, prefix) }
+        // Keep every candidate the user is still narrowing toward (prefix OR camel/subsequence), but float
+        // true prefix matches above scattered fuzzy hits. The sort is stable, so the backend's semantic
+        // ranking (expected type, proximity) survives *within* each tier — we only re-tier by match quality.
+        return base.asSequence()
+            .filter { matchPositions(it.label, prefix) != null }
+            .sortedBy { matchTier(it.label, prefix) }
+            .toList()
     }
 
     companion object {
@@ -70,18 +76,41 @@ internal fun CompletionSession.coversCaret(text: CharSequence, caret: Int, extra
     return true
 }
 
-/** Case-insensitive prefix match, falling back to a camel-hump subsequence (e.g. `nf` → `newFile`). */
-internal fun fuzzyMatches(candidate: String, query: String): Boolean {
-    if (candidate.startsWith(query, ignoreCase = true)) return true
+/** Case-insensitive prefix match, falling back to a fuzzy (camel-hump / subsequence) match. */
+internal fun fuzzyMatches(candidate: String, query: String): Boolean =
+    matchPositions(candidate, query) != null
+
+/**
+ * The indices of [candidate] that [query] matches, or `null` if it doesn't match at all. A case-insensitive
+ * prefix yields the leading run `0..query.length-1`; otherwise the query characters are matched as an
+ * in-order subsequence (which subsumes camel-hump and substring matches, e.g. `nf` → `newFile`, `lw` →
+ * `layout_width`). Returned positions drive both the popup's match highlighting and the filter — one matcher,
+ * so what gets bolded is exactly what matched. Allocation-light: a single `IntArray` of the query length.
+ */
+internal fun matchPositions(candidate: String, query: String): IntArray? {
+    if (query.isEmpty()) return IntArray(0)
+    if (candidate.startsWith(query, ignoreCase = true)) return IntArray(query.length) { it }
+    val pos = IntArray(query.length)
     var ci = 0
-    for (qc in query) {
-        var matched = false
-        while (ci < candidate.length) {
-            val same = candidate[ci].lowercaseChar() == qc.lowercaseChar()
-            ci++
-            if (same) { matched = true; break }
-        }
-        if (!matched) return false
+    var qi = 0
+    while (qi < query.length && ci < candidate.length) {
+        if (candidate[ci].lowercaseChar() == query[qi].lowercaseChar()) { pos[qi] = ci; qi++ }
+        ci++
     }
-    return true
+    return if (qi == query.length) pos else null
+}
+
+/**
+ * A coarse match-quality tier used only to re-order the locally-filtered set (lower = better): an exact
+ * match floats above a prefix match floats above a fuzzy hit, with the case-sensitive variant winning each
+ * pair. So typing `Text` ranks the exact `Text` above `TextField`/`TextView`. Stable-sorting by this keeps
+ * the backend's ranking intact inside each tier while re-tiering by match quality.
+ */
+internal fun matchTier(candidate: String, query: String): Int = when {
+    query.isEmpty() -> 0
+    candidate == query -> 0                             // exact match (case-sensitive) — the user typed it whole
+    candidate.equals(query, ignoreCase = true) -> 1     // exact match, differing only in case
+    candidate.startsWith(query) -> 2                    // case-sensitive prefix
+    candidate.startsWith(query, ignoreCase = true) -> 3 // case-insensitive prefix
+    else -> 4                                           // fuzzy (camel-hump / subsequence)
 }

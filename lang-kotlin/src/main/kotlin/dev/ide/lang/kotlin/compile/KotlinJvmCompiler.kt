@@ -56,6 +56,15 @@ class KotlinJvmCompiler {
      * already-compiled `.class` on [classpath]; pointing `-Xfriend-paths` at that output dir lets a changed
      * file still see its `internal` siblings. (Empty for a whole-module compile, where every file is source.)
      */
+    /**
+     * [compilerPlugins] are kotlinc compiler-plugin jars (each carrying a `META-INF/services`
+     * `CompilerPluginRegistrar`) and [pluginOptions] their `plugin:<id>:<key>=<value>` strings — fed to
+     * `-Xplugin`/`-P`. This is a generic capability; the Compose compiler plugin is the first consumer (the
+     * host decides per-module whether to apply it — see `ComposeCompilerPlugin`). On ART the plugin's
+     * registrar must also be dexed into the app: kotlinc reads the service *descriptor* from the jar but
+     * resolves the registrar *class* through parent delegation to the app classloader (a jar's `.class`
+     * bytes can't be defined at runtime on ART), exactly as the bundled compiler's own classes are.
+     */
     fun compile(
         kotlinSources: List<Path>,
         javaSources: List<Path>,
@@ -64,8 +73,13 @@ class KotlinJvmCompiler {
         jvmTarget: String = "17",
         bootClasspath: List<Path> = emptyList(),
         friendPaths: List<Path> = emptyList(),
+        compilerPlugins: List<Path> = emptyList(),
+        pluginOptions: List<String> = emptyList(),
     ): Result {
         if (kotlinSources.isEmpty()) return Result(true, emptyList())
+        // Keep the compiler's application environment (and its warm jar FS) alive across builds. Must be set
+        // before the first KotlinCoreEnvironment is created, so do it before exec touches one.
+        KotlinEnvironmentKeepAlive.ensure()
         runCatching { java.nio.file.Files.createDirectories(outputDir) }
 
         // The platform library: an explicit boot library when given (android.jar on ART); otherwise on ART
@@ -86,6 +100,12 @@ class KotlinJvmCompiler {
             noReflect = true
             reportOutputFiles = true   // emit OUTPUT messages → source→.class mapping recovered below
             if (friendPaths.isNotEmpty()) this.friendPaths = friendPaths.map { it.toString() }.toTypedArray()
+            // Compiler plugins (e.g. Compose). pluginClasspaths is the `-Xplugin` set; pluginOptions the `-P`
+            // `plugin:<id>:<k>=<v>` strings. The plugin jars must exist on disk for kotlinc to read their
+            // service descriptors; the host supplies them (bundled assets on ART, resolved jars on desktop).
+            val plugins = compilerPlugins.filter { java.nio.file.Files.isRegularFile(it) }
+            if (plugins.isNotEmpty()) this.pluginClasspaths = plugins.map { it.toString() }.toTypedArray()
+            if (pluginOptions.isNotEmpty()) this.pluginOptions = pluginOptions.toTypedArray()
             if (onArt) {
                 noJdk = true    // ART has no JDK; the platform is android.jar, folded into the classpath above
             } else {

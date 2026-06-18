@@ -42,6 +42,12 @@ class RawCallable(
     val node: DomNode?,
     /** `"private"` / `"protected"` / `"internal"` / null (public). */
     val visibility: String? = null,
+    /** A `@Composable`-annotated function (detected by annotation simple name — no need to resolve the type). */
+    val isComposable: Boolean = false,
+    /** An `inline` function. */
+    val isInline: Boolean = false,
+    /** The index of the `vararg` value parameter, or -1 if none. */
+    val varargParamIndex: Int = -1,
 )
 
 class RawClass(
@@ -53,6 +59,15 @@ class RawClass(
     val constructors: List<RawCallable>,
     val ctx: FileContext,
     val node: DomNode?,
+    /** Entry names when this is an `enum class` (`RED`, `GREEN`); empty otherwise. */
+    val enumEntries: List<String> = emptyList(),
+    /** The companion object's simple name (`"Companion"` by default), or null if none. A bare `Type.`
+     *  reference resolves to the companion instance, so its members + applicable extensions are in scope
+     *  (Compose's `Color.Black`, `Modifier.padding`). The companion is registered as its own [RawClass]. */
+    val companionObjectName: String? = null,
+    /** True when this RawClass IS a companion object — kept out of type-name completion (a `Companion`
+     *  suggestion is noise) while still resolvable as `Outer.Companion` for member lookup. */
+    val isCompanion: Boolean = false,
 )
 
 class SourceFile(
@@ -108,7 +123,7 @@ object SourceIndexBuilder {
             when (decl) {
                 is KtNamedFunction -> callable(decl, ctx, parsed).let { if (it.receiverText != null) extensions += it else topLevel += it }
                 is KtProperty -> property(decl, ctx, parsed).let { if (it.receiverText != null) extensions += it else topLevel += it }
-                is KtClassOrObject -> rawClass(decl, ctx, parsed)?.let { classes += it }
+                is KtClassOrObject -> classes += collectClasses(decl, ctx, parsed)
                 else -> {}
             }
         }
@@ -126,19 +141,60 @@ object SourceIndexBuilder {
         }
         if (c.primaryConstructorParameters.isNotEmpty() || c.hasExplicitPrimaryConstructor()) {
             ctors += RawCallable(c.name ?: "", true, null, fqn, null,
-                c.primaryConstructorParameters.map { (it.name ?: "_") to it.typeReference?.text }, ctx, node(parsed, c))
+                c.primaryConstructorParameters.map { (it.name ?: "_") to it.typeReference?.text }, ctx, node(parsed, c),
+                varargParamIndex = c.primaryConstructorParameters.indexOfFirst { it.isVarArg })
         }
+        val enumEntries = ArrayList<String>()
         for (d in c.declarations) {
             when (d) {
+                is org.jetbrains.kotlin.psi.KtEnumEntry -> d.name?.let { enumEntries += it } // before KtClassOrObject
                 is KtNamedFunction -> members += callable(d, ctx, parsed)
                 is KtProperty -> members += property(d, ctx, parsed)
                 is KtClassOrObject -> {} // nested handled as their own top-level entries via fqName elsewhere
                 else -> {}
             }
         }
+        // A `data class`'s `copy(...)` is compiler-synthesized (not written in source), so the index would
+        // otherwise miss it — every primary-constructor property becomes a defaulted `copy` parameter, and the
+        // function returns the class itself. Without this, `style.copy(fontSize = …)` on a project data class
+        // lowers to `unresolved/ambiguous call` and a Compose preview can't interpret it.
+        if ((c as? org.jetbrains.kotlin.psi.KtClass)?.isData() == true) {
+            members += RawCallable(
+                name = "copy", isFunction = true, receiverText = null, returnText = fqn, initializerText = null,
+                paramTexts = c.primaryConstructorParameters.map { (it.name ?: "_") to it.typeReference?.text },
+                ctx = ctx, node = node(parsed, c),
+            )
+        }
+        val companion = c.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtObjectDeclaration>().firstOrNull { it.isCompanion() }
         return RawClass(fqn, c.name ?: fqn.substringAfterLast('.'), c is org.jetbrains.kotlin.psi.KtObjectDeclaration,
-            supers, members, ctors, ctx, node(parsed, c))
+            supers, members, ctors, ctx, node(parsed, c), enumEntries,
+            companionObjectName = companion?.let { it.name ?: "Companion" },
+            isCompanion = (c as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.isCompanion() == true)
     }
+
+    /** [c] plus its companion object(s) and every (transitively) nested class/object, each as its own
+     *  [RawClass] keyed by dotted FQN — so a nested type/object (`Icons.Filled`, `Icons.AutoMirrored.Filled`)
+     *  is a known type whose members enumerate and which a `Owner.Nested` selector resolves against, matching
+     *  the binary-classpath behavior. Companions are added by [companionClasses] and skipped in the recursion
+     *  so each is registered exactly once. */
+    private fun collectClasses(c: KtClassOrObject, ctx: FileContext, parsed: KotlinParsedFile): List<RawClass> {
+        val out = ArrayList<RawClass>()
+        rawClass(c, ctx, parsed)?.let { out += it }
+        out += companionClasses(c, ctx, parsed)
+        c.declarations.forEach { d ->
+            if (d is KtClassOrObject && !(d is org.jetbrains.kotlin.psi.KtObjectDeclaration && d.isCompanion())) {
+                out += collectClasses(d, ctx, parsed)
+            }
+        }
+        return out
+    }
+
+    /** A class's companion object(s) registered as their own [RawClass] (`Outer.Companion`), so a bare
+     *  `Outer.` reference can enumerate the companion's members + applicable extensions via the symbol service. */
+    private fun companionClasses(c: KtClassOrObject, ctx: FileContext, parsed: KotlinParsedFile): List<RawClass> =
+        c.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtObjectDeclaration>()
+            .filter { it.isCompanion() }
+            .mapNotNull { rawClass(it, ctx, parsed) }
 
     private fun callable(f: KtNamedFunction, ctx: FileContext, parsed: KotlinParsedFile) = RawCallable(
         name = f.name ?: "_",
@@ -150,6 +206,9 @@ object SourceIndexBuilder {
         ctx = ctx,
         node = node(parsed, f),
         visibility = visOf(f),
+        isComposable = f.annotationEntries.any { it.shortName?.asString() == "Composable" },
+        isInline = f.hasModifier(KtTokens.INLINE_KEYWORD),
+        varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
     )
 
     private fun property(p: KtProperty, ctx: FileContext, parsed: KotlinParsedFile) = RawCallable(

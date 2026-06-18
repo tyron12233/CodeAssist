@@ -47,7 +47,7 @@ class BuiltinsReader(private val jars: List<Path>) {
                 comp.propertyList.filterNot { it.hasReceiverType() }.forEach { members += prop(it, compNr, compTp, ctx, owner, static = true) }
             }
         }
-        val supers = cls.supertypeList.mapNotNull { classifierFqn(it, nr) }
+        val supers = cls.supertypeList.mapNotNull { typeRef(it, nr, classTp, ctx) }
         return KotlinMetadata.Decoded(fqn, supers, cls.typeParameterList.map { nr.getString(it.name) }, members, emptyList(), emptyList())
     }
 
@@ -66,6 +66,7 @@ class BuiltinsReader(private val jars: List<Path>) {
             signature = "($params): ${typeText(f.returnType, nr, tp)}",
             typeParameters = f.typeParameterList.map { nr.getString(it.name) },
             paramTypes = f.valueParameterList.map { typeRef(if (it.hasVarargElementType()) it.varargElementType else it.type, nr, tp, ctx) },
+            varargParamIndex = f.valueParameterList.indexOfFirst { it.hasVarargElementType() },
         )
     }
 

@@ -15,8 +15,8 @@ class TypeShape(
     /** Each type parameter's erased upper bound (positional with [typeParameters]); empty when unknown
      *  (the Kotlin-metadata decode doesn't carry bounds — an uncovered parameter is left unbound there). */
     val typeParameterBounds: List<TypeRef>,
-    /** Generic supertypes carrying their type arguments (Java bytecode); the metadata decode erases the
-     *  arguments to bare classifier types. */
+    /** Generic supertypes carrying their type arguments (Java bytecode AND the Kotlin `@Metadata` decode), so
+     *  a member inherited through a generic supertype substitutes (`CompositionLocal<T>` → `current: TextStyle`). */
     val supertypes: List<TypeRef>,
     val members: List<KotlinSymbol>,
 ) {
@@ -31,11 +31,14 @@ class TypeShape(
     companion object {
         fun of(js: JavaShape): TypeShape = TypeShape(js.typeParameters, js.typeParameterBounds, js.superTypes, js.members)
 
-        /** A Kotlin `@Metadata` class: supertype arguments are erased by the decode (bare classifier FQNs),
-         *  and metadata carries no type-parameter bounds. */
+        /** A Kotlin `@Metadata` class: supertypes carry their type arguments (so inherited generic members
+         *  substitute); metadata carries no type-parameter bounds. The class's MEMBER extensions (`RowScope`'s
+         *  `fun Modifier.weight()`) are kept as members — they carry their extension `receiverTypeFqn`, so a
+         *  resolver enumerating an implicit receiver's members (`memberExtensionsInScope`) can apply them to a
+         *  matching receiver while in scope, and they don't pollute plain member lookups (which ignore them). */
         fun of(d: KotlinMetadata.Decoded, ctx: KotlinTypeContext?): TypeShape = TypeShape(
             d.typeParameters, emptyList(),
-            d.supertypeFqns.map { KotlinType(it, context = ctx) }, d.ownMembers,
+            d.supertypes.map { it.rebind(ctx) }, d.ownMembers + d.extensions,
         )
     }
 }
@@ -55,8 +58,13 @@ fun KotlinSymbol.rebindTypes(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymb
     typeParameters = typeParameters,
     typeParameterBounds = typeParameterBounds.map { it.rebind(ctx) },
     paramTypes = paramTypes.map { (it as? KotlinType)?.withContext(ctx) ?: it },
+    paramNames = paramNames,
     receiverTypeArgs = receiverTypeArgs.map { it.rebind(ctx) },
     receiverTypeParam = receiverTypeParam,
     packageName = packageName,
+    declaringClassFqn = declaringClassFqn,
     isInternal = isInternal,
+    isComposable = isComposable,
+    isInline = isInline,
+    varargParamIndex = varargParamIndex,
 )

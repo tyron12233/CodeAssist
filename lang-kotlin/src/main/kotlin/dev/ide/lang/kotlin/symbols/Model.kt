@@ -38,6 +38,9 @@ class KotlinSymbol(
     val typeParameterBounds: List<TypeRef> = emptyList(),
     /** Value-parameter types (vararg → element type), for inferring type arguments from call arguments. */
     val paramTypes: List<TypeRef?> = emptyList(),
+    /** Value-parameter NAMES (positional with [paramTypes]), for named-argument completion. Empty when the
+     *  source doesn't carry real names (Java bytecode strips them, surfacing only `p0`/`p1`). */
+    val paramNames: List<String> = emptyList(),
     /** Type arguments of the extension receiver type (e.g. `[T]` for `Iterable<T>.first`), for binding from
      *  the actual receiver's arguments. */
     val receiverTypeArgs: List<TypeRef> = emptyList(),
@@ -47,9 +50,20 @@ class KotlinSymbol(
     /** Declaring package, for a TOP-LEVEL callable (`kotlin.math` for `ln`); drives import visibility. Null
      *  for members. */
     val packageName: String? = null,
+    /** The declaring JVM class FQN of a BINARY callable: the owning class for a member/constructor, or the
+     *  `…Kt` file facade for a top-level function / extension (extensions compile to static facade methods).
+     *  This is what the interpreter reflects into; null when source or not yet known. */
+    val declaringClassFqn: String? = null,
     /** Kotlin `internal` visibility (PRIVATE/PROTECTED go in [modifiers]). A binary `internal` member isn't
      *  accessible from another module, so it's hidden on member access. */
     val isInternal: Boolean = false,
+    /** A `@Composable` function — the interpreter's Compose bridge must thread a `Composer` into its calls. */
+    val isComposable: Boolean = false,
+    /** An `inline` function (so a composable content lambda is inlined into the caller's group). */
+    val isInline: Boolean = false,
+    /** The index of the `vararg` value parameter (`listOf`, `mutableStateListOf(vararg …)`), or -1 if none.
+     *  A vararg parameter absorbs any number of trailing positional arguments at a call site. */
+    val varargParamIndex: Int = -1,
     private val declarationNode: DomNode? = null,
     private val doc: String? = null,
 ) : Symbol {
@@ -73,6 +87,10 @@ class KotlinType(
     /** A `kotlin.FunctionN` that is a RECEIVER function type (`T.() -> R`, `@ExtensionFunctionType`): its
      *  first type argument is the receiver, not a value parameter. Drives implicit-`this` (apply/with/run). */
     val isExtensionFunctionType: Boolean = false,
+    /** A `@Composable` function type (`@Composable () -> Unit`, a Compose content slot). A lambda passed to a
+     *  parameter of this type must be invoked with a threaded `Composer` by the interpreter's Compose bridge —
+     *  even when the function it's passed to (e.g. `LazyListScope.items`) is itself NOT `@Composable`. */
+    val isComposable: Boolean = false,
 ) : TypeRef {
 
     override fun isAssignableFrom(other: TypeRef): Boolean {
@@ -95,11 +113,11 @@ class KotlinType(
         context?.membersOf(qualifiedName, typeArguments, accessibleFrom) ?: emptyList()
 
     fun withNullable(n: Boolean): KotlinType =
-        if (n == nullable) this else KotlinType(qualifiedName, typeArguments, n, context, isTypeParameter, isExtensionFunctionType)
+        if (n == nullable) this else KotlinType(qualifiedName, typeArguments, n, context, isTypeParameter, isExtensionFunctionType, isComposable)
 
     /** Rebind the resolution [context] through the whole tree (used when reloading a context-free cache). */
     fun withContext(ctx: KotlinTypeContext?): KotlinType =
-        KotlinType(qualifiedName, typeArguments.map { (it as? KotlinType)?.withContext(ctx) ?: it }, nullable, ctx, isTypeParameter, isExtensionFunctionType)
+        KotlinType(qualifiedName, typeArguments.map { (it as? KotlinType)?.withContext(ctx) ?: it }, nullable, ctx, isTypeParameter, isExtensionFunctionType, isComposable)
 
     override fun toString(): String =
         TypeRendering.render(qualifiedName, typeArguments.map { it.toString() }, nullable, isTypeParameter, isExtensionFunctionType)

@@ -67,6 +67,20 @@ class KotlinCompletionE2ETest {
     }
 
     @Test
+    fun prefixIsPushedDownNotJustFilteredAfter() {
+        // With a non-empty prefix the symbol service must return only matching candidates (extensions,
+        // members, and top-level callables) — the large-classpath perf fix. Guards against a regression that
+        // re-materializes the whole set per keystroke.
+        val members = labels(srcDir, "Use.kt", """fun f() { "hello".upper| }""")
+        assertTrue("uppercase" in members, "matching extension expected; got ${members.take(20)}")
+        assertTrue(members.none { it.startsWith("trim") }, "non-matching extensions must be filtered out; got ${members.take(20)}")
+        val scope = labels(srcDir, "Use.kt", "package demo\nfun use() { greetT| }")
+        assertTrue("greetTop" in scope, "matching top-level expected; got ${scope.take(20)}")
+        assertTrue("answerTop" !in scope, "a non-matching top-level must be filtered out; got ${scope.take(20)}")
+        assertTrue(scope.none { it == "println" }, "an unrelated stdlib top-level must not appear for prefix 'greetT'; got ${scope.take(20)}")
+    }
+
+    @Test
     fun stdlibIsImplicitWithoutDeclaringIt() {
         // Empty classpath: the project declares NO kotlin-stdlib, but the backend must still surface
         // top-level callables (println/listOf) — Kotlin's stdlib is an implicit dependency.
@@ -151,6 +165,45 @@ class KotlinCompletionE2ETest {
     fun validMemberHasNoDiagnostic() {
         val diags = diagnostics("package demo\nfun f(g: Greeter) { g.hello() }")
         assertTrue(diags.none { it.message.contains("hello") }, "a valid member must not be flagged; got $diags")
+    }
+
+    @Test
+    fun companionObjectMemberIsNotFlaggedUnresolved() {
+        // `Palette.Red` resolves through the companion object — a `Color.Red`-style static access must NOT flag.
+        assertTrue(
+            diagnostics("package demo\nfun f() { val r = Palette.Red\n  println(r) }").none { it.code == "kt.unresolved" },
+            "a companion-object member must resolve; got ${diagnostics("package demo\nfun f() { val r = Palette.Red\n  println(r) }")}",
+        )
+        // ...but a genuinely-missing static/companion member is still flagged.
+        assertTrue(
+            diagnostics("package demo\nfun f() { val r = Palette.Bogus\n  println(r) }")
+                .any { it.code == "kt.unresolved" && it.message.contains("Bogus") },
+            "a missing companion member is still flagged",
+        )
+    }
+
+    @Test
+    fun superMemberOnSourceSupertypeStillValidated() {
+        // A SOURCE supertype is fully enumerable: a valid `super.member` resolves, a bogus one is flagged.
+        assertTrue(
+            diagnostics("package demo\nclass C : Base() { override fun onCreate() { super.onCreate() } }")
+                .none { it.code == "kt.unresolved" },
+            "super.onCreate() on a source supertype must resolve",
+        )
+        assertTrue(
+            diagnostics("package demo\nclass C : Base() { fun g() { super.bogusXyz() } }")
+                .any { it.code == "kt.unresolved" && it.message.contains("bogusXyz") },
+            "a bogus super member on a source supertype is flagged",
+        )
+    }
+
+    @Test
+    fun superMemberOnBinarySupertypeIsNotFalselyFlagged() {
+        // A binary/framework supertype reaches inherited members through a best-effort chain (boot-classpath
+        // ancestors may be unread), so a `super.<member>` call is never flagged — the on-device
+        // `super.onCreate(...)` (ComponentActivity) false-positive.
+        val diags = diagnostics("import java.util.ArrayList\nclass C : ArrayList<String>() { fun g() { super.someInheritedThing() } }")
+        assertTrue(diags.none { it.code == "kt.unresolved" }, "super on a binary supertype must not be flagged; got $diags")
     }
 
     @Test
@@ -433,6 +486,10 @@ class KotlinCompletionE2ETest {
                 "Greeter.kt" to "package demo\nclass Greeter {\n  fun hello(): String = \"hi\"\n  val title: String = \"t\"\n}",
                 "Chain.kt" to "package demo\nclass A { fun b(): B = B() }\nclass B { fun c(): String = \"c\" }",
                 "Top.kt" to "package demo\nfun greetTop() {}\nval answerTop = 42",
+                // A class with a companion object (Compose `Color.Red`-style static access).
+                "Palette.kt" to "package demo\nclass Palette {\n  companion object {\n    val Red: Palette = Palette()\n    fun mix(): Palette = Palette()\n  }\n}",
+                // A source supertype with an overridable member (source `super.member` is fully enumerable).
+                "Bases.kt" to "package demo\nopen class Base {\n  open fun onCreate() {}\n  open val tag: String = \"\"\n}",
             ),
         )
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

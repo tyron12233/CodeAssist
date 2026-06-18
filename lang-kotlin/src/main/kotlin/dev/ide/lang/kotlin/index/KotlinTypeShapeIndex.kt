@@ -37,7 +37,7 @@ import java.io.DataOutput
  */
 object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.typeShape")
-    override val version = 2 // v2: constructors emitted + JVM primitives mapped to Kotlin classifiers
+    override val version = 9 // v9: class MEMBER extensions kept in the shape (scope member-ext like RowScope.weight)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN
@@ -90,10 +90,15 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         writeStrings(out, s.typeParameters)
         writeTypes(out, s.typeParameterBounds)
         out.writeInt(s.paramTypes.size); s.paramTypes.forEach { writeType(out, it as? KotlinType) }
+        writeStrings(out, s.paramNames)
         writeTypes(out, s.receiverTypeArgs)
         out.writeUTF(s.receiverTypeParam ?: "")
         out.writeUTF(s.packageName ?: "")
+        out.writeUTF(s.declaringClassFqn ?: "")
         out.writeBoolean(s.isInternal)
+        out.writeBoolean(s.isComposable)
+        out.writeBoolean(s.isInline)
+        out.writeInt(s.varargParamIndex)
     }
 
     private fun readSymbol(inp: DataInput): KotlinSymbol {
@@ -106,15 +111,21 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val tps = readStrings(inp)
         val bounds = readTypes(inp)
         val params = List(inp.readInt()) { readType(inp) }
+        val paramNames = readStrings(inp)
         val recvArgs = readTypes(inp)
         val recvParam = inp.readUTF().ifEmpty { null }
         val pkg = inp.readUTF().ifEmpty { null }
+        val declaringFqn = inp.readUTF().ifEmpty { null }
         val internal = inp.readBoolean()
+        val isComposable = inp.readBoolean()
+        val isInline = inp.readBoolean()
+        val varargIdx = inp.readInt()
         return KotlinSymbol(
             name = name, kind = kind, type = type, origin = BINARY, modifiers = mods,
             receiverTypeFqn = recvFqn, signature = sig, typeParameters = tps, typeParameterBounds = bounds,
-            paramTypes = params, receiverTypeArgs = recvArgs, receiverTypeParam = recvParam,
-            packageName = pkg, isInternal = internal,
+            paramTypes = params, paramNames = paramNames, receiverTypeArgs = recvArgs, receiverTypeParam = recvParam,
+            packageName = pkg, declaringClassFqn = declaringFqn, isInternal = internal,
+            isComposable = isComposable, isInline = isInline, varargParamIndex = varargIdx,
         )
     }
 
@@ -136,6 +147,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(t.nullable)
         out.writeBoolean(t.isTypeParameter)
         out.writeBoolean(t.isExtensionFunctionType)
+        out.writeBoolean(t.isComposable)
         out.writeInt(t.typeArguments.size)
         t.typeArguments.forEach { writeType(out, it as? KotlinType) }
     }
@@ -146,7 +158,8 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val nullable = inp.readBoolean()
         val isTp = inp.readBoolean()
         val isExtFn = inp.readBoolean()
+        val isComposable = inp.readBoolean()
         val args = buildList<TypeRef> { repeat(inp.readInt()) { readType(inp)?.let(::add) } }
-        return KotlinType(fqn, args, nullable, context = null, isTypeParameter = isTp, isExtensionFunctionType = isExtFn)
+        return KotlinType(fqn, args, nullable, context = null, isTypeParameter = isTp, isExtensionFunctionType = isExtFn, isComposable = isComposable)
     }
 }

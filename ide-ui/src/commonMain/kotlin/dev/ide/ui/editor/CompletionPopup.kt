@@ -144,7 +144,7 @@ private fun CompletionRow(
         // The label (the name) keeps priority via weight(1f); the detail is capped to ~half the row and
         // ellipsizes, so a long `(params): Ret` signature can never squeeze the name out of view.
         Text(
-            highlightPrefix(item.label, prefix),
+            highlightMatch(item.label, prefix),
             style = Ca.type.code,
             color = Ca.colors.textPrimary,
             maxLines = 1,
@@ -166,16 +166,23 @@ private fun CompletionRow(
 }
 
 /**
- * Bold + accent-color the matched run of [prefix] in [label], wherever it occurs (case-insensitive) — not
- * only at the head. So when the user types `layout_w`, the matched span inside `android:layout_width` (or
- * `home` inside `@string/home`) is the part highlighted, making namespace/path matches legible.
+ * Bold + accent-color the exact characters of [label] that [prefix] matched — the same positions the local
+ * filter ([matchPositions]) used to keep the item, so a fuzzy match shows *which* letters caught. A prefix
+ * match bolds the leading run; a camel/subsequence match (`lw` → **l**ayout_**w**idth, `nf` → **n**ew**F**ile)
+ * bolds each matched letter, adjacent ones merged into one span so the rendered runs stay legible.
  */
 @Composable
-private fun highlightPrefix(label: String, prefix: String): AnnotatedString = buildAnnotatedString {
+private fun highlightMatch(label: String, prefix: String): AnnotatedString = buildAnnotatedString {
     append(label)
     if (prefix.isEmpty()) return@buildAnnotatedString
-    val start = label.indexOf(prefix, ignoreCase = true)
-    if (start >= 0) {
-        addStyle(SpanStyle(color = Ca.colors.accent, fontWeight = FontWeight.Bold), start, start + prefix.length)
+    val pos = matchPositions(label, prefix) ?: return@buildAnnotatedString
+    val style = SpanStyle(color = Ca.colors.accent, fontWeight = FontWeight.Bold)
+    var k = 0
+    while (k < pos.size) {
+        val runStart = pos[k]
+        var runEnd = runStart
+        while (k + 1 < pos.size && pos[k + 1] == runEnd + 1) { runEnd = pos[k + 1]; k++ }
+        addStyle(style, runStart, runEnd + 1)
+        k++
     }
 }

@@ -100,17 +100,21 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
         sourcepath = (sourceRootPaths + syntheticStubDirs).map { it.toString() }.toTypedArray()
         classpath = jars.map { it.toString() }.toTypedArray()
-        // The public DOM ASTParser needs a recognized system library or it throws "Missing system library";
-        // a plain jar like android.jar on the classpath is not one, so it must be handed the running VM's JRE.
-        // The complication: android.jar itself ships java.* (377 java.util classes, etc.), so the VM's
-        // `java.base` module + android.jar's classpath copy make `java.util` resolvable from two modules
-        // ("accessible from more than one module: <unnamed> and java.base") — `Locale` then "cannot be
-        // resolved". This is an inherent limit of the disk-only ASTParser for an android.jar platform, with
-        // no good setting: false ⇒ "Missing system library", true ⇒ the split. So the binding DOM parse stays
-        // usable on a real JDK but is unreliable on android.jar — which is why diagnostics come from the
-        // low-level compiler over the custom name environment instead (see [diagnose]); it resolves java.*
-        // from android.jar alone, no VM module, no split. Completion likewise uses the low-level path.
-        includeVmBootclasspath = true
+        // Whether `android.jar` is the platform (no real modular JDK underneath) — true on-device (ART) and
+        // for an Android project on desktop.
+        val isAndroidPlatform = jars.any { it.fileName?.toString() == "android.jar" }
+        // On a real JDK, the public DOM ASTParser needs a recognized system library or it throws "Missing
+        // system library"; a plain classpath jar isn't one, so it must be handed the running VM's modular JRE.
+        // On an android.jar platform, DON'T include the VM bootclasspath:
+        //   - On-device the host VM is ART, whose "bootclasspath" enumerates native `.so` files under
+        //     /apex/com.android.art/lib; ecj opens each as a jar → noisy per-parse `ZipException`s.
+        //   - android.jar itself ships java.* (377 java.util classes, etc.), so the VM's `java.base` module
+        //     plus android.jar's classpath copy make java.* "accessible from more than one module" — `Locale`
+        //     and friends then fail to resolve (the split).
+        // android.jar is already on the classpath and supplies java.*, so omitting the VM bootclasspath
+        // resolves java.* from android.jar alone — no .so scan, no module split — matching the low-level
+        // compiler path used for diagnostics/completion (see [diagnose]).
+        includeVmBootclasspath = !isAndroidPlatform
 
         @Suppress("UNCHECKED_CAST")
         compilerOptions = (JavaCore.getOptions() as MutableMap<String, String>).also {
@@ -256,7 +260,10 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
      * type and method/constructor names. Empty when the caret sits outside any type (imports, package line).
      */
     fun enclosingStructure(file: VirtualFile, text: CharSequence, offset: Int): List<String> {
-        val pf = parse(file, text)
+        // Structure only (enclosing type/method names) — no bindings needed, so use the cheap syntactic parse
+        // that skips the classpath/sourcepath environment scan and the shadow-file move. This runs per caret
+        // move (breadcrumb), so the binding parse's cost (and, on android, its classpath work) isn't warranted.
+        val pf = parseSyntactic(file, text)
         var node: ASTNode? = (pf.nodeAt(offset) as? JdtDomNode)?.node
         val out = ArrayDeque<String>()
         while (node != null) {

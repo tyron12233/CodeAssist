@@ -126,6 +126,8 @@ enum class CompletionItemKind {
     METHOD, CONSTRUCTOR, FIELD, ENUM_CONSTANT,
     VARIABLE, PARAMETER, TYPE_PARAMETER,
     PACKAGE, KEYWORD, SNIPPET,
+    /** A bare word lifted from the current buffer (hippie/word completion) — no semantic backing. */
+    WORD,
 }
 
 data class TextEdit(val range: TextRange, val newText: String)

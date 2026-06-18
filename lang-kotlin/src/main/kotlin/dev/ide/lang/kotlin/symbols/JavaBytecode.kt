@@ -108,6 +108,9 @@ object JavaBytecode {
                     typeParameters = methodTypeParams,
                     typeParameterBounds = methodBounds,
                     paramTypes = paramTypes,
+                    declaringClassFqn = classFqn,
+                    // ACC_VARARGS ⇒ the LAST parameter is a vararg (`String...`), so it absorbs trailing args.
+                    varargParamIndex = if (access and Opcodes.ACC_VARARGS != 0) paramTypes.size - 1 else -1,
                 )
                 return null
             }

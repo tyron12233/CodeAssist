@@ -18,7 +18,10 @@ import dev.ide.lang.kotlin.completion.KotlinCompletionService
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
+import dev.ide.lang.kotlin.resolve.ComposableContext
 import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.symbols.DefaultImports
+import dev.ide.lang.kotlin.symbols.FileContext
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.resolve.ResolveResult
@@ -51,9 +54,11 @@ import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
+import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtProperty
@@ -128,6 +133,71 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))
 
+    // --- Compose preview (interpreter integration; see docs/compose-interpreter.md) ---
+
+    /** The `@Preview @Composable` functions in [file]'s last parse — the editor's preview targets. */
+    fun composePreviews(file: VirtualFile): List<dev.ide.lang.kotlin.interp.PreviewInfo> =
+        lastByFile[file.path]?.let { dev.ide.lang.kotlin.interp.KotlinComposePreviews.find(it.ktFile) } ?: emptyList()
+
+    /** Lower every top-level function in [file] to a [dev.ide.lang.kotlin.interp.ResolvedFunction], keyed
+     *  `"name/arity"` — the program the interpreter runs a preview against (same-file composables included). */
+    fun lowerFile(file: VirtualFile): Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction> =
+        loweredFor(file)?.program ?: emptyMap()
+
+    /** Lower every source class/object/enum in [file] to a [dev.ide.lang.kotlin.interp.ResolvedClass] — the
+     *  project-source types a preview's program may construct or reference (they aren't compiled at preview
+     *  time, so the interpreter materializes them from this). Empty when [file] isn't parsed or lowering throws
+     *  (the preview then hits the honest boundary for those types rather than losing the whole render). */
+    fun lowerFileClasses(file: VirtualFile): List<dev.ide.lang.kotlin.interp.ResolvedClass> =
+        loweredFor(file)?.classes ?: emptyList()
+
+    // The lowered preview program + classes, cached per file keyed on the parsed text's content hash. The
+    // preview re-renders on every keystroke AND redundantly without a text change (the pane renders light +
+    // dark frames, detection runs alongside render, and zoom/device switches re-fire) — PSI→ResolvedTree
+    // lowering (overload resolution against the classpath) is the dominant interpreter-side cost, so it's
+    // memoized. A real text edit changes the hash and re-lowers; a classpath change disposes the analyzer
+    // (host's invalidateAnalyzers), dropping this with it.
+    private class Lowered(
+        val contentHash: Int,
+        val program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction>,
+        val classes: List<dev.ide.lang.kotlin.interp.ResolvedClass>,
+    )
+    private val loweredCache = ConcurrentHashMap<String, Lowered>()
+
+    private fun loweredFor(file: VirtualFile): Lowered? {
+        val parsed = lastByFile[file.path] ?: return null
+        val hash = parsed.ktFile.text.hashCode()
+        loweredCache[file.path]?.let { if (it.contentHash == hash) return it }
+        val resolver = dev.ide.lang.kotlin.interp.KotlinTreeResolver(parsed.ktFile, parsed, service)
+        val program = parsed.ktFile.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>().associate { fn ->
+            val f = lowerOneFunction(resolver, fn)
+            "${f.name}/${f.params.size}" to f
+        }
+        val classes = runCatching { resolver.lowerClasses() }.getOrDefault(emptyList())
+        return Lowered(hash, program, classes).also { loweredCache[file.path] = it }
+    }
+
+    private fun lowerOneFunction(
+        resolver: dev.ide.lang.kotlin.interp.KotlinTreeResolver,
+        fn: org.jetbrains.kotlin.psi.KtNamedFunction,
+    ): dev.ide.lang.kotlin.interp.ResolvedFunction = try {
+        resolver.lowerFunction(fn)
+    } catch (t: Throwable) {
+        // A resolver gap can THROW (an unhandled PSI shape, a null in inference) rather than produce an
+        // Unsupported node — which would lose the whole file's lowering and leave the preview with no
+        // reason. Turn it into a diagnostic so the cause is reported, not swallowed.
+        val span = dev.ide.lang.kotlin.interp.SourceSpan(fn.textRange.startOffset, fn.textRange.endOffset)
+        val reason = "lowering failed (${t::class.java.simpleName}): ${t.message ?: "no message"}"
+        val params = fn.valueParameters.mapIndexed { i, p ->
+            dev.ide.lang.kotlin.interp.RParam(dev.ide.lang.kotlin.interp.SlotId(i), p.name ?: "_", null)
+        }
+        dev.ide.lang.kotlin.interp.ResolvedFunction(
+            fn.name ?: "?", params,
+            dev.ide.lang.kotlin.interp.RNode.Unsupported(reason, fn.name ?: "", span),
+            listOf(dev.ide.lang.kotlin.interp.LoweringDiagnostic(reason, span)),
+        )
+    }
+
     override suspend fun analyze(file: VirtualFile): AnalysisResult {
         val parsed = lastByFile[file.path] ?: return AnalysisResult(file, emptyList())
         return AnalysisResult(file, parsed.diagnostics + semanticDiagnostics(parsed))
@@ -136,8 +206,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /**
      * Semantic diagnostics. Conservative to avoid false positives over an incomplete (parse-only) symbol
      * model. It flags:
-     *  - an unresolved member on an explicit receiver whose type was inferred (`"".bogus()`);
+     *  - an unresolved member on an explicit receiver whose type was inferred (`"".bogus()`), including an
+     *    extension that is on the classpath but not in scope (an unimported `16.dp`/`14.sp`);
      *  - an unresolved bare reference: a lower-case name in value position that resolves to nothing;
+     *  - a named argument whose name matches no parameter of any function the call could resolve to;
      *  - a type mismatch for an initializer (`val a: Int = ""`) or a `return` value (`fun f(): Int { return "" }`);
      *  - a `val` reassignment (`val x = 1; x = 2`);
      *  - a missing `return` in a block-body function with a non-Unit declared return type;
@@ -155,6 +227,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val refNames = referencedNames(ktFile) // for unused-import / unused-private (names used in the body)
         val out = ArrayList<Diagnostic>()
         fun walk(psi: PsiElement) {
+            // Poll between nodes (never mid-I/O) so a higher-priority call — code completion sharing the one
+            // engine thread — can preempt this full-file pass instead of waiting it out. The host retries.
+            dev.ide.platform.EngineCancellation.checkCanceled()
             when (psi) {
                 is KtNameReferenceExpression ->
                     (unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))?.let { out += it }
@@ -177,6 +252,8 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                 is KtCallExpression -> {
                     argumentCountMismatch(psi)?.let { out += it }
                     (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it }
+                    out += unknownNamedArguments(psi, resolver)
+                    composableInvocation(psi, resolver)?.let { out += it }
                 }
                 is KtDotQualifiedExpression -> unsafeNullableAccess(psi, resolver)?.let { out += it }
                 // Conflicting declarations: same-name (and, for functions, same-signature) declarations in
@@ -786,12 +863,112 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             else -> null
         } ?: return null
         val recvType = resolver.inferType(receiver) ?: return null // unknown receiver → don't flag
-        val members = service.membersOf(recvType.qualifiedName, recvType.typeArguments, null)
-        if (members.isEmpty()) return null // couldn't enumerate the type → don't flag
         val name = expr.getReferencedName()
-        if (members.any { it.name == name }) return null
+        // `Owner.Nested` — a nested type/object reached through a member selector (Compose's `Icons.Filled`,
+        // `Icons.AutoMirrored`, `Icons.AutoMirrored.Filled`): a classifier, not an instance member, so it never
+        // appears in membersOf. Probe the candidate nested FQN (mirrors KotlinResolver.nestedType) so a chain
+        // bottoming out at an icon extension property (`Icons.AutoMirrored.Filled.List`) isn't falsely flagged.
+        if (name.isNotEmpty() && service.isKnownType("${recvType.qualifiedName}.$name")) return null
+        // `super.member` (e.g. `super.onCreate(...)`): a SOURCE supertype's members are fully enumerable, but a
+        // binary/framework supertype (`ComponentActivity`) reaches inherited members through boot-classpath
+        // ancestors (`android.app.Activity`) the symbol reader may not have read — its chain enumeration is
+        // best-effort, so don't risk a false "unresolved" on a valid override call.
+        if (unwrapParen(receiver) is KtSuperExpression && service.sourceClass(recvType.qualifiedName) == null) return null
+        // A `Type.member` reference (`Color.Red`) also sees the type's companion-object members and statics,
+        // which membersOf (instance members) doesn't list — include them so a valid companion member resolves.
+        val members = service.membersOf(recvType.qualifiedName, recvType.typeArguments, null) +
+            if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName) else emptyList()
+        if (members.isEmpty()) return null // couldn't enumerate the type → don't flag
+        val matching = members.filter { it.name == name }
+        if (matching.isNotEmpty()) {
+            // A plain member (or one we can't classify) resolves outright. An EXTENSION resolves only when it
+            // is actually in scope — imported, same-package, or default-imported — so an unimported `16.dp` /
+            // `14.sp` (the extension is on the classpath but not brought in) stays unresolved, as Kotlin reports.
+            val ctx = resolver.fileContext
+            if (matching.any { it !is KotlinSymbol || !it.isExtension || extensionInScope(it, ctx) }) return null
+        }
         val r = expr.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", "kt.unresolved")
+    }
+
+    /**
+     * Whether an extension [sym] is in scope at the use site. Kotlin resolves an extension only when it is
+     * imported (explicitly or via a star/default import) or declared in the file's own package, so a
+     * classpath extension that was never imported (`16.dp` without `import androidx.compose.ui.unit.dp`) does
+     * NOT resolve. No package info → don't guess a rejection (treat as in scope). Mirrors the interpreter's
+     * `KotlinTreeResolver.extensionInScope`.
+     */
+    private fun extensionInScope(sym: KotlinSymbol, ctx: FileContext): Boolean {
+        val pkg = sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null } ?: return true
+        if (pkg == ctx.packageName || DefaultImports.isDefaultImported(pkg)) return true
+        return ctx.imports.any { imp -> if (imp.isStar) imp.packageName == pkg else imp.fqn == "$pkg.${sym.name}" }
+    }
+
+    /**
+     * A named argument (`foo(bar = 1)`) whose name matches no parameter of any function/constructor the call
+     * could resolve to — a typo like `Text(colour = …)`. Conservative to avoid false positives over the
+     * parse-only model: it backs off entirely when the target is uncertain — a member call whose receiver
+     * can't be typed, a callee that resolves to nothing, or any plausible target whose parameter names were
+     * stripped (Java bytecode surfaces `p0`/`p1`, so a name can't be validated). A genuinely zero-parameter
+     * target contributes no names but doesn't suppress the check. A name is flagged only when it definitely
+     * belongs to no candidate overload.
+     */
+    private fun unknownNamedArguments(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> {
+        val named = call.valueArguments.mapNotNull { it.getArgumentName() }
+        if (named.isEmpty()) return emptyList()
+        // A member call we can't type → the target is unknown; don't risk a false positive.
+        val parent = call.parent
+        if (parent is KtQualifiedExpression && parent.selectorExpression === call &&
+            resolver.inferType(parent.receiverExpression) == null
+        ) return emptyList()
+        val targets = resolver.callTargets(call)
+        if (targets.isEmpty()) return emptyList()
+        // A target whose parameter NAMES are unavailable (count mismatch / synthetic / blank) makes the check
+        // unsound: the actually-resolved overload's names may be unknowable. Skip the whole call then.
+        if (targets.any { t ->
+                t.paramTypes.isNotEmpty() &&
+                    (t.paramNames.size != t.paramTypes.size || t.paramNames.any { it.isEmpty() || isSyntheticParamName(it) })
+            }
+        ) return emptyList()
+        val known = targets.flatMapTo(HashSet()) { it.paramNames.filter { n -> n.isNotEmpty() } }
+        return named.mapNotNull { argName ->
+            val id = argName.asName?.identifier ?: return@mapNotNull null
+            if (id in known) return@mapNotNull null
+            val ref = (argName as? KtValueArgumentName)?.referenceExpression ?: return@mapNotNull null
+            val r = ref.textRange
+            Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Cannot find a parameter with this name: $id", "kt.namedArgument")
+        }
+    }
+
+    /** ASM surfaces stripped Java parameters as `p0`, `p1`, … — useless as named arguments and not validatable. */
+    private fun isSyntheticParamName(n: String): Boolean = n.length >= 2 && n[0] == 'p' && n.drop(1).all { it.isDigit() }
+
+    /**
+     * A call to a `@Composable` function from a non-`@Composable` context — Compose's calling-convention error
+     * (the compiler's `COMPOSABLE_INVOCATION`: "@Composable invocations can only happen from the context of a
+     * @Composable function"). Conservative: it fires only when the callee is confidently `@Composable` AND the
+     * surrounding context is confidently non-composable. An unknown lambda context (the parse-only model can't
+     * resolve the enclosing call/expected type) backs off, so this never false-positives. Inline lambdas
+     * (`repeat`/`with`/`forEach`) are transparent — a composable call inside one within a composable scope is fine.
+     */
+    private fun composableInvocation(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        val callee = resolver.calleeFunctionOf(call) ?: return null
+        if (!callee.isComposable) return null // not a composable call → nothing to check (and skips the context walk)
+        if (resolver.composableContextAt(call.textRange.startOffset) != ComposableContext.NON_COMPOSABLE) return null
+        val anchor = call.calleeExpression ?: call
+        val r = anchor.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "@Composable invocation can only happen from the context of a @Composable function",
+            "kt.composableInvocation",
+        )
+    }
+
+    /** Strip enclosing parentheses (`(super).foo` → `super`) so a receiver is classified by its real expression. */
+    private fun unwrapParen(expr: KtExpression): KtExpression {
+        var e: KtExpression = expr
+        while (e is KtParenthesizedExpression) e = e.expression ?: return e
+        return e
     }
 
     // --- resolution / inference ---
@@ -820,7 +997,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         return KotlinScope(offset, resolver)
     }
 
-    override fun expectedTypeAt(file: VirtualFile, offset: Int): TypeRef? = null // not yet supported
+    override fun expectedTypeAt(file: VirtualFile, offset: Int): TypeRef? {
+        val parsed = lastByFile[file.path] ?: return null
+        return KotlinResolver(parsed.ktFile, parsed, service).expectedTypeAt(offset)
+    }
 
     override fun resolveType(node: DomNode): TypeRef? {
         val kdn = node as? KotlinDomNode ?: return null

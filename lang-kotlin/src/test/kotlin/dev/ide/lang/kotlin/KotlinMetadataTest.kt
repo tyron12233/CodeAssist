@@ -50,6 +50,24 @@ class KotlinMetadataTest {
     }
 
     @Test
+    fun decodedSupertypesCarryTheirTypeArguments() {
+        // The decode used to keep only supertype classifier FQNs, erasing their type arguments. That broke
+        // member inheritance through a generic supertype: `ProvidableCompositionLocal<T> : CompositionLocal<T>`
+        // lost the `<T>`, so the inherited `current: T` never substituted to the receiver's argument — the
+        // `LocalTextStyle.current.copy(fontSize = …)` Compose-preview failure. `ArrayDeque<E> : AbstractMutableList<E>`
+        // is the stdlib analog: the supertype must carry its `E` argument.
+        val decoded = assertNotNull(KotlinMetadata.decode(entryBytes("kotlin/collections/ArrayDeque.class"), null))
+        val abstractList = decoded.supertypes.filterIsInstance<dev.ide.lang.kotlin.symbols.KotlinType>()
+            .firstOrNull { it.qualifiedName == "kotlin.collections.AbstractMutableList" }
+        assertNotNull(abstractList, "ArrayDeque's supertype list should include AbstractMutableList; got ${decoded.supertypeFqns}")
+        assertTrue(abstractList.typeArguments.isNotEmpty(), "the supertype must carry its type argument (E), not be erased")
+        assertTrue(
+            (abstractList.typeArguments.first() as? dev.ide.lang.kotlin.symbols.KotlinType)?.isTypeParameter == true,
+            "the argument should be the type parameter E; got ${abstractList.typeArguments}",
+        )
+    }
+
+    @Test
     fun decodesStdlibExtensions() {
         val exts = allExtensions()
         assertTrue(exts.size > 500, "stdlib should yield many extensions; got ${exts.size}")

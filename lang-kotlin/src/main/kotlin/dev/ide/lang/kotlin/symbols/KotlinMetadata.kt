@@ -8,16 +8,20 @@ import org.objectweb.asm.AnnotationVisitor
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.Opcodes
+import kotlin.metadata.ClassKind
 import kotlin.metadata.KmClass
 import kotlin.metadata.KmClassifier
+import kotlin.metadata.kind
 import kotlin.metadata.KmFunction
 import kotlin.metadata.KmPackage
 import kotlin.metadata.KmProperty
 import kotlin.metadata.KmType
 import kotlin.metadata.KmTypeParameter
 import kotlin.metadata.Visibility
+import kotlin.metadata.isInline
 import kotlin.metadata.isNullable
 import kotlin.metadata.visibility
+import org.objectweb.asm.MethodVisitor
 import kotlin.metadata.jvm.KotlinClassMetadata
 import kotlin.metadata.jvm.annotations
 
@@ -32,34 +36,72 @@ object KotlinMetadata {
     /** A decoded unit: a class (own members + supertypes + type params) or a file/multifile facade. */
     class Decoded(
         val classFqn: String?,
-        val supertypeFqns: List<String>,
+        /** Generic supertypes carrying their type arguments (`ProvidableCompositionLocal<T>` → `CompositionLocal<T>`),
+         *  so a member inherited through a generic supertype substitutes (the `current: T` → `TextStyle` case). */
+        val supertypes: List<TypeRef>,
         /** The class's own type-parameter names (`List<T>` → `["T"]`), for member substitution. */
         val typeParameters: List<String>,
         val ownMembers: List<KotlinSymbol>,
         val topLevel: List<KotlinSymbol>,
         val extensions: List<KotlinSymbol>,
-    )
+        /** For a multi-file class PART, the public FACADE class FQN (`kotlin.math.MathKt`) the part's
+         *  top-level functions are actually invoked through — not the part's own `…__…Kt` name. Null for a
+         *  plain file facade (its own class name, set by the reader, is correct). */
+        val facadeClassFqn: String? = null,
+        /** The simple name of this class's companion object (`"Companion"` by default), or null if none. A
+         *  bare `Type.` reference resolves to the companion instance, so extensions applicable to it apply. */
+        val companionObjectName: String? = null,
+        /** True when this class is a Kotlin `object` singleton (`CardDefaults`, `MaterialTheme`). A bare
+         *  reference to it (`CardDefaults.`) denotes the INSTANCE, so its members are accessed like an
+         *  instance's — not statics off a type. */
+        val isObject: Boolean = false,
+    ) {
+        /** Just the supertype classifier FQNs — for the supertype walk that doesn't need type arguments. */
+        val supertypeFqns: List<String> get() = supertypes.mapNotNull { (it as? KotlinType)?.qualifiedName }
+    }
 
     fun isKotlin(classBytes: ByteArray): Boolean = extract(classBytes) != null
 
     fun decode(classBytes: ByteArray, ctx: KotlinTypeContext?): Decoded? {
         val metadata = extract(classBytes) ?: return null
+        // `@Composable` isn't in the @Metadata blob; detect it from the bytecode (the annotation and/or the
+        // synthetic `Composer` parameter the plugin appends), correlated to the metadata function by name.
+        val composable = composableMethodNames(classBytes)
         return when (val km = runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull()) {
-            is KotlinClassMetadata.Class -> decodeClass(km.kmClass, ctx)
-            is KotlinClassMetadata.FileFacade -> decodePackage(km.kmPackage, ctx)
-            is KotlinClassMetadata.MultiFileClassPart -> decodePackage(km.kmPackage, ctx)
+            is KotlinClassMetadata.Class -> decodeClass(km.kmClass, ctx, composable)
+            is KotlinClassMetadata.FileFacade -> decodePackage(km.kmPackage, ctx, null, composable)
+            is KotlinClassMetadata.MultiFileClassPart -> decodePackage(km.kmPackage, ctx, km.facadeClassName.replace('/', '.'), composable)
             else -> null
         }
     }
 
-    private fun decodeClass(km: KmClass, ctx: KotlinTypeContext?): Decoded {
+    /** JVM method names that are `@Composable`: either carry the annotation or take a `Composer` parameter
+     *  (the plugin appends one). Read straight from the bytecode — the Kotlin metadata doesn't store it. */
+    private fun composableMethodNames(bytes: ByteArray): Set<String> {
+        val names = HashSet<String>()
+        val reader = runCatching { ClassReader(bytes) }.getOrNull() ?: return names
+        reader.accept(object : ClassVisitor(Opcodes.ASM9) {
+            override fun visitMethod(access: Int, name: String, descriptor: String, sig: String?, exceptions: Array<out String>?): MethodVisitor? {
+                if (COMPOSER_DESC in descriptor) names += name
+                return object : MethodVisitor(Opcodes.ASM9) {
+                    override fun visitAnnotation(desc: String?, visible: Boolean): AnnotationVisitor? {
+                        if (desc == COMPOSABLE_ANNO_DESC) names += name
+                        return null
+                    }
+                }
+            }
+        }, ClassReader.SKIP_CODE or ClassReader.SKIP_FRAMES)
+        return names
+    }
+
+    private fun decodeClass(km: KmClass, ctx: KotlinTypeContext?, composable: Set<String>): Decoded {
         val classFqn = km.name.replace('/', '.')
         val owner = KotlinSymbol(classFqn.substringAfterLast('.'), SymbolKind.CLASS, origin = BINARY)
         val classTp = km.typeParameters.associate { it.id to it.name }
         val own = ArrayList<KotlinSymbol>()
         val ext = ArrayList<KotlinSymbol>()
-        km.functions.forEach { f -> funcSymbol(f, ctx, owner, classTp).let { if (it.isExtension) ext += it else own += it } }
-        km.properties.forEach { p -> propSymbol(p, ctx, owner, classTp).let { if (it.isExtension) ext += it else own += it } }
+        km.functions.forEach { f -> funcSymbol(f, ctx, owner, classTp, classFqn, composable).let { if (it.isExtension) ext += it else own += it } }
+        km.properties.forEach { p -> propSymbol(p, ctx, owner, classTp, classFqn).let { if (it.isExtension) ext += it else own += it } }
         km.constructors.forEach { c ->
             own += KotlinSymbol(
                 name = classFqn.substringAfterLast('.'),
@@ -68,20 +110,39 @@ object KotlinMetadata {
                 owner = owner,
                 origin = BINARY,
                 signature = "(" + c.valueParameters.joinToString(", ") { vp -> "${vp.name}: ${typeText(vp.type, classTp)}" } + ")",
+                paramTypes = c.valueParameters.map { vp -> typeRef(vp.varargElementType ?: vp.type, ctx, classTp) },
+                paramNames = c.valueParameters.map { it.name },
+                declaringClassFqn = classFqn,
+                varargParamIndex = c.valueParameters.indexOfFirst { it.varargElementType != null },
             )
         }
-        return Decoded(classFqn, km.supertypes.mapNotNull { classifierFqn(it) }, km.typeParameters.map { it.name }, own, emptyList(), ext)
+        // Enum entries are accessed statically off the enum type (`Color.RED`); surface them as static fields
+        // typed to the enum, so expected-type completion can offer them.
+        km.enumEntries.forEach { entry ->
+            own += KotlinSymbol(
+                name = entry,
+                kind = SymbolKind.ENUM_CONSTANT,
+                type = ctx?.let { KotlinType(classFqn, context = it) },
+                owner = owner,
+                modifiers = setOf(Modifier.STATIC),
+                origin = BINARY,
+            )
+        }
+        return Decoded(classFqn, km.supertypes.mapNotNull { typeRef(it, ctx, classTp) }, km.typeParameters.map { it.name }, own, emptyList(), ext, companionObjectName = km.companionObject, isObject = km.kind == ClassKind.OBJECT)
     }
 
-    private fun decodePackage(km: KmPackage, ctx: KotlinTypeContext?): Decoded {
+    private fun decodePackage(km: KmPackage, ctx: KotlinTypeContext?, facadeFqn: String?, composable: Set<String>): Decoded {
         val top = ArrayList<KotlinSymbol>()
         val ext = ArrayList<KotlinSymbol>()
-        km.functions.forEach { f -> funcSymbol(f, ctx, null, emptyMap()).let { if (it.isExtension) ext += it else top += it } }
-        km.properties.forEach { p -> propSymbol(p, ctx, null, emptyMap()).let { if (it.isExtension) ext += it else top += it } }
-        return Decoded(null, emptyList(), emptyList(), emptyList(), top, ext)
+        // The facade class FQN isn't in KmPackage for a plain file facade — the ClasspathReader sets
+        // declaringClassFqn from the .class entry name. For a multi-file class PART, [facadeFqn] overrides it
+        // (the part's `…__…Kt` name isn't where the public static method lives).
+        km.functions.forEach { f -> funcSymbol(f, ctx, null, emptyMap(), facadeFqn, composable).let { if (it.isExtension) ext += it else top += it } }
+        km.properties.forEach { p -> propSymbol(p, ctx, null, emptyMap(), facadeFqn).let { if (it.isExtension) ext += it else top += it } }
+        return Decoded(null, emptyList(), emptyList(), emptyList(), top, ext, facadeClassFqn = facadeFqn)
     }
 
-    private fun funcSymbol(f: KmFunction, ctx: KotlinTypeContext?, owner: KotlinSymbol?, classTp: Map<Int, String>): KotlinSymbol {
+    private fun funcSymbol(f: KmFunction, ctx: KotlinTypeContext?, owner: KotlinSymbol?, classTp: Map<Int, String>, declaringFqn: String?, composable: Set<String>): KotlinSymbol {
         val tp = classTp + f.typeParameters.associate { it.id to it.name }
         val receiver = f.receiverParameterType
         val (recvFqn, recvParam) = receiver?.let { receiverInfo(it, f.typeParameters) } ?: (null to null)
@@ -98,12 +159,17 @@ object KotlinMetadata {
             signature = "($params): ${typeText(f.returnType, tp)}",
             typeParameters = f.typeParameters.map { it.name },
             paramTypes = f.valueParameters.map { typeRef(it.varargElementType ?: it.type, ctx, tp) },
+            paramNames = f.valueParameters.map { it.name },
             receiverTypeArgs = receiver?.arguments?.map { arg -> arg.type?.let { typeRef(it, ctx, tp) } ?: KotlinType("kotlin.Any", context = ctx) } ?: emptyList(),
             receiverTypeParam = recvParam,
+            declaringClassFqn = declaringFqn,
+            isComposable = f.name in composable,
+            isInline = f.isInline,
+            varargParamIndex = f.valueParameters.indexOfFirst { it.varargElementType != null },
         )
     }
 
-    private fun propSymbol(p: KmProperty, ctx: KotlinTypeContext?, owner: KotlinSymbol?, classTp: Map<Int, String>): KotlinSymbol {
+    private fun propSymbol(p: KmProperty, ctx: KotlinTypeContext?, owner: KotlinSymbol?, classTp: Map<Int, String>, declaringFqn: String?): KotlinSymbol {
         val tp = classTp + p.typeParameters.associate { it.id to it.name }
         val receiver = p.receiverParameterType
         val (recvFqn, recvParam) = receiver?.let { receiverInfo(it, p.typeParameters) } ?: (null to null)
@@ -119,6 +185,7 @@ object KotlinMetadata {
             signature = ": ${typeText(p.returnType, tp)}",
             receiverTypeArgs = receiver?.arguments?.map { arg -> arg.type?.let { typeRef(it, ctx, tp) } ?: KotlinType("kotlin.Any", context = ctx) } ?: emptyList(),
             receiverTypeParam = recvParam,
+            declaringClassFqn = declaringFqn,
         )
     }
 
@@ -151,10 +218,13 @@ object KotlinMetadata {
         }
         val fqn = classifierFqn(t) ?: return null
         val args = t.arguments.map { arg -> arg.type?.let { typeRef(it, ctx, tp) } ?: KotlinType("kotlin.Any", context = ctx) }
-        // `T.() -> R` (apply/with/run blocks, DSL builders) carries @kotlin.ExtensionFunctionType on the type.
-        val isExtFn = TypeRendering.isFunctionType(fqn) &&
-            runCatching { t.annotations.any { it.className == "kotlin/ExtensionFunctionType" } }.getOrDefault(false)
-        return KotlinType(fqn, args, nullable = t.isNullable, context = ctx, isExtensionFunctionType = isExtFn)
+        // `T.() -> R` (apply/with/run blocks, DSL builders) carries @kotlin.ExtensionFunctionType on the type;
+        // a Compose content slot (`@Composable () -> Unit`) carries @androidx.compose.runtime.Composable on it.
+        val annos = if (TypeRendering.isFunctionType(fqn))
+            runCatching { t.annotations.map { it.className } }.getOrDefault(emptyList()) else emptyList()
+        val isExtFn = "kotlin/ExtensionFunctionType" in annos
+        val isComposable = "androidx/compose/runtime/Composable" in annos
+        return KotlinType(fqn, args, nullable = t.isNullable, context = ctx, isExtensionFunctionType = isExtFn, isComposable = isComposable)
     }
 
     private fun typeText(t: KmType, tp: Map<Int, String>): String {
@@ -168,6 +238,8 @@ object KotlinMetadata {
     }
 
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
+    private const val COMPOSABLE_ANNO_DESC = "Landroidx/compose/runtime/Composable;"
+    private const val COMPOSER_DESC = "Landroidx/compose/runtime/Composer;"
 
     private fun visibilityMods(v: Visibility): Set<Modifier> = when (v) {
         Visibility.PRIVATE, Visibility.PRIVATE_TO_THIS, Visibility.LOCAL -> setOf(Modifier.PRIVATE)
