@@ -109,17 +109,25 @@ class DexArchiveCacheTest {
         val tmp = Files.createTempDirectory("dexdup")
         try {
             val libs = tmp.resolve("libs"); Files.createDirectories(libs)
-            // The same artifact reaching the dexer via two paths (byte-identical → same content hash), e.g. two
-            // resolver cache paths. Both define kotlin/sequences/SequencesKt.class.
+            // Same artifact via two paths (byte-identical → same content hash), e.g. two resolver cache paths.
             val dupA = jar(libs, "stdlib-a.jar", "kotlin/sequences/SequencesKt.class")
             val dupB = libs.resolve("stdlib-b.jar"); Files.copy(dupA, dupB)
+            // Two DISTINCT jars (different content) that both define the same type — e.g. two kotlin-stdlib
+            // versions, or a library bundling stdlib classes. Content-hash dedup can't catch this; class-level
+            // dedup must. Give them an extra differing entry so their content hashes differ.
+            val verA = jar(libs, "stdlib-1.8.jar", "kotlin/jvm/internal/Intrinsics.class").also { Files.write(libs.resolve("a.txt"), byteArrayOf(1)) }
+            val verB = libs.resolve("stdlib-1.9.jar")
+            ZipOutputStream(Files.newOutputStream(verB)).use { z ->
+                z.putNextEntry(ZipEntry("kotlin/jvm/internal/Intrinsics.class")); z.write("v9".toByteArray()); z.closeEntry()
+                z.putNextEntry(ZipEntry("kotlin/Unit.class")); z.write("unit".toByteArray()); z.closeEntry()
+            }
             val other = jar(libs, "other.jar", "o/O.class")
 
             val dexer = ClasspathCheckingDexer()
             val extRoot = tmp.resolve("ext")
-            val result = buildTask(":x:dexBuilder", listOf(dupA, dupB, other), extRoot, dexer, tmp.resolve("cache"), tmp.resolve("x"))
+            val result = buildTask(":x:dexBuilder", listOf(dupA, dupB, verA, verB, other), extRoot, dexer, tmp.resolve("cache"), tmp.resolve("x"))
                 .execute(SimpleTaskContext())
-            assertEquals(dev.ide.build.TaskResult.Success, result, "dedup must keep SequencesKt off the classpath twice")
+            assertEquals(dev.ide.build.TaskResult.Success, result, "class-level dedup must keep duplicate types off the classpath")
             assertTrue(DexArchivesProbe.hasDexUnder(extRoot), "the deduped library set still produces dex output")
         } finally {
             tmp.toFile().deleteRecursively()

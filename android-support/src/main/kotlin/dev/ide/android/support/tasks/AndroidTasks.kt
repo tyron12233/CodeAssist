@@ -430,7 +430,7 @@ internal class DexArchiveBuilderTask(
      * unchanged ones + library jars are the desugaring *classpath* so a changed class still sees its siblings.
      * D8's `DexFilePerClassFile` writes `<class>.dex` straight into [projectDexRoot]; the merge resolves them.
      */
-    private fun archiveProject(ctx: TaskContext, universeByHash: Map<String, Path>): Boolean {
+    private fun archiveProject(ctx: TaskContext, universeByHash: Map<String, Path>, classesOf: Map<Path, Set<String>>): Boolean {
         Files.createDirectories(projectDexRoot)
         // Collect across every project-class root (Java output + Kotlin output) keyed by package-relative
         // path; a later root wins a (rare) name clash. Relpaths from distinct roots don't otherwise collide.
@@ -457,14 +457,33 @@ internal class DexArchiveBuilderTask(
             val unchanged = current.keys - changed.toSet()
             val classpath = ArrayList<Path>()
             if (unchanged.isNotEmpty()) { DexArchives.jarClasses(byRel, unchanged, restJar); classpath.add(restJar) }
-            // Library universe, deduped by content hash (see execute) so D8 never sees a type twice.
-            classpath.addAll(universeByHash.values)
+            // Library universe, class-deduped so D8 never sees a type twice. Exclude the project's own classes
+            // (the program + restJar) so a library that happens to redefine one can't collide with them either.
+            classpath.addAll(classpathFor(universeByHash.values, classesOf, exclude = current.keys))
             val r = dexer.dexArchive(listOf(changedJar), classpath, androidJar, minApi, release, projectDexRoot,
                 threads = DexConcurrency.plan(1).threadsPerInvocation)
             r.log.forEach(ctx.logger()); if (!r.success) { ok = false; ctx.logger()("dex archive failed for project classes") }
         }
         DexArchives.writeClassManifest(projectDexRoot, current)
         return ok
+    }
+
+    /**
+     * Build a duplicate-free desugaring classpath from [candidates]. D8 aborts when two classpath entries
+     * define the same type, so walk the jars in priority order and keep one only if it introduces no class
+     * already provided — by an earlier-kept jar or by [exclude] (the program's own classes, which belong to
+     * the input, not the classpath). A jar that fully overlaps an earlier one (e.g. a second kotlin-stdlib) is
+     * dropped whole; a partial overlap is also dropped, at worst reviving a benign "Type not found" desugaring
+     * warning for its unique classes — never a hard failure. Resource-only jars (no classes) are always kept.
+     */
+    private fun classpathFor(candidates: Collection<Path>, classesOf: Map<Path, Set<String>>, exclude: Set<String>): List<Path> {
+        val seen = HashSet(exclude)
+        val kept = ArrayList<Path>()
+        for (jar in candidates) {
+            val cs = classesOf[jar] ?: emptySet()
+            if (cs.isEmpty() || cs.none { it in seen }) { kept.add(jar); seen.addAll(cs) }
+        }
+        return kept
     }
 
     /**
@@ -475,11 +494,12 @@ internal class DexArchiveBuilderTask(
      *  3. otherwise dex it once, then seed the shared cache so every other project skips it next time.
      * Jar content hashes ([hashOf], precomputed once) come from a path+size+mtime cache so unchanged libraries
      * aren't re-hashed each build. [universeByHash] is the content-hash-deduped desugaring classpath universe
-     * (hash -> representative jar) and [desugarDigest] keys the shared cache to it (see [execute]).
+     * (hash -> representative jar), [classesOf] each jar's class entries (for class-level dedup), and
+     * [desugarDigest] keys the shared cache to it (see [execute]).
      */
     private suspend fun dexJars(
         ctx: TaskContext, root: Path, jars: List<Path>,
-        hashOf: Map<Path, String>, universeByHash: Map<String, Path>, desugarDigest: String,
+        hashOf: Map<Path, String>, universeByHash: Map<String, Path>, classesOf: Map<Path, Set<String>>, desugarDigest: String,
     ): Boolean {
         Files.createDirectories(root)
         val byHash = LinkedHashMap<String, Path>()                       // content hash -> a jar (dedups copies)
@@ -496,9 +516,11 @@ internal class DexArchiveBuilderTask(
                 async(Dispatchers.IO) {
                     sem.withPermit {
                         ctx.checkCanceled()
-                        // Desugaring classpath = the deduped library universe minus this jar's own content (keyed
-                        // by hash, not path, so a second path to the same jar can't put its classes back on).
-                        val classpath = universeByHash.filterKeys { it != hash }.values.toList()
+                        // Desugaring classpath = the library universe minus this jar's own content (by hash, so a
+                        // second path can't put it back) and class-deduped (so a different jar can't redefine
+                        // this jar's types, nor any type twice across the classpath).
+                        val others = universeByHash.filterKeys { it != hash }.values
+                        val classpath = classpathFor(others, classesOf, exclude = classesOf[jar] ?: emptySet())
                         if (!dexOneLibrary(ctx, jar, root.resolve(hash), hash, classpath, desugarDigest, plan.threadsPerInvocation)) ok.set(false)
                     }
                 }
@@ -571,6 +593,23 @@ private object DexArchives {
         val md = MessageDigest.getInstance("SHA-256")
         hashes.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)); md.update(0) }
         return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }.substring(0, 16)
+    }
+
+    /** The `.class` entry names a jar defines (e.g. `kotlin/jvm/internal/Intrinsics.class`), for class-level
+     *  classpath dedup. A non-jar or unreadable input yields the empty set (no class conflict). */
+    fun classNamesOf(jar: Path): Set<String> {
+        if (!isZip(jar)) return emptySet()
+        val out = HashSet<String>()
+        runCatching {
+            ZipFile(jar.toFile()).use { zf ->
+                val e = zf.entries()
+                while (e.hasMoreElements()) {
+                    val name = e.nextElement().name
+                    if (name.endsWith(".class")) out.add(name)
+                }
+            }
+        }
+        return out
     }
 
     /** Content hash of a single file's bytes (`.class` files are deterministic — no timestamps). */
