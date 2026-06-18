@@ -49,4 +49,15 @@ class DesktopFileActions(private val backend: IdeBackend) : FileActions {
             if (Desktop.isDesktopSupported()) Desktop.getDesktop().browse(java.net.URI(url))
         }
     }
+
+    override val canReveal: Boolean = true
+
+    /** Reveal [path] in the system file manager (the folder itself, or a file's parent). */
+    override fun reveal(path: String) {
+        runCatching {
+            val file = File(path)
+            val dir = if (file.isDirectory) file else file.parentFile ?: file
+            if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(dir)
+        }
+    }
 }

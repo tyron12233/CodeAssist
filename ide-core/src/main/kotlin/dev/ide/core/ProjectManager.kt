@@ -34,6 +34,9 @@ class ProjectManager private constructor(
     private val dexRunner: DexRunner? = null,
     /** On-device APK installer (from :ide-android) so the android Run works in every opened project. */
     private val apkInstaller: ApkInstaller? = null,
+    /** On-device live custom-view runtime (from :ide-android) so the layout preview renders live custom
+     *  views in every opened project, not just the first-run demo. */
+    private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
 ) {
     init {
         Files.createDirectories(projectsRoot)
@@ -61,11 +64,12 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir)
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. */
-    fun open(rootPath: String): IdeServices = IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller)
+    fun open(rootPath: String): IdeServices =
+        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir)
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
@@ -159,21 +163,25 @@ class ProjectManager private constructor(
 
         /**
          * On-device (ART) host: the bundled `android.jar` boot classpath + native tool ports; Java 8.
-         * [dataDir] (the app's `filesDir`) is the backup root, so a backup captures both new projects and
-         * any project files left by a previous, incompatible app version.
+         * A backup captures the live projects under [projectsRoot] plus every [legacyDataDirs] tree, so
+         * project files left by a previous, incompatible app version (e.g. in internal storage before the
+         * move to external app storage) are still recoverable.
          */
         fun onDevice(
             projectsRoot: Path,
             bootClasspath: List<String>,
             androidToolsDir: Path,
             debugKeystore: Path,
-            dataDir: Path,
+            /** Extra directories a backup should also sweep up — typically a legacy internal-storage home. */
+            legacyDataDirs: List<Path> = emptyList(),
             /** The host's `DexClassLoader` runner, so a Java console `run` works on ART. */
             dexRunner: DexRunner? = null,
             /** The device's `Build.VERSION.SDK_INT` — min-api the Java dex-run targets. */
             deviceApiLevel: Int = 21,
             /** The host's APK installer, so the android Run (build + install + launch) works on device. */
             apkInstaller: ApkInstaller? = null,
+            /** The host's live custom-view runtime, so the layout preview renders custom views in every project. */
+            customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
         ): ProjectManager {
             val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel)
@@ -183,9 +191,10 @@ class ProjectManager private constructor(
                 { sdk },
                 LanguageLevel.JAVA_8,
                 tools,
-                backupRoots = listOf(dataDir),
+                backupRoots = listOf(projectsRoot) + legacyDataDirs,
                 dexRunner = dexRunner,
                 apkInstaller = apkInstaller,
+                customViewRuntime = customViewRuntime,
             )
         }
     }

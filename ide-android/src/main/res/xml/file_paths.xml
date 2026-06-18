@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Paths the FileProvider may expose as content:// URIs. Projects live under filesDir/codeassist;
-     `files-path` maps internal app storage (Context.getFilesDir()). -->
+<!-- Paths the FileProvider may expose as content:// URIs. Projects now live under the app's external
+     files dir (Android/data/<pkg>/files/codeassist); `external-files-path` maps getExternalFilesDir(null).
+     The internal `files-path` is kept so a backup zip written before the storage move can still be shared. -->
 <paths>
+    <external-files-path name="codeassist-ext" path="codeassist/" />
     <files-path name="codeassist" path="codeassist/" />
 </paths>

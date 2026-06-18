@@ -14,8 +14,13 @@
          be exec'd (ART forbids executing binaries from anywhere else). That extraction is driven by
          packaging.jniLibs.useLegacyPackaging=true in build.gradle.kts (which sets extractNativeLibs on the
          merged manifest); declaring it here too is redundant, so AGP owns it. -->
+    <!-- largeHeap: this app runs kotlinc/D8/R8 in-process (no `java` to fork on ART), so it needs far more
+         heap than a normal app. largeHeap raises the per-app cap (device-dependent, often 2-4x) — the single
+         biggest lever against OOM during on-device builds; the dexer also bounds its parallelism to the heap
+         (see DexConcurrency). -->
     <application
         android:allowBackup="true"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
@@ -49,8 +54,8 @@
             </intent-filter>
         </activity>
 
-        <!-- Exposes app-private project files (filesDir/codeassist) to other apps as content:// URIs
-             for Share / "Open with", without FileUriExposedException. -->
+        <!-- Exposes a single project file to other apps as a content:// URI for Share / "Open with",
+             without FileUriExposedException. Folder-level browsing is handled by the DocumentsProvider below. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -59,6 +64,21 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Surfaces the whole projects folder as a browsable, read/write root in the system Files app and
+             any SAF file manager — so users can drop in icons/layouts/assets and edit project files from a
+             file manager without the All-Files-Access permission (issues #1010 / #1016). The platform requires
+             this provider be exported and protected by the system-only MANAGE_DOCUMENTS permission. -->
+        <provider
+            android:name=".ProjectsDocumentsProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
         </provider>
     </application>
 

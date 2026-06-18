@@ -34,6 +34,7 @@ import dev.ide.ui.components.BetaBadge
 import dev.ide.ui.components.BetaBanner
 import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.ProjectTile
+import dev.ide.ui.components.StorageAccessCard
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
 import dev.ide.ui.icons.CaIcons
@@ -48,6 +49,8 @@ fun ProjectPickerScreen(
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
     onSubmitSuggestions: (() -> Unit)? = null,
+    storagePath: String? = null,
+    onOpenInFiles: (() -> Unit)? = null,
 ) {
     var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
     Box(Modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
@@ -68,6 +71,8 @@ fun ProjectPickerScreen(
             Spacer(Modifier.size(12.dp))
 
             BetaBanner(onSubmit = onSubmitSuggestions)
+
+            StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
 
             NewProjectCard(onNewProject)
 

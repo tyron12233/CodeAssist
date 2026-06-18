@@ -33,6 +33,18 @@ interface FileActions {
     /** Whether this host can open external URLs (shows link affordances like "Submit suggestions"). */
     val canOpenUrl: Boolean get() = false
 
+    /** Whether this host can open a folder in the system file manager (shows the "Open in Files" affordance). */
+    val canReveal: Boolean get() = false
+
+    /**
+     * Open [path] (a directory) in the system file manager so the user can browse and manage it there.
+     * On Android this launches the system Files app at CodeAssist's projects root — surfaced by a
+     * DocumentsProvider — so any SAF file manager can browse it and import files (icons/layouts/assets)
+     * into a project; on desktop it reveals the folder. Default no-op (the affordance is hidden when
+     * [canReveal] is false).
+     */
+    fun reveal(path: String) = Unit
+
     /** A no-op bridge for hosts without file integration (the default). */
     object None : FileActions {
         override val canImport: Boolean = false

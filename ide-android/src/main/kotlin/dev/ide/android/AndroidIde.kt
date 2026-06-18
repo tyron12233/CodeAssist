@@ -13,16 +13,21 @@ import java.nio.file.Paths
  * On-device bootstrap for the IDE engine, the Android counterpart to :ide-desktop's wiring. ART has no
  * JDK to detect, so the Android SDK's `android.jar` (signatures for `java.*` + `android.*`) ships as an
  * asset, is copied into app storage once, and is fed as each workspace's boot classpath. Projects live
- * under `filesDir/codeassist/projects` (one workspace dir each) and a [ProjectManager] creates/opens/lists
- * them, so the IDE supports live in-session switching. On first launch the Android multi-module sample is
- * seeded. Everything above that (project model, JDT completion/analysis, indexing, the Android build) is
- * the same `IdeServices` the desktop runs, surfaced through the same `IdeServicesBackend`.
+ * under `<external-files>/codeassist/projects` (one workspace dir each) — app-specific external storage,
+ * so a [ProjectsDocumentsProvider] can surface them in the system Files app / any file manager without
+ * the All-Files-Access permission. A [ProjectManager] creates/opens/lists them, so the IDE supports live
+ * in-session switching. On first launch the Android multi-module sample is seeded. Everything above that
+ * (project model, JDT completion/analysis, indexing, the Android build) is the same `IdeServices` the
+ * desktop runs, surfaced through the same `IdeServicesBackend`.
  */
 object AndroidIde {
 
     /** Heavy (file copy + project gen + JDT init) — call off the main thread. */
     fun bootstrap(context: Context): Session {
-        val home = File(context.filesDir, "codeassist").apply { mkdirs() }
+        // App-specific EXTERNAL storage (`Android/data/<pkg>/files/codeassist`): no permission needed, yet
+        // reachable by other file managers via [ProjectsDocumentsProvider]. Fall back to internal storage
+        // only if external isn't mounted (rare). The location is resolved identically by the provider.
+        val home = File(externalHome(context), "codeassist").apply { mkdirs() }
         val androidJar = copyAsset(context, "android.jar", File(home, "android.jar"))
         // The on-device Kotlin compiler (K2JVMCompiler) is dexed, but IntelliJ-core boots its extension
         // registry by reading XML descriptors (META-INF/extensions/*.xml) from a real filesystem path, which
@@ -49,14 +54,16 @@ object AndroidIde {
             context.applicationContext, androidJar.toPath(),
             File(context.cacheDir, "preview"), android.os.Build.VERSION.SDK_INT,
         )
-        // dataDir = the whole app filesDir, so a backup also sweeps up project files left by a previous
-        // (incompatible) app version that still live in app storage after the update.
+        // Earlier builds kept projects in internal storage (`filesDir/codeassist`); they're incompatible
+        // with the new build system but a backup can still sweep them up, so pass them as a legacy root.
+        val legacyHome = File(context.filesDir, "codeassist").toPath()
         val manager = ProjectManager.onDevice(
             projectsRoot, bootClasspath, nativeLibDir, debugKeystore.toPath(),
-            dataDir = context.filesDir.toPath(),
+            legacyDataDirs = listOf(legacyHome).filter { java.nio.file.Files.exists(it) },
             dexRunner = dexRunner,
             deviceApiLevel = android.os.Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
+            customViewRuntime = previewRuntime,
         )
 
         val services = if (manager.isEmpty()) {
@@ -73,6 +80,8 @@ object AndroidIde {
                 deviceApiLevel = android.os.Build.VERSION.SDK_INT,
                 apkInstaller = apkInstaller,
                 customViewRuntime = previewRuntime,
+                // Share the download cache with every later project (the app home, sibling of projects/).
+                sharedCachesRoot = home.toPath(),
             )
         } else {
             manager.open(manager.list().first().rootPath)
@@ -80,6 +89,14 @@ object AndroidIde {
 
         return Session(services, IdeServicesBackend(services, manager))
     }
+
+    /** App-specific external storage base (`Android/data/<pkg>/files`), or internal `filesDir` if external
+     *  isn't currently mounted. Resolved the same way by [bootstrap] and [ProjectsDocumentsProvider] so both
+     *  see one projects directory. */
+    fun externalHome(context: Context): File = context.getExternalFilesDir(null) ?: context.filesDir
+
+    /** The single on-disk projects directory (`<external-files>/codeassist/projects`). */
+    fun projectsDir(context: Context): File = File(File(externalHome(context), "codeassist"), "projects")
 
     /** Copy a bundled asset into app storage once (assets are read-only in the APK). */
     private fun copyAsset(context: Context, name: String, dest: File): File {
