@@ -18,6 +18,7 @@ import kotlin.metadata.KmProperty
 import kotlin.metadata.KmType
 import kotlin.metadata.KmTypeParameter
 import kotlin.metadata.Visibility
+import kotlin.metadata.declaresDefaultValue
 import kotlin.metadata.isInline
 import kotlin.metadata.isNullable
 import kotlin.metadata.visibility
@@ -186,6 +187,7 @@ object KotlinMetadata {
             isInline = f.isInline,
             isSuspend = f.isSuspend,
             varargParamIndex = f.valueParameters.indexOfFirst { it.varargElementType != null },
+            paramHasDefault = f.valueParameters.map { it.declaresDefaultValue },
         )
     }
 

@@ -185,6 +185,7 @@ class ClasspathReader(
         val isInline: Boolean,
         val isSuspend: Boolean,
         val varargParamIndex: Int,
+        val paramHasDefault: List<Boolean>,
     ) {
         // Cached types are context-free; rebind the live context so members()/supertypes() work after reload.
         fun toSymbol(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymbol(
@@ -205,6 +206,7 @@ class ClasspathReader(
             isInline = isInline,
             isSuspend = isSuspend,
             varargParamIndex = varargParamIndex,
+            paramHasDefault = paramHasDefault,
         )
 
         companion object {
@@ -220,6 +222,7 @@ class ClasspathReader(
                 s.isInline,
                 s.isSuspend,
                 s.varargParamIndex,
+                s.paramHasDefault,
             )
         }
     }
@@ -257,6 +260,7 @@ class ClasspathReader(
             out.writeBoolean(r.isInline)
             out.writeBoolean(r.isSuspend)
             out.writeInt(r.varargParamIndex)
+            out.writeInt(r.paramHasDefault.size); r.paramHasDefault.forEach { out.writeBoolean(it) }
         }
     }
 
@@ -280,7 +284,8 @@ class ClasspathReader(
             val isInline = inp.readBoolean()
             val isSuspend = inp.readBoolean()
             val varargIdx = inp.readInt()
-            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, isSuspend, varargIdx)
+            val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
+            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, isSuspend, varargIdx, paramHasDefault)
         }
         return out
     }
@@ -312,7 +317,7 @@ class ClasspathReader(
     }
 
     private companion object {
-        const val FORMAT_VERSION = 10 // v10: + KotlinSymbol.isSuspend (semantic-highlight suspension points)
+        const val FORMAT_VERSION = 11 // v11: + RawCallableData.paramHasDefault (missing-required-argument detection)
         val BINARY = SymbolOrigin(fromSource = false, file = null)
     }
 }

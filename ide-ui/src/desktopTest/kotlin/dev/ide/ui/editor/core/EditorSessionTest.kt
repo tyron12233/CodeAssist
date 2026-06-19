@@ -8,6 +8,7 @@ import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.applySmartEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -267,6 +268,81 @@ class EditorSessionTest {
         val s = session("foo barBaz qux", 0)
         s.selectWordAt(6)
         assertEquals("barBaz", s.selectedText())
+    }
+
+    @Test
+    fun completionAcceptWhileComposingRestartsTheIme() {
+        // The Android stale-prefix bug: the user types a prefix the IME holds as a COMPOSING region, then
+        // accepts a completion. Clearing our composing + updating selection isn't enough — the IME keeps its own
+        // composing buffer (the prefix), re-inserting it on the next keystroke. `applyEdits` must restart the IME
+        // so it drops that buffer.
+        val s = session("", 0)
+        var restarts = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() { restarts++ }
+        }
+        s.imeSetComposingText("pri", 1) // IME inserts + composes "pri"
+        assertNotNull(s.composing)
+        assertEquals("pri", s.doc.text)
+        s.applyEdits(listOf(RangeEdit(0, 3, "println", 7)), TextRange(7)) // accept the completion
+        assertEquals("println", s.doc.text)
+        assertNull(s.composing, "the editor's composing region must be cleared")
+        assertEquals(1, restarts, "a completion accepted while composing must restart the IME")
+    }
+
+    @Test
+    fun completionAcceptThatMovesCaretInsideInsertedTextRestartsAtFinalCaret() {
+        // A method completion (`println()`) accepted while composing "pri": it inserts more than the identifier
+        // (the `()`) AND moves the caret INSIDE the parens. The IME restart must fire with the FINAL caret
+        // already in place, so the keyboard re-reads the post-accept position (8, inside the parens) — not the
+        // end of the inserted text — and drops its stale "pri" buffer.
+        val s = session("", 0)
+        var restarts = 0
+        var caretSeenOnRestart = -1
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() { restarts++; caretSeenOnRestart = s.selection.start }
+        }
+        s.imeSetComposingText("pri", 1)
+        s.applyEdits(listOf(RangeEdit(0, 3, "println()", 9)), TextRange(8)) // caret lands inside the parens
+        assertEquals("println()", s.doc.text)
+        assertEquals(TextRange(8), s.selection, "caret lands inside the parens")
+        assertNull(s.composing)
+        assertEquals(1, restarts)
+        assertEquals(8, caretSeenOnRestart, "the restart sees the final (moved) caret, not the end of the insert")
+    }
+
+    @Test
+    fun completionAcceptWithSelectedPlaceholderRestartsTheIme() {
+        // A snippet-style accept that leaves a placeholder SELECTED (a non-collapsed final selection): the
+        // restart still fires and the IME re-reads the selection range.
+        val s = session("", 0)
+        var restarts = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() { restarts++ }
+        }
+        s.imeSetComposingText("fo", 1)
+        s.applyEdits(listOf(RangeEdit(0, 2, "forEach { it }", 14)), TextRange(9, 11)) // "it" selected
+        assertEquals("forEach { it }", s.doc.text)
+        assertEquals(TextRange(9, 11), s.selection)
+        assertEquals(1, restarts, "a placeholder-selecting accept while composing must still restart the IME")
+    }
+
+    @Test
+    fun applyEditsWithoutComposingDoesNotRestartTheIme() {
+        // A non-IME edit through the same path (auto-close bracket, block edit, or a completion accepted with no
+        // active composition) must NOT churn the IME — only a stale composing buffer needs the restart.
+        val s = session("foo", 3)
+        var restarts = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() { restarts++ }
+        }
+        s.applyEdits(listOf(RangeEdit(3, 3, "()", 4)), TextRange(4))
+        assertEquals("foo()", s.doc.text)
+        assertEquals(0, restarts, "an edit with no active composing region must not restart the IME")
     }
 
     @Test

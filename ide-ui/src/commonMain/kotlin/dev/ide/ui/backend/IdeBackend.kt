@@ -186,6 +186,14 @@ interface IdeBackend {
     suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
 
     /**
+     * Parameter-info / signature help for the call surrounding [offset] in [path]'s live buffer [text]. The
+     * editor floats a small panel *above* the call listing the callee's overloads, with the argument the caret
+     * is on highlighted — separate from completion. Returns null when the caret isn't inside a resolvable call
+     * (the editor then dismisses any open panel). Default null for backends without signature-help support.
+     */
+    suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? = null
+
+    /**
      * Type-aware semantic-highlight tokens for [path]'s live buffer [text] — the editor overlays them on its
      * fast lexical highlighting, so a field reads differently from a local, a `@Composable`/`suspend`/extension
      * call is marked, a real type is distinguished from a same-named variable. Ranges are document offsets;
@@ -1010,6 +1018,27 @@ data class UiInlayHint(
 ) {
     val text: String get() = parts.joinToString("") { it.text }
 }
+
+/** One parameter within a [UiSignature]; [start]/[end] are its `[start, end)` offsets into [UiSignature.label]
+ *  (for highlighting), both -1 when not located. */
+data class UiSignatureParam(val label: String, val start: Int = -1, val end: Int = -1)
+
+/** One overload's rendered signature: the whole [label] (e.g. `format(String fmt, Object... args)`) plus each
+ *  parameter's sub-range, and an optional per-overload [activeParameter] override (varargs). */
+data class UiSignature(
+    val label: String,
+    val parameters: List<UiSignatureParam>,
+    val documentation: String? = null,
+    val activeParameter: Int? = null,
+)
+
+/** Parameter-info for the call at the caret: the applicable overloads, which one is active, and the index of
+ *  the argument the caret is in (the parameter to highlight). */
+data class UiSignatureHelp(
+    val signatures: List<UiSignature>,
+    val activeSignature: Int = 0,
+    val activeParameter: Int = 0,
+)
 
 /** Android platform-sources status: the [platform] (e.g. "android-36"), whether sources are [installed],
  *  and whether they're [downloadable] (an sdkmanager is present). */

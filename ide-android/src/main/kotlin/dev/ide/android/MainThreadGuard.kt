@@ -21,6 +21,11 @@ object MainThreadGuard {
     @Volatile
     private var installed = false
 
+    /** Signature of the last recovered error; an identical one recurring every frame is logged ONCE, not on
+     *  each recovery (see [install]). */
+    @Volatile
+    private var lastSignature: String? = null
+
     /** Must be called on the main thread (e.g. from `Activity.onCreate`). Idempotent. */
     fun install() {
         if (installed) return
@@ -30,10 +35,20 @@ object MainThreadGuard {
                 try {
                     Looper.loop() // returns only if the looper quits (it doesn't, on the main thread)
                     return@post
+                } catch (e: VirtualMachineError) {
+                    throw e // OOM / stack overflow — not recoverable; let the process die + report
                 } catch (t: Throwable) {
-                    // Per-message exception bubbled out of dispatch: log it (→ dialog + report) and re-enter
-                    // the loop so the next message is processed. Not a tight spin — it waits for the next msg.
-                    runCatching { log.error("Recovered from an unexpected error on the UI thread", t) }
+                    // A per-message exception bubbled out of dispatch — re-enter the loop so the next message is
+                    // processed. Log it (→ dialog + scrubbed report) ONLY when its signature changed: a crash
+                    // that recurs every frame (e.g. a broken preview recomposing each pass) must not run the
+                    // dialog/report path on every recovery, which itself posts main-thread work and starves the
+                    // UI into a freeze. The deduped error stays visible; a different error (or a fixed edit, which
+                    // changes/clears the signature) logs again and the preview recovers on the next good frame.
+                    val sig = "${t.javaClass.name}@${t.stackTrace.firstOrNull()}"
+                    if (sig != lastSignature) {
+                        lastSignature = sig
+                        runCatching { log.error("Recovered from an unexpected error on the UI thread", t) }
+                    }
                 }
             }
         }

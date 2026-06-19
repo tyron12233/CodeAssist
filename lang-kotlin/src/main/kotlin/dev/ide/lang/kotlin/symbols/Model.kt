@@ -66,6 +66,10 @@ class KotlinSymbol(
     /** The index of the `vararg` value parameter (`listOf`, `mutableStateListOf(vararg …)`), or -1 if none.
      *  A vararg parameter absorbs any number of trailing positional arguments at a call site. */
     val varargParamIndex: Int = -1,
+    /** Whether each value parameter declares a DEFAULT value (positional with [paramTypes]) — so a call site
+     *  may omit it. EMPTY means "unknown" (Java bytecode, an old cache): callers that validate required
+     *  arguments must back off rather than guess. When non-empty its size matches [paramTypes]. */
+    val paramHasDefault: List<Boolean> = emptyList(),
     private val declarationNode: DomNode? = null,
     private val doc: String? = null,
 ) : Symbol {
@@ -79,7 +83,7 @@ class KotlinSymbol(
         KotlinSymbol(
             name, kind, type, owner, modifiers, origin, receiverTypeFqn, sig, typeParameters, typeParameterBounds,
             paramTypes, names, receiverTypeArgs, receiverTypeParam, packageName, declaringClassFqn, isInternal,
-            isComposable, isInline, isSuspend, varargParamIndex, declarationNode, docText,
+            isComposable, isInline, isSuspend, varargParamIndex, paramHasDefault, declarationNode, docText,
         )
 }
 

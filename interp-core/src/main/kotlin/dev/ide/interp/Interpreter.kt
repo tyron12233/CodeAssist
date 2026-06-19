@@ -252,6 +252,23 @@ class Interpreter(
             val args = listOf(extReceiver) + call.args.map { eval(it.value, env) }
             return dispatcher.dispatch(call, scope, args)
         }
+        // `super.foo(...)`: dispatch to the SUPERCLASS implementation, skipping the lexical class's own override.
+        if (call.dispatch == DispatchKind.SUPER) {
+            val receiver = call.receiver?.let { eval(it, env) }
+            if (receiver is SourceObject) {
+                val lexical = (callee as? ResolvedCallable.Source)?.declId?.substringBeforeLast('/')?.substringBeforeLast('.')
+                val m = lexical?.let { superMethod(it, "${callee.displayName}/${call.args.size}") }
+                if (m != null) return callMethod(m, receiver, call.args.map { eval(it.value, env) })
+                // A binary/library superclass method (`Activity.onCreate`, `Object.toString`): there is no source
+                // body and a SourceObject isn't a real subclass instance to reflect a `super` call into. No-op it
+                // — an override that calls `super.foo()` still lowers and runs; the preview never needs the
+                // framework's own behavior. (Arguments are still evaluated for their side effects.)
+                call.args.forEach { eval(it.value, env) }
+                return Unit
+            }
+            // A non-source receiver can't carry a super relationship the interpreter models — honest boundary.
+            throw InterpreterException("`super.${callee.displayName}` on a non-source receiver is not supported")
+        }
         // Everything else (library/member/constructor) goes through the host dispatcher — except a member call
         // whose receiver turns out to be a source instance, which can't be reflected and is interpreted instead
         // (covers both a `Source` member callee and a synthetic `contains`/`componentN` on a source object).
@@ -469,6 +486,16 @@ class Interpreter(
     private fun findSourceMethod(cls: ResolvedClass, key: String, seen: MutableSet<String> = HashSet()): ResolvedFunction? {
         if (!seen.add(cls.fqn)) return null
         cls.methods[key]?.let { return it }
+        for (sup in cls.supertypes) sourceClass(sup)?.let { findSourceMethod(it, key, seen)?.let { m -> return m } }
+        return null
+    }
+
+    /** The implementation a `super.key` call binds to: the nearest `key` (`"name/arity"`) declared on a SOURCE
+     *  supertype of [lexicalFqn], skipping [lexicalFqn]'s own override. Null when the lexical class is unknown or
+     *  no source supertype declares it (a binary superclass method — the caller no-ops the super call). */
+    private fun superMethod(lexicalFqn: String, key: String): ResolvedFunction? {
+        val cls = sourceClass(lexicalFqn) ?: return null
+        val seen = HashSet<String>().apply { add(cls.fqn) } // exclude the lexical class so its override is skipped
         for (sup in cls.supertypes) sourceClass(sup)?.let { findSourceMethod(it, key, seen)?.let { m -> return m } }
         return null
     }

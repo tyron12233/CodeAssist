@@ -565,6 +565,13 @@ private fun CodeEditorContent(
     var paneTopInWindow by remember(path) { mutableFloatStateOf(0f) }
     var paneBottomInWindow by remember(path) { mutableFloatStateOf(0f) }
 
+    // ---- signature help (parameter info): the IntelliJ panel floated ABOVE the call the caret is inside ----
+    // Independent of completion: it re-resolves on every caret move / edit while the caret is inside a call
+    // (gated by a cheap local scan so we don't hit the backend elsewhere), and dismisses when it leaves.
+    var sigHelp by remember(path) { mutableStateOf<dev.ide.ui.backend.UiSignatureHelp?>(null) }
+    var sigDismissed by remember(path) { mutableStateOf(false) }
+    var sigEpoch by remember(path) { mutableIntStateOf(0) } // bumped by the explicit (Ctrl/Cmd-P) trigger
+
     // ---- code actions (lightbulb): quick-fixes + caret intentions at the current selection ----
     var actions by remember(path) { mutableStateOf<List<UiAction>>(emptyList()) }
     var actionsOpen by remember(path) { mutableStateOf(false) }
@@ -694,12 +701,33 @@ private fun CodeEditorContent(
     // Accept [picked], or — for the keyboard path — the currently-selected item. Callers that already know
     // the item (a click/tap on a row) MUST pass it: `safeSelected` is captured at composition time, so a
     // same-frame `selected = …; accept()` would still read the stale selection and accept the wrong row.
+    // Apply completion [edits] but keep the viewport visually stationary when they insert line(s) ABOVE the
+    // visible area — the off-screen auto-import case. Without this, an inserted import line shifts every line
+    // below it down by one row, so the whole view (and the caret you were looking at) suddenly jumps. We anchor
+    // on the completion line ([anchorLine], captured pre-edit): if any edit lands above the first visible line,
+    // nudge the scroll by the anchor's visual-line delta so it — and thus the visible region — stays put. An
+    // insertion the user can actually SEE (within the viewport) is left to shift naturally.
+    fun applyEditsKeepingViewport(edits: List<RangeEdit>, finalSel: TextRange, anchorLine: Int) {
+        val doc = editorSession.doc
+        val topLine = lineAtY(0f).coerceIn(0, (doc.lineCount - 1).coerceAtLeast(0))
+        val topVisibleStart = doc.lineStart(topLine)
+        val insertsAboveViewport = edits.any { it.start < topVisibleStart && '\n' in it.text }
+        val visualBefore = editorSession.foldModel.visualForDocLine(anchorLine)
+        editorSession.applyEdits(edits, finalSel)
+        if (insertsAboveViewport) {
+            val anchorAfter = editorSession.doc.lineForOffset(finalSel.min)
+            val delta = (editorSession.foldModel.visualForDocLine(anchorAfter) - visualBefore) * metrics.lineHeight
+            if (delta > 0f) vOffset.floatValue = (vOffset.floatValue + delta).coerceIn(0f, maxV())
+        }
+    }
+
     fun accept(picked: UiCompletionItem? = null) {
         val s = liveCompletion ?: return
         val item = picked ?: displayed.getOrNull(safeSelected) ?: return
         val chars = editorSession.doc.chars
         val len = chars.length
         val mainStart = s.tokenStart.coerceIn(0, len)
+        val anchorLine = editorSession.doc.lineForOffset(mainStart) // the completion line, for viewport stability
         // Replace the WHOLE identifier token under the caret, not just the typed prefix: completing in the
         // middle of a word (get<caret>TextState) then removes the trailing suffix instead of leaving it.
         var mainEnd = caretOffset.coerceIn(mainStart, len)
@@ -729,7 +757,7 @@ private fun CodeEditorContent(
                 val st = e.start.coerceIn(0, len)
                 if (st <= mainStart) base += e.newText.length - (e.end.coerceIn(st, len) - st)
             }
-            editorSession.applyEdits(edits, TextRange(base))
+            applyEditsKeepingViewport(edits, TextRange(base), anchorLine)
             snippet = SnippetSession.start(editorSession, base, snip)
             dismissed = true
             job?.cancel()
@@ -749,7 +777,7 @@ private fun CodeEditorContent(
         }
         val selLen = item.caret?.selectionLength ?: 0
         val sel = if (selLen > 0) TextRange(caret, caret + selLen) else TextRange(caret)
-        editorSession.applyEdits(edits, sel)
+        applyEditsKeepingViewport(edits, sel, anchorLine)
         dismissed = true
         job?.cancel()
     }
@@ -874,6 +902,24 @@ private fun CodeEditorContent(
             result.isEmpty() -> actionsOpen = false
             actionSelected >= result.size -> actionSelected = 0
         }
+    }
+
+    // signature help — re-resolve whenever the caret moves or the buffer changes (or Ctrl/Cmd-P bumps sigEpoch).
+    // Gated by a cheap local scan so we only call the backend when the caret is actually inside a call's parens;
+    // dismisses (and re-arms) when the caret leaves the call, so Esc only hides it for the current call.
+    LaunchedEffect(path, editorSession.textRevision, editorSession.selection, sigEpoch, isFocused) {
+        if (!isFocused) { sigHelp = null; return@LaunchedEffect }
+        val sel = editorSession.selection
+        val caret = sel.start
+        if (sel.start != sel.end || !caretInsideCall(editorSession.doc.chars, caret)) {
+            sigHelp = null
+            sigDismissed = false
+            return@LaunchedEffect
+        }
+        if (sigDismissed) return@LaunchedEffect
+        delay(40.milliseconds)
+        val text = editorSession.doc.text
+        sigHelp = runCatching { backend.signatureHelp(path, text, caret) }.getOrNull()
     }
 
     // host (toolbar Find button) requested the find bar
@@ -1049,6 +1095,11 @@ private fun CodeEditorContent(
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Spacebar) {
                         dismissed = false; refresh(immediate = true); return@onPreviewKeyEvent true
                     }
+                    // Parameter info (Ctrl/Cmd-P, a la IntelliJ): force the signature-help panel even if it was
+                    // dismissed — re-arm + bump the epoch so the resolve effect re-runs for the call at the caret.
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.P) {
+                        sigDismissed = false; sigEpoch++; return@onPreviewKeyEvent true
+                    }
                     // Rename (F2, or Shift-F6 a la IntelliJ): prompt for a new name → project-wide rename.
                     if (ev.key == Key.F2 || (ev.isShiftPressed && ev.key == Key.F6)) {
                         startRename(); return@onPreviewKeyEvent true
@@ -1078,6 +1129,11 @@ private fun CodeEditorContent(
                             Key.Escape -> { sn.finish(); snippet = null; return@onPreviewKeyEvent true }
                             else -> Unit
                         }
+                    }
+                    // Esc closes the (informational) signature-help panel when no completion popup is open; the
+                    // panel captures no other keys, so everything else flows through to the editor.
+                    if (sigHelp != null && !sigDismissed && !showPopup && ev.key == Key.Escape) {
+                        sigDismissed = true; return@onPreviewKeyEvent true
                     }
                     if (!showPopup) return@onPreviewKeyEvent false
                     when (ev.key) {
@@ -1437,6 +1493,28 @@ private fun CodeEditorContent(
             }
         }
 
+        // signature-help (parameter-info) panel — floated ABOVE the caret line, independent of the completion
+        // popup below it. Non-focusable so typing keeps reaching the editor; dismissed by the host logic above.
+        val sig = sigHelp
+        if (sig != null && !sigDismissed && isFocused && sig.signatures.isNotEmpty()) {
+            val (_, sigX, sigTop) = caretGeometry(caretOffset)
+            val gapPx = with(density) { 6.dp.roundToPx() }
+            val positionProvider = remember(sigX, sigTop, gapPx) {
+                AboveAnchorPositionProvider(
+                    sigX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
+                    sigTop.roundToInt(),
+                    gapPx,
+                )
+            }
+            Popup(
+                popupPositionProvider = positionProvider,
+                onDismissRequest = { sigDismissed = true },
+                properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
+            ) {
+                SignatureHelpPopup(sig)
+            }
+        }
+
         // lightbulb on the caret line whenever actions are available and no completion popup is showing
         if (actions.isNotEmpty() && !showPopup && isFocused) {
             val caretLn = doc.lineForOffset(caretOffset)
@@ -1718,8 +1796,14 @@ private fun DrawScope.drawEditor(
     val lastVisible = foldModel.docLineForVisual(botRow)
     // The document lines actually ON SCREEN (one per visual row) — iterated by the per-line draw loops instead
     // of `firstVisible..lastVisible`, which would walk every hidden line of a large collapsed region each frame.
-    val visibleLines = if (!foldModel.hasFolds) (firstVisible..lastVisible).toList()
-        else IntArray(botRow - topRow + 1) { foldModel.docLineForVisual(topRow + it) }.toList()
+    // `botRow` is clamped to the current line count while `topRow` follows the raw scroll offset, so a
+    // document that shrank under a stale scroll position can leave botRow < topRow for a frame. Guard the
+    // array size (a negative size threw NegativeArraySizeException) and treat it as nothing visible.
+    val visibleLines = when {
+        botRow < topRow -> emptyList()
+        !foldModel.hasFolds -> (firstVisible..lastVisible).toList()
+        else -> IntArray(botRow - topRow + 1) { foldModel.docLineForVisual(topRow + it) }.toList()
+    }
     val textLeft = gutterWidth + metrics.padLeft - hOff
     fun lineTop(line: Int) = metrics.padTop + foldModel.visualForDocLine(line) * lineH - vOff
     fun xOf(line: Int, offset: Int): Float =
@@ -2108,6 +2192,28 @@ private class AboveAnchorPositionProvider(
 }
 
 // ---- helpers ----
+
+/**
+ * A cheap, bounded backward scan: is the caret inside an open `(...)` call argument list? Used only as a gate
+ * so signature help hits the backend just when the caret is plausibly in a call (the backend does the real,
+ * literal-aware resolution). It bails at a statement boundary (`;`/`{`) or an opening `[`/`{` at depth 0 so an
+ * array index / lambda body doesn't read as a call. False positives only cost one backend call that returns null.
+ */
+private fun caretInsideCall(chars: CharSequence, caret: Int): Boolean {
+    var depth = 0
+    var i = (caret - 1).coerceAtMost(chars.length - 1)
+    var guard = 0
+    while (i >= 0 && guard < 4000) {
+        when (chars[i]) {
+            ')', ']', '}' -> depth++
+            '(' -> { if (depth == 0) return true; depth-- }
+            '[' -> { if (depth == 0) return false; depth-- }
+            '{', ';' -> if (depth == 0) return false
+        }
+        i--; guard++
+    }
+    return false
+}
 
 private fun paletteFor(syntax: SyntaxColors): Array<SpanStyle?> {
     val palette = arrayOfNulls<SpanStyle>(TokenType.entries.size)

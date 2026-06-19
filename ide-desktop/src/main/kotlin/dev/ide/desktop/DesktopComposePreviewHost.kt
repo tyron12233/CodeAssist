@@ -66,6 +66,12 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         }
         var renderError by remember(path, functionName, text) { mutableStateOf<Throwable?>(null) }
         var partialError by remember(path, functionName, text) { mutableStateOf<Throwable?>(null) }
+        // The interpreter re-runs on every recomposition pass, so a content lambda that fails deterministically
+        // hands the renderer a FRESH Throwable each pass. Writing that to `partialError` (read during
+        // composition) every pass would invalidate → re-run → invalidate … an unbounded recomposition loop.
+        // Track the last error identity (type + message) and update state only when it actually changes — incl.
+        // clearing to null. Keyed alongside `partialError` so both reset together on a new buffer.
+        val partialKey = remember(path, functionName, text) { arrayOfNulls<String>(1) }
 
         // Report interpret/render problems to the pane's shared problem chip (cleared when it renders cleanly),
         // so the details live in the tappable chip rather than covering the device frame.
@@ -90,12 +96,19 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                 is PreviewState.Ready -> renderer.Render(
                     s.lowered.entry, s.lowered.program, s.lowered.classes,
                     onError = { error ->
-                        LaunchedEffect(error) { renderError = error }
+                        // Key the capture on the error's identity, not the instance: the interpreter throws a
+                        // fresh Throwable each pass, so keying on `error` would relaunch + rewrite state every
+                        // recomposition → a render loop. Same message/type ⇒ same key ⇒ captured once.
+                        LaunchedEffect(error.message, error::class) { renderError = error }
                         PreviewRenderError(error)
                     },
                     onPartialError = { e ->
-                        if (e != null) log.warn("Compose preview partial render", e)
-                        partialError = e
+                        val key = e?.let { "${it::class.java.name}: ${it.message}" }
+                        if (key != partialKey[0]) {
+                            partialKey[0] = key
+                            if (e != null) log.warn("Compose preview partial render", e)
+                            partialError = e
+                        }
                     },
                 )
                 is PreviewState.NotInterpretable -> Text(

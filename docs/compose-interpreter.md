@@ -335,7 +335,17 @@ the renderer itself is device-proven.)
 **Resolver subset (widened).** ✅ String-template interpolation (`"a${x}b"` → `RNode.StringConcat`,
 stringified at runtime) and `when` (desugared to a nested `if`/`==` chain; a subject is evaluated once into a
 temp local; `is`/`in` conditions still `Unsupported`). CI-tested (`InterpreterTest`: interpolation, subject
-`when`, subjectless `when`).
+`when`, subjectless `when`). ✅ `super.foo(...)` / `super.prop` (`DispatchKind.SUPER`): lowered against the
+enclosing class's `this`, dispatched to the nearest SOURCE supertype implementation (skipping the lexical
+override); a `super` call into a binary superclass (`super.onCreate` → `ComponentActivity`) has no source body
+and no real super-instance, so the interpreter no-ops it. The point is that an unrelated overriding member in a
+preview's file (a `MainActivity.onCreate`) now lowers without a diagnostic. CI-tested
+(`SuperCallAndReachabilityTest`).
+
+**Preview gate scoping.** `IdeServices.lowerComposePreview` requires only the source classes the preview can
+actually REACH to lower cleanly (`reachableSourceClasses`: the transitive closure of constructed types, source
+calls, object/enum/property references, and their supertypes/members from the entry function), not every class
+in the file. An unrelated `Activity` the preview never instantiates can no longer block rendering.
 
 **Remaining:**
 - **`@Composable` content lambdas passed to non-composable scope builders** (`LazyColumn { items(xs) { i -> Text(i) } }`).

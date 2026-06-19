@@ -154,6 +154,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         )
     }
 
+    override val signatureHelp: dev.ide.lang.signature.SignatureHelpService by lazy {
+        KotlinSignatureHelpService(service) { refreshOverlay() }
+    }
+
     override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService by lazy {
         KotlinSemanticHighlighter(
             parsedFor = { lastByFile[it.path] },
@@ -451,7 +455,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             is KtReturnExpression -> returnTypeMismatch(psi, resolver)?.let { out += it }
             is KtBinaryExpression -> valReassignment(psi)?.let { out += it }
             is KtCallExpression -> KotlinPerf.span("sem.call") {
-                KotlinPerf.span("call.argCount") { argumentCountMismatch(psi)?.let { out += it } }
+                // The same-file PSI check first (it also catches "too many arguments"); only fall back to the
+                // overload-aware binary check when it didn't fire, so a call is never double-reported.
+                KotlinPerf.span("call.argCount") {
+                    val same = argumentCountMismatch(psi)
+                    if (same != null) out += same
+                    else missingRequiredArgument(psi, resolver)?.let { out += it }
+                }
                 KotlinPerf.span("call.ctor") { (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it } }
                 KotlinPerf.span("call.namedArgs") { out += unknownNamedArguments(psi, resolver) }
                 KotlinPerf.span("call.composable") { composableInvocation(psi, resolver)?.let { out += it } }
@@ -804,6 +814,23 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * same-file candidate by name (skipped if overloaded or has a vararg) whose required/maximum arity the
      * call violates is flagged.
      */
+    /**
+     * A call (member, top-level, or constructor — source OR binary) that omits a REQUIRED argument: `Button { }`
+     * without `onClick`. Delegates to [KotlinResolver.missingRequiredArgument], which is sound across overloads
+     * and backs off whenever per-parameter defaults aren't known. Reported as `kt.argumentCount` (the same code
+     * as the same-file check), so quick-fixes keyed on it apply uniformly. The span is the argument list, or the
+     * callee name for a bare trailing-lambda call (`Button { }`, which has no `(...)`).
+     */
+    private fun missingRequiredArgument(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        val missing = runCatching { resolver.missingRequiredArgument(call) }.getOrNull() ?: return null
+        val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+        val r = call.valueArgumentList?.textRange ?: callee.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "No value passed for required parameter $missing of '${callee.getReferencedName()}'", "kt.argumentCount",
+        )
+    }
+
     private fun argumentCountMismatch(call: KtCallExpression): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
         if (call.parent is KtQualifiedExpression && (call.parent as KtQualifiedExpression).selectorExpression === call) return null // member call: receiver unknown

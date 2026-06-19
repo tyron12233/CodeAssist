@@ -76,7 +76,10 @@ fun reorderNamedArgs(paramNames: List<String>, rawArgs: List<RArg>, args: List<A
     val nameToIndex = HashMap<String, Int>(n * 2)
     paramNames.forEachIndexed { i, nm -> nameToIndex.putIfAbsent(nm, i) }
     val slots = MutableList<Any?>(n) { OmittedArg }
-    val trailingLambda = args.lastOrNull() is InterpretedLambda && rawArgs.last().name == null
+    // Only a SYNTACTIC trailing lambda (`{ }` outside the parens) binds to the last parameter. A lambda inside
+    // the parens — `onCheckedChange = { }` (named) or a positional `f(x, { })` — is a normal value argument
+    // that binds by name/position, NOT to the last parameter.
+    val trailingLambda = rawArgs.lastOrNull()?.trailingLambda == true
     var nextPositional = 0
     for (i in args.indices) {
         val target = when {
@@ -199,7 +202,9 @@ class ReflectiveDispatcher(
         val args = if (callee is ResolvedCallable.Library)
             reorderNamedArgs(callee.paramNames, call.args, args) else args
         return when (call.dispatch) {
-            DispatchKind.MEMBER, DispatchKind.OPERATOR, DispatchKind.INVOKE -> {
+            // SUPER is resolved by the interpreter (source super → the supertype body; binary super → no-op), so
+            // it normally never reaches here; if it does, the only sound thing is a plain instance invocation.
+            DispatchKind.MEMBER, DispatchKind.OPERATOR, DispatchKind.INVOKE, DispatchKind.SUPER -> {
                 val target = receiver ?: throw InterpreterException("instance call `${callee.displayName}` has no receiver")
                 invokeInstance(target, callee.displayName, args, composableParamFlags(callee, args))
             }

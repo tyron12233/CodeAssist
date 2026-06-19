@@ -653,6 +653,13 @@ class EditorSession(
      * already expressed in pre-edit offsets, then land the caret at [finalSelection]. One notify.
      */
     fun applyEdits(edits: List<RangeEdit>, finalSelection: TextRange) {
+        // A completion accepted while the IME was composing (the typed prefix is the composing region) replaces
+        // that region programmatically. Clearing our own [composing] + pushing the new selection isn't enough:
+        // the IME keeps its OWN composing buffer (the pre-accept prefix), so the next keystroke/Enter re-inserts
+        // it. Force the IME to restart so it discards that buffer and re-reads the post-accept text/selection —
+        // but only when a region was actually composing, to avoid an unnecessary restart on a plain edit
+        // (auto-close bracket, block edit) where the IME state is already coherent.
+        val wasComposing = composing != null
         beginBatch()
         composing = null
         for (e in edits.sortedByDescending { it.start }) {
@@ -660,6 +667,7 @@ class EditorSession(
         }
         updateSelectionAndComposing(finalSelection, null)
         endBatch()
+        if (wasComposing) imeListener?.onRestartInput()
     }
 
     // ---- IME bridge (called by the platform InputConnection) ----

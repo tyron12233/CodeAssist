@@ -16,7 +16,7 @@ import dev.ide.platform.log.Log
  */
 object KotlinPerf {
     @Volatile
-    var enabled: Boolean = runCatching { true || System.getProperty("ide.kotlin.perf")?.toBoolean() == true }.getOrNull() ?: false
+    var enabled: Boolean = runCatching { System.getProperty("ide.kotlin.perf")?.toBoolean() == true }.getOrNull() ?: false
 
     private val log = Log.logger("kotlin-perf")
     private val current = ThreadLocal<Trace?>()

@@ -110,6 +110,13 @@ object ComposableAbi {
         loader: ClassLoader? = null,
         receiver: Any? = null,
         receiverCount: Int = 0,
+        // True when [originalArgs] are already in declaration order (named-arg reordering ran), so they bind to
+        // JVM slots POSITIONALLY — never via the trailing-lambda remap. When false, [lastArgIsTrailingLambda]
+        // decides whether the final lambda is a SYNTACTIC trailing lambda (binds to the last value parameter)
+        // or an in-parens lambda argument (binds positionally — `Switch(checked, onCheckedChange = { … })`,
+        // whose `onCheckedChange` must NOT land on the last `interactionSource` parameter).
+        argsInDeclarationOrder: Boolean = false,
+        lastArgIsTrailingLambda: Boolean = originalArgs.lastOrNull() is InterpretedLambda,
     ): Any? {
         val owner = loadClassNoInit(ownerFqn, loader) ?: Class.forName(ownerFqn)
         // Pick the transformed overload to invoke from the RUNTIME class, then derive the real value-parameter
@@ -123,8 +130,10 @@ object ComposableAbi {
         // Bind supplied args to parameter slots. After named-arg reordering the args are already in declaration
         // order (with `OmittedArg` holes); otherwise a trailing lambda binds to the last declared parameter.
         val k = originalArgs.size
-        val ordered = originalArgs.any { it === OmittedArg }
-        val trailingLambda = !ordered && originalArgs.lastOrNull() is InterpretedLambda
+        // A trailing-lambda remap (last arg → last value parameter) applies ONLY to a syntactic trailing lambda
+        // on a purely positional call. Reordered (declaration-order) args bind positionally; an interior
+        // OmittedArg hole likewise means the caller already placed the args.
+        val trailingLambda = !argsInDeclarationOrder && lastArgIsTrailingLambda && originalArgs.none { it === OmittedArg }
         val slots = arrayOfNulls<Any?>(n)
         val provided = BooleanArray(n)
         for (i in 0 until k) {

@@ -185,6 +185,9 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     /** Inlay hints (var/lambda types, parameter names, chaining) over the binding DOM. */
     override val inlayHints: dev.ide.lang.hints.InlayHintService = JdtInlayHintService(this)
 
+    /** Parameter-info popup (call overloads + active argument) over the binding DOM. */
+    override val signatureHelp: dev.ide.lang.signature.SignatureHelpService = JdtSignatureHelpService(this)
+
     /** Type-aware semantic coloring (fields vs locals, real types, static/final) over the binding DOM. */
     override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService =
         dev.ide.lang.jdt.highlight.JdtSemanticHighlighter(this)

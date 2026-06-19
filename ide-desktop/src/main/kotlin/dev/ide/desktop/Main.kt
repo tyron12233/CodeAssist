@@ -1,5 +1,6 @@
 package dev.ide.desktop
 
+import androidx.compose.material.Button
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window

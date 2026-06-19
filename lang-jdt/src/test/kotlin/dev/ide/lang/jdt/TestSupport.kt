@@ -86,6 +86,17 @@ fun completeResult(analyzer: JdtSourceAnalyzer, file: Path, codeWithCaret: Strin
     return runSync { analyzer.completion.complete(request) }
 }
 
+/** Signature help at the `|CARET|` in [codeWithCaret], as if editing [file]. */
+fun signatureHelpAt(analyzer: JdtSourceAnalyzer, file: Path, codeWithCaret: String): dev.ide.lang.signature.SignatureHelp? {
+    val offset = codeWithCaret.indexOf("|CARET|")
+    require(offset >= 0) { "missing |CARET|" }
+    val text = codeWithCaret.replace("|CARET|", "")
+    val request = dev.ide.lang.signature.SignatureHelpRequest(
+        Snapshot(StubFile(file.toString(), text), 1, text), offset, dev.ide.lang.signature.SignatureHelpTrigger.Explicit,
+    )
+    return runSync { analyzer.signatureHelp!!.signatureHelp(request) }
+}
+
 private class Snapshot(override val file: VirtualFile, override val version: Long, override val text: CharSequence) : DocumentSnapshot {
     override fun length() = text.length
 }

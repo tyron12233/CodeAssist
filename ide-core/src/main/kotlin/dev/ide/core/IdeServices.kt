@@ -1994,6 +1994,21 @@ class IdeServices private constructor(
     private fun isWordStart(c: Char): Boolean = c.isLetter() || c == '_' || c == '$'
     private fun isWordChar(c: Char): Boolean = c.isLetterOrDigit() || c == '_' || c == '$'
 
+    /** Parameter-info / signature help at [offset] in [text] (the live buffer), bound to [file]'s module +
+     *  language. Null when the file is outside the project, its backend has no signature-help service, or the
+     *  caret isn't inside a resolvable call. */
+    fun signatureHelp(file: Path, text: String, offset: Int): dev.ide.lang.signature.SignatureHelp? {
+        val module = moduleForEditableFile(file) ?: return null
+        updateDocument(file, text) // the live buffer feeds the analyzer's overlay
+        val analyzer = analyzerFor(module, languageFor(file))
+        val service = analyzer.signatureHelp ?: return null
+        val snapshot = EditorDocument(store.vfs.fileFor(file), docVersion.incrementAndGet(), text)
+        val request = dev.ide.lang.signature.SignatureHelpRequest(
+            snapshot, offset, dev.ide.lang.signature.SignatureHelpTrigger.CursorUpdate,
+        )
+        return runCatching { runSync { service.signatureHelp(request) } }.getOrNull()
+    }
+
     /** Inlay hints for [text] (the live buffer) in `[startOffset, endOffset)`, bound to [file]'s module +
      *  language. Empty when the file is outside the project or its backend has no inlay-hint service. */
     fun inlayHints(file: Path, text: String, startOffset: Int, endOffset: Int): List<dev.ide.lang.hints.InlayHint> {
@@ -2209,10 +2224,13 @@ class IdeServices private constructor(
         if (analyzer.hasSyntaxErrors(vf)) return null
         val program = analyzer.lowerFile(vf)
         val entry = program["$functionName/0"]?.takeIf { it.isComplete } ?: return null
-        // Every source type the preview may construct must lower cleanly too (a malformed `data class` would
-        // otherwise build wrong-typed instances) — not just the entry function.
+        // Every source type the preview can actually REACH must lower cleanly too (a malformed `data class` it
+        // constructs would otherwise build wrong-typed instances). Scope the check to reachable types only — an
+        // unrelated class in the same file (e.g. a `MainActivity` whose `onCreate` uses a construct the
+        // interpreter doesn't model) is never instantiated by the preview, so it must not block rendering.
         val classes = analyzer.lowerFileClasses(vf)
-        if (classes.any { !it.isComplete }) return null
+        val reachable = dev.ide.lang.kotlin.interp.reachableSourceClasses(entry, program, classes)
+        if (classes.any { it.fqn in reachable && !it.isComplete }) return null
         return LoweredComposePreview(entry, program, classes)
     }
 

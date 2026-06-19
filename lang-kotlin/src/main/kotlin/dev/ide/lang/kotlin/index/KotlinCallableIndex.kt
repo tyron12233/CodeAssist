@@ -39,7 +39,7 @@ import java.io.DataOutput
  */
 object KotlinCallableIndex : IndexExtension<String, CallableShape> {
     override val id = IndexId("kotlin.callables")
-    override val version = 2 // v2: + CallableShape.varargParamIndex (vararg-aware call resolution)
+    override val version = 3 // v3: + CallableShape.paramHasDefault (missing-required-argument detection)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = CallableShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried by prefix on a tagged key; no fuzzy
@@ -104,6 +104,7 @@ class CallableShape(
     val isComposable: Boolean,
     val isInline: Boolean,
     val varargParamIndex: Int = -1,
+    val paramHasDefault: List<Boolean> = emptyList(),
 ) {
     fun toSymbol(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymbol(
         name = name,
@@ -122,6 +123,7 @@ class CallableShape(
         isComposable = isComposable,
         isInline = isInline,
         varargParamIndex = varargParamIndex,
+        paramHasDefault = paramHasDefault,
     )
 
     companion object {
@@ -138,6 +140,7 @@ class CallableShape(
             s.isComposable,
             s.isInline,
             s.varargParamIndex,
+            s.paramHasDefault,
         )
     }
 }
@@ -160,6 +163,7 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         out.writeBoolean(value.isComposable)
         out.writeBoolean(value.isInline)
         out.writeInt(value.varargParamIndex)
+        out.writeInt(value.paramHasDefault.size); value.paramHasDefault.forEach { out.writeBoolean(it) }
     }
 
     override fun read(inp: DataInput): CallableShape {
@@ -178,7 +182,8 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         val isComposable = inp.readBoolean()
         val isInline = inp.readBoolean()
         val varargIdx = inp.readInt()
-        return CallableShape(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, varargIdx)
+        val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
+        return CallableShape(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, varargIdx, paramHasDefault)
     }
 
     /** Recursive, context-free encoding of a [KotlinType] (fqn + flags + args). */

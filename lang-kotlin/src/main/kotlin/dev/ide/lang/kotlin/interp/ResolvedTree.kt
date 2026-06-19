@@ -32,6 +32,12 @@ enum class DispatchKind {
      *  `Modifier.weight(1f)` inside `Row { }`. [RNode.Call.dispatchReceiver] is the scope instance (the
      *  content lambda's receiver), [RNode.Call.receiver] is the extension receiver (the `Modifier`). */
     MEMBER_EXTENSION,
+    /** A `super.foo(...)` call: dispatched on the same instance ([RNode.Call.receiver] is `this`) but resolved
+     *  to the SUPERCLASS implementation, skipping the lexical class's own override. The callee's owner FQN (the
+     *  lexical class) tells the interpreter where to start the super lookup. A super call into a binary
+     *  superclass (`super.onCreate` → `ComponentActivity`) has no source body and no real super-instance to
+     *  reflect into, so the interpreter treats it as a no-op. */
+    SUPER,
 }
 
 /** What a name resolves to. Locals/params carry their slot; the rest carry enough to read/invoke. */
@@ -106,8 +112,17 @@ sealed interface ResolvedCallable {
     ) : ResolvedCallable
 }
 
-/** One argument of a call. [name] is set for a named argument; [spread] for a `*array` vararg spread. */
-data class RArg(val value: RNode, val name: String? = null, val spread: Boolean = false)
+/** One argument of a call. [name] is set for a named argument; [spread] for a `*array` vararg spread.
+ *  [trailingLambda] marks a SYNTACTIC trailing lambda — a `{ }` written OUTSIDE the parentheses (Kotlin's
+ *  trailing-lambda sugar, a `KtLambdaArgument`), which binds to the callee's LAST value parameter. A lambda
+ *  written INSIDE the parens (`onCheckedChange = { }`, or a positional `f(x, { })`) is a normal value
+ *  argument that binds POSITIONALLY — it must NOT be remapped to the last parameter. */
+data class RArg(
+    val value: RNode,
+    val name: String? = null,
+    val spread: Boolean = false,
+    val trailingLambda: Boolean = false,
+)
 
 /** A lambda/function parameter slot. */
 data class RParam(val slot: SlotId, val name: String, val type: KotlinType?)
@@ -261,6 +276,86 @@ data class LoweringDiagnostic(val reason: String, val source: SourceSpan)
 fun RNode.walk(visit: (RNode) -> Unit) {
     visit(this)
     children().forEach { it.walk(visit) }
+}
+
+/** The source class a binding refers to, if any: an `object`/companion singleton, an enum entry's enum, or a
+ *  property's declaring class. Null for a local/param/receiver, or when the owner is a binary facade (a
+ *  caller maps the name against the file's source classes and ignores misses). */
+fun Binding.referencedClass(): String? = when (this) {
+    is Binding.ObjectRef -> fqn
+    is Binding.EnumEntry -> enumFqn
+    is Binding.Property -> ownerFqn
+    else -> null
+}
+
+/**
+ * The source classes [entry] can actually reach — transitively through the source functions it calls, the
+ * source types it constructs/references, and the supertypes/members those pull in. A preview gate need only
+ * require THESE to lower cleanly: a source type the preview never touches (an unrelated `Activity` in the same
+ * file) can't make the preview build wrong-typed instances, so it must not block rendering.
+ *
+ * Conservative in the safe direction: it errs toward reaching MORE classes (it follows every constructor,
+ * member call, object/enum/property reference, supertype, and `init`/default expression it sees), so a class
+ * the preview really might use is included. A transitive function call that doesn't match a program key by
+ * `name/arity` (e.g. an omitted default argument) simply isn't followed — only its classes might be missed,
+ * never falsely included.
+ */
+fun reachableSourceClasses(
+    entry: ResolvedFunction,
+    program: Map<String, ResolvedFunction>,
+    classes: List<ResolvedClass>,
+): Set<String> {
+    val byFqn = classes.associateBy { it.fqn }
+    val bySimple = classes.groupBy { it.simpleName }.mapValues { it.value.first() }
+    fun classOf(name: String): ResolvedClass? = byFqn[name] ?: bySimple[name.substringAfterLast('.')]
+
+    val reached = LinkedHashSet<String>()
+    // Bodies still to scan, de-duplicated by identity (a tree's structural hash would be costly and a function
+    // is only ever the same object instance within one lowering).
+    val scanned = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<RNode, Boolean>())
+    val work = ArrayDeque<RNode>()
+    fun addBody(node: RNode?) { if (node != null && scanned.add(node)) work.add(node) }
+
+    fun reachClass(name: String?) {
+        val cls = name?.let { classOf(it) } ?: return
+        if (!reached.add(cls.fqn)) return
+        // Constructing or referencing a source type runs its super constructor and initializers and exposes its
+        // members — all of which must lower cleanly for an instance to be well-formed.
+        cls.superCall?.let { sc -> reachClass(sc.fqn); sc.args.forEach { addBody(it.value) } }
+        cls.supertypes.forEach { reachClass(it) }
+        cls.primaryParams.forEach { addBody(it.default) }
+        cls.initSteps.forEach { addBody(it) }
+        cls.methods.values.forEach { addBody(it.body) }
+        cls.enumEntries.forEach { e -> e.args.forEach { addBody(it.value) } }
+    }
+
+    addBody(entry.body)
+    while (work.isNotEmpty()) {
+        work.removeFirst().walk { node ->
+            when (node) {
+                is RNode.Call -> {
+                    val callee = node.callee
+                    if (callee is ResolvedCallable.Source) {
+                        val owner = callee.declId.substringBeforeLast('/')
+                        if (callee.isConstructor) {
+                            reachClass(owner)
+                        } else {
+                            // A top-level source function (`Greeting(...)`) is keyed `name/arity` in the program;
+                            // a member/super call carries its declaring class as `owner` (`pkg.Type.name`).
+                            program["${callee.displayName}/${node.args.size}"]?.let { addBody(it.body) }
+                            if ('.' in owner) reachClass(owner.substringBeforeLast('.'))
+                        }
+                    }
+                }
+                is RNode.Name -> node.binding.referencedClass()?.let { reachClass(it) }
+                is RNode.PropertyGet -> node.binding.referencedClass()?.let { reachClass(it) }
+                is RNode.PropertySet -> node.binding.referencedClass()?.let { reachClass(it) }
+                is RNode.TypeCheck -> reachClass(node.typeFqn)
+                else -> {}
+            }
+        }
+    }
+    return reached
 }
 
 /** Direct child nodes, for traversal. */

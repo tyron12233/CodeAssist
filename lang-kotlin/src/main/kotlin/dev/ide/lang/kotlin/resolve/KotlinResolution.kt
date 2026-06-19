@@ -116,6 +116,27 @@ class KotlinResolver(
         KtTokens.ANDAND, KtTokens.OROR, KtTokens.LT, KtTokens.GT, KtTokens.LTEQ, KtTokens.GTEQ,
         KtTokens.EQEQ, KtTokens.EXCLEQ, KtTokens.EQEQEQ, KtTokens.EXCLEQEQEQ -> service.typeByFqn("kotlin.Boolean")
         KtTokens.ELVIS -> inferType(e.left)?.withNullable(false) ?: inferType(e.right)
+        // An infix call (`a to b`, `0 until n`): the result is the infix function's return type, so a chain
+        // off it (`(1 to 2).first`, `(0 until n).count()`) can resolve its receiver. Resolved as a single-param
+        // member of the left type, else a single-param extension on it (member-first, like the lowering). The
+        // receiver's type parameter is already bound by the member/extension lookup; the value parameter's is
+        // bound here from the right operand (`"" to 1` → `Pair<String, Int>`, not `Pair<String, B>`).
+        KtTokens.IDENTIFIER -> {
+            val name = e.operationReference.getReferencedName()
+            val leftType = inferType(e.left) ?: return null
+            val member = service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
+                .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            val callable = member ?: service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name)
+                .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+            val raw = callable?.type as? KotlinType
+            if (raw == null || callable.typeParameters.isEmpty()) raw
+            else {
+                val bindings = HashMap<String, TypeRef>()
+                val pt = callable.paramTypes.firstOrNull() as? KotlinType
+                if (pt != null) inferType(e.right)?.let { unify(pt, it, bindings) }
+                service.substitute(raw, bindings) as? KotlinType ?: raw
+            }
+        }
         else -> {
             val convention = ARITHMETIC_CONVENTIONS[token] ?: return null
             val leftType = inferType(e.left) ?: return null
@@ -486,6 +507,41 @@ class KotlinResolver(
             out += idx
         }
         return out
+    }
+
+    /**
+     * The name (or `#index`) of a value parameter the [call] leaves unfilled even though it is REQUIRED — no
+     * default, not a vararg — i.e. Kotlin's "No value passed for parameter 'x'" (`Button { }` omits the
+     * required `onClick`). Null when the call is valid OR can't be judged soundly. Conservative over the
+     * parse-only model, mirroring the other call checks:
+     *  - backs off entirely if ANY candidate overload's per-parameter defaults are UNKNOWN (Java bytecode, an
+     *    old cache) — that overload might accept the call;
+     *  - backs off on a spread argument (arity opaque);
+     *  - reports only when EVERY candidate is missing a required parameter (so a sibling overload that accepts
+     *    the args makes it valid — `remember { }` vs `remember(vararg, calc)`).
+     * Used by both the editor diagnostic (`kt.argumentCount`) and the Compose preview lowering (which rejects
+     * the call rather than running invalid code with a null stand-in for the missing argument).
+     */
+    fun missingRequiredArgument(call: KtCallExpression): String? {
+        if (call.valueArguments.any { it.getSpreadElement() != null }) return null
+        val candidates = runCatching { callTargets(call) }.getOrDefault(emptyList())
+            .filter { it.kind == SymbolKind.METHOD || it.kind == SymbolKind.CONSTRUCTOR }
+        if (candidates.isEmpty()) return null
+        // Every candidate must carry KNOWN per-parameter defaults (size matches its params); else an overload we
+        // can't judge might accept the call, so we must not flag.
+        if (candidates.any { it.paramTypes.isNotEmpty() && it.paramHasDefault.size != it.paramTypes.size }) return null
+        var report: String? = null
+        for (c in candidates) {
+            val supplied = suppliedValueParameterIndices(c, call)
+            val missing = c.paramTypes.indices.firstOrNull { i ->
+                i !in supplied && i != c.varargParamIndex && c.paramHasDefault.getOrElse(i) { true } == false
+            } ?: return null // this overload is fully satisfied → the call is valid
+            if (report == null) {
+                val nm = c.paramNames.getOrNull(missing)
+                report = if (nm != null && nm.isNotEmpty()) "'$nm'" else "#${missing + 1}"
+            }
+        }
+        return report
     }
 
     /** A lambda fills a functional parameter (a Kotlin `(…) -> R` or a Java SAM); bind its result type
@@ -954,6 +1010,8 @@ class KotlinResolver(
             origin = SOURCE, signature = sig,
             paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
             paramNames = params.map { (n, _) -> n },
+            paramHasDefault = fn.valueParameters.map { it.hasDefaultValue() },
+            varargParamIndex = fn.valueParameters.indexOfFirst { it.isVarArg },
             isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" },
             // Top-level callables carry their package for import-visibility; members don't (mirror toSymbol).
             packageName = if (ownerFqn == null) fileContext.packageName.ifEmpty { null } else null,

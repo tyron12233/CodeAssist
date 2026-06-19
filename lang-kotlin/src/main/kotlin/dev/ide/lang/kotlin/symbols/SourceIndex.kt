@@ -53,6 +53,9 @@ class RawCallable(
     /** The function's own type-parameter names (`fun <T> items(…)` → `["T"]`) — so a param/return type that
      *  references one is marked a type parameter (enabling generic inference: binding `T` from an argument). */
     val typeParameterNames: List<String> = emptyList(),
+    /** Whether each value parameter declares a default (positional with [paramTexts]) — so a required-argument
+     *  check can tell which the call may omit. Empty ⇒ not a function / unknown. */
+    val paramHasDefault: List<Boolean> = emptyList(),
 )
 
 class RawClass(
@@ -153,7 +156,8 @@ object SourceIndexBuilder {
         if (c.primaryConstructorParameters.isNotEmpty() || c.hasExplicitPrimaryConstructor()) {
             ctors += RawCallable(c.name ?: "", true, null, fqn, null,
                 c.primaryConstructorParameters.map { (it.name ?: "_") to it.typeReference?.text }, ctx, node(parsed, c),
-                varargParamIndex = c.primaryConstructorParameters.indexOfFirst { it.isVarArg })
+                varargParamIndex = c.primaryConstructorParameters.indexOfFirst { it.isVarArg },
+                paramHasDefault = c.primaryConstructorParameters.map { it.hasDefaultValue() })
         }
         val enumEntries = ArrayList<String>()
         for (d in c.declarations) {
@@ -174,6 +178,7 @@ object SourceIndexBuilder {
                 name = "copy", isFunction = true, receiverText = null, returnText = fqn, initializerText = null,
                 paramTexts = c.primaryConstructorParameters.map { (it.name ?: "_") to it.typeReference?.text },
                 ctx = ctx, node = node(parsed, c),
+                paramHasDefault = c.primaryConstructorParameters.map { true }, // copy() defaults every param to the current value
             )
         }
         val companion = c.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtObjectDeclaration>().firstOrNull { it.isCompanion() }
@@ -221,6 +226,7 @@ object SourceIndexBuilder {
         isInline = f.hasModifier(KtTokens.INLINE_KEYWORD),
         isSuspend = f.hasModifier(KtTokens.SUSPEND_KEYWORD),
         varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
+        paramHasDefault = f.valueParameters.map { it.hasDefaultValue() },
         typeParameterNames = f.typeParameters.mapNotNull { it.name },
     )
 

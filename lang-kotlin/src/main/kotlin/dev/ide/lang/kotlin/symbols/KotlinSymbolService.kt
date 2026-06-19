@@ -706,6 +706,7 @@ class KotlinSymbolService(
             isInline = s.isInline,
             isSuspend = s.isSuspend,
             varargParamIndex = s.varargParamIndex,
+            paramHasDefault = s.paramHasDefault,
             declarationNode = s.declaration(), doc = s.documentation(),
         )
     }
@@ -974,6 +975,7 @@ class KotlinSymbolService(
             isInline = rc.isInline,
             isSuspend = rc.isSuspend,
             varargParamIndex = if (rc.isFunction) rc.varargParamIndex else -1,
+            paramHasDefault = if (rc.isFunction) rc.paramHasDefault else emptyList(),
             // Top-level callables (no owner) carry their package for import-visibility; members don't.
             packageName = if (ownerFqn == null) rc.ctx.packageName.ifEmpty { null } else null,
             declarationNode = rc.node,

@@ -333,10 +333,88 @@ class ComposableAbiDefaultsTest {
         var reported: Throwable? = null
         val renderer = ComposePreviewRenderer()
         composeOnce {
-            renderer.Render(entry, emptyMap()) { reported = it } // must not throw out of the composition
+            // Named arg, NOT a trailing lambda: `onPartialError` is Render's last parameter, so a trailing
+            // lambda binds there instead — this top-level failure surfaces through `onError`.
+            renderer.Render(entry, emptyMap(), onError = { reported = it }) // must not throw out of the composition
         }
         assertEquals(true, reported != null, "a runtime interpreter failure should be reported via onError")
     }
+
+    @Test
+    fun inParensLambdaArgBindsPositionallyNotToTheLastParam() {
+        // The `Switch(checked = …, onCheckedChange = { … })` crash in miniature. `Toggle`'s shape mirrors it: a
+        // function-typed parameter (`onChange`) followed by a defaulted parameter (`source`, cf. Switch's
+        // `interactionSource`). The lambda is an IN-PARENS argument, so it binds to `onChange` (param 1) — NOT
+        // remapped to the last `source` parameter. The old trailing-lambda heuristic misbound it to `source`,
+        // leaving the lambda proxied into the wrong type (the real null-`interactions` ThumbNode crash) and
+        // `onChange` defaulted to null. Driven through the dispatcher with NAMED args, exactly like the report.
+        val facade = "dev.ide.interp.compose.ComposableAbiDefaultsTestKt"
+        val span = dev.ide.lang.kotlin.interp.SourceSpan(0, 0)
+        val lambda = object : dev.ide.interp.InterpretedLambda {
+            override val paramCount = 1
+            override fun invoke(args: List<Any?>): Any? = null
+        }
+        // A named lambda argument written inside the parens (trailingLambda = false).
+        fun arg(name: String, v: dev.ide.lang.kotlin.interp.RNode) = dev.ide.lang.kotlin.interp.RArg(v, name, false, false)
+        val callee = dev.ide.lang.kotlin.interp.ResolvedCallable.Library(
+            displayName = "Toggle", ownerFqn = facade, methodName = "Toggle",
+            paramTypes = listOf(
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.Boolean"),
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.Function1"),
+                dev.ide.lang.kotlin.symbols.KotlinType("dev.ide.interp.compose.ToggleSource"),
+            ),
+            isStatic = true, isConstructor = false, isInline = false, isComposable = true,
+            paramNames = listOf("checked", "onChange", "source"),
+        )
+        val call = dev.ide.lang.kotlin.interp.RNode.Call(
+            callee, dev.ide.lang.kotlin.interp.DispatchKind.TOP_LEVEL, receiver = null,
+            args = listOf(arg("checked", dev.ide.lang.kotlin.interp.RNode.Const(true, null, span)), arg("onChange", dev.ide.lang.kotlin.interp.RNode.Const(null, null, span))),
+            callSiteKey = dev.ide.lang.kotlin.interp.CallSiteKey(21), source = span,
+        )
+        val dispatcher = ComposeDispatcher()
+        composeOnce {
+            dispatcher.composer = currentComposer
+            dispatcher.dispatch(call, receiver = null, args = listOf<Any?>(true, lambda))
+        }
+        assertEquals(true, Capture.flag, "`checked` should bind to parameter 0")
+        assertEquals("nullsource", Capture.label, "`source` must default (null) — the lambda is `onChange`, not `source`")
+    }
+
+    @Test
+    fun positionalInParensLambdaDoesNotRemapToLastParam() {
+        // The same shape, purely positional through the ABI (`Toggle(true, { })` — the `{ }` is an in-parens
+        // value argument, not a trailing lambda): with lastArgIsTrailingLambda = false it binds to `onChange`,
+        // and `source` defaults.
+        val lambda = object : dev.ide.interp.InterpretedLambda {
+            override val paramCount = 1
+            override fun invoke(args: List<Any?>): Any? = null
+        }
+        composeOnce {
+            val composer: Any = currentComposer
+            ComposableAbi.startGroup(composer, KEY)
+            try {
+                ComposableAbi.call(
+                    ownerFqn = "dev.ide.interp.compose.ComposableAbiDefaultsTestKt",
+                    method = "Toggle",
+                    originalArgs = listOf<Any?>(true, lambda),
+                    composer = composer,
+                    declaredParamCount = 3,
+                    lambdaProxy = ::anyProxy,
+                    lastArgIsTrailingLambda = false, // a lambda inside the parens, not a trailing lambda
+                )
+            } finally {
+                ComposableAbi.endGroup(composer)
+            }
+        }
+        assertEquals(true, Capture.flag, "`checked` binds to parameter 0")
+        assertEquals("nullsource", Capture.label, "`source` defaults — the lambda bound to `onChange`")
+    }
+
+    /** A general proxy: wrap an interpreted lambda as any single-method functional interface. */
+    private fun anyProxy(lambda: dev.ide.interp.InterpretedLambda, fi: Class<*>): Any =
+        java.lang.reflect.Proxy.newProxyInstance(fi.classLoader, arrayOf(fi)) { _, m, a ->
+            if (m.name == "invoke") lambda.invoke(a?.toList() ?: emptyList()) else null
+        }
 
     // --- harness ---
 
@@ -441,6 +519,18 @@ fun FakeBarScope.BarItem(selected: Boolean, label: String = "deflabel", count: I
 object FakeTheme {
     val palette: String
         @Composable @ReadOnlyComposable get() = "themed"
+}
+
+/** A marker (cf. `MutableInteractionSource`): a defaulted parameter that follows a function-typed one — the
+ *  shape behind the `Switch(checked, onCheckedChange = { })` crash. */
+interface ToggleSource
+
+/** Mirrors `Switch`'s parameter shape: a function-typed `onChange` followed by a DEFAULTED `source`. An
+ *  in-parens lambda must bind to `onChange`, leaving `source` to default — not be remapped onto `source`. */
+@Composable
+fun Toggle(checked: Boolean, onChange: (Boolean) -> Unit, source: ToggleSource? = null) {
+    Capture.flag = checked
+    Capture.label = if (source == null) "nullsource" else "hassource"
 }
 
 /** Top-level capture sink (the composable writes here; the test reads it). */

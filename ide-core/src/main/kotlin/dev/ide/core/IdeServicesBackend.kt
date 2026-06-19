@@ -1092,6 +1092,28 @@ class IdeServicesBackend(
         }
     }
 
+    override suspend fun signatureHelp(path: String, text: String, offset: Int): dev.ide.ui.backend.UiSignatureHelp? {
+        // Background lane: completion (interactive) preempts it. A preemption just means "no panel this round";
+        // the editor re-queries on the next caret move / edit, so swallowing it to null is correct (no retry needed).
+        val help = try {
+            background { services.signatureHelp(Paths.get(path), text, offset) }
+        } catch (e: EngineCanceledException) {
+            return null
+        } ?: return null
+        return dev.ide.ui.backend.UiSignatureHelp(
+            signatures = help.signatures.map { s ->
+                dev.ide.ui.backend.UiSignature(
+                    label = s.label,
+                    parameters = s.parameters.map { p -> dev.ide.ui.backend.UiSignatureParam(p.label, p.labelStart, p.labelEnd) },
+                    documentation = s.documentation,
+                    activeParameter = s.activeParameter,
+                )
+            },
+            activeSignature = help.activeSignature,
+            activeParameter = help.activeParameter,
+        )
+    }
+
     override suspend fun semanticTokens(path: String, text: String): List<dev.ide.ui.backend.UiSemanticToken> {
         val tokens = try {
             background { services.semanticTokens(Paths.get(path), text) }

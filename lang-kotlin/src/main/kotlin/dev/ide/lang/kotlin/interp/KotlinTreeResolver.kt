@@ -48,6 +48,7 @@ import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtUnaryExpression
 import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtWhenConditionInRange
 import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
@@ -629,12 +630,41 @@ class KotlinTreeResolver(
     }
 
     private fun qualifiedNode(e: KtDotQualifiedExpression): RNode {
+        if (e.receiverExpression is KtSuperExpression) return superNode(e)
         val receiver = lower(e.receiverExpression)
         if (receiver is RNode.Unsupported) return receiver
         return when (val sel = e.selectorExpression) {
             is KtCallExpression -> callNode(sel, receiver, e.receiverExpression)
             is KtNameReferenceExpression -> propertyGet(sel.getReferencedName(), receiver, e.receiverExpression, e)
             else -> unsupported("qualified selector ${sel?.let { it::class.simpleName }}", e)
+        }
+    }
+
+    /**
+     * `super.foo(args)` / `super.prop` — same instance, superclass implementation. The receiver is the
+     * enclosing class's `this` (so a source-superclass method runs on the right object); the call carries
+     * [DispatchKind.SUPER] and the lexical class FQN so the interpreter starts the method lookup at the
+     * supertypes, skipping this class's own override. A super call to a binary superclass (`super.onCreate`)
+     * has no source body — the interpreter no-ops it; the point here is that lowering produces no diagnostic,
+     * so an unrelated overriding member (a `MainActivity.onCreate`) doesn't block the file's previews.
+     */
+    private fun superNode(e: KtDotQualifiedExpression): RNode {
+        val ctx = classStack.lastOrNull() ?: return unsupported("`super` outside a class body", e)
+        val receiver = thisRef(ctx, e)
+        return when (val sel = e.selectorExpression) {
+            is KtCallExpression -> {
+                val name = (sel.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+                    ?: return unsupported("super call without a simple name", e)
+                val arity = sel.valueArguments.size
+                val callee = ResolvedCallable.Source(name, "${ctx.fqn}.$name/$arity", emptyList(), isConstructor = false)
+                RNode.Call(callee, DispatchKind.SUPER, receiver, lowerArgs(sel), CallSiteKey(sel.textRange.startOffset), span(e))
+            }
+            // `super.prop` reads the inherited/overridden property off the same instance.
+            is KtNameReferenceExpression ->
+                if (sel.getReferencedName() in ctx.propertyNames)
+                    RNode.PropertyGet(receiver, Binding.Property(sel.getReferencedName(), ctx.fqn, backingField = false), span(e))
+                else unsupported("super property `${sel.getReferencedName()}` (not a known member)", e)
+            else -> unsupported("super selector ${sel?.let { it::class.simpleName }}", e)
         }
     }
 
@@ -765,7 +795,9 @@ class KotlinTreeResolver(
 
     private fun lowerArgs(call: KtCallExpression): List<RArg> = call.valueArguments.map { va ->
         val expr = va.getArgumentExpression() ?: return@map RArg(unsupported("empty argument", call))
-        RArg(lower(expr), va.getArgumentName()?.asName?.identifier, va.getSpreadElement() != null)
+        // A `KtLambdaArgument` is a trailing lambda (written outside the parens) — it binds to the LAST value
+        // parameter. A lambda inside the parens (named or positional) is an ordinary `KtValueArgument`.
+        RArg(lower(expr), va.getArgumentName()?.asName?.identifier, va.getSpreadElement() != null, va is KtLambdaArgument)
     }
 
     private fun callNode(call: KtCallExpression, receiverNode: RNode?, receiverExpr: KtExpression? = null): RNode {
@@ -778,6 +810,15 @@ class KotlinTreeResolver(
         if (uninferable.isNotEmpty()) {
             val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: "?"
             return unsupported("not enough information to infer type variable ${uninferable.joinToString(", ")} for `$name`", call)
+        }
+        // A call that omits a REQUIRED argument (`Button { }` — no `onClick`) doesn't compile. The arity
+        // fallback in `chooseCallee` would still pick the overload and lower a call with a null stand-in for the
+        // missing parameter, which then RUNS in the preview as if valid. Reject it with the honest reason so the
+        // preview reports the gap instead of silently rendering invalid code. Sound across overloads (backs off
+        // unless every candidate is missing a required parameter; see `missingRequiredArgument`).
+        runCatching { resolver.missingRequiredArgument(call) }.getOrNull()?.let { missing ->
+            val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: "?"
+            return unsupported("no value passed for required parameter $missing of `$name`", call)
         }
         // A bare or `this`-qualified call to a member of the enclosing class dispatches on `this` — resolve it
         // against the class context directly (the editor resolver doesn't model source implicit receivers).
@@ -940,6 +981,10 @@ class KotlinTreeResolver(
                 synthOperator(op), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))), key, span(e),
             )
         }
+        // An infix function call (`a to b`, `1 shl 2`, `x downTo y`): the operation token is an IDENTIFIER and
+        // the operation reference is the function name. It desugars to `a.name(b)` — a member or an in-scope
+        // extension of the left operand's type.
+        if (token == KtTokens.IDENTIFIER) return infixNode(e, left, right, key)
         val convention = ARITHMETIC[token] ?: return unsupported("operator ${e.operationReference.text}", e)
         val leftType = resolver.inferType(left)
         // String concatenation (no `String.plus` member is reliably in the index), or an UNKNOWN left type
@@ -960,6 +1005,33 @@ class KotlinTreeResolver(
             toCallable(op), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))),
             CallSiteKey(e.textRange.startOffset), span(e),
         )
+    }
+
+    /**
+     * `a NAME b` — an infix function call. Kotlin parses it as a binary expression whose operation token is an
+     * IDENTIFIER; it means exactly `a.NAME(b)`. The callee is a single-parameter MEMBER of the left operand's
+     * type (Kotlin's member-first rule) or, failing that, an in-scope single-parameter EXTENSION on it
+     * (`1 to 2`, `0 until n`, `n downTo 1`, `x shl 2` — `to`/`until`/`downTo` are stdlib extensions, the bit
+     * ops are `Int`/`Long` members). The receiver type must be known and the function must resolve, else an
+     * honest Unsupported — we never fabricate a callee for an infix we can't bind (soundness, like every other
+     * call path here). A source-declared infix member resolves through `membersNamed` like any other member.
+     */
+    private fun infixNode(e: KtBinaryExpression, left: KtExpression, right: KtExpression, key: CallSiteKey): RNode {
+        val name = e.operationReference.getReferencedName()
+        val leftType = runCatching { resolver.inferType(left) }.getOrNull()
+            ?: return unsupported("infix `$name` on an unknown receiver type", e)
+        val recv = lower(left)
+        if (recv is RNode.Unsupported) return recv
+        val args = listOf(RArg(lower(right)))
+        // Member-first: a single-param method named [name] declared on (or inherited by) the left type.
+        service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, recv, args, key, span(e)) }
+        // Else an in-scope extension on the left type (imported or default-imported, like `to`/`until`).
+        service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name)
+            .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, recv, args, key, span(e)) }
+        return unsupported("unresolved infix function `$name` on ${leftType.qualifiedName}", e)
     }
 
     /**
@@ -1147,6 +1219,14 @@ class KotlinTreeResolver(
 
     private fun chooseCallee(call: KtCallExpression): KotlinSymbol? {
         val candidates = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+            // A TOP-LEVEL extension (`fun String.getSize()`, carrying its declaring package) resolves only when
+            // it is actually in scope — imported, same-package, or default-imported. `callTargets` surfaces the
+            // receiver type's extensions UNFILTERED (via `membersForCompletion`), which otherwise lets an
+            // out-of-scope or wrong-receiver stdlib false positive (`kotlin.jvm.internal.PrimitiveSpreadBuilder`'s
+            // `getSize`, keyed on `kotlin.Any`) win the overload tie-break over the real source extension — or
+            // resolve at all where nothing legal exists. Member-extensions (`packageName == null`; resolved via
+            // their in-scope receiver, e.g. `RowScope.weight`) are NOT import-gated and pass through unchanged.
+            .filter { !it.isExtension || it.packageName == null || extensionInScope(it) }
             // Dedup by SIGNATURE (kind + name + param types), IGNORING the declaring owner. A method with the
             // same signature from different owners is the same call shape: an override surfacing from both the
             // class and its supertype (`SnapshotStateList.add` + `MutableList.add`), the same callable present

@@ -109,6 +109,13 @@ class ComposeDispatcher(
             // (`Text(text = …, modifier = …, textAlign = …)`); interior omissions become `OmittedArg` holes the
             // ABI fills from `$default`. A purely positional call is returned unchanged.
             val ordered = reorderNamedArgs(callee.paramNames, call.args, args)
+            // `reorderNamedArgs` returns the SAME list reference when it didn't reorder (purely positional, or
+            // names unknown); a new list means the args are now in declaration order and bind positionally. The
+            // trailing-lambda remap then applies only to a SYNTACTIC trailing lambda (`{ }` outside the parens),
+            // NOT an in-parens lambda argument like `onCheckedChange = { … }` — which would otherwise land on
+            // the callee's last parameter (`Switch`'s `interactionSource`) and corrupt the composition.
+            val argsInDeclarationOrder = ordered !== args
+            val lastArgIsTrailingLambda = call.args.lastOrNull()?.trailingLambda == true
             // An EXTENSION composable's transformed JVM method is STATIC with the receiver (the scope) as its
             // first parameter, so prepend it to the args and invoke statically; receiverCount=1 keeps the
             // `$default` mask numbered over value params only. A MEMBER composable invokes on the receiver
@@ -123,6 +130,8 @@ class ComposeDispatcher(
                 loader = loader,
                 receiver = if (isExtension) null else receiver,
                 receiverCount = if (isExtension) 1 else 0,
+                argsInDeclarationOrder = argsInDeclarationOrder,
+                lastArgIsTrailingLambda = lastArgIsTrailingLambda,
             )
         } finally {
             ComposableAbi.endGroup(composer)

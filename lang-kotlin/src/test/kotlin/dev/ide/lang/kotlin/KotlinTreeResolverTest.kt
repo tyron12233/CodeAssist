@@ -586,6 +586,133 @@ class KotlinTreeResolverTest {
         assertTrue(fn.isComplete, "hold { } should lower completely; diags=${fn.diagnostics}")
     }
 
+    @Test
+    fun sourceInfixMemberCallResolvesToMemberDispatch() {
+        // `c add 2` — `add` is a source `infix fun` member of `Calc`. An infix call is `c.add(2)`: a MEMBER
+        // dispatch on the left operand with the right operand as the single argument.
+        val fn = lower("package demo\nfun f(c: Calc) { c add 2 }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "an infix member call should lower to a Call")
+        assertEquals(DispatchKind.MEMBER, call.dispatch)
+        assertEquals("add", call.callee.displayName)
+        assertIs<RNode.Name>(call.receiver, "the receiver is the left operand")
+        assertEquals(1, call.args.size)
+        assertIs<RNode.Const>(call.args[0].value, "the right operand is the single argument")
+        assertTrue(fn.isComplete, "a source infix member should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun sourceInfixExtensionCallResolvesToExtensionDispatch() {
+        // `g combinedWith h` — `combinedWith` is a same-package `infix fun Greeter.…` extension, in scope
+        // without an import, so it resolves to an EXTENSION dispatch on the left operand.
+        val fn = lower("package demo\nfun f(g: Greeter, h: Greeter) { g combinedWith h }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0])
+        assertEquals(DispatchKind.EXTENSION, call.dispatch)
+        assertEquals("combinedWith", call.callee.displayName)
+        assertTrue(fn.isComplete, "a same-package infix extension should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun stdlibInfixToResolvesAsExtension() {
+        // `1 to 2` — the stdlib `infix fun <A, B> A.to(that: B): Pair<A, B>` (package `kotlin`, default-imported)
+        // lowers to an EXTENSION call against the real stdlib jar.
+        val fn = lower("package demo\nfun f() { val p = 1 to 2 }")
+        val decl = assertIs<RNode.LocalVar>(fn.stmts()[0])
+        val call = assertIs<RNode.Call>(decl.initializer, "`1 to 2` should lower to a `to` call")
+        assertEquals(DispatchKind.EXTENSION, call.dispatch)
+        assertEquals("to", call.callee.displayName)
+        assertTrue(fn.isComplete, "the stdlib `to` infix should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun infixResultTypeBindsBothTypeParametersForAChainedCall() {
+        // `("" to 1).second.toLong()` — the `to` result must infer `Pair<String, Int>` (NOT `Pair<String, B>`
+        // with the value type parameter left free), so `.second` types to `Int` and `.toLong()` resolves its
+        // receiver. Guards binding the value parameter from the right operand, not only the receiver one.
+        val fn = lower("package demo\nfun f() { (\"\" to 1).second.toLong() }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "the chained .toLong() should resolve")
+        assertEquals("toLong", call.callee.displayName)
+        assertTrue(fn.isComplete, "the infix result's value type parameter must bind; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun extensionFunctionCallOnAnExplicitReceiverResolves() {
+        // `"".getSize()` — `getSize` is a top-level `fun String.getSize()` extension, NOT a member of String, so
+        // it resolves only by consulting the extension index for the receiver type. (A `recv.foo()` call
+        // previously looked at members only, leaving every extension call on an explicit receiver Unsupported.)
+        val fn = lower("package demo\nfun f() { \"\".getSize() }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "an extension call on a receiver should resolve")
+        assertEquals(DispatchKind.EXTENSION, call.dispatch)
+        assertEquals("getSize", call.callee.displayName)
+        assertIs<RNode.Const>(call.receiver, "the string literal is the extension receiver")
+        assertTrue(fn.isComplete, "an in-scope extension call should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun extensionFunctionCallWithArgumentResolves() {
+        // `g.shout(3)` — an extension with a value parameter: the receiver is the extension receiver, the value
+        // argument the single arg.
+        val fn = lower("package demo\nfun f(g: Greeter) { g.shout(3) }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0])
+        assertEquals(DispatchKind.EXTENSION, call.dispatch)
+        assertEquals("shout", call.callee.displayName)
+        assertEquals(1, call.args.size)
+        assertTrue(fn.isComplete, "diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun unimportedExtensionFunctionCallIsUnsupportedNotResolved() {
+        // `"".getSize()` from another package WITHOUT importing `demo.getSize` does not compile, so it must not
+        // resolve to a fabricated callee — the sound lowering is Unsupported (the extension-scope rule, applied
+        // to function calls the same way it already is to extension properties).
+        val fn = lower("package other\nfun f() { \"\".getSize() }")
+        assertIs<RNode.Unsupported>(fn.stmts()[0], "an unimported extension call must not resolve")
+        assertFalse(fn.isComplete)
+    }
+
+    @Test
+    fun importedExtensionFunctionCallResolves() {
+        // The same extension, explicitly imported, resolves.
+        val fn = lower("package other\nimport demo.getSize\nfun f() { \"\".getSize() }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0])
+        assertEquals(DispatchKind.EXTENSION, call.dispatch)
+        assertEquals("getSize", call.callee.displayName)
+        assertTrue(fn.isComplete, "an imported extension call should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun callOmittingRequiredArgumentIsUnsupported() {
+        // `Banner { }` supplies only the trailing `content` lambda and omits the REQUIRED `onClick` — invalid
+        // Kotlin (no value passed for parameter 'onClick'). It must NOT lower to a runnable call (which would
+        // pass null for onClick and "run" in the preview), but report the missing parameter.
+        val fn = lower("package demo\nfun f() { Banner { } }")
+        val node = assertIs<RNode.Unsupported>(fn.stmts()[0], "a call missing a required argument must be Unsupported")
+        assertTrue(node.reason.contains("onClick"), "the reason should name the missing parameter; got ${node.reason}")
+        assertFalse(fn.isComplete)
+    }
+
+    @Test
+    fun callSupplyingRequiredArgumentLowers() {
+        // Supplying `onClick` (the trailing lambda still binds to `content`, `label` defaults) lowers cleanly.
+        val fn = lower("package demo\nfun f() { Banner(onClick = {}) { } }")
+        assertIs<RNode.Call>(fn.stmts()[0])
+        assertTrue(fn.isComplete, "supplying the required onClick should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun callOmittingOnlyDefaultedArgumentLowers() {
+        // Omitting `label` (which has a default) is valid — only a REQUIRED omission is rejected.
+        val fn = lower("package demo\nfun f() { Banner(onClick = {}, content = {}) }")
+        assertTrue(fn.isComplete, "omitting only a defaulted parameter should lower; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun unknownInfixFunctionIsUnsupportedNotGuessed() {
+        // `g mystery h` — no `mystery` member or in-scope extension on `Greeter`. Soundness: never fabricated.
+        val fn = lower("package demo\nfun f(g: Greeter, h: Greeter) { g mystery h }")
+        assertIs<RNode.Unsupported>(fn.stmts()[0], "an unresolved infix function must be Unsupported")
+        assertFalse(fn.isComplete)
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(
@@ -639,6 +766,11 @@ class KotlinTreeResolverTest {
                     fun Scaff(top: Int = 0, content: (Pads) -> Unit) {}
                     fun <T> hold(calc: () -> T): T = calc()
                     fun <T> hold(vararg keys: Any?, calc: () -> T): T = calc()
+                    class Calc { infix fun add(n: Int): Int = n }
+                    infix fun Greeter.combinedWith(other: Greeter): String = ""
+                    fun Banner(onClick: () -> Unit, label: String = "", content: () -> Unit) {}
+                    fun String.getSize(): Int = length
+                    fun Greeter.shout(volume: Int): String = ""
                 """.trimIndent(),
             ),
         )
