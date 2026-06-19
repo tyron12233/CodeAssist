@@ -186,6 +186,18 @@ interface IdeBackend {
     suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
 
     /**
+     * Type-aware semantic-highlight tokens for [path]'s live buffer [text] — the editor overlays them on its
+     * fast lexical highlighting, so a field reads differently from a local, a `@Composable`/`suspend`/extension
+     * call is marked, a real type is distinguished from a same-named variable. Ranges are document offsets;
+     * [UiSemanticToken.kind] is an open string id (the UI maps known ids to colors, unknown → its base color).
+     *
+     * Runs on the shared engine thread, debounced like [analyze]/[hintsAt]. May throw [AnalysisPreempted] when
+     * a completion request cut ahead — the host should retry, keeping the current tokens meanwhile (an empty
+     * result would wrongly clear the coloring until the next edit). Default empty for backends without it.
+     */
+    suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> = emptyList()
+
+    /**
      * Code actions available at the selection `[selStart, selEnd)` (a collapsed range = the bare caret) in
      * [path]'s live buffer [text]: quick-fixes for the diagnostics there plus caret intentions like
      * "Introduce local variable". What the editor lightbulb / Alt-Enter menu lists. The order is stable for a
@@ -433,6 +445,18 @@ interface IdeBackend {
      */
     val fileSystemEpoch: StateFlow<Int> get() = kotlinx.coroutines.flow.MutableStateFlow(0)
 
+    // ---- critical errors (IntelliJ-style non-fatal dialog) ----
+
+    /**
+     * The current unexpected error to surface as a non-fatal dialog, or null. Set when the engine logs an
+     * `ERROR` (a caught failure) or an uncaught exception is intercepted — the app keeps running and the user
+     * sees a dismissible dialog instead of a crash. Observe (don't poll); answer with [dismissError].
+     */
+    val errorEvents: StateFlow<UiError?> get() = kotlinx.coroutines.flow.MutableStateFlow(null)
+
+    /** Dismiss the shown error [id]; surfaces the next queued error, if any. */
+    fun dismissError(id: Int) {}
+
     // ---- app preferences (onboarding flag, etc.) ----
 
     /** Read an app-global preference, or null if unset (e.g. `"onboarding.seen"`). */
@@ -440,6 +464,37 @@ interface IdeBackend {
 
     /** Persist an app-global preference. */
     fun setPreference(key: String, value: String) {}
+
+    // ---- usage analytics (opt-in) ----
+
+    /**
+     * Whether this backend actually has analytics wired (a transport is configured). False on hosts with no
+     * collector (desktop) or a fork built without an endpoint — the UI then shows neither the consent prompt
+     * nor the settings toggle.
+     */
+    fun analyticsAvailable(): Boolean = false
+
+    /**
+     * The user's analytics-consent decision: `true` = allowed, `false` = declined, `null` = not yet asked
+     * (show the consent prompt). Persisted across launches. Default `null` so a backend without analytics
+     * never prompts.
+     */
+    fun analyticsConsent(): Boolean? = null
+
+    /**
+     * Record the user's analytics decision (from the consent prompt or the settings toggle). Persists it so
+     * the prompt isn't shown again, and enables/disables collection immediately (declining/revoking discards
+     * any buffered events). No-op for backends without analytics.
+     */
+    fun setAnalyticsConsent(granted: Boolean) {}
+
+    /**
+     * Record an analytics [event] (a snake_case name) with string-only [props]. Used for performance metrics
+     * (build/index/completion timings, crashes) — no feature-usage tracking. A no-op unless the user granted
+     * consent; never carries user content (source, file/project names, paths). Returns immediately —
+     * delivery is batched in the background.
+     */
+    fun track(event: String, props: Map<String, String> = emptyMap()) {}
 
     // ---- editor session (open tabs) ----
 
@@ -627,6 +682,20 @@ data class UiPermissionRequest(val id: Int, val category: String, val detail: St
 
 /** The user's answer to a [UiPermissionRequest]: deny, or allow for this one call / this run / always (persisted). */
 enum class UiPermissionDecision { DENY, ALLOW_ONCE, ALLOW_RUN, ALLOW_ALWAYS }
+
+/**
+ * An unexpected error surfaced as a non-fatal dialog (IntelliJ "Internal Error" style). [title] is a short
+ * heading (the exception type), [message] a one-line summary, [detail] the full stack trace text for the
+ * expandable section (local display only — what we *send* for analytics is separately scrubbed), and
+ * [timeLabel] when it happened. [id] round-trips back through [IdeBackend.dismissError].
+ */
+data class UiError(
+    val id: Int,
+    val title: String,
+    val message: String,
+    val detail: String,
+    val timeLabel: String,
+)
 
 data class IndexUiStatus(
     val building: Boolean = false,
@@ -876,6 +945,23 @@ enum class UiActionKind { QUICK_FIX, INTENTION, REFACTOR }
 
 /** One entry in the editor's code-action menu. [id] is the stable index used to round-trip via [IdeBackend.applyAction]. */
 data class UiAction(val id: Int, val title: String, val kind: UiActionKind)
+
+/**
+ * One classified identifier from semantic highlighting: its `[startOffset, endOffset)` span, an open
+ * string [kind] id (`class`/`method`/`property`/`parameter`/`localVariable`/… — the UI maps known ids to a
+ * base color, an unknown id falls back), and orthogonal [modifiers] layered as color tweaks + font styles.
+ */
+data class UiSemanticToken(
+    val startOffset: Int,
+    val endOffset: Int,
+    val kind: String,
+    val modifiers: Set<UiHighlightModifier> = emptySet(),
+)
+
+/** Orthogonal facts a [UiSemanticToken] can carry — the editor layers these over the base kind color. */
+enum class UiHighlightModifier {
+    Declaration, Static, Abstract, Deprecated, Readonly, Mutable, Extension, Composable, Suspend,
+}
 
 /** What an inlay hint conveys — drives its tint/affinity. */
 enum class UiInlayKind { Type, Parameter, Chaining, Other }

@@ -19,7 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.components.AnalyticsConsentSheet
 import dev.ide.ui.components.BetaInfo
+import dev.ide.ui.components.ErrorDialog
 import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.components.PermissionDialog
@@ -64,6 +66,10 @@ fun CodeAssistApp(
     var showMigration by remember { mutableStateOf(backend.preference("migration.acknowledged") != "true") }
     var showLegacyRecovery by remember { mutableStateOf(backend.preference("legacy.recovery.seen") != "true") }
     var showOnboarding by remember { mutableStateOf(backend.preference("onboarding.seen") != "true") }
+    // Opt-in analytics: prompt only when collection is available and the user hasn't decided yet (null).
+    var showAnalytics by remember { mutableStateOf(backend.analyticsAvailable() && backend.analyticsConsent() == null) }
+    // The live toggle state for the picker's settings row (null = analytics unavailable → hide the row).
+    var analyticsOn by remember { mutableStateOf(backend.analyticsConsent() == true) }
     // Bumped after a project is deleted so the picker re-reads the (now-smaller) on-disk project list.
     var projectsRefresh by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -104,10 +110,11 @@ fun CodeAssistApp(
         // deeper handler wins); this one only fires for screen-level back: pop a sub-screen to the editor, the
         // editor to the project picker, or dismiss the first-launch sheets. On the picker it stays disabled so
         // back exits the app as usual.
-        PlatformBackHandler(enabled = screen != Screen.Projects || showOnboarding || showMigration) {
+        PlatformBackHandler(enabled = screen != Screen.Projects || showOnboarding || showMigration || showAnalytics) {
             when {
                 showOnboarding -> { showOnboarding = false; backend.setPreference("onboarding.seen", "true") }
                 showMigration -> { showMigration = false; backend.setPreference("migration.acknowledged", "true") }
+                showAnalytics -> { showAnalytics = false; backend.setAnalyticsConsent(false) }
                 screen == Screen.Dependencies || screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen = Screen.Editor
                 screen == Screen.CreateProject -> screen = Screen.Projects
                 screen == Screen.Editor -> screen = Screen.Projects
@@ -140,6 +147,8 @@ fun CodeAssistApp(
                                     showLegacyRecovery = false
                                     backend.setPreference("legacy.recovery.seen", "true")
                                 },
+                                analyticsEnabled = if (backend.analyticsAvailable()) analyticsOn else null,
+                                onAnalyticsChange = { on -> analyticsOn = on; backend.setAnalyticsConsent(on) },
                             )
                         }
                         Screen.CreateProject -> CreateProjectScreen(
@@ -199,8 +208,20 @@ fun CodeAssistApp(
                     backend.setPreference("onboarding.seen", "true")
                 },
             )
+            // Opt-in analytics consent — last of the first-launch sheets, after onboarding/migration.
+            AnalyticsConsentSheet(
+                visible = showAnalytics && !showOnboarding && !showMigration && screen == Screen.Projects,
+                onAllow = { showAnalytics = false; analyticsOn = true; backend.setAnalyticsConsent(true) },
+                onDecline = { showAnalytics = false; analyticsOn = false; backend.setAnalyticsConsent(false) },
+                onLearnMore = if (fileActions.canOpenUrl) {
+                    { fileActions.openUrl(BetaInfo.PRIVACY_URL) }
+                } else null,
+            )
             // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
             PermissionDialog(backend)
+            // IntelliJ-style non-fatal error dialog — overlays everything when the engine reports an
+            // unexpected error or an uncaught exception is intercepted (the app keeps running).
+            ErrorDialog(backend)
         }
     }
 }

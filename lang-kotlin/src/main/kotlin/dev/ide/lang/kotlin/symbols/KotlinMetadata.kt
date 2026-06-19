@@ -22,6 +22,7 @@ import kotlin.metadata.isInline
 import kotlin.metadata.isNullable
 import kotlin.metadata.visibility
 import org.objectweb.asm.MethodVisitor
+import kotlin.metadata.isSuspend
 import kotlin.metadata.jvm.KotlinClassMetadata
 import kotlin.metadata.jvm.annotations
 
@@ -183,6 +184,7 @@ object KotlinMetadata {
             declaringClassFqn = declaringFqn,
             isComposable = f.name in composable,
             isInline = f.isInline,
+            isSuspend = f.isSuspend,
             varargParamIndex = f.valueParameters.indexOfFirst { it.varargElementType != null },
         )
     }

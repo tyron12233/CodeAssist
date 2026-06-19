@@ -760,6 +760,15 @@ class KotlinTreeResolver(
 
     private fun callNode(call: KtCallExpression, receiverNode: RNode?, receiverExpr: KtExpression? = null): RNode {
         checkNamedArguments(call)
+        // A generic call whose type arguments can't be inferred (`mutableStateOf()` with no value argument) is
+        // invalid Kotlin — the editor flags `kt.cannotInferType`. The arity fallback in `chooseCallee` would
+        // still pick the callee and lower a malformed (under-applied) call that crashes the run reflectively;
+        // surface the honest reason instead so the preview names the gap rather than dying opaquely.
+        val uninferable = runCatching { resolver.uninferableTypeParameters(call) }.getOrDefault(emptyList())
+        if (uninferable.isNotEmpty()) {
+            val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: "?"
+            return unsupported("not enough information to infer type variable ${uninferable.joinToString(", ")} for `$name`", call)
+        }
         // A bare or `this`-qualified call to a member of the enclosing class dispatches on `this` — resolve it
         // against the class context directly (the editor resolver doesn't model source implicit receivers).
         val ctx = classStack.lastOrNull()
@@ -1044,9 +1053,18 @@ class KotlinTreeResolver(
         val slot = newSlot()
         val delegate = p.delegateExpression
         if (delegate != null) {
-            // `val/var x by <delegate>` — the slot holds the DELEGATE object; reads/writes of `x` go through
-            // its `.value` (the State/MutableState/Lazy convention). Any other delegate is Unsupported (sound:
-            // we don't model an arbitrary getValue/setValue convention).
+            // `val/var x by <delegate>` requires the delegate's `getValue` (and `setValue` for a `var`)
+            // operator to be in scope — for Compose's `MutableState` these are extensions in
+            // `androidx.compose.runtime` (`val text by remember { mutableStateOf(0) }` needs `import
+            // androidx.compose.runtime.getValue`). Without it the code doesn't compile, so the preview must
+            // surface the gap rather than silently read `.value` (which the interpreter could do regardless).
+            val missingOps = runCatching { resolver.missingDelegateOperators(p) }.getOrDefault(emptyList())
+            if (missingOps.isNotEmpty()) {
+                return unsupported("property delegate operator(s) ${missingOps.joinToString(", ")} not in scope (import them)", p)
+            }
+            // The slot holds the DELEGATE object; reads/writes of `x` go through its `.value` (the State/
+            // MutableState/Lazy convention). Any other delegate is Unsupported (sound: we don't model an
+            // arbitrary getValue/setValue convention).
             val valueProperty = delegateValueProperty(delegate)
                 ?: return unsupported("property delegate is not a `.value` delegate (State/Lazy)", p)
             val delegateNode = lower(delegate)

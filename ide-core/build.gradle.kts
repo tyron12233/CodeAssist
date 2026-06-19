@@ -30,6 +30,9 @@ dependencies {
     implementation(project(":layout-preview-impl")) // the preview engine (inflater + resolver + chrome)
     implementation(project(":deps-api"))
     implementation(project(":deps-impl")) // Maven dependency resolver (download/transitive/conflict)
+    // Opt-in usage analytics. `api` because AnalyticsService appears in IdeServicesBackend's (public)
+    // constructor signature, so a host wiring it (ide-android) needs the type on its compile classpath.
+    api(project(":analytics-api"))
     implementation(project(":vfs-api"))
 
     implementation(libs.kotlinx.coroutines.core)

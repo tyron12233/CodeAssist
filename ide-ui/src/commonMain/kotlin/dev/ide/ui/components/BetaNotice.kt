@@ -35,6 +35,9 @@ object BetaInfo {
 
     /** Where "Submit suggestions" sends the user (opened via FileActions.openUrl). */
     const val FEEDBACK_URL: String = "https://github.com/tyron12233/CodeAssist/issues/new"
+
+    /** What "Learn more" on the analytics consent prompt opens — the data-collection details. */
+    const val PRIVACY_URL: String = "https://github.com/tyron12233/CodeAssist/blob/main/docs/analytics.md"
 }
 
 /**

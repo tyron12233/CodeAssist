@@ -135,15 +135,37 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
         val androidSources = (ctx.classpath.entries + ctx.bootClasspath.entries)
             .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
             .firstOrNull { it.fileName?.toString() == "android.jar" }
-            ?.let { jar -> // …/platforms/android-NN/android.jar  →  …/sources/android-NN
-                val platformDir = jar.parent
-                platformDir?.parent?.parent?.resolve("sources")?.resolve(platformDir.fileName.toString())
-            }?.takeIf { Files.isDirectory(it) }
+            ?.let { jar -> androidPlatformSources(jar) }
         baseSourceDirs = sourceRootPaths + attachmentDirs + listOfNotNull(androidSources)
         baseSourceJars = attachmentJars + listOfNotNull(jdkSrcZip)
         librarySourceArchives = (baseSourceJars + attachmentDirs + listOfNotNull(androidSources)).distinct()
         sourceMethodResolver = SourceMethodResolver(baseSourceDirs, baseSourceJars)
     }
+
+    /**
+     * The Android platform `sources/android-NN` dir for a `platforms/android-NN/android.jar`, so framework
+     * APIs complete with real parameter names + javadoc. Prefers the exact platform-dir name, but falls back
+     * to any installed `sources/android-NN…` with the same MAJOR API level: the SDK ships framework sources
+     * keyed by base level (`android-36`) while the platform jar may be a minor/extension revision (`android-36.1`)
+     * — an exact-name-only match would silently miss the sources whenever the two don't line up.
+     */
+    private fun androidPlatformSources(jar: Path): Path? {
+        val platformDir = jar.parent ?: return null
+        val sourcesRoot = platformDir.parent?.parent?.resolve("sources") ?: return null
+        val exact = sourcesRoot.resolve(platformDir.fileName.toString())
+        if (Files.isDirectory(exact)) return exact
+        if (!Files.isDirectory(sourcesRoot)) return null
+        val major = androidMajor(platformDir.fileName.toString()) ?: return null
+        return Files.list(sourcesRoot).use { stream ->
+            stream.filter { Files.isDirectory(it) && androidMajor(it.fileName.toString()) == major }
+                .sorted(compareByDescending { it.fileName.toString() })
+                .findFirst().orElse(null)
+        }
+    }
+
+    /** `android-36` / `android-36.1` → 36 (the base API level, ignoring the minor/extension revision). */
+    private fun androidMajor(dirName: String): Int? =
+        dirName.removePrefix("android-").substringBefore('.').toIntOrNull()
 
     /** Add extra source archives (e.g. a downloaded JDK `src.zip`) for names/javadoc, rebuilding the resolver. */
     fun addSourceJars(extra: List<Path>) {
@@ -162,6 +184,10 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     /** Inlay hints (var/lambda types, parameter names, chaining) over the binding DOM. */
     override val inlayHints: dev.ide.lang.hints.InlayHintService = JdtInlayHintService(this)
+
+    /** Type-aware semantic coloring (fields vs locals, real types, static/final) over the binding DOM. */
+    override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService =
+        dev.ide.lang.jdt.highlight.JdtSemanticHighlighter(this)
 
     /**
      * Release the per-module environment cache (open library-jar handles). The host registers each analyzer
@@ -188,7 +214,34 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
      * also exists on the sourcepath it is briefly shadowed aside so JDT does not see a duplicate type
      * definition (which would abort binding resolution) — then restored.
      */
+    /**
+     * Single-entry, content-keyed cache of the last binding-resolved parse. A settled buffer is parsed for
+     * MULTIPLE editor features in close succession — inlay hints, semantic highlighting, and any caret query
+     * (resolve/scopeAt/expectedTypeAt) — all on the same text; without this each pays the full binding parse
+     * (a fresh ASTParser + classpath/sourcepath environment scan + the shadow-file move). Reused while the
+     * focal (path, text) is unchanged; the focal edit changes the text → a miss, and a disk write to any
+     * dependency invalidates it via [invalidateBindingCache] (binding resolution reads dependencies from disk,
+     * so a same-text focal parse is otherwise sound). The engine runs single-threaded; [Volatile] is cheap insurance.
+     */
+    private class BindingParseCacheEntry(val path: String, val text: String, val parsed: JdtParsedFile)
+
+    @Volatile
+    private var bindingCache: BindingParseCacheEntry? = null
+
+    /** Drop the cached binding parse — call when disk changed under us (a save of this or any dependency). */
+    fun invalidateBindingCache() {
+        bindingCache = null
+    }
+
     fun parse(file: VirtualFile, text: CharSequence): JdtParsedFile {
+        val t = text.toString()
+        bindingCache?.let { if (it.path == file.path && it.text == t) return it.parsed }
+        val parsed = parseUncached(file, t)
+        bindingCache = BindingParseCacheEntry(file.path, t, parsed)
+        return parsed
+    }
+
+    private fun parseUncached(file: VirtualFile, text: CharSequence): JdtParsedFile {
         val onDisk = onSourcepathFile(file) ?: return doParse(file, text)
         val backup = onDisk.resolveSibling("${onDisk.fileName}.codeassist-shadow")
         val moved = runCatching { Files.move(onDisk, backup, StandardCopyOption.REPLACE_EXISTING); true }.getOrDefault(false)

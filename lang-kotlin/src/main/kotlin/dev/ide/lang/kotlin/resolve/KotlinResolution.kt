@@ -308,6 +308,147 @@ class KotlinResolver(
         return bindings
     }
 
+    /**
+     * The own type parameters of [call]'s callee that cannot be inferred at this site — Kotlin's
+     * "Not enough information to infer type variable T" (`mutableStateOf()` with no argument: `T` is observed
+     * by the result `MutableState<T>` but nothing supplies it). A type parameter qualifies only when:
+     *  - the call carries NO explicit type-argument list (`mutableStateOf<String>()` supplies it),
+     *  - it appears in the callee's RETURN type (so the result observes it),
+     *  - no value argument binds it (argument inference left it free),
+     *  - it is not the extension receiver's own type parameter (a `T.foo()` binds `T` from the receiver), and
+     *  - it constrains some value parameter, EVERY one of which received no argument — so no argument could
+     *    have bound it. This distinguishes the omitted-argument case from `mutableStateOf(x)` where an
+     *    argument is present and inference merely (best-effort) failed.
+     * Backs off entirely when a concrete expected type drives the inference (`val s: MutableState<String> =
+     * mutableStateOf()`), a spread argument is present, or the callee can't be resolved — conservative, so it
+     * never reports a type Kotlin would accept. Shared by the editor diagnostic and the interpreter lowering.
+     */
+    fun uninferableTypeParameters(call: KtCallExpression): List<String> {
+        if (call.typeArgumentList != null) return emptyList()
+        if (call.valueArguments.any { it.getSpreadElement() != null }) return emptyList()
+        val sym = resolveCalleeFunction(call) ?: return emptyList()
+        if (sym.typeParameters.isEmpty()) return emptyList()
+        val ret = sym.type as? KotlinType ?: return emptyList()
+        // A concrete expected type at this position can drive the inference, so it isn't uninferable.
+        (expectedTypeAt(call.textRange.startOffset) as? KotlinType)?.let { exp ->
+            if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
+        }
+        val bound = inferTypeArguments(sym, call).keys
+        val supplied = suppliedValueParameterIndices(sym, call)
+        return sym.typeParameters.filter { tp ->
+            if (tp in bound || tp == sym.receiverTypeParam) return@filter false
+            if (!mentionsTypeParam(ret, tp)) return@filter false
+            val mentioning = sym.paramTypes.indices.filter { mentionsTypeParam(sym.paramTypes[it], tp) }
+            mentioning.isNotEmpty() && mentioning.none { it in supplied }
+        }
+    }
+
+    /**
+     * The delegate-accessor operators a `by`-delegated [property] needs but that are NOT in scope: `getValue`
+     * always, plus `setValue` for a `var`. Kotlin desugars `val x by d` to `d.getValue(thisRef, prop)` and a
+     * `var` write to `d.setValue(…)`, requiring an applicable `operator fun` on the delegate's type. For
+     * Compose's `MutableState` these are EXTENSIONS in `androidx.compose.runtime`, so
+     * `val text by remember { mutableStateOf(0) }` does NOT compile without `import
+     * androidx.compose.runtime.getValue` — exactly the reported gap. A plain MEMBER operator, or an in-scope
+     * (imported / same-package / default-imported, e.g. `kotlin.Lazy.getValue`) extension operator on the
+     * delegate type or a supertype, satisfies it. Empty when the delegate type is unknown OR the operator
+     * isn't modeled at all on the classpath (conservative — never invents a rejection).
+     */
+    fun missingDelegateOperators(property: KtProperty): List<String> {
+        val delegate = property.delegateExpression ?: return emptyList()
+        val dt = inferType(delegate) ?: return emptyList()
+        if (dt.isTypeParameter) return emptyList()
+        // When the delegate's type can't be inferred (`remember { mutableStateOf() }`), the root error is the
+        // inference failure, not the operator — its type (an erased `MutableState<Any?>`) is fictitious, so a
+        // getValue check against it is misleading. Defer to the `cannotInferType` diagnostic.
+        if (delegateContainsUninferableCall(delegate)) return emptyList()
+        val needed = if (property.isVar) listOf("getValue", "setValue") else listOf("getValue")
+        return needed.filter { op -> !delegateOperatorInScope(dt, op) }
+    }
+
+    /**
+     * Fully-qualified names to import to bring a `by`-delegate's missing `getValue`/`setValue` operator into
+     * scope — the quick-fix for `val text by remember { mutableStateOf(0) }` →
+     * `import androidx.compose.runtime.getValue`. Only out-of-scope EXTENSION operators that actually apply to
+     * the delegate's type are offered (so an unrelated `getValue` isn't suggested); empty when the operator is
+     * already in scope, unmodeled, or the delegate type is unknown/uninferable.
+     */
+    fun delegateOperatorImportCandidates(property: KtProperty): List<String> {
+        val delegate = property.delegateExpression ?: return emptyList()
+        val dt = inferType(delegate)?.takeIf { !it.isTypeParameter } ?: return emptyList()
+        if (delegateContainsUninferableCall(delegate)) return emptyList()
+        val ops = if (property.isVar) listOf("getValue", "setValue") else listOf("getValue")
+        val out = LinkedHashSet<String>()
+        for (op in ops) {
+            val candidates = service.membersOf(dt.qualifiedName, dt.typeArguments, null)
+                .filterIsInstance<KotlinSymbol>()
+                .filter { it.name == op && it.kind == SymbolKind.METHOD }
+            if (candidates.any { !it.isExtension || extensionInScope(it) }) continue // already satisfied
+            candidates.filter { it.isExtension && !extensionInScope(it) }.forEach { ext ->
+                val pkg = ext.packageName ?: ext.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
+                if (pkg != null) out += "$pkg.$op"
+            }
+        }
+        return out.toList()
+    }
+
+    /** Whether the delegate expression contains a call whose type arguments can't be inferred — so the
+     *  delegate-operator check should stand down in favour of the type-inference diagnostic. */
+    private fun delegateContainsUninferableCall(delegate: KtExpression): Boolean {
+        var found = false
+        fun rec(e: PsiElement) {
+            if (found) return
+            if (e is KtCallExpression && uninferableTypeParameters(e).isNotEmpty()) { found = true; return }
+            var c = e.firstChild
+            while (c != null && !found) { rec(c); c = c.nextSibling }
+        }
+        rec(delegate)
+        return found
+    }
+
+    /** Whether a `getValue`/`setValue` operator named [op] is available for a delegate of type [delegateType]:
+     *  a plain member, or an in-scope extension. Returns true (don't flag) when none is modeled at all. */
+    private fun delegateOperatorInScope(delegateType: KotlinType, op: String): Boolean {
+        val candidates = service.membersOf(delegateType.qualifiedName, delegateType.typeArguments, null)
+            .filterIsInstance<KotlinSymbol>()
+            .filter { it.name == op && it.kind == SymbolKind.METHOD }
+        if (candidates.isEmpty()) return true // operator not modeled on the classpath → conservative
+        return candidates.any { !it.isExtension || extensionInScope(it) }
+    }
+
+    /** Whether the extension [sym] is in scope here — imported (explicit/star), same-package, or
+     *  default-imported. No package info → don't guess a rejection. Mirrors `KotlinSourceAnalyzer.extensionInScope`. */
+    private fun extensionInScope(sym: KotlinSymbol): Boolean {
+        val pkg = sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null } ?: return true
+        if (pkg == fileContext.packageName || dev.ide.lang.kotlin.symbols.DefaultImports.isDefaultImported(pkg)) return true
+        return fileContext.imports.any { imp -> if (imp.isStar) imp.packageName == pkg else imp.fqn == "$pkg.${sym.name}" }
+    }
+
+    /** Whether the type reference [t] is, or nests, the type parameter named [name]. */
+    private fun mentionsTypeParam(t: TypeRef?, name: String): Boolean {
+        if (t == null) return false
+        if (t is KotlinType && t.isTypeParameter && t.qualifiedName == name) return true
+        return t.typeArguments.any { mentionsTypeParam(it, name) }
+    }
+
+    /** The declared value-parameter indices that received an argument at [call]: a named argument by its
+     *  parameter name, a trailing lambda by Kotlin's trailing-lambda rule (the last parameter), the rest by
+     *  position. A named argument whose name matches no parameter contributes nothing. */
+    private fun suppliedValueParameterIndices(sym: KotlinSymbol, call: KtCallExpression): Set<Int> {
+        val paramCount = maxOf(sym.paramTypes.size, sym.paramNames.size)
+        val out = HashSet<Int>()
+        call.valueArguments.forEachIndexed { i, arg ->
+            val named = arg.getArgumentName()?.asName?.identifier
+            val idx = when {
+                named != null -> sym.paramNames.indexOf(named).takeIf { it >= 0 } ?: return@forEachIndexed
+                arg is KtLambdaArgument -> (paramCount - 1).coerceAtLeast(0)
+                else -> i
+            }
+            out += idx
+        }
+        return out
+    }
+
     /** A lambda fills a functional parameter (a Kotlin `(…) -> R` or a Java SAM); bind its result type
      *  parameter from the lambda's inferred result (`map { … }`'s `R`, `let`'s `R`). */
     private fun bindLambdaReturn(pt: KotlinType, lambda: KtLambdaExpression, bindings: MutableMap<String, TypeRef>) {

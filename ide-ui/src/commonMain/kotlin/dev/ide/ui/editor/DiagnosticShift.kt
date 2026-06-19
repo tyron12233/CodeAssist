@@ -1,6 +1,8 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.core.EditSpan
 import dev.ide.ui.editor.core.EditorDocument
 
@@ -99,4 +101,31 @@ fun shiftDiagnostics(diagnostics: List<UiDiagnostic>, edit: EditSpan, doc: Edito
         out.add(d.copy(startOffset = start, endOffset = end, line = ln + 1, col = start - doc.lineStart(ln) + 1))
     }
     return out
+}
+
+/**
+ * Re-map semantic-highlight tokens across a single [edit] the session just applied, so the type-aware
+ * coloring tracks the text until a fresh (debounced) pass replaces it — the same live-shift the editor does
+ * for diagnostics, just for color spans (no line/col to recompute). A token the edit fully consumed is dropped.
+ */
+fun shiftSemanticTokens(tokens: List<UiSemanticToken>, edit: EditSpan, docLength: Int): List<UiSemanticToken> {
+    if (tokens.isEmpty() || edit.isNoOp) return tokens
+    val out = ArrayList<UiSemanticToken>(tokens.size)
+    for (t in tokens) {
+        val start = mapStart(t.startOffset, edit).coerceIn(0, docLength)
+        val end = mapEnd(t.endOffset, edit).coerceIn(start, docLength)
+        if (end <= start) continue
+        out.add(t.copy(startOffset = start, endOffset = end))
+    }
+    return out
+}
+
+/**
+ * Re-map `@Preview` gutter markers across a single [edit], so the gutter icons track the function they mark
+ * as the user types above them, instead of sitting at a stale line until the debounced refetch. A marker
+ * whose anchor offset the edit consumed is kept clamped to the edit point (refetch corrects it shortly).
+ */
+fun shiftComposePreviews(markers: List<UiComposePreview>, edit: EditSpan, docLength: Int): List<UiComposePreview> {
+    if (markers.isEmpty() || edit.isNoOp) return markers
+    return markers.map { it.copy(offset = mapStart(it.offset, edit).coerceIn(0, docLength)) }
 }

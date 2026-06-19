@@ -46,6 +46,8 @@ class RawCallable(
     val isComposable: Boolean = false,
     /** An `inline` function. */
     val isInline: Boolean = false,
+    /** A `suspend` function. */
+    val isSuspend: Boolean = false,
     /** The index of the `vararg` value parameter, or -1 if none. */
     val varargParamIndex: Int = -1,
 )
@@ -214,6 +216,7 @@ object SourceIndexBuilder {
         visibility = visOf(f),
         isComposable = f.annotationEntries.any { it.shortName?.asString() == "Composable" },
         isInline = f.hasModifier(KtTokens.INLINE_KEYWORD),
+        isSuspend = f.hasModifier(KtTokens.SUSPEND_KEYWORD),
         varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
     )
 

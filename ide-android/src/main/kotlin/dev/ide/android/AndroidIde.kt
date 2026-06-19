@@ -25,6 +25,7 @@ object AndroidIde {
 
     /** Heavy (file copy + project gen + JDT init) — call off the main thread. */
     fun bootstrap(context: Context): Session {
+        val startNs = System.nanoTime()
         // App-specific EXTERNAL storage (`Android/data/<pkg>/files/codeassist`): no permission needed, yet
         // reachable by other file managers via [ProjectsDocumentsProvider]. Fall back to internal storage
         // only if external isn't mounted (rare). The location is resolved identically by the provider.
@@ -103,7 +104,55 @@ object AndroidIde {
             manager.open(manager.list().first().rootPath)
         }
 
-        return Session(services, IdeServicesBackend(services, manager))
+        // Opt-in usage analytics (no collection until the user grants consent — see docs/analytics.md).
+        val analytics = buildAnalytics(manager, home)
+        val backend = IdeServicesBackend(services, manager, analytics)
+        // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
+        // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
+        backend.installCrashReporting()
+        // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
+        // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
+        if (backend.analyticsConsent() == true) {
+            backend.track(dev.ide.analytics.Events.COLD_START, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
+        }
+
+        return Session(services, backend)
+    }
+
+    /**
+     * Build the analytics service from the baked-in Supabase config. Returns the no-op service when no
+     * endpoint is configured (a fork building without a key) so the rest of the app is unaffected. The
+     * install id is a random UUID persisted once in prefs (not tied to any account); the session id is fresh
+     * per launch. The service starts gated on the stored consent and collects nothing until it's granted.
+     */
+    private fun buildAnalytics(manager: ProjectManager, home: File): dev.ide.analytics.AnalyticsService {
+        val url = BuildConfig.ANALYTICS_URL
+        val key = BuildConfig.ANALYTICS_KEY
+        if (url.isBlank() || key.isBlank()) return dev.ide.analytics.NoopAnalyticsService
+
+        val installId = manager.preference("analytics.install.id")
+            ?: java.util.UUID.randomUUID().toString().also { manager.setPreference("analytics.install.id", it) }
+        val device = dev.ide.analytics.DeviceInfo(
+            appVersion = BuildConfig.VERSION_NAME,
+            appBuild = BuildConfig.VERSION_CODE,
+            osApi = android.os.Build.VERSION.SDK_INT,
+            deviceModel = android.os.Build.MODEL ?: "",
+            deviceManufacturer = android.os.Build.MANUFACTURER ?: "",
+            abi = android.os.Build.SUPPORTED_ABIS?.firstOrNull() ?: "",
+            locale = java.util.Locale.getDefault().toLanguageTag(),
+        )
+        val service = dev.ide.analytics.impl.DefaultAnalyticsService(
+            installId = installId,
+            sessionId = java.util.UUID.randomUUID().toString(),
+            device = device,
+            sink = dev.ide.analytics.impl.SupabaseSink(url, key),
+            initialConsent = manager.preference("analytics.consent") == "granted",
+            queueFile = File(home, "analytics-queue.txt").toPath(),
+        )
+        // Bridge the logging facade to analytics: caught ERROR logs become scrubbed `error_logged` events
+        // (no messages/paths). No-ops while the service is disabled, and starts working on consent.
+        dev.ide.platform.log.Log.addSink(dev.ide.analytics.impl.AnalyticsLogSink(service))
+        return service
     }
 
     /** App-specific external storage base (`Android/data/<pkg>/files`), or internal `filesDir` if external

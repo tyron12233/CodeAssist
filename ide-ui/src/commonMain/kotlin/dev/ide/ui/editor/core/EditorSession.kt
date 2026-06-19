@@ -5,9 +5,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
+import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.CodeLanguage
+import dev.ide.ui.editor.shiftComposePreviews
 import dev.ide.ui.editor.shiftDiagnostics
+import dev.ide.ui.editor.shiftSemanticTokens
 import kotlin.math.max
 import kotlin.math.min
 
@@ -59,6 +63,24 @@ class EditorSession(
      * supplies fresh authoritative results via [applyAnalysis] (debounced) and reads this to render.
      */
     var diagnostics by mutableStateOf<List<UiDiagnostic>>(emptyList())
+        private set
+
+    /**
+     * Type-aware semantic-highlight tokens anchored to this buffer. Like [diagnostics], the editor shifts them
+     * in place on each edit ([shiftSemanticTokens]) so the coloring tracks the text between debounced passes;
+     * the host supplies fresh authoritative results via [applySemanticTokens]. The render layer overlays them
+     * on the lexical token spans.
+     */
+    var semanticTokens by mutableStateOf<List<UiSemanticToken>>(emptyList())
+        private set
+
+    /**
+     * `@Preview` gutter markers anchored to this buffer. Like [diagnostics]/[semanticTokens] the editor shifts
+     * their offsets in place on each edit ([shiftComposePreviews]) so the gutter icons track the function they
+     * mark while typing, instead of sitting at a stale line until the debounced refetch. Host refills via
+     * [applyComposePreviews].
+     */
+    var previewMarkers by mutableStateOf<List<UiComposePreview>>(emptyList())
         private set
 
     val styles = LineStyles(language)
@@ -148,6 +170,8 @@ class EditorSession(
         // order (multi-edit ops re-map each diagnostic correctly), O(diagnostics), no String diff. Just like
         // the line index and token spans above, the buffer keeps its own decorations in sync.
         if (diagnostics.isNotEmpty()) diagnostics = shiftDiagnostics(diagnostics, edit, doc)
+        if (semanticTokens.isNotEmpty()) semanticTokens = shiftSemanticTokens(semanticTokens, edit, doc.length)
+        if (previewMarkers.isNotEmpty()) previewMarkers = shiftComposePreviews(previewMarkers, edit, doc.length)
         if (!applyingUndo) recordEdit(s, removedText, text, selBefore)
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
@@ -158,6 +182,16 @@ class EditorSession(
     /** Swap in a fresh authoritative analysis (aligned to the current text). The host calls this debounced. */
     fun applyAnalysis(result: List<UiDiagnostic>) {
         diagnostics = result
+    }
+
+    /** Swap in fresh authoritative semantic-highlight tokens (aligned to the current text). Host calls debounced. */
+    fun applySemanticTokens(result: List<UiSemanticToken>) {
+        semanticTokens = result
+    }
+
+    /** Swap in fresh `@Preview` gutter markers (aligned to the current text). The host calls this debounced. */
+    fun applyComposePreviews(result: List<UiComposePreview>) {
+        previewMarkers = result
     }
 
     private fun updateSelectionAndComposing(sel: TextRange, comp: TextRange?) {
@@ -324,6 +358,8 @@ class EditorSession(
         this.selection = selection.coercedIn(doc.length)
         composing = null
         diagnostics = emptyList() // a wholesale replace invalidates the old anchors; re-analysis will refill
+        semanticTokens = emptyList()
+        previewMarkers = emptyList()
         goalColumn = -1
         // a wholesale replace invalidates the inverse-edit history (offsets no longer mean anything)
         undoStack.clear(); redoStack.clear(); currentGroup = null; coalesceTyping = false

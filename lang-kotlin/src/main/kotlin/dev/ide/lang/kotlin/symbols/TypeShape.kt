@@ -66,5 +66,6 @@ fun KotlinSymbol.rebindTypes(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymb
     isInternal = isInternal,
     isComposable = isComposable,
     isInline = isInline,
+    isSuspend = isSuspend,
     varargParamIndex = varargParamIndex,
 )

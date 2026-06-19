@@ -53,6 +53,7 @@ enum class BackendCapability {
     SNIPPETS,           // completion emits snippet items (CaretAction.ExpandSnippet)
     POSTFIX,            // contributes/handles postfix templates (dev.ide.lang.postfix)
     INLAY_HINTS,        // provides an InlayHintService
+    SEMANTIC_HIGHLIGHT, // provides a SemanticHighlightService (type-aware editor coloring)
     COMPILE,            // can emit bytecode
     FORMAT,
 }
@@ -93,6 +94,10 @@ interface SourceAnalyzer {
     val incrementalParser: IncrementalParser
     val completion: CompletionService?      // null if !capabilities.contains(COMPLETION)
     val inlayHints: InlayHintService?       // null if !capabilities.contains(INLAY_HINTS)
+        get() = null
+
+    /** Type-aware editor coloring; null if !capabilities.contains(SEMANTIC_HIGHLIGHT). See the highlight SPI. */
+    val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService?
         get() = null
 
     /** Current tolerant tree for [file] (parsed/incrementally maintained). */

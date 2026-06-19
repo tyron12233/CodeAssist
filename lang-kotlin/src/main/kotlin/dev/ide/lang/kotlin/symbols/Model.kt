@@ -61,6 +61,8 @@ class KotlinSymbol(
     val isComposable: Boolean = false,
     /** An `inline` function (so a composable content lambda is inlined into the caller's group). */
     val isInline: Boolean = false,
+    /** A `suspend` function — for semantic highlighting (suspension points) and future coroutine checks. */
+    val isSuspend: Boolean = false,
     /** The index of the `vararg` value parameter (`listOf`, `mutableStateListOf(vararg …)`), or -1 if none.
      *  A vararg parameter absorbs any number of trailing positional arguments at a call site. */
     val varargParamIndex: Int = -1,
@@ -77,7 +79,7 @@ class KotlinSymbol(
         KotlinSymbol(
             name, kind, type, owner, modifiers, origin, receiverTypeFqn, sig, typeParameters, typeParameterBounds,
             paramTypes, names, receiverTypeArgs, receiverTypeParam, packageName, declaringClassFqn, isInternal,
-            isComposable, isInline, varargParamIndex, declarationNode, docText,
+            isComposable, isInline, isSuspend, varargParamIndex, declarationNode, docText,
         )
 }
 

@@ -9,6 +9,10 @@ import androidx.compose.ui.text.TextStyle
 /** Phantom (non-document) text rendered inside a line at column [col] — an inlay hint. */
 data class InlayPiece(val col: Int, val text: String)
 
+/** A semantic-highlight run within a line: columns `[start, end)` styled with [style] (already theme- and
+ *  modifier-resolved). Overlaid on top of the lexical token spans, so it wins where they overlap. */
+data class SemSpan(val start: Int, val end: Int, val style: SpanStyle)
+
 /**
  * Per-line measured-text cache — the Compose analog of sora-editor's per-line render nodes + measure
  * cache. A line's [TextLayoutResult] (Skia paragraph: shaped, styled, ready to `drawText`) is built
@@ -29,13 +33,24 @@ class LineRenderCache(
     /** TokenType.ordinal → span style (theme-resolved). Rebuild the cache on theme change. */
     private val palette: Array<SpanStyle?>,
 ) {
-    private class Entry(val rev: Int, val inlayRev: Int, val layout: TextLayoutResult, var lastUsed: Long)
+    private class Entry(val rev: Int, val inlayRev: Int, val semRev: Int, val layout: TextLayoutResult, var lastUsed: Long)
 
     private val cache = HashMap<Int, Entry>()
     private var tick = 0L
 
     private val inlayRevs = InlayRevisions()
     private var inlayStyle: SpanStyle = SpanStyle()
+
+    private val semantic = SemanticSpansByLine()
+
+    /**
+     * Set the semantic-highlight overlay (document-line keyed, columns within each line). Like [setInlays] it
+     * bumps a per-line stamp only for lines whose spans changed, so only those re-shape on the next draw — the
+     * async semantic pass never re-lays-out the whole viewport. Empty map ⇒ purely lexical highlighting.
+     */
+    fun setSemanticSpans(newSpans: Map<Int, List<SemSpan>>) {
+        semantic.update(newSpans)
+    }
 
     /** Widest line laid out so far, px — feeds the horizontal scroll range as lines get measured. */
     var measuredMaxWidth = 0f
@@ -78,8 +93,9 @@ class LineRenderCache(
     fun layoutFor(line: Int, doc: EditorDocument, styles: LineStyles): TextLayoutResult {
         val rev = styles.revOf(line)
         val irev = inlayRevs.stampOf(line)
+        val srev = semantic.stampOf(line)
         cache[line]?.let { e ->
-            if (e.rev == rev && e.inlayRev == irev) {
+            if (e.rev == rev && e.inlayRev == irev && e.semRev == srev) {
                 e.lastUsed = ++tick
                 return e.layout
             }
@@ -87,32 +103,37 @@ class LineRenderCache(
         val text = doc.lineText(line)
         val spans = styles.spansFor(line)
         val pieces = inlayRevs.piecesFor(line)
+        val sem = semantic.spansFor(line)
         val annotated = when {
-            pieces.isEmpty() && spans.isEmpty() -> AnnotatedString(text)
+            pieces.isEmpty() && spans.isEmpty() && sem.isEmpty() -> AnnotatedString(text)
             pieces.isEmpty() -> AnnotatedString(
                 text,
+                // Lexical spans first, then semantic on top (later ranges win on overlap), bounded to the line.
                 spanStyles = spans.mapNotNull { sp ->
                     palette[sp.type.ordinal]?.let { AnnotatedString.Range(it, sp.start, sp.end) }
+                } + sem.mapNotNull { sp ->
+                    clampRange(sp.start, sp.end, text.length)?.let { (s, e) -> AnnotatedString.Range(sp.style, s, e) }
                 },
             )
-            else -> buildInlayAnnotated(text, spans, pieces)
+            else -> buildInlayAnnotated(text, spans, pieces, sem)
         }
         val layout = measurer.measure(annotated, style = baseStyle, softWrap = false, maxLines = 1)
         if (layout.size.width > measuredMaxWidth) measuredMaxWidth = layout.size.width.toFloat()
-        cache[line] = Entry(rev, irev, layout, ++tick)
+        cache[line] = Entry(rev, irev, srev, layout, ++tick)
         if (cache.size > MAX_ENTRIES) evict()
         return layout
     }
 
-    /** Splice [pieces] into [text] as phantom runs, mapping the syntax [spans] to the shifted visual columns
-     *  and styling the inlay runs (added last so they win over any overlapping syntax span). */
+    /** Splice [pieces] into [text] as phantom runs, mapping the syntax [spans] (then the [sem]antic overlay)
+     *  to the shifted visual columns and styling the inlay runs (added last so they win over any span). */
     private fun buildInlayAnnotated(
         text: String,
         spans: List<LineSpan>,
         pieces: List<InlayPiece>,
+        sem: List<SemSpan>,
     ): AnnotatedString {
         val sb = StringBuilder(text.length + pieces.sumOf { it.text.length })
-        val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>(spans.size + pieces.size)
+        val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>(spans.size + sem.size + pieces.size)
         val inlayRanges = ArrayList<IntArray>(pieces.size)
         var pi = 0
         for (col in 0..text.length) {
@@ -128,8 +149,19 @@ class LineRenderCache(
             val st = palette[sp.type.ordinal] ?: continue
             ranges.add(AnnotatedString.Range(st, mapCol(pieces, sp.start), mapCol(pieces, sp.end)))
         }
+        for (sp in sem) {
+            val (s, e) = clampRange(sp.start, sp.end, text.length) ?: continue
+            ranges.add(AnnotatedString.Range(sp.style, mapCol(pieces, s), mapCol(pieces, e)))
+        }
         for (r in inlayRanges) ranges.add(AnnotatedString.Range(inlayStyle, r[0], r[1]))
         return AnnotatedString(sb.toString(), spanStyles = ranges)
+    }
+
+    /** Clamp a semantic span to `[0, len]`, or null if it doesn't fall within the line (stale after an edit). */
+    private fun clampRange(start: Int, end: Int, len: Int): Pair<Int, Int>? {
+        val s = start.coerceIn(0, len)
+        val e = end.coerceIn(s, len)
+        return if (e > s) s to e else null
     }
 
     private fun mapCol(pieces: List<InlayPiece>, rawCol: Int): Int {
@@ -144,11 +176,13 @@ class LineRenderCache(
         if (delta == 0) return
         shiftIntKeyed(cache, fromOldLine, delta)
         inlayRevs.shift(fromOldLine, delta)
+        semantic.shift(fromOldLine, delta)
     }
 
     fun clear() {
         cache.clear()
         inlayRevs.clear()
+        semantic.clear()
         measuredMaxWidth = 0f
     }
 
@@ -214,6 +248,42 @@ internal class InlayRevisions {
 
     fun clear() {
         inlays = emptyMap()
+        stampByLine.clear()
+        stamp = 0
+    }
+}
+
+/**
+ * Per-line semantic-overlay tracking, the [SemSpan] analog of [InlayRevisions]. Holds the current document-
+ * line-keyed semantic spans and a unique-forever stamp per line, bumped ONLY for lines whose spans changed —
+ * so an async semantic-highlight pass re-shapes only the lines it actually recolored, not the whole viewport.
+ */
+internal class SemanticSpansByLine {
+    private var spans: Map<Int, List<SemSpan>> = emptyMap()
+    private val stampByLine = HashMap<Int, Int>()
+    private var stamp = 0
+
+    fun stampOf(line: Int): Int = stampByLine[line] ?: 0
+    fun spansFor(line: Int): List<SemSpan> = spans[line] ?: emptyList()
+
+    /** Adopt [newSpans], bumping the stamp for each line whose spans changed, were added, or were removed. */
+    fun update(newSpans: Map<Int, List<SemSpan>>) {
+        if (newSpans == spans) return
+        for ((line, s) in spans) if (newSpans[line] != s) stampByLine[line] = ++stamp
+        for (line in newSpans.keys) if (line !in spans) stampByLine[line] = ++stamp
+        spans = newSpans
+    }
+
+    /** Mirror a line splice so a moved line keeps its stamp (paired with the layout cache shift). */
+    fun shift(fromOldLine: Int, delta: Int) {
+        if (delta == 0) return
+        shiftIntKeyed(stampByLine, fromOldLine, delta)
+        if (spans.isNotEmpty()) spans = spans.mapKeys { (k, _) -> if (k >= fromOldLine) k + delta else k }
+            .filterKeys { it >= 0 }
+    }
+
+    fun clear() {
+        spans = emptyMap()
         stampByLine.clear()
         stamp = 0
     }

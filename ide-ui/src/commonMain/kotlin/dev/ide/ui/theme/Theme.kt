@@ -36,6 +36,11 @@ data class SyntaxColors(
     val punctuation: Color,
     val constant: Color,
     val annotation: Color,
+    // semantic-highlight modifier accents (layered over the base kind color; see SemanticStyles)
+    val composable: Color,
+    val extension: Color,
+    val mutableVar: Color,
+    val suspendFn: Color,
 )
 
 /** Solid puzzle-block palette (`--blk-*`) for the projectional block editor. */
@@ -135,6 +140,10 @@ private val DarkSyntax = SyntaxColors(
     punctuation = Color(0xFF8B8D96),
     constant = Color(0xFFD9A066),
     annotation = Color(0xFFE6C178),
+    composable = Color(0xFF4FC1A6),
+    extension = Color(0xFF82AAFF),
+    mutableVar = Color(0xFFE0918A),
+    suspendFn = Color(0xFFD9A0C9),
 )
 
 private val LightSyntax = SyntaxColors(
@@ -151,6 +160,10 @@ private val LightSyntax = SyntaxColors(
     punctuation = Color(0xFF6B6C73),
     constant = Color(0xFFB9690B),
     annotation = Color(0xFF9A6700),
+    composable = Color(0xFF1F8A77),
+    extension = Color(0xFF3A6FB5),
+    mutableVar = Color(0xFFC0473F),
+    suspendFn = Color(0xFF9C4E8A),
 )
 
 private fun darkColors(accent: Color, accentStrong: Color) = CodeAssistColors(

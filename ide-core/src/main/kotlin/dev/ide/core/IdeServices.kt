@@ -488,7 +488,9 @@ class IdeServices private constructor(
         val sdkRoot = dev.ide.android.support.tools.AndroidSdk.findSdkRoot(workspaceRoot) ?: return null
         val sdk = dev.ide.android.support.tools.AndroidSdk.detect(sdkRoot) ?: return null
         val platform = sdk.androidJar.parent?.fileName?.toString() ?: return null // android-NN
-        val installed = java.nio.file.Files.isDirectory(sdkRoot.resolve("sources").resolve(platform))
+        // Same-major sources count as installed: the editor resolves them by major API level, so an exact
+        // `sources/android-36` isn't required when `sources/android-36.1` is present (and vice-versa).
+        val installed = dev.ide.android.support.tools.AndroidSdk.platformSourcesDir(sdkRoot, platform) != null
         return AndroidSourcesInfo(platform, installed, downloadable = findSdkmanager(sdkRoot) != null)
     }
 
@@ -501,7 +503,7 @@ class IdeServices private constructor(
         val sdkRoot = dev.ide.android.support.tools.AndroidSdk.findSdkRoot(workspaceRoot) ?: return "No Android SDK found."
         val sdk = dev.ide.android.support.tools.AndroidSdk.detect(sdkRoot) ?: return "No installed Android platform."
         val platform = sdk.androidJar.parent?.fileName?.toString() ?: return "Couldn't determine the platform."
-        if (java.nio.file.Files.isDirectory(sdkRoot.resolve("sources").resolve(platform))) return "Sources for $platform are already installed."
+        if (dev.ide.android.support.tools.AndroidSdk.platformSourcesDir(sdkRoot, platform) != null) return "Sources for $platform are already installed."
         val sdkmanager = findSdkmanager(sdkRoot) ?: return "sdkmanager not found — install the sources via Android Studio's SDK Manager (SDK Platforms → Sources for Android $platform)."
         return runCatching {
             val proc = ProcessBuilder(sdkmanager.toString(), "sources;$platform")
@@ -1641,6 +1643,9 @@ class IdeServices private constructor(
         openDocuments[path] = text
         path.parent?.let { Files.createDirectories(it) }
         path.writeText(text)
+        // A write to disk can change how OTHER files resolve (a dependency's saved edit). The JDT binding-parse
+        // cache keys only on the focal text, so drop it on any save to avoid a same-text focal parse going stale.
+        analyzers.values.forEach { (it as? JdtSourceAnalyzer)?.invalidateBindingCache() }
         if (isResourcePath(path)) {
             invalidateSyntheticClasses() // an edited res file changes R
             if (path.toString().endsWith(".xml")) {
@@ -1998,6 +2003,19 @@ class IdeServices private constructor(
         val service = analyzer.inlayHints ?: return emptyList()
         val vf = store.vfs.fileFor(file)
         return runCatching { runSync { service.hints(vf, TextRange(startOffset, endOffset)) } }.getOrDefault(emptyList())
+    }
+
+    /** Type-aware semantic-highlight tokens for [text], bound to [file]'s module (empty if outside the project
+     *  or the backend has no highlighter). Runs on the engine thread, like analysis/hints. */
+    fun semanticTokens(file: Path, text: String): List<dev.ide.lang.highlight.SemanticToken> {
+        val module = moduleForEditableFile(file) ?: return emptyList()
+        updateDocument(file, text) // the live buffer feeds the analyzer's overlay
+        val analyzer = analyzerFor(module, languageFor(file))
+        val service = analyzer.semanticHighlighter ?: return emptyList()
+        val vf = store.vfs.fileFor(file)
+        // Refresh the analyzer's parse of the live buffer (the Kotlin highlighter reads the last parse).
+        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        return runCatching { runSync { service.highlight(vf) } }.getOrDefault(emptyList())
     }
 
     /** Enclosing declarations (type/method names, outer→inner) at [offset] in [file]'s buffer — for the

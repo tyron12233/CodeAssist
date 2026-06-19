@@ -183,6 +183,7 @@ class ClasspathReader(
         val paramNames: List<String>,
         val isComposable: Boolean,
         val isInline: Boolean,
+        val isSuspend: Boolean,
         val varargParamIndex: Int,
     ) {
         // Cached types are context-free; rebind the live context so members()/supertypes() work after reload.
@@ -202,6 +203,7 @@ class ClasspathReader(
             declaringClassFqn = declaringClassFqn,
             isComposable = isComposable,
             isInline = isInline,
+            isSuspend = isSuspend,
             varargParamIndex = varargParamIndex,
         )
 
@@ -216,6 +218,7 @@ class ClasspathReader(
                 s.paramNames,
                 s.isComposable,
                 s.isInline,
+                s.isSuspend,
                 s.varargParamIndex,
             )
         }
@@ -252,6 +255,7 @@ class ClasspathReader(
             out.writeInt(r.paramNames.size); r.paramNames.forEach { out.writeUTF(it) }
             out.writeBoolean(r.isComposable)
             out.writeBoolean(r.isInline)
+            out.writeBoolean(r.isSuspend)
             out.writeInt(r.varargParamIndex)
         }
     }
@@ -274,8 +278,9 @@ class ClasspathReader(
             val paramNames = List(inp.readInt()) { inp.readUTF() }
             val isComposable = inp.readBoolean()
             val isInline = inp.readBoolean()
+            val isSuspend = inp.readBoolean()
             val varargIdx = inp.readInt()
-            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, varargIdx)
+            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, isSuspend, varargIdx)
         }
         return out
     }
@@ -307,7 +312,7 @@ class ClasspathReader(
     }
 
     private companion object {
-        const val FORMAT_VERSION = 9 // v9: + KotlinSymbol.varargParamIndex (vararg-aware call resolution)
+        const val FORMAT_VERSION = 10 // v10: + KotlinSymbol.isSuspend (semantic-highlight suspension points)
         val BINARY = SymbolOrigin(fromSource = false, file = null)
     }
 }

@@ -75,6 +75,7 @@ import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiError
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiRenameTarget
@@ -97,9 +98,17 @@ import dev.ide.platform.CancelToken
 import dev.ide.platform.EngineCancellation
 import dev.ide.platform.EngineCanceledException
 import dev.ide.ui.backend.AnalysisPreempted
+import dev.ide.platform.log.Log
+import dev.ide.platform.log.LogLevel
+import dev.ide.platform.log.LogSink
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 import java.io.File
@@ -122,6 +131,12 @@ import kotlin.io.path.writeText
 class IdeServicesBackend(
     initial: IdeServices,
     private val manager: ProjectManager? = null,
+    /**
+     * Opt-in usage analytics. Defaults to the no-op service (desktop, or when no transport is configured);
+     * the on-device host injects a [dev.ide.analytics.impl.DefaultAnalyticsService] backed by Supabase. The
+     * backend gates it on the persisted consent preference — see [analyticsConsent]/[setAnalyticsConsent].
+     */
+    private val analytics: dev.ide.analytics.AnalyticsService = dev.ide.analytics.NoopAnalyticsService,
 ) : IdeBackend, dev.ide.preview.LayoutPreviewBackend {
 
     @Volatile
@@ -190,6 +205,70 @@ class IdeServicesBackend(
 
     private val _fsEpoch = MutableStateFlow(0)
     override val fileSystemEpoch: StateFlow<Int> get() = _fsEpoch
+
+    /** Background scope for the analytics build/index watchers (see [init]); cancelled in [close]. */
+    private val analyticsScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** Aggregates per-keystroke latencies (completion/analysis) into periodic summary events. */
+    private val perf = PerfSampler { name, props -> track(name, props) }
+
+    // ---- critical-error surface (non-fatal dialog, fed by the logging facade) ----
+
+    private val _errorEvents = MutableStateFlow<UiError?>(null)
+    private val errorQueue = ArrayDeque<UiError>()
+    private val errorIdSeq = AtomicInteger(0)
+    private val errorLock = Any()
+
+    /** Turns engine ERROR logs (caught failures) into the non-fatal dialog. Registered on [Log] in [init]. */
+    private val errorDialogSink = LogSink { record ->
+        val t = record.throwable
+        if (record.level == LogLevel.ERROR && t != null) {
+            showError(t.javaClass.simpleName.ifEmpty { "Error" }, record.message, stackString(t))
+        }
+    }
+
+    init {
+        Log.addSink(errorDialogSink)
+
+        // index_perf: time each index build (building → not building) and emit its duration. Low-volume
+        // (once per build/reindex). Re-subscribes per project (collectLatest on the epoch).
+        analyticsScope.launch {
+            projectEpoch.collectLatest {
+                var startNs = 0L
+                var building = false
+                services.indexStatus.collectLatest { st ->
+                    if (st.building && !building) { building = true; startNs = System.nanoTime() }
+                    else if (!st.building && building) {
+                        building = false
+                        track(dev.ide.analytics.Events.INDEX_PERF, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
+                    }
+                }
+            }
+        }
+        // Emit build_result (the performance signal) when a build/run reaches a terminal status, watched off
+        // the live buildState so it captures every trigger (Run button, task picker, android run). Re-subscribes
+        // per project (collectLatest on the epoch) since a project swap re-points services.buildState. track()
+        // no-ops while consent is absent, so this is harmless when analytics is off.
+        analyticsScope.launch {
+            projectEpoch.collectLatest {
+                var prev = dev.ide.ui.backend.RunStatus.Idle
+                services.buildState.collectLatest { bs ->
+                    val terminal = bs.status == dev.ide.ui.backend.RunStatus.Succeeded || bs.status == dev.ide.ui.backend.RunStatus.Failed
+                    if (terminal && prev == dev.ide.ui.backend.RunStatus.Running) {
+                        track(
+                            dev.ide.analytics.Events.BUILD_RESULT,
+                            mapOf(
+                                "ok" to (bs.status == dev.ide.ui.backend.RunStatus.Succeeded).toString(),
+                                "duration_ms" to bs.elapsedMs.toString(),
+                                "steps" to bs.steps.size.toString(),
+                            ),
+                        )
+                    }
+                    prev = bs.status
+                }
+            }
+        }
+    }
 
     override val project: ProjectInfo
         get() = ProjectInfo(
@@ -600,7 +679,9 @@ class IdeServicesBackend(
         services.save(Paths.get(path), text)
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
+        val t0 = System.nanoTime()
         val result = interactive { services.complete(Paths.get(path), text, offset) }
+        perf.record(dev.ide.analytics.Events.COMPLETION_PERF, (System.nanoTime() - t0) / 1_000_000)
         return UiCompletionResult(
             items = result.items.map { item ->
                 UiCompletionItem(
@@ -726,6 +807,78 @@ class IdeServicesBackend(
         manager?.setPreference(key, value)
     }
 
+    // --- usage analytics (opt-in) ---
+    // Consent is persisted as a preference ("granted"/"denied"; absent = undecided → prompt). The injected
+    // AnalyticsService does the collection; it no-ops while disabled, and revoking drops anything buffered.
+
+    override fun analyticsAvailable(): Boolean = analytics !== dev.ide.analytics.NoopAnalyticsService
+
+    override fun analyticsConsent(): Boolean? = when (manager?.preference(ANALYTICS_CONSENT_PREF)) {
+        "granted" -> true
+        "denied" -> false
+        else -> null
+    }
+
+    override fun setAnalyticsConsent(granted: Boolean) {
+        manager?.setPreference(ANALYTICS_CONSENT_PREF, if (granted) "granted" else "denied")
+        analytics.enabled = granted
+    }
+
+    override fun track(event: String, props: Map<String, String>) {
+        analytics.track(dev.ide.analytics.AnalyticsEvent(event, dev.ide.analytics.Events.categoryOf(event), props))
+    }
+
+    // --- critical-error dialog ---
+
+    override val errorEvents: StateFlow<UiError?> get() = _errorEvents
+
+    override fun dismissError(id: Int) {
+        synchronized(errorLock) {
+            if (_errorEvents.value?.id != id) return
+            _errorEvents.value = if (errorQueue.isEmpty()) null else errorQueue.removeFirst()
+        }
+    }
+
+    /** Enqueue an error for the dialog (shown one at a time; queue capped so a storm can't grow unbounded). */
+    private fun showError(title: String, message: String, detail: String) {
+        val err = UiError(errorIdSeq.incrementAndGet(), title, message, detail, timeLabel())
+        synchronized(errorLock) {
+            if (_errorEvents.value == null) _errorEvents.value = err
+            else { errorQueue.addLast(err); while (errorQueue.size > 20) errorQueue.removeFirst() }
+        }
+    }
+
+    /**
+     * Install the process-wide uncaught-exception handler: surface the non-fatal dialog, report `app_crash`,
+     * and **swallow** (don't chain to the system killer) so the app stays alive. Hosts call this once at
+     * startup. On Android the [dev.ide.android] main-thread guard additionally keeps the UI looper running;
+     * this handler then mainly catches background-thread failures.
+     */
+    fun installCrashReporting() {
+        Thread.setDefaultUncaughtExceptionHandler { thread, t ->
+            runCatching { Log.logger("uncaught").warn("Uncaught exception on ${thread.name}", t) } // ring/console only
+            runCatching { showError("Application error", t.message ?: t.javaClass.simpleName, stackString(t)) }
+            runCatching {
+                analytics.track(
+                    dev.ide.analytics.AnalyticsEvent(
+                        dev.ide.analytics.Events.APP_CRASH,
+                        dev.ide.analytics.EventCategory.CRASH,
+                        dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name),
+                    )
+                )
+                analytics.flush()
+            }
+        }
+    }
+
+    private fun stackString(t: Throwable): String {
+        val sw = java.io.StringWriter()
+        t.printStackTrace(java.io.PrintWriter(sw))
+        return sw.toString()
+    }
+
+    private fun timeLabel(): String = runCatching { java.time.LocalTime.now().withNano(0).toString() }.getOrDefault("")
+
     // Open tabs are persisted per project, alongside the other workspace state under `.platform/`. Format:
     // line 1 = active index, each following line = one open file path (tab order). Best-effort — a missing or
     // unreadable file just means "no remembered tabs". Kept out of `.platform/caches/` so a backup includes it.
@@ -761,7 +914,18 @@ class IdeServicesBackend(
     }
 
     /** Close the active engine — the host calls this on teardown (window close / activity destroy). */
-    fun close() = services.close()
+    fun close() {
+        runCatching { Log.removeSink(errorDialogSink) }
+        runCatching { analyticsScope.cancel() }
+        runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
+        runCatching { analytics.flush() }
+        runCatching { analytics.close() }
+        services.close()
+    }
+
+    private companion object {
+        const val ANALYTICS_CONSENT_PREF = "analytics.consent"
+    }
 
     /** Make [next] the active project: swap it in, bump the epoch (re-keys UI state), and close the old one. */
     private fun swap(next: IdeServices) {
@@ -813,11 +977,13 @@ class IdeServicesBackend(
         // Routes through the full analysis engine: JDT compiler errors + the Java analyzers, merged,
         // suppression-filtered, and profile-adjusted into one set. Runs in the preemptible lane so a
         // completion request can cut ahead; a preempted pass surfaces as AnalysisPreempted for the host to retry.
+        val t0 = System.nanoTime()
         val diagnostics = try {
             background { services.analyzeDiagnostics(Paths.get(path), text) }
         } catch (e: EngineCanceledException) {
-            throw AnalysisPreempted()
+            throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
         }
+        perf.record(dev.ide.analytics.Events.ANALYSIS_PERF, (System.nanoTime() - t0) / 1_000_000)
         return diagnostics.map { d ->
             val (line, col) = lineColOf(text, d.range.start)
             UiDiagnostic(
@@ -888,6 +1054,36 @@ class IdeServicesBackend(
                 paddingRight = h.paddingRight,
             )
         }
+    }
+
+    override suspend fun semanticTokens(path: String, text: String): List<dev.ide.ui.backend.UiSemanticToken> {
+        val tokens = try {
+            background { services.semanticTokens(Paths.get(path), text) }
+        } catch (e: EngineCanceledException) {
+            // Preempted by completion on the shared engine thread — surface it so the host retries and keeps
+            // the current coloring meanwhile (returning empty would clear it until the next edit).
+            throw AnalysisPreempted()
+        }
+        return tokens.map { t ->
+            dev.ide.ui.backend.UiSemanticToken(
+                startOffset = t.range.start,
+                endOffset = t.range.end,
+                kind = t.kind.id,
+                modifiers = t.modifiers.mapTo(LinkedHashSet()) { mapHighlightModifier(it) },
+            )
+        }
+    }
+
+    private fun mapHighlightModifier(m: dev.ide.lang.highlight.HighlightModifier): dev.ide.ui.backend.UiHighlightModifier = when (m) {
+        dev.ide.lang.highlight.HighlightModifier.DECLARATION -> dev.ide.ui.backend.UiHighlightModifier.Declaration
+        dev.ide.lang.highlight.HighlightModifier.STATIC -> dev.ide.ui.backend.UiHighlightModifier.Static
+        dev.ide.lang.highlight.HighlightModifier.ABSTRACT -> dev.ide.ui.backend.UiHighlightModifier.Abstract
+        dev.ide.lang.highlight.HighlightModifier.DEPRECATED -> dev.ide.ui.backend.UiHighlightModifier.Deprecated
+        dev.ide.lang.highlight.HighlightModifier.READONLY -> dev.ide.ui.backend.UiHighlightModifier.Readonly
+        dev.ide.lang.highlight.HighlightModifier.MUTABLE -> dev.ide.ui.backend.UiHighlightModifier.Mutable
+        dev.ide.lang.highlight.HighlightModifier.EXTENSION -> dev.ide.ui.backend.UiHighlightModifier.Extension
+        dev.ide.lang.highlight.HighlightModifier.COMPOSABLE -> dev.ide.ui.backend.UiHighlightModifier.Composable
+        dev.ide.lang.highlight.HighlightModifier.SUSPEND -> dev.ide.ui.backend.UiHighlightModifier.Suspend
     }
 
     // ---- code actions (quick-fixes + intentions) ----

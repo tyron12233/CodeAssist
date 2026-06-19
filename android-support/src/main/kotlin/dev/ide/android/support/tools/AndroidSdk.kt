@@ -105,6 +105,27 @@ class AndroidSdk(
             ).filterNotNull().map { Paths.get(it) }.firstOrNull { Files.isDirectory(it.resolve("platforms")) }
         }
 
+        /**
+         * The installed framework SOURCES dir for the platform named [platformDirName] (`android-36`): the
+         * exact-named `sources/android-36`, else any installed `sources/android-NN…` with the same MAJOR API
+         * level. The SDK keys framework sources by base level while the platform jar can be a minor / extension
+         * revision (`android-36.1`), so an exact-only match misses sources the editor can perfectly well use
+         * for parameter names + javadoc. Null when no same-major sources are installed.
+         */
+        fun platformSourcesDir(sdkRoot: Path, platformDirName: String): Path? {
+            val sources = sdkRoot.resolve("sources")
+            if (!Files.isDirectory(sources)) return null
+            val exact = sources.resolve(platformDirName)
+            if (Files.isDirectory(exact)) return exact
+            val major = apiLevelOf(platformDirName)
+            if (major < 0) return null
+            return Files.list(sources).use { stream ->
+                stream.filter { Files.isDirectory(it) && apiLevelOf(it.fileName.toString()) == major }
+                    .sorted(compareByDescending { it.fileName.toString() })
+                    .findFirst().orElse(null)
+            }
+        }
+
         private fun locatePlatformJar(platformsDir: Path, compileSdk: Int?): Path? {
             if (!Files.isDirectory(platformsDir)) return null
             if (compileSdk != null) {

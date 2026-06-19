@@ -1,6 +1,13 @@
 package dev.ide.fakecompose
 
 import androidx.compose.runtime.Composable
+import kotlin.reflect.KProperty
+
+/** Mirrors Compose's `androidx.compose.runtime.{getValue,setValue}`: the `by`-delegation operators for a
+ *  `FakeState` are EXTENSIONS (compiled to the `FakeComposablesKt` facade), so `val x by …{ fakeMutableStateOf() }`
+ *  only compiles when they are imported — the missing-`getValue`-import case. */
+operator fun <T> FakeState<T>.getValue(thisRef: Any?, property: KProperty<*>): T = value
+operator fun <T> FakeState<T>.setValue(thisRef: Any?, property: KProperty<*>, value: T) { this.value = value }
 
 /** A `@Composable` top-level function compiled into the test classpath (facade `FakeComposablesKt`), so the
  *  binary `@Composable` detection can be exercised on real bytecode without the Compose compiler. */

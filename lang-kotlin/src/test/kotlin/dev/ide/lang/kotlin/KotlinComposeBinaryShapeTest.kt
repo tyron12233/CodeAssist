@@ -123,6 +123,47 @@ class KotlinComposeBinaryShapeTest {
     }
 
     @Test
+    fun uninferableStateFactoryLowersToAnHonestGap() {
+        // `val text by fakeRemember { fakeMutableStateOf() }` — `fakeMutableStateOf()` has no argument to pin
+        // `T`, no explicit type argument, and no expected type, so its result type can't be inferred (invalid
+        // Kotlin). The lowering must surface this as an Unsupported gap naming the type variable, NOT lower a
+        // malformed under-applied call (`chooseCallee`'s arity fallback would otherwise pick it) that crashes
+        // the run reflectively.
+        val fn = lower("@Composable fun C() { val text by fakeRemember { fakeMutableStateOf() } }")
+        val gaps = ArrayList<String>()
+        fn.body.walk { if (it is RNode.Unsupported) gaps += it.reason }
+        assertTrue(
+            gaps.any { it.contains("infer type variable T") },
+            "uninferable mutableStateOf() should lower to an 'infer type variable T' gap; got $gaps",
+        )
+    }
+
+    @Test
+    fun inferableStateFactoryStillLowersCleanly() {
+        // The counterpart: `fakeMutableStateOf("")` HAS an argument that pins `T = String`, so it must lower
+        // with no gap (the check must not over-fire on a well-formed generic call).
+        assertComplete(lower("@Composable fun C() { val text by fakeRemember { fakeMutableStateOf(\"\") } }"))
+    }
+
+    @Test
+    fun delegateWithoutGetValueImportLowersToAGap() {
+        // `val text by fakeRemember { fakeMutableStateOf("") }` with the factories imported but NOT the
+        // `getValue` operator extension: the delegation can't compile, so the preview lowering must surface a
+        // gap naming the missing operator instead of silently reading `.value`.
+        val kt = KotlinParserHost.parse(
+            "Use.kt",
+            "import dev.ide.fakecompose.fakeRemember\n" +
+                "import dev.ide.fakecompose.fakeMutableStateOf\n" +
+                "import androidx.compose.runtime.Composable\n" +
+                "@Composable fun C() { val text by fakeRemember { fakeMutableStateOf(\"\") } }",
+        )
+        val fn = KotlinTreeResolver(kt, KotlinParsedFile(kt, FakeFile("Use.kt"), 0), service).lowerFirstFunction()!!
+        val gaps = ArrayList<String>()
+        fn.body.walk { if (it is RNode.Unsupported) gaps += it.reason }
+        assertTrue(gaps.any { it.contains("getValue") }, "a delegate missing its getValue import should gap; got $gaps")
+    }
+
+    @Test
     fun rememberOfVarargFactoryInfersTheCollectionType() {
         // `val l = remember { mutableStateListOf("a","b") }; l.add("c"); l.removeAt(0)` — vararg-through-generic
         // inference must type `l` as the `MutableList` so its members resolve.

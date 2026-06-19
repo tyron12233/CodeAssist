@@ -258,15 +258,42 @@ private fun CodeEditorContent(
             }
         }
     }
+    // ---- semantic highlighting (type-aware coloring): fetched debounced off the engine thread and overlaid
+    // on the lexical spans. Java/Kotlin only (other backends return nothing). Shares the engine thread with
+    // completion/analysis, so a completion request preempts this pass (AnalysisPreempted) — retry a few times,
+    // keeping the current tokens, so the coloring survives a keystroke race instead of vanishing until the
+    // next edit. The session shifts the tokens in place on each edit, so they track the text in between.
+    LaunchedEffect(path, editorSession.textRevision) {
+        if (!path.endsWith(".java") && !path.endsWith(".kt") && !path.endsWith(".kts")) {
+            editorSession.applySemanticTokens(emptyList()); return@LaunchedEffect
+        }
+        delay(280.milliseconds)
+        val text = editorSession.doc.text
+        var attempt = 0
+        while (attempt++ < 8) {
+            try {
+                editorSession.applySemanticTokens(backend.semanticTokens(path, text))
+                break
+            } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
+                delay(150.milliseconds)
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (e: Throwable) {
+                break // keep whatever we had; a later edit retriggers
+            }
+        }
+    }
+
     // ---- @Preview gutter markers: the file's Compose @Preview functions, fetched debounced. Each draws a
     // tappable glyph in the gutter on its line → switch this tab to the Preview surface for that function.
     // Kotlin-only (the backend is a no-op elsewhere); cheap, so it just rides the edit cadence.
-    var composePreviews by remember(path) { mutableStateOf<List<UiComposePreview>>(emptyList()) }
+    // Stored on the session so they shift with edits (the gutter icon tracks its function while typing); the
+    // debounced fetch refills the authoritative set.
     LaunchedEffect(path, editorSession.textRevision) {
-        if (!path.endsWith(".kt") && !path.endsWith(".kts")) { composePreviews = emptyList(); return@LaunchedEffect }
+        if (!path.endsWith(".kt") && !path.endsWith(".kts")) { editorSession.applyComposePreviews(emptyList()); return@LaunchedEffect }
         delay(400.milliseconds)
         val text = editorSession.doc.text
-        composePreviews = runCatching { backend.composePreviews(path, text) }.getOrDefault(emptyList())
+        editorSession.applyComposePreviews(runCatching { backend.composePreviews(path, text) }.getOrDefault(emptyList()))
     }
     val inlayStyle = remember(colors) { SpanStyle(color = colors.textTertiary, fontStyle = FontStyle.Italic) }
     val perLineInlays = remember(inlayHints, editorSession.doc) {
@@ -282,6 +309,13 @@ private fun CodeEditorContent(
         }
     }
     renderCache.setInlays(perLineInlays, inlayStyle)
+
+    // Semantic overlay → per-line spans (recomputed when the tokens, buffer, or theme change), pushed to the
+    // render cache which re-shapes only the lines whose spans actually changed (per-line stamp).
+    val perLineSemantic = remember(editorSession.semanticTokens, editorSession.doc, syntax) {
+        perLineSemanticSpans(editorSession.semanticTokens, editorSession.doc, syntax)
+    }
+    renderCache.setSemanticSpans(perLineSemantic)
 
     // Per-number layout cache, keyed by the actual line number (not just its digit count) so the gutter
     // renders real numbers — caching by digit-count rendered "0"/"00"/… for every line.
@@ -1280,7 +1314,7 @@ private fun CodeEditorContent(
         // @Preview gutter icons — a tappable glyph in the gutter beside each Compose @Preview function.
         // Tapping switches this tab to the Preview surface rendering that specific composable. Positioned
         // per line and read in the layout phase, so they scroll with the document like the diagnostic chips.
-        for (p in composePreviews) {
+        for (p in editorSession.previewMarkers) {
             val ln = doc.lineForOffset(p.offset.coerceIn(0, docLength))
             PreviewGutterIcon(
                 onClick = { onPreview(p.functionName) },

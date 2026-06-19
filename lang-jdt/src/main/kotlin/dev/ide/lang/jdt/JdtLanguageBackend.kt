@@ -22,6 +22,7 @@ class JdtLanguageBackend : LanguageBackend {
         BackendCapability.SNIPPETS,
         BackendCapability.POSTFIX,
         BackendCapability.INLAY_HINTS,
+        BackendCapability.SEMANTIC_HIGHLIGHT,
         BackendCapability.COMPILE,
     )
 

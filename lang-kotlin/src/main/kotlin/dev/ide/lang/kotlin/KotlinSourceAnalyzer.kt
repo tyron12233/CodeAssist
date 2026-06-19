@@ -133,8 +133,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val lastByFile = ConcurrentHashMap<String, KotlinParsedFile>()
 
     override val incrementalParser: IncrementalParser = object : IncrementalParser {
-        override fun parseFull(snapshot: DocumentSnapshot): ParsedFile =
-            (backing.parseFull(snapshot) as KotlinParsedFile).also { lastByFile[snapshot.file.path] = it }
+        override fun parseFull(snapshot: DocumentSnapshot): ParsedFile {
+            // A settled buffer is parseFull'd for several features in succession (analyze, semantic highlight,
+            // breadcrumb, …). The PSI parse is pure for a given text, so reuse the last parse when the text is
+            // unchanged instead of re-running the parser each time.
+            lastByFile[snapshot.file.path]?.let { if (it.ktFile.text.contentEquals(snapshot.text)) return it }
+            return (backing.parseFull(snapshot) as KotlinParsedFile).also { lastByFile[snapshot.file.path] = it }
+        }
 
         override fun reparse(previous: ParsedFile, newSnapshot: DocumentSnapshot, edits: List<DocumentEdit>): ReparseResult =
             backing.reparse(previous, newSnapshot, edits).also { lastByFile[newSnapshot.file.path] = it.tree as KotlinParsedFile }
@@ -146,6 +151,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         KotlinInlayHintService(
             parsedFor = { lastByFile[it.path] },
             resolverFor = { KotlinResolver(it.ktFile, it, service) },
+        )
+    }
+
+    override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService by lazy {
+        KotlinSemanticHighlighter(
+            parsedFor = { lastByFile[it.path] },
+            resolverFor = { KotlinResolver(it.ktFile, it, service) },
+            refresh = { refreshOverlay() },
         )
     }
 
@@ -232,26 +245,50 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * each `kt.unresolved` name under the caret, one fix per candidate fully-qualified name (top-level
      * callable / type), inserting `import <fqn>` after the existing imports (else the package directive, else
      * the file top). A candidate already imported contributes nothing; results are de-duplicated and capped.
+     * A `kt.delegateOperator` diagnostic under the caret additionally offers imports for the delegate's missing
+     * `getValue`/`setValue` operator (`import androidx.compose.runtime.getValue` for `by mutableStateOf`).
      */
     fun importFixesAt(file: VirtualFile, offset: Int): List<KotlinImportFix> {
         val parsed = lastByFile[file.path] ?: return emptyList()
         refreshOverlay()
         val text = parsed.ktFile.text
-        val unresolved = semanticDiagnostics(parsed)
-            .filter { it.code == "kt.unresolved" && offset >= it.range.start && offset <= it.range.end }
-        if (unresolved.isEmpty()) return emptyList()
+        val diags = semanticDiagnostics(parsed)
+        fun coversCaret(d: Diagnostic) = offset >= d.range.start && offset <= d.range.end
+        val unresolved = diags.filter { it.code == "kt.unresolved" && coversCaret(it) }
+        val delegateOps = diags.filter { it.code == "kt.delegateOperator" && coversCaret(it) }
+        if (unresolved.isEmpty() && delegateOps.isEmpty()) return emptyList()
         val insertOffset = importInsertOffset(parsed.ktFile)
         val existing = parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
         val seen = HashSet<String>()
         val out = ArrayList<KotlinImportFix>()
+        fun offer(fqn: String) {
+            if (fqn in existing || !seen.add(fqn)) return
+            out += KotlinImportFix("Import $fqn", listOf(DocumentEdit(insertOffset, 0, "import $fqn\n")))
+        }
         for (d in unresolved) {
             val name = text.substring(d.range.start.coerceIn(0, text.length), d.range.end.coerceIn(0, text.length))
-            for (fqn in service.importCandidates(name)) {
-                if (fqn in existing || !seen.add(fqn)) continue
-                out += KotlinImportFix("Import $fqn", listOf(DocumentEdit(insertOffset, 0, "import $fqn\n")))
+            service.importCandidates(name).forEach(::offer)
+        }
+        if (delegateOps.isNotEmpty()) {
+            val resolver = KotlinResolver(parsed.ktFile, parsed, service)
+            for (prop in delegatePropertiesCovering(parsed.ktFile, offset)) {
+                resolver.delegateOperatorImportCandidates(prop).forEach(::offer)
             }
         }
         return out.take(12)
+    }
+
+    /** The `by`-delegated properties whose delegate expression covers [offset] — the targets a delegate-operator
+     *  import fix applies to (the `kt.delegateOperator` diagnostic is anchored on the delegate expression). */
+    private fun delegatePropertiesCovering(ktFile: KtFile, offset: Int): List<KtProperty> {
+        val out = ArrayList<KtProperty>()
+        fun rec(p: PsiElement) {
+            if (p is KtProperty) p.delegateExpression?.textRange?.let { if (offset >= it.startOffset && offset <= it.endOffset) out += p }
+            var c = p.firstChild
+            while (c != null) { rec(c); c = c.nextSibling }
+        }
+        rec(ktFile)
+        return out
     }
 
     /** Offset of a fresh line just after the last import (else the package directive, else the file start). */
@@ -303,6 +340,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                     unusedLocal(psi)?.let { out += it }
                     missingInitializer(psi)?.let { out += it }
                     varCouldBeVal(psi)?.let { out += it }
+                    delegateOperatorNotInScope(psi, resolver)?.let { out += it }
                     if (isPrivateDeclaration(psi)) unusedPrivate(psi, refNames)?.let { out += it }
                 }
                 is KtParameter -> typeMismatch(psi.typeReference?.text, psi.defaultValue, resolver)?.let { out += it }
@@ -319,6 +357,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                     (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it }
                     out += unknownNamedArguments(psi, resolver)
                     composableInvocation(psi, resolver)?.let { out += it }
+                    cannotInferType(psi, resolver)?.let { out += it }
                 }
                 is KtDotQualifiedExpression -> unsafeNullableAccess(psi, resolver)?.let { out += it }
                 // Conflicting declarations: same-name (and, for functions, same-signature) declarations in
@@ -1055,6 +1094,46 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "@Composable invocation can only happen from the context of a @Composable function",
             "kt.composableInvocation",
+        )
+    }
+
+    /**
+     * A generic call whose type arguments can't be inferred — Kotlin's "Not enough information to infer type
+     * variable T" (`val text by remember { mutableStateOf() }`: the inner `mutableStateOf()` has no argument to
+     * pin `T`, no explicit type argument, and no expected type, so its result type is undetermined). The check
+     * lives in [KotlinResolver.uninferableTypeParameters] (shared with the interpreter) and is conservative —
+     * it reports a parameter only when nothing at the site could have inferred it.
+     */
+    private fun cannotInferType(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        val uninferable = resolver.uninferableTypeParameters(call)
+        if (uninferable.isEmpty()) return null
+        val anchor = call.calleeExpression ?: call
+        val r = anchor.textRange
+        val vars = uninferable.joinToString(", ")
+        val msg = if (uninferable.size == 1) "Not enough information to infer type variable $vars"
+        else "Not enough information to infer type variables $vars"
+        return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, msg, "kt.cannotInferType")
+    }
+
+    /**
+     * A `by`-delegated property whose delegate-accessor operator isn't in scope — Kotlin desugars `val x by d`
+     * to `d.getValue(thisRef, prop)` (and a `var` write to `d.setValue(…)`), so the operator must be callable.
+     * For Compose's `MutableState` it is an EXTENSION in `androidx.compose.runtime`: `val text by remember {
+     * mutableStateOf(0) }` does not compile without `import androidx.compose.runtime.getValue`. The detection
+     * lives in [KotlinResolver.missingDelegateOperators] (shared with the interpreter) and is conservative —
+     * an unmodeled operator never flags, so it only fires when the operator exists on the classpath but isn't
+     * brought into scope.
+     */
+    private fun delegateOperatorNotInScope(prop: KtProperty, resolver: KotlinResolver): Diagnostic? {
+        val missing = resolver.missingDelegateOperators(prop)
+        if (missing.isEmpty()) return null
+        val anchor = prop.delegateExpression ?: return null
+        val r = anchor.textRange
+        val ops = missing.joinToString("' and '")
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "This delegate has no '$ops' operator in scope; import the delegate's '$ops' extension to use it",
+            "kt.delegateOperator",
         )
     }
 

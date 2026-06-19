@@ -29,6 +29,7 @@ class KotlinLanguageBackend : LanguageBackend {
         BackendCapability.BINDINGS,
         BackendCapability.COMPLETION,
         BackendCapability.INLAY_HINTS,
+        BackendCapability.SEMANTIC_HIGHLIGHT,
         BackendCapability.COMPILE,
     )
 

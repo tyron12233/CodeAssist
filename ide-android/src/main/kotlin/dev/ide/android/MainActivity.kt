@@ -53,6 +53,9 @@ class MainActivity : ComponentActivity() {
     private val inbound = mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Keep the app alive after an unexpected UI-thread exception (shows a non-fatal dialog instead of
+        // crashing). Installed first, on the main thread, so it guards everything below.
+        MainThreadGuard.install()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)

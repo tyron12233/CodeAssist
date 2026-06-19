@@ -48,6 +48,8 @@ include(
     ":interp-core", // on-device Kotlin interpreter: tree-walks lang-kotlin's ResolvedTree (Compose interpreter, step 3)
     ":deps-api",
     ":deps-impl",
+    ":analytics-api", // opt-in usage-analytics SPI (event model + AnalyticsService/AnalyticsSink ports)
+    ":analytics-impl", // the engine: durable batch buffer + Supabase PostgREST sink + scrubbed crash reporter
     ":block-api",
     ":block-impl",
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free

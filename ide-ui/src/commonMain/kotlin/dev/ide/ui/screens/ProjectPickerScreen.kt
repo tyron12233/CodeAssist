@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.ProjectInfo
+import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BetaBadge
 import dev.ide.ui.components.BetaBanner
 import dev.ide.ui.components.CenteredDialog
@@ -53,6 +54,9 @@ fun ProjectPickerScreen(
     onOpenInFiles: (() -> Unit)? = null,
     showLegacyRecovery: Boolean = false,
     onDismissLegacyRecovery: () -> Unit = {},
+    /** Analytics consent for the settings row: true/false = on/off, null = analytics unavailable (hide row). */
+    analyticsEnabled: Boolean? = null,
+    onAnalyticsChange: (Boolean) -> Unit = {},
 ) {
     var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
     val compatibilityCount = projects.count { it.compatibility }
@@ -80,6 +84,17 @@ fun ProjectPickerScreen(
             }
 
             StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
+
+            if (analyticsEnabled != null) {
+                Box(
+                    Modifier.fillMaxWidth()
+                        .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md))
+                        .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.md))
+                        .padding(horizontal = 14.dp),
+                ) {
+                    AnalyticsToggleRow(enabled = analyticsEnabled, onChange = onAnalyticsChange)
+                }
+            }
 
             NewProjectCard(onNewProject)
 

@@ -157,6 +157,24 @@ android {
         versionName = "3.0.2"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Opt-in usage analytics (see docs/analytics.md). The Supabase project URL + *publishable* key are
+        // baked in as BuildConfig fields, overridable per-build via -PANALYTICS_URL / -PANALYTICS_KEY or the
+        // ANALYTICS_URL / ANALYTICS_KEY env vars (so the endpoint/key can rotate without a code change). The
+        // publishable key is safe to ship: the `events` table's RLS allows INSERT only. An empty URL leaves
+        // analytics wired but inert (the host falls back to the no-op service), so a fork can build with no
+        // endpoint. Collection still never happens without the user's explicit consent.
+        val analyticsUrl = (findProperty("ANALYTICS_URL") as String?) ?: System.getenv("ANALYTICS_URL")
+            ?: "https://lqlpkeummmmglikumotx.supabase.co"
+        val analyticsKey = (findProperty("ANALYTICS_KEY") as String?) ?: System.getenv("ANALYTICS_KEY")
+            ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
+        buildConfigField("String", "ANALYTICS_URL", "\"$analyticsUrl\"")
+        buildConfigField("String", "ANALYTICS_KEY", "\"$analyticsKey\"")
+    }
+
+    buildFeatures {
+        // VERSION_NAME / VERSION_CODE + the ANALYTICS_* fields above are read from BuildConfig at runtime.
+        buildConfig = true
     }
 
     // Stage the generated assets (kotlin-stdlib.jar, kotlinc-resources.zip) into the merged assets so the
@@ -380,6 +398,12 @@ dependencies {
     implementation(project(":layout-preview-api"))
     implementation(project(":layout-preview-impl"))
     implementation(project(":android-support"))
+    // Opt-in usage analytics engine: DefaultAnalyticsService + the Supabase sink + the crash reporter. The
+    // analytics-api types reach here transitively via :ide-core (which exposes them as `api`).
+    implementation(project(":analytics-impl"))
+    // The logging facade (Log) — used directly here for the main-thread guard + the analytics log sink. It
+    // reaches :ide-core only as `implementation` (not transitive), so depend on it explicitly.
+    implementation(project(":platform-core"))
     implementation(files(relocateEcjForArt.flatMap { it.outputJar }))
 
     // The JDK `java.compiler` module's javax.* classes (javax.lang.model / .tools / .annotation.processing),

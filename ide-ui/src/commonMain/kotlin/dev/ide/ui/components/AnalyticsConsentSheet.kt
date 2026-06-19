@@ -1,0 +1,163 @@
+package dev.ide.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.theme.Ca
+
+/**
+ * The one-time, **opt-in** analytics consent prompt shown on first launch (after onboarding). Collection
+ * does not begin until the user taps "Allow" — declining (or dismissing) records the decision so the
+ * prompt isn't shown again. Plain-language summary of what's collected and the firm "never" line; an
+ * optional [onLearnMore] opens the privacy details. Adapts to the platform like the other notices
+ * (centered dialog on desktop, bottom sheet on mobile).
+ *
+ * [onAllow]/[onDecline] persist the decision (the host writes the consent preference + toggles collection).
+ */
+@Composable
+fun AnalyticsConsentSheet(
+    visible: Boolean,
+    onAllow: () -> Unit,
+    onDecline: () -> Unit,
+    onLearnMore: (() -> Unit)? = null,
+) {
+    if (isMobilePlatform) {
+        BottomSheet(visible = visible, onDismiss = onDecline, heightFraction = 0.62f) {
+            ConsentBody(
+                onAllow = onAllow,
+                onDecline = onDecline,
+                onLearnMore = onLearnMore,
+                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+        }
+    } else {
+        CenteredDialog(visible = visible, onDismiss = onDecline) {
+            val shape = RoundedCornerShape(Ca.radius.sheet)
+            ConsentBody(
+                onAllow = onAllow,
+                onDecline = onDecline,
+                onLearnMore = onLearnMore,
+                modifier = Modifier
+                    .width(460.dp)
+                    .background(Ca.colors.glassThick, shape)
+                    .border(1.dp, Ca.colors.glassEdge, shape)
+                    .padding(28.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsentBody(
+    onAllow: () -> Unit,
+    onDecline: () -> Unit,
+    onLearnMore: (() -> Unit)?,
+    modifier: Modifier,
+) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.size(72.dp).background(Ca.colors.accent.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CaIcons.info, null, Modifier.size(34.dp), tint = Ca.colors.accent)
+        }
+        Spacer(Modifier.height(20.dp))
+        Text("Help improve CodeAssist", color = Ca.colors.textPrimary, style = Ca.type.title2, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Share anonymous performance data so we can see what's slow and what's failing — and fix the " +
+                "right things.\n\n" +
+                "We collect: your app version and device model, how long builds, indexing, and code completion " +
+                "take, build success/failure, and scrubbed crash reports.\n\n" +
+                "We never collect your code, file or project names, which features you use, or anything that " +
+                "identifies you. You can change this anytime in the project picker.",
+            color = Ca.colors.textSecondary,
+            style = Ca.type.subhead,
+            textAlign = TextAlign.Center,
+        )
+        if (onLearnMore != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Learn more",
+                color = Ca.colors.accent,
+                style = Ca.type.subhead,
+                modifier = Modifier
+                    .clickable(MutableInteractionSource(), indication = null, onClick = onLearnMore)
+                    .padding(6.dp),
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+        PrimaryButton(text = "Allow", onClick = onAllow, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "No thanks",
+            color = Ca.colors.textSecondary,
+            style = Ca.type.subhead,
+            modifier = Modifier
+                .clickable(MutableInteractionSource(), indication = null, onClick = onDecline)
+                .padding(12.dp),
+        )
+    }
+}
+
+/** A compact reusable analytics on/off row for a settings surface (the project picker's about area). */
+@Composable
+fun AnalyticsToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clickable(MutableInteractionSource(), indication = null) { onChange(!enabled) }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
+        Column(Modifier.weight(1f)) {
+            Text("Performance analytics", color = Ca.colors.textPrimary, style = Ca.type.subhead)
+            Text(
+                if (enabled) "Sharing anonymous performance data" else "Not sharing performance data",
+                color = Ca.colors.textSecondary,
+                style = Ca.type.caption,
+            )
+        }
+        ConsentToggle(enabled, onChange)
+    }
+}
+
+/** A small on-brand pill toggle (matches the module-settings switch), local to the analytics row. */
+@Composable
+private fun ConsentToggle(on: Boolean, onToggle: (Boolean) -> Unit) {
+    Box(
+        Modifier
+            .size(width = 44.dp, height = 26.dp)
+            .background(if (on) Ca.colors.accent else Ca.colors.surface3, RoundedCornerShape(Ca.radius.pill))
+            .clickable(MutableInteractionSource(), indication = null) { onToggle(!on) }
+            .padding(3.dp),
+        contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(Modifier.size(20.dp).background(Ca.colors.textOnAccent, RoundedCornerShape(Ca.radius.pill)))
+    }
+}
