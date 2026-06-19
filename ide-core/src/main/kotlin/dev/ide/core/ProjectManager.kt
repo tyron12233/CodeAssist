@@ -8,6 +8,7 @@ import dev.ide.model.template.TemplateArgs
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.Properties
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -25,11 +26,15 @@ data class ProjectSummary(val name: String, val rootPath: String, val moduleCoun
 class ProjectManager private constructor(
     val projectsRoot: Path,
     private val homeDir: Path,
+    /** The directory a file manager should browse — the app's storage root, which may sit above
+     *  [projectsRoot] and hold sibling data (e.g. projects from a previous app version). */
+    val storageRoot: Path,
     private val sdk: () -> SdkData,
     private val languageLevel: LanguageLevel,
     private val androidTools: AndroidDeviceTools?,
-    /** Directories whose contents a backup captures — new projects, plus any legacy data on-device. */
-    private val backupRoots: List<Path>,
+    /** Legacy on-device data homes (e.g. a previous internal-storage root) that a backup also sweeps up and
+     *  that [importLegacyProjects] recovers projects from. Empty on desktop. */
+    private val legacyDataDirs: List<Path>,
     /** On-device `DexClassLoader` runner (from :ide-android) so a Java `run` works in every opened project. */
     private val dexRunner: DexRunner? = null,
     /** On-device APK installer (from :ide-android) so the android Run works in every opened project. */
@@ -43,6 +48,9 @@ class ProjectManager private constructor(
     }
 
     private val prefsFile: Path get() = homeDir.resolve("prefs.properties")
+
+    /** Directories a backup sweeps: the live projects, plus any legacy data still on disk. */
+    private val backupRoots: List<Path> get() = listOf(projectsRoot) + legacyDataDirs
 
     /** Existing projects (subdirs of [projectsRoot] holding a saved model), sorted by name. */
     fun list(): List<ProjectSummary> {
@@ -136,6 +144,70 @@ class ProjectManager private constructor(
         return rel.split('/').any { it == "build" || it == "exports" || it == ".gradle" }
     }
 
+    // --- legacy project recovery ---
+
+    /**
+     * One-time recovery for users upgrading from a build that kept projects in internal app storage (before
+     * the move to external app storage): copy every loadable project workspace found under [legacyDataDirs]
+     * into [projectsRoot] so it reappears in the picker. Non-destructive — the originals stay in place (and
+     * remain part of a backup) — and guarded by a preference so it runs at most once. Returns the number of
+     * projects recovered. Only finds workspaces in the current on-disk model format; data from an
+     * incompatible older app is left for [exportBackup] / the file manager.
+     */
+    fun importLegacyProjects(): Int {
+        if (preference(LEGACY_IMPORTED_PREF) == "true") return 0
+        var imported = 0
+        for (legacy in legacyDataDirs) {
+            for (src in legacyProjectRoots(legacy)) {
+                val dest = uniqueProjectDir(src.fileName.toString())
+                if (runCatching { copyTree(src, dest) }.isSuccess) imported++
+                else runCatching { deleteTree(dest) } // drop a half-copied directory
+            }
+        }
+        setPreference(LEGACY_IMPORTED_PREF, "true")
+        return imported
+    }
+
+    /** Loadable project workspaces under a legacy home: its direct children and any under a `projects/` subdir. */
+    private fun legacyProjectRoots(legacy: Path): List<Path> {
+        if (!Files.isDirectory(legacy)) return emptyList()
+        val bases = listOf(legacy, legacy.resolve("projects")).filter { Files.isDirectory(it) }
+        val found = LinkedHashSet<Path>()
+        for (base in bases) {
+            runCatching {
+                Files.newDirectoryStream(base).use { stream ->
+                    for (dir in stream) if (Files.isDirectory(dir) && ModelPersistence.exists(dir)) found.add(dir)
+                }
+            }
+        }
+        return found.toList()
+    }
+
+    /** Recursive copy, skipping bulky/derived trees (build outputs, caches) the way [exportBackup] does. */
+    private fun copyTree(src: Path, dest: Path) {
+        Files.walk(src).use { stream ->
+            stream.forEach { path ->
+                val rel = src.relativize(path).toString().replace(File.separatorChar, '/')
+                if (rel.contains(".platform/caches/") ||
+                    rel.split('/').any { it == "build" || it == ".gradle" }
+                ) return@forEach
+                val target = dest.resolve(src.relativize(path).toString())
+                if (Files.isDirectory(path)) Files.createDirectories(target)
+                else {
+                    Files.createDirectories(target.parent)
+                    Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        }
+    }
+
+    private fun deleteTree(dir: Path) {
+        if (!Files.exists(dir)) return
+        Files.walk(dir).use { stream ->
+            stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        }
+    }
+
     private fun uniqueProjectDir(name: String): Path {
         val base = slug(name).ifEmpty { "project" }
         var candidate = projectsRoot.resolve(base)
@@ -150,29 +222,37 @@ class ProjectManager private constructor(
         name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
 
     companion object {
+        private const val LEGACY_IMPORTED_PREF = "legacy.projects.imported"
+
         /** Desktop host: an installed Android SDK if present (so `android.*` resolves), else a detected JDK; Java 17. */
-        fun desktop(projectsRoot: Path): ProjectManager =
+        fun desktop(projectsRoot: Path, legacyDataDirs: List<Path> = emptyList()): ProjectManager =
             ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,
+                storageRoot = projectsRoot.parent ?: projectsRoot,
                 { IdeServices.defaultDesktopSdk() },
                 LanguageLevel.JAVA_17,
                 androidTools = null,
-                backupRoots = listOf(projectsRoot),
+                legacyDataDirs = legacyDataDirs,
             )
 
         /**
          * On-device (ART) host: the bundled `android.jar` boot classpath + native tool ports; Java 8.
-         * A backup captures the live projects under [projectsRoot] plus every [legacyDataDirs] tree, so
-         * project files left by a previous, incompatible app version (e.g. in internal storage before the
-         * move to external app storage) are still recoverable.
+         * A backup captures the live projects under [projectsRoot] plus every [legacyDataDirs] tree, and
+         * [importLegacyProjects] copies any loadable projects out of those trees into [projectsRoot], so
+         * project files left by a previous app version (e.g. in internal storage before the move to external
+         * app storage) reappear in the picker and stay recoverable.
          */
         fun onDevice(
             projectsRoot: Path,
             bootClasspath: List<String>,
             androidToolsDir: Path,
             debugKeystore: Path,
-            /** Extra directories a backup should also sweep up — typically a legacy internal-storage home. */
+            /** The app's external storage root (`getExternalFilesDir(null)`), browsed by a file manager;
+             *  sits above [projectsRoot] and holds sibling data like a previous version's projects. */
+            storageRoot: Path,
+            /** Extra directories a backup should also sweep up — a legacy internal-storage home and the
+             *  previous app version's projects directory. */
             legacyDataDirs: List<Path> = emptyList(),
             /** The host's `DexClassLoader` runner, so a Java console `run` works on ART. */
             dexRunner: DexRunner? = null,
@@ -188,10 +268,11 @@ class ProjectManager private constructor(
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,
+                storageRoot,
                 { sdk },
                 LanguageLevel.JAVA_8,
                 tools,
-                backupRoots = listOf(projectsRoot) + legacyDataDirs,
+                legacyDataDirs = legacyDataDirs,
                 dexRunner = dexRunner,
                 apkInstaller = apkInstaller,
                 customViewRuntime = customViewRuntime,

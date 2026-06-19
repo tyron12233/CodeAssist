@@ -686,6 +686,10 @@ class IdeServicesBackend(
 
     override fun projectsRootPath(): String? = manager?.projectsRoot?.toString()
 
+    // The app storage root a file manager browses: it holds the projects folder alongside the SDK, keystore,
+    // caches, and any sibling data such as a previous app version's projects.
+    override fun storageRootPath(): String? = manager?.storageRoot?.toString()
+
     override fun projectTemplates(): List<UiProjectTemplate> = services.projectTemplates().map(::toUiTemplate)
 
     override suspend fun createProject(templateId: String, args: Map<String, String>): UiProjectResult {

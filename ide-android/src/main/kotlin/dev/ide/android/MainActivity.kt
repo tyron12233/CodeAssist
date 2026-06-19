@@ -158,13 +158,13 @@ class MainActivity : ComponentActivity() {
     }.getOrElse { Toast.makeText(this, "Can't share this file", Toast.LENGTH_SHORT).show() }
 
     /**
-     * Open the system Files app at CodeAssist's projects root (served by [ProjectsDocumentsProvider]) so
+     * Open the system Files app at CodeAssist's app directory (served by [ProjectsDocumentsProvider]) so
      * the user can browse/import there. Best-effort across OEM file managers: tries the DocumentsProvider
      * root, then a generic Files launch, and finally explains where to look. Doesn't deep-link to a
-     * specific subfolder — file managers don't honor that uniformly — it opens the projects root.
+     * specific subfolder — file managers don't honor that uniformly — it opens the app root.
      */
     private fun openProjectsInFiles() {
-        val rootId = AndroidIde.projectsDir(this).absolutePath
+        val rootId = AndroidIde.externalHome(this).absolutePath
         val rootUri = android.provider.DocumentsContract.buildRootUri("$packageName.documents", rootId)
         val view = Intent(Intent.ACTION_VIEW)
             .setDataAndType(rootUri, "vnd.android.document/root")

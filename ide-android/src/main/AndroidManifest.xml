@@ -66,7 +66,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Surfaces the whole projects folder as a browsable, read/write root in the system Files app and
+        <!-- Surfaces the whole app directory as a browsable, read/write root in the system Files app and
              any SAF file manager — so users can drop in icons/layouts/assets and edit project files from a
              file manager without the All-Files-Access permission (issues #1010 / #1016). The platform requires
              this provider be exported and protected by the system-only MANAGE_DOCUMENTS permission. -->

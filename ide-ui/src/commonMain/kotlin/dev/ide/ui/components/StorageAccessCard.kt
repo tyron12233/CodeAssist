@@ -31,11 +31,12 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 
 /**
- * A persistent "where your files live" panel for the Projects screen. Shows the on-disk projects folder
- * (tap to copy), explains that it's reachable from any file manager, and offers a one-tap "Open in Files"
- * — the in-app counterpart to the on-device DocumentsProvider. Doubles as the first-run storage explainer:
- * users coming from a version that hid projects in the sandbox can now find and share them. Renders nothing
- * when there's no managed projects root ([path] is null).
+ * A persistent "where your files live" panel for the Projects screen. Shows the on-disk app folder (the
+ * whole CodeAssist directory: projects plus the SDK, keystore, and caches), tap to copy, explains that
+ * it's reachable from any file manager, and offers a one-tap "Open in Files" — the in-app counterpart to
+ * the on-device DocumentsProvider. Doubles as the first-run storage explainer: users coming from a version
+ * that hid files in the sandbox can now find and share them. Renders nothing when there's no managed
+ * storage root ([path] is null).
  *
  * [onOpenInFiles] is wired by the host to [dev.ide.ui.backend.FileActions.reveal]; pass null when the host
  * can't open a file manager (the button is then hidden, the path + copy still show).
@@ -62,9 +63,9 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
                 Icon(CaIcons.folder, null, Modifier.size(18.dp), tint = Ca.colors.accent)
             }
             Column(Modifier.weight(1f)) {
-                Text("Your project files", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text("Your CodeAssist files", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Open this folder in any file manager to add icons, layouts, or assets — or edit from a PC.",
+                    "Open this folder in any file manager to browse your projects (including any from older versions, under \"Projects\"), add icons or assets, or edit from a PC.",
                     color = Ca.colors.textTertiary,
                     style = Ca.type.caption2,
                 )

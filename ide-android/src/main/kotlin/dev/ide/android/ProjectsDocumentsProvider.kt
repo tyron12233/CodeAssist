@@ -13,21 +13,24 @@ import java.io.File
 import java.io.FileNotFoundException
 
 /**
- * Surfaces CodeAssist's projects directory (`<external-files>/codeassist/projects`) to the system Files
- * app and any SAF-aware file manager as a browsable, **read/write** root — without the All-Files-Access
- * permission. This is the piece a plain `FileProvider` can't do: a `FileProvider` only hands out one
- * content:// URI at a time, whereas a `DocumentsProvider` lets another app browse the whole tree and
- * create/edit/delete/rename files in it (issues #1010 / #1016: dropping in icons, layouts, music, and
- * editing project files from a PC-style file manager).
+ * Surfaces CodeAssist's whole external app directory (`getExternalFilesDir(null)`) to the system Files app
+ * and any SAF-aware file manager as a browsable, **read/write** root — without the All-Files-Access
+ * permission. The exposed tree is the entire external files dir: the new app home (`codeassist/` with its
+ * projects, the SDK `android.jar`, the debug keystore, the kotlinc home) AND sibling data from older app
+ * versions — notably the v0.2.9 `Projects/` folder — so users can recover projects an update left behind.
+ * This is the piece a plain `FileProvider` can't do: a
+ * `FileProvider` only hands out one content:// URI at a time, whereas a `DocumentsProvider` lets another
+ * app browse the whole tree and create/edit/delete/rename files in it (issues #1010 / #1016: dropping in
+ * icons, layouts, music, and editing project files from a PC-style file manager).
  *
  * The [documentId] is simply a file's absolute path; every operation re-validates that the resolved file
- * stays inside the projects root before touching it, so a crafted document id can't escape the sandbox.
- * The provider runs in the app process and resolves the same directory as [AndroidIde.projectsDir], so
+ * stays inside the app home before touching it, so a crafted document id can't escape the sandbox.
+ * The provider runs in the app process and resolves the same directory as [AndroidIde.externalHome], so
  * what the IDE writes is exactly what other apps see.
  */
 class ProjectsDocumentsProvider : DocumentsProvider() {
 
-    private val rootDir: File by lazy { AndroidIde.projectsDir(context!!).apply { mkdirs() } }
+    private val rootDir: File by lazy { AndroidIde.externalHome(context!!).apply { mkdirs() } }
     private val rootId: String get() = rootDir.absolutePath
 
     override fun onCreate(): Boolean = true
@@ -39,7 +42,7 @@ class ProjectsDocumentsProvider : DocumentsProvider() {
             add(Root.COLUMN_ROOT_ID, rootId)
             add(Root.COLUMN_DOCUMENT_ID, rootId)
             add(Root.COLUMN_TITLE, "CodeAssist")
-            add(Root.COLUMN_SUMMARY, "Projects")
+            add(Root.COLUMN_SUMMARY, "App files")
             // CREATE → other apps may add files here; IS_CHILD → the system can verify tree membership;
             // LOCAL_ONLY → on-device storage; SUPPORTS_SEARCH → the Files-app search box works.
             add(
@@ -68,7 +71,7 @@ class ProjectsDocumentsProvider : DocumentsProvider() {
         val parent = resolve(parentDocumentId)
         val cursor = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
         parent.listFiles()
-            ?.filterNot { it.name.startsWith(".") } // hide .platform/.git internals, like the in-app tree
+            // Full file view: dot-prefixed internals (.platform caches, .git) are shown too.
             ?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
             ?.forEach { addFileRow(cursor, it) }
         return cursor
@@ -104,7 +107,7 @@ class ProjectsDocumentsProvider : DocumentsProvider() {
 
     override fun renameDocument(documentId: String, displayName: String): String {
         val file = resolve(documentId)
-        require(documentId != rootId) { "Cannot rename the projects root" }
+        require(documentId != rootId) { "Cannot rename the app root" }
         val target = File(file.parentFile, displayName)
         if (target.exists()) throw FileNotFoundException("${target.name} already exists")
         if (!file.renameTo(target)) throw FileNotFoundException("Failed to rename ${file.name}")
@@ -113,13 +116,13 @@ class ProjectsDocumentsProvider : DocumentsProvider() {
 
     override fun getDocumentType(documentId: String): String = mimeTypeOf(resolve(documentId))
 
-    /** Resolve a [documentId] (an absolute path) to a [File], rejecting anything outside the projects root. */
+    /** Resolve a [documentId] (an absolute path) to a [File], rejecting anything outside the app home. */
     private fun resolve(documentId: String): File {
         val file = File(documentId)
         val canonical = runCatching { file.canonicalPath }.getOrDefault(file.absolutePath)
         val root = runCatching { rootDir.canonicalPath }.getOrDefault(rootDir.absolutePath)
         require(canonical == root || canonical.startsWith(root + File.separator)) {
-            "Document is outside the projects root: $documentId"
+            "Document is outside the app root: $documentId"
         }
         return file
     }
@@ -138,7 +141,7 @@ class ProjectsDocumentsProvider : DocumentsProvider() {
         }
         cursor.newRow().apply {
             add(Document.COLUMN_DOCUMENT_ID, file.absolutePath)
-            add(Document.COLUMN_DISPLAY_NAME, if (file.absolutePath == rootId) "Projects" else file.name)
+            add(Document.COLUMN_DISPLAY_NAME, if (file.absolutePath == rootId) "CodeAssist" else file.name)
             add(Document.COLUMN_SIZE, file.length())
             add(Document.COLUMN_MIME_TYPE, mimeTypeOf(file))
             add(Document.COLUMN_LAST_MODIFIED, file.lastModified())

@@ -391,6 +391,15 @@ interface IdeBackend {
      */
     fun projectsRootPath(): String? = null
 
+    /**
+     * The on-disk directory the in-app "project folder" panel shows and that [FileActions.reveal] opens in a
+     * file manager. This is the whole app storage root (it contains the projects folder plus the SDK,
+     * keystore, caches, and any sibling data such as projects from a previous app version), so users can
+     * reach everything from a file manager. Defaults to [projectsRootPath]; null when the backend has no
+     * managed root.
+     */
+    fun storageRootPath(): String? = projectsRootPath()
+
     /** The templates the Create-Project gallery offers, with the inputs each one collects. */
     fun projectTemplates(): List<UiProjectTemplate> = emptyList()
 

@@ -55,6 +55,42 @@ class ProjectManagerTest {
         }
     }
 
+    /**
+     * Projects left in a previous storage location (e.g. internal app storage before the move to external)
+     * are recovered into the active projects root so they reappear in the picker, exactly once, and open.
+     */
+    @Test
+    fun importsLegacyProjectsFromAPreviousStorageLocation() {
+        val tmp = Files.createTempDirectory("cm-legacy")
+        try {
+            // A previous internal-storage home with one project under its `projects/` dir.
+            val legacyHome = tmp.resolve("internal/codeassist")
+            ProjectManager.desktop(legacyHome.resolve("projects"))
+                .create("java-console", mapOf("name" to "Old App", "packageName" to "com.acme.old")).use { }
+
+            // The new external-storage manager sees none of them until it imports.
+            val newManager = ProjectManager.desktop(
+                tmp.resolve("external/codeassist/projects"),
+                legacyDataDirs = listOf(legacyHome),
+            )
+            assertTrue(newManager.isEmpty(), "fresh external root starts empty")
+
+            assertEquals(1, newManager.importLegacyProjects(), "one legacy project recovered")
+            assertEquals(listOf("Old App"), newManager.list().map { it.name })
+
+            // Idempotent: a second call (flag set) imports nothing and doesn't duplicate.
+            assertEquals(0, newManager.importLegacyProjects())
+            assertEquals(1, newManager.list().size)
+
+            // The recovered project actually opens.
+            newManager.open(newManager.list().first().rootPath).use { ide ->
+                assertEquals(listOf("app"), ide.moduleNames())
+            }
+        } finally {
+            tmp.toFile().deleteRecursively()
+        }
+    }
+
     /** The built-in template gallery exposes the shipped Java, Kotlin, and Android templates. */
     @Test
     fun exposesBuiltInTemplates() {

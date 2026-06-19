@@ -130,9 +130,9 @@ fun CodeAssistApp(
                                 onSubmitSuggestions = if (fileActions.canOpenUrl) {
                                     { fileActions.openUrl(BetaInfo.FEEDBACK_URL) }
                                 } else null,
-                                storagePath = backend.projectsRootPath(),
+                                storagePath = backend.storageRootPath(),
                                 onOpenInFiles = if (fileActions.canReveal) {
-                                    { backend.projectsRootPath()?.let { fileActions.reveal(it) } }
+                                    { backend.storageRootPath()?.let { fileActions.reveal(it) } }
                                 } else null,
                             )
                         }
