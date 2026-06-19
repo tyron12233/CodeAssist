@@ -3338,6 +3338,22 @@ class IdeServices private constructor(
             if (store.workspace.sdkTable.sdks.isEmpty()) store.replaceSdks(listOf(sdk))
             return IdeServices(platform, store, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot)
         }
+
+        /**
+         * Best-effort import of the Gradle project at [root] into the native model, writing a workspace there
+         * (so it lists/opens like any project) flagged as **compatibility mode**. Reads the Gradle scripts
+         * tolerantly (see [GradleImport]) — the result may have unresolved dependencies and may not build
+         * without adjustment. Returns false (writing nothing) if [root] isn't an importable Gradle project.
+         */
+        fun importGradleProjectAt(root: Path, sdk: SdkData, languageLevel: LanguageLevel): Boolean {
+            val spec = GradleImport.parse(root) ?: return false
+            val (_, store) = openStore(root)
+            store.replaceSdks(listOf(sdk))
+            GradleImport.populate(store, spec, languageLevel)
+            store.save()
+            GradleImport.markCompatibilityMode(root)
+            return true
+        }
     }
 }
 

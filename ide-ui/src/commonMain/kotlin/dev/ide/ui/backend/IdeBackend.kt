@@ -720,6 +720,8 @@ data class ProjectInfo(
     val name: String,
     val rootPath: String,
     val moduleCount: Int,
+    /** True when the project was imported from Gradle and runs in compatibility mode (may not be fully supported). */
+    val compatibility: Boolean = false,
 )
 
 /** How the project tree is shaped — a curated module view, or the raw filesystem (see [IdeBackend.fileTree]). */

@@ -15,7 +15,13 @@ import java.util.zip.ZipOutputStream
 import java.nio.file.Paths
 
 /** A project listed in the picker, read cheaply from disk without opening the full engine. */
-data class ProjectSummary(val name: String, val rootPath: String, val moduleCount: Int)
+data class ProjectSummary(
+    val name: String,
+    val rootPath: String,
+    val moduleCount: Int,
+    /** True when this project was imported from a Gradle project and runs in compatibility mode. */
+    val compatibility: Boolean = false,
+)
 
 /**
  * Owns the on-disk set of projects (one workspace dir per project under [projectsRoot]) and the
@@ -60,7 +66,12 @@ class ProjectManager private constructor(
             .filter { Files.isDirectory(it) && ModelPersistence.exists(it) }
             .map { dir ->
                 val proj = runCatching { ModelPersistence.load(dir) }.getOrNull()?.projects?.firstOrNull()
-                ProjectSummary(proj?.name ?: dir.fileName.toString(), dir.toString(), proj?.modules?.size ?: 0)
+                ProjectSummary(
+                    proj?.name ?: dir.fileName.toString(),
+                    dir.toString(),
+                    proj?.modules?.size ?: 0,
+                    compatibility = GradleImport.isCompatibilityMode(dir),
+                )
             }
             .sortedBy { it.name.lowercase() }
     }
@@ -158,25 +169,35 @@ class ProjectManager private constructor(
         if (preference(LEGACY_IMPORTED_PREF) == "true") return 0
         var imported = 0
         for (legacy in legacyDataDirs) {
-            for (src in legacyProjectRoots(legacy)) {
+            // Current-format workspaces (e.g. this app's earlier internal-storage projects): copy verbatim.
+            for (src in legacyProjectDirs(legacy) { ModelPersistence.exists(it) }) {
                 val dest = uniqueProjectDir(src.fileName.toString())
                 if (runCatching { copyTree(src, dest) }.isSuccess) imported++
                 else runCatching { deleteTree(dest) } // drop a half-copied directory
+            }
+            // Legacy Gradle projects (e.g. v0.2.9): copy sources, then build a compatibility-mode model.
+            for (src in legacyProjectDirs(legacy) { GradleImport.isGradleProject(it) }) {
+                val dest = uniqueProjectDir(src.fileName.toString())
+                val ok = runCatching {
+                    copyTree(src, dest)
+                    IdeServices.importGradleProjectAt(dest, sdk(), languageLevel)
+                }.getOrDefault(false)
+                if (ok) imported++ else runCatching { deleteTree(dest) }
             }
         }
         setPreference(LEGACY_IMPORTED_PREF, "true")
         return imported
     }
 
-    /** Loadable project workspaces under a legacy home: its direct children and any under a `projects/` subdir. */
-    private fun legacyProjectRoots(legacy: Path): List<Path> {
+    /** Direct children of a legacy home (and of its `projects/` subdir) matching [accept]. */
+    private fun legacyProjectDirs(legacy: Path, accept: (Path) -> Boolean): List<Path> {
         if (!Files.isDirectory(legacy)) return emptyList()
         val bases = listOf(legacy, legacy.resolve("projects")).filter { Files.isDirectory(it) }
         val found = LinkedHashSet<Path>()
         for (base in bases) {
             runCatching {
                 Files.newDirectoryStream(base).use { stream ->
-                    for (dir in stream) if (Files.isDirectory(dir) && ModelPersistence.exists(dir)) found.add(dir)
+                    for (dir in stream) if (Files.isDirectory(dir) && accept(dir)) found.add(dir)
                 }
             }
         }

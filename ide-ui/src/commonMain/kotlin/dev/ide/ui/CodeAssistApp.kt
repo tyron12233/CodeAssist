@@ -62,6 +62,7 @@ fun CodeAssistApp(
     var depsModule by remember { mutableStateOf<String?>(null) }
     var configModule by remember { mutableStateOf<String?>(null) }
     var showMigration by remember { mutableStateOf(backend.preference("migration.acknowledged") != "true") }
+    var showLegacyRecovery by remember { mutableStateOf(backend.preference("legacy.recovery.seen") != "true") }
     var showOnboarding by remember { mutableStateOf(backend.preference("onboarding.seen") != "true") }
     // Bumped after a project is deleted so the picker re-reads the (now-smaller) on-disk project list.
     var projectsRefresh by remember { mutableStateOf(0) }
@@ -134,6 +135,11 @@ fun CodeAssistApp(
                                 onOpenInFiles = if (fileActions.canReveal) {
                                     { backend.storageRootPath()?.let { fileActions.reveal(it) } }
                                 } else null,
+                                showLegacyRecovery = showLegacyRecovery,
+                                onDismissLegacyRecovery = {
+                                    showLegacyRecovery = false
+                                    backend.setPreference("legacy.recovery.seen", "true")
+                                },
                             )
                         }
                         Screen.CreateProject -> CreateProjectScreen(

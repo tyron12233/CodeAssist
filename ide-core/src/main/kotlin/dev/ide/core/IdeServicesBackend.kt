@@ -682,7 +682,7 @@ class IdeServicesBackend(
     // ---- project management ----
 
     override fun projects(): List<ProjectInfo> =
-        manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount) } ?: listOf(project)
+        manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility) } ?: listOf(project)
 
     override fun projectsRootPath(): String? = manager?.projectsRoot?.toString()
 

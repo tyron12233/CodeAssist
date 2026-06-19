@@ -51,8 +51,11 @@ fun ProjectPickerScreen(
     onSubmitSuggestions: (() -> Unit)? = null,
     storagePath: String? = null,
     onOpenInFiles: (() -> Unit)? = null,
+    showLegacyRecovery: Boolean = false,
+    onDismissLegacyRecovery: () -> Unit = {},
 ) {
     var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
+    val compatibilityCount = projects.count { it.compatibility }
     Box(Modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 640.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 48.dp),
@@ -71,6 +74,10 @@ fun ProjectPickerScreen(
             Spacer(Modifier.size(12.dp))
 
             BetaBanner(onSubmit = onSubmitSuggestions)
+
+            if (showLegacyRecovery && compatibilityCount > 0) {
+                LegacyRecoveryBanner(count = compatibilityCount, onDismiss = onDismissLegacyRecovery)
+            }
 
             StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
 
@@ -227,12 +234,15 @@ private fun ProjectCard(project: ProjectInfo, delayMillis: Int, onOpen: () -> Un
         Column(Modifier.weight(1f)) {
             Text(project.name, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(project.rootPath, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                "${project.moduleCount} modules",
-                color = Ca.colors.textTertiary,
-                style = Ca.type.caption,
-                fontWeight = FontWeight.Medium,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "${project.moduleCount} modules",
+                    color = Ca.colors.textTertiary,
+                    style = Ca.type.caption,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (project.compatibility) CompatibilityChip()
+            }
         }
         if (onDelete != null) {
             val deleteInteraction = remember { MutableInteractionSource() }
@@ -247,5 +257,63 @@ private fun ProjectCard(project: ProjectInfo, delayMillis: Int, onOpen: () -> Un
             }
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+    }
+}
+
+/** A small amber pill marking a project imported from Gradle (compatibility mode). */
+@Composable
+private fun CompatibilityChip() {
+    Row(
+        Modifier
+            .background(Ca.colors.warning.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(CaIcons.warning, null, Modifier.size(12.dp), tint = Ca.colors.warning)
+        Text("Compatibility", color = Ca.colors.warning, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * A dismissible first-run banner shown when projects were recovered from an older CodeAssist version.
+ * Sets expectations: Gradle-style projects open in a limited compatibility mode and may not be fully
+ * supported. [count] is how many compatibility-mode projects were found.
+ */
+@Composable
+private fun LegacyRecoveryBanner(count: Int, onDismiss: () -> Unit) {
+    val shape = RoundedCornerShape(Ca.radius.lg)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Ca.colors.warning.copy(alpha = 0.10f), shape)
+            .border(1.dp, Ca.colors.warning.copy(alpha = 0.35f), shape)
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(CaIcons.warning, null, Modifier.size(20.dp), tint = Ca.colors.warning)
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (count == 1) "Recovered 1 project from an older version"
+                else "Recovered $count projects from an older version",
+                color = Ca.colors.textPrimary,
+                style = Ca.type.subhead,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "These use Gradle and open in a limited compatibility mode — some features may not work and " +
+                    "they may not build until dependencies are re-added. Your original files are kept safe in " +
+                    "your storage folder.",
+                color = Ca.colors.textSecondary,
+                style = Ca.type.caption2,
+            )
+        }
+        val interaction = remember { MutableInteractionSource() }
+        Box(
+            Modifier.size(28.dp).pressScale(interaction).clickable(interaction, indication = null, onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CaIcons.close, "Dismiss", Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+        }
     }
 }
