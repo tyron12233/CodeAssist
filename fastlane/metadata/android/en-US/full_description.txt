@@ -35,5 +35,8 @@ fully offline.
 * A run sandbox prompts you before code you run touches the network, files,
   reflection or other processes.
 
+<b>Free and open source</b>
 CodeAssist is free and open-source software, licensed under the GNU General
-Public License v3.0 or later.
+Public License v3.0 or later. Browse the source, report issues, and download
+releases on GitHub:
+https://github.com/tyron12233/CodeAssist
