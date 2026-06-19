@@ -41,3 +41,7 @@ docs/codeassist-layout-preview-design.md
 docs/handoff_onboarding_compose/
 docs/design/
 docs/*.png
+
+# Built app artifacts (never commit; releases attach these, Play gets the AAB)
+*.aab
+*.apk
