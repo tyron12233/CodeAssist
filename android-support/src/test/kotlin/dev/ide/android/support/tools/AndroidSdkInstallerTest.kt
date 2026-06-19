@@ -47,27 +47,23 @@ class AndroidSdkInstallerTest {
     """.trimIndent()
 
     @Test
-    fun parsesAndFiltersPackages() {
+    fun parsesSourcesOnly() {
         val pkgs = AndroidSdkInstaller.parsePackages(xml)
-        val paths = pkgs.map { it.path }.toSet()
-        assertEquals(setOf("platforms;android-34", "build-tools;34.0.0", "sources;android-34"), paths) // extras filtered out
-
-        val platform = pkgs.first { it.path == "platforms;android-34" }
-        assertEquals(AndroidSdkInstaller.Category.PLATFORM, platform.category)
-        assertEquals("3", platform.revision)
-        assertTrue(platform.archiveUrl!!.endsWith("platform-34_r03.zip"), platform.archiveUrl!!)
-        assertTrue(platform.archiveUrl!!.startsWith(AndroidSdkInstaller.REPO_BASE))
+        // Sources only — platforms/build-tools/cmdline-tools/extras are all dropped.
+        assertEquals(setOf("sources;android-34"), pkgs.map { it.path }.toSet())
 
         val sources = pkgs.first { it.path == "sources;android-34" }
         assertEquals(AndroidSdkInstaller.Category.SOURCES, sources.category)
+        assertEquals("1", sources.revision)
+        assertTrue(sources.archiveUrl!!.endsWith("sources-34_r01.zip"), sources.archiveUrl!!)
+        assertTrue(sources.archiveUrl!!.startsWith(AndroidSdkInstaller.REPO_BASE))
         assertEquals(20L, sources.sizeBytes)
     }
 
     @Test
     fun installDirMapsIdToPath() {
-        val pkgs = AndroidSdkInstaller.parsePackages(xml)
-        val dir = pkgs.first { it.path == "build-tools;34.0.0" }.installDir(Path.of("/sdk"))
-        assertEquals(Path.of("/sdk", "build-tools", "34.0.0"), dir)
+        val dir = AndroidSdkInstaller.parsePackages(xml).first { it.path == "sources;android-34" }.installDir(Path.of("/sdk"))
+        assertEquals(Path.of("/sdk", "sources", "android-34"), dir)
     }
 
     @Test
@@ -85,10 +81,11 @@ class AndroidSdkInstallerTest {
 
     @Test
     fun categoryOfClassifies() {
-        assertEquals(AndroidSdkInstaller.Category.PLATFORM, AndroidSdkInstaller.categoryOf("platforms;android-34"))
-        assertEquals(AndroidSdkInstaller.Category.BUILD_TOOLS, AndroidSdkInstaller.categoryOf("build-tools;34.0.0"))
         assertEquals(AndroidSdkInstaller.Category.SOURCES, AndroidSdkInstaller.categoryOf("sources;android-34"))
-        assertEquals(AndroidSdkInstaller.Category.CMDLINE_TOOLS, AndroidSdkInstaller.categoryOf("cmdline-tools;latest"))
+        // Everything that isn't a source is OTHER (and so never offered for install).
+        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("platforms;android-34"))
+        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("build-tools;34.0.0"))
+        assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("cmdline-tools;latest"))
         assertEquals(AndroidSdkInstaller.Category.OTHER, AndroidSdkInstaller.categoryOf("ndk;26.0.0"))
     }
 

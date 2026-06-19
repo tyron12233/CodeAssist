@@ -97,6 +97,17 @@ class EditorSessionTest {
     }
 
     @Test
+    fun backspaceMidIndentOfBlankLineRemovesWholeLineAndPutsCaretAtPrevLineEnd() {
+        // caret sits amid the tabs of a blank line (e.g. inside an auto-inserted `{\n\t\t\n}` block);
+        // deleting must take the trailing tabs too, so the joined line has no leftover whitespace and
+        // the caret lands at the end of the previous line.
+        val s = session("foo\n\t\t\t", 5) // caret after the first tab, two more follow
+        s.backspace()
+        assertEquals("foo", s.doc.text)
+        assertEquals(TextRange(3), s.selection)
+    }
+
+    @Test
     fun backspaceInIndentOfNonBlankLinePeelsOneChar() {
         // line has real content after the indent — stays a normal single-char delete
         val s = session("foo\n    bar", 7)

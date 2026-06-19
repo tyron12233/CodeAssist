@@ -18,6 +18,7 @@ internal object Scoring {
         IndexOrigin.SOURCE -> 30
         IndexOrigin.LIBRARY -> 12
         IndexOrigin.SDK -> 0
+        IndexOrigin.LIBRARY_SOURCE -> 0 // not ranked among name hits; the source-doc index is queried by exact FQN
     }
 
     fun scorePrefix(term: String, p: String, origin: IndexOrigin): Int {

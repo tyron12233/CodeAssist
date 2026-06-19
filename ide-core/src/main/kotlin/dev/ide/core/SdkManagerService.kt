@@ -39,8 +39,12 @@ class SdkManagerService(
     private val workspaceRoot: Path,
     private val onChanged: () -> Unit,
     private val fetcher: SdkNetFetcher = HttpSdkNetFetcher,
+    sharedRoot: Path? = null,
 ) {
-    private val platformDir: Path = workspaceRoot.resolve(".platform")
+    // SDK sources, the JDK src.zip, and the resumable download cache are toolchain artifacts, not project
+    // files, so they live under the shared root (the host's home dir) when one is supplied: installed once
+    // and reused across every project. Without a shared root (e.g. the desktop demo) they fall back per-workspace.
+    private val platformDir: Path = (sharedRoot ?: workspaceRoot).resolve(".platform")
     private val downloadsDir: Path = platformDir.resolve("sdk-downloads")
     private val jdk = JdkManager(platformDir, fetcher)
 
@@ -62,21 +66,22 @@ class SdkManagerService(
     fun androidSdkRoot(): Path = AndroidSdk.findSdkRoot(workspaceRoot) ?: defaultAndroidSdkRoot()
 
     /** List the installable Android **source** packages, each flagged [UiSdkPackage.installed]/
-     *  [UiSdkPackage.incomplete]. The SDK Manager is for sources/docs only, so platforms/build-tools/
-     *  command-line tools are intentionally excluded. Empty when offline. */
+     *  [UiSdkPackage.incomplete]. The SDK Manager is for sources/docs only ([AndroidSdkInstaller] fetches no
+     *  other category), so platforms/build-tools/command-line tools never appear. Empty when offline. */
     suspend fun androidPackages(): List<UiSdkPackage> = withContext(Dispatchers.IO) {
         val root = androidSdkRoot()
         val installed = runCatching { AndroidSdkInstaller.installedPackages(root) }.getOrDefault(emptySet())
         val incomplete = runCatching { AndroidSdkInstaller.incompletePackages(root) }.getOrDefault(emptySet())
         AndroidSdkInstaller.fetchPackages(fetcher)
-            .filter { it.category == AndroidSdkInstaller.Category.SOURCES }
             .map { UiSdkPackage(it.path, it.displayName, it.category.name, it.sizeBytes, it.path in installed, it.archiveUrl != null, it.path in incomplete) }
     }
 
-    /** Start downloading one Android package by its sdkmanager id (`sources;android-34`, `platforms;android-34`,
-     *  …) on the background scope. Returns immediately; progress streams on [state]. */
+    /** Start downloading one Android **source** package by its sdkmanager id (`sources;android-34`) on the
+     *  background scope. Returns immediately; progress streams on [state]. */
     fun installAndroidPackage(path: String): String {
         if (jobs.containsKey(path)) return "Already downloading $path."
+        // Sources only: the SDK Manager never offers anything else, so reject a stale/foreign id outright.
+        if (!path.startsWith("sources;")) return "Only SDK sources can be installed."
         launchDownload(path, path) {
             val pkg = withContext(Dispatchers.IO) { AndroidSdkInstaller.fetchPackages(fetcher).firstOrNull { it.path == path } }
                 ?: return@launchDownload "Package $path not found in the repository."
@@ -170,6 +175,10 @@ class SdkManagerService(
     private fun mb(bytes: Long): String = if (bytes <= 0) "0 MB" else "%.1f MB".format(bytes / 1_048_576.0)
 
     private fun defaultAndroidSdkRoot(): Path {
+        // On ART there is no usable user.home (it resolves to "/"), so the conventional "$home/Android/Sdk"
+        // becomes "/Android/Sdk" at the read-only filesystem root. Keep installs inside the writable shared
+        // platform dir instead (where the JDK and downloads already live), so they are shared across projects.
+        if (isAndroidRuntime) return platformDir.resolve("android-sdk")
         val home = System.getProperty("user.home").orEmpty()
         val os = System.getProperty("os.name").orEmpty().lowercase()
         return when {
@@ -178,6 +187,11 @@ class SdkManagerService(
             else -> Paths.get(home, "Android", "Sdk")
         }
     }
+
+    /** True on Android's runtime (ART/Dalvik), where user.home is not a writable location. */
+    private val isAndroidRuntime: Boolean =
+        System.getProperty("java.vm.name").orEmpty().contains("Dalvik", ignoreCase = true) ||
+            System.getProperty("java.vendor").orEmpty().contains("Android", ignoreCase = true)
 }
 
 /** Recompute the aggregate [busy]/[message]/[fraction] header from the per-item queue. */

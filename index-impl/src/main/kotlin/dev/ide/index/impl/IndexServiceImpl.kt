@@ -131,6 +131,7 @@ class IndexServiceImpl(
             val artifacts = buildList {
                 scope.jdkHome?.let { add(Artifact.Jrt(it)) }
                 scope.libraryJars.forEach { add(Artifact.Jar(it)) }
+                scope.sourceArchives.forEach { if (Files.exists(it)) add(Artifact.SourceArchive(it)) }
             }
             val total = artifacts.size + 1
             artifacts.forEachIndexed { i, art ->
@@ -295,6 +296,37 @@ class IndexServiceImpl(
             }
         }
 
+        /** A library/SDK SOURCE archive (`-sources.jar`, JDK `src.zip`) or sources DIR (Android `sources/`):
+         *  yields its `.java`/`.kt` entries as immutable [IndexOrigin.LIBRARY_SOURCE] units (segment-cached). */
+        class SourceArchive(val path: Path) : Artifact() {
+            private val isDir get() = Files.isDirectory(path)
+            override val label get() = "sources: ${path.fileName}"
+            override fun contentHash(): ContentHash {
+                // A dir's sources are immutable once installed (SDK), so key by path; a zip by size+mtime.
+                if (isDir) return ContentHash("srcdir-$path")
+                val attrs = runCatching { Files.size(path) to Files.getLastModifiedTime(path).toMillis() }.getOrDefault(0L to 0L)
+                return ContentHash("srcjar-${path.fileName}-${attrs.first}-${attrs.second}")
+            }
+            override fun open(): Pair<Sequence<IndexInput>, Closeable> {
+                val hash = contentHash()
+                fun isSrc(n: String) = n.endsWith(".java") || n.endsWith(".kt")
+                if (isDir) {
+                    val files = Files.walk(path).use { s ->
+                        s.filter { Files.isRegularFile(it) && isSrc(it.toString()) }.collect(Collectors.toList())
+                    }
+                    val seq = files.asSequence().map { f ->
+                        val rel = runCatching { path.relativize(f).toString() }.getOrDefault(f.fileName.toString())
+                        SourceArchiveInput(hash, rel) { runCatching { Files.readAllBytes(f) }.getOrDefault(ByteArray(0)) }
+                    }
+                    return seq to Closeable {}
+                }
+                val zip = ZipFile(path.toFile())
+                val seq = zip.entries().asSequence().filter { !it.isDirectory && isSrc(it.name) }
+                    .map { entry -> SourceArchiveInput(hash, entry.name) { zip.getInputStream(entry).readBytes() } as IndexInput }
+                return seq to Closeable { zip.close() }
+            }
+        }
+
         class Jrt(val home: Path) : Artifact() {
             override val label get() = "JDK"
             override fun contentHash() = ContentHash("jrt-${home}-${System.getProperty("java.version")}")
@@ -329,6 +361,20 @@ class IndexServiceImpl(
         override val sourcePath: Path? = null
         override fun bytes(): ByteArray = readBytes()
         override fun text(): String? = null
+        override fun dom(): ParsedFile? = null
+    }
+
+    /** A `.java`/`.kt` entry from an attached SOURCE archive/dir: immutable, carries source text. */
+    private class SourceArchiveInput(
+        override val contentHash: ContentHash,
+        override val unitName: String?,
+        private val readBytes: () -> ByteArray,
+    ) : IndexInput {
+        override val origin = IndexOrigin.LIBRARY_SOURCE
+        override val sourcePath: Path? = null
+        private val bytes by lazy { readBytes() }
+        override fun bytes(): ByteArray = bytes
+        override fun text(): String = bytes.decodeToString()
         override fun dom(): ParsedFile? = null
     }
 

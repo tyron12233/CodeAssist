@@ -13,22 +13,22 @@ import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * A self-contained Android SDK package downloader — a small, cross-platform stand-in for `sdkmanager` that
- * talks to Google's SDK repository directly (so it works on desktop and on-device, where no `sdkmanager`
- * exists). It fetches the repository manifest, lists the installable packages (platforms, build-tools,
- * sources, command-line tools), and installs one by downloading its archive and extracting it into the SDK
+ * A self-contained Android SDK **sources** downloader, talking to Google's SDK repository directly (so it
+ * works on desktop and on-device, where no `sdkmanager` exists). It fetches the repository manifest, lists the
+ * installable source packages, and installs one by downloading its archive and extracting it into the SDK
  * layout. Network and disk are the only side effects; all I/O goes through an injected [SdkNetFetcher] so the
  * parsing/selection/path logic is unit-testable offline.
  *
- * Note: build-tools archives carry per-OS native binaries (so they're host-specific); platforms and sources
- * are architecture-independent and install identically everywhere.
+ * Sources only, by design: they exist to power editor docs (javadoc, parameter names, go-to-source), and are
+ * architecture-independent. Platforms/build-tools/command-line tools are not offered — on-device the build
+ * uses bundled tools (aapt2, in-process D8/apksig) and the bundled android.jar, so there is nothing to fetch.
  */
 object AndroidSdkInstaller {
 
     const val REPO_BASE = "https://dl.google.com/android/repository/"
     private const val REPO_XML = "repository2-3.xml"
 
-    enum class Category { PLATFORM, BUILD_TOOLS, SOURCES, CMDLINE_TOOLS, OTHER }
+    enum class Category { SOURCES, OTHER }
 
     /** One installable package from the repository manifest. [path] is the sdkmanager-style id
      *  (`platforms;android-34`); [archiveUrl] is absolute (or null if no archive fits this host). */
@@ -83,10 +83,7 @@ object AndroidSdkInstaller {
             if (!Files.isDirectory(d)) return
             Files.list(d).use { s -> s.filter { Files.isDirectory(it) && accept(it) }.forEach { out += "$idPrefix${it.fileName}" } }
         }
-        listDirs("platforms", "platforms;")
-        listDirs("build-tools", "build-tools;")
         listDirs("sources", "sources;")
-        listDirs("cmdline-tools", "cmdline-tools;")
         return out
     }
 
@@ -142,20 +139,10 @@ object AndroidSdkInstaller {
         }
     }
 
-    /** The latest `cmdline-tools;latest` package, used to bootstrap an SDK that has no sdkmanager. */
-    fun cmdlineToolsPackage(packages: List<RepoPackage>): RepoPackage? =
-        packages.firstOrNull { it.category == Category.CMDLINE_TOOLS && it.path.endsWith(";latest") }
-            ?: packages.firstOrNull { it.category == Category.CMDLINE_TOOLS }
-
     // ---- XML helpers ----
 
-    internal fun categoryOf(path: String): Category = when {
-        path.startsWith("platforms;") -> Category.PLATFORM
-        path.startsWith("build-tools;") -> Category.BUILD_TOOLS
-        path.startsWith("sources;") -> Category.SOURCES
-        path.startsWith("cmdline-tools;") -> Category.CMDLINE_TOOLS
-        else -> Category.OTHER
-    }
+    internal fun categoryOf(path: String): Category =
+        if (path.startsWith("sources;")) Category.SOURCES else Category.OTHER
 
     private fun revisionOf(pkg: Element): String {
         val rev = firstChild(pkg, "revision") ?: return ""

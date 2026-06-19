@@ -371,6 +371,7 @@ class KotlinCompletionService(private val service: KotlinSymbolService) : Comple
             insertText = insert,
             kind = itemKind(s.kind),
             detail = detail,
+            documentation = s.documentation(), // javadoc/KDoc from attached sources → the popup's doc panel
             sortPriority = proximity(s.kind),
             symbol = s,
             additionalEdits = importEdit,

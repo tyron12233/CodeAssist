@@ -112,12 +112,15 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int): RangeEdit? {
         (deleted in QUOTES && next == deleted)
     if (emptyPair) return RangeEdit(pos - 1, pos + 1, "", pos - 1)
     // Smart-indent backspace (IntelliJ-style): on a blank, whitespace-only line, a single Backspace
-    // removes the whole leading indent together with the preceding line break, hopping the caret to
-    // the end of the previous line — rather than peeling off one space/tab at a time.
+    // removes the whole line (all of its whitespace, including any after the caret) together with the
+    // preceding line break, hopping the caret to the end of the previous line — rather than peeling off
+    // one space/tab at a time. Deleting through the trailing whitespace (e.g. the caret sitting amid the
+    // tabs of an auto-inserted `{\n    \n}` block) leaves no trailing run, so the caret lands cleanly at
+    // the end of the joined line.
     if ((deleted == ' ' || deleted == '\t') && pos > 1) {
         val lineStart = lineStartOf(text, pos)
         if (lineStart > 0 && isBlankLine(text, lineStart)) {
-            return RangeEdit(lineStart - 1, pos, "", lineStart - 1)
+            return RangeEdit(lineStart - 1, lineEndOf(text, lineStart), "", lineStart - 1)
         }
     }
     // don't split a surrogate pair (emoji in string literals)
@@ -129,6 +132,13 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int): RangeEdit? {
 private fun lineStartOf(text: CharSequence, pos: Int): Int {
     var i = pos
     while (i > 0 && text[i - 1] != '\n') i--
+    return i
+}
+
+/** Offset of the end of the line beginning at [lineStart] (the next '\n', or EOF). */
+private fun lineEndOf(text: CharSequence, lineStart: Int): Int {
+    var i = lineStart
+    while (i < text.length && text[i] != '\n') i++
     return i
 }
 

@@ -23,8 +23,10 @@ value class IndexId(val value: String)
 /** Whether the engine builds a trigram index for an extension (controls fuzzy/substring matching). */
 enum class MatchingMode { PREFIX_ONLY, PREFIX_AND_FUZZY }
 
-/** Provenance of an indexed entry — drives ranking proximity and the completion origin label. */
-enum class IndexOrigin { SDK, LIBRARY, SOURCE }
+/** Provenance of an indexed entry — drives ranking proximity and the completion origin label. [LIBRARY_SOURCE]
+ *  is an attached library/SDK SOURCE archive (`-sources.jar`, JDK `src.zip`, Android `sources/`): immutable like
+ *  a library (so it's segment-cached, not the edit-sensitive in-memory [SOURCE] path) but carries source text. */
+enum class IndexOrigin { SDK, LIBRARY, SOURCE, LIBRARY_SOURCE }
 
 /** Serialize + ORDER keys (ordering is what enables prefix scans). v1 keys are strings. */
 interface KeyDescriptor<K : Any> : Comparator<K> {
@@ -77,6 +79,9 @@ data class IndexScope(
     val jdkHome: Path? = null,
     /** Android `res/` roots — walked for `.xml` resource files (e.g. the resource-declaration index). */
     val resourceRoots: List<Path> = emptyList(),
+    /** Attached SOURCE archives/dirs (`-sources.jar`, JDK `src.zip`, Android `sources/`) — walked for `.java`/
+     *  `.kt`, fed as [IndexOrigin.LIBRARY_SOURCE] units (the source-doc index: real param names + javadoc/KDoc). */
+    val sourceArchives: List<Path> = emptyList(),
 )
 
 /** Observable build state for the UI — the "availability / graceful degrade while building" signal. */

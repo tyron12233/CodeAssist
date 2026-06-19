@@ -145,7 +145,7 @@ interface IdeBackend {
     /** Live download queue + progress. Shared with the editor — observe, don't poll. */
     val sdkManagerState: StateFlow<UiSdkManagerState> get() = kotlinx.coroutines.flow.MutableStateFlow(UiSdkManagerState())
 
-    /** The installable Android SDK packages (platforms, build-tools, sources, command-line tools). Empty offline. */
+    /** The installable Android SDK source packages (for editor docs/go-to-source). Empty offline. */
     suspend fun sdkPackages(): List<UiSdkPackage> = emptyList()
 
     /** Start downloading one Android package by its id (`sources;android-34`). Returns immediately; the
@@ -911,7 +911,7 @@ data class UiSdkDownload(
     val detail: String = "",
 )
 
-/** An installable Android SDK package. [category] ∈ {PLATFORM, BUILD_TOOLS, SOURCES, CMDLINE_TOOLS}.
+/** An installable Android SDK package. [category] is always SOURCES (the SDK Manager is sources/docs only).
  *  [incomplete] ⇒ a previous install was interrupted; re-installing resumes/repairs it. */
 data class UiSdkPackage(
     val path: String,

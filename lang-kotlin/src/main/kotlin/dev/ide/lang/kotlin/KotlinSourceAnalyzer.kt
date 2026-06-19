@@ -99,6 +99,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var syntheticClassProvider: () -> List<dev.ide.lang.synthetic.SyntheticClass> = { emptyList() }
 
+    /** Injected by the host: real parameter names + javadoc/KDoc from attached SOURCES (index-backed, with an
+     *  on-demand parse fallback). Lets completing a Java/Android/library API from a `.kt` file show real names
+     *  and docs instead of `p0`/`p1` and nothing. */
+    @Volatile
+    var sourceDocProvider: dev.ide.lang.resolve.SourceDocProvider = dev.ide.lang.resolve.SourceDocProvider.NONE
+
     private val sourceRoots: List<VirtualFile> = ctx.sourceRoots
     private val classpathJars: List<Path> =
         (ctx.classpath.entries + ctx.bootClasspath.entries)
@@ -106,7 +112,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             .filter { Files.exists(it) }
 
     private val serviceLazy = lazy {
-        KotlinSymbolService(sourceRoots, classpathJars, indexService, extensionCacheDir) { syntheticClassProvider() }
+        KotlinSymbolService(sourceRoots, classpathJars, indexService, extensionCacheDir, { syntheticClassProvider() }, sourceDocProvider)
     }
     private val service: KotlinSymbolService get() = serviceLazy.value
 

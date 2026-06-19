@@ -116,7 +116,7 @@ class IndexQueryBenchmark {
     // ---- the two scorers (the new one mirrors IndexData; the old one is the prior allocating form) ----
 
     private fun originBonus(o: IndexOrigin) = when (o) {
-        IndexOrigin.SOURCE -> 30; IndexOrigin.LIBRARY -> 12; IndexOrigin.SDK -> 0
+        IndexOrigin.SOURCE -> 30; IndexOrigin.LIBRARY -> 12; IndexOrigin.SDK -> 0; IndexOrigin.LIBRARY_SOURCE -> 0
     }
 
     /** The prior form: lowercases both strings and builds a humps string per candidate. */

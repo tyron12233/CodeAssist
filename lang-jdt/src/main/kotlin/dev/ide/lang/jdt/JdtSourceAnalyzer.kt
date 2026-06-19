@@ -73,6 +73,11 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     private val baseSourceDirs: List<Path>
     private val baseSourceJars: List<Path>
 
+    /** Immutable library/SDK SOURCE archives + dirs (`-sources.jar`, JDK `src.zip`, Android `sources/`) — no
+     *  project source. The host feeds these to the source-doc index ([IndexScope.sourceArchives]). */
+    var librarySourceArchives: List<Path> = emptyList()
+        private set
+
     /** Live editor buffers (FQCN -> source) for in-memory completion; set by the host (e.g. IdeServices). */
     var overlayProvider: () -> Map<String, CharArray> = { emptyMap() }
 
@@ -136,13 +141,18 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
             }?.takeIf { Files.isDirectory(it) }
         baseSourceDirs = sourceRootPaths + attachmentDirs + listOfNotNull(androidSources)
         baseSourceJars = attachmentJars + listOfNotNull(jdkSrcZip)
+        librarySourceArchives = (baseSourceJars + attachmentDirs + listOfNotNull(androidSources)).distinct()
         sourceMethodResolver = SourceMethodResolver(baseSourceDirs, baseSourceJars)
     }
 
     /** Add extra source archives (e.g. a downloaded JDK `src.zip`) for names/javadoc, rebuilding the resolver. */
     fun addSourceJars(extra: List<Path>) {
-        val jars = (baseSourceJars + extra.filter { Files.isRegularFile(it) }).distinct()
-        if (jars.size != baseSourceJars.size) sourceMethodResolver = SourceMethodResolver(baseSourceDirs, jars)
+        val present = extra.filter { Files.isRegularFile(it) }
+        val jars = (baseSourceJars + present).distinct()
+        if (jars.size != baseSourceJars.size) {
+            sourceMethodResolver = SourceMethodResolver(baseSourceDirs, jars)
+            librarySourceArchives = (librarySourceArchives + present).distinct()
+        }
     }
 
     override val incrementalParser: IncrementalParser = JdtIncrementalParser(this)

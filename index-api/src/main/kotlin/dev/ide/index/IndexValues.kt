@@ -17,6 +17,13 @@ data class SymbolValue(val name: String, val kind: String, val filePath: String,
 /** member hit: member name, owner type FQN, kind (method/field), and a short signature hint. */
 data class MemberValue(val name: String, val owner: String, val kind: String, val signature: String)
 
+/**
+ * source-doc hit: real parameter [names] + cleaned [doc] (javadoc/KDoc) for a method declared on the owner
+ * type the index is keyed by, recovered from attached SOURCES (a compiled artifact carries neither). The
+ * type's own doc is stored as the entry with an empty [name] (and [arity] -1). [arity] picks the overload.
+ */
+data class SourceDocValue(val name: String, val arity: Int, val names: List<String>, val doc: String?)
+
 object ClassNameExternalizer : Externalizer<ClassNameValue> {
     override fun write(out: DataOutput, value: ClassNameValue) {
         out.writeUTF(value.fqn); out.writeByte(value.origin.ordinal); out.writeUTF(value.kind)
@@ -48,4 +55,19 @@ object MemberExternalizer : Externalizer<MemberValue> {
         out.writeUTF(value.name); out.writeUTF(value.owner); out.writeUTF(value.kind); out.writeUTF(value.signature)
     }
     override fun read(inp: DataInput) = MemberValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readUTF())
+}
+
+object SourceDocExternalizer : Externalizer<SourceDocValue> {
+    override fun write(out: DataOutput, value: SourceDocValue) {
+        out.writeUTF(value.name)
+        out.writeInt(value.arity)
+        out.writeInt(value.names.size); value.names.forEach { out.writeUTF(it) }
+        out.writeBoolean(value.doc != null); if (value.doc != null) out.writeUTF(value.doc)
+    }
+    override fun read(inp: DataInput): SourceDocValue {
+        val name = inp.readUTF(); val arity = inp.readInt()
+        val names = List(inp.readInt()) { inp.readUTF() }
+        val doc = if (inp.readBoolean()) inp.readUTF() else null
+        return SourceDocValue(name, arity, names, doc)
+    }
 }

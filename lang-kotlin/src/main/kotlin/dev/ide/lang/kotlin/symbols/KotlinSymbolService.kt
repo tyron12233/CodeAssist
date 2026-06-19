@@ -43,6 +43,9 @@ class KotlinSymbolService(
      *  contributed via `platform.syntheticClass`. The host MUST exclude the Kotlin `<File>Kt` facades — a
      *  Kotlin file references its own top-level declarations directly, not through their Java-facade shape. */
     private val syntheticProvider: () -> List<SyntheticClass> = { emptyList() },
+    /** Optional: real parameter names + javadoc/KDoc from attached SOURCES, used to enrich binary symbols
+     *  (Java bytecode strips parameter names; neither bytecode nor `@Metadata` carries doc comments). */
+    private val sourceDoc: dev.ide.lang.resolve.SourceDocProvider = dev.ide.lang.resolve.SourceDocProvider.NONE,
 ) : KotlinTypeContext, Closeable {
 
     // Kotlin's stdlib is an IMPLICIT dependency of every Kotlin file (like java.lang for Java). Always
@@ -479,12 +482,52 @@ class KotlinSymbolService(
     /** Enumerate one type level from its [shape]: own members (with the receiver's [typeArgs] bound into their
      *  generic signatures) plus members inherited from each generic supertype (the binding substituted into the
      *  supertype's arguments first, so `List<String> : Collection<String>` keeps `stream()` typed). */
+    /**
+     * Splice source-recovered parameter NAMES + javadoc/KDoc into a binary member symbol when sources are
+     * attached (a no-op when none, or for source symbols). Java bytecode strips parameter names (only `p0`/`p1`
+     * survive) and neither bytecode nor `@Metadata` carries doc comments, so the editor would otherwise show
+     * `p0: View` and no docs; this fills the real names (rebuilding the display signature) and the doc text.
+     * Provider lookups are cached per-type on the provider side, so calling per-member is cheap.
+     */
+    private fun enrich(s: KotlinSymbol): KotlinSymbol {
+        if (sourceDoc === dev.ide.lang.resolve.SourceDocProvider.NONE || s.origin.fromSource) return s
+        if (s.kind != SymbolKind.METHOD && s.kind != SymbolKind.CONSTRUCTOR) return s
+        val owner = s.declaringClassFqn ?: return s
+        val md = sourceDoc.method(owner, s.name, s.paramTypes.size) ?: return s
+        val needNames = s.paramNames.isEmpty() || s.paramNames.all { isSyntheticParamName(it) }
+        val names = if (needNames && md.names.size == s.paramTypes.size) md.names else s.paramNames
+        val sig = if (names !== s.paramNames) rewriteParamNames(s.signature, names) else s.signature
+        val doc = s.documentation() ?: md.doc
+        return if (names === s.paramNames && doc == s.documentation()) s
+        else s.withSourceDoc(names = names, sig = sig, docText = doc)
+    }
+
+    /** `p0`/`p1`/… — the placeholder names Java bytecode surfaces when real ones were stripped. */
+    private fun isSyntheticParamName(n: String): Boolean = n.length >= 2 && n[0] == 'p' && n.drop(1).all { it.isDigit() }
+
+    /** Swap the parameter NAMES in a `(p0: View, p1: Int): T` display for real ones, keeping the rendered type
+     *  tokens (and the return type) byte-for-byte. Left unchanged on an arity mismatch or a malformed signature. */
+    private fun rewriteParamNames(signature: String?, names: List<String>): String? {
+        if (signature == null) return null
+        val open = signature.indexOf('('); val close = signature.indexOf(')')
+        if (open < 0 || close <= open) return signature
+        val inner = signature.substring(open + 1, close)
+        if (inner.isBlank()) return signature
+        val parts = inner.split(", ")
+        if (parts.size != names.size) return signature
+        val rebuilt = parts.mapIndexed { i, p ->
+            val colon = p.indexOf(": ")
+            if (colon < 0) p else names[i] + p.substring(colon)
+        }.joinToString(", ")
+        return signature.substring(0, open + 1) + rebuilt + signature.substring(close)
+    }
+
     private fun membersFromShape(shape: TypeShape, typeArgs: List<TypeRef>, visited: MutableSet<String>): List<KotlinSymbol> {
         val bindings = classBindings(shape, typeArgs)
         // A member that re-declares a class type-parameter name (a static `<E> of(E)` on `List<E>`) shadows it,
         // so its own parameters are excluded from the class binding (bound later from the call site).
         val own = shape.members.map { m ->
-            substituteSymbol(m, if (m.typeParameters.isEmpty()) bindings else bindings - m.typeParameters.toSet())
+            enrich(substituteSymbol(m, if (m.typeParameters.isEmpty()) bindings else bindings - m.typeParameters.toSet()))
         }
         val inherited = shape.supertypes.flatMap { st ->
             val sub = substitute(st, bindings) as? KotlinType ?: return@flatMap emptyList()

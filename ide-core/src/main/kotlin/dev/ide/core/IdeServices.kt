@@ -332,6 +332,8 @@ class IdeServices private constructor(
             JavaMembersByOwnerIndex, // cross-language: a Kotlin file enumerating a Java SOURCE class's members
             dev.ide.lang.kotlin.index.KotlinTypeShapeIndex, // Kotlin backend: persistent owner-keyed member shapes
             dev.ide.lang.kotlin.index.KotlinCallableIndex, // Kotlin backend: persistent extensions + top-level callables
+            dev.ide.lang.jdt.index.JavaSourceDocIndex, // param names + javadoc from attached Java sources
+            dev.ide.lang.kotlin.index.KotlinSourceDocIndex, // param names + KDoc from attached Kotlin sources
             AndroidResourceIndex, // Android resource declarations
         ).forEach { platform.extensions.register(INDEX_EP, it, plugin) }
         IndexServiceImpl(
@@ -366,6 +368,9 @@ class IdeServices private constructor(
             sourceRoots = jdt.flatMap { it.sourceRootPaths }.distinct(),
             libraryJars = jdt.flatMap { it.classpathJarPaths }.distinct(),
             jdkHome = jdt.firstNotNullOfOrNull { it.jdkHome },
+            // Attached library/SDK SOURCE archives (incl. the downloaded JDK src.zip, folded in by the JDT
+            // branch of analyzerFor) → the source-doc index: real param names + javadoc/KDoc.
+            sourceArchives = jdt.flatMap { it.librarySourceArchives }.distinct(),
             // Index res/ XML: project + dependency-module + AAR res (the same merge the repository sees).
             resourceRoots = modules().flatMap { m ->
                 if (m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null)
@@ -474,7 +479,7 @@ class IdeServices private constructor(
     // ---- SDK / toolchain manager (download Android SDK packages + JDK sources) ----
 
     /** Downloads Android SDK packages + JDK sources behind a progress flow. Invalidates analyzers on change. */
-    val sdkManager = SdkManagerService(store.rootPath, onChanged = ::invalidateAnalyzers)
+    val sdkManager = SdkManagerService(store.rootPath, onChanged = { invalidateAnalyzers(); resyncIndex() }, sharedRoot = sharedCachesRoot)
 
     // ---- Android platform sources (for parameter names + javadoc on android.* APIs) ----
 
@@ -508,6 +513,7 @@ class IdeServices private constructor(
             if (!done) { proc.destroyForcibly(); return "Timed out downloading sources for $platform." }
             if (proc.exitValue() == 0) {
                 invalidateAnalyzers() // pick up the freshly-installed sources
+                resyncIndex()         // index them for param names + javadoc (source-doc index)
                 "Installed sources for $platform."
             } else "sdkmanager failed (exit ${proc.exitValue()}) installing sources for $platform."
         }.getOrElse { "Couldn't run sdkmanager: ${it.message}" }
@@ -1713,6 +1719,12 @@ class IdeServices private constructor(
                         it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                         // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
                         it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
+                        // Real parameter names + javadoc/KDoc from attached sources: the persistent source-doc
+                        // index, with the module's JDT resolver (project dirs + -sources.jars + JDK src.zip +
+                        // Android sources) as the live parse fallback before the index has built.
+                        val jdtFallback = (analyzerFor(module) as? JdtSourceAnalyzer)?.sourceMethodResolver
+                            ?: dev.ide.lang.resolve.SourceDocProvider.NONE
+                        it.sourceDocProvider = IndexBackedSourceDocs(indexService, jdtFallback)
                     }
                     is XmlSourceAnalyzer -> {
                         // Inject the Android knowledge: layout metadata (SDK attrs.xml asset when present, else

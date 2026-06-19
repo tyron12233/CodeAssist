@@ -70,6 +70,15 @@ class KotlinSymbol(
     val isExtension: Boolean get() = receiverTypeFqn != null
     override fun declaration(): DomNode? = declarationNode
     override fun documentation(): String? = doc
+
+    /** A copy with source-recovered facts spliced in (real parameter [names], rebuilt [sig], [docText]) — used
+     *  to enrich a binary symbol from attached sources without re-reading its shape. Other fields are preserved. */
+    fun withSourceDoc(names: List<String> = paramNames, sig: String? = signature, docText: String? = doc): KotlinSymbol =
+        KotlinSymbol(
+            name, kind, type, owner, modifiers, origin, receiverTypeFqn, sig, typeParameters, typeParameterBounds,
+            paramTypes, names, receiverTypeArgs, receiverTypeParam, packageName, declaringClassFqn, isInternal,
+            isComposable, isInline, varargParamIndex, declarationNode, docText,
+        )
 }
 
 /**
