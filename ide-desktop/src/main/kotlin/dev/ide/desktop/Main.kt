@@ -8,6 +8,8 @@ import androidx.compose.ui.window.rememberWindowState
 import dev.ide.core.IdeServices
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
+import dev.ide.platform.log.ConsoleLogSink
+import dev.ide.platform.log.Log
 import dev.ide.ui.CodeAssistApp
 import java.nio.file.Path
 
@@ -20,6 +22,9 @@ import java.nio.file.Path
 fun main(args: Array<String>) {
     System.setProperty("apple.awt.application.appearance", "system")
     System.setProperty("apple.awt.application.name", "CodeAssist")
+    // Survive an unexpected exception on the AWT event thread (e.g. the live-preview interpreter crashing deep
+    // in Compose's measure/semantics pass on a half-typed buffer) instead of taking the whole IDE down.
+    AwtThreadGuard.install()
 
     val projectsRoot = Path.of(
         System.getProperty("codeassist.projects.root")
@@ -41,6 +46,8 @@ fun main(args: Array<String>) {
         services.close()
         return
     }
+
+    Log.addSink(ConsoleLogSink())
 
     val backend = IdeServicesBackend(services, manager)
     application {

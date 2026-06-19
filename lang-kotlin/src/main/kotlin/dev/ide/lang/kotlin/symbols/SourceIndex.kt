@@ -50,6 +50,9 @@ class RawCallable(
     val isSuspend: Boolean = false,
     /** The index of the `vararg` value parameter, or -1 if none. */
     val varargParamIndex: Int = -1,
+    /** The function's own type-parameter names (`fun <T> items(…)` → `["T"]`) — so a param/return type that
+     *  references one is marked a type parameter (enabling generic inference: binding `T` from an argument). */
+    val typeParameterNames: List<String> = emptyList(),
 )
 
 class RawClass(
@@ -218,6 +221,7 @@ object SourceIndexBuilder {
         isInline = f.hasModifier(KtTokens.INLINE_KEYWORD),
         isSuspend = f.hasModifier(KtTokens.SUSPEND_KEYWORD),
         varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
+        typeParameterNames = f.typeParameters.mapNotNull { it.name },
     )
 
     private fun property(p: KtProperty, ctx: FileContext, parsed: KotlinParsedFile) = RawCallable(

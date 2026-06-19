@@ -90,3 +90,21 @@ val FakeIcons.AutoMirrored.Filled.FakeListIcon: String get() = "list-icon"
  *  the item-scope. Being an extension called bare inside `fakeLazyColumn { }`, resolving its lambda's receiver
  *  exercises the implicit-receiver call-resolution path (not just top-level functions). */
 fun <T> FakeListScope.fakeItemsIndexed(items: List<T>, itemContent: @Composable FakeItemScope.(Int, T) -> Unit) {}
+
+/** Two overloads of `fakeItems` that mirror `LazyListScope.items`: an Int-based overload (no type param) and
+ *  a generic List-based overload, BOTH with 4 parameters. A call that supplies only 3 args (first positional +
+ *  named key lambda + trailing content lambda) must pick the List overload when the first arg is a `List<T>`,
+ *  not the Int overload — exercising the binary-extension disambiguation path. */
+fun FakeListScope.fakeItems(
+    count: Int,
+    key: ((Int) -> Any)? = null,
+    contentType: ((Int) -> Any)? = null,
+    itemContent: @Composable FakeItemScope.(Int) -> Unit = {},
+) {}
+
+fun <T> FakeListScope.fakeItems(
+    items: List<T>,
+    key: ((T) -> Any)? = null,
+    contentType: ((T) -> Any)? = null,
+    itemContent: @Composable FakeItemScope.(T) -> Unit = {},
+) {}

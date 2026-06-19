@@ -14,14 +14,24 @@ import dev.ide.interp.ComposableInvoker
  */
 class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvoker {
 
-    override fun invokeComposable(callSiteKey: Int, body: () -> Any?): Any? {
+    override fun invokeComposable(callSiteKey: Int, restartable: Boolean, args: List<Any?>, body: () -> Any?): Any? {
         val outer = dispatcher.composer ?: return body() // no composition in progress → just run it
         val group = ComposableAbi.startRestartGroup(outer, callSiteKey)
         dispatcher.composer = group
         val result: Any?
         val scope: Any?
         try {
-            result = body()
+            // The `$changed` fast path: record the args into the slot table, then skip re-interpreting the body
+            // when this is a skippable (Unit-returning) composable, nothing it was passed changed, and the
+            // runtime says this group may skip (i.e. it wasn't invalidated by its own state read). The arg
+            // recording must happen every pass to keep slot positions stable, so it runs before the skip test.
+            val argsChanged = if (restartable) ComposableAbi.argsChanged(group, args) else true
+            result = if (restartable && !argsChanged && ComposableAbi.isSkipping(group)) {
+                ComposableAbi.skipToGroupEnd(group)
+                Unit // a skipped Unit composable contributes no value; its nodes are reused from last time
+            } else {
+                body()
+            }
             scope = ComposableAbi.endRestartGroup(group)
         } catch (t: Throwable) {
             // The body failed mid-composition (e.g. an interpreter error). Balance the restart group we opened
@@ -36,7 +46,7 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
         // own restart group and re-registers), exactly as the plugin's restart lambda re-invokes the function.
         ComposableAbi.updateScope(scope) { recomposeComposer ->
             dispatcher.composer = recomposeComposer
-            invokeComposable(callSiteKey, body)
+            invokeComposable(callSiteKey, restartable, args, body)
         }
         return result
     }

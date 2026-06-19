@@ -354,6 +354,48 @@ object ComposableAbi {
     fun endRestartGroup(composer: Any): Any? =
         composer.javaClass.methods.first { it.name == "endRestartGroup" && it.parameterCount == 0 }.invoke(composer)
 
+    // --- $changed skipping (the recomposition fast path) ---
+
+    /**
+     * Record each of [args] into the restart group's slot table via `composer.changed(Any?)` and report
+     * whether ANY of them differs from the previous composition — the interpreter's stand-in for the
+     * compiler-computed `$dirty` bitmask. Every arg is offered to `changed` unconditionally (no short-circuit):
+     * the calls advance fixed slot positions, so skipping one would desync the slot table on the next pass.
+     * `changed` compares with `equals`, so a remembered/identical instance reports unchanged. Empty args → not
+     * changed (a no-arg composable's recompositions are entirely state-driven).
+     */
+    fun argsChanged(composer: Any, args: List<Any?>): Boolean {
+        if (args.isEmpty()) return false
+        val changed = changedMethodCache.getOrPut(composer.javaClass) {
+            composer.javaClass.methods.first {
+                it.name == "changed" && it.parameterCount == 1 && it.parameterTypes[0] == Any::class.java
+            }
+        }
+        var dirty = false
+        for (a in args) dirty = (changed.invoke(composer, a) as Boolean) || dirty
+        return dirty
+    }
+
+    /** `composer.getSkipping(): Boolean` — true when the runtime invited this group to skip (it was reached by
+     *  a parent recomposition, NOT invalidated by a state read of its own). A state-driven recompose reports
+     *  false here, so the body always re-runs then. */
+    fun isSkipping(composer: Any): Boolean =
+        skippingGetterCache.getOrPut(composer.javaClass) {
+            composer.javaClass.methods.first { it.name == "getSkipping" && it.parameterCount == 0 }
+        }.invoke(composer) as Boolean
+
+    /** `composer.skipToGroupEnd()` — abandon re-execution of this group's body, reusing last composition's
+     *  nodes. Called in place of the interpreted body when the group is skippable and unchanged. */
+    fun skipToGroupEnd(composer: Any) {
+        skipToGroupEndCache.getOrPut(composer.javaClass) {
+            composer.javaClass.methods.first { it.name == "skipToGroupEnd" && it.parameterCount == 0 }
+        }.invoke(composer)
+    }
+
+    private val changedMethodCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val skippingGetterCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val skipToGroupEndCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+
     /** Register the recomposition block: when the scope is invalidated (a state it read changed), the real
      *  Recomposer calls [recompose] with a fresh composer. No-op if [scope] is null. */
     fun updateScope(scope: Any?, recompose: (Any) -> Unit) {

@@ -84,9 +84,12 @@ class KotlinSymbolService(
     private val fileCache = ConcurrentHashMap<String, CachedFile>()
 
     // Per-receiver-FQN memo of the (recursively-walked) Kotlin supertype chain — the expensive part of
-    // `extensionsFor`/`supertypesOf`, recomputed on every member-access keystroke otherwise. A pure-classpath
-    // type's chain is stable; a SOURCE type's depends on the model, so the whole memo is dropped on any edit.
-    @Volatile private var supertypeMemo = ConcurrentHashMap<String, List<String>>()
+    // `extensionsFor`/`supertypesOf`, recomputed on every member-access keystroke otherwise. Split by origin:
+    // a classpath/builtin type's chain CANNOT depend on project source (the classpath can't extend your code),
+    // so it's stable for the session; only a SOURCE type's chain can change on an edit. Keeping the classpath
+    // memo across edits is the win for Compose (its deep `Modifier`/`MaterialTheme`/… chains stay warm).
+    private val classpathSupertypeMemo = ConcurrentHashMap<String, List<String>>()
+    @Volatile private var sourceSupertypeMemo = ConcurrentHashMap<String, List<String>>()
 
     /**
      * Replace the live editor buffers (VirtualFile path → text) the source model overlays on top of disk, so
@@ -107,7 +110,7 @@ class KotlinSymbolService(
             if (changed.isEmpty()) return
             changed.forEach { fileCache.remove(it) }
             cachedModel = null
-            supertypeMemo = ConcurrentHashMap() // source supertypes may have changed; classpath entries re-warm
+            sourceSupertypeMemo = ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
         }
     }
 
@@ -385,23 +388,26 @@ class KotlinSymbolService(
             return simple // already a full FQN (or unresolvable) → verbatim
         }
 
-        // 1. An explicit (non-star) import.
+        // 1. Kotlin built-in simple types (String/Int/List/Map/…) are intrinsic — they are ALWAYS in scope
+        //    via kotlin.*/kotlin.collections.* implicit imports and cannot be shadowed by an explicit import
+        //    that happens to share the simple name (e.g. `import icons.automirrored.filled.List` → the icon
+        //    object must not displace `kotlin.collections.List` in type-annotation position).
+        Builtins.DEFAULT_SIMPLE_TYPES[simple]?.let { return it }
+        // 2. An explicit (non-star) import.
         ctx?.imports?.firstOrNull { !it.isStar && it.simpleName == simple }?.let { return it.fqn }
-        // 2. The file's own package (source, then classpath) — a same-package type needs no import.
+        // 3. The file's own package (source, then classpath) — a same-package type needs no import.
         ctx?.packageName?.takeIf { it.isNotEmpty() }?.let { pkg ->
             "$pkg.$simple".let { cand -> if (cand in model().classByFqn || reader.classBytes(cand) != null) return cand }
         }
-        // 3. Any project SOURCE class by simple name: the editor stays lenient about a same-module type the
+        // 4. Any project SOURCE class by simple name: the editor stays lenient about a same-module type the
         //    user hasn't imported yet (its members still resolve). Kotlin sources come from the model; Java
         //    sources from the index (SOURCE origin only — a LIBRARY type must NOT resolve bare, so an unimported
         //    classpath type like `ComponentActivity` stays unresolved and is flagged by the unresolved-TYPE check).
         model().classByFqn.keys.firstOrNull { it.substringAfterLast('.') == simple }?.let { return it }
         index?.exact<ClassNameValue>(CLASS_NAMES, simple)?.firstOrNull { it.origin == IndexOrigin.SOURCE }?.let { return it.fqn }
-        // 4. A top-level synthetic class by simple name (e.g. `R` → `com.example.R`); nested types (`R.layout`)
+        // 5. A top-level synthetic class by simple name (e.g. `R` → `com.example.R`); nested types (`R.layout`)
         //    are reached through their outer, never resolved bare.
         synthetic().topLevelFqns.firstOrNull { it.substringAfterLast('.') == simple }?.let { return it }
-        // 5. A Kotlin default simple type (String/Int/List/…).
-        Builtins.DEFAULT_SIMPLE_TYPES[simple]?.let { return it }
         // 6. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
         //    a simple name is visible if it lives in one of these packages.
         val starPackages = (ctx?.imports?.filter { it.isStar }?.map { it.packageName } ?: emptyList()) +
@@ -430,17 +436,33 @@ class KotlinSymbolService(
      * (same as [membersOf]).
      */
     fun membersForCompletion(typeFqn: String, typeArgs: List<TypeRef>, namePrefix: String): List<KotlinSymbol> {
-        val own = ownAndInherited(typeFqn, typeArgs, HashSet())
+        val own = dev.ide.lang.kotlin.KotlinPerf.span("own") { ownAndInherited(typeFqn, typeArgs, HashSet()) }
         val ownMatched = if (namePrefix.isEmpty()) own else own.filter { it.name.startsWith(namePrefix, ignoreCase = true) }
-        return ownMatched + extensionsFor(typeFqn, typeArgs, namePrefix)
+        return ownMatched + dev.ide.lang.kotlin.KotlinPerf.span("ext") { extensionsFor(typeFqn, typeArgs, namePrefix) }
+    }
+
+    /**
+     * Members of [typeFqn] named EXACTLY [name] — the diagnostic path's "does this member exist on the receiver?"
+     * probe (unresolved-member checking). Pushes the name through the same prefix machinery as
+     * [membersForCompletion], so only same-named members + extensions are materialized and receiver-bound —
+     * NOT the type's entire extension set (the `kotlin.Any` bucket alone is thousands on a Compose classpath),
+     * which `membersOf(…)` with no prefix enumerated and allocated just to keep the one matching name.
+     * Empty [name] returns nothing (an incomplete `recv.` is not a real member reference) rather than everything.
+     */
+    fun membersNamed(typeFqn: String, typeArgs: List<TypeRef>, name: String): List<KotlinSymbol> {
+        if (name.isEmpty()) return emptyList()
+        return membersForCompletion(typeFqn, typeArgs, name).filter { it.name == name }
     }
 
     override fun supertypesOf(typeFqn: String): List<TypeRef> =
         kotlinSupertypesMemo(typeFqn).map { typeByFqn(it) }
 
-    /** [kotlinSupertypes] memoized per FQN (dropped on edit via [setOverlay]); the walk is the hot cost. */
-    private fun kotlinSupertypesMemo(fqn: String): List<String> =
-        supertypeMemo.getOrPut(fqn) { kotlinSupertypes(fqn, HashSet()) }
+    /** [kotlinSupertypes] memoized per FQN; the walk is the hot cost. A SOURCE type's chain (its FQN is in the
+     *  project model) goes in the edit-dropped memo, everything else in the session-stable classpath memo. */
+    private fun kotlinSupertypesMemo(fqn: String): List<String> {
+        val memo = if (model().classByFqn.containsKey(fqn)) sourceSupertypeMemo else classpathSupertypeMemo
+        return memo.getOrPut(fqn) { kotlinSupertypes(fqn, HashSet()) }
+    }
 
     private fun ownAndInherited(fqnRaw: String, typeArgs: List<TypeRef>, visited: MutableSet<String>): List<KotlinSymbol> {
         // A JVM type maps to its Kotlin classifier (`java.lang.String` → `kotlin.String`), so member
@@ -495,12 +517,12 @@ class KotlinSymbolService(
         // is applied BEFORE bindExtensionReceiver, which allocates a fresh symbol per generic receiver.
         val idx = index
         val fromClasspath = if (idx != null) {
-            val viaIndex = targets.flatMap { t ->
+            val viaIndex = dev.ide.lang.kotlin.KotlinPerf.span("ext.index") { targets.flatMap { t ->
                 idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.extPrefix(t, namePrefix), EXTENSION_QUERY_LIMIT)
                     .map { it.value.toSymbol(this) }.toList()
-            }
+            } }
             // Always fold in the bundled stdlib's extensions (`Iterable.map`, `String.trim`) — see [stdlibReader].
-            val scan = stdlibScan()
+            val scan = dev.ide.lang.kotlin.KotlinPerf.span("ext.stdlib") { stdlibScan() }
             viaIndex + targets.flatMap { scan.extensionsByReceiver[it].orEmpty() }.filter { matches(it.name) }
         } else {
             val scan = reader.scan(this)
@@ -686,6 +708,19 @@ class KotlinSymbolService(
             varargParamIndex = s.varargParamIndex,
             declarationNode = s.declaration(), doc = s.documentation(),
         )
+    }
+
+    /**
+     * Mark any reference to one of the declaration's own type-parameter [names] in [type] (recursing into type
+     * arguments) as `isTypeParameter`. A type parsed from SOURCE text (`(T) -> Any`, `List<T>`) doesn't know
+     * `T` is a type parameter — `resolveTypeName` returns it verbatim — so without this, generic inference
+     * (`unify`/`substitute`) can't bind it and `it` in `key = { it.id }` types as a bogus concrete `T`.
+     */
+    private fun markTypeParameters(type: KotlinType?, names: Set<String>): KotlinType? {
+        if (type == null || names.isEmpty()) return type
+        val args = type.typeArguments.map { (it as? KotlinType)?.let { a -> markTypeParameters(a, names) } ?: it }
+        val isTp = type.isTypeParameter || type.qualifiedName in names
+        return KotlinType(type.qualifiedName, args, type.nullable, this, isTp, type.isExtensionFunctionType, type.isComposable)
     }
 
     /** Recursively replace type-parameter references in [type] per [bindings]. */
@@ -909,7 +944,8 @@ class KotlinSymbolService(
     // --- raw -> neutral symbol ---
 
     private fun toSymbol(rc: RawCallable, ownerFqn: String?): KotlinSymbol {
-        val type = typeFromText(rc.returnText, rc.ctx) ?: inferInitializerType(rc.initializerText, rc.ctx)
+        val tps = rc.typeParameterNames.toHashSet()
+        val type = markTypeParameters(typeFromText(rc.returnText, rc.ctx) ?: inferInitializerType(rc.initializerText, rc.ctx), tps)
         val receiverFqn = rc.receiverText?.let { resolveTypeName(it, rc.ctx) }
         val sig = if (rc.isFunction) {
             "(" + rc.paramTexts.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" +
@@ -925,7 +961,8 @@ class KotlinSymbolService(
             origin = SOURCE,
             receiverTypeFqn = receiverFqn,
             signature = sig,
-            paramTypes = if (rc.isFunction) rc.paramTexts.map { (_, t) -> typeFromText(t, rc.ctx) } else emptyList(),
+            typeParameters = rc.typeParameterNames,
+            paramTypes = if (rc.isFunction) rc.paramTexts.map { (_, t) -> markTypeParameters(typeFromText(t, rc.ctx), tps) } else emptyList(),
             paramNames = if (rc.isFunction) rc.paramTexts.map { (n, _) -> n } else emptyList(),
             modifiers = when (rc.visibility) {
                 "private" -> setOf(dev.ide.lang.resolve.Modifier.PRIVATE)

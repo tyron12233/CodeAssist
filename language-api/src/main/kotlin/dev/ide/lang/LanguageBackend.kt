@@ -54,6 +54,7 @@ enum class BackendCapability {
     POSTFIX,            // contributes/handles postfix templates (dev.ide.lang.postfix)
     INLAY_HINTS,        // provides an InlayHintService
     SEMANTIC_HIGHLIGHT, // provides a SemanticHighlightService (type-aware editor coloring)
+    CODE_FOLDING,       // provides a FoldingService (collapse imports / blocks / comments)
     COMPILE,            // can emit bytecode
     FORMAT,
 }
@@ -98,6 +99,10 @@ interface SourceAnalyzer {
 
     /** Type-aware editor coloring; null if !capabilities.contains(SEMANTIC_HIGHLIGHT). See the highlight SPI. */
     val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService?
+        get() = null
+
+    /** Code-folding regions; null if !capabilities.contains(CODE_FOLDING). See the folding SPI. */
+    val folding: dev.ide.lang.folding.FoldingService?
         get() = null
 
     /** Current tolerant tree for [file] (parsed/incrementally maintained). */

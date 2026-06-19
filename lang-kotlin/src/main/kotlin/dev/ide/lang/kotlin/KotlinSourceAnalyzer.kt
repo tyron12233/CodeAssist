@@ -162,6 +162,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         )
     }
 
+    override val folding: dev.ide.lang.folding.FoldingService by lazy {
+        KotlinCodeFolder(parsedFor = { lastByFile[it.path] })
+    }
+
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))
 
@@ -170,6 +174,20 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** The `@Preview @Composable` functions in [file]'s last parse — the editor's preview targets. */
     fun composePreviews(file: VirtualFile): List<dev.ide.lang.kotlin.interp.PreviewInfo> =
         lastByFile[file.path]?.let { dev.ide.lang.kotlin.interp.KotlinComposePreviews.find(it.ktFile) } ?: emptyList()
+
+    /**
+     * Whether [file]'s last parse contains syntax errors (`PsiErrorElement`s). A file that doesn't parse
+     * cleanly must NOT be interpreted for a preview: the error-tolerant parser still yields a whole tree, but a
+     * stray/incomplete token mis-shapes declarations — e.g. `data class Project(dsad val id: …)` parses into a
+     * constructor whose parameters are all shifted, so the interpreter builds objects with wrong-typed fields
+     * (a `Float` slot holding a `String`). That garbage program then crashes the real Compose runtime deep in
+     * its measure/semantics pass (a `ClassCastException` Compose throws AFTER the interpreter returned), which
+     * no interpreter-level guard can catch. So the preview gates on this and shows "fix errors" instead.
+     */
+    fun hasSyntaxErrors(file: VirtualFile): Boolean {
+        val parsed = lastByFile[file.path] ?: return false
+        return org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.hasErrorElements(parsed.ktFile)
+    }
 
     /** Lower every top-level function in [file] to a [dev.ide.lang.kotlin.interp.ResolvedFunction], keyed
      *  `"name/arity"` — the program the interpreter runs a preview against (same-file composables included). */
@@ -230,10 +248,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         )
     }
 
-    override suspend fun analyze(file: VirtualFile): AnalysisResult {
-        val parsed = lastByFile[file.path] ?: return AnalysisResult(file, emptyList())
-        refreshOverlay() // cross-file: a symbol just typed in another open file must not flag here as unresolved
-        return AnalysisResult(file, parsed.diagnostics + semanticDiagnostics(parsed))
+    override suspend fun analyze(file: VirtualFile): AnalysisResult = KotlinPerf.trace("kt.analyze") {
+        val parsed = lastByFile[file.path] ?: return@trace AnalysisResult(file, emptyList())
+        KotlinPerf.span("overlay") { refreshOverlay() } // cross-file: a symbol just typed elsewhere must not flag here
+        AnalysisResult(file, parsed.diagnostics + KotlinPerf.span("semantic") { semanticDiagnostics(parsed) })
     }
 
     /** A single "Import …" code action: its lightbulb [title] and the document [edits] that apply it. */
@@ -321,64 +339,148 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * Capitalized names (types/constructors), type-position references (generic params), qualified receivers,
      * numeric-literal adaptation, `Nothing` terminals, smart-cast guards, and implicit-companion bodies are left alone.
      */
+    // Per-file incremental-analyze cache. The semantic pass re-resolves the whole file, which is the editor's
+    // dominant cost on a large file; this lets a body-only edit re-analyze ONLY the changed function and reuse
+    // every other declaration's diagnostics (re-anchored to its shifted offset). See [semanticDiagnostics].
+    private class DeclDiags(val header: String, val fullText: String, val rel: List<Diagnostic>)
+    private class AnalyzeCache(val importsKey: String, val decls: List<DeclDiags>)
+    private val analyzeCache = ConcurrentHashMap<String, AnalyzeCache>()
+
+    /**
+     * Semantic diagnostics, computed incrementally. The set is `file-level checks` + `Σ per top-level
+     * declaration`. Walking the package/import subtrees yields nothing (the per-node checks back off inside
+     * imports — see [unresolvedBareReference]), so this is equivalent to one whole-file walk.
+     *
+     * Incremental reuse: when exactly one top-level declaration changed AND it is a block-bodied function whose
+     * HEADER (modifiers/annotations/receiver/params/return type) is unchanged, only its body changed — nothing
+     * any OTHER declaration resolves against moved (a block body's return type is declared, so it's part of the
+     * header), and imports are unchanged (guarded). So that one function is re-analyzed and every other
+     * declaration's cached diagnostics are reused, re-anchored to its new start offset. Any other shape
+     * (signature change, added/removed/reordered declaration, multiple changes, an import edit) → full re-analyze.
+     */
     private fun semanticDiagnostics(parsed: KotlinParsedFile): List<Diagnostic> {
         val ktFile = parsed.ktFile
         val resolver = KotlinResolver(ktFile, parsed, service)
         val refNames = referencedNames(ktFile) // for unused-import / unused-private (names used in the body)
         val localAliases = typeAliasNamesIn(ktFile) // same-file typealiases (the disk model may lag the buffer)
-        val out = ArrayList<Diagnostic>()
-        fun walk(psi: PsiElement) {
-            // Poll between nodes (never mid-I/O) so a higher-priority call — code completion sharing the one
-            // engine thread — can preempt this full-file pass instead of waiting it out. The host retries.
-            dev.ide.platform.EngineCancellation.checkCanceled()
-            when (psi) {
-                is KtNameReferenceExpression ->
-                    (unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))?.let { out += it }
-                is KtUserType -> unresolvedTypeReference(psi, resolver, localAliases)?.let { out += it }
-                is KtProperty -> {
-                    typeMismatch(psi.typeReference?.text, psi.initializer, resolver)?.let { out += it }
-                    unusedLocal(psi)?.let { out += it }
-                    missingInitializer(psi)?.let { out += it }
-                    varCouldBeVal(psi)?.let { out += it }
-                    delegateOperatorNotInScope(psi, resolver)?.let { out += it }
-                    if (isPrivateDeclaration(psi)) unusedPrivate(psi, refNames)?.let { out += it }
-                }
-                is KtParameter -> typeMismatch(psi.typeReference?.text, psi.defaultValue, resolver)?.let { out += it }
-                is KtNamedFunction -> {
-                    // a block-body function must return a value (missing-return); an expression body is type-checked.
-                    if (psi.hasBlockBody()) missingReturn(psi, resolver)?.let { out += it }
-                    else typeMismatch(psi.typeReference?.text, psi.bodyExpression, resolver)?.let { out += it }
-                    if (isPrivateDeclaration(psi)) unusedPrivate(psi, refNames)?.let { out += it }
-                }
-                is KtReturnExpression -> returnTypeMismatch(psi, resolver)?.let { out += it }
-                is KtBinaryExpression -> valReassignment(psi)?.let { out += it }
-                is KtCallExpression -> {
-                    argumentCountMismatch(psi)?.let { out += it }
-                    (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it }
-                    out += unknownNamedArguments(psi, resolver)
-                    composableInvocation(psi, resolver)?.let { out += it }
-                    cannotInferType(psi, resolver)?.let { out += it }
-                }
-                is KtDotQualifiedExpression -> unsafeNullableAccess(psi, resolver)?.let { out += it }
-                // Conflicting declarations: same-name (and, for functions, same-signature) declarations in
-                // one scope — a parameter list, a block (locals), a class body, or the file (top level).
-                is KtParameterList -> out += duplicateParams(psi)
-                is KtBlockExpression -> {
-                    out += duplicateDeclarations(psi.statements.filterIsInstance<KtDeclaration>())
-                    out += unreachableCode(psi, resolver)
-                }
-                is KtClassBody -> out += duplicateDeclarations(psi.declarations)
-                is KtFile -> {
-                    out += duplicateDeclarations(psi.declarations)
-                    out += unusedImports(psi, refNames)
-                }
-                else -> {}
+
+        // File-level checks (whole-file, but cheap — no type resolution): always recomputed.
+        val fileLevel = ArrayList<Diagnostic>()
+        fileLevel += duplicateDeclarations(ktFile.declarations)
+        fileLevel += unusedImports(ktFile, refNames)
+        fileLevel += conflictingImports(ktFile)
+        unusedPrivateDeclarations(ktFile, refNames, fileLevel)
+
+        val topDecls = ktFile.declarations
+        val importsKey = (ktFile.packageDirective?.text ?: "") + "\u0000" + (ktFile.importList?.text ?: "")
+        val prev = analyzeCache[parsed.file.path]
+        val recompute = KotlinPerf.span("scopeCheck") { recomputeIndices(prev, importsKey, topDecls) } // null → full
+
+        val perDecl = ArrayList<List<Diagnostic>>(topDecls.size)
+        val newEntries = ArrayList<DeclDiags>(topDecls.size)
+        for ((i, d) in topDecls.withIndex()) {
+            val base = d.textRange.startOffset
+            if (recompute != null && i !in recompute) {
+                val cached = prev!!.decls[i] // text identical → reuse, re-anchored to the (possibly shifted) offset
+                perDecl += cached.rel.map { it.copy(range = TextRange(it.range.start + base, it.range.end + base)) }
+                newEntries += cached
+            } else {
+                val diags = ArrayList<Diagnostic>()
+                walkDecl(d, resolver, localAliases, diags)
+                perDecl += diags
+                newEntries += DeclDiags(headerOf(d), d.text, diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
             }
-            var c = psi.firstChild
-            while (c != null) { walk(c); c = c.nextSibling }
         }
-        walk(ktFile)
-        return out
+        analyzeCache[parsed.file.path] = AnalyzeCache(importsKey, newEntries)
+
+        val result = ArrayList<Diagnostic>(fileLevel)
+        perDecl.forEach { result += it }
+        return result
+    }
+
+    /**
+     * Which top-level declarations must be re-analyzed against [prev], or null to re-analyze the whole file.
+     * Empty list → nothing changed (reuse all). One index → a safe body-only function edit (see
+     * [semanticDiagnostics]). Anything else → null (full).
+     */
+    private fun recomputeIndices(prev: AnalyzeCache?, importsKey: String, topDecls: List<KtDeclaration>): List<Int>? {
+        if (prev == null || prev.importsKey != importsKey || prev.decls.size != topDecls.size) return null
+        val changed = ArrayList<Int>(2)
+        for (i in topDecls.indices) if (topDecls[i].text != prev.decls[i].fullText) changed += i
+        if (changed.size > 1) return null // a multi-declaration edit → don't reason about it; re-analyze fully
+        if (changed.isEmpty()) return changed // identical text (e.g. a caret-only re-analyze) → reuse everything
+        val k = changed[0]
+        val fn = topDecls[k] as? KtNamedFunction ?: return null
+        val body = fn.bodyBlockExpression ?: return null // expression bodies feed inference → treat as structural
+        val newHeader = fn.text.substring(0, body.textRange.startOffset - fn.textRange.startOffset)
+        return if (newHeader == prev.decls[k].header) changed else null // header changed → signature changed → full
+    }
+
+    /** A declaration's pre-body text (signature surface) for a block-bodied function; its full text otherwise. */
+    private fun headerOf(d: KtDeclaration): String {
+        val body = (d as? KtNamedFunction)?.bodyBlockExpression ?: return d.text
+        return d.text.substring(0, body.textRange.startOffset - d.textRange.startOffset)
+    }
+
+    /** Walk one declaration's subtree, accumulating its semantic diagnostics into [out] (no file-level checks —
+     *  those run once in [semanticDiagnostics]; a declaration subtree never contains the KtFile node). Only
+     *  declaration-LOCAL checks live here; whole-file ones (unused-private, unused-import) are file-level so a
+     *  body edit elsewhere can't leave a stale reused result. */
+    private fun walkDecl(psi: PsiElement, resolver: KotlinResolver, localAliases: Set<String>, out: MutableList<Diagnostic>) {
+        // Poll between nodes (never mid-I/O) so a higher-priority call — code completion sharing the one
+        // engine thread — can preempt this pass instead of waiting it out. The host retries.
+        dev.ide.platform.EngineCancellation.checkCanceled()
+        when (psi) {
+            is KtNameReferenceExpression -> KotlinPerf.span("sem.nameRef") {
+                (unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))?.let { out += it }
+            }
+            is KtUserType -> KotlinPerf.span("sem.type") { unresolvedTypeReference(psi, resolver, localAliases)?.let { out += it } }
+            is KtProperty -> {
+                typeMismatch(psi.typeReference?.text, psi.initializer, resolver)?.let { out += it }
+                unusedLocal(psi)?.let { out += it }
+                missingInitializer(psi)?.let { out += it }
+                varCouldBeVal(psi)?.let { out += it }
+                delegateOperatorNotInScope(psi, resolver)?.let { out += it }
+            }
+            is KtParameter -> typeMismatch(psi.typeReference?.text, psi.defaultValue, resolver)?.let { out += it }
+            is KtNamedFunction -> {
+                // a block-body function must return a value (missing-return); an expression body is type-checked.
+                if (psi.hasBlockBody()) missingReturn(psi, resolver)?.let { out += it }
+                else typeMismatch(psi.typeReference?.text, psi.bodyExpression, resolver)?.let { out += it }
+            }
+            is KtReturnExpression -> returnTypeMismatch(psi, resolver)?.let { out += it }
+            is KtBinaryExpression -> valReassignment(psi)?.let { out += it }
+            is KtCallExpression -> KotlinPerf.span("sem.call") {
+                KotlinPerf.span("call.argCount") { argumentCountMismatch(psi)?.let { out += it } }
+                KotlinPerf.span("call.ctor") { (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it } }
+                KotlinPerf.span("call.namedArgs") { out += unknownNamedArguments(psi, resolver) }
+                KotlinPerf.span("call.composable") { composableInvocation(psi, resolver)?.let { out += it } }
+                KotlinPerf.span("call.inferType") { cannotInferType(psi, resolver)?.let { out += it } }
+            }
+            is KtDotQualifiedExpression -> unsafeNullableAccess(psi, resolver)?.let { out += it }
+            // Conflicting declarations within a scope below the file: a parameter list, a block (locals), or a
+            // class body. (Top-level conflicts are a file-level check in semanticDiagnostics.)
+            is KtParameterList -> out += duplicateParams(psi)
+            is KtBlockExpression -> {
+                out += duplicateDeclarations(psi.statements.filterIsInstance<KtDeclaration>())
+                out += unreachableCode(psi, resolver)
+            }
+            is KtClassBody -> out += duplicateDeclarations(psi.declarations)
+            else -> {}
+        }
+        var c = psi.firstChild
+        while (c != null) { walkDecl(c, resolver, localAliases, out); c = c.nextSibling }
+    }
+
+    /** Unused `private` declarations — a whole-file check (its used-ness depends on references ANYWHERE in the
+     *  file, so it can't be cached per declaration). Recurses the file flagging each private decl absent from
+     *  [refNames]; locals can't carry a visibility modifier, so only top-level/member declarations match. */
+    private fun unusedPrivateDeclarations(root: PsiElement, refNames: Set<String>, out: MutableList<Diagnostic>) {
+        if (root is KtNamedDeclaration && (root is KtProperty || root is KtNamedFunction) && isPrivateDeclaration(root)) {
+            unusedPrivate(root, refNames)?.let { out += it }
+        }
+        var c = root.firstChild
+        while (c != null) { unusedPrivateDeclarations(c, refNames, out); c = c.nextSibling }
     }
 
     /** Every identifier referenced in the file body (outside import/package directives), for the
@@ -641,6 +743,41 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             if (name.isEmpty() || name in OPERATOR_NAMES || name in refNames) continue
             val r = (imp.importedReference ?: imp).textRange
             out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.WARNING, "Unused import directive", "kt.unusedImport")
+        }
+        return out
+    }
+
+    /**
+     * Two or more explicit imports that bring the SAME simple name (or alias) into scope but resolve to
+     * DIFFERENT fully-qualified targets — Kotlin's `CONFLICTING_IMPORT` (`import java.util.Date` +
+     * `import java.sql.Date`: a bare `Date` is then ambiguous, and the file does not compile until one is
+     * aliased or removed). Every member of a conflicting group is flagged (matching the editor underlining
+     * each). Conservative — purely textual on the import list, so it never resolves anything:
+     *  - star imports are skipped (they don't conflict at import time; use-site ambiguity is a separate matter);
+     *  - an ALIAS changes the effective name, so `import java.sql.Date as SqlDate` no longer collides;
+     *  - identical duplicate imports (same target) are NOT a conflict (a single distinct target), they're
+     *    merely redundant — left to the unused/duplicate handling, not flagged as ambiguous.
+     */
+    private fun conflictingImports(file: KtFile): List<Diagnostic> {
+        val byName = LinkedHashMap<String, MutableList<KtImportDirective>>()
+        for (imp in file.importDirectives) {
+            if (imp.isAllUnder) continue // star import: no name brought in at import time
+            val fq = imp.importedFqName ?: continue
+            val name = imp.aliasName ?: fq.shortName().asString()
+            if (name.isEmpty()) continue
+            byName.getOrPut(name) { ArrayList() }.add(imp)
+        }
+        val out = ArrayList<Diagnostic>()
+        for ((name, imports) in byName) {
+            // Only a genuine ambiguity — two DIFFERENT targets sharing one name — conflicts.
+            if (imports.mapNotNullTo(HashSet()) { it.importedFqName?.asString() }.size < 2) continue
+            for (imp in imports) {
+                val r = (imp.importedReference ?: imp).textRange
+                out += Diagnostic(
+                    TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                    "Conflicting import, imported name '$name' is ambiguous", "kt.conflictingImport",
+                )
+            }
         }
         return out
     }
@@ -996,7 +1133,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             else -> null
         } ?: return null
         val recvType = resolver.inferType(receiver) ?: return null // unknown receiver → don't flag
+        // A type-parameter receiver (an un-inferred `T`) can't have its concrete members enumerated — the
+        // universal `T`-receiver stdlib extensions (`let`/`run`/`apply`/…) would make the set non-empty and
+        // falsely "resolve" everything-or-nothing. Back off rather than flag a member we can't verify.
+        if (recvType.isTypeParameter) return null
         val name = expr.getReferencedName()
+        if (name.isEmpty()) return null // an incomplete `recv.` — not a real member reference (and avoids a full scan)
         // `Owner.Nested` — a nested type/object reached through a member selector (Compose's `Icons.Filled`,
         // `Icons.AutoMirrored`, `Icons.AutoMirrored.Filled`): a classifier, not an instance member, so it never
         // appears in membersOf. Probe the candidate nested FQN (mirrors KotlinResolver.nestedType) so a chain
@@ -1007,19 +1149,23 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         // ancestors (`android.app.Activity`) the symbol reader may not have read — its chain enumeration is
         // best-effort, so don't risk a false "unresolved" on a valid override call.
         if (unwrapParen(receiver) is KtSuperExpression && service.sourceClass(recvType.qualifiedName) == null) return null
-        // A `Type.member` reference (`Color.Red`) also sees the type's companion-object members and statics,
-        // which membersOf (instance members) doesn't list — include them so a valid companion member resolves.
-        val members = service.membersOf(recvType.qualifiedName, recvType.typeArguments, null) +
-            if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName) else emptyList()
-        if (members.isEmpty()) return null // couldn't enumerate the type → don't flag
-        val matching = members.filter { it.name == name }
+        // Does the receiver have a member named `name`? Push the NAME into the lookup so only same-named
+        // members/extensions are materialized + receiver-bound — not the type's whole extension set (the
+        // `kotlin.Any` bucket alone is thousands on a Compose classpath). A `Type.member` reference (`Color.Red`)
+        // also sees the type's companion-object members/statics, which instance membersNamed doesn't list.
+        val matching = service.membersNamed(recvType.qualifiedName, recvType.typeArguments, name) +
+            if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()
         if (matching.isNotEmpty()) {
-            // A plain member (or one we can't classify) resolves outright. An EXTENSION resolves only when it
-            // is actually in scope — imported, same-package, or default-imported — so an unimported `16.dp` /
-            // `14.sp` (the extension is on the classpath but not brought in) stays unresolved, as Kotlin reports.
+            // A plain member resolves outright. An EXTENSION resolves only when it is actually in scope —
+            // imported, same-package, or default-imported — so an unimported `16.dp` / `14.sp` (the extension is
+            // on the classpath but not brought in) stays unresolved, as Kotlin reports.
             val ctx = resolver.fileContext
-            if (matching.any { it !is KotlinSymbol || !it.isExtension || extensionInScope(it, ctx) }) return null
+            if (matching.any { !it.isExtension || extensionInScope(it, ctx) }) return null
         }
+        // No same-named member. Flag ONLY if the receiver type is actually enumerable — an unknown type (which
+        // membersNamed can't see into) must not yield a false "unresolved" (the old `membersOf(…)` returned an
+        // empty set for an unknown type and was skipped; `isKnownType` is that same guard without enumerating).
+        if (!service.isKnownType(recvType.qualifiedName)) return null
         val r = expr.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", "kt.unresolved")
     }
@@ -1085,9 +1231,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * (`repeat`/`with`/`forEach`) are transparent — a composable call inside one within a composable scope is fine.
      */
     private fun composableInvocation(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
-        val callee = resolver.calleeFunctionOf(call) ?: return null
-        if (!callee.isComposable) return null // not a composable call → nothing to check (and skips the context walk)
+        // The error fires only when a @Composable callee is invoked from a NON_COMPOSABLE context, so check the
+        // context FIRST: it's a cheap ancestor walk (the @Composable test is syntactic), whereas resolving the
+        // callee is overload resolution against scope + classpath. In a real Compose UI file most calls sit in a
+        // @Composable function/lambda, so this skips the expensive callee resolution for the vast majority.
         if (resolver.composableContextAt(call.textRange.startOffset) != ComposableContext.NON_COMPOSABLE) return null
+        val callee = resolver.calleeFunctionOf(call) ?: return null
+        if (!callee.isComposable) return null // a non-composable call from a plain context → nothing to flag
         val anchor = call.calleeExpression ?: call
         val r = anchor.textRange
         return Diagnostic(
@@ -1156,7 +1306,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val q = psi.parent as? KtQualifiedExpression
         val sym: Symbol? = if (q != null && q.selectorExpression === psi) {
             resolver.inferType(q.receiverExpression)?.let { recv ->
-                service.membersOf(recv.qualifiedName, recv.typeArguments, null).filterIsInstance<KotlinSymbol>().firstOrNull { it.name == name }
+                service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull()
             }
         } else {
             resolver.scopeSymbolsAt(psi.textRange.startOffset).firstOrNull { it.name == name }

@@ -73,6 +73,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -284,6 +285,40 @@ private fun CodeEditorContent(
         }
     }
 
+    // ---- code folding: foldable regions (imports, type/function bodies, comments) fetched debounced off the
+    // engine thread. Java/Kotlin only. The session preserves the user's collapse toggles across refetches and
+    // collapses `collapsedByDefault` regions (imports) once per file; offsets shift in place between passes.
+    LaunchedEffect(path, editorSession.textRevision) {
+        if (!path.endsWith(".java") && !path.endsWith(".kt") && !path.endsWith(".kts")) {
+            editorSession.applyCodeFolds(emptyList()); return@LaunchedEffect
+        }
+        delay(320.milliseconds)
+        val text = editorSession.doc.text
+        var attempt = 0
+        while (attempt++ < 8) {
+            try {
+                val fresh = backend.codeFolds(path, text).map {
+                    dev.ide.ui.editor.folding.FoldRegion(it.startOffset, it.endOffset, it.placeholder, it.kind, it.collapsedByDefault)
+                }
+                editorSession.applyCodeFolds(fresh)
+                break
+            } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
+                delay(150.milliseconds)
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (e: Throwable) {
+                break // keep whatever we had; a later edit retriggers
+            }
+        }
+    }
+
+    // If the caret lands inside a collapsed fold (go-to-definition, rename, programmatic navigation), reveal it
+    // — tapping can't put the caret in hidden text (offsetAt clamps to the visible prefix), so this only fires
+    // for non-tap navigation.
+    LaunchedEffect(editorSession.selection) {
+        editorSession.expandFoldAt(editorSession.selection.end)
+    }
+
     // ---- @Preview gutter markers: the file's Compose @Preview functions, fetched debounced. Each draws a
     // tappable glyph in the gutter on its line → switch this tab to the Preview surface for that function.
     // Kotlin-only (the backend is a no-op elsewhere); cheap, so it just rides the edit cadence.
@@ -317,6 +352,50 @@ private fun CodeEditorContent(
     }
     renderCache.setSemanticSpans(perLineSemantic)
 
+    // Collapsed fold-start lines render a composite "prefix + placeholder + suffix" on one row (e.g.
+    // `fun f() {...}`). Measured on demand (only the handful of visible fold-start lines) and cached until the
+    // buffer or fold set changes; the placeholder run is dimmed and chip-tinted so it reads as foldable.
+    val foldPlaceholderStyle = remember(colors) {
+        // A faint chip behind `...` — a low-alpha overlay (NOT hairline.copy(alpha=…), which would replace the
+        // hairline's alpha and paint a near-opaque white box in dark mode).
+        val chipBg = if (colors.isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
+        SpanStyle(color = colors.textTertiary, background = chipBg)
+    }
+    val compositeCache = remember(editorSession.doc, editorSession.foldModel, codeStyle, foldPlaceholderStyle, palette) {
+        HashMap<Int, TextLayoutResult>()
+    }
+    fun compositeLayoutFor(line: Int): TextLayoutResult = compositeCache.getOrPut(line) {
+        val fm = editorSession.foldModel
+        val info = fm.foldStartingAt(line)
+        val doc = editorSession.doc
+        if (info == null) return@getOrPut renderCache.layoutFor(line, doc, editorSession.styles)
+        val text = fm.compositeText(line, doc)
+        val prefixLen = (info.prefixEnd - doc.lineStart(line)).coerceIn(0, text.length)
+        val phEnd = (prefixLen + info.placeholder.length).coerceAtMost(text.length)
+        // Carry the real lexical coloring onto the composite: the start line's spans color the prefix and the
+        // end line's spans color the suffix (remapped past the placeholder), so a folded line reads in the
+        // same syntax colors as the rest — not flat default text.
+        val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>()
+        for (sp in editorSession.styles.spansFor(line)) {
+            val st = palette[sp.type.ordinal] ?: continue
+            val s = sp.start.coerceIn(0, prefixLen); val e = sp.end.coerceIn(0, prefixLen)
+            if (e > s) ranges.add(AnnotatedString.Range(st, s, e))
+        }
+        val suffixCol0 = info.suffixStart - doc.lineStart(info.endLine) // suffix's start column on the end line
+        val base = phEnd
+        for (sp in editorSession.styles.spansFor(info.endLine)) {
+            val st = palette[sp.type.ordinal] ?: continue
+            val cs = maxOf(sp.start, suffixCol0); val ce = sp.end
+            if (ce > cs) ranges.add(AnnotatedString.Range(st, (base + cs - suffixCol0).coerceAtMost(text.length), (base + ce - suffixCol0).coerceAtMost(text.length)))
+        }
+        ranges.add(AnnotatedString.Range(foldPlaceholderStyle, prefixLen, phEnd))
+        measurer.measure(AnnotatedString(text, spanStyles = ranges), style = codeStyle, softWrap = false, maxLines = 1)
+    }
+    // Document lines that begin ANY fold region (collapsed or open) — drives the gutter chevrons.
+    val foldableStartLines = remember(editorSession.foldRegions, editorSession.doc) {
+        editorSession.foldRegions.mapTo(HashSet<Int>()) { editorSession.doc.lineForOffset(it.start) }
+    }
+
     // Per-number layout cache, keyed by the actual line number (not just its digit count) so the gutter
     // renders real numbers — caching by digit-count rendered "0"/"00"/… for every line.
     val gutterNumberCache = remember(measurer, gutterStyle) { HashMap<Int, TextLayoutResult>() }
@@ -325,9 +404,13 @@ private fun CodeEditorContent(
             measurer.measure(AnnotatedString(n.toString()), style = gutterStyle, softWrap = false, maxLines = 1)
         }
 
-    val gutterWidthPx = remember(editorSession.doc.lineCount, density) {
+    // A fold strip on the inner edge of the gutter holds the ▸/▾ chevrons (collapsed folds always show one;
+    // an expandable line shows one on the caret line). Reserved so the line numbers don't reflow when a
+    // chevron appears.
+    val foldStripPx = with(density) { 14.dp.toPx() }
+    val gutterWidthPx = remember(editorSession.doc.lineCount, density, foldStripPx) {
         with(density) {
-            (editorSession.doc.lineCount.toString().length * 9 + 22).coerceAtLeast(44).dp.toPx()
+            (editorSession.doc.lineCount.toString().length * 9 + 22).coerceAtLeast(44).dp.toPx() + foldStripPx
         }
     }
 
@@ -335,7 +418,7 @@ private fun CodeEditorContent(
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     val vOffset = remember(path) { mutableFloatStateOf(0f) }
     val hOffset = remember(path) { mutableFloatStateOf(0f) }
-    fun contentHeight() = metrics.padTop + editorSession.doc.lineCount * metrics.lineHeight + metrics.padBottom
+    fun contentHeight() = metrics.padTop + editorSession.foldModel.visualLineCount * metrics.lineHeight + metrics.padBottom
     fun contentWidth() = metrics.padLeft +
         max(renderCache.measuredMaxWidth, editorSession.maxLineChars * metrics.charWidth) + metrics.padRight
     fun maxV() = (contentHeight() - viewport.height).coerceAtLeast(0f)
@@ -355,13 +438,16 @@ private fun CodeEditorContent(
     // A zoom rescales the line metrics (hence the content size), and the viewport changes on resize/rotate;
     // re-clamp the scroll so a zoom-out can't strand the viewport past the document end — where taps would
     // map to a coerced position that no longer matches what's rendered.
-    LaunchedEffect(zoom, editorSession.doc.lineCount, viewport) {
+    // Re-clamp on fold changes too: collapsing a region shrinks the content height without changing the line
+    // count, so a stale vOffset could otherwise strand the viewport past the (now shorter) document end.
+    LaunchedEffect(zoom, editorSession.doc.lineCount, editorSession.foldRegions, viewport) {
         vOffset.floatValue = vOffset.floatValue.coerceIn(0f, maxV())
         hOffset.floatValue = hOffset.floatValue.coerceIn(0f, maxH())
     }
 
-    // ---- geometry helpers (viewport coordinates ↔ document offsets) ----
-    fun lineTop(line: Int) = metrics.padTop + line * metrics.lineHeight - vOffset.floatValue
+    // ---- geometry helpers (viewport coordinates ↔ document offsets) — all routed through the fold model so a
+    // collapsed region occupies a single visual row and the hidden lines below it contribute no height ----
+    fun lineTop(line: Int) = metrics.padTop + editorSession.foldModel.visualForDocLine(line) * metrics.lineHeight - vOffset.floatValue
     fun textLeft() = gutterWidthPx + metrics.padLeft - hOffset.floatValue
     fun layoutFor(line: Int) = renderCache.layoutFor(line, editorSession.doc, editorSession.styles)
     fun caretGeometry(offset: Int): Triple<Int, Float, Float> { // line, xInViewport, topInViewport
@@ -370,17 +456,39 @@ private fun CodeEditorContent(
         val x = layoutFor(line).getHorizontalPosition(renderCache.rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
         return Triple(line, textLeft() + x, lineTop(line))
     }
-    fun lineAtY(y: Float): Int =
-        floor((y + vOffset.floatValue - metrics.padTop) / metrics.lineHeight)
-            .toInt().coerceIn(0, editorSession.doc.lineCount - 1)
+    /** The document line shown at viewport [y] (the fold-start line when [y] is on a collapsed row). */
+    fun lineAtY(y: Float): Int {
+        val fm = editorSession.foldModel
+        val row = floor((y + vOffset.floatValue - metrics.padTop) / metrics.lineHeight)
+            .toInt().coerceIn(0, (fm.visualLineCount - 1).coerceAtLeast(0))
+        return fm.docLineForVisual(row)
+    }
+    /** Handle a tap that targets folding: the gutter fold strip toggles the line's fold; tapping a collapsed
+     *  line's placeholder (the dimmed `...` past the visible prefix) expands it. Returns true when handled. */
+    fun foldActionAt(pos: Offset): Boolean {
+        val doc = editorSession.doc
+        val line = lineAtY(pos.y)
+        val startsFold = editorSession.foldRegions.any { doc.lineForOffset(it.start) == line }
+        if (startsFold && pos.x >= gutterWidthPx - foldStripPx && pos.x < gutterWidthPx) {
+            return editorSession.toggleFoldAtLine(line)
+        }
+        val info = editorSession.foldModel.foldStartingAt(line)
+        if (info != null && pos.x >= textLeft()) {
+            val prefixCols = (info.prefixEnd - doc.lineStart(line)).coerceAtLeast(0)
+            val prefixX = textLeft() + compositeLayoutFor(line).getHorizontalPosition(prefixCols, usePrimaryDirection = true)
+            if (pos.x >= prefixX) return editorSession.toggleFoldAtLine(line)
+        }
+        return false
+    }
     fun offsetAt(pos: Offset): Int {
         val doc = editorSession.doc
-        val line = floor((pos.y + vOffset.floatValue - metrics.padTop) / metrics.lineHeight)
-            .toInt().coerceIn(0, doc.lineCount - 1)
+        val line = lineAtY(pos.y)
         val xInLine = pos.x - textLeft()
         val visualCol = layoutFor(line).getOffsetForPosition(Offset(xInLine.coerceAtLeast(0f), metrics.lineHeight / 2f))
         val col = renderCache.visualToRaw(line, visualCol)
-        return doc.lineStart(line) + col.coerceAtMost(doc.lineLength(line))
+        // On a collapsed fold-start line only the prefix (text before the fold) is real; clamp the caret there.
+        val maxCol = editorSession.foldModel.foldStartingAt(line)?.let { it.prefixEnd - doc.lineStart(line) } ?: doc.lineLength(line)
+        return doc.lineStart(line) + col.coerceAtMost(maxCol)
     }
 
     // ---- focus / caret blink / touch chrome ----
@@ -408,7 +516,8 @@ private fun CodeEditorContent(
         val ln = d.lineForOffset(off)
         val x = gutterWidthPx + metrics.padLeft +
             layoutFor(ln).getHorizontalPosition(renderCache.rawToVisual(ln, off - d.lineStart(ln)), usePrimaryDirection = true)
-        Offset(x, metrics.padTop + ln * metrics.lineHeight)
+        // Content-space Y uses the VISUAL row so the caret tracks the collapsed layout (folds above it shrink Y).
+        Offset(x, metrics.padTop + editorSession.foldModel.visualForDocLine(ln) * metrics.lineHeight)
     }
     LaunchedEffect(caretTarget) {
         // Snap on the first placement (file open) and across off-screen jumps (go-to-symbol, PageUp/Down) —
@@ -430,6 +539,9 @@ private fun CodeEditorContent(
         }
     }
     var lastInputWasTouch by remember { mutableStateOf(false) }
+    // The document line the mouse is hovering (desktop) — drives showing an expandable fold chevron on hover,
+    // IntelliJ-style. -1 when the pointer is a touch or has left the editor.
+    var hoveredLine by remember(editorSession) { mutableIntStateOf(-1) }
     var handlesVisible by remember(path) { mutableStateOf(false) }
     // triple-tap → select line: a double-tap "arms" this for a brief window; the next quick tap nearby then
     // selects the whole line instead of placing the caret. Keeps detectTapGestures' single/double logic intact.
@@ -788,7 +900,7 @@ private fun CodeEditorContent(
     LaunchedEffect(editorSession.editCount, viewport) {
         if (viewport == IntSize.Zero) return@LaunchedEffect
         val (line, _, _) = caretGeometry(editorSession.selection.end)
-        val top = metrics.padTop + line * metrics.lineHeight
+        val top = metrics.padTop + editorSession.foldModel.visualForDocLine(line) * metrics.lineHeight
         val bottom = top + metrics.lineHeight
         val vh = viewport.height.toFloat()
         if (top < vOffset.floatValue) vOffset.floatValue = (top - metrics.lineHeight).coerceIn(0f, maxV())
@@ -1000,6 +1112,24 @@ private fun CodeEditorContent(
                 }
                 .scrollable(vScroll, Orientation.Vertical, reverseDirection = true)
                 .scrollable(hScroll, Orientation.Horizontal, reverseDirection = true)
+                // Mouse hover (desktop): track the hovered line so an expandable fold shows its chevron on hover
+                // (IntelliJ-style). Observation only — never consumes, so it doesn't disturb taps/scroll/drag.
+                .pointerInput(editorSession, metrics, gutterWidthPx) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.firstOrNull()
+                            when {
+                                change?.type != PointerType.Mouse -> {}
+                                event.type == PointerEventType.Exit -> hoveredLine = -1
+                                event.type == PointerEventType.Move || event.type == PointerEventType.Enter -> {
+                                    val ln = lineAtY(change.position.y)
+                                    if (ln != hoveredLine) hoveredLine = ln
+                                }
+                            }
+                        }
+                    }
+                }
                 // Keyed on metrics/gutterWidth too: a gesture block captures the geometry helpers
                 // (offsetAt/lineAtY) once when it launches, so it must re-launch when a zoom rescales the
                 // line metrics — otherwise a post-zoom tap maps through stale lineHeight to the wrong line.
@@ -1022,6 +1152,7 @@ private fun CodeEditorContent(
                                 // (full message + fixes) instead of moving the caret.
                                 val gutterDiag = if (pos.x < gutterWidthPx) diagnosticOnLine(lineAtY(pos.y)) else null
                                 when {
+                                    foldActionAt(pos) -> {} // toggled/expanded a fold (gutter chevron or placeholder)
                                     triple -> {
                                         tripleArmed = false; tripleArmJob?.cancel()
                                         editorSession.selectLineAt(offsetAt(pos))
@@ -1086,6 +1217,7 @@ private fun CodeEditorContent(
                             val gutterDiag = if (down.position.x < gutterWidthPx)
                                 diagnosticOnLine(lineAtY(down.position.y)) else null
                             when {
+                                mouseClicks == 1 && foldActionAt(down.position) -> {} // fold chevron / placeholder
                                 gutterDiag != null && mouseClicks == 1 -> openDiagnosticSheet(gutterDiag)
                                 mouseClicks == 2 -> editorSession.selectWordAt(anchor)
                                 mouseClicks == 3 -> editorSession.selectLineAt(anchor)
@@ -1143,7 +1275,12 @@ private fun CodeEditorContent(
                         vOff = vOffset.floatValue,
                         hOff = hOffset.floatValue,
                         layoutFor = ::layoutFor,
+                        compositeLayoutFor = ::compositeLayoutFor,
                         rawToVisual = renderCache::rawToVisual,
+                        foldModel = editorSession.foldModel,
+                        foldableStartLines = foldableStartLines,
+                        foldStripWidth = foldStripPx,
+                        hoveredLine = hoveredLine,
                         numberLayout = ::numberLayout,
                         diagByLine = diagByLine,
                         bracketPair = bracketPair,
@@ -1156,6 +1293,7 @@ private fun CodeEditorContent(
                             selection = colors.accent.copy(alpha = 0.30f),
                             gutterText = colors.gutterText,
                             gutterCurrent = colors.textSecondary,
+                            gutterBorder = colors.separator,
                             error = colors.error,
                             warning = colors.warning,
                             info = colors.info,
@@ -1192,8 +1330,11 @@ private fun CodeEditorContent(
                 }
                 m
             }
+            val fm = editorSession.foldModel
             for ((ln, d) in chipPerLine) {
-                val lineWidth = layoutFor(ln).size.width
+                if (fm.isHidden(ln)) continue // diagnostic inside a collapsed region → no chip
+                // Place after the composite text on a fold-start line, else after the real line.
+                val lineWidth = if (fm.foldStartingAt(ln) != null) compositeLayoutFor(ln).size.width else layoutFor(ln).size.width
                 DiagnosticChip(
                     d.severity,
                     d.unused,
@@ -1202,7 +1343,7 @@ private fun CodeEditorContent(
                     modifier = Modifier.offset {
                         IntOffset(
                             (gutterWidthPx + metrics.padLeft + lineWidth + 24f - hOffset.floatValue).roundToInt(),
-                            (metrics.padTop + ln * metrics.lineHeight - vOffset.floatValue).roundToInt(),
+                            (metrics.padTop + fm.visualForDocLine(ln) * metrics.lineHeight - vOffset.floatValue).roundToInt(),
                         )
                     },
                 )
@@ -1299,7 +1440,7 @@ private fun CodeEditorContent(
         // lightbulb on the caret line whenever actions are available and no completion popup is showing
         if (actions.isNotEmpty() && !showPopup && isFocused) {
             val caretLn = doc.lineForOffset(caretOffset)
-            val lineTopPx = metrics.padTop + caretLn * metrics.lineHeight - vOffset.floatValue
+            val lineTopPx = metrics.padTop + editorSession.foldModel.visualForDocLine(caretLn) * metrics.lineHeight - vOffset.floatValue
             ActionLightbulb(
                 onClick = { dismissed = true; job?.cancel(); actionSelected = 0; actionsOpen = true },
                 modifier = Modifier.offset {
@@ -1316,12 +1457,13 @@ private fun CodeEditorContent(
         // per line and read in the layout phase, so they scroll with the document like the diagnostic chips.
         for (p in editorSession.previewMarkers) {
             val ln = doc.lineForOffset(p.offset.coerceIn(0, docLength))
+            if (editorSession.foldModel.isHidden(ln)) continue // @Preview folded away → no gutter icon
             PreviewGutterIcon(
                 onClick = { onPreview(p.functionName) },
                 modifier = Modifier.offset {
                     IntOffset(
                         1.dp.roundToPx(),
-                        (metrics.padTop + ln * metrics.lineHeight - vOffset.floatValue + (metrics.lineHeight - 20.dp.toPx()) / 2f).roundToInt(),
+                        (metrics.padTop + editorSession.foldModel.visualForDocLine(ln) * metrics.lineHeight - vOffset.floatValue + (metrics.lineHeight - 20.dp.toPx()) / 2f).roundToInt(),
                     )
                 },
             )
@@ -1487,6 +1629,7 @@ private class EditorDrawColors(
     val selection: Color,
     val gutterText: Color,
     val gutterCurrent: Color,
+    val gutterBorder: Color,
     val error: Color,
     val warning: Color,
     val info: Color,
@@ -1546,7 +1689,12 @@ private fun DrawScope.drawEditor(
     vOff: Float,
     hOff: Float,
     layoutFor: (Int) -> TextLayoutResult,
+    compositeLayoutFor: (Int) -> TextLayoutResult,
     rawToVisual: (Int, Int) -> Int,
+    foldModel: dev.ide.ui.editor.folding.FoldModel,
+    foldableStartLines: Set<Int>,
+    foldStripWidth: Float,
+    hoveredLine: Int,
     numberLayout: (Int) -> TextLayoutResult,
     diagByLine: Map<Int, List<DiagSeg>>,
     bracketPair: Pair<Int, Int>?,
@@ -1561,10 +1709,19 @@ private fun DrawScope.drawEditor(
     val doc = session.doc
     val sel = session.selection
     val lineH = metrics.lineHeight
-    val firstVisible = floor((vOff - metrics.padTop) / lineH).toInt().coerceAtLeast(0)
-    val lastVisible = (((vOff + size.height - metrics.padTop) / lineH).toInt()).coerceAtMost(doc.lineCount - 1)
+    // Viewport bounds are visual ROWS (folds compress them); map back to the doc lines they show. The
+    // firstVisible..lastVisible doc range still covers every visible row in the viewport (hidden lines inside
+    // it are skipped per-loop), so the existing line-keyed loops keep working with one `isHidden` guard each.
+    val topRow = floor((vOff - metrics.padTop) / lineH).toInt().coerceAtLeast(0)
+    val botRow = ((vOff + size.height - metrics.padTop) / lineH).toInt().coerceAtMost((foldModel.visualLineCount - 1).coerceAtLeast(0))
+    val firstVisible = foldModel.docLineForVisual(topRow)
+    val lastVisible = foldModel.docLineForVisual(botRow)
+    // The document lines actually ON SCREEN (one per visual row) — iterated by the per-line draw loops instead
+    // of `firstVisible..lastVisible`, which would walk every hidden line of a large collapsed region each frame.
+    val visibleLines = if (!foldModel.hasFolds) (firstVisible..lastVisible).toList()
+        else IntArray(botRow - topRow + 1) { foldModel.docLineForVisual(topRow + it) }.toList()
     val textLeft = gutterWidth + metrics.padLeft - hOff
-    fun lineTop(line: Int) = metrics.padTop + line * lineH - vOff
+    fun lineTop(line: Int) = metrics.padTop + foldModel.visualForDocLine(line) * lineH - vOff
     fun xOf(line: Int, offset: Int): Float =
         textLeft + layoutFor(line).getHorizontalPosition(rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
 
@@ -1584,6 +1741,7 @@ private fun DrawScope.drawEditor(
                 if (eLine < firstVisible || sLine > lastVisible) continue
                 val color = if (idx == currentMatch) colors.findCurrent else colors.findMatch
                 for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
+                    if (foldModel.isHidden(line)) continue
                     val x0 = if (line == sLine) xOf(line, m.start) else textLeft
                     val x1 = if (line == eLine) xOf(line, m.end) else textLeft + layoutFor(line).size.width
                     if (x1 > x0) drawRect(color, Offset(x0, lineTop(line)), Size(x1 - x0, lineH))
@@ -1596,6 +1754,7 @@ private fun DrawScope.drawEditor(
             val sLine = doc.lineForOffset(sel.min)
             val eLine = doc.lineForOffset(sel.max)
             for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
+                if (foldModel.isHidden(line)) continue
                 val x0 = if (line == sLine) xOf(line, sel.min) else textLeft
                 val x1 = if (line == eLine) xOf(line, sel.max)
                 else textLeft + layoutFor(line).size.width + metrics.charWidth * 0.6f // mark the line break
@@ -1621,7 +1780,7 @@ private fun DrawScope.drawEditor(
                 }
                 return -1 // blank line
             }
-            for (line in firstVisible..lastVisible) {
+            for (line in visibleLines) {
                 var cols = indentCols(line)
                 if (cols < 0) { // blank: bridge with the shallower of the nearest non-blank neighbours
                     var up = line - 1
@@ -1643,10 +1802,15 @@ private fun DrawScope.drawEditor(
             }
         }
 
-        // text — cached per-line layouts; only a cache miss (edited or newly-visible line) shapes text
-        for (line in firstVisible..lastVisible) {
-            if (doc.lineLength(line) == 0) continue
-            drawText(layoutFor(line), topLeft = Offset(textLeft, lineTop(line)))
+        // text — cached per-line layouts; only a cache miss (edited or newly-visible line) shapes text. A line
+        // hidden inside a collapsed fold is skipped; the line that STARTS a collapsed fold draws its composite
+        // (`prefix + placeholder + suffix`) instead of its raw text.
+        for (line in visibleLines) {
+            if (foldModel.foldStartingAt(line) != null) {
+                drawText(compositeLayoutFor(line), topLeft = Offset(textLeft, lineTop(line)))
+            } else if (doc.lineLength(line) != 0) {
+                drawText(layoutFor(line), topLeft = Offset(textLeft, lineTop(line)))
+            }
         }
 
         // IME composing underline
@@ -1654,6 +1818,7 @@ private fun DrawScope.drawEditor(
             val cs = doc.lineForOffset(comp.min)
             val ce = doc.lineForOffset(comp.max)
             for (line in max(cs, firstVisible)..min(ce, lastVisible)) {
+                if (foldModel.isHidden(line)) continue
                 val x0 = if (line == cs) xOf(line, comp.min) else textLeft
                 val x1 = if (line == ce) xOf(line, comp.max) else textLeft + layoutFor(line).size.width
                 if (x1 > x0) {
@@ -1664,7 +1829,7 @@ private fun DrawScope.drawEditor(
         }
 
         // diagnostic squiggles
-        for (line in firstVisible..lastVisible) {
+        for (line in visibleLines) {
             val segs = diagByLine[line] ?: continue
             val layout = layoutFor(line)
             val maxCol = doc.lineLength(line)
@@ -1717,7 +1882,11 @@ private fun DrawScope.drawEditor(
         drawRect(colors.currentLine, Offset(0f, lineTop(caretLine)), Size(gutterWidth, lineH))
     }
     val dotR = 2.5.dp.toPx()
-    for (line in firstVisible..lastVisible) {
+    // The fold strip occupies the inner [gutterWidth - foldStripWidth, gutterWidth) band; numbers right-align
+    // just left of it so a chevron never overlaps a number.
+    val numberRight = gutterWidth - foldStripWidth - 4.dp.toPx()
+    val chevronCx = gutterWidth - foldStripWidth / 2f
+    for (line in visibleLines) {
         val segs = diagByLine[line]
         val hasError = segs?.any { it.severity == UiSeverity.Error } == true
         val hasWarning = !hasError && segs?.any { it.severity == UiSeverity.Warning } == true
@@ -1734,16 +1903,25 @@ private fun DrawScope.drawEditor(
                 center = Offset(5.dp.toPx() + dotR, lineTop(line) + lineH / 2f),
             )
         }
+        // Fold chevron: a collapsed fold always shows ▸ (so it can be re-expanded); an open foldable line
+        // shows ▾ on the caret line and on mouse hover (IntelliJ-style — hover is a no-op on touch).
+        val collapsed = foldModel.foldStartingAt(line) != null
+        val expandable = !collapsed && line in foldableStartLines
+        if (collapsed || (expandable && (line == caretLine || line == hoveredLine))) {
+            drawFoldChevron(chevronCx, lineTop(line) + lineH / 2f, expanded = !collapsed, color = colors.gutterCurrent)
+        }
         val num = numberLayout(line + 1)
         drawText(
             num,
             color = numColor,
             topLeft = Offset(
-                gutterWidth - 10.dp.toPx() - num.size.width,
+                numberRight - num.size.width,
                 lineTop(line) + (lineH - num.size.height) / 2f,
             ),
         )
     }
+    // A hairline at the gutter's right edge separates it from the code area.
+    drawLine(colors.gutterBorder, Offset(gutterWidth, 0f), Offset(gutterWidth, size.height), strokeWidth = 1f)
 
     // touch selection handles (under the selection edges / the caret)
     if (handlesVisible) {
@@ -1757,6 +1935,20 @@ private fun DrawScope.drawEditor(
             drawCircle(handleColor, r, Offset(x, lineTop(line) + lineH + r * 0.8f))
         }
     }
+}
+
+/** A small fold chevron centered at ([cx], [cy]): ▾ when [expanded] (an open foldable line), ▸ when collapsed. */
+private fun DrawScope.drawFoldChevron(cx: Float, cy: Float, expanded: Boolean, color: Color) {
+    val r = 3.2.dp.toPx()
+    val path = Path().apply {
+        if (expanded) { // ▾ points down
+            moveTo(cx - r, cy - r * 0.6f); lineTo(cx + r, cy - r * 0.6f); lineTo(cx, cy + r * 0.7f)
+        } else {        // ▸ points right
+            moveTo(cx - r * 0.6f, cy - r); lineTo(cx + r * 0.7f, cy); lineTo(cx - r * 0.6f, cy + r)
+        }
+        close()
+    }
+    drawPath(path, color.copy(alpha = 0.8f))
 }
 
 /** A squiggly underline from [x1] to [x2] at baseline [y] (a tight triangle wave reads as wavy). */

@@ -168,9 +168,15 @@ fun composableParamFlags(callee: ResolvedCallable, args: List<Any?>, leadingRece
  * can wrap the body in a restart group and register a recomposition that re-runs [body] — re-implementing
  * the compiler plugin's `startRestartGroup … endRestartGroup().updateScope { … }` at interpretation time,
  * against the real runtime. The default (no host) just runs the body once.
+ *
+ * [restartable] is true for a `Unit`-returning composable (the only shape the compiler makes skippable); when
+ * it is set and none of [args] (the call's already-evaluated argument values) changed since the last
+ * composition, the host may skip [body] entirely (`composer.skipToGroupEnd()`) instead of re-interpreting the
+ * whole subtree — the `$changed` fast path. A non-restartable composable always runs [body] (its result is
+ * needed), and [args] is ignored.
  */
 fun interface ComposableInvoker {
-    fun invokeComposable(callSiteKey: Int, body: () -> Any?): Any?
+    fun invokeComposable(callSiteKey: Int, restartable: Boolean, args: List<Any?>, body: () -> Any?): Any?
 }
 
 /**

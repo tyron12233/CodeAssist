@@ -2,6 +2,7 @@ package dev.ide.android.support.tools
 
 import org.w3c.dom.Element
 import java.io.BufferedInputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
@@ -46,13 +47,21 @@ object AndroidSdkInstaller {
 
     /** Fetch + parse the repository manifest into the available packages. Empty on a network/parse failure. */
     fun fetchPackages(fetcher: SdkNetFetcher = HttpSdkNetFetcher): List<RepoPackage> {
-        val xml = fetcher.fetchText(REPO_BASE + REPO_XML) ?: return emptyList()
+        val xml = fetcher.fetchText(REPO_BASE + REPO_XML)
+            ?: throw IOException("Could not reach the Android SDK repository (${REPO_BASE}${REPO_XML}). Check your internet connection.")
         return runCatching { parsePackages(xml) }.getOrDefault(emptyList())
     }
 
     internal fun parsePackages(xml: String): List<RepoPackage> {
-        val dbf = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-        val doc = dbf.newDocumentBuilder().parse(xml.byteInputStream())
+        val dbf = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            // Disable external entity resolution: prevents the parser from opening network connections
+            // to resolve DTD/schema URIs embedded in the XML (XXE protection + no surprise DNS).
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+        }
+        val doc = dbf.newDocumentBuilder().also { it.setEntityResolver { _, _ -> org.xml.sax.InputSource("".reader()) } }.parse(xml.byteInputStream())
         val out = ArrayList<RepoPackage>()
         val remotes = doc.getElementsByTagNameNS("*", "remotePackage")
         for (i in 0 until remotes.length) {

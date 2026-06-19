@@ -2018,6 +2018,18 @@ class IdeServices private constructor(
         return runCatching { runSync { service.highlight(vf) } }.getOrDefault(emptyList())
     }
 
+    /** Foldable regions for [file]'s live buffer — imports, type/function bodies, block comments. */
+    fun codeFolds(file: Path, text: String): List<dev.ide.lang.folding.FoldRegion> {
+        val module = moduleForEditableFile(file) ?: return emptyList()
+        updateDocument(file, text) // the live buffer feeds the analyzer's overlay
+        val analyzer = analyzerFor(module, languageFor(file))
+        val service = analyzer.folding ?: return emptyList()
+        val vf = store.vfs.fileFor(file)
+        // Refresh the analyzer's parse of the live buffer (the folder reads the last parse).
+        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        return runCatching { runSync { service.folds(vf) } }.getOrDefault(emptyList())
+    }
+
     /** Enclosing declarations (type/method names, outer→inner) at [offset] in [file]'s buffer — for the
      *  cursor-tracking breadcrumb. Empty if the file is outside the project or not JDT-backed. */
     fun breadcrumbAt(file: Path, text: String, offset: Int): List<String> {
@@ -2147,6 +2159,7 @@ class IdeServices private constructor(
             ?: return PreviewRunResult(false, "Not a Kotlin file")
         val vf = store.vfs.fileFor(file)
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        if (analyzer.hasSyntaxErrors(vf)) return PreviewRunResult(false, "the file has syntax errors — fix them to preview")
         val program = analyzer.lowerFile(vf)
         val entry = program["$functionName/0"]
             ?: return PreviewRunResult(false, "`$functionName` not found (a preview must be a no-arg @Composable)")
@@ -2167,6 +2180,7 @@ class IdeServices private constructor(
             ?: return listOf("not a Kotlin file")
         val vf = store.vfs.fileFor(file)
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        if (analyzer.hasSyntaxErrors(vf)) return listOf("the file has syntax errors — fix them to preview")
         val program = analyzer.lowerFile(vf)
         val entry = program["$functionName/0"]
             ?: return listOf("`$functionName` not found as a no-arg @Composable (lowered: ${program.keys.joinToString()})")
@@ -2189,9 +2203,17 @@ class IdeServices private constructor(
             ?: return null
         val vf = store.vfs.fileFor(file)
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        // A file with syntax errors mis-shapes declarations when parsed error-tolerantly — interpreting it
+        // builds a garbage program that crashes the real Compose runtime in a phase nothing can catch. Don't
+        // render it; the editor's diagnostics already flag the errors and the preview shows a "fix errors" state.
+        if (analyzer.hasSyntaxErrors(vf)) return null
         val program = analyzer.lowerFile(vf)
         val entry = program["$functionName/0"]?.takeIf { it.isComplete } ?: return null
-        return LoweredComposePreview(entry, program, analyzer.lowerFileClasses(vf))
+        // Every source type the preview may construct must lower cleanly too (a malformed `data class` would
+        // otherwise build wrong-typed instances) — not just the entry function.
+        val classes = analyzer.lowerFileClasses(vf)
+        if (classes.any { !it.isComplete }) return null
+        return LoweredComposePreview(entry, program, classes)
     }
 
     /**

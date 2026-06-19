@@ -11,6 +11,7 @@ import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.shiftComposePreviews
 import dev.ide.ui.editor.shiftDiagnostics
+import dev.ide.ui.editor.shiftFoldRegions
 import dev.ide.ui.editor.shiftSemanticTokens
 import kotlin.math.max
 import kotlin.math.min
@@ -82,6 +83,36 @@ class EditorSession(
      */
     var previewMarkers by mutableStateOf<List<UiComposePreview>>(emptyList())
         private set
+
+    /**
+     * Foldable regions anchored to this buffer (imports, type/function bodies, comments) with each one's
+     * collapsed/expanded toggle. Like [diagnostics] the editor shifts their offsets on each edit
+     * ([dev.ide.ui.editor.shiftFoldRegions]) so a collapsed fold keeps covering its block while typing; the
+     * host refills the authoritative set via [applyCodeFolds], preserving the user's current toggles. The
+     * renderer/geometry read [foldModel], rebuilt lazily whenever the regions or the document change.
+     */
+    var foldRegions by mutableStateOf<List<dev.ide.ui.editor.folding.FoldRegion>>(emptyList())
+        private set
+
+    /** Whether the [collapsedByDefault] folds have been applied once for this file (so a refetch doesn't re-collapse
+     *  a region the user has since expanded). */
+    private var defaultFoldsApplied = false
+
+    private var foldModelCache: dev.ide.ui.editor.folding.FoldModel? = null
+    private var foldModelDoc: EditorDocument? = null
+    private var foldModelRegions: List<dev.ide.ui.editor.folding.FoldRegion>? = null
+
+    /** The current folding projection (document ⇄ visual-row mapping + composites), rebuilt only when the
+     *  regions or the document change. [dev.ide.ui.editor.folding.FoldModel.EMPTY]-equivalent when nothing folds. */
+    val foldModel: dev.ide.ui.editor.folding.FoldModel
+        get() {
+            val d = doc; val r = foldRegions
+            if (foldModelCache == null || foldModelDoc !== d || foldModelRegions !== r) {
+                foldModelCache = dev.ide.ui.editor.folding.FoldModel.build(d, r)
+                foldModelDoc = d; foldModelRegions = r
+            }
+            return foldModelCache!!
+        }
 
     val styles = LineStyles(language)
 
@@ -172,6 +203,7 @@ class EditorSession(
         if (diagnostics.isNotEmpty()) diagnostics = shiftDiagnostics(diagnostics, edit, doc)
         if (semanticTokens.isNotEmpty()) semanticTokens = shiftSemanticTokens(semanticTokens, edit, doc.length)
         if (previewMarkers.isNotEmpty()) previewMarkers = shiftComposePreviews(previewMarkers, edit, doc.length)
+        if (foldRegions.isNotEmpty()) foldRegions = shiftFoldRegions(foldRegions, edit, doc.length)
         if (!applyingUndo) recordEdit(s, removedText, text, selBefore)
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
@@ -192,6 +224,43 @@ class EditorSession(
     /** Swap in fresh `@Preview` gutter markers (aligned to the current text). The host calls this debounced. */
     fun applyComposePreviews(result: List<UiComposePreview>) {
         previewMarkers = result
+    }
+
+    /**
+     * Adopt a freshly-computed set of foldable regions (host calls this debounced). The user's collapsed
+     * toggles are PRESERVED across refetches: a new region overlapping a currently-collapsed one stays
+     * collapsed. [collapsedByDefault] regions (imports) collapse only the FIRST time they appear for this file
+     * (so re-expanding imports survives the next pass). Offsets come straight from the fresh parse.
+     */
+    fun applyCodeFolds(fresh: List<dev.ide.ui.editor.folding.FoldRegion>) {
+        val previouslyCollapsed = foldRegions.filter { it.collapsed }
+        foldRegions = fresh.map { r ->
+            val keepCollapsed = previouslyCollapsed.any { it.start == r.start && it.end == r.end } ||
+                (r.collapsed && !defaultFoldsApplied) // collapsedByDefault, first time only
+            r.copy(collapsed = keepCollapsed)
+        }
+        defaultFoldsApplied = true
+    }
+
+    /** Toggle the fold whose START is on document [line] (the gutter chevron / placeholder click). No-op when
+     *  no fold starts there. Returns true if a fold was toggled. */
+    fun toggleFoldAtLine(line: Int): Boolean {
+        var toggled = false
+        foldRegions = foldRegions.map { r ->
+            if (!toggled && doc.lineForOffset(r.start) == line) { toggled = true; r.copy(collapsed = !r.collapsed) }
+            else r
+        }
+        return toggled
+    }
+
+    /** Expand the fold covering document [offset] if any is collapsed there (used when the caret/selection
+     *  lands inside hidden text, e.g. via go-to-definition). Returns true if something expanded. */
+    fun expandFoldAt(offset: Int): Boolean {
+        var changed = false
+        foldRegions = foldRegions.map { r ->
+            if (r.collapsed && offset > r.start && offset < r.end) { changed = true; r.copy(collapsed = false) } else r
+        }
+        return changed
     }
 
     private fun updateSelectionAndComposing(sel: TextRange, comp: TextRange?) {
@@ -360,6 +429,8 @@ class EditorSession(
         diagnostics = emptyList() // a wholesale replace invalidates the old anchors; re-analysis will refill
         semanticTokens = emptyList()
         previewMarkers = emptyList()
+        foldRegions = emptyList()
+        defaultFoldsApplied = false // re-apply collapse-by-default (imports) for the freshly-loaded buffer
         goalColumn = -1
         // a wholesale replace invalidates the inverse-edit history (offsets no longer mean anything)
         undoStack.clear(); redoStack.clear(); currentGroup = null; coalesceTyping = false

@@ -178,13 +178,18 @@ data class RCatch(val slot: SlotId, val name: String, val typeFqn: String?, val 
 
 /** A lowered function: its parameter slots + body, plus any [diagnostics] (one per [RNode.Unsupported]).
  *  When [receiverSlot] is set the function is a class member: the interpreter binds the receiver object to
- *  that slot before running the body, so `this`/implicit-member access reads it. */
+ *  that slot before running the body, so `this`/implicit-member access reads it.
+ *
+ *  [returnsUnit] marks a function whose result is `Unit` (a block body with no declared return type, or one
+ *  declared `: Unit`). The Compose bridge only makes a `Unit`-returning `@Composable` restartable (skippable);
+ *  a value-returning composable must always re-run so its result is fresh, so this gates `$changed` skipping. */
 data class ResolvedFunction(
     val name: String,
     val params: List<RParam>,
     val body: RNode,
     val diagnostics: List<LoweringDiagnostic>,
     val receiverSlot: SlotId? = null,
+    val returnsUnit: Boolean = false,
 ) {
     val isComplete: Boolean get() = diagnostics.isEmpty()
 }

@@ -50,6 +50,16 @@ class ComposeDispatcher(
     @Volatile
     var composer: Any? = null
 
+    /**
+     * The first error swallowed while interpreting a `@Composable` content lambda this composition (see
+     * [composableLambdaProxy]), or null. Lets the host surface a "preview is partial / has errors" hint after a
+     * composition settles — the throw itself can't reach the renderer's error boundary because lazy content
+     * (LazyColumn items, Scaffold body) composes during Compose's measure pass, outside `Render`'s try/catch.
+     * The host should read it after composing and reset it before the next pass.
+     */
+    @Volatile
+    var contentLambdaError: Throwable? = null
+
     override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
         val c = composer
         val callee = call.callee
@@ -139,6 +149,20 @@ class ComposeDispatcher(
                     if (composerArg != null) composer = composerArg
                     try {
                         lambda.invoke(real)
+                    } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
+                        throw ce // recomposition cancellation is control flow — never swallow it
+                    } catch (e: Exception) {
+                        // A malformed/half-typed buffer can make an interpreted composable throw mid-composition
+                        // (a wrong-typed arg, an unresolved call, an ABI mismatch). This lambda runs during
+                        // Compose's measure/subcompose pass (LazyColumn items, Scaffold content), OUTSIDE the
+                        // preview renderer's try/catch — so letting it propagate kills the host thread. Swallow
+                        // it: the lambda returns normally (emitting whatever composed before the failure), the
+                        // enclosing library composable balances its own groups, and the preview degrades to a
+                        // partial render instead of crashing. The innermost lambda catches first, so no enclosing
+                        // composable frame ever sees the throw. (A `VirtualMachineError`/`StackOverflowError`
+                        // still propagates — those aren't recoverable mid-composition.)
+                        contentLambdaError = contentLambdaError ?: e
+                        Unit
                     } finally {
                         composer = prev
                     }

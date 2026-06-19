@@ -105,6 +105,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -159,23 +160,27 @@ class IdeServicesBackend(
     private val engineDispatcher = Dispatchers.Default.limitedParallelism(1)
 
     /**
-     * Two priority lanes over the single [engineDispatcher], so the keystroke-critical call (completion)
-     * isn't stuck behind a heavy per-keystroke pass (full-file analysis/inference) on that one worker.
+     * Three priority lanes over the single [engineDispatcher]:
      *
-     * [background] work runs under a [CancelToken] and polls [EngineCancellation.checkCanceled] at safe
-     * points; [interactive] work flips that token before it queues, so an in-flight background pass bails at
-     * its next poll and frees the worker. [backgroundToken] is the token of the pass currently executing;
-     * [interactivePending] catches the case where a background pass is about to start while a completion is
-     * already waiting (it bails immediately rather than making completion wait it out).
+     *  1. [interactive] — completion: highest priority, preempts both background and preview.
+     *  2. [background] — analysis/hints/detection: preempts preview, preempted by interactive.
+     *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
+     *
+     * Each lane uses a [CancelToken] that higher-priority callers flip from their thread before queuing, so
+     * an in-flight lower-priority pass bails at its next [EngineCancellation.checkCanceled] poll and frees
+     * the worker. The `*Pending` counters let a lower-priority lane bail immediately at the start of its
+     * engine-thread slot when a higher-priority call is already waiting in the queue.
      */
-    @Volatile
-    private var backgroundToken: CancelToken? = null
+    @Volatile private var backgroundToken: CancelToken? = null
+    @Volatile private var previewToken: CancelToken? = null
     private val interactivePending = AtomicInteger(0)
+    private val backgroundPending = AtomicInteger(0)
 
-    /** Latency-critical engine work (completion): preempt any in-flight background pass, then run. */
+    /** Latency-critical engine work (completion): preempts both background and preview lanes. */
     private suspend fun <T> interactive(block: () -> T): T {
         interactivePending.incrementAndGet()
-        backgroundToken?.cancel() // flip from the caller thread → seen by the engine thread at its next poll
+        backgroundToken?.cancel()
+        previewToken?.cancel()
         try {
             return withContext(engineDispatcher) { block() }
         } finally {
@@ -184,21 +189,53 @@ class IdeServicesBackend(
     }
 
     /**
-     * Preemptible per-keystroke engine work (analysis/hints/breadcrumb/preview-detection). Runs under a fresh
-     * cancel token; throws [EngineCanceledException] when a completion request preempts it — callers map that
+     * Preemptible per-keystroke engine work (analysis/hints/breadcrumb/preview-detection). Preempts the
+     * preview lane; throws [EngineCanceledException] when a completion request preempts it — callers map that
      * to their own "skipped" result (re-run on the next edit, or retried by the host).
      */
-    private suspend fun <T> background(block: () -> T): T =
-        withContext(engineDispatcher) {
-            val token = CancelToken()
-            backgroundToken = token
-            if (interactivePending.get() > 0) token.cancel() // a completion is already waiting → don't start
+    private suspend fun <T> background(block: () -> T): T {
+        backgroundPending.incrementAndGet()
+        previewToken?.cancel()
+        return try {
+            withContext(engineDispatcher) {
+                val token = CancelToken()
+                backgroundToken = token
+                if (interactivePending.get() > 0) token.cancel()
+                try {
+                    EngineCancellation.withToken(token) { block() }
+                } finally {
+                    if (backgroundToken === token) backgroundToken = null
+                }
+            }
+        } finally {
+            backgroundPending.decrementAndGet()
+        }
+    }
+
+    /**
+     * Lowest-priority engine work (preview rendering/lowering). Preempted by both [interactive] and
+     * [background]; retries automatically after a short delay so the caller suspends until the engine is
+     * free rather than getting a one-shot cancellation. Only [CancellationException] (outer coroutine
+     * cancelled) escapes — [EngineCanceledException] is handled internally by the retry loop.
+     */
+    private suspend fun <T> preview(block: suspend () -> T): T {
+        while (true) {
             try {
-                EngineCancellation.withToken(token) { block() }
-            } finally {
-                if (backgroundToken === token) backgroundToken = null
+                return withContext(engineDispatcher) {
+                    val token = CancelToken()
+                    previewToken = token
+                    if (interactivePending.get() > 0 || backgroundPending.get() > 0) token.cancel()
+                    try {
+                        EngineCancellation.withToken(token) { block() }
+                    } finally {
+                        if (previewToken === token) previewToken = null
+                    }
+                }
+            } catch (e: EngineCanceledException) {
+                delay(150)
             }
         }
+    }
 
     private val _projectEpoch = MutableStateFlow(0)
     override val projectEpoch: StateFlow<Int> get() = _projectEpoch
@@ -715,21 +752,20 @@ class IdeServicesBackend(
 
     override fun startPendingDependencyResolution() = services.startPendingDependencyResolution()
 
-    /** The lowered preview to render (serialized with other language work). Returns an ide-core type, so it
-     *  lives here on the concrete backend rather than the cross-platform [dev.ide.ui.backend.IdeBackend]. The
-     *  on-device preview host (`:ide-android`) calls this, then composes it via the interpreter. */
+    /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
+     *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
     suspend fun lowerComposePreview(path: String, functionName: String, text: String): LoweredComposePreview? =
-        withContext(engineDispatcher) { services.lowerComposePreview(Paths.get(path), text, functionName) }
+        preview { services.lowerComposePreview(Paths.get(path), text, functionName) }
 
     /** Why [functionName] isn't interpretable yet (lowering diagnostics + offending source), for the preview
-     *  panel's not-interpretable state. Off the UI thread, serialized with other language work. */
+     *  panel's not-interpretable state. Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewDiagnostics(path: String, functionName: String, text: String): List<String> =
-        withContext(engineDispatcher) { services.composePreviewDiagnostics(Paths.get(path), text, functionName) }
+        preview { services.composePreviewDiagnostics(Paths.get(path), text, functionName) }
 
     /** The project library inputs for the on-device Compose preview's `DexClassLoader` (see
-     *  [IdeServices.composePreviewLibs]). Off the UI thread — touches the model classpath. */
+     *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
-        withContext(engineDispatcher) { services.composePreviewLibs(Paths.get(path)) }
+        preview { services.composePreviewLibs(Paths.get(path)) }
     override fun dependencyModules(): List<UiDepModule> = services.dependencyModules()
 
     // Resolution does blocking HTTP — keep it off the caller's (possibly UI) dispatcher.
@@ -1014,7 +1050,7 @@ class IdeServicesBackend(
         }
 
     override suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
-        withContext(engineDispatcher) { services.runComposePreview(Paths.get(path), text, functionName) }
+        preview { services.runComposePreview(Paths.get(path), text, functionName) }
             .let { UiPreviewResult(it.ok, it.message) }
 
     override fun androidSourcesInfo(): UiAndroidSourcesInfo? =
@@ -1084,6 +1120,23 @@ class IdeServicesBackend(
         dev.ide.lang.highlight.HighlightModifier.EXTENSION -> dev.ide.ui.backend.UiHighlightModifier.Extension
         dev.ide.lang.highlight.HighlightModifier.COMPOSABLE -> dev.ide.ui.backend.UiHighlightModifier.Composable
         dev.ide.lang.highlight.HighlightModifier.SUSPEND -> dev.ide.ui.backend.UiHighlightModifier.Suspend
+    }
+
+    override suspend fun codeFolds(path: String, text: String): List<dev.ide.ui.backend.UiFoldRegion> {
+        val folds = try {
+            background { services.codeFolds(Paths.get(path), text) }
+        } catch (e: EngineCanceledException) {
+            throw AnalysisPreempted() // preempted by completion — host retries, keeps current folds meanwhile
+        }
+        return folds.map { f ->
+            dev.ide.ui.backend.UiFoldRegion(
+                startOffset = f.range.start,
+                endOffset = f.range.end,
+                placeholder = f.placeholder,
+                kind = f.kind.id,
+                collapsedByDefault = f.collapsedByDefault,
+            )
+        }
     }
 
     // ---- code actions (quick-fixes + intentions) ----

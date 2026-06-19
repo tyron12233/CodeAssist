@@ -198,6 +198,18 @@ interface IdeBackend {
     suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> = emptyList()
 
     /**
+     * Foldable regions for [path]'s live buffer [text] — import groups, type/function bodies, block comments.
+     * Ranges are document offsets spanning exactly the text to hide; [UiFoldRegion.placeholder] is shown in
+     * its place when collapsed (the editor keeps the start line up to the range and the end line after it,
+     * joined by the placeholder → `fun Test() {...}`). [UiFoldRegion.collapsedByDefault] regions (imports)
+     * start folded the first time the file opens.
+     *
+     * Runs on the shared engine thread, debounced like [semanticTokens]. May throw [AnalysisPreempted] when a
+     * completion request cut ahead — the host should retry, keeping the current folds meanwhile. Default empty.
+     */
+    suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> = emptyList()
+
+    /**
      * Code actions available at the selection `[selStart, selEnd)` (a collapsed range = the bare caret) in
      * [path]'s live buffer [text]: quick-fixes for the diagnostics there plus caret intentions like
      * "Introduce local variable". What the editor lightbulb / Alt-Enter menu lists. The order is stable for a
@@ -962,6 +974,20 @@ data class UiSemanticToken(
 enum class UiHighlightModifier {
     Declaration, Static, Abstract, Deprecated, Readonly, Mutable, Extension, Composable, Suspend,
 }
+
+/**
+ * One foldable region: the `[startOffset, endOffset)` span to collapse, the [placeholder] shown in its place
+ * (`...`, `import ...`, `/*...*/`), an open string [kind] id (`imports`/`functionBody`/`classBody`/`comment`/…
+ * — the UI treats an unknown kind generically), and whether it [collapsedByDefault] (imports) when the file
+ * first opens.
+ */
+data class UiFoldRegion(
+    val startOffset: Int,
+    val endOffset: Int,
+    val placeholder: String,
+    val kind: String,
+    val collapsedByDefault: Boolean = false,
+)
 
 /** What an inlay hint conveys — drives its tint/affinity. */
 enum class UiInlayKind { Type, Parameter, Chaining, Other }

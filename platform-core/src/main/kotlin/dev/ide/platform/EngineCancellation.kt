@@ -17,7 +17,7 @@ object EngineCancellation {
     private val current = ThreadLocal<CancelToken?>()
 
     /** Run [block] on this thread under [token] (restoring any previous token on exit). */
-    fun <T> withToken(token: CancelToken, block: () -> T): T {
+    suspend fun <T> withToken(token: CancelToken, block: suspend () -> T): T {
         val prev = current.get()
         current.set(token)
         try {

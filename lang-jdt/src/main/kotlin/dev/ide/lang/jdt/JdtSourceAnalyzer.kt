@@ -189,6 +189,10 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService =
         dev.ide.lang.jdt.highlight.JdtSemanticHighlighter(this)
 
+    /** Structural code folding (imports, type/method bodies, comments) over the syntactic AST. */
+    override val folding: dev.ide.lang.folding.FoldingService =
+        dev.ide.lang.jdt.folding.JdtCodeFolder(this)
+
     /**
      * Release the per-module environment cache (open library-jar handles). The host registers each analyzer
      * with the platform disposer, so this runs when the workspace closes; the shared platform jrt image is

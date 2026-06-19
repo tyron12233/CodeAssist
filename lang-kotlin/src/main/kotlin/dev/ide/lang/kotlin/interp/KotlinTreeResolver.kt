@@ -250,8 +250,18 @@ class KotlinTreeResolver(
             else -> fn.bodyExpression?.let { lower(it) } ?: unsupported("empty body", fn)
         }
         scopes.removeLast()
-        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList())
+        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), returnsUnit = returnsUnit(fn))
     }
+
+    /** Whether [fn] returns `Unit` — a block body with no explicit return type, or one declared `: Unit`. An
+     *  expression body without an explicit type is treated as non-Unit (unknown), conservatively keeping it out
+     *  of the Compose restartable/skippable path (a value-returning composable must always re-run). */
+    private fun returnsUnit(fn: KtNamedFunction): Boolean =
+        when (fn.typeReference?.text?.trim()) {
+            null -> fn.hasBlockBody()
+            "Unit", "kotlin.Unit" -> true
+            else -> false
+        }
 
     // --- source class / object / enum lowering ---
 
@@ -392,7 +402,7 @@ class KotlinTreeResolver(
         }
         classStack.removeLast()
         scopes.removeLast()
-        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), receiverSlot = thisSlot)
+        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), receiverSlot = thisSlot, returnsUnit = returnsUnit(fn))
     }
 
     private fun lowerEnumEntries(decl: KtClassOrObject): List<REnumEntry> =

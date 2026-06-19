@@ -27,6 +27,8 @@ import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.editor.preview.PreviewIssue
 import dev.ide.ui.editor.preview.PreviewIssueLevel
+import dev.ide.ui.editor.preview.PreviewRenderError
+import dev.ide.platform.log.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -37,6 +39,8 @@ import kotlinx.coroutines.withContext
  * [IdeServicesBackend] — which swaps its inner services on project switch — so one host serves all projects.
  */
 class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : ComposePreviewHost {
+
+    private val log = Log.logger("AndroidComposePreviewHost")
 
     @Composable
     override fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, modifier: Modifier) {
@@ -62,14 +66,19 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         }
         val renderer = remember(loader) { ComposePreviewRenderer(loader) }
         var renderError by remember(path, functionName, text) { mutableStateOf<Throwable?>(null) }
+        var partialError by remember(path, functionName, text) { mutableStateOf<Throwable?>(null) }
 
         // Report interpret/render problems to the pane's shared problem chip (cleared when it renders cleanly),
         // so the details live in the tappable chip rather than covering the device frame.
-        LaunchedEffect(state, renderError) {
+        // renderError = top-level failure (preview replaced by error view); partialError = content-lambda error
+        // (preview still shows, but lazy content like LazyColumn items may be incomplete).
+        LaunchedEffect(state, renderError, partialError) {
             val err = renderError
+            val partial = partialError
             report(
                 when {
                     err != null -> listOf(PreviewIssue(PreviewIssueLevel.ERROR, "Preview failed to render", err.message ?: err::class.simpleName ?: "Unknown error"))
+                    partial != null -> listOf(PreviewIssue(PreviewIssueLevel.WARNING, "Preview partially rendered", partial.message ?: partial::class.simpleName ?: "Unknown error"))
                     state is PreviewState.NotInterpretable -> (state as PreviewState.NotInterpretable).reasons.map { PreviewIssue(PreviewIssueLevel.WARNING, "Preview not interpretable", it) }
                     else -> emptyList()
                 },
@@ -89,10 +98,17 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             Box(modifier, contentAlignment = Alignment.Center) {
                 when (val s = state) {
                     is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
-                    is PreviewState.Ready -> renderer.Render(s.lowered.entry, s.lowered.program, s.lowered.classes) { error ->
-                        LaunchedEffect(error) { renderError = error }
-                        Text("Preview failed to render", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.padding(16.dp))
-                    }
+                    is PreviewState.Ready -> renderer.Render(
+                        s.lowered.entry, s.lowered.program, s.lowered.classes,
+                        onError = { error ->
+                            LaunchedEffect(error) { renderError = error }
+                            PreviewRenderError(error)
+                        },
+                        onPartialError = { e ->
+                            if (e != null) log.warn("Compose preview partial render", e)
+                            partialError = e
+                        },
+                    )
                     is PreviewState.NotInterpretable -> Text(
                         "Preview not interpretable", color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp, modifier = Modifier.padding(16.dp),

@@ -27,8 +27,10 @@ enum class Screen { Projects, CreateProject, Editor, Dependencies, ModuleConfig,
  */
 enum class RailDestination { Files, Search, Source, More }
 
-/** Editor surface for a tab: the plain text editor, or the projectional block editor over the same AST. */
-enum class EditorViewMode { Text, Blocks, Preview }
+/** Editor surface for a tab: the plain text editor, the projectional block editor over the same AST, a
+ *  full-pane preview, or [Split] — code and its preview together (so you can edit and watch it update,
+ *  the one layout that works on a phone where the panes can't otherwise share the screen). */
+enum class EditorViewMode { Text, Blocks, Preview, Split }
 
 /**
  * One open editor tab. Its buffer-of-record is the [EditorSession] (the rope-backed model both the text

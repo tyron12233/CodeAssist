@@ -129,3 +129,20 @@ fun shiftComposePreviews(markers: List<UiComposePreview>, edit: EditSpan, docLen
     if (markers.isEmpty() || edit.isNoOp) return markers
     return markers.map { it.copy(offset = mapStart(it.offset, edit).coerceIn(0, docLength)) }
 }
+
+/**
+ * Re-map fold regions across a single [edit], so a collapsed fold keeps covering its block as the user types
+ * before/inside it, until a fresh (debounced) pass replaces the set. A region the edit fully consumed (its
+ * braces deleted) collapses to empty and is dropped — the refetch re-derives folds from the new structure.
+ */
+fun shiftFoldRegions(regions: List<dev.ide.ui.editor.folding.FoldRegion>, edit: EditSpan, docLength: Int): List<dev.ide.ui.editor.folding.FoldRegion> {
+    if (regions.isEmpty() || edit.isNoOp) return regions
+    val out = ArrayList<dev.ide.ui.editor.folding.FoldRegion>(regions.size)
+    for (r in regions) {
+        val start = mapStart(r.start, edit).coerceIn(0, docLength)
+        val end = mapEnd(r.end, edit).coerceIn(start, docLength)
+        if (end <= start) continue
+        out.add(r.copy(start = start, end = end))
+    }
+    return out
+}

@@ -153,6 +153,56 @@ class KotlinDiagnosticsTest {
         )
     }
 
+    @Test
+    fun conflictingImportsAreFlagged() {
+        // Two `Date`s from different packages — the classic ambiguous import (Kotlin's CONFLICTING_IMPORT).
+        val diags = diagnose(
+            "ConflictDate.kt",
+            "package demo\nimport java.util.Date\nimport java.sql.Date\nfun f(d: Date) {}",
+        )
+        val conflicts = diags.filter { it.code == "kt.conflictingImport" && it.message.contains("Date") }
+        assertTrue(conflicts.size >= 2, "both conflicting `Date` imports should be flagged; got $diags")
+    }
+
+    @Test
+    fun aliasedImportResolvesTheConflict() {
+        // Aliasing one import changes the effective name, so `Date` and `SqlDate` no longer collide.
+        val diags = diagnose(
+            "AliasedDate.kt",
+            "package demo\nimport java.util.Date\nimport java.sql.Date as SqlDate\nfun f(a: Date, b: SqlDate) {}",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.conflictingImport" },
+            "an aliased import must not conflict; got $diags",
+        )
+    }
+
+    @Test
+    fun duplicateIdenticalImportIsNotAmbiguous() {
+        // Same target imported twice is redundant, not ambiguous — no CONFLICTING_IMPORT.
+        val diags = diagnose(
+            "DupImport.kt",
+            "package demo\nimport java.util.Date\nimport java.util.Date\nfun f(d: Date) {}",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.conflictingImport" },
+            "a duplicate identical import is not an ambiguity; got $diags",
+        )
+    }
+
+    @Test
+    fun starImportDoesNotConflictWithExplicit() {
+        // A star import brings no specific name in at import time, so it doesn't conflict with an explicit one.
+        val diags = diagnose(
+            "StarPlusExplicit.kt",
+            "package demo\nimport java.util.*\nimport java.sql.Date\nfun f(d: Date) {}",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.conflictingImport" },
+            "a star import must not be reported as a conflicting import; got $diags",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(

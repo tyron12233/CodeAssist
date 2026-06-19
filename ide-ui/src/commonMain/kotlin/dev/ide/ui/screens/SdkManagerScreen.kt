@@ -64,9 +64,18 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
     var packages by remember { mutableStateOf<List<UiSdkPackage>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var statusIsError by remember { mutableStateOf(false) }
     val jdk = remember { runCatching { backend.jdkInfo() }.getOrNull() }
 
-    suspend fun reload() { loading = true; packages = runCatching { backend.sdkPackages() }.getOrDefault(emptyList()); loading = false }
+    suspend fun reload() {
+        loading = true
+        status = null
+        val result = runCatching { backend.sdkPackages() }
+        packages = result.getOrDefault(emptyList())
+        statusIsError = result.isFailure
+        if (result.isFailure) status = result.exceptionOrNull()?.message ?: "Could not load packages."
+        loading = false
+    }
     LaunchedEffect(Unit) { reload() }
     // Refresh the installed/incomplete flags whenever a download finishes (it ran in the background).
     val finishedCount = progress.downloads.count { it.status == "DONE" }
@@ -85,7 +94,7 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             Text("SDK Manager", style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
             IconButtonCa(CaIcons.refresh, "Refresh", { scope.launch { reload() } }, boxSize = iconBox)
         }
-        status?.let { Text(it, style = Ca.type.footnote, color = Ca.colors.accent, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+        status?.let { Text(it, style = Ca.type.footnote, color = if (statusIsError) Ca.colors.error else Ca.colors.accent, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             // Purpose: these downloads power editor docs, not building.

@@ -218,7 +218,7 @@ class Interpreter(
             val argv = call.args.map { eval(it.value, env) }
             val invoke = { call(target, argv) }
             return if (callee.isComposable && composableInvoker != null) {
-                composableInvoker.invokeComposable(call.callSiteKey.value, invoke)
+                composableInvoker.invokeComposable(call.callSiteKey.value, target.returnsUnit, argv, invoke)
             } else {
                 invoke()
             }
@@ -782,28 +782,62 @@ class Interpreter(
      * to find an enclosing binding; [define] introduces a binding in this scope (params, local `val`/`var`,
      * loop variable); [assign] updates the binding in whichever scope owns it (so a mutated outer `var` stays
      * visible). This per-scope isolation is what makes closures capture per-iteration values.
+     *
+     * Backed by two small parallel arrays scanned linearly rather than a `HashMap`: a scope almost always holds
+     * a handful of slots (a function's params, a loop variable, a lambda's params), so a linear scan over 0–4
+     * ints beats hashing, and the arrays are allocated lazily on first [define] — a body scope that introduces
+     * no locals (a `while`/`for` body, an expression lambda) costs nothing. This is the per-render hot path:
+     * the previous `HashMap` allocated a node table plus a node per entry for every scope, every recomposition.
      */
     private class Env(private val parent: Env? = null) {
-        private val slots = HashMap<Int, Any?>()
+        private var keys: IntArray? = null
+        private var values: Array<Any?>? = null
+        private var size = 0
 
         fun read(slot: SlotId): Any? {
+            val key = slot.value
             var e: Env? = this
             while (e != null) {
-                if (e.slots.containsKey(slot.value)) return e.slots[slot.value]
+                val i = e.indexOf(key)
+                if (i >= 0) return e.values!![i]
                 e = e.parent
             }
             return null
         }
 
-        fun define(slot: SlotId, value: Any?) { slots[slot.value] = value }
+        fun define(slot: SlotId, value: Any?) {
+            val key = slot.value
+            val i = indexOf(key)
+            if (i >= 0) { values!![i] = value; return } // redefine in this scope (shadow/overwrite)
+            var ks = keys
+            var vs = values
+            if (ks == null) { ks = IntArray(INITIAL); vs = arrayOfNulls(INITIAL); keys = ks; values = vs }
+            else if (size == ks.size) { ks = ks.copyOf(size * 2); vs = vs!!.copyOf(size * 2); keys = ks; values = vs }
+            ks[size] = key
+            vs!![size] = value
+            size++
+        }
 
         fun assign(slot: SlotId, value: Any?) {
+            val key = slot.value
             var e: Env? = this
             while (e != null) {
-                if (e.slots.containsKey(slot.value)) { e.slots[slot.value] = value; return }
+                val i = e.indexOf(key)
+                if (i >= 0) { e.values!![i] = value; return }
                 e = e.parent
             }
-            slots[slot.value] = value // not previously declared (shouldn't happen post-resolution) → bind here
+            define(slot, value) // not previously declared (shouldn't happen post-resolution) → bind here
+        }
+
+        /** Index of [key] in this scope's own slots, or -1. Linear scan — scopes are tiny. */
+        private fun indexOf(key: Int): Int {
+            val ks = keys ?: return -1
+            for (i in 0 until size) if (ks[i] == key) return i
+            return -1
+        }
+
+        private companion object {
+            const val INITIAL = 4
         }
     }
 

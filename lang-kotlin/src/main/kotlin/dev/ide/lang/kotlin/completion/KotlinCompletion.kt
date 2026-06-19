@@ -66,8 +66,11 @@ class KotlinCompletionService(
     private val onBeforeComplete: () -> Unit = {},
 ) : CompletionService {
 
-    override suspend fun complete(request: CompletionRequest): CompletionResult {
-        onBeforeComplete()
+    override suspend fun complete(request: CompletionRequest): CompletionResult =
+        dev.ide.lang.kotlin.KotlinPerf.trace("kt.complete") { completeInner(request) }
+
+    private suspend fun completeInner(request: CompletionRequest): CompletionResult {
+        dev.ide.lang.kotlin.KotlinPerf.span("onBefore") { onBeforeComplete() }
         val original = request.document.text.toString()
         val offset = request.offset.coerceIn(0, original.length)
         val prefix = identifierPrefixBefore(original, offset)
@@ -84,7 +87,7 @@ class KotlinCompletionService(
 
         // Splice the marker right at the caret so the parser yields a real reference node even after `.`.
         val spliced = original.substring(0, offset) + MARKER + original.substring(offset)
-        val kt = KotlinParserHost.parse(request.document.file.name, spliced)
+        val kt = dev.ide.lang.kotlin.KotlinPerf.span("parse") { KotlinParserHost.parse(request.document.file.name, spliced) }
         val parsed = KotlinParsedFile(kt, request.document.file, request.document.version)
         val resolver = KotlinResolver(kt, parsed, service)
 
@@ -135,11 +138,11 @@ class KotlinCompletionService(
         var packageCompletion = false
         var expected: KotlinType? = null
 
-        val raw: List<KotlinSymbol> = when {
+        val raw: List<KotlinSymbol> = dev.ide.lang.kotlin.KotlinPerf.span("candidates") { when {
             nameRef != null && isSelectorOfQualified(nameRef) -> {
                 val qualified = nameRef.parent as KtQualifiedExpression
                 val receiver = qualified.receiverExpression
-                val recvType = resolver.inferType(receiver)
+                val recvType = dev.ide.lang.kotlin.KotlinPerf.span("infer") { resolver.inferType(receiver) }
                 if (recvType != null) {
                     // Instance receiver (`listOf("").`) → instance members + extensions; type receiver
                     // (`Int.`) → companion ("static") members + nested. Built-ins now provide the real Kotlin
@@ -148,8 +151,9 @@ class KotlinCompletionService(
                     val typeReceiver = resolver.isTypeReceiver(receiver)
                     // Prefix-aware: with large classpaths (Compose) a receiver's member+extension set is huge,
                     // so push the typed prefix into the symbol service rather than enumerating then filtering.
-                    val members = service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
-                        .filter { memberVisibleOn(it, typeReceiver) }
+                    val members = dev.ide.lang.kotlin.KotlinPerf.span("members") {
+                        service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
+                    }.filter { memberVisibleOn(it, typeReceiver) }
                     // A bare `Type.` where the type has a companion object resolves to the companion instance,
                     // so the companion's own members (Compose's `Color.Black`/`White`) and the extensions
                     // applicable to it (`Modifier.Companion : Modifier` → `Modifier.padding`/`background`) are
@@ -191,22 +195,25 @@ class KotlinCompletionService(
                 // The type the context wants → offer literals/enum constants and rank assignable candidates first.
                 expected = resolver.expectedTypeAt(offset)
                 expected?.let { extra += expectedExtras(it, prefix) { fqn -> importEditForType(fqn) } }
-                resolver.scopeSymbolsAt(offset, prefix) + service.typeNamesByPrefix(prefix)
+                dev.ide.lang.kotlin.KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
+                    dev.ide.lang.kotlin.KotlinPerf.span("typeNames") { service.typeNamesByPrefix(prefix) }
             }
-        }
+        } }
 
         // Inside a @Composable context (a `setContent`/`Column` content lambda, a @Composable function body),
         // float @Composable callables to the top — Android Studio's Compose weigher. NOT a filter: non-composable
         // code (`remember`, `println`, locals, control flow) stays available, just ranked below.
-        val composableContext = resolver.composableContextAt(offset) == ComposableContext.COMPOSABLE
+        val composableContext = dev.ide.lang.kotlin.KotlinPerf.span("composeCtx") {
+            resolver.composableContextAt(offset) == ComposableContext.COMPOSABLE
+        }
 
-        val candidates = raw.asSequence()
+        val candidates = dev.ide.lang.kotlin.KotlinPerf.span("rank") { raw.asSequence()
             .filter { it.name != "_" && it.name.startsWith(prefix, ignoreCase = true) && MARKER !in it.name }
             .distinctBy { it.name + "#" + it.kind + "#" + (it.signature ?: "") }
             .map { Candidate(it, if (packageCompletion) emptyList() else importEditFor(it)) }
             .sortedWith(rank(prefix, expected, composableContext))
             .take(MAX_ITEMS)
-            .toList()
+            .toList() }
 
         val symbolItems = candidates.map { toItem(it.symbol, it.importEdit, followingChar) }
         val items = (extra.distinctBy { it.kind to it.label } + symbolItems).take(MAX_ITEMS)

@@ -30,14 +30,20 @@ import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.delay
+
+/** Idle delay before the live buffer is re-interpreted, so a burst of typing settles into one re-composition. */
+private const val PREVIEW_DEBOUNCE_MS = 400L
 
 /**
  * The Compose `@Preview` pane. Shares the exact [PreviewSurface] chrome with the layout-XML preview —
  * device selection, rotation, the Light/Night toggle, free pan + pinch/zoom — so both Preview views look
  * and behave the same. The open file's first `@Preview` is composed live inside the device card by the
  * platform render [host] (the on-device interpreter); the Night toggle drives the `uiMode`, mirroring
- * `@Preview(uiMode = UI_MODE_NIGHT_YES)`. A green Live badge shows when a host is present, and a Rebuild
- * button forces a fresh composition. With no host (desktop) the card shows the "renders on device" note.
+ * `@Preview(uiMode = UI_MODE_NIGHT_YES)`. The interpreter is NOT re-run on every keystroke: the rendered
+ * buffer trails the editor by an idle debounce, and a Stop/Resume button freezes it entirely so editing
+ * does no interpretation work. The Live/Paused badge reflects that state; Rebuild renders the current
+ * buffer on demand. With no host (desktop) the card shows the "renders on device" note.
  */
 @Composable
 fun ComposePreviewPane(
@@ -53,10 +59,22 @@ fun ComposePreviewPane(
     var previews by remember(path) { mutableStateOf<List<String>>(emptyList()) }
     var nonce by remember(path) { mutableStateOf(0) }
     var problems by remember(path) { mutableStateOf<List<PreviewIssue>>(emptyList()) }
+    // Live preview is debounced + pausable so the interpreter doesn't re-run on every keystroke. `renderText`
+    // is the buffer actually lowered + interpreted: while live it trails the editor by an idle delay (so a
+    // burst of typing settles into ONE re-composition), and while paused it's frozen at its last value so
+    // editing does no interpretation work at all. Rebuild renders the current buffer on demand regardless.
+    var live by remember(path) { mutableStateOf(true) }
+    var renderText by remember(path) { mutableStateOf(text) }
+    LaunchedEffect(path, text, live) {
+        if (!live) return@LaunchedEffect
+        delay(PREVIEW_DEBOUNCE_MS)
+        renderText = text
+    }
 
-    // Detect the @Preview functions in the live buffer (debounce is handled by the caller's edit cadence).
-    LaunchedEffect(path, text) {
-        previews = runCatching { backend.composePreviews(path, text).map { it.functionName } }.getOrDefault(emptyList())
+    // Detect the @Preview functions from the rendered buffer (so the list/selection track what's on screen,
+    // and detection stops churning while paused).
+    LaunchedEffect(path, renderText) {
+        previews = runCatching { backend.composePreviews(path, renderText).map { it.functionName } }.getOrDefault(emptyList())
     }
     // Render the user's selected preview when it still exists in the file; otherwise the first one.
     val fn = selected?.takeIf { it in previews } ?: previews.firstOrNull()
@@ -80,19 +98,34 @@ fun ComposePreviewPane(
             }
             if (host != null) {
                 Divider()
+                val badge = if (live) Ca.colors.run else Ca.colors.textTertiary
                 Row(
                     Modifier.padding(horizontal = Ca.spacing.s1),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Box(Modifier.size(6.dp).background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill)))
-                    Text("Live", color = Ca.colors.run, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                    Box(Modifier.size(6.dp).background(badge, RoundedCornerShape(Ca.radius.pill)))
+                    Text(if (live) "Live" else "Paused", color = badge, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
                 }
             }
         },
         bottomBarExtras = {
+            // Stop/resume the live preview so editing doesn't trigger interpretation (host-only — desktop has
+            // no live interpreter). Resuming catches up to the current buffer after the usual debounce.
+            if (host != null) {
+                Divider()
+                PillButton({ live = !live }) {
+                    Icon(
+                        if (live) CaIcons.stop else CaIcons.play,
+                        if (live) "Stop live preview" else "Resume live preview",
+                        Modifier.size(15.dp),
+                        tint = if (live) Ca.colors.textSecondary else Ca.colors.run,
+                    )
+                }
+            }
             Divider()
-            PillButton({ nonce++ }) { Icon(CaIcons.refresh, "Rebuild preview", Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
+            // Render the current buffer now (also the manual trigger while paused).
+            PillButton({ renderText = text; nonce++ }) { Icon(CaIcons.refresh, "Rebuild preview", Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
         },
     ) { _, _, density ->
         val base = LocalDensity.current
@@ -105,7 +138,7 @@ fun ComposePreviewPane(
                     // surface's pan/zoom graphicsLayer scales the result. Night drives the host's uiMode; the
                     // host reports interpret/render problems back up to the shared chip.
                     CompositionLocalProvider(LocalDensity provides Density(density, base.fontScale)) {
-                        host.Preview(path, fn, text, state.night, { problems = it }, Modifier.fillMaxSize())
+                        host.Preview(path, fn, renderText, state.night, { problems = it }, Modifier.fillMaxSize())
                     }
                 }
                 else -> {

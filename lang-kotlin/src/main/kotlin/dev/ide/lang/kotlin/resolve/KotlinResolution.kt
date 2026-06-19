@@ -79,6 +79,9 @@ class KotlinResolver(
     private val inferCache = HashMap<KtExpression, KotlinType?>()
     private val calleeCache = HashMap<KtCallExpression, KotlinSymbol?>()
     private val implicitReceiversCache = HashMap<Int, List<KotlinType>>()
+    // Composable context is identical for every position inside one boundary (a function/accessor/lambda), and
+    // it's queried per call expression in the analyze pass, so memoize by that boundary element.
+    private val composeCtxCache = HashMap<PsiElement, ComposableContext>()
 
     fun inferType(expr: KtExpression?): KotlinType? {
         if (expr == null) return null
@@ -122,9 +125,8 @@ class KotlinResolver(
             // directly because the builtin `Float.times`/etc. members carry no return type in the model, so the
             // member lookup below returns null and `(progress * 100).toInt()` couldn't resolve its receiver.
             else numericResultType(leftType, inferType(e.right))
-                ?: service.membersOf(leftType.qualifiedName, leftType.typeArguments, null)
-                    .filterIsInstance<KotlinSymbol>()
-                    .firstOrNull { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+                ?: service.membersNamed(leftType.qualifiedName, leftType.typeArguments, convention)
+                    .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
                     ?.type as? KotlinType
         }
     }
@@ -151,9 +153,8 @@ class KotlinResolver(
     private fun inferArrayGet(e: KtArrayAccessExpression): KotlinType? {
         val recv = inferType(e.arrayExpression) ?: return null
         val arity = e.indexExpressions.size
-        return service.membersOf(recv.qualifiedName, recv.typeArguments, null)
-            .filterIsInstance<KotlinSymbol>()
-            .firstOrNull { it.name == "get" && it.kind == SymbolKind.METHOD && it.paramTypes.size == arity }
+        return service.membersNamed(recv.qualifiedName, recv.typeArguments, "get")
+            .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == arity }
             ?.type as? KotlinType
     }
 
@@ -264,7 +265,7 @@ class KotlinResolver(
 
     private fun resolveCalleeFunction(call: KtCallExpression): KotlinSymbol? {
         if (calleeCache.containsKey(call)) return calleeCache[call]
-        if (!resolvingCallees.add(call)) return null // re-entrant resolution → break the cycle (don't cache)
+        if (!resolvingCallees.add(call)) return reentrantCalleeFallback(call) // re-entrant → break the cycle (don't cache)
         val result = try {
             computeCallee(call)
         } finally {
@@ -274,14 +275,31 @@ class KotlinResolver(
         return result
     }
 
+    /**
+     * Re-entrancy fallback for [resolveCalleeFunction]: a callee's resolution is requested WHILE that callee is
+     * already mid-resolution (a higher-order call whose lambda-parameter typing loops back into the same call).
+     * The cycle must break, but a hard `null` STARVES the lambda of its parameter shape — `it` inside it then
+     * goes untyped, losing completion/go-to-def on it. Instead resolve the callee NON-recursively from an
+     * UNAMBIGUOUS top-level match by name (+ arity) — skipping the receiver/argument inference that is the cycle.
+     * Returns null for a member call (needs the receiver) or an overloaded name, i.e. exactly the prior behaviour
+     * in the ambiguous cases — so this only ever ADDS a resolution in the re-entrant window, never changes a
+     * confident one. Deliberately NOT cached: the outer (full) resolution still computes and caches the real result.
+     */
+    private fun reentrantCalleeFallback(call: KtCallExpression): KotlinSymbol? {
+        val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        val argCount = call.valueArguments.size
+        val byName = service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
+        return byName.singleOrNull { it.paramTypes.size == argCount } ?: byName.singleOrNull()
+    }
+
     private fun computeCallee(call: KtCallExpression): KotlinSymbol? {
         val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
         val argCount = call.valueArguments.size // already includes the trailing lambda
         val q = call.parent as? KtQualifiedExpression
         val receiverType = if (q != null && q.selectorExpression === call) inferType(q.receiverExpression) else null
         val candidates = if (receiverType != null) {
-            service.membersOf(receiverType.qualifiedName, receiverType.typeArguments, null)
-                .filterIsInstance<KotlinSymbol>().filter { it.name == name && it.kind == SymbolKind.METHOD }
+            service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+                .filter { it.kind == SymbolKind.METHOD }
         } else {
             // Top-level functions (`Text`, `Column`, `remember`, …) resolve via the cheap exact lookup. Only when
             // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
@@ -290,9 +308,32 @@ class KotlinResolver(
             service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
                 .ifEmpty { scopeSymbolsAt(call.textRange.startOffset, name).filter { it.name == name && it.kind == SymbolKind.METHOD } }
         }
-        return candidates.firstOrNull { it.paramTypes.size == argCount }
-            ?: candidates.firstOrNull { it.paramTypes.isNotEmpty() && it.paramTypes.size <= argCount }
-            ?: candidates.firstOrNull()
+        // Prefer exact arity; then functions with MORE params than supplied args (defaulted params the caller
+        // omits — `Box(modifier){…}` with 4-param Box, `items(list,key){…}` vs all-4-param overloads); then
+        // functions with fewer (vararg / extra trailing lambdas). Within each tier, break ties by scoring the
+        // first positional non-lambda arg's type against the first parameter — picks `items(List<T>…)` over
+        // `items(Int…)` when the arg is a `List<Project>`, and the 4-param Box over a no-content overload.
+        val exact = candidates.filter { it.paramTypes.size == argCount }
+        if (exact.isNotEmpty()) return disambiguateByFirstArg(exact, call) ?: exact.first()
+        val moreParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
+        if (moreParams.isNotEmpty()) return disambiguateByFirstArg(moreParams, call) ?: moreParams.first()
+        val fewerParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
+        if (fewerParams.isNotEmpty()) return disambiguateByFirstArg(fewerParams, call) ?: fewerParams.first()
+        return candidates.firstOrNull()
+    }
+
+    /** Break ties among overload [candidates] by scoring the first positional non-lambda arg's inferred type
+     *  against each candidate's first parameter type. A generic (type-param) first param accepts any type;
+     *  a concrete first param must match by qualified name. Returns null when scoring isn't possible. */
+    private fun disambiguateByFirstArg(candidates: List<KotlinSymbol>, call: KtCallExpression): KotlinSymbol? {
+        if (candidates.size == 1) return candidates.first()
+        val firstExpr = call.valueArguments.firstOrNull { !it.isNamed() && it !is KtLambdaArgument }
+            ?.getArgumentExpression() ?: return null
+        val argType = inferType(firstExpr)?.takeIf { !it.isTypeParameter } ?: return null
+        return candidates.firstOrNull { sym ->
+            val pt = sym.paramTypes.firstOrNull() as? KotlinType ?: return@firstOrNull false
+            pt.isTypeParameter || pt.qualifiedName == argType.qualifiedName
+        }
     }
 
     private fun inferTypeArguments(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
@@ -380,9 +421,8 @@ class KotlinResolver(
         val ops = if (property.isVar) listOf("getValue", "setValue") else listOf("getValue")
         val out = LinkedHashSet<String>()
         for (op in ops) {
-            val candidates = service.membersOf(dt.qualifiedName, dt.typeArguments, null)
-                .filterIsInstance<KotlinSymbol>()
-                .filter { it.name == op && it.kind == SymbolKind.METHOD }
+            val candidates = service.membersNamed(dt.qualifiedName, dt.typeArguments, op)
+                .filter { it.kind == SymbolKind.METHOD }
             if (candidates.any { !it.isExtension || extensionInScope(it) }) continue // already satisfied
             candidates.filter { it.isExtension && !extensionInScope(it) }.forEach { ext ->
                 val pkg = ext.packageName ?: ext.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
@@ -409,9 +449,8 @@ class KotlinResolver(
     /** Whether a `getValue`/`setValue` operator named [op] is available for a delegate of type [delegateType]:
      *  a plain member, or an in-scope extension. Returns true (don't flag) when none is modeled at all. */
     private fun delegateOperatorInScope(delegateType: KotlinType, op: String): Boolean {
-        val candidates = service.membersOf(delegateType.qualifiedName, delegateType.typeArguments, null)
-            .filterIsInstance<KotlinSymbol>()
-            .filter { it.name == op && it.kind == SymbolKind.METHOD }
+        val candidates = service.membersNamed(delegateType.qualifiedName, delegateType.typeArguments, op)
+            .filter { it.kind == SymbolKind.METHOD }
         if (candidates.isEmpty()) return true // operator not modeled on the classpath → conservative
         return candidates.any { !it.isExtension || extensionInScope(it) }
     }
@@ -496,7 +535,12 @@ class KotlinResolver(
     private fun bindingsFromValueArgs(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
         if (sym.typeParameters.isEmpty()) return emptyMap()
         val bindings = HashMap<String, TypeRef>()
+        val needed = sym.typeParameters.toHashSet()
         call.valueArguments.forEachIndexed { i, arg ->
+            // `unify` is putIfAbsent (first binding wins), so once every type parameter is bound the remaining
+            // arguments can only no-op — stop inferring siblings (a nested Compose tree fans this out hard).
+            // Behaviour-identical: a key-form mismatch just means no early exit, never a different result.
+            if (bindings.keys.containsAll(needed)) return bindings
             val expr = arg.getArgumentExpression() ?: return@forEachIndexed
             if (expr is KtLambdaExpression) return@forEachIndexed
             val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
@@ -571,6 +615,21 @@ class KotlinResolver(
      * model can't tell) — callers should back off (no diagnostic, no completion boost) to avoid false positives.
      */
     fun composableContextAt(offset: Int): ComposableContext {
+        // The walk is decided entirely by the boundary nodes (function/accessor/lambda) above the offset, so the
+        // nearest such boundary is a sound cache key — every position within it resolves to the same context.
+        val boundary = run {
+            var n: PsiElement? = elementAt(offset)
+            while (n != null && n !is KtNamedFunction && n !is org.jetbrains.kotlin.psi.KtPropertyAccessor && n !is KtLambdaExpression) n = n.parent
+            n
+        }
+        boundary?.let { composeCtxCache[it]?.let { hit -> return hit } }
+        return composableContextWalk(offset).also { if (boundary != null) composeCtxCache[boundary] = it }
+    }
+
+    private fun composableContextWalk(offset: Int): ComposableContext {
+        if (offset in 8095..8098) {
+            println()
+        }
         var node: PsiElement? = elementAt(offset)
         while (node != null) {
             when (node) {
@@ -630,7 +689,7 @@ class KotlinResolver(
     }
 
     private fun memberNamed(type: KotlinType, name: String): KotlinSymbol? =
-        service.membersOf(type.qualifiedName, type.typeArguments, null).filterIsInstance<KotlinSymbol>().firstOrNull { it.name == name }
+        service.membersNamed(type.qualifiedName, type.typeArguments, name).firstOrNull()
 
     // --- scopes ---
 
@@ -762,7 +821,7 @@ class KotlinResolver(
         // being edited, so a same-file member (`field`, `helper()`) won't appear in membersOf() below.
         if (enclosingClassMembersContain(offset, name)) return true
         if (implicitReceiversAt(offset).any { recv ->
-                service.membersOf(recv.qualifiedName, recv.typeArguments, null).any { it.name == name }
+                service.membersNamed(recv.qualifiedName, recv.typeArguments, name).isNotEmpty()
             }
         ) return true
         // A top-level callable (`remember`, `mutableStateOf`) resolves bare only when it is actually in
@@ -943,8 +1002,8 @@ class KotlinResolver(
         val q = call.parent as? KtQualifiedExpression
         val receiverType = if (q != null && q.selectorExpression === call) inferType(q.receiverExpression) else null
         if (receiverType != null) {
-            val members = service.membersOf(receiverType.qualifiedName, receiverType.typeArguments, null)
-                .filterIsInstance<KotlinSymbol>().filter { it.name == name && it.kind == SymbolKind.METHOD }
+            val members = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+                .filter { it.kind == SymbolKind.METHOD }
             // Member-extensions of an in-scope implicit receiver: `Modifier.weight(…)` resolves inside `Row { }`
             // because `RowScope` (the content lambda's receiver) declares `fun Modifier.weight()`. Only an
             // extension whose receiver matches the call's explicit receiver type — kept scope-gated, so `weight`
@@ -974,9 +1033,9 @@ class KotlinResolver(
             .filterIsInstance<KotlinType>().map { it.qualifiedName }).toHashSet()
         val out = ArrayList<KotlinSymbol>()
         for (scope in implicitReceiversAt(offset)) {
-            service.membersOf(scope.qualifiedName, scope.typeArguments, null).filterIsInstance<KotlinSymbol>()
+            service.membersNamed(scope.qualifiedName, scope.typeArguments, name)
                 .filterTo(out) {
-                    it.name == name && it.kind == SymbolKind.METHOD && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets
+                    it.kind == SymbolKind.METHOD && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets
                 }
         }
         return out
