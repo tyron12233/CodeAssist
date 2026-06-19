@@ -1,0 +1,12 @@
+CodeAssist 3.0.1
+
+* Your project files now show up in Android's file manager (Documents Provider) — browse, open, edit and share.
+* Kotlin completion, type resolution and diagnostics — built from scratch, running on-device.
+* Compose @Composable preview, rendered live by our own on-device Kotlin interpreter.
+* XML layout preview, including your own custom View subclasses.
+* Fixed: Compose apps build and launch on-device again (dexer dropped Kotlin 2.4 classes).
+* SDK Manager, file management (create/rename/move/copy/delete), and in-app file viewers.
+
+Heads-up: this release breaks older projects — fast iteration over backwards-compatibility.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.0.1
