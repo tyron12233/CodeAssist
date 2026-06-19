@@ -176,7 +176,6 @@ fun EditorScreen(
         )
         FileOperationDialog(
             request = fileOp,
-            tree = state.tree,
             rootPath = state.backend.project.rootPath,
             listDir = { state.backend.listDirectory(it) },
             onRename = { node, newName -> node.fileOpPath()?.let { p -> scope.launch { state.renamePath(p, newName) } } },

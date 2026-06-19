@@ -42,6 +42,7 @@ import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.resolveTint
 import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.secondaryClickable
 import dev.ide.ui.theme.Ca
 
 /**
@@ -219,8 +220,8 @@ private fun HeaderOverflowMenu(
     Box {
         IconButtonCa(CaIcons.ellipsis, "More actions", onClick = { open = true }, boxSize = 34, iconSize = 18)
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            FileActionItem(CaIcons.plus, "New file…") { open = false; onNewFile() }
-            FileActionItem(CaIcons.folder, "New folder…") { open = false; onNewFolder() }
+            FileActionItem(CaIcons.plus, "New file") { open = false; onNewFile() }
+            FileActionItem(CaIcons.folder, "New folder") { open = false; onNewFolder() }
             FileActionItem(CaIcons.chevronDown, "Expand all") { open = false; onExpandAll() }
             FileActionItem(CaIcons.chevronUp, "Collapse all") { open = false; onCollapseAll() }
             Box(Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp).background(Ca.colors.separator))
@@ -289,7 +290,7 @@ private fun TreeRow(
     val isActive = node.filePath != null && node.filePath == activePath
     // New File / New Folder can target ANY directory (or a file's parent) — create anything, anywhere.
     val targetDir = node.newTargetDir()
-    // Android res nodes additionally offer the templated "New resource…" flow.
+    // Android res nodes additionally offer the templated "New resource" flow.
     val canNewResource = node.resDirPath != null
     // A Java/Kotlin source root or package additionally offers typed "New Java class / Kotlin file".
     val isSourceContext = targetDir != null && node.sourceRootPath != null
@@ -329,6 +330,7 @@ private fun TreeRow(
                 },
                 onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
             )
+            .secondaryClickable(enabled = hasMenu) { menuOpen = true }
             .padding(start = (8 + depth * 16).dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -368,6 +370,10 @@ private fun TreeRow(
             node.gitStatus != null ->
                 Box(Modifier.size(6.dp).background(gitColor(node.gitStatus), RoundedCornerShape(Ca.radius.pill)))
         }
+        // A visible overflow affordance on desktop hover — the file ops (rename/move/copy/delete/reveal)
+        // otherwise have no on-screen entry point there (touch reaches them via long-press).
+        if ((canContext || canRevealHere) && hovered)
+            IconButtonCa(CaIcons.ellipsis, "Actions for ${node.name}", onClick = { menuOpen = true }, boxSize = 22, iconSize = 14)
     }
         if (hasMenu) CaDropdownMenu(
             expanded = menuOpen,
@@ -380,16 +386,16 @@ private fun TreeRow(
                 NewActionItems(node, targetDir, isSourceContext, canNewResource, onNewFile, onNewFolder, onNewResource, onNewSource) { menuOpen = false }
             } else {
                 if (canModuleMenu) {
-                    FileActionItem(CaIcons.gear, "Module settings…") { menuOpen = false; onConfigureModule(node) }
-                    FileActionItem(CaIcons.layers, "Dependencies…") { menuOpen = false; onViewDependencies(node) }
-                    FileActionItem(CaIcons.plus, "Add source root…") { menuOpen = false; onAddSourceRoot(node) }
+                    FileActionItem(CaIcons.gear, "Module settings") { menuOpen = false; onConfigureModule(node) }
+                    FileActionItem(CaIcons.layers, "Dependencies") { menuOpen = false; onViewDependencies(node) }
+                    FileActionItem(CaIcons.plus, "Add source root") { menuOpen = false; onAddSourceRoot(node) }
                 }
                 if (canNew) FileActionItem(CaIcons.plus, "New", trailing = CaIcons.caretRight) { inNewPage = true }
                 if (canRevealHere) FileActionItem(CaIcons.share, "Reveal in file manager") { menuOpen = false; ctx.onReveal(node) }
                 if (canContext) {
-                    FileActionItem(CaIcons.docText, "Rename…") { menuOpen = false; ctx.onRename(node) }
-                    FileActionItem(CaIcons.arrowRight, "Move…") { menuOpen = false; ctx.onMove(node) }
-                    FileActionItem(CaIcons.copy, "Copy…") { menuOpen = false; ctx.onCopy(node) }
+                    FileActionItem(CaIcons.docText, "Rename") { menuOpen = false; ctx.onRename(node) }
+                    FileActionItem(CaIcons.arrowRight, "Move") { menuOpen = false; ctx.onMove(node) }
+                    FileActionItem(CaIcons.copy, "Copy") { menuOpen = false; ctx.onCopy(node) }
                     FileActionItem(CaIcons.close, "Delete", danger = true) { menuOpen = false; ctx.onDelete(node) }
                 }
             }
@@ -438,13 +444,13 @@ private fun NewActionItems(
     close: () -> Unit,
 ) {
     if (isSourceContext && targetDir != null) {
-        FileActionItem(CaIcons.code, "Java Class…") { close(); onNewSource(targetDir, NewSourceLang.Java) }
-        FileActionItem(CaIcons.code, "Kotlin File…") { close(); onNewSource(targetDir, NewSourceLang.Kotlin) }
+        FileActionItem(CaIcons.code, "Java Class") { close(); onNewSource(targetDir, NewSourceLang.Java) }
+        FileActionItem(CaIcons.code, "Kotlin File") { close(); onNewSource(targetDir, NewSourceLang.Kotlin) }
     }
-    if (canNewResource) FileActionItem(CaIcons.image, "Resource File…") { close(); onNewResource(node) }
+    if (canNewResource) FileActionItem(CaIcons.image, "Resource File") { close(); onNewResource(node) }
     if (targetDir != null) {
-        FileActionItem(CaIcons.plus, "File…") { close(); onNewFile(targetDir) }
-        FileActionItem(CaIcons.folder, "Directory…") { close(); onNewFolder(targetDir) }
+        FileActionItem(CaIcons.plus, "File") { close(); onNewFile(targetDir) }
+        FileActionItem(CaIcons.folder, "Directory") { close(); onNewFolder(targetDir) }
     }
 }
 
@@ -463,7 +469,7 @@ private fun NewHoverButton(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButtonCa(CaIcons.plus, "New…", onClick = { open = true }, boxSize = 22, iconSize = 14)
+        IconButtonCa(CaIcons.plus, "New", onClick = { open = true }, boxSize = 22, iconSize = 14)
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             NewActionItems(node, targetDir, isSourceContext, canNewResource, onNewFile, onNewFolder, onNewResource, onNewSource) { open = false }
         }

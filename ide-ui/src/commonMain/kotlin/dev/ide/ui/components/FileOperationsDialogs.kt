@@ -38,7 +38,6 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.resolveTint
-import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 
 /** The on-disk path a node's file operations act on: a file's own path, a package's deepest directory, or an
@@ -56,40 +55,16 @@ enum class FileOpKind { Rename, Move, Copy, Delete }
 /** A pending file operation: the [node] it targets and the [kind] of operation. */
 data class FileOpRequest(val node: TreeNode, val kind: FileOpKind)
 
-/** A destination directory offered by the move/copy picker (a human label + the absolute path). */
-data class DirChoice(val label: String, val path: String)
-
-/**
- * Candidate destination directories for move/copy: every source root and package directory in the tree
- * (each compacted-package level is offered separately) plus Android `res/` folders. Sorted by label.
- */
-fun collectDirChoices(root: TreeNode): List<DirChoice> {
-    val out = LinkedHashMap<String, DirChoice>() // de-dupe by path; keep first label
-    fun add(path: String, label: String) { if (path !in out) out[path] = DirChoice(label, path) }
-    fun walk(node: TreeNode) {
-        when (node.kind) {
-            NodeKind.SourceRoot -> node.sourceRootPath?.let { add(it, node.name) }
-            NodeKind.Package -> for (seg in node.packageSegments) add(seg.dirPath, seg.packageName)
-            NodeKind.Folder -> node.resDirPath?.let { add(it, node.name) }
-            else -> {}
-        }
-        node.children.forEach(::walk)
-    }
-    walk(root)
-    return out.values.sortedBy { it.label.lowercase() }
-}
-
 /**
  * Host the rename / move / copy / delete dialogs for [request]; [onDismiss] clears it.
  *
- * Move/Copy uses a file-manager-style **directory browser** on mobile (tap folders to descend, breadcrumb
- * pills to jump back, "Move/Copy here" lands in the current folder) driven by [listDir] from [rootPath];
- * on desktop it stays the flat destination list collected from [tree].
+ * Move/Copy uses a file-manager-style **directory browser** on every platform: tap folders to descend,
+ * breadcrumb pills to jump back, and "Move/Copy here" lands in the current folder — driven by [listDir]
+ * from [rootPath].
  */
 @Composable
 fun FileOperationDialog(
     request: FileOpRequest?,
-    tree: TreeNode,
     rootPath: String,
     listDir: (String) -> List<UiDirEntry>,
     onRename: (TreeNode, String) -> Unit,
@@ -111,8 +86,7 @@ fun FileOperationDialog(
                 val onPick: (String) -> Unit = { dest ->
                     if (r.kind == FileOpKind.Move) onMove(r.node, dest) else onCopy(r.node, dest)
                 }
-                if (isMobilePlatform) DirectoryBrowserPanel(r.node, r.kind, rootPath, listDir, onDismiss, onPick)
-                else DestinationPanel(r.node, r.kind, collectDirChoices(tree), onDismiss, onPick)
+                DirectoryBrowserPanel(r.node, r.kind, rootPath, listDir, onDismiss, onPick)
             }
         }
     }
@@ -153,37 +127,6 @@ private fun DeletePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: () -> 
     }
 }
 
-@Composable
-private fun DestinationPanel(node: TreeNode, kind: FileOpKind, choices: List<DirChoice>, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var selected by remember(node) { mutableStateOf<String?>(null) }
-    val verb = if (kind == FileOpKind.Move) "Move" else "Copy"
-    DialogCard("$verb '${node.name}' to…") {
-        if (choices.isEmpty()) {
-            Text("No destination folders found.", color = Ca.colors.textSecondary, style = Ca.type.footnote)
-        } else {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 280.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                choices.forEach { c ->
-                    val isSel = c.path == selected
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .background(if (isSel) Ca.colors.accentSoft else Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                            .clickable { selected = c.path }
-                            .padding(horizontal = 12.dp, vertical = 9.dp),
-                    ) {
-                        Text(c.label, color = if (isSel) Ca.colors.accent else Ca.colors.textPrimary, style = Ca.type.footnote,
-                            fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal)
-                    }
-                }
-            }
-        }
-        Spacer12()
-        ButtonRow(onDismiss, verb, selected != null) { selected?.let { onConfirm(it); onDismiss() } }
-    }
-}
-
 /** A path's parent directory (works for either separator); the whole string if it has no separator. */
 private fun parentDir(path: String): String {
     val cut = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
@@ -217,7 +160,7 @@ private fun crumbsFor(root: String, cur: String): List<Crumb> {
 }
 
 /**
- * The mobile move/copy picker: a file-manager-style directory browser. Tapping a folder descends into it;
+ * The move/copy picker: a file-manager-style directory browser. Tapping a folder descends into it;
  * the breadcrumb pills jump back to any ancestor; the confirm button lands the moved/copied item in the
  * currently-shown folder. Opens at the item's current parent for context.
  */
