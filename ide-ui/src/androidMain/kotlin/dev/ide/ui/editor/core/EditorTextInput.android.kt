@@ -12,6 +12,7 @@ import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.requireView
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
@@ -78,7 +79,12 @@ private class EditorTextInputNode(
     private fun registerHandle() {
         ime.onShow = {
             wantsKeyboard = true
-            if (focused && job == null) startSession()
+            // Dismissing the keyboard (back press) hides the IME but leaves the input session alive
+            // (it's bound to focus, not visibility), so a tap that finds job != null must re-raise the
+            // keyboard directly — otherwise the session stays open and the keyboard never comes back.
+            if (focused) {
+                if (job == null) startSession() else showSoftKeyboard()
+            }
         }
         ime.onHide = {
             wantsKeyboard = false
@@ -137,6 +143,15 @@ private class EditorTextInputNode(
         job?.cancel()
         job = null
         session.imeFinishComposing()
+    }
+
+    // Re-raise the soft keyboard on the host view's existing input connection, without tearing down and
+    // restarting the session (which would reset composing state). Used when the session is still open but
+    // the user had dismissed the keyboard.
+    private fun showSoftKeyboard() {
+        val view = requireView()
+        val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(view, 0)
     }
 }
 
