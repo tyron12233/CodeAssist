@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCatchClause
+import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
@@ -589,6 +590,17 @@ class KotlinResolver(
         else -> null // calls, literals, `this`, `super` → instances
     }
 
+    /** Whether [name] is a type parameter declared by an enclosing function / class / property at [offset]
+     *  (`fun <T>`, `class C<T>`, `val <T> List<T>.x`) — so a generic type reference isn't flagged unresolved. */
+    fun isTypeParameterInScope(name: String, offset: Int): Boolean {
+        var node: PsiElement? = elementAt(offset)
+        while (node != null) {
+            if (node is org.jetbrains.kotlin.psi.KtTypeParameterListOwner && node.typeParameters.any { it.name == name }) return true
+            node = node.parent
+        }
+        return false
+    }
+
     private fun enclosingClassOrObject(offset: Int): KtClassOrObject? {
         var node: PsiElement? = elementAt(offset)
         while (node != null) { if (node is KtClassOrObject) return node; node = node.parent }
@@ -599,8 +611,12 @@ class KotlinResolver(
      *  import, or a known type). Used by the unresolved-reference diagnostic. */
     fun bareNameResolves(name: String, offset: Int): Boolean {
         if (localsAt(offset).any { it.name == name }) return true
-        // Top-level declarations in THIS live file (the module index is disk-based and may lag the buffer).
-        if (ktFile.declarations.any { (it is KtNamedFunction && it.name == name) || (it is KtProperty && it.name == name) }) return true
+        // A reified type parameter used in expression position (`T::class`) is in scope, not unresolved.
+        if (isTypeParameterInScope(name, offset)) return true
+        // Top-level declarations in THIS live file (the module index is disk-based and may lag the buffer):
+        // functions/properties AND classes/objects/typealiases (a same-file `object Foo` / `class Foo` is a
+        // resolvable bare reference — `Foo()` / `Foo.bar` — before the index has caught up to the buffer).
+        if (ktFile.declarations.any { it is org.jetbrains.kotlin.psi.KtNamedDeclaration && it.name == name }) return true
         // Members of an ENCLOSING class of the live buffer — the symbol service indexes disk, not the file
         // being edited, so a same-file member (`field`, `helper()`) won't appear in membersOf() below.
         if (enclosingClassMembersContain(offset, name)) return true
@@ -675,6 +691,11 @@ class KotlinResolver(
     fun scopeSymbolsAt(offset: Int, namePrefix: String = ""): List<KotlinSymbol> {
         val out = ArrayList<KotlinSymbol>()
         out += localsAt(offset)
+        // Same-file declarations from the LIVE buffer — a just-typed `fun helper()` / `val x` / `class Foo`.
+        // The symbol service indexes DISK and is not refreshed mid-session, so these would otherwise not
+        // complete until the file is saved AND the analyzer rebuilt. Mirrors the live-buffer resolution in
+        // [bareNameResolves] so a reference that ISN'T flagged unresolved also COMPLETES.
+        out += sameFileScopeSymbols(offset)
         // Members of every implicit `this` (apply/with/run block, extension fn, enclosing class).
         implicitReceiversAt(offset).forEach { recv ->
             out += service.membersOf(recv.qualifiedName, recv.typeArguments, null).filterIsInstance<KotlinSymbol>()
@@ -683,6 +704,89 @@ class KotlinResolver(
         // [topLevelCallables] filters by prefix itself rather than materializing all of it (empty = all).
         val scoped = if (namePrefix.isEmpty()) out else out.filter { it.name.startsWith(namePrefix, ignoreCase = true) }
         return scoped + service.topLevelCallables(namePrefix)
+    }
+
+    /**
+     * Symbols for declarations visible by simple name in the LIVE buffer that the disk-based symbol model may
+     * not carry yet: this file's top-level functions/properties/types plus the members of every enclosing
+     * class. Extensions are excluded (not callable by bare name). Signatures match [KotlinSymbolService]'s
+     * `toSymbol` so the completion de-dup folds a live symbol together with its already-indexed disk twin.
+     */
+    private fun sameFileScopeSymbols(offset: Int): List<KotlinSymbol> {
+        val out = ArrayList<KotlinSymbol>()
+        for (d in ktFile.declarations) when (d) {
+            is KtNamedFunction -> if (d.receiverTypeReference == null) out += sameFileFunction(d, null)
+            is KtProperty -> if (d.receiverTypeReference == null) out += sameFileProperty(d, null)
+            is KtClassOrObject -> out += sameFileType(d)
+            else -> {}
+        }
+        var node: PsiElement? = elementAt(offset)
+        while (node != null) {
+            if (node is KtClassOrObject) {
+                val ownerFqn = node.fqName?.asString()
+                for (d in node.declarations) when (d) {
+                    is KtNamedFunction -> if (d.receiverTypeReference == null) out += sameFileFunction(d, ownerFqn)
+                    is KtProperty -> if (d.receiverTypeReference == null) out += sameFileProperty(d, ownerFqn)
+                    else -> {}
+                }
+                node.primaryConstructorParameters.filter { it.hasValOrVar() }.forEach { p ->
+                    out += KotlinSymbol(
+                        p.name ?: "_", SymbolKind.FIELD,
+                        type = service.typeFromText(p.typeReference?.text, fileContext), origin = SOURCE,
+                        owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
+                        declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+                    )
+                }
+            }
+            node = node.parent
+        }
+        return out
+    }
+
+    private fun sameFileFunction(fn: KtNamedFunction, ownerFqn: String?): KotlinSymbol {
+        val params = fn.valueParameters.map { (it.name ?: "_") to it.typeReference?.text }
+        val retText = fn.typeReference?.text
+        val sig = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" } ?: "")
+        return KotlinSymbol(
+            name = fn.name ?: "_", kind = SymbolKind.METHOD,
+            type = retText?.let { service.typeFromText(it, fileContext) },
+            owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
+            origin = SOURCE, signature = sig,
+            paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
+            paramNames = params.map { (n, _) -> n },
+            isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" },
+            // Top-level callables carry their package for import-visibility; members don't (mirror toSymbol).
+            packageName = if (ownerFqn == null) fileContext.packageName.ifEmpty { null } else null,
+            declarationNode = runCatching { parsed.adapt(fn) }.getOrNull(),
+        )
+    }
+
+    private fun sameFileProperty(p: KtProperty, ownerFqn: String?): KotlinSymbol {
+        val retText = p.typeReference?.text
+        return KotlinSymbol(
+            name = p.name ?: "_", kind = SymbolKind.FIELD,
+            type = retText?.let { service.typeFromText(it, fileContext) } ?: inferType(p.initializer),
+            owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
+            origin = SOURCE, signature = retText?.let { ": $it" } ?: "",
+            packageName = if (ownerFqn == null) fileContext.packageName.ifEmpty { null } else null,
+            declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+        )
+    }
+
+    private fun sameFileType(c: KtClassOrObject): KotlinSymbol {
+        val cls = c as? KtClass
+        val kind = when {
+            cls?.isInterface() == true -> SymbolKind.INTERFACE
+            cls?.isEnum() == true -> SymbolKind.ENUM
+            cls?.isAnnotation() == true -> SymbolKind.ANNOTATION_TYPE
+            else -> SymbolKind.CLASS
+        }
+        return KotlinSymbol(
+            name = c.name ?: "_", kind = kind,
+            type = c.fqName?.asString()?.let { service.typeByFqn(it) },
+            origin = SOURCE,
+            declarationNode = runCatching { parsed.adapt(c) }.getOrNull(),
+        )
     }
 
     // --- named arguments / expected type / overrides ---

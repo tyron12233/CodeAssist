@@ -53,6 +53,64 @@ class KotlinCompletionE2ETest {
     }
 
     @Test
+    fun sameFileDeclarationsCompleteFromLiveBuffer() {
+        // A top-level fun/val/class typed in the buffer is NOT on disk (the symbol model indexes disk and is
+        // not refreshed mid-session) — it must still complete as a bare reference from the live buffer.
+        val fn = labels(srcDir, "Live.kt", "fun freshlyTyped() {}\nfun f() { freshl| }")
+        assertTrue("freshlyTyped" in fn, "a just-typed same-file top-level fun should complete; got $fn")
+        val prop = labels(srcDir, "Live.kt", "val freshProp = 1\nfun f() { freshP| }")
+        assertTrue("freshProp" in prop, "a just-typed same-file top-level val should complete; got $prop")
+        val cls = labels(srcDir, "Live.kt", "class FreshClass\nfun f() { FreshCl| }")
+        assertTrue("FreshClass" in cls, "a just-typed same-file class should complete; got $cls")
+    }
+
+    @Test
+    fun sameFileClassMembersCompleteFromLiveBuffer() {
+        // An enclosing-class member typed in the buffer must complete as a bare reference inside the class.
+        val m = labels(srcDir, "Live.kt", "class C {\n  fun helperFn() {}\n  fun f() { helperF| }\n}")
+        assertTrue("helperFn" in m, "a just-typed enclosing-class member should complete; got $m")
+        val p = labels(srcDir, "Live.kt", "class C {\n  val memberProp = 1\n  fun f() { memberP| }\n}")
+        assertTrue("memberProp" in p, "a just-typed enclosing-class property should complete; got $p")
+    }
+
+    @Test
+    fun crossFileDeclarationsCompleteFromLiveOverlay() {
+        // A function/val typed in ANOTHER open file (A.kt) but not yet saved to disk must complete in B.kt,
+        // via the live overlay the host feeds the symbol model. On disk A.kt has no such declarations.
+        val dir = tempProject(mapOf("A.kt" to "package demo\n", "B.kt" to "package demo\nfun use() {}\n"))
+        val a = KotlinSourceAnalyzer(fakeContext(dir))
+        val aPath = dir.resolve("A.kt").toString()
+        a.liveOverlayProvider = { mapOf(aPath to "package demo\nfun crossFileFn() {}\nval crossFileVal = 1\n") }
+        val items = runBlocking { a.completeAtCaret(dir, "B.kt", "package demo\nfun use() { crossFil| }") }
+            .items.mapNotNull { it.symbol?.name }
+        assertTrue("crossFileFn" in items, "a fun typed in another open file should complete; got $items")
+        assertTrue("crossFileVal" in items, "a val typed in another open file should complete; got $items")
+        // Editing that other file again (the overlay text changes) is reflected on the next completion — the
+        // model diffs the buffers and reparses only the changed file.
+        a.liveOverlayProvider = { mapOf(aPath to "package demo\nfun crossFileFn() {}\nfun anotherFn() {}\n") }
+        val items2 = runBlocking { a.completeAtCaret(dir, "B.kt", "package demo\nfun use() { anoth| }") }
+            .items.mapNotNull { it.symbol?.name }
+        assertTrue("anotherFn" in items2, "an edit to the other open file is reflected; got $items2")
+    }
+
+    @Test
+    fun renamingAFunctionRemovesTheOldNameFromCompletion() {
+        // Renaming a function must invalidate the old name in completion (the live overlay re-syncs the model).
+        val dir = tempProject(mapOf("A.kt" to "package demo\nfun oldName() {}\n", "B.kt" to "package demo\nfun use() {}\n"))
+        val a = KotlinSourceAnalyzer(fakeContext(dir))
+        val aPath = dir.resolve("A.kt").toString()
+        a.liveOverlayProvider = { mapOf(aPath to "package demo\nfun oldName() {}\n") }
+        val before = runBlocking { a.completeAtCaret(dir, "B.kt", "package demo\nfun use() { oldNam| }") }.items.mapNotNull { it.symbol?.name }
+        assertTrue("oldName" in before, "before rename oldName is offered; got $before")
+        // Rename it in the (open) A.kt buffer → the old name must no longer complete, the new one must.
+        a.liveOverlayProvider = { mapOf(aPath to "package demo\nfun newName() {}\n") }
+        val afterOld = runBlocking { a.completeAtCaret(dir, "B.kt", "package demo\nfun use() { oldNam| }") }.items.mapNotNull { it.symbol?.name }
+        assertTrue("oldName" !in afterOld, "after rename the old name must be invalidated; got $afterOld")
+        val afterNew = runBlocking { a.completeAtCaret(dir, "B.kt", "package demo\nfun use() { newNam| }") }.items.mapNotNull { it.symbol?.name }
+        assertTrue("newName" in afterNew, "the renamed function completes under its new name; got $afterNew")
+    }
+
+    @Test
     fun scopeCompletionSeesLocalsAndTopLevel() {
         val locals = labels(srcDir, "Use.kt", "package demo\nfun use() { val localX = 1\n  localX; loc| }")
         assertTrue("localX" in locals, "local 'localX' in scope; got ${locals.take(20)}")

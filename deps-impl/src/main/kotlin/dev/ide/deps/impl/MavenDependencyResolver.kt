@@ -71,7 +71,6 @@ class MavenDependencyResolver(
         val packagingByGa = HashMap<GA, String>()
         val walked = HashSet<Coordinate>()
         val unresolved = LinkedHashSet<Coordinate>()
-        val directGAs = LinkedHashSet<GA>()
 
         // Imported BOMs (Gradle `platform(...)`): merge their dependencyManagement into one version source
         // for versionless coordinates. Earlier platforms win on overlap (putIfAbsent); a BOM that can't be
@@ -91,7 +90,6 @@ class MavenDependencyResolver(
                 c0.copy(version = v)
             } else c0
             directVersions[c.ga] = c.version
-            directGAs += c.ga
             queue.add(Req(c, emptySet(), direct = true))
         }
 
@@ -185,12 +183,17 @@ class MavenDependencyResolver(
                         val ext = if (kind == ArtifactKind.AAR) "aar" else "jar"
 
                         val artifact = fetchArtifact(coord, ext, repos)
-                        if (artifact == null) return@withPermit DownloadOutcome(coord, null, ga in directGAs)
+                        // A failed fetch of ANY chosen artifact — direct OR transitive — is recorded as
+                        // unresolved. Previously only direct failures were surfaced, so a flaky-network drop of
+                        // a transitive (e.g. `androidx.activity:activity`, ComponentActivity's home, pulled by
+                        // `activity-compose`) silently vanished from the closure and got persisted as if the
+                        // library were complete — invisible until completion couldn't resolve the type.
+                        if (artifact == null) return@withPermit DownloadOutcome(coord, null, failed = true)
                         val classesRoot = if (kind == ArtifactKind.AAR) fileFor(extractClassesJar(coord, artifact)) else fileFor(artifact)
                         val sources = fetchArtifact(coord, "jar", repos, classifier = "sources")?.let { fileFor(it) }
                         val dependsOn = edges[ga].orEmpty().mapNotNull { c -> chosen[c]?.let { Coordinate(c.group, c.name, it) } }
                         progress.report(downloaded.incrementAndGet().toDouble() / total, "Downloaded ${coord.name}")
-                        DownloadOutcome(coord, ResolvedArtifact(coord, kind, classesRoot, sources, dependsOn), false)
+                        DownloadOutcome(coord, ResolvedArtifact(coord, kind, classesRoot, sources, dependsOn), failed = false)
                     }
                 }
             }.awaitAll()
@@ -198,7 +201,7 @@ class MavenDependencyResolver(
         val resolved = ArrayList<ResolvedArtifact>()
         for (o in outcomes) {
             if (o == null) continue
-            if (o.artifact != null) resolved += o.artifact else if (o.directUnresolved) unresolved += o.coord
+            if (o.artifact != null) resolved += o.artifact else if (o.failed) unresolved += o.coord
         }
 
         val conflicts = seenVersions
@@ -383,8 +386,9 @@ class MavenDependencyResolver(
 
     private data class Req(val coord: Coordinate, val exclusions: Set<GA>, val direct: Boolean)
 
-    /** Result of one parallel download slot: a resolved artifact, or a direct coord that failed to fetch. */
-    private data class DownloadOutcome(val coord: Coordinate, val artifact: ResolvedArtifact?, val directUnresolved: Boolean)
+    /** Result of one parallel download slot: a resolved artifact, or a coord whose artifact [failed] to fetch
+     *  (any such failure — direct or transitive — is surfaced as unresolved, never silently dropped). */
+    private data class DownloadOutcome(val coord: Coordinate, val artifact: ResolvedArtifact?, val failed: Boolean)
 
     private companion object {
         const val MAX_NODES = 4000

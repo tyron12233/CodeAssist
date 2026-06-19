@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin.symbols
 
 import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexId
+import dev.ide.index.IndexOrigin
 import dev.ide.index.IndexService
 import dev.ide.index.MemberValue
 import dev.ide.lang.dom.DomNode
@@ -75,22 +76,82 @@ class KotlinSymbolService(
     @Volatile private var overlay: Map<String, String> = emptyMap()
     @Volatile private var cachedModel: ModuleSourceModel? = null
 
+    // Per-file parse cache so a model rebuild reparses ONLY the files whose effective text changed (the one
+    // being edited) and reuses every other file's prior parse. Parsing is the dominant cost, so this keeps a
+    // cross-file overlay refresh at O(one reparse) instead of O(whole module). Keyed by VirtualFile path; the
+    // value is the content hash it was parsed from + the resulting SourceFile (null = parse failed/unreadable).
+    private class CachedFile(val hash: Int, val file: SourceFile?)
+    private val fileCache = ConcurrentHashMap<String, CachedFile>()
+
     // Per-receiver-FQN memo of the (recursively-walked) Kotlin supertype chain — the expensive part of
     // `extensionsFor`/`supertypesOf`, recomputed on every member-access keystroke otherwise. A pure-classpath
     // type's chain is stable; a SOURCE type's depends on the model, so the whole memo is dropped on any edit.
     @Volatile private var supertypeMemo = ConcurrentHashMap<String, List<String>>()
 
-    /** Replace the live text of edited files; invalidates the source model so the next query reparses. */
+    /**
+     * Replace the live editor buffers (VirtualFile path → text) the source model overlays on top of disk, so
+     * cross-file completion/resolution/diagnostics see UNSAVED edits in other open files. Diffs against the
+     * current overlay and invalidates only the files whose effective text actually changed (a no-op when none
+     * did), so the steady-state per-keystroke cost is one file's reparse, not the whole module's.
+     */
     fun setOverlay(map: Map<String, String>) {
-        overlay = map
-        cachedModel = null
-        supertypeMemo = ConcurrentHashMap() // source supertypes may have changed; classpath entries just re-warm
+        synchronized(this) {
+            val old = overlay
+            if (map == old) return // identical content → the model already reflects it
+            // Files whose effective text changed: present on only one side, or on both with differing text. A
+            // path that LEFT the overlay reverts to its disk content, so drop its cache too (model() re-reads).
+            val changed = HashSet<String>()
+            for ((p, t) in map) if (old[p] != t) changed += p
+            for (p in old.keys) if (p !in map) changed += p
+            overlay = map
+            if (changed.isEmpty()) return
+            changed.forEach { fileCache.remove(it) }
+            cachedModel = null
+            supertypeMemo = ConcurrentHashMap() // source supertypes may have changed; classpath entries re-warm
+        }
     }
 
     private fun model(): ModuleSourceModel =
         cachedModel ?: synchronized(this) {
-            cachedModel ?: SourceIndexBuilder.build(sourceRoots, overlay).also { cachedModel = it }
+            cachedModel ?: buildModel().also { cachedModel = it }
         }
+
+    /** Aggregate the per-file [SourceFile]s into the module model, reusing unchanged files' cached parses and
+     *  reparsing only those whose effective (overlay-or-disk) text changed since the last build. */
+    private fun buildModel(): ModuleSourceModel {
+        val ov = overlay
+        val files = ArrayList<SourceFile>()
+        val seen = HashSet<String>()
+        for (root in sourceRoots) walkKt(root) { vf ->
+            if (seen.add(vf.path)) sourceFileFor(vf, ov)?.let(files::add)
+        }
+        return ModuleSourceModel(files)
+    }
+
+    private fun sourceFileFor(vf: VirtualFile, ov: Map<String, String>): SourceFile? {
+        val path = vf.path
+        val overlayText = ov[path]
+        val cached = fileCache[path]
+        if (overlayText != null) {
+            val h = overlayText.hashCode()
+            cached?.let { if (it.hash == h) return it.file }
+            val sf = SourceIndexBuilder.extract(vf, overlayText)
+            fileCache[path] = CachedFile(h, sf)
+            return sf
+        }
+        // No overlay → disk content. A prior parse is reused without touching disk: disk is stable during a
+        // session, and a save routes the file through the overlay (which invalidates this entry via setOverlay).
+        cached?.let { return it.file }
+        val text = runCatching { vf.readText().toString() }.getOrNull() ?: return null
+        val sf = SourceIndexBuilder.extract(vf, text)
+        fileCache[path] = CachedFile(text.hashCode(), sf)
+        return sf
+    }
+
+    private fun walkKt(file: VirtualFile, onFile: (VirtualFile) -> Unit) {
+        if (file.isDirectory) file.children().forEach { walkKt(it, onFile) }
+        else if (file.name.endsWith(".kt")) onFile(file)
+    }
 
     // --- synthetic ("light") classes (Android R/BuildConfig, ViewBinding, …) ---
 
@@ -300,7 +361,13 @@ class KotlinSymbolService(
         return out.map { it.trim() }
     }
 
-    /** Simple/qualified type name -> FQN (resolved via imports, same package, defaults, classpath). */
+    /**
+     * Simple/qualified type name -> FQN, resolved via imports / same package / defaults / classpath. STRICT: an
+     * unimported classpath type does NOT resolve (its bare name is returned verbatim) — matching Kotlin/IntelliJ
+     * (a type must be imported), so the unresolved-TYPE diagnostic flags the missing import and completion on a
+     * value of an unresolved type yields nothing. The bare name returned lets callers detect "unresolved" via
+     * [isKnownType] (false for a simple name).
+     */
     fun resolveTypeName(name: String, ctx: FileContext?): String? {
         val simple = name.trim().removeSuffix("?").substringBefore('<').trim()
         if (simple.isEmpty()) return null
@@ -318,18 +385,35 @@ class KotlinSymbolService(
             return simple // already a full FQN (or unresolvable) → verbatim
         }
 
+        // 1. An explicit (non-star) import.
         ctx?.imports?.firstOrNull { !it.isStar && it.simpleName == simple }?.let { return it.fqn }
-        ctx?.let { c -> "${c.packageName}.$simple".takeIf { it in model().classByFqn }?.let { return it } }
+        // 2. The file's own package (source, then classpath) — a same-package type needs no import.
+        ctx?.packageName?.takeIf { it.isNotEmpty() }?.let { pkg ->
+            "$pkg.$simple".let { cand -> if (cand in model().classByFqn || reader.classBytes(cand) != null) return cand }
+        }
+        // 3. Any project SOURCE class by simple name: the editor stays lenient about a same-module type the
+        //    user hasn't imported yet (its members still resolve). Kotlin sources come from the model; Java
+        //    sources from the index (SOURCE origin only — a LIBRARY type must NOT resolve bare, so an unimported
+        //    classpath type like `ComponentActivity` stays unresolved and is flagged by the unresolved-TYPE check).
         model().classByFqn.keys.firstOrNull { it.substringAfterLast('.') == simple }?.let { return it }
-        // A top-level synthetic class by simple name (e.g. `R` → `com.example.R`); nested types (`R.layout`)
-        // are reached through their outer, never resolved bare.
+        index?.exact<ClassNameValue>(CLASS_NAMES, simple)?.firstOrNull { it.origin == IndexOrigin.SOURCE }?.let { return it.fqn }
+        // 4. A top-level synthetic class by simple name (e.g. `R` → `com.example.R`); nested types (`R.layout`)
+        //    are reached through their outer, never resolved bare.
         synthetic().topLevelFqns.firstOrNull { it.substringAfterLast('.') == simple }?.let { return it }
+        // 5. A Kotlin default simple type (String/Int/List/…).
         Builtins.DEFAULT_SIMPLE_TYPES[simple]?.let { return it }
-        ctx?.imports?.filter { it.isStar }?.forEach { star ->
-            val cand = "${star.packageName}.$simple"
+        // 6. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
+        //    a simple name is visible if it lives in one of these packages.
+        val starPackages = (ctx?.imports?.filter { it.isStar }?.map { it.packageName } ?: emptyList()) +
+            DefaultImports.STAR_PACKAGES
+        for (pkg in starPackages) {
+            val cand = "$pkg.$simple"
             if (reader.classBytes(cand) != null) return cand
         }
-        index?.exact<ClassNameValue>(CLASS_NAMES, simple)?.firstOrNull()?.let { return it.fqn }
+        // NOT brought into scope by any import. Deliberately NO blind classpath lookup by simple name — that
+        // fallback masked missing-import errors (e.g. `ComponentActivity` silently resolving to
+        // `androidx.activity.ComponentActivity`, then its members/extensions completing as if imported). The
+        // name is returned verbatim so callers can detect "unresolved" via `isKnownType` (false for a bare name).
         return simple
     }
 
@@ -721,9 +805,9 @@ class KotlinSymbolService(
             // Public types directly in the package.
             idx.exact<ClassNameValue>(PACKAGE_TYPES, packageFqn).forEach { v ->
                 val simple = v.fqn.substringAfterLast('.')
-                if (simple.startsWith(prefix, ignoreCase = true)) {
-                    out.getOrPut(v.fqn) { KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY) }
-                }
+                if (!simple.startsWith(prefix, ignoreCase = true)) return@forEach
+                if (v.origin != IndexOrigin.SOURCE && isKotlinFacade(v.fqn, simple)) return@forEach
+                out.getOrPut(v.fqn) { KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY) }
             }
         }
         // Same-project source classes declared in this package (the index lags the live buffer).
@@ -731,6 +815,21 @@ class KotlinSymbolService(
             .filter { it.fqn.substringBeforeLast('.', "") == packageFqn && it.simpleName.startsWith(prefix, ignoreCase = true) }
             .forEach { out.getOrPut(it.fqn) { KotlinSymbol(it.simpleName, SymbolKind.CLASS, typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) } }
         return out.values.take(limit)
+    }
+
+    /**
+     * Whether a BINARY classpath class [fqn] is a Kotlin file/multi-file **facade** (`FooKt`, `StringsKt`,
+     * `StringsKt__StringsJVMKt`) — the synthetic class top-level functions/properties compile into. It is not a
+     * referenceable type, so it must never surface as a class-completion candidate. The bytecode-name-only
+     * `java.classNames` index can't tell (it reads only the public flag), but `kotlin.typeShape` holds every
+     * real classpath type and excludes facades by construction — so a `…Kt`-named binary class with no shape
+     * entry is a facade. A persisted index lookup (no live decode), gated by the naming convention so only the
+     * handful of suspects pay it. (Caller restricts this to BINARY hits: a project SOURCE class also has no
+     * shape, but isn't a facade.)
+     */
+    private fun isKotlinFacade(fqn: String, simpleName: String): Boolean {
+        if (!simpleName.endsWith("Kt") && "__" !in simpleName) return false
+        return index?.exact<TypeShape>(TYPE_SHAPE, fqn)?.firstOrNull() == null
     }
 
     /** Type-name candidates by prefix: source classes + defaults + the classpath `classNames` index. */
@@ -746,8 +845,11 @@ class KotlinSymbolService(
         Builtins.DEFAULT_SIMPLE_TYPES.filter { it.key.startsWith(prefix, ignoreCase = true) }
             .forEach { (s, fqn) -> out.getOrPut(fqn) { KotlinSymbol(s, SymbolKind.CLASS, typeByFqn(fqn), origin = BINARY) } }
         index?.prefix<ClassNameValue>(CLASS_NAMES, prefix, limit)?.forEach { hit ->
-            out.getOrPut(hit.value.fqn) {
-                KotlinSymbol(hit.value.fqn.substringAfterLast('.'), classNameKind(hit.value.kind), typeByFqn(hit.value.fqn), origin = BINARY)
+            val v = hit.value
+            val simple = v.fqn.substringAfterLast('.')
+            if (v.origin != IndexOrigin.SOURCE && isKotlinFacade(v.fqn, simple)) return@forEach
+            out.getOrPut(v.fqn) {
+                KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY)
             }
         }
         return out.values.take(limit)
@@ -792,8 +894,16 @@ class KotlinSymbolService(
         if (fqn in Builtins.DEFAULT_SIMPLE_TYPES.values) return true
         if (builtins.isBuiltin(fqn)) return true
         val java = Builtins.javaTypeFor(fqn) ?: fqn
-        return reader.classBytes(fqn) != null || reader.classBytes(java) != null
+        if (reader.classBytes(fqn) != null || reader.classBytes(java) != null) return true
+        // A project Java SOURCE class (no `.class` on disk while editing) — known via the index, SOURCE origin.
+        return index?.exact<ClassNameValue>(CLASS_NAMES, fqn.substringAfterLast('.'))
+            ?.any { it.fqn == fqn && it.origin == IndexOrigin.SOURCE } == true
     }
+
+    /** Whether [simpleName] is a `typealias` declared anywhere in the project source — the unresolved-TYPE
+     *  diagnostic backs off on these (the source model resolves classes, not aliases, so an alias use would
+     *  otherwise be a false positive). Same-file aliases are also checked against the live buffer at the call site. */
+    fun isProjectTypeAlias(simpleName: String): Boolean = simpleName in model().typeAliasNames
 
     // --- raw -> neutral symbol ---
 
@@ -850,6 +960,7 @@ class KotlinSymbolService(
         reader.close()
         stdlibReader.close()
         javaShapeCache.clear()
+        fileCache.clear()
     }
 
     private fun classNameKind(kind: String): SymbolKind = when (kind.uppercase()) {

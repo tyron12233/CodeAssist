@@ -5,6 +5,7 @@ import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ClasspathSnapshot
+import dev.ide.model.MavenClasspath
 import dev.ide.model.ContentRole
 import dev.ide.model.Library
 import dev.ide.model.LibraryDependency
@@ -46,7 +47,11 @@ object ModuleCompilationContext {
 
         return CompilationContextView(
             sourceRoots = sources.toList(),
-            classpath = ClasspathSnapshotView(libraries.toList()),
+            // Each declared dependency's closure is assembled independently, so the union can carry two
+            // versions of one artifact (e.g. `androidx.collection` 1.1.0 + 1.4.0). Collapse to newest-wins —
+            // the same dedup the build classpath uses — so the analyzer sees one version per artifact (no
+            // duplicate classes), matching a whole-graph resolve.
+            classpath = ClasspathSnapshotView(MavenClasspath.resolveVersionConflicts(libraries.toList())),
             bootClasspath = boot,
             languageLevel = module.languageLevel,
             outputDir = module.outputDir,

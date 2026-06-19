@@ -914,6 +914,100 @@ class IdeServices private constructor(
     @Volatile
     private var pendingDeps: List<dev.ide.model.template.TemplateDependency> = emptyList()
     private val pendingStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val reconcileStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Fingerprint marker recording the declared-dependency set last fully reconciled — so reconciliation
+     *  runs once per dep-set change, not on every open. */
+    private val reconcileMarker: java.nio.file.Path get() = store.rootPath.resolve(".platform/.deps-reconciled")
+
+    /**
+     * Heal stale/incomplete persisted dependency closures in the background, once per open. A project's
+     * `libraries.json` can hold an INCOMPLETE closure: an artifact that failed to download during the
+     * original resolve was historically dropped silently, so e.g. base `androidx.activity:activity`
+     * (`ComponentActivity`'s home) could be absent from `activity-compose`'s closure, and nothing
+     * re-resolved on open — completion then can't resolve the type. This re-resolves each declared Maven
+     * dependency (cache-first, so cheap when already healthy) and rebuilds any closure that differs from a
+     * fully-successful fresh resolve. Bounded by a fingerprint marker so the graph isn't re-walked on every
+     * open; only marks done when *every* dependency resolved completely, so an offline open retries next
+     * time instead of locking in a partial state. Never clobbers a good closure with an incomplete one.
+     */
+    fun startDependencyReconciliation() {
+        if (!reconcileStarted.compareAndSet(false, true)) return
+        val mods = modules().filter { m -> m.dependencies.any { it is LibraryDependency && parseCoordinate(it.library.name) != null } }
+        if (mods.isEmpty()) return
+        val fingerprint = mods.flatMap { m ->
+            m.dependencies.filterIsInstance<LibraryDependency>().map { "${m.id.value}|${it.library.name}" }
+        }.sorted().joinToString("\n")
+        if (runCatching { reconcileMarker.readText() }.getOrNull() == fingerprint) return
+
+        depsScope.launch {
+            var changedAny = false
+            var allComplete = true
+            for (m in mods) {
+                // finalize=false: defer the one save/invalidate/reindex to after the whole batch.
+                val asm = runCatching { assembleModuleClasspath(m, NoProgress, finalize = false) }.getOrNull()
+                if (asm == null || asm.unresolved.isNotEmpty()) allComplete = false // partial → retry next open
+                if (asm?.changed == true) changedAny = true
+            }
+            if (changedAny) { store.save(); invalidateAnalyzers(); resyncIndex() }
+            if (allComplete) runCatching {
+                java.nio.file.Files.createDirectories(reconcileMarker.parent)
+                reconcileMarker.writeText(fingerprint)
+            }
+        }
+    }
+
+    private data class ModuleAssembly(val changed: Boolean, val unresolved: List<Coordinate>, val resolvedCount: Int)
+
+    /**
+     * Resolve a module's ENTIRE declared Maven-dependency set as ONE graph (not each dependency in isolation),
+     * so conflict resolution spans the whole graph: one version per `group:name`, and a transitive that only a
+     * superseded version pulled in is pruned — exactly what `gradle`/`maven` produce. The single unified closure
+     * is partitioned back across the declared dependencies (each artifact assigned to the first declarer, in
+     * order, whose `dependsOn` chain reaches it), so the per-library model is preserved while the UNION of the
+     * libraries is precisely the whole-graph closure — no duplication, no independent-resolution drift. A
+     * library is rewritten only when its partition actually changes; a dependency whose primary didn't resolve
+     * (offline) is left intact rather than emptied. Returns the unresolved coordinates so a partial resolve is
+     * surfaced and never treated as complete.
+     */
+    private suspend fun assembleModuleClasspath(module: Module, progress: ProgressReporter, finalize: Boolean): ModuleAssembly {
+        val directs = module.dependencies.filterIsInstance<LibraryDependency>()
+            .mapNotNull { dep -> parseInputCoordinate(dep.library.name)?.let { dep.library.name to it } }
+            .distinctBy { it.first }
+        if (directs.isEmpty()) return ModuleAssembly(false, emptyList(), 0)
+
+        val result = depsResolver.resolve(directs.map { it.second }, DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, progress, platforms = declaredPlatforms(module))
+        val byGa = result.resolved.associateBy { it.coordinate.group to it.coordinate.name }
+        val partition = DependencyPartition.partition(directs, result.resolved)
+
+        var changed = false
+        for ((libName, coord) in directs) {
+            val artifacts = partition[libName].orEmpty()
+            if (artifacts.isEmpty()) continue   // primary didn't resolve (offline) → keep any existing closure
+            val freshClasses = artifacts.map { it.classesRoot.path }.toSet()
+            // The whole closure's `-sources.jar`s — direct AND transitive — so go-to-source, real parameter
+            // names, and javadoc/KDoc resolve for every type the library can reach, not just the declared
+            // coordinate. (`sourceAttachments` → JdtSourceAnalyzer's resolver + the source-doc index.) Included
+            // in the up-to-date check so an existing library whose classes already match but is missing the
+            // transitive sources (the prior behavior, or an offline first resolve) heals on reconcile.
+            val freshSources = artifacts.mapNotNull { it.sourcesRoot?.path }.toSet()
+            val existing = findLibrary(libName)
+            if (existing?.classesRoots?.map { it.path }?.toSet() == freshClasses &&
+                existing.sourcesRoots.map { it.path }.toSet() == freshSources) continue // already correct
+            val primary = byGa[coord.group to coord.name]
+            store.workspace.libraryTable.create(libName).apply {
+                kind = if (primary?.kind == ArtifactKind.AAR) LibraryKind.AAR else LibraryKind.JAR
+                artifacts.forEach { a ->
+                    addClassesRoot(a.classesRoot)
+                    a.sourcesRoot?.let { addSourcesRoot(it) }
+                }
+                commit()
+            }
+            changed = true
+        }
+        if (changed && finalize) { store.save(); invalidateAnalyzers(); resyncIndex() }
+        return ModuleAssembly(changed, result.unresolved, result.resolved.size)
+    }
 
     /**
      * Resolve + attach the template's declared dependencies in the background — started by the host **once
@@ -923,7 +1017,11 @@ class IdeServices private constructor(
      */
     fun startPendingDependencyResolution() {
         val deps = pendingDeps
-        if (deps.isEmpty() || !pendingStarted.compareAndSet(false, true)) return
+        // No template deps to resolve (the normal case for an already-created project that's just been
+        // opened) → instead reconcile the persisted closures, which heals an incomplete one baked by an
+        // earlier partial resolve (see [startDependencyReconciliation]).
+        if (deps.isEmpty()) { startDependencyReconciliation(); return }
+        if (!pendingStarted.compareAndSet(false, true)) return
         pendingDeps = emptyList()
         depsScope.launch {
             _depsState.value = DepsResolveState(resolving = true, message = "Resolving project dependencies…", fraction = 0.0, log = listOf("Resolving project dependencies…"))
@@ -1196,24 +1294,27 @@ class IdeServices private constructor(
         if (libraryName != coordinate && module.dependencies.any { it is LibraryDependency && it.library.name == libraryName })
             return UiAddResult(false, "$libraryName is already a dependency of '$moduleName'.")
 
-        store.workspace.libraryTable.create(libraryName).apply {
-            kind = if (primary.kind == ArtifactKind.AAR) LibraryKind.AAR else LibraryKind.JAR
-            result.resolved.forEach { addClassesRoot(it.classesRoot) }   // declared + its whole transitive closure
-            primary.sourcesRoot?.let { addSourcesRoot(it) }
-            commit()
-        }
+        // Record the declaration; its closure is assembled below as part of the WHOLE module graph (so the new
+        // dependency's transitives are conflict-resolved against the existing ones, not unioned independently).
         val project = projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
         project.beginModification().apply {
             module(module.id).addDependency(LibraryDependency(LibraryRef(libraryName), parseScope(scope)))
             commit()
         }
-        if (finalize) {
-            store.save()
-            invalidateAnalyzers()   // dependents' classpaths include this module's exported (api) libraries
-            resyncIndex()
-        }
+        val updated = modules().firstOrNull { it.name == moduleName }
+            ?: return UiAddResult(false, "Module '$moduleName' disappeared during resolution.")
+        val asm = assembleModuleClasspath(updated, progress, finalize)
+        // A fresh marker is now stale (the declared set changed) — let the next open re-verify cheaply.
+        runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
+
         val transitiveCount = result.resolved.size - 1
         val suffix = if (transitiveCount > 0) " (+$transitiveCount transitive)" else ""
+        // A non-empty `unresolved` means part of the graph failed to download (surfaced, not silently dropped):
+        // the classpath is incomplete — warn so the user re-resolves instead of hitting "unresolved type" later.
+        if (asm.unresolved.isNotEmpty()) {
+            val missing = asm.unresolved.joinToString(", ") { "${it.group}:${it.name}:${it.version}" }
+            return UiAddResult(true, "Added $libraryName$suffix, but ${asm.unresolved.size} artifact(s) failed to download and are missing from the classpath — re-resolve to complete it: $missing", result.resolved.size)
+        }
         return UiAddResult(true, "Added $libraryName$suffix", result.resolved.size)
     }
 
@@ -1263,6 +1364,18 @@ class IdeServices private constructor(
         store.save()
         invalidateAnalyzers()
         resyncIndex()
+        // Removing a library changes the declared set, so the whole-graph partition must be recomputed: a
+        // transitive the removed dep had claimed may still be needed by a remaining dep, and one only it pulled
+        // in must now be pruned. Re-assemble in the background (cache-first → cheap).
+        if (entry is LibraryDependency) {
+            reconcileStarted.set(false)
+            runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
+            depsScope.launch {
+                runCatching {
+                    modules().firstOrNull { it.name == moduleName }?.let { assembleModuleClasspath(it, NoProgress, finalize = true) }
+                }
+            }
+        }
         return true
     }
 
@@ -1617,6 +1730,21 @@ class IdeServices private constructor(
         return map
     }
 
+    /**
+     * The open editor buffers for Kotlin source as a path → text overlay (keys match `VirtualFile.path`, i.e.
+     * the absolute normalized path), for the Kotlin symbol model's cross-file freshness. A fresh snapshot per
+     * call (NOT the live `openDocuments` map) so the model's content-diff in `setOverlay` works — handing back
+     * the same mutable instance would always compare equal and never invalidate.
+     */
+    private fun kotlinOverlay(): Map<String, String> {
+        val out = HashMap<String, String>()
+        for ((path, content) in openDocuments) {
+            val s = path.toString()
+            if (s.endsWith(".kt") || s.endsWith(".kts")) out[s] = content
+        }
+        return out
+    }
+
     private fun fqcnOf(path: Path, text: String): String? {
         val cls = path.fileName.toString().removeSuffix(".java").takeIf { it.isNotEmpty() } ?: return null
         val pkg = PACKAGE_DECL.find(text)?.groupValues?.get(1)
@@ -1725,6 +1853,9 @@ class IdeServices private constructor(
                         val jdtFallback = (analyzerFor(module) as? JdtSourceAnalyzer)?.sourceMethodResolver
                             ?: dev.ide.lang.resolve.SourceDocProvider.NONE
                         it.sourceDocProvider = IndexBackedSourceDocs(indexService, jdtFallback)
+                        // Live editor buffers (path → text) so cross-file completion/resolution/diagnostics see
+                        // unsaved edits in OTHER open .kt files before they're saved + reindexed.
+                        it.liveOverlayProvider = ::kotlinOverlay
                     }
                     is XmlSourceAnalyzer -> {
                         // Inject the Android knowledge: layout metadata (SDK attrs.xml asset when present, else

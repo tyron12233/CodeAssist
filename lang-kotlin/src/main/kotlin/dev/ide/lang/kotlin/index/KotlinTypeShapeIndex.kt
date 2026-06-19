@@ -37,7 +37,7 @@ import java.io.DataOutput
  */
 object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.typeShape")
-    override val version = 9 // v9: class MEMBER extensions kept in the shape (scope member-ext like RowScope.weight)
+    override val version = 10 // v10: exclude file/multi-file facade + synthetic classes (not referenceable types)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN
@@ -47,8 +47,12 @@ object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
 
     override fun index(input: IndexInput): Map<String, Collection<TypeShape>> {
         val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
-        // A Kotlin @Metadata class (skip file/multifile facades — those feed the extension/top-level scan,
-        // not a type's member shape); otherwise plain Java/Android bytecode.
+        // A facade/synthetic class is not a referenceable type — its callables feed the extension/top-level
+        // scan (`kotlin.callables`), not a member shape. Skip it BEFORE the bytecode fallback: the multi-file
+        // FACADE (@Metadata k=4) isn't handled by KotlinMetadata.decode, so it would otherwise fall through and
+        // be indexed as a bogus type (its members duplicating the parts' top-level callables).
+        if (KotlinMetadata.isFacadeOrSynthetic(bytes)) return emptyMap()
+        // A Kotlin @Metadata class; otherwise plain Java/Android bytecode.
         runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull()?.let { d ->
             val fqn = d.classFqn ?: return emptyMap()
             return mapOf(fqn to listOf(TypeShape.of(d, null)))

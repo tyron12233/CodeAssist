@@ -62,6 +62,24 @@ object KotlinMetadata {
 
     fun isKotlin(classBytes: ByteArray): Boolean = extract(classBytes) != null
 
+    /**
+     * Whether [classBytes] is a Kotlin **file/multi-file facade** or **synthetic** JVM class (`FooKt`,
+     * `StringsKt`, `StringsKt__StringsJVMKt`, lambda/`$WhenMappings` classes) — a class that holds top-level
+     * callables or compiler-synthesized members, NOT a user-referenceable Kotlin type. `false` for a real
+     * `class`/`object`/`interface`/`enum`/`annotation` and for plain (non-Kotlin) bytecode. Lets class-name
+     * completion drop facades the bytecode-name-only `java.classNames` index can't distinguish.
+     */
+    fun isFacadeOrSynthetic(classBytes: ByteArray): Boolean {
+        val metadata = extract(classBytes) ?: return false
+        return when (runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull()) {
+            is KotlinClassMetadata.FileFacade,
+            is KotlinClassMetadata.MultiFileClassFacade,
+            is KotlinClassMetadata.MultiFileClassPart,
+            is KotlinClassMetadata.SyntheticClass -> true
+            else -> false // a real Class, an Unknown/newer-version blob, or unparseable → keep it
+        }
+    }
+
     fun decode(classBytes: ByteArray, ctx: KotlinTypeContext?): Decoded? {
         val metadata = extract(classBytes) ?: return null
         // `@Composable` isn't in the @Metadata blob; detect it from the bytecode (the annotation and/or the

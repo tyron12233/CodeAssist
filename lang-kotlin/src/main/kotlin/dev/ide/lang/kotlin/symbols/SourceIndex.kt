@@ -75,12 +75,16 @@ class SourceFile(
     val topLevel: List<RawCallable>,
     val extensions: List<RawCallable>,
     val classes: List<RawClass>,
+    /** Simple names of `typealias` declarations in the file — type references to them must not be flagged
+     *  unresolved (the model resolves classes, not aliases). */
+    val typeAliases: List<String> = emptyList(),
 )
 
 class ModuleSourceModel(val files: List<SourceFile>) {
     val classByFqn: Map<String, RawClass> = files.flatMap { it.classes }.associateBy { it.fqn }
     val topLevel: List<RawCallable> = files.flatMap { it.topLevel }
     val extensions: List<RawCallable> = files.flatMap { it.extensions }
+    val typeAliasNames: Set<String> = files.flatMapTo(HashSet()) { it.typeAliases }
 
     companion object {
         val EMPTY = ModuleSourceModel(emptyList())
@@ -118,16 +122,18 @@ object SourceIndexBuilder {
         val topLevel = ArrayList<RawCallable>()
         val extensions = ArrayList<RawCallable>()
         val classes = ArrayList<RawClass>()
+        val typeAliases = ArrayList<String>()
 
         for (decl in kt.declarations) {
             when (decl) {
                 is KtNamedFunction -> callable(decl, ctx, parsed).let { if (it.receiverText != null) extensions += it else topLevel += it }
                 is KtProperty -> property(decl, ctx, parsed).let { if (it.receiverText != null) extensions += it else topLevel += it }
                 is KtClassOrObject -> classes += collectClasses(decl, ctx, parsed)
+                is org.jetbrains.kotlin.psi.KtTypeAlias -> decl.name?.let { typeAliases += it }
                 else -> {}
             }
         }
-        return SourceFile(ctx, topLevel, extensions, classes)
+        return SourceFile(ctx, topLevel, extensions, classes, typeAliases)
     }
 
     private fun rawClass(c: KtClassOrObject, ctx: FileContext, parsed: KotlinParsedFile): RawClass? {

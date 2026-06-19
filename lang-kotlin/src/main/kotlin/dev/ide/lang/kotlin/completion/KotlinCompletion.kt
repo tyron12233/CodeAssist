@@ -59,9 +59,15 @@ import org.jetbrains.kotlin.psi.KtValueArgumentName
  *   • expected type    — `true`/`false` where a Boolean is wanted and `Enum.CONSTANT` at an enum slot, and the
  *                        ranking floats candidates whose type is assignable to the expected type first.
  */
-class KotlinCompletionService(private val service: KotlinSymbolService) : CompletionService {
+class KotlinCompletionService(
+    private val service: KotlinSymbolService,
+    /** Run before each completion — the host wires this to sync the symbol model to the live editor buffers,
+     *  so a declaration just typed in another open file completes here (cross-file freshness). */
+    private val onBeforeComplete: () -> Unit = {},
+) : CompletionService {
 
     override suspend fun complete(request: CompletionRequest): CompletionResult {
+        onBeforeComplete()
         val original = request.document.text.toString()
         val offset = request.offset.coerceIn(0, original.length)
         val prefix = identifierPrefixBefore(original, offset)

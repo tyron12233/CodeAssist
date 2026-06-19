@@ -67,6 +67,7 @@ import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtThrowExpression
 import org.jetbrains.kotlin.psi.KtTypeReference
+import org.jetbrains.kotlin.psi.KtUserType
 import org.jetbrains.kotlin.psi.KtValueArgumentName
 import org.jetbrains.kotlin.psi.KtWhileExpression
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
@@ -105,6 +106,18 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var sourceDocProvider: dev.ide.lang.resolve.SourceDocProvider = dev.ide.lang.resolve.SourceDocProvider.NONE
 
+    /** Injected by the host: the current live editor buffers (VirtualFile path → text) for CROSS-file
+     *  freshness — a declaration just typed in ANOTHER open file resolves/completes here before it is saved
+     *  and reindexed. Pushed into the symbol model at each analyze/complete/resolve; the model diffs the
+     *  buffers and reparses only what changed (a no-op when nothing did), so the refresh is cheap. */
+    @Volatile
+    var liveOverlayProvider: () -> Map<String, String> = { emptyMap() }
+
+    /** Sync the symbol model to the current live buffers before a query (see [liveOverlayProvider]). */
+    private fun refreshOverlay() {
+        runCatching { service.setOverlay(liveOverlayProvider()) }
+    }
+
     private val sourceRoots: List<VirtualFile> = ctx.sourceRoots
     private val classpathJars: List<Path> =
         (ctx.classpath.entries + ctx.bootClasspath.entries)
@@ -127,7 +140,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             backing.reparse(previous, newSnapshot, edits).also { lastByFile[newSnapshot.file.path] = it.tree as KotlinParsedFile }
     }
 
-    override val completion: CompletionService by lazy { KotlinCompletionService(service) }
+    override val completion: CompletionService by lazy { KotlinCompletionService(service) { refreshOverlay() } }
 
     override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
         KotlinInlayHintService(
@@ -206,6 +219,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     override suspend fun analyze(file: VirtualFile): AnalysisResult {
         val parsed = lastByFile[file.path] ?: return AnalysisResult(file, emptyList())
+        refreshOverlay() // cross-file: a symbol just typed in another open file must not flag here as unresolved
         return AnalysisResult(file, parsed.diagnostics + semanticDiagnostics(parsed))
     }
 
@@ -221,6 +235,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      */
     fun importFixesAt(file: VirtualFile, offset: Int): List<KotlinImportFix> {
         val parsed = lastByFile[file.path] ?: return emptyList()
+        refreshOverlay()
         val text = parsed.ktFile.text
         val unresolved = semanticDiagnostics(parsed)
             .filter { it.code == "kt.unresolved" && offset >= it.range.start && offset <= it.range.end }
@@ -273,6 +288,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val ktFile = parsed.ktFile
         val resolver = KotlinResolver(ktFile, parsed, service)
         val refNames = referencedNames(ktFile) // for unused-import / unused-private (names used in the body)
+        val localAliases = typeAliasNamesIn(ktFile) // same-file typealiases (the disk model may lag the buffer)
         val out = ArrayList<Diagnostic>()
         fun walk(psi: PsiElement) {
             // Poll between nodes (never mid-I/O) so a higher-priority call — code completion sharing the one
@@ -281,6 +297,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             when (psi) {
                 is KtNameReferenceExpression ->
                     (unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))?.let { out += it }
+                is KtUserType -> unresolvedTypeReference(psi, resolver, localAliases)?.let { out += it }
                 is KtProperty -> {
                     typeMismatch(psi.typeReference?.text, psi.initializer, resolver)?.let { out += it }
                     unusedLocal(psi)?.let { out += it }
@@ -638,9 +655,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *  - **count**: flagged only when NO constructor has the argument count AND none could be variadic
      *    (an array/vararg param makes the arity open); skipped entirely for binary Kotlin classes (their
      *    metadata doesn't surface default arguments, so a same-arity check would be unsound);
-     *  - **type**: only PRIMITIVE/String-family mismatches against the unique arity-matching constructor —
-     *    reference-type subtyping is left alone (the supertype chain may be incomplete here, so an
-     *    `isAssignableFrom` could wrongly report a mismatch). Named/spread arguments are skipped.
+     *  - **type**: an argument whose inferred type is not assignable to the parameter type of the unique
+     *    arity-matching constructor (same [isMismatch] rule as a declaration's `val a: T = …` — both types
+     *    must be fully-known concrete types, so an unmodeled/partial hierarchy backs off instead of
+     *    false-flagging). Named/spread arguments are skipped.
      */
     private fun constructorCallMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
@@ -675,7 +693,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             val expr = arg.getArgumentExpression() ?: continue
             val pt = match.paramTypes.getOrNull(i) as? KotlinType ?: continue
             val at = resolver.inferType(expr) ?: continue
-            if (isPrimitiveFamilyMismatch(pt, at)) {
+            if (isMismatch(pt, at)) {
                 val r = expr.textRange
                 return mismatchDiagnostic(r.startOffset, r.endOffset, at, pt)
             }
@@ -687,9 +705,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * The same check as [constructorCallMismatch] but for a class declared in THIS file, where the PSI gives
      * exact arity (default values + varargs) — the binary path can't (the typeShape index/decode has no source
      * class, and binary metadata hides defaults). A bare `Foo(args)` whose callee is a same-file top-level
-     * `KtClass`: its argument count must fit some constructor's required..max, and primitive/String-family arg
-     * types must match the unique arity-fitting constructor. Backs off on overloads it can't reason about: a
-     * companion object (a possible `invoke` operator), any variadic constructor, and non-instantiable kinds.
+     * `KtClass`: its argument count must fit some constructor's required..max, and each argument's inferred
+     * type must be assignable to the corresponding parameter of the unique arity-fitting constructor (the
+     * [isMismatch] rule). Backs off on overloads it can't reason about: a companion object (a possible
+     * `invoke` operator), any variadic constructor, and non-instantiable kinds.
      */
     private fun sameFileConstructorMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
@@ -716,7 +735,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             val expr = arg.getArgumentExpression() ?: continue
             val pt = service.typeFromText(match.getOrNull(i)?.typeReference?.text, resolver.fileContext) ?: continue
             val at = resolver.inferType(expr) ?: continue
-            if (isPrimitiveFamilyMismatch(pt, at)) {
+            if (isMismatch(pt, at)) {
                 val r = expr.textRange
                 return mismatchDiagnostic(r.startOffset, r.endOffset, at, pt)
             }
@@ -732,18 +751,6 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         cls.secondaryConstructors.forEach { c: KtSecondaryConstructor -> lists.add(c.valueParameters) }
         if (lists.isEmpty()) lists.add(emptyList()) // no explicit constructor → implicit no-arg
         return lists
-    }
-
-    /** A confident, subtyping-free mismatch between two primitive/String-family types (a `String` where an
-     *  `Int` is expected, etc.). Numeric/numeric is excused (a literal adapts), and `String`→`CharSequence`
-     *  is assignable. Reference types are never compared here (their hierarchy may be incompletely modeled). */
-    private fun isPrimitiveFamilyMismatch(param: KotlinType, arg: KotlinType): Boolean {
-        val p = param.qualifiedName
-        val a = arg.qualifiedName
-        if (p !in PRIMITIVE_FAMILY || a !in PRIMITIVE_FAMILY || p == a) return false
-        if (p in NUMERIC && a in NUMERIC) return false
-        if (p == "kotlin.CharSequence" && a == "kotlin.String") return false
-        return true
     }
 
     /**
@@ -786,9 +793,6 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val NUMERIC = setOf(
         "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Double", "kotlin.Float",
     )
-
-    // Types with no subtype relationships (so an exact-name comparison is sound), for constructor arg checking.
-    private val PRIMITIVE_FAMILY = NUMERIC + setOf("kotlin.Boolean", "kotlin.Char", "kotlin.String", "kotlin.CharSequence")
 
     private val ASSIGN_OPS = setOf(
         KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ,
@@ -853,13 +857,15 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }
 
     /**
-     * A bare reference (no explicit receiver) in value position whose name resolves to nothing: a likely
-     * typo, whether it's a call (`prinltn("x")`), an assignment target, or a plain read (`val x = bogus`).
-     * Lower-case only (constructors/types/annotations are capitalized and handled by the type/import path),
-     * and skipped for: member selectors (handled by [unresolvedMember]), the receiver of a qualified
-     * expression (could be a package or a type's static access), type-position references (generic params),
-     * import/package directives, named-argument labels, the implicit lambda `it`, a property accessor's
-     * `field`, and any scope with a companion object (whose members are bare-accessible but not modeled).
+     * A bare reference (no explicit receiver) in value position whose name resolves to nothing: a likely typo
+     * or missing import, whether it's a call (`prinltn("x")`), a constructor / composable call (`Foo()`,
+     * `Greeting()`), an assignment target, or a plain read (`val x = bogus` / a bare `ComponentActivity`).
+     * Both lower- and upper-case names are checked (a capitalized name resolves via a type/object/import, a
+     * same-file class, or a constructor — [KotlinResolver.bareNameResolves] knows all of these). Skipped for:
+     * member selectors (handled by [unresolvedMember]), the receiver of a qualified expression (could be a
+     * package or a type's static access), type-position references (handled by [unresolvedTypeReference]) and
+     * annotations, import/package directives, named-argument labels, the implicit lambda `it`, a property
+     * accessor's `field`, and any scope with a companion object (whose members are bare-accessible but not modeled).
      */
     private fun unresolvedBareReference(expr: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
         val parent = expr.parent
@@ -876,13 +882,53 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         if (parent is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel) return null
         if (inImportOrPackage(expr) || inTypeReference(expr)) return null
         val name = expr.getReferencedName()
-        if (name.isEmpty() || name.first().isUpperCase()) return null
+        if (name.isEmpty()) return null
         if (name == "it" && hasAncestor(expr) { it is org.jetbrains.kotlin.psi.KtLambdaExpression }) return null
         if (name == "field" && hasAncestor(expr) { it is KtPropertyAccessor }) return null
         val off = expr.textRange.startOffset
         if (resolver.companionInScope(off) || resolver.bareNameResolves(name, off)) return null
         val r = expr.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", "kt.unresolved")
+    }
+
+    /**
+     * A TYPE reference whose simple name resolves to nothing in scope — a missing import or a typo
+     * (`val a: ComponentActivity` / `class X : AnyClass()` with no matching import). The outermost SIMPLE
+     * (unqualified) user type is checked. Conservative back-offs that are NOT errors: an explicitly-imported
+     * name, a generic type parameter in scope, a project `typealias`, and annotation type references (their own
+     * rules). Qualified / nested names (`java.util.Locale`, `Outer.Inner`) are left to other checks.
+     */
+    private fun unresolvedTypeReference(userType: KtUserType, resolver: KotlinResolver, localAliases: Set<String>): Diagnostic? {
+        // A qualified type (`java.util.Locale`, `Outer.Inner`) or a qualifier SEGMENT of one (the `gen` in
+        // `gen.Txt`) — left alone; only a standalone simple name is checked.
+        if (userType.qualifier != null || userType.parent is KtUserType) return null
+        // Annotation type references (`@Composable`) have their own resolution rules — not flagged here.
+        if (hasAncestor(userType) { it is org.jetbrains.kotlin.psi.KtAnnotationEntry }) return null
+        val ref = userType.referenceExpression ?: return null
+        val name = ref.getReferencedName()
+        if (name.isEmpty()) return null
+        val ctx = resolver.fileContext
+        if (ctx.imports.any { !it.isStar && it.simpleName == name }) return null // explicitly imported → trust it
+        if (name in localAliases || service.isProjectTypeAlias(name)) return null // a typealias, not a class
+        val off = userType.textRange.startOffset
+        if (resolver.isTypeParameterInScope(name, off)) return null
+        // In scope (imported / same-package / source / default / builtin / star-imported) → resolves; don't flag.
+        val resolved = service.resolveTypeName(name, ctx)
+        if (resolved != null && service.isKnownType(resolved)) return null
+        val r = ref.textRange
+        return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", "kt.unresolved")
+    }
+
+    /** Simple names of every `typealias` declared in [file] (the live buffer the disk model may lag). */
+    private fun typeAliasNamesIn(file: KtFile): Set<String> {
+        val out = HashSet<String>()
+        fun rec(p: PsiElement) {
+            if (p is org.jetbrains.kotlin.psi.KtTypeAlias) p.name?.let { out += it }
+            var c = p.firstChild
+            while (c != null) { rec(c); c = c.nextSibling }
+        }
+        rec(file)
+        return out
     }
 
     /** True if [expr] sits inside a type reference (so a lower-case generic type param isn't flagged). */
@@ -1023,6 +1069,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     override fun resolve(node: DomNode): ResolveResult {
         val kdn = node as? KotlinDomNode ?: return ResolveResult.Unresolved
+        refreshOverlay() // go-to-definition must reach a symbol just declared in another open file
         val parsed = kdn.owner
         val resolver = KotlinResolver(parsed.ktFile, parsed, service)
         val psi = kdn.psi as? KtNameReferenceExpression ?: return ResolveResult.Unresolved
