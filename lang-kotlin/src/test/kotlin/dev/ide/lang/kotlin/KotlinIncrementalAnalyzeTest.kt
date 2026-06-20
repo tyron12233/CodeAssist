@@ -77,6 +77,52 @@ class KotlinIncrementalAnalyzeTest {
         assertScopedEqualsFull(v1, v2)
     }
 
+    // ---- intra-function statement reuse (one big body; a keystroke re-checks only the touched statement) ----
+
+    /** A single function with many body statements, so an edit exercises the per-STATEMENT reuse path. */
+    private fun bigFn(vararg stmts: String): String = buildString {
+        appendLine("package demo")
+        appendLine("fun screen() {")
+        stmts.forEach { appendLine("    $it") }
+        appendLine("}")
+    }
+
+    @Test
+    fun statementEditDeepInBodyMatchesFull() {
+        val v1 = bigFn("val a = 1", "val b = 2", "val c = bogusRef", "println(a + b)")
+        val v2 = bigFn("val a = 1", "val b = 2", "val c = 3", "println(a + b)") // fixed only statement 3
+        assertScopedEqualsFull(v1, v2)
+    }
+
+    @Test
+    fun laterStatementUsingAnEarlierUnusedLocalClearsTheWarning() {
+        // `helper` is unused in v1 (warning); v2 adds a LATER use → the warning on the UNCHANGED earlier `val`
+        // must clear. unused-local reads sibling statements, so this proves it is NOT stale-reused per statement.
+        val v1 = bigFn("val helper = 41", "println(\"hi\")")
+        val v2 = bigFn("val helper = 41", "println(helper)")
+        assertScopedEqualsFull(v1, v2)
+        assertScopedEqualsFull(v2, v1) // and back: the use is removed → warning must reappear
+    }
+
+    @Test
+    fun laterReassignmentFlipsVarCouldBeValOnEarlierDecl() {
+        // var-could-be-val also reads later statements: adding a reassignment must clear the hint on the
+        // unchanged `var` declaration.
+        val v1 = bigFn("var count = 0", "println(count)")
+        val v2 = bigFn("var count = 0", "count = 5", "println(count)")
+        assertScopedEqualsFull(v1, v2)
+        assertScopedEqualsFull(v2, v1)
+    }
+
+    @Test
+    fun earlyDeclTypeChangePropagatesToLaterStatements() {
+        // Changing the type of an early local must re-resolve LATER statements' member access against it
+        // (scopeDirty propagation) — `s.length` is valid on String, unresolved on Int.
+        val v1 = bigFn("val s = \"x\"", "println(s.length)")
+        val v2 = bigFn("val s = 1", "println(s.length)") // now s: Int — but Int has no `length`? (still must match full)
+        assertScopedEqualsFull(v1, v2)
+    }
+
     @Test
     fun importEditFallsBackToFull() {
         val v1 = "package demo\nimport kotlin.math.PI\n" + body()

@@ -52,7 +52,7 @@ internal class WorkspaceImpl(private val store: ProjectModelStore) : Workspace {
     override val projects: List<Project> get() = store.data.projects.map { ProjectImpl(it, store) }
     override val libraryTable: LibraryTable get() = LibraryTableImpl(store, projectId = null)
     override val sdkTable: SdkTable get() = SdkTableImpl(store.data.sdks, store)
-    override fun <T : Any> service(key: ServiceKey<T>): T = store.service(key)
+    override fun <T : Any> service(key: ServiceKey<T>): T = store.workspaceContainer.getService(key)
     override fun beginModification(): WorkspaceTransaction = WorkspaceTransactionImpl(store)
 }
 
@@ -122,6 +122,8 @@ internal class ModuleImpl(
         }
         return ClasspathSnapshotImpl(MavenClasspath.resolveVersionConflicts(items))
     }
+
+    override fun <T : Any> service(key: ServiceKey<T>): T = store.moduleContainer(id).getService(key)
 
     private fun addEntry(
         entry: OrderEntry,

@@ -153,7 +153,7 @@ class IndexServiceImpl(
             }
             setStatus(IndexStatus(true, "Indexing project source", artifacts.size.toDouble() / total))
             indexSource(scope.sourceRoots, scope.resourceRoots)
-            setStatus(IndexStatus(false, "Indexed", 1.0))
+            setStatus(IndexStatus(false, "Indexed", 1.0, ready = true))
         } catch (t: Throwable) {
             setStatus(IndexStatus(false, "Indexing failed: ${t.message}", 1.0))
             throw t
@@ -303,7 +303,11 @@ class IndexServiceImpl(
             override fun open(): Pair<Sequence<IndexInput>, Closeable> {
                 val zip = ZipFile(path.toFile())
                 val hash = contentHash()
-                val seq = zip.entries().asSequence().filter { !it.isDirectory && it.name.endsWith(".class") }
+                // `.class` (the bytecode indexes) plus `.kotlin_builtins` (Kotlin's intrinsic List/Int/String/…
+                // shapes, kept in kotlin-stdlib as protobuf, not bytecode). Each extension's inputFilter selects
+                // its own, so the `.class`-only indexes ignore the builtins entries and vice versa.
+                val seq = zip.entries().asSequence()
+                    .filter { !it.isDirectory && (it.name.endsWith(".class") || it.name.endsWith(".kotlin_builtins")) }
                     .map { entry -> LibraryInput(IndexOrigin.LIBRARY, hash, entry.name) { zip.getInputStream(entry).readBytes() } }
                 return seq to Closeable { zip.close() }
             }

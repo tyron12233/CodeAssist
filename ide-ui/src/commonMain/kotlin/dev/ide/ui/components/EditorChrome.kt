@@ -77,6 +77,12 @@ fun EditorTopBar(
     onPickTask: (RunTaskOption) -> Unit = {},
     onSave: () -> Unit = {},
     hasUnsavedChanges: Boolean = false,
+    hasActiveFile: Boolean = false,
+    canUndo: Boolean = false,
+    canRedo: Boolean = false,
+    onUndo: () -> Unit = {},
+    onRedo: () -> Unit = {},
+    onFind: () -> Unit = {},
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
     inlayHintsOn: Boolean = true,
@@ -86,6 +92,7 @@ fun EditorTopBar(
     previewBusy: Boolean = false,
     compact: Boolean = false,
 ) {
+    val dim = Ca.colors.textTertiary.copy(alpha = 0.35f)
     GlassSurface(modifier = Modifier.fillMaxWidth().height(52.dp), material = GlassMaterial.Regular) {
         Row(
             Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp),
@@ -102,11 +109,17 @@ fun EditorTopBar(
             // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
             IconButtonCa(CaIcons.save, "Save", onSave, active = hasUnsavedChanges)
             if (compact) {
-                // On a phone the bar can't hold every control, so Run stays inline and the rest collapse
-                // into a single ⋯ overflow menu — keeping the bar uncluttered yet everything one tap away.
+                // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
+                // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
                 RunControl(runTasks, onRun, onPickTask, compact = true)
                 EditorOverflowMenu(
                     onOpenPalette = onOpenPalette,
+                    hasActiveFile = hasActiveFile,
+                    canUndo = canUndo,
+                    canRedo = canRedo,
+                    onUndo = onUndo,
+                    onRedo = onRedo,
+                    onFind = onFind,
                     inlayHintsOn = inlayHintsOn,
                     onToggleInlayHints = onToggleInlayHints,
                     consoleOpen = consoleOpen,
@@ -115,6 +128,12 @@ fun EditorTopBar(
                     onPreview = onPreview,
                 )
             } else {
+                // Edit actions (undo/redo/find) sit just before Run — disabled-tinted with no file open.
+                if (hasActiveFile) {
+                    IconButtonCa(CaIcons.undo, "Undo", onUndo, tint = if (canUndo) null else dim)
+                    IconButtonCa(CaIcons.redo, "Redo", onRedo, tint = if (canRedo) null else dim)
+                    IconButtonCa(CaIcons.search, "Find / replace", onFind)
+                }
                 IconButtonCa(CaIcons.command, "Command palette", onOpenPalette)
                 IconButtonCa(CaIcons.eye, "Toggle inlay hints", onToggleInlayHints, active = inlayHintsOn)
                 IconButtonCa(CaIcons.terminal, "Build console", onToggleConsole, active = consoleOpen)
@@ -134,6 +153,12 @@ fun EditorTopBar(
 @Composable
 private fun EditorOverflowMenu(
     onOpenPalette: () -> Unit,
+    hasActiveFile: Boolean,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onFind: () -> Unit,
     inlayHintsOn: Boolean,
     onToggleInlayHints: () -> Unit,
     consoleOpen: Boolean,
@@ -145,28 +170,44 @@ private fun EditorOverflowMenu(
     Box {
         IconButtonCa(CaIcons.ellipsis, "More actions", { open = true })
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            OverflowItem(CaIcons.command, "Command palette", active = false) { open = false; onOpenPalette() }
+            if (hasActiveFile) {
+                OverflowItem(CaIcons.undo, "Undo", enabled = canUndo) { open = false; onUndo() }
+                OverflowItem(CaIcons.redo, "Redo", enabled = canRedo) { open = false; onRedo() }
+                OverflowItem(CaIcons.search, "Find / replace") { open = false; onFind() }
+            }
+            OverflowItem(CaIcons.command, "Command palette") { open = false; onOpenPalette() }
             OverflowItem(
                 CaIcons.eye, if (inlayHintsOn) "Hide inlay hints" else "Show inlay hints", active = inlayHintsOn,
             ) { open = false; onToggleInlayHints() }
             OverflowItem(CaIcons.terminal, "Build console", active = consoleOpen) { open = false; onToggleConsole() }
-            if (showPreview) OverflowItem(CaIcons.image, "Compose preview", active = false) { open = false; onPreview() }
+            if (showPreview) OverflowItem(CaIcons.image, "Compose preview") { open = false; onPreview() }
         }
     }
 }
 
 @Composable
-private fun OverflowItem(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+private fun OverflowItem(
+    icon: ImageVector,
+    label: String,
+    active: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val textColor = when {
+        !enabled -> Ca.colors.textTertiary.copy(alpha = 0.4f)
+        active -> Ca.colors.accent
+        else -> Ca.colors.textPrimary
+    }
+    val tint = when {
+        !enabled -> Ca.colors.textTertiary.copy(alpha = 0.4f)
+        active -> Ca.colors.accent
+        else -> Ca.colors.textSecondary
+    }
     DropdownMenuItem(
-        text = {
-            Text(
-                label,
-                color = if (active) Ca.colors.accent else Ca.colors.textPrimary,
-                style = Ca.type.footnote, fontWeight = FontWeight.Medium,
-            )
-        },
-        leadingIcon = { Icon(icon, null, Modifier.size(16.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary) },
+        text = { Text(label, color = textColor, style = Ca.type.footnote, fontWeight = FontWeight.Medium) },
+        leadingIcon = { Icon(icon, null, Modifier.size(16.dp), tint = tint) },
         onClick = onClick,
+        enabled = enabled,
     )
 }
 

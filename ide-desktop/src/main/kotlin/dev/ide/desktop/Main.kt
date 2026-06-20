@@ -33,24 +33,25 @@ fun main(args: Array<String>) {
     )
     val manager = ProjectManager.desktop(projectsRoot)
 
-    // Active engine: the most recent existing project, or a freshly-seeded sample on first launch.
-    val services = if (manager.isEmpty()) {
-        // Share the download cache with every later project (sibling of projects/, so deps resolve once).
-        IdeServices.bootstrapDemo(projectsRoot.resolve("android-sample"), sharedCachesRoot = projectsRoot.parent ?: projectsRoot)
-    } else {
-        manager.open(manager.list().first().rootPath)
+    // First launch: put the Android sample on disk so the picker isn't empty. It is NOT opened here — the
+    // engine for a project is created lazily when the user opens it (or the onboarding sheet opens the sample),
+    // so the IDE starts straight on the picker without paying to bootstrap an engine no one may use.
+    if (manager.isEmpty()) {
+        IdeServices.seedDemo(projectsRoot.resolve("android-sample"))
     }
 
     // Headless mode: ensure a project exists and exit (CI/smoke checks, no display needed).
     if ("--generate-only" in args || System.getProperty("codeassist.generateOnly") == "true") {
         println("Projects at $projectsRoot: " + manager.list().joinToString { it.name })
-        services.close()
         return
     }
 
     Log.addSink(ConsoleLogSink())
 
-    val backend = IdeServicesBackend(services, manager)
+    // Start with no project open: the picker is shown (projectEpoch stays 0), and opening a project from it
+    // creates that project's IdeServices on demand. The download cache is still shared across projects via
+    // the ProjectManager (sharedCachesRoot = projects-root parent), so deps resolve once.
+    val backend = IdeServicesBackend(initial = null, manager = manager)
     application {
         val state = rememberWindowState(size = DpSize(1360.dp, 880.dp))
         Window(

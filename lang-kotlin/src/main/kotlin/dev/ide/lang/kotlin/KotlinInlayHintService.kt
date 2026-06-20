@@ -34,7 +34,13 @@ class KotlinInlayHintService(
         val resolver = resolverFor(parsed)
         val out = ArrayList<InlayHint>()
 
+        // Only descend into nodes whose text range intersects the requested window. Type inference per
+        // val/lambda is the cost here, so skipping the off-screen subtrees (the editor asks for the visible
+        // range) keeps the pass proportional to what's shown, not to file size. A node fully outside the
+        // window can't contain an in-window hint, so pruning its subtree is exact, not a heuristic.
         fun walk(psi: PsiElement) {
+            val r = psi.textRange
+            if (r.endOffset < range.start || r.startOffset > range.end) return
             when (psi) {
                 is KtProperty -> localTypeHint(psi, resolver)?.let { out += it }
                 is KtLambdaExpression -> lambdaHints(psi, resolver, out)

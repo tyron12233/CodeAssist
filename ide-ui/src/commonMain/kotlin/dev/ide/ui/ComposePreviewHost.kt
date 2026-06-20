@@ -16,8 +16,10 @@ interface ComposePreviewHost {
      * [dark] forces the night `uiMode` so the same preview can be rendered in either colour scheme via the
      * surface's Night toggle, mirroring `@Preview(uiMode = UI_MODE_NIGHT_YES)`. The host reports its current
      * interpret/render problems through [onProblems] (empty when the preview renders cleanly) so the pane can
-     * surface them in the shared problem chip rather than burying them inside the device frame.
+     * surface them in the shared problem chip rather than burying them inside the device frame. It also reports
+     * through [onBusy] whether it is currently working (lowering/interpreting the buffer) vs. settled, so the
+     * pane can show a loading badge while the engine catches up to a new buffer.
      */
     @Composable
-    fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, modifier: Modifier)
+    fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier)
 }

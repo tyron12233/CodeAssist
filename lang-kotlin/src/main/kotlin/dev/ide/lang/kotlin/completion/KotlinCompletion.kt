@@ -355,11 +355,12 @@ class KotlinCompletionService(
         val callSyntaxFollows = followingChar == '(' || followingChar == '{'
         val trailingLambda = if (isFunction && !callSyntaxFollows) trailingLambdaParam(s) else null
         val (insert, caret) = when {
-            // A function whose LAST parameter is a function type → insert a trailing lambda. A Compose content
-            // slot (`Column { }`) or a sole functional param (`remember { }`, `forEach { }`) takes the lambda
-            // directly; otherwise the leading args come first (`items(<caret>) { }`).
+            // A function whose LAST parameter is a function type → insert a trailing lambda. Only a SOLE
+            // parameter (`remember { }`, `forEach { }`, or a Composable whose only slot is the content lambda)
+            // drops the parens and lands the caret in the braces. Any other parameters — even on a @Composable
+            // like `Column(modifier, ...) { }` — keep `()` and put the caret inside them so those args are fillable.
             trailingLambda != null -> {
-                val lambdaOnly = trailingLambda.isComposable || s.paramTypes.size == 1
+                val lambdaOnly = s.paramTypes.size == 1
                 if (lambdaOnly) "${s.name} { }" to CaretAction.At(s.name.length + 2)      // `name { | }`
                 else "${s.name}() { }" to CaretAction.At(s.name.length + 1)               // `name(|) { }`
             }

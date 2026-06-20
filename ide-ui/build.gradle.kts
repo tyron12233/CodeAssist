@@ -72,6 +72,8 @@ kotlin {
         val desktopTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test) // virtual-clock tests for the editor engine daemon
+                implementation(compose.desktop.currentOs) // skiko native runtime for off-screen ImageComposeScene snapshots
             }
         }
     }

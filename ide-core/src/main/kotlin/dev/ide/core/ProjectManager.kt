@@ -53,6 +53,13 @@ class ProjectManager private constructor(
         Files.createDirectories(projectsRoot)
     }
 
+    /**
+     * The process-global application service container. One per running app; it parents every opened
+     * project's workspace container, so APPLICATION-scoped services are shared across projects and
+     * survive project switches. Disposed by [dispose] on app exit.
+     */
+    val applicationContainer: dev.ide.platform.ServiceContainer = dev.ide.platform.impl.ApplicationContainer()
+
     private val prefsFile: Path get() = homeDir.resolve("prefs.properties")
 
     /** Directories a backup sweeps: the live projects, plus any legacy data still on disk. */
@@ -83,12 +90,12 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir, appContainer = applicationContainer)
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. */
     fun open(rootPath: String): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir)
+        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir, appContainer = applicationContainer)
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
@@ -229,6 +236,11 @@ class ProjectManager private constructor(
         }
     }
 
+    /** Dispose application-scoped services. Call on app exit, after the open project is closed. */
+    fun dispose() {
+        runCatching { applicationContainer.dispose() }
+    }
+
     private fun uniqueProjectDir(name: String): Path {
         val base = slug(name).ifEmpty { "project" }
         var candidate = projectsRoot.resolve(base)
@@ -285,7 +297,9 @@ class ProjectManager private constructor(
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
         ): ProjectManager {
             val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
-            val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel)
+            // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
+            val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
+                desugarStubs = bootClasspath.drop(1).map { Paths.get(it) })
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,

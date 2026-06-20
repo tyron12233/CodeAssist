@@ -2,6 +2,7 @@ package dev.ide.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -17,18 +18,18 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -52,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +69,7 @@ import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
 import dev.ide.ui.components.Chip
+import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
@@ -77,152 +80,299 @@ import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Width at/above which the screen uses the desktop two-pane layout (module list pane + content). */
-private val CONFIG_EXPANDED_BREAKPOINT = 820.dp
-
 private data class ConfigToast(val text: String, val error: Boolean)
 
+/** The two tabs of a module's detail view. */
+enum class ModulesTab { Settings, Dependencies }
+
 /**
- * The **Module Settings** editor: configure a module's Java version and its facet settings (Android
- * namespace/SDK/build types, …). Facet panels are generic — each field is rendered from the
- * model-API-driven [UiConfigField] the backend derived from the facet codec, so a new facet (or a new
- * field on an existing one) appears here automatically. Persists via [IdeBackend.updateModuleConfig].
- * Adaptive: a two-pane desktop layout, a chip switcher on phone. Talks only to [IdeBackend].
+ * The **Modules** screen. Lists the project's modules first (add / remove); selecting one opens its detail
+ * view with two tabs — **Settings** (Java version, source sets, facet config) and **Dependencies** (the
+ * per-module dependency manager: libraries, BOMs, module-on-module deps, custom repositories). Facet panels
+ * are generic — fields are derived from the facet codec, so a new facet appears without bespoke UI. Talks
+ * only to [IdeBackend].
  */
 @Composable
 fun ModuleConfigScreen(
     backend: IdeBackend,
     initialModule: String?,
+    initialTab: ModulesTab = ModulesTab.Settings,
     onBack: () -> Unit,
     codeFont: FontFamily = FontFamily.Monospace,
 ) {
-    val modules = remember { backend.configurableModules() }
-    var selected by remember { mutableStateOf(initialModule ?: modules.firstOrNull()?.name) }
-    var config by remember { mutableStateOf<UiModuleConfig?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var reloadKey by remember { mutableStateOf(0) }
-    var toast by remember { mutableStateOf<ConfigToast?>(null) }
-    var addRootOpen by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    // Add/remove typed content roots, then reload the form so the change shows.
-    val onAddSourceRoot: () -> Unit = { addRootOpen = true }
-    val onRemoveSourceRoot: (String, String) -> Unit = { set, root ->
-        val module = selected
-        if (module != null && backend.removeSourceRoot(module, set, root)) reloadKey++
-    }
-
-    LaunchedEffect(selected, reloadKey) {
-        val module = selected ?: return@LaunchedEffect
-        loading = true
-        config = runCatching { backend.getModuleConfig(module) }.getOrNull()
-        loading = false
-    }
-    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
-
-    BoxWithConstraints(Modifier.fillMaxSize().background(Ca.colors.bg)) {
-        val expanded = maxWidth >= CONFIG_EXPANDED_BREAKPOINT
-        Column(Modifier.fillMaxSize()) {
-            ConfigHeader(onBack)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
-            if (expanded) {
-                Row(Modifier.fillMaxSize()) {
-                    GlassSurface(Modifier.width(280.dp).fillMaxHeight(), GlassMaterial.Regular) {
-                        ModuleListPane(modules, selected) { selected = it }
-                    }
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
-                    ConfigBody(config, loading, codeFont, Modifier.weight(1f).fillMaxHeight(), onAddSourceRoot, onRemoveSourceRoot) { edit ->
-                        val module = selected ?: return@ConfigBody
-                        scope.launch {
-                            val r = backend.updateModuleConfig(module, edit)
-                            toast = ConfigToast(r.message, error = !r.success)
-                            if (r.success) reloadKey++
-                        }
-                    }
-                }
-            } else {
-                if (modules.size > 1) ModuleSwitcherChips(modules, selected) { selected = it }
-                ConfigBody(config, loading, codeFont, Modifier.weight(1f).fillMaxWidth(), onAddSourceRoot, onRemoveSourceRoot) { edit ->
-                    val module = selected ?: return@ConfigBody
-                    scope.launch {
-                        val r = backend.updateModuleConfig(module, edit)
-                        toast = ConfigToast(r.message, error = !r.success)
-                        if (r.success) reloadKey++
-                    }
-                }
-            }
-        }
-        AddSourceRootDialog(
-            request = (selected.takeIf { addRootOpen })?.let { AddSourceRootRequest(it, backend.moduleSourceSets(it)) },
-            onDismiss = { addRootOpen = false },
-            onAdd = { module, set, dirName, role ->
-                if (backend.addSourceRoot(module, set, dirName, role) != null) reloadKey++
-            },
-        )
-        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    var selected by remember { mutableStateOf(initialModule) }
+    val module = selected
+    if (module == null) {
+        ModulesList(backend, codeFont, onOpen = { selected = it }, onBack = onBack)
+    } else {
+        ModuleDetail(backend, module, initialTab, codeFont, onBack = { selected = null })
     }
 }
 
-// ---- header + switchers -------------------------------------------------------------------------
+// ---- shared header ------------------------------------------------------------------------------
 
 @Composable
-private fun ConfigHeader(onBack: () -> Unit) {
+private fun ModulesHeader(title: String, icon: ImageVector, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
     GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
         Row(
             Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, "Back", onBack)
-            Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-            Text("Module Settings", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+            Icon(icon, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+            Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            action?.invoke()
         }
     }
 }
 
+// ---- modules list -------------------------------------------------------------------------------
+
 @Composable
-private fun ModuleListPane(modules: List<UiModuleRef>, selected: String?, onSelect: (String) -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        Text("MODULES", color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 6.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-            items(modules, key = { it.name }) { m ->
-                val isSel = m.name == selected
-                val bg by animateColorAsState(if (isSel) Ca.colors.accentSoft else Color.Transparent, tween(Motion.FAST), label = "cfgModuleBg")
-                Row(
-                    Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { onSelect(m.name) }
-                        .background(bg, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(CaIcons.layers, null, Modifier.size(18.dp), tint = if (isSel) Ca.colors.accent else Ca.colors.textSecondary)
-                    Column(Modifier.weight(1f)) {
-                        Text(m.name, color = if (isSel) Ca.colors.accent else Ca.colors.textPrimary, style = Ca.type.footnote,
-                            fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(m.typeDisplay, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (String) -> Unit, onBack: () -> Unit) {
+    var modules by remember { mutableStateOf(backend.configurableModules()) }
+    var newOpen by remember { mutableStateOf(false) }
+    var pendingRemove by remember { mutableStateOf<String?>(null) }
+    var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+
+    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+        Column(Modifier.fillMaxSize()) {
+            ModulesHeader("Modules", CaIcons.layers, onBack) {
+                IconButtonCa(CaIcons.plus, "New module", onClick = { newOpen = true }, active = true)
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            if (modules.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No modules. Tap + to add one.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(modules, key = { it.name }) { m ->
+                        ModuleListItem(m, onOpen = { onOpen(m.name) }, onRemove = { pendingRemove = m.name })
                     }
                 }
+            }
+        }
+        NewModuleDialog(
+            visible = newOpen,
+            backend = backend,
+            codeFont = codeFont,
+            onDismiss = { newOpen = false },
+            onCreate = { name, typeId, level, facetValues ->
+                scope.launch {
+                    val r = backend.createModule(name, typeId, level, facetValues)
+                    toast = ConfigToast(r.message, error = !r.success)
+                    if (r.success) { newOpen = false; modules = backend.configurableModules() }
+                }
+            },
+        )
+        ConfirmModuleRemove(
+            moduleName = pendingRemove,
+            onDismiss = { pendingRemove = null },
+            onConfirm = {
+                val name = pendingRemove
+                if (name != null && backend.removeModule(name)) {
+                    toast = ConfigToast("Removed $name", error = false); modules = backend.configurableModules()
+                }
+                pendingRemove = null
+            },
+        )
+        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun ModuleListItem(module: UiModuleRef, onOpen: () -> Unit, onRemove: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onOpen)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+        Column(Modifier.weight(1f)) {
+            Text(module.name, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(module.typeDisplay, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButtonCa(CaIcons.close, "Remove ${module.name}", onClick = onRemove, boxSize = 30, iconSize = 16, tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+    }
+}
+
+// ---- module detail (Settings | Dependencies) ---------------------------------------------------
+
+@Composable
+private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: ModulesTab, codeFont: FontFamily, onBack: () -> Unit) {
+    var tab by remember(moduleName) { mutableStateOf(initialTab) }
+    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+        Column(Modifier.fillMaxSize()) {
+            ModulesHeader(moduleName, CaIcons.gear, onBack)
+            ModuleTabRow(tab) { tab = it }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            when (tab) {
+                ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
+                ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
             }
         }
     }
 }
 
 @Composable
-private fun ModuleSwitcherChips(modules: List<UiModuleRef>, selected: String?, onSelect: (String) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        modules.forEach { m ->
-            val isSel = m.name == selected
-            val bg by animateColorAsState(if (isSel) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "cfgChipBg")
-            Row(
-                Modifier.background(bg, RoundedCornerShape(Ca.radius.pill))
-                    .clickable(remember { MutableInteractionSource() }, null) { onSelect(m.name) }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ModulesTab.entries.forEach { t ->
+            val sel = t == tab
+            val bg by animateColorAsState(if (sel) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "tabBg")
+            Box(
+                Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null) { onSelect(t) }
+                    .padding(horizontal = 16.dp, vertical = 7.dp),
             ) {
-                Icon(CaIcons.layers, null, Modifier.size(14.dp), tint = if (isSel) Ca.colors.accent else Ca.colors.textSecondary)
-                Text(m.name, color = if (isSel) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote,
-                    fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal)
+                Text(t.name, color = if (sel) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont: FontFamily, modifier: Modifier) {
+    var config by remember(moduleName) { mutableStateOf<UiModuleConfig?>(null) }
+    var loading by remember(moduleName) { mutableStateOf(false) }
+    var reloadKey by remember(moduleName) { mutableStateOf(0) }
+    var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    var addRootOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(moduleName, reloadKey) {
+        loading = true
+        config = runCatching { backend.getModuleConfig(moduleName) }.getOrNull()
+        loading = false
+    }
+    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+
+    Box(modifier) {
+        ConfigBody(
+            config, loading, codeFont, backend.project.rootPath, Modifier.fillMaxSize(),
+            onAddSourceRoot = { addRootOpen = true },
+            onRemoveSourceRoot = { set, root -> if (backend.removeSourceRoot(moduleName, set, root)) reloadKey++ },
+        ) { edit ->
+            scope.launch {
+                val r = backend.updateModuleConfig(moduleName, edit)
+                toast = ConfigToast(r.message, error = !r.success)
+                if (r.success) reloadKey++
+            }
+        }
+        AddSourceRootDialog(
+            request = if (addRootOpen) AddSourceRootRequest(moduleName, backend.moduleSourceSets(moduleName)) else null,
+            onDismiss = { addRootOpen = false },
+            onAdd = { module, set, dirName, role -> if (backend.addSourceRoot(module, set, dirName, role) != null) reloadKey++ },
+        )
+        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+// ---- new-module dialog + remove confirm ---------------------------------------------------------
+
+@Composable
+private fun ConfirmModuleRemove(moduleName: String?, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    var shown by remember { mutableStateOf<String?>(null) }
+    if (moduleName != null) shown = moduleName
+    DropdownOverlay(visible = moduleName != null, onDismiss = onDismiss, topPadding = 160.dp) {
+        Column(
+            Modifier.padding(horizontal = 12.dp).widthIn(max = 440.dp).fillMaxWidth()
+                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
+        ) {
+            Text("Remove module", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Text("Remove '${shown ?: ""}' from the project? Its files are left on disk; other modules' dependencies on it are dropped.",
+                color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Spacer(Modifier.weight(1f))
+                DialogTextButton("Cancel", destructive = false, onClick = onDismiss)
+                DialogTextButton("Remove", destructive = true, onClick = onConfirm)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DialogTextButton(label: String, destructive: Boolean, onClick: () -> Unit) {
+    val fill = if (destructive) Ca.colors.error else Ca.colors.surface3
+    val fg = if (destructive) Ca.colors.textOnAccent else Ca.colors.textSecondary
+    Box(
+        Modifier.background(fill, RoundedCornerShape(Ca.radius.control)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 9.dp),
+    ) { Text(label, color = fg, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold) }
+}
+
+@Composable
+private fun NewModuleDialog(
+    visible: Boolean,
+    backend: IdeBackend,
+    codeFont: FontFamily,
+    onDismiss: () -> Unit,
+    onCreate: (name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>) -> Unit,
+) {
+    DropdownOverlay(visible = visible, onDismiss = onDismiss, topPadding = 56.dp) {
+        val types = remember { backend.availableModuleTypes() }
+        Column(
+            Modifier.padding(horizontal = 12.dp).widthIn(max = 560.dp).fillMaxWidth()
+                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
+        ) {
+            if (types.isEmpty()) {
+                Text("No module types available.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+            } else {
+                var name by remember { mutableStateOf("") }
+                var typeIdx by remember { mutableStateOf(0) }
+                val type = types[typeIdx.coerceIn(0, types.lastIndex)]
+                var level by remember(type.id) { mutableStateOf(type.defaultLanguageLevel) }
+                // Facet forms are rebuilt when the chosen type changes (each type has its own default facets).
+                val forms = remember(type.id) { type.defaultFacets.map { it.toForm() } }
+
+                Text("New module", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item("name") {
+                        LabeledField("Name") {
+                            Box(Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                if (name.isEmpty()) Text("e.g. feature, core", color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                                BasicTextField(name, { name = it }, singleLine = true,
+                                    textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
+                                    cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                    item("type") {
+                        LabeledField("Type") {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                types.forEachIndexed { i, t -> LevelChip(t.displayName, i == typeIdx) { typeIdx = i } }
+                            }
+                        }
+                    }
+                    item("level") {
+                        LabeledField("Java version") {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                type.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
+                            }
+                        }
+                    }
+                    items(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Spacer(Modifier.weight(1f))
+                    DialogTextButton("Cancel", destructive = false, onClick = onDismiss)
+                    PrimaryButton("Create", icon = CaIcons.check, onClick = {
+                        onCreate(name.trim(), type.id, level, forms.associate { it.table to it.toValues() })
+                    })
+                }
             }
         }
     }
@@ -235,6 +385,7 @@ private fun ConfigBody(
     config: UiModuleConfig?,
     loading: Boolean,
     codeFont: FontFamily,
+    projectRoot: String,
     modifier: Modifier,
     onAddSourceRoot: () -> Unit,
     onRemoveSourceRoot: (sourceSet: String, rootPath: String) -> Unit,
@@ -248,7 +399,7 @@ private fun ConfigBody(
             config == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Couldn't load module configuration.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
             }
-            else -> ConfigForm(config, codeFont, onAddSourceRoot, onRemoveSourceRoot, onSave)
+            else -> ConfigForm(config, codeFont, projectRoot, onAddSourceRoot, onRemoveSourceRoot, onSave)
         }
     }
 }
@@ -257,6 +408,7 @@ private fun ConfigBody(
 private fun ConfigForm(
     config: UiModuleConfig,
     codeFont: FontFamily,
+    projectRoot: String,
     onAddSourceRoot: () -> Unit,
     onRemoveSourceRoot: (sourceSet: String, rootPath: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
@@ -264,17 +416,20 @@ private fun ConfigForm(
     // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
     var level by remember(config) { mutableStateOf(config.languageLevel) }
     val forms = remember(config) { config.facets.map { it.toForm() } }
+    val dirty = level != config.languageLevel  // (facet edits always allow save; this just brightens the button)
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ---- General ----
         item("general") {
             SectionCard("General") {
-                ReadOnlyRow("Module", config.name, codeFont)
-                ReadOnlyRow("Type", config.typeDisplay, codeFont)
-                ReadOnlyRow("Output", config.outputDir, codeFont)
-                Spacer(Modifier.height(6.dp))
+                MetaRow("Type") { Chip(config.typeDisplay, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
+                MetaRow("Output") {
+                    Text(shortenPath(config.outputDir, projectRoot), color = Ca.colors.textTertiary,
+                        style = Ca.type.caption.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.height(2.dp))
                 Text("Java version", color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     config.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
                 }
             }
@@ -283,12 +438,12 @@ private fun ConfigForm(
         // ---- Source sets (add / remove typed roots) ----
         item("sourceSets") {
             SectionCard("Source sets", action = {
-                IconButtonCa(CaIcons.plus, "Add source root", onClick = onAddSourceRoot, boxSize = 26, iconSize = 16)
+                IconButtonCa(CaIcons.plus, "Add source root", onClick = onAddSourceRoot, boxSize = 26, iconSize = 16, active = true)
             }) {
                 if (config.sourceSets.isEmpty()) {
                     Text("No source sets yet.", color = Ca.colors.textTertiary, style = Ca.type.caption2)
                 }
-                config.sourceSets.forEach { ss -> SourceSetRow(ss, codeFont) { root -> onRemoveSourceRoot(ss.name, root) } }
+                config.sourceSets.forEach { ss -> SourceSetRow(ss, codeFont, projectRoot) { root -> onRemoveSourceRoot(ss.name, root) } }
             }
         }
 
@@ -296,8 +451,8 @@ private fun ConfigForm(
         items(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
 
         item("save") {
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.End) {
-                PrimaryButton("Save changes", icon = CaIcons.check, onClick = {
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp), horizontalArrangement = Arrangement.End) {
+                PrimaryButton(if (dirty) "Save changes" else "Save", icon = CaIcons.check, onClick = {
                     onSave(UiModuleConfigEdit(
                         languageLevel = level,
                         facetValues = forms.associate { it.table to it.toValues() },
@@ -313,39 +468,55 @@ private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null,
     Column(
         Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
             .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(title.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             action?.invoke()
         }
         content()
     }
 }
 
+/** A compact label · value row used in the General card (label fixed-width so values line up). */
 @Composable
-private fun ReadOnlyRow(label: String, value: String, codeFont: FontFamily) {
+private fun MetaRow(label: String, value: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(label, color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(72.dp))
-        Text(value, color = Ca.colors.textPrimary, style = Ca.type.footnote.copy(fontFamily = codeFont),
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(60.dp))
+        Box(Modifier.weight(1f)) { value() }
     }
 }
 
 @Composable
-private fun SourceSetRow(ss: UiSourceSetInfo, codeFont: FontFamily, onRemoveRoot: (rootPath: String) -> Unit) {
-    Column(Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(10.dp)) {
+private fun SourceSetRow(ss: UiSourceSetInfo, codeFont: FontFamily, projectRoot: String, onRemoveRoot: (rootPath: String) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(ss.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             Chip(ss.scope.lowercase(), fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
         }
+        if (ss.roots.isEmpty()) Text("no roots", color = Ca.colors.textTertiary, style = Ca.type.caption2)
         ss.roots.forEach { r ->
-            Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(r, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont),
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(shortenPath(r, projectRoot), color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                IconButtonCa(CaIcons.close, "Remove $r", onClick = { onRemoveRoot(r) }, boxSize = 22, iconSize = 12)
+                IconButtonCa(CaIcons.close, "Remove ${shortenPath(r, projectRoot)}", onClick = { onRemoveRoot(r) }, boxSize = 22, iconSize = 12)
             }
         }
+    }
+}
+
+/** A path shown relative to the project root so long absolute paths don't dominate the row. */
+private fun shortenPath(full: String, projectRoot: String): String {
+    val f = full.replace('\\', '/')
+    val root = projectRoot.replace('\\', '/').trimEnd('/')
+    return when {
+        root.isEmpty() -> full
+        f == root -> "."
+        f.startsWith("$root/") -> f.removePrefix("$root/")
+        else -> full
     }
 }
 
@@ -462,24 +633,46 @@ private fun StringListEditor(values: SnapshotStateList<String>, codeFont: FontFa
 
 @Composable
 private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(field.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            IconButtonCa(CaIcons.plus, "Add ${field.label}", { field.rows.add(cloneTemplateRow(field)) }, boxSize = 28, iconSize = 15, active = true)
-        }
+    // Highlight the just-added row briefly so it's obvious a new item appeared (it animates in at the bottom).
+    var justAdded by remember { mutableStateOf(-1) }
+    LaunchedEffect(justAdded) { if (justAdded >= 0) { delay(1600); justAdded = -1 } }
+    val singular = field.label.lowercase().removeSuffix("s")
+
+    Column(Modifier.fillMaxWidth().animateContentSize(tween(Motion.BASE, easing = Motion.spring)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(field.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        if (field.rows.isEmpty()) Text("No ${singular}s yet — add one below.", color = Ca.colors.textTertiary, style = Ca.type.caption2)
         field.rows.forEachIndexed { i, row ->
+            val isNew = i == justAdded
+            val borderColor by animateColorAsState(if (isNew) Ca.colors.accent else Ca.colors.hairline, tween(Motion.SLOW), label = "newRowBorder")
             Column(
-                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)).padding(12.dp),
+                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md))
+                    .border(if (isNew) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(Ca.radius.md)).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(rowTitle(row, i), color = Ca.colors.textPrimary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    IconButtonCa(CaIcons.close, "Remove", { field.rows.removeAt(i) }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(rowTitle(row, i), color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (isNew) Chip("new", fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
+                    IconButtonCa(CaIcons.close, "Remove", { val at = i; field.rows.removeAt(at); if (justAdded == at) justAdded = -1 }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
                 }
                 row.forEach { FieldEditor(it, codeFont) }
             }
         }
-        if (field.rows.isEmpty()) Text("None", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        AddRowButton("Add $singular") { field.rows.add(cloneTemplateRow(field)); justAdded = field.rows.lastIndex }
+    }
+}
+
+/** A full-width, clearly-labelled add button for the inline-table editor (build types / product flavors). */
+@Composable
+private fun AddRowButton(label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.md))
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = Ca.colors.accent)
+        Spacer(Modifier.width(6.dp))
+        Text(label, color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
     }
 }
 

@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -55,12 +56,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -82,25 +78,22 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import dev.ide.ui.editor.core.EditorCaretGeometry
 import dev.ide.ui.editor.core.EditorImeHandle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAction
@@ -110,17 +103,15 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
-import dev.ide.ui.editor.core.EditSpan
 import dev.ide.ui.editor.core.InlayPiece
 import dev.ide.ui.editor.core.LineRenderCache
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.editor.core.RangeEdit
-import dev.ide.ui.editor.core.TokenType
+import dev.ide.ui.editor.core.smartEnter
 import dev.ide.ui.editor.core.editorTextInput
 import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
-import dev.ide.ui.theme.SyntaxColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -153,7 +144,6 @@ fun CodeEditor(
     onSave: () -> Unit = {},
     onNavigate: (path: String, offset: Int) -> Unit = { _, _ -> },
     onRenamed: (newPath: String?) -> Unit = {},
-    showInlayHints: Boolean = true,
     /** Bump from the host (a toolbar Find button) to open the in-file find bar; 0 = no request. */
     findEpoch: Int = 0,
     /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
@@ -170,7 +160,7 @@ fun CodeEditor(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         CodeEditorContent(
             path, session, backend, modifier, onSave, onNavigate, onRenamed,
-            showInlayHints, findEpoch, fontScale, onFontScaleChange, onPreview,
+            findEpoch, fontScale, onFontScaleChange, onPreview,
         )
     }
 }
@@ -184,7 +174,6 @@ private fun CodeEditorContent(
     onSave: () -> Unit = {},
     onNavigate: (path: String, offset: Int) -> Unit = { _, _ -> },
     onRenamed: (newPath: String?) -> Unit = {},
-    showInlayHints: Boolean = true,
     findEpoch: Int = 0,
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
@@ -233,84 +222,10 @@ private fun CodeEditorContent(
         LineRenderCache(measurer, codeStyle, palette)
     }
 
-    // ---- inlay hints (inferred var/lambda types, parameter names, chaining) — fetched debounced, woven into
-    // the line layouts as dimmed phantom text. Disabled ⇒ no fetch and the layout/offset math is the identity.
-    var inlayHints by remember(path) { mutableStateOf<List<UiInlayHint>>(emptyList()) }
-    LaunchedEffect(path, editorSession.textRevision, showInlayHints) {
-        if (!showInlayHints) { inlayHints = emptyList(); return@LaunchedEffect }
-        delay(300.milliseconds)
-        val text = editorSession.doc.text
-        // Hints share the one engine thread with completion/analysis; a completion request preempts this pass
-        // (surfaced as AnalysisPreempted). Retry a few times — keeping the current hints in the meantime —
-        // so a pass that loses the race to a keystroke still lands once typing settles, rather than the hints
-        // going missing until the next edit (the old behavior was: clear on preempt, only retrigger on an edit).
-        var attempt = 0
-        while (attempt++ < 8) {
-            try {
-                inlayHints = backend.hintsAt(path, text, 0, text.length)
-                break
-            } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
-                delay(150.milliseconds) // let the interactive call finish, then try again
-            } catch (cancel: kotlinx.coroutines.CancellationException) {
-                throw cancel // the effect itself was cancelled (new edit/file) — don't swallow
-            } catch (e: Throwable) {
-                inlayHints = emptyList()
-                break
-            }
-        }
-    }
-    // ---- semantic highlighting (type-aware coloring): fetched debounced off the engine thread and overlaid
-    // on the lexical spans. Java/Kotlin only (other backends return nothing). Shares the engine thread with
-    // completion/analysis, so a completion request preempts this pass (AnalysisPreempted) — retry a few times,
-    // keeping the current tokens, so the coloring survives a keystroke race instead of vanishing until the
-    // next edit. The session shifts the tokens in place on each edit, so they track the text in between.
-    LaunchedEffect(path, editorSession.textRevision) {
-        if (!path.endsWith(".java") && !path.endsWith(".kt") && !path.endsWith(".kts")) {
-            editorSession.applySemanticTokens(emptyList()); return@LaunchedEffect
-        }
-        delay(280.milliseconds)
-        val text = editorSession.doc.text
-        var attempt = 0
-        while (attempt++ < 8) {
-            try {
-                editorSession.applySemanticTokens(backend.semanticTokens(path, text))
-                break
-            } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
-                delay(150.milliseconds)
-            } catch (cancel: kotlinx.coroutines.CancellationException) {
-                throw cancel
-            } catch (e: Throwable) {
-                break // keep whatever we had; a later edit retriggers
-            }
-        }
-    }
-
-    // ---- code folding: foldable regions (imports, type/function bodies, comments) fetched debounced off the
-    // engine thread. Java/Kotlin only. The session preserves the user's collapse toggles across refetches and
-    // collapses `collapsedByDefault` regions (imports) once per file; offsets shift in place between passes.
-    LaunchedEffect(path, editorSession.textRevision) {
-        if (!path.endsWith(".java") && !path.endsWith(".kt") && !path.endsWith(".kts")) {
-            editorSession.applyCodeFolds(emptyList()); return@LaunchedEffect
-        }
-        delay(320.milliseconds)
-        val text = editorSession.doc.text
-        var attempt = 0
-        while (attempt++ < 8) {
-            try {
-                val fresh = backend.codeFolds(path, text).map {
-                    dev.ide.ui.editor.folding.FoldRegion(it.startOffset, it.endOffset, it.placeholder, it.kind, it.collapsedByDefault)
-                }
-                editorSession.applyCodeFolds(fresh)
-                break
-            } catch (preempted: dev.ide.ui.backend.AnalysisPreempted) {
-                delay(150.milliseconds)
-            } catch (cancel: kotlinx.coroutines.CancellationException) {
-                throw cancel
-            } catch (e: Throwable) {
-                break // keep whatever we had; a later edit retriggers
-            }
-        }
-    }
+    // Inlay hints, semantic tokens, folds and @Preview markers are all produced by the editor highlighting
+    // daemon ([EditorEngineDaemon], driven by EditorCenter so it runs in every view mode) and live on the
+    // session, which shifts them in place between passes — the canvas just reads them.
+    val inlayHints = editorSession.inlayHints
 
     // If the caret lands inside a collapsed fold (go-to-definition, rename, programmatic navigation), reveal it
     // — tapping can't put the caret in hidden text (offsetAt clamps to the visible prefix), so this only fires
@@ -319,17 +234,7 @@ private fun CodeEditorContent(
         editorSession.expandFoldAt(editorSession.selection.end)
     }
 
-    // ---- @Preview gutter markers: the file's Compose @Preview functions, fetched debounced. Each draws a
-    // tappable glyph in the gutter on its line → switch this tab to the Preview surface for that function.
-    // Kotlin-only (the backend is a no-op elsewhere); cheap, so it just rides the edit cadence.
-    // Stored on the session so they shift with edits (the gutter icon tracks its function while typing); the
-    // debounced fetch refills the authoritative set.
-    LaunchedEffect(path, editorSession.textRevision) {
-        if (!path.endsWith(".kt") && !path.endsWith(".kts")) { editorSession.applyComposePreviews(emptyList()); return@LaunchedEffect }
-        delay(400.milliseconds)
-        val text = editorSession.doc.text
-        editorSession.applyComposePreviews(runCatching { backend.composePreviews(path, text) }.getOrDefault(emptyList()))
-    }
+    // (@Preview gutter markers are now the daemon's PREVIEWS pass — applied to the session above.)
     val inlayStyle = remember(colors) { SpanStyle(color = colors.textTertiary, fontStyle = FontStyle.Italic) }
     val perLineInlays = remember(inlayHints, editorSession.doc) {
         if (inlayHints.isEmpty()) emptyMap() else buildMap<Int, MutableList<InlayPiece>> {
@@ -416,6 +321,9 @@ private fun CodeEditorContent(
 
     // ---- scrolling: plain offsets read in the draw phase (a fling never recomposes) ----
     var viewport by remember { mutableStateOf(IntSize.Zero) }
+    // The editor content's offset within the IME root view, so the caret-geometry provider can report
+    // CursorAnchorInfo coordinates in view-pixel space (see the editorTextInput node).
+    val contentInWindow = remember { mutableStateOf(Offset.Zero) }
     val vOffset = remember(path) { mutableFloatStateOf(0f) }
     val hOffset = remember(path) { mutableFloatStateOf(0f) }
     fun contentHeight() = metrics.padTop + editorSession.foldModel.visualLineCount * metrics.lineHeight + metrics.padBottom
@@ -455,6 +363,24 @@ private fun CodeEditorContent(
         val line = doc.lineForOffset(offset)
         val x = layoutFor(line).getHorizontalPosition(renderCache.rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
         return Triple(line, textLeft() + x, lineTop(line))
+    }
+    // Feed the platform IME bridge the caret's pixel geometry for CursorAnchorInfo (the keyboard positions its
+    // floating UI / handwriting box from it). Viewport coordinates are offset by the content's window position so
+    // they land in view-pixel space; best-effort (null when layout isn't ready) and only read by the Android node.
+    DisposableEffect(editorIme) {
+        editorIme.caretGeometryProvider = {
+            runCatching {
+                val (_, x, top) = caretGeometry(editorSession.selection.min)
+                val base = contentInWindow.value
+                EditorCaretGeometry(
+                    horizontalPosition = base.x + x,
+                    top = base.y + top,
+                    baseline = base.y + top + metrics.lineHeight,
+                    bottom = base.y + top + metrics.lineHeight,
+                )
+            }.getOrNull()
+        }
+        onDispose { editorIme.caretGeometryProvider = null }
     }
     /** The document line shown at viewport [y] (the fold-start line when [y] is on a collapsed row). */
     fun lineAtY(y: Float): Int {
@@ -555,11 +481,9 @@ private fun CodeEditorContent(
     var mouseLastClickMs by remember(path) { mutableLongStateOf(0L) }
     var mouseLastClickPos by remember(path) { mutableStateOf(Offset.Zero) }
 
-    // ---- completion (same session/cache/filter machinery as before) ----
-    var completion by remember(path) { mutableStateOf<CompletionSession?>(null) }
-    var selected by remember(path) { mutableIntStateOf(0) }
-    var dismissed by remember(path) { mutableStateOf(false) }
-    var job by remember(path) { mutableStateOf<Job?>(null) }
+    // ---- completion — popup state + async request/keep-alive in [CompletionController]; accept() (below)
+    // stays in this surface because it's wired into the canvas geometry + snippet session ----
+    val completion = rememberCompletionController(path, editorSession, backend)
     // Active snippet/template expansion (tab-stop stepping), or null. Reset when the file changes.
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
     var paneTopInWindow by remember(path) { mutableFloatStateOf(0f) }
@@ -568,52 +492,16 @@ private fun CodeEditorContent(
     // ---- signature help (parameter info): the IntelliJ panel floated ABOVE the call the caret is inside ----
     // Independent of completion: it re-resolves on every caret move / edit while the caret is inside a call
     // (gated by a cheap local scan so we don't hit the backend elsewhere), and dismisses when it leaves.
-    var sigHelp by remember(path) { mutableStateOf<dev.ide.ui.backend.UiSignatureHelp?>(null) }
-    var sigDismissed by remember(path) { mutableStateOf(false) }
-    var sigEpoch by remember(path) { mutableIntStateOf(0) } // bumped by the explicit (Ctrl/Cmd-P) trigger
+    val sig = rememberSignatureHelpController(path, backend) // parameter-info state + resolution
 
-    // ---- code actions (lightbulb): quick-fixes + caret intentions at the current selection ----
-    var actions by remember(path) { mutableStateOf<List<UiAction>>(emptyList()) }
-    var actionsOpen by remember(path) { mutableStateOf(false) }
-    var actionSelected by remember(path) { mutableIntStateOf(0) }
-
-    // ---- diagnostic sheet: tap a gutter glyph / inline chip → full (scrollable) message + its fixes ----
-    var diagnosticSheet by remember(path) { mutableStateOf<UiDiagnostic?>(null) }
-    var sheetActions by remember(path) { mutableStateOf<List<UiAction>>(emptyList()) }
+    // ---- code actions (lightbulb) + diagnostic sheet — state + behaviour in [EditorActionsController];
+    // opening either dismisses the completion popup so they don't overlap ----
+    val acts = rememberEditorActionsController(path, editorSession, backend) { completion.dismiss() }
 
     // ---- in-file find / replace (Ctrl-F / Ctrl-R; or the toolbar Find button via findEpoch) ----
-    var findOpen by remember(path) { mutableStateOf(false) }
-    var replaceMode by remember(path) { mutableStateOf(false) }
-    var findQuery by remember(path) { mutableStateOf("") }
-    var replaceText by remember(path) { mutableStateOf("") }
-    var findOptions by remember(path) { mutableStateOf(FindOptions()) }
-    var matches by remember(path) { mutableStateOf<List<Match>>(emptyList()) }
-    var currentMatch by remember(path) { mutableIntStateOf(0) }
-    var regexError by remember(path) { mutableStateOf(false) }
-
-    fun gotoMatch(index: Int) {
-        if (matches.isEmpty()) return
-        val i = ((index % matches.size) + matches.size) % matches.size
-        currentMatch = i
-        val m = matches[i]
-        editorSession.setSelectionRange(m.start, m.end) // selects + scrolls the match into view
-    }
-
-    fun replaceCurrent() {
-        val m = matches.getOrNull(currentMatch) ?: return
-        editorSession.applyEdits(
-            listOf(RangeEdit(m.start, m.end, replaceText, m.start + replaceText.length)),
-            TextRange(m.start + replaceText.length),
-        )
-        // matches recompute on the textRevision bump; currentMatch then points at the following occurrence
-    }
-
-    fun replaceAll() {
-        if (matches.isEmpty()) return
-        val edits = matches.map { RangeEdit(it.start, it.end, replaceText, it.start + replaceText.length) }
-        editorSession.applyEdits(edits, TextRange(matches.first().start + replaceText.length))
-        currentMatch = 0
-    }
+    // State + behaviour live in [FindReplaceController]; the surface only opens it, paints its matches, and
+    // renders the [FindReplaceBar] against it.
+    val find = rememberFindReplaceController(path, editorSession)
 
     // ---- rename refactoring (F2 / Shift-F6): prompt for a new name, then a project-wide rename ----
     var rename by remember(path) { mutableStateOf<RenameUiState?>(null) }
@@ -654,11 +542,11 @@ private fun CodeEditorContent(
     // Language-specific word chars (XML namespace `:` and resource-ref `@?+/.-`) so the popup survives
     // them as the user types. Java gets none, preserving its behavior.
     val wordExtra = extraWordChars(path)
-    val liveCompletion = completion?.takeIf { it.coversCaret(doc.chars, caretOffset, wordExtra) }
+    val liveCompletion = completion.current?.takeIf { it.coversCaret(doc.chars, caretOffset, wordExtra) }
     val activePrefix = liveCompletion?.let { doc.substring(it.tokenStart, caretOffset) } ?: ""
     val displayed = liveCompletion?.filtered(activePrefix) ?: emptyList()
-    val showPopup = !dismissed && displayed.isNotEmpty()
-    val safeSelected = selected.coerceIn(0, (displayed.size - 1).coerceAtLeast(0))
+    val showPopup = !completion.dismissed && displayed.isNotEmpty()
+    val safeSelected = completion.selected.coerceIn(0, (displayed.size - 1).coerceAtLeast(0))
 
     // Keep the popup *window* mounted across the 1-frame gaps a keystroke opens up, instead of unmounting and
     // recreating the Popup window each keystroke (the blink the user sees). It opens once there are items, and
@@ -668,34 +556,14 @@ private fun CodeEditorContent(
     // (Esc/accept/click-away/non-identifier → `dismissed`) or when the caret leaves the token. No timer, so
     // nothing races the refresh debounce. `shownCompletion` snapshots the last good render state (token +
     // items + prefix), so while `displayed` is transiently empty the window shows real content, never an empty box.
-    var popupVisible by remember(path) { mutableStateOf(false) }
     val onToken = liveCompletion != null
     val hasItems = displayed.isNotEmpty()
-    LaunchedEffect(dismissed, onToken, hasItems) {
-        popupVisible = when {
-            dismissed || !onToken -> false
-            hasItems -> true
-            else -> popupVisible // transient empty while still on the token: hold the popup open
-        }
+    LaunchedEffect(completion.dismissed, onToken, hasItems) {
+        completion.updatePopupVisibility(onToken, hasItems)
     }
-    val shownCompletion = remember(path) { mutableStateOf<ShownCompletion?>(null) }
     SideEffect {
         val live = liveCompletion
-        if (live != null && hasItems) shownCompletion.value = ShownCompletion(live.tokenStart, displayed, activePrefix)
-    }
-
-    fun refresh(immediate: Boolean = false) {
-        job?.cancel()
-        job = scope.launch {
-            if (!immediate) delay(110.milliseconds)
-            val text = editorSession.doc.text
-            val caret = editorSession.selection.start
-            val res = runCatching { backend.complete(path, text, caret) }.getOrNull() ?: return@launch
-            val sameToken = res.replaceStart == completion?.tokenStart
-            completion = CompletionSession.from(res)
-            if (!sameToken) selected = 0
-            dismissed = res.items.isEmpty()
-        }
+        if (live != null && hasItems) completion.snapshotShown(live.tokenStart, displayed, activePrefix)
     }
 
     // Accept [picked], or — for the keyboard path — the currently-selected item. Callers that already know
@@ -750,6 +618,9 @@ private fun CodeEditorContent(
         // Snippet/postfix item: apply the edits, then drive tab-stop stepping. The inserted text lands at
         // `base` (mainStart shifted by any additionalEdits that delete text before it, e.g. postfix removing
         // the `receiver.`), and the snippet offsets are relative to that.
+        // The text edit we're about to apply ends in an identifier char; without this the revision trigger
+        // would immediately reopen the popup. Keep it closed until the user types again.
+        completion.suppressNext()
         val snip = item.snippet
         if (snip != null) {
             var base = mainStart
@@ -759,8 +630,7 @@ private fun CodeEditorContent(
             }
             applyEditsKeepingViewport(edits, TextRange(base), anchorLine)
             snippet = SnippetSession.start(editorSession, base, snip)
-            dismissed = true
-            job?.cancel()
+            completion.dismiss()
             return
         }
         // caret lands inside the inserted text (the item decides); edits above shift it by their delta
@@ -778,75 +648,24 @@ private fun CodeEditorContent(
         val selLen = item.caret?.selectionLength ?: 0
         val sel = if (selLen > 0) TextRange(caret, caret + selLen) else TextRange(caret)
         applyEditsKeepingViewport(edits, sel, anchorLine)
-        dismissed = true
-        job?.cancel()
+        completion.dismiss()
     }
 
-    // Apply [act]: ask the backend for its edits over the buffer at the context range [ctxStart,ctxEnd), then
-    // splice them in (the editor round-trip — reparse + re-analyze follow the normal text path). The caret is
-    // kept on its logical spot by shifting it by the net delta of edits that land at/before it.
-    fun runAction(act: UiAction, ctxStart: Int, ctxEnd: Int) {
-        val text = editorSession.doc.text
-        scope.launch {
-            val raw = runCatching { backend.applyAction(path, text, ctxStart, ctxEnd, act.id) }.getOrNull().orEmpty()
-            if (raw.isEmpty()) return@launch
-            val len = editorSession.doc.length
-            val edits = raw.map { e ->
-                val st = e.start.coerceIn(0, len)
-                RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
-            }
-            var caret = ctxStart
-            for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
-            editorSession.applyEdits(edits, TextRange(caret.coerceAtLeast(0)))
-        }
+    // Smart Enter (Shift+Enter): finish the current line, then open an indented new line — IntelliJ's
+    // "Complete Statement". The decision is a pure function ([smartEnter]); we just apply its edit.
+    fun completeStatement() {
+        completion.dismiss()
+        val edit = smartEnter(editorSession.doc.chars, editorSession.selection.start, editorSession.language)
+        editorSession.applyEdits(listOf(edit), TextRange(edit.caret))
     }
 
-    fun applyActionAt(index: Int) {
-        val act = actions.getOrNull(index) ?: return
-        actionsOpen = false
-        val sel = editorSession.selection
-        runAction(act, sel.min, sel.max)
-    }
-
-    // The most-severe diagnostic whose start sits on [line], or null — drives gutter-glyph and chip taps.
-    fun diagnosticOnLine(line: Int): UiDiagnostic? {
-        var best: UiDiagnostic? = null
-        for (d in editorSession.diagnostics) {
-            if (editorSession.doc.lineForOffset(d.startOffset.coerceIn(0, editorSession.doc.length)) != line) continue
-            val cur = best
-            if (cur == null || d.severity.ordinal < cur.severity.ordinal) best = d
-        }
-        return best
-    }
-
-    // Open the diagnostic sheet for [d] and fetch the quick-fixes registered for its range.
-    fun openDiagnosticSheet(d: UiDiagnostic) {
-        dismissed = true; job?.cancel(); actionsOpen = false
-        diagnosticSheet = d
-        sheetActions = emptyList()
-        val text = editorSession.doc.text
-        scope.launch {
-            sheetActions = runCatching { backend.actionsAt(path, text, d.startOffset, d.endOffset) }.getOrNull().orEmpty()
-        }
-    }
-
-    fun applySheetFix(index: Int) {
-        val d = diagnosticSheet ?: return
-        val act = sheetActions.getOrNull(index) ?: return
-        diagnosticSheet = null
-        runAction(act, d.startOffset, d.endOffset)
-    }
 
     // keep the per-line render cache aligned with line splices (a render concern, owned by this surface)
     SideEffect {
         editorSession.onLinesShifted = { from, delta -> renderCache.shiftKeys(from, delta) }
-        // Active template session re-anchors its tab stops on each edit (typing inside a placeholder); the
-        // same per-edit signal keeps inlay-hint offsets aligned between debounced refetches, so a hint after
-        // an edit doesn't lag at a stale position.
-        editorSession.onSnippetEdit = { span ->
-            snippet?.onEdit(span)
-            if (inlayHints.isNotEmpty()) inlayHints = shiftInlayHints(inlayHints, span)
-        }
+        // Active template session re-anchors its tab stops on each edit (typing inside a placeholder).
+        // (Inlay-hint offsets are shifted by the session itself now, alongside the other overlays.)
+        editorSession.onSnippetEdit = { span -> snippet?.onEdit(span) }
     }
 
     // completion triggering — fires only when the buffer's *text* actually advances (textRevision bumps on
@@ -859,7 +678,10 @@ private fun CodeEditorContent(
         if (rev == lastSeenRev) return@LaunchedEffect // mount / no real edit since the last handled one
         lastSeenRev = rev
         handlesVisible = false // typing puts the touch chrome away (Android convention)
-        selected = 0
+        completion.selected = 0
+        // This revision is accept()'s own edit (it inserts an identifier, which would otherwise re-trigger
+        // completion). Swallow it once so the popup stays closed until the next real keystroke.
+        if (completion.consumeSuppressedTrigger()) return@LaunchedEffect
         val d = editorSession.doc
         val caret = editorSession.selection.start
         val before = if (caret in 1..d.length) d.charAt(caret - 1) else null
@@ -871,20 +693,14 @@ private fun CodeEditorContent(
             if (tag != null) {
                 val close = "</$tag>"
                 editorSession.applyEdits(listOf(RangeEdit(caret, caret, close, caret)), TextRange(caret))
-                dismissed = true
+                completion.dismissed = true
                 return@LaunchedEffect
             }
         }
 
         when {
-            before == '.' || (before != null && isIdentifierChar(before, extraWordChars(path))) -> {
-                dismissed = false
-                refresh()
-            }
-            else -> {
-                dismissed = true
-                job?.cancel()
-            }
+            before == '.' || (before != null && isIdentifierChar(before, extraWordChars(path))) -> completion.reopen()
+            else -> completion.dismiss()
         }
     }
 
@@ -892,54 +708,26 @@ private fun CodeEditorContent(
     // the caret rests on (or selects) something actionable. Cheap on the engine side (cached diagnostics +
     // the syntax tree; no fresh binding analysis), and the full text is materialized once per pause, here.
     LaunchedEffect(path, editorSession.selection, editorSession.textRevision) {
-        delay(250.milliseconds)
-        if (!isFocused) { actions = emptyList(); return@LaunchedEffect }
-        val text = editorSession.doc.text
-        val sel = editorSession.selection
-        val result = runCatching { backend.actionsAt(path, text, sel.min, sel.max) }.getOrNull().orEmpty()
-        actions = result
-        when {
-            result.isEmpty() -> actionsOpen = false
-            actionSelected >= result.size -> actionSelected = 0
-        }
+        acts.refreshAvailability(isFocused)
     }
 
     // signature help — re-resolve whenever the caret moves or the buffer changes (or Ctrl/Cmd-P bumps sigEpoch).
     // Gated by a cheap local scan so we only call the backend when the caret is actually inside a call's parens;
     // dismisses (and re-arms) when the caret leaves the call, so Esc only hides it for the current call.
-    LaunchedEffect(path, editorSession.textRevision, editorSession.selection, sigEpoch, isFocused) {
-        if (!isFocused) { sigHelp = null; return@LaunchedEffect }
-        val sel = editorSession.selection
-        val caret = sel.start
-        if (sel.start != sel.end || !caretInsideCall(editorSession.doc.chars, caret)) {
-            sigHelp = null
-            sigDismissed = false
-            return@LaunchedEffect
-        }
-        if (sigDismissed) return@LaunchedEffect
-        delay(40.milliseconds)
-        val text = editorSession.doc.text
-        sigHelp = runCatching { backend.signatureHelp(path, text, caret) }.getOrNull()
+    LaunchedEffect(path, editorSession.textRevision, editorSession.selection, sig.epoch, isFocused) {
+        sig.resolve(isFocused, editorSession)
     }
 
     // host (toolbar Find button) requested the find bar
     LaunchedEffect(findEpoch) {
-        if (findEpoch > 0) { findOpen = true; replaceMode = false }
+        if (findEpoch > 0) find.openBar(replace = false)
     }
 
     // recompute find matches when the query/options change or the buffer edits (debounced); select the match
     // nearest the caret so it scrolls into view. Closed or empty query ⇒ no matches (nothing highlights).
-    LaunchedEffect(findOpen, findQuery, findOptions, editorSession.textRevision) {
-        if (!findOpen || findQuery.isEmpty()) { matches = emptyList(); regexError = false; return@LaunchedEffect }
-        delay(120.milliseconds)
-        regexError = findOptions.regex && runCatching { Regex(findQuery) }.isFailure
-        val found = findMatches(editorSession.doc.text, findQuery, findOptions)
-        matches = found
-        if (found.isEmpty()) currentMatch = 0
-        else {
-            currentMatch = matchIndexFrom(found, editorSession.selection.start).coerceIn(0, found.size - 1)
-            editorSession.setSelectionRange(found[currentMatch].start, found[currentMatch].end)
-        }
+    LaunchedEffect(find.open, find.query, find.options, editorSession.textRevision) {
+        if (find.open && find.query.isNotEmpty()) delay(120.milliseconds)
+        find.recompute()
     }
 
     // ---- bring the caret into view after every edit/caret move ----
@@ -1010,7 +798,12 @@ private fun CodeEditorContent(
             Key.PageDown -> { editorSession.moveVertical(pageLines, select); return true }
             Key.Backspace -> { editorSession.backspace(word); return true }
             Key.Delete -> { editorSession.deleteForward(word); return true }
-            Key.Enter, Key.NumPadEnter -> { editorSession.commitText("\n"); return true }
+            Key.Enter, Key.NumPadEnter -> {
+                // Shift+Enter = complete statement (IntelliJ's Smart Enter): finish the line then open a new one.
+                if (ev.isShiftPressed && !shortcut && !ev.isAltPressed) completeStatement()
+                else editorSession.commitText("\n")
+                return true
+            }
             Key.Tab -> {
                 if (!shortcut && !ev.isAltPressed) {
                     if (ev.isShiftPressed) editorSession.dedent() else editorSession.indent()
@@ -1030,8 +823,8 @@ private fun CodeEditorContent(
                 }
                 // Undo (⌘/Ctrl-Z), redo (⌘/Ctrl-Shift-Z or Ctrl-Y). Dismiss the popup/snippet first so they
                 // don't act on the reverted buffer.
-                Key.Z -> { dismissed = true; job?.cancel(); snippet = null; if (ev.isShiftPressed) editorSession.redo() else editorSession.undo(); return true }
-                Key.Y -> { dismissed = true; job?.cancel(); snippet = null; editorSession.redo(); return true }
+                Key.Z -> { completion.dismiss(); snippet = null; if (ev.isShiftPressed) editorSession.redo() else editorSession.undo(); return true }
+                Key.Y -> { completion.dismiss(); snippet = null; editorSession.redo(); return true }
                 // Zoom: ⌘/Ctrl with +/-/0 (mirrors the pinch gesture).
                 Key.Equals, Key.Plus, Key.NumPadAdd -> { onFontScaleChange(clampFontScale(fontScale * 1.1f)); return true }
                 Key.Minus, Key.NumPadSubtract -> { onFontScaleChange(clampFontScale(fontScale / 1.1f)); return true }
@@ -1065,6 +858,7 @@ private fun CodeEditorContent(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { viewport = it }
+                .onGloballyPositioned { contentInWindow.value = it.positionInWindow() }
                 .editorTextInput(editorSession, editorIme)
                 .focusRequester(focus)
                 .onFocusChanged { isFocused = it.isFocused }
@@ -1076,10 +870,9 @@ private fun CodeEditorContent(
                     }
                     // Find (⌘/Ctrl-F) / find+replace (⌘/Ctrl-R); seed the query from the current selection.
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && (ev.key == Key.F || ev.key == Key.R)) {
-                        editorSession.selectedText()?.takeIf { it.isNotEmpty() && '\n' !in it }?.let { findQuery = it }
-                        replaceMode = ev.key == Key.R
-                        findOpen = true
-                        dismissed = true; job?.cancel()
+                        val seed = editorSession.selectedText()?.takeIf { it.isNotEmpty() && '\n' !in it }
+                        find.openBar(replace = ev.key == Key.R, seed = seed)
+                        completion.dismiss()
                         return@onPreviewKeyEvent true
                     }
                     // Go to definition (⌘/Ctrl-B): resolve the resource/symbol at the caret and jump to it.
@@ -1093,12 +886,12 @@ private fun CodeEditorContent(
                         return@onPreviewKeyEvent true
                     }
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Spacebar) {
-                        dismissed = false; refresh(immediate = true); return@onPreviewKeyEvent true
+                        completion.reopen(immediate = true); return@onPreviewKeyEvent true
                     }
                     // Parameter info (Ctrl/Cmd-P, a la IntelliJ): force the signature-help panel even if it was
                     // dismissed — re-arm + bump the epoch so the resolve effect re-runs for the call at the caret.
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.P) {
-                        sigDismissed = false; sigEpoch++; return@onPreviewKeyEvent true
+                        sig.triggerExplicit(); return@onPreviewKeyEvent true
                     }
                     // Rename (F2, or Shift-F6 a la IntelliJ): prompt for a new name → project-wide rename.
                     if (ev.key == Key.F2 || (ev.isShiftPressed && ev.key == Key.F6)) {
@@ -1107,15 +900,15 @@ private fun CodeEditorContent(
                     // Code actions: Alt+Enter (or Ctrl/Cmd-.) opens the lightbulb menu; when it's open the
                     // arrows + Enter/Tab drive it and Esc closes it (checked before completion's own keys).
                     if ((ev.isAltPressed && ev.key == Key.Enter) || ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Period)) {
-                        if (actions.isNotEmpty()) { dismissed = true; job?.cancel(); actionSelected = 0; actionsOpen = true }
+                        if (acts.available.isNotEmpty()) acts.openMenu()
                         return@onPreviewKeyEvent true
                     }
-                    if (actionsOpen) {
+                    if (acts.menuOpen) {
                         return@onPreviewKeyEvent when (ev.key) {
-                            Key.Escape -> { actionsOpen = false; true }
-                            Key.DirectionDown -> { actionSelected = (actionSelected + 1).coerceAtMost((actions.size - 1).coerceAtLeast(0)); true }
-                            Key.DirectionUp -> { actionSelected = (actionSelected - 1).coerceAtLeast(0); true }
-                            Key.Enter, Key.Tab -> { applyActionAt(actionSelected); true }
+                            Key.Escape -> { acts.closeMenu(); true }
+                            Key.DirectionDown -> { acts.moveSelection(1); true }
+                            Key.DirectionUp -> { acts.moveSelection(-1); true }
+                            Key.Enter, Key.Tab -> { acts.applyAt(acts.menuSelected); true }
                             else -> false
                         }
                     }
@@ -1132,14 +925,14 @@ private fun CodeEditorContent(
                     }
                     // Esc closes the (informational) signature-help panel when no completion popup is open; the
                     // panel captures no other keys, so everything else flows through to the editor.
-                    if (sigHelp != null && !sigDismissed && !showPopup && ev.key == Key.Escape) {
-                        sigDismissed = true; return@onPreviewKeyEvent true
+                    if (sig.help != null && !sig.dismissed && !showPopup && ev.key == Key.Escape) {
+                        sig.dismiss(); return@onPreviewKeyEvent true
                     }
                     if (!showPopup) return@onPreviewKeyEvent false
                     when (ev.key) {
-                        Key.Escape -> { dismissed = true; job?.cancel(); true }
-                        Key.DirectionDown -> { selected = (safeSelected + 1).coerceAtMost((displayed.size - 1).coerceAtLeast(0)); true }
-                        Key.DirectionUp -> { selected = (safeSelected - 1).coerceAtLeast(0); true }
+                        Key.Escape -> { completion.dismiss(); true }
+                        Key.DirectionDown -> { completion.selected = (safeSelected + 1).coerceAtMost((displayed.size - 1).coerceAtLeast(0)); true }
+                        Key.DirectionUp -> { completion.selected = (safeSelected - 1).coerceAtLeast(0); true }
                         Key.Tab, Key.Enter -> { accept(); true }
                         else -> false
                     }
@@ -1206,7 +999,7 @@ private fun CodeEditorContent(
                                 val triple = tripleArmed && (pos - tripleArmPos).getDistance() < 60f
                                 // A tap on a gutter error/warning glyph opens that line's diagnostic sheet
                                 // (full message + fixes) instead of moving the caret.
-                                val gutterDiag = if (pos.x < gutterWidthPx) diagnosticOnLine(lineAtY(pos.y)) else null
+                                val gutterDiag = if (pos.x < gutterWidthPx) acts.diagnosticOnLine(lineAtY(pos.y)) else null
                                 when {
                                     foldActionAt(pos) -> {} // toggled/expanded a fold (gutter chevron or placeholder)
                                     triple -> {
@@ -1214,7 +1007,7 @@ private fun CodeEditorContent(
                                         editorSession.selectLineAt(offsetAt(pos))
                                         if (lastInputWasTouch) handlesVisible = true
                                     }
-                                    gutterDiag != null -> openDiagnosticSheet(gutterDiag)
+                                    gutterDiag != null -> acts.openSheet(gutterDiag)
                                     else -> {
                                         editorSession.setCaret(offsetAt(pos))
                                         if (lastInputWasTouch) {
@@ -1241,7 +1034,7 @@ private fun CodeEditorContent(
                             // (handles + the floating toolbar), the standard Android text gesture. Code actions
                             // are reached from the lightbulb in that toolbar (and the gutter bulb), so this
                             // gesture is never overloaded.
-                            dismissed = true; job?.cancel()
+                            completion.dismiss()
                             editorSession.selectWordAt(offsetAt(pos))
                             if (lastInputWasTouch) {
                                 handlesVisible = true
@@ -1271,10 +1064,10 @@ private fun CodeEditorContent(
                             val anchor = offsetAt(down.position)
                             // A click on a gutter error/warning glyph opens that line's diagnostic sheet.
                             val gutterDiag = if (down.position.x < gutterWidthPx)
-                                diagnosticOnLine(lineAtY(down.position.y)) else null
+                                acts.diagnosticOnLine(lineAtY(down.position.y)) else null
                             when {
                                 mouseClicks == 1 && foldActionAt(down.position) -> {} // fold chevron / placeholder
-                                gutterDiag != null && mouseClicks == 1 -> openDiagnosticSheet(gutterDiag)
+                                gutterDiag != null && mouseClicks == 1 -> acts.openSheet(gutterDiag)
                                 mouseClicks == 2 -> editorSession.selectWordAt(anchor)
                                 mouseClicks == 3 -> editorSession.selectLineAt(anchor)
                                 else -> editorSession.setCaret(anchor)
@@ -1340,8 +1133,8 @@ private fun CodeEditorContent(
                         numberLayout = ::numberLayout,
                         diagByLine = diagByLine,
                         bracketPair = bracketPair,
-                        findMatches = if (findOpen) matches else emptyList(),
-                        currentMatch = currentMatch,
+                        findMatches = if (find.open) find.matches else emptyList(),
+                        currentMatch = find.currentIndex,
                         colors = EditorDrawColors(
                             background = colors.editorBg,
                             currentLine = colors.currentLine,
@@ -1395,7 +1188,7 @@ private fun CodeEditorContent(
                     d.severity,
                     d.unused,
                     d.message,
-                    onClick = { openDiagnosticSheet(d) },
+                    onClick = { acts.openSheet(d) },
                     modifier = Modifier.offset {
                         IntOffset(
                             (gutterWidthPx + metrics.padLeft + lineWidth + 24f - hOffset.floatValue).roundToInt(),
@@ -1420,8 +1213,8 @@ private fun CodeEditorContent(
                     hasSelection = !editorSession.selection.collapsed,
                     // The lightbulb appears in the toolbar whenever the caret/selection has actions available —
                     // the easy, discoverable way to reach quick-fixes & intentions on a phone (tap → lightbulb).
-                    hasActions = actions.isNotEmpty(),
-                    onActions = { handlesVisible = false; dismissed = true; job?.cancel(); actionSelected = 0; actionsOpen = true },
+                    hasActions = acts.available.isNotEmpty(),
+                    onActions = { handlesVisible = false; acts.openMenu() },
                     onCopy = {
                         editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
                         handlesVisible = false
@@ -1442,8 +1235,8 @@ private fun CodeEditorContent(
         // completion popup, anchored at the token start in viewport coordinates. Mounted on `popupVisible`
         // (the keep-alive latch) and rendered from `shownCompletion` (the last good state) so a keystroke's
         // transient session swap / filter miss doesn't blink the window shut.
-        val shown = shownCompletion.value
-        if (popupVisible && shown != null) {
+        val shown = completion.shown
+        if (completion.popupVisible && shown != null) {
             val anchor = shown.tokenStart.coerceIn(0, docLength)
             val (anchorLine, anchorX, anchorTop) = caretGeometry(anchor)
             val lineBottomPx = anchorTop + metrics.lineHeight
@@ -1463,7 +1256,7 @@ private fun CodeEditorContent(
 
             Popup(
                 popupPositionProvider = positionProvider,
-                onDismissRequest = { dismissed = true; job?.cancel() },
+                onDismissRequest = { completion.dismiss() },
                 // The popup is non-focusable (typing must reach the editor), but Compose still registers it
                 // for outside-touch dismissal — and every tap on the SOFT KEYBOARD is a touch outside the
                 // popup window, so it fired onDismissRequest on each keystroke and blinked the popup shut.
@@ -1484,10 +1277,10 @@ private fun CodeEditorContent(
                         width = popupWidth,
                         maxListHeight = listMax,
                         onPick = { item ->
-                            selected = items.indexOf(item).coerceAtLeast(0)
+                            completion.selected = items.indexOf(item).coerceAtLeast(0)
                             accept(item) // accept the tapped row, not the (stale) currently-selected index
                         },
-                        onHover = { selected = it },
+                        onHover = { completion.selected = it },
                     )
                 }
             }
@@ -1495,8 +1288,8 @@ private fun CodeEditorContent(
 
         // signature-help (parameter-info) panel — floated ABOVE the caret line, independent of the completion
         // popup below it. Non-focusable so typing keeps reaching the editor; dismissed by the host logic above.
-        val sig = sigHelp
-        if (sig != null && !sigDismissed && isFocused && sig.signatures.isNotEmpty()) {
+        val sigHelp = sig.help
+        if (sigHelp != null && !sig.dismissed && isFocused && sigHelp.signatures.isNotEmpty()) {
             val (_, sigX, sigTop) = caretGeometry(caretOffset)
             val gapPx = with(density) { 6.dp.roundToPx() }
             val positionProvider = remember(sigX, sigTop, gapPx) {
@@ -1508,19 +1301,19 @@ private fun CodeEditorContent(
             }
             Popup(
                 popupPositionProvider = positionProvider,
-                onDismissRequest = { sigDismissed = true },
+                onDismissRequest = { sig.dismiss() },
                 properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
             ) {
-                SignatureHelpPopup(sig)
+                SignatureHelpPopup(sigHelp)
             }
         }
 
         // lightbulb on the caret line whenever actions are available and no completion popup is showing
-        if (actions.isNotEmpty() && !showPopup && isFocused) {
+        if (acts.available.isNotEmpty() && !showPopup && isFocused) {
             val caretLn = doc.lineForOffset(caretOffset)
             val lineTopPx = metrics.padTop + editorSession.foldModel.visualForDocLine(caretLn) * metrics.lineHeight - vOffset.floatValue
             ActionLightbulb(
-                onClick = { dismissed = true; job?.cancel(); actionSelected = 0; actionsOpen = true },
+                onClick = { acts.openMenu() },
                 modifier = Modifier.offset {
                     IntOffset(
                         (gutterWidthPx - 19.dp.toPx()).roundToInt(),
@@ -1548,7 +1341,7 @@ private fun CodeEditorContent(
         }
 
         // code-actions menu, anchored below the caret line (same position machinery as completion)
-        if (actionsOpen && actions.isNotEmpty()) {
+        if (acts.menuOpen && acts.available.isNotEmpty()) {
             val (_, anchorX, anchorTop) = caretGeometry(caretOffset)
             val lineBottomPx = anchorTop + metrics.lineHeight
             val gapPx = with(density) { 6.dp.roundToPx() }
@@ -1563,16 +1356,16 @@ private fun CodeEditorContent(
             }
             Popup(
                 popupPositionProvider = positionProvider,
-                onDismissRequest = { actionsOpen = false },
+                onDismissRequest = { acts.closeMenu() },
             ) {
                 BoxWithConstraints {
                     val compact = maxWidth < 600.dp
                     val popupWidth = if (compact) (maxWidth * 0.9f).coerceIn(240.dp, 340.dp) else 360.dp
                     CodeActionsMenu(
-                        actions = actions,
-                        selectedIndex = actionSelected.coerceIn(0, (actions.size - 1).coerceAtLeast(0)),
+                        actions = acts.available,
+                        selectedIndex = acts.menuSelected.coerceIn(0, (acts.available.size - 1).coerceAtLeast(0)),
                         width = popupWidth,
-                        onPick = { applyActionAt(it) },
+                        onPick = { acts.applyAt(it) },
                     )
                 }
             }
@@ -1592,652 +1385,38 @@ private fun CodeEditorContent(
         }
 
         // diagnostic sheet — full (scrollable) message + that diagnostic's fixes, docked at the pane bottom
-        diagnosticSheet?.let { d ->
+        acts.sheet?.let { d ->
             DiagnosticSheet(
                 severity = d.severity,
                 unused = d.unused,
                 message = d.message,
-                actions = sheetActions,
-                onPick = { applySheetFix(it) },
-                onDismiss = { diagnosticSheet = null },
+                actions = acts.sheetActions,
+                onPick = { acts.applySheetFix(it) },
+                onDismiss = { acts.closeSheet() },
             )
         }
 
         // find / replace bar, docked at the top of the editor
-        if (findOpen) {
+        if (find.open) {
             FindReplaceBar(
-                query = findQuery,
-                replace = replaceText,
-                replaceMode = replaceMode,
-                options = findOptions,
-                matchCount = matches.size,
-                currentIndex = if (matches.isEmpty()) -1 else currentMatch,
-                regexError = regexError,
-                onQueryChange = { findQuery = it },
-                onReplaceChange = { replaceText = it },
-                onToggleReplaceMode = { replaceMode = !replaceMode },
-                onOptionsChange = { findOptions = it },
-                onPrev = { gotoMatch(currentMatch - 1) },
-                onNext = { gotoMatch(currentMatch + 1) },
-                onReplaceOne = { replaceCurrent() },
-                onReplaceAll = { replaceAll() },
-                onClose = { findOpen = false; runCatching { focus.requestFocus() } },
+                query = find.query,
+                replace = find.replaceWith,
+                replaceMode = find.replaceMode,
+                options = find.options,
+                matchCount = find.matches.size,
+                currentIndex = if (find.matches.isEmpty()) -1 else find.currentIndex,
+                regexError = find.regexError,
+                onQueryChange = { find.query = it },
+                onReplaceChange = { find.replaceWith = it },
+                onToggleReplaceMode = { find.replaceMode = !find.replaceMode },
+                onOptionsChange = { find.options = it },
+                onPrev = { find.goto(find.currentIndex - 1) },
+                onNext = { find.goto(find.currentIndex + 1) },
+                onReplaceOne = { find.replaceCurrent() },
+                onReplaceAll = { find.replaceAll() },
+                onClose = { find.open = false; runCatching { focus.requestFocus() } },
                 modifier = Modifier.align(Alignment.TopCenter),
             )
         }
-    }
-}
-
-/** What the rename prompt is editing: where the caret was, the symbol's old name + kind, and the typed name. */
-private data class RenameUiState(val offset: Int, val oldName: String, val kind: String, val newName: String)
-
-/** The last good completion render state, latched so the popup window survives a keystroke's transient gaps. */
-private data class ShownCompletion(val tokenStart: Int, val items: List<UiCompletionItem>, val prefix: String)
-
-/** A centered prompt for the new identifier; Enter renames, Esc cancels. Auto-focused, with the name selected. */
-@Composable
-private fun RenamePopup(
-    state: RenameUiState,
-    busy: Boolean,
-    error: String?,
-    onChange: (String) -> Unit,
-    onCommit: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val focus = remember { FocusRequester() }
-    // Prefill with the old name, fully selected, so typing replaces it (the IntelliJ rename feel).
-    var field by remember { mutableStateOf(TextFieldValue(state.newName, androidx.compose.ui.text.TextRange(0, state.newName.length))) }
-    LaunchedEffect(Unit) { focus.requestFocus() }
-    Column(
-        modifier.padding(top = 48.dp).width(320.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
-            .padding(16.dp),
-    ) {
-        Text("Rename ${state.kind}", color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.size(8.dp))
-        Box(
-            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, if (error != null) Ca.colors.error else Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            BasicTextField(
-                value = field,
-                onValueChange = { field = it; onChange(it.text) },
-                singleLine = true,
-                enabled = !busy,
-                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary, fontFamily = Ca.type.codeFamily),
-                cursorBrush = SolidColor(Ca.colors.accent),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
-                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (ev.key) {
-                        Key.Enter -> { onCommit(); true }
-                        Key.Escape -> { onCancel(); true }
-                        else -> false
-                    }
-                },
-            )
-        }
-        if (error != null) {
-            Spacer(Modifier.size(6.dp))
-            Text(error, color = Ca.colors.error, style = Ca.type.caption2)
-        }
-        Spacer(Modifier.size(6.dp))
-        Text(if (busy) "Renaming…" else "Enter to rename '${state.oldName}', Esc to cancel",
-            color = Ca.colors.textTertiary, style = Ca.type.caption2)
-    }
-}
-
-// ---- drawing ----
-
-private class EditorMetrics(
-    val lineHeight: Float,
-    val charWidth: Float,
-    val padTop: Float,
-    val padLeft: Float,
-    val padRight: Float,
-    val padBottom: Float,
-)
-
-private class EditorDrawColors(
-    val background: Color,
-    val currentLine: Color,
-    val caret: Color,
-    val selection: Color,
-    val gutterText: Color,
-    val gutterCurrent: Color,
-    val gutterBorder: Color,
-    val error: Color,
-    val warning: Color,
-    val info: Color,
-    val muted: Color,
-    val composing: Color,
-    val indentGuide: Color,
-    val findMatch: Color,
-    val findCurrent: Color,
-)
-
-/**
- * Re-anchor inlay-hint offsets to a single text edit so they stay attached between debounced refetches.
- * A hint inside the replaced span is dropped (the next fetch repositions it); one after it shifts by the
- * length delta; one before it is untouched.
- */
-private fun shiftInlayHints(hints: List<UiInlayHint>, span: EditSpan): List<UiInlayHint> {
-    val es = span.start
-    val ee = span.start + span.removed
-    val d = span.added - span.removed
-    if (d == 0 && span.removed == 0) return hints
-    return hints.mapNotNull { h ->
-        when {
-            h.offset <= es -> h
-            h.offset >= ee -> if (d == 0) h else h.copy(offset = h.offset + d)
-            else -> null
-        }
-    }
-}
-
-private class DiagSeg(val startCol: Int, val endCol: Int, val severity: UiSeverity, val unused: Boolean)
-
-private fun mapDiagnosticsToLines(diagnostics: List<UiDiagnostic>, doc: EditorDocument): Map<Int, List<DiagSeg>> {
-    if (diagnostics.isEmpty()) return emptyMap()
-    val out = HashMap<Int, MutableList<DiagSeg>>()
-    for (d in diagnostics) {
-        // all severities get a squiggle (coloured per severity in the draw phase); the gutter glyph
-        // below still only lights for Error/Warning.
-        val s = d.startOffset.coerceIn(0, doc.length)
-        val e = d.endOffset.coerceIn(s, doc.length)
-        if (e <= s) continue
-        val startLine = doc.lineForOffset(s)
-        val endLine = min(doc.lineForOffset(e), startLine + 200) // bound degenerate whole-file spans
-        for (ln in startLine..endLine) {
-            val segS = if (ln == startLine) s - doc.lineStart(ln) else 0
-            val segE = if (ln == endLine) e - doc.lineStart(ln) else doc.lineLength(ln)
-            if (segE <= segS) continue
-            out.getOrPut(ln) { ArrayList(2) }.add(DiagSeg(segS, segE, d.severity, d.unused))
-        }
-    }
-    return out
-}
-
-private fun DrawScope.drawEditor(
-    session: EditorSession,
-    metrics: EditorMetrics,
-    gutterWidth: Float,
-    vOff: Float,
-    hOff: Float,
-    layoutFor: (Int) -> TextLayoutResult,
-    compositeLayoutFor: (Int) -> TextLayoutResult,
-    rawToVisual: (Int, Int) -> Int,
-    foldModel: dev.ide.ui.editor.folding.FoldModel,
-    foldableStartLines: Set<Int>,
-    foldStripWidth: Float,
-    hoveredLine: Int,
-    numberLayout: (Int) -> TextLayoutResult,
-    diagByLine: Map<Int, List<DiagSeg>>,
-    bracketPair: Pair<Int, Int>?,
-    findMatches: List<Match>,
-    currentMatch: Int,
-    colors: EditorDrawColors,
-    caretVisible: Boolean,
-    caretContent: Offset,
-    handlesVisible: Boolean,
-    handleColor: Color,
-) {
-    val doc = session.doc
-    val sel = session.selection
-    val lineH = metrics.lineHeight
-    // Viewport bounds are visual ROWS (folds compress them); map back to the doc lines they show. The
-    // firstVisible..lastVisible doc range still covers every visible row in the viewport (hidden lines inside
-    // it are skipped per-loop), so the existing line-keyed loops keep working with one `isHidden` guard each.
-    val topRow = floor((vOff - metrics.padTop) / lineH).toInt().coerceAtLeast(0)
-    val botRow = ((vOff + size.height - metrics.padTop) / lineH).toInt().coerceAtMost((foldModel.visualLineCount - 1).coerceAtLeast(0))
-    val firstVisible = foldModel.docLineForVisual(topRow)
-    val lastVisible = foldModel.docLineForVisual(botRow)
-    // The document lines actually ON SCREEN (one per visual row) — iterated by the per-line draw loops instead
-    // of `firstVisible..lastVisible`, which would walk every hidden line of a large collapsed region each frame.
-    // `botRow` is clamped to the current line count while `topRow` follows the raw scroll offset, so a
-    // document that shrank under a stale scroll position can leave botRow < topRow for a frame. Guard the
-    // array size (a negative size threw NegativeArraySizeException) and treat it as nothing visible.
-    val visibleLines = when {
-        botRow < topRow -> emptyList()
-        !foldModel.hasFolds -> (firstVisible..lastVisible).toList()
-        else -> IntArray(botRow - topRow + 1) { foldModel.docLineForVisual(topRow + it) }.toList()
-    }
-    val textLeft = gutterWidth + metrics.padLeft - hOff
-    fun lineTop(line: Int) = metrics.padTop + foldModel.visualForDocLine(line) * lineH - vOff
-    fun xOf(line: Int, offset: Int): Float =
-        textLeft + layoutFor(line).getHorizontalPosition(rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
-
-    val caretLine = doc.lineForOffset(sel.end)
-
-    // current-line band across the full width (incl. gutter; gutter bg repaints its slice below)
-    if (sel.collapsed) {
-        drawRect(colors.currentLine, Offset(0f, lineTop(caretLine)), Size(size.width, lineH))
-    }
-
-    clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
-        // find-match highlights (under the selection/text): every match tinted, the current one stronger.
-        if (findMatches.isNotEmpty()) {
-            for ((idx, m) in findMatches.withIndex()) {
-                val sLine = doc.lineForOffset(m.start)
-                val eLine = doc.lineForOffset(m.end)
-                if (eLine < firstVisible || sLine > lastVisible) continue
-                val color = if (idx == currentMatch) colors.findCurrent else colors.findMatch
-                for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
-                    if (foldModel.isHidden(line)) continue
-                    val x0 = if (line == sLine) xOf(line, m.start) else textLeft
-                    val x1 = if (line == eLine) xOf(line, m.end) else textLeft + layoutFor(line).size.width
-                    if (x1 > x0) drawRect(color, Offset(x0, lineTop(line)), Size(x1 - x0, lineH))
-                }
-            }
-        }
-
-        // selection background
-        if (!sel.collapsed) {
-            val sLine = doc.lineForOffset(sel.min)
-            val eLine = doc.lineForOffset(sel.max)
-            for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
-                if (foldModel.isHidden(line)) continue
-                val x0 = if (line == sLine) xOf(line, sel.min) else textLeft
-                val x1 = if (line == eLine) xOf(line, sel.max)
-                else textLeft + layoutFor(line).size.width + metrics.charWidth * 0.6f // mark the line break
-                if (x1 > x0) drawRect(colors.selection, Offset(x0, lineTop(line)), Size(x1 - x0, lineH))
-            }
-        }
-
-        // indent guides ("bracket lines") — a faint vertical at each 4-column indent level, bridged across
-        // blank lines so a guide spans a block's empty rows. Drawn under the text.
-        run {
-            val unit = 4
-            fun indentCols(line: Int): Int {
-                val end = doc.lineEnd(line)
-                var i = doc.lineStart(line)
-                var c = 0
-                while (i < end) {
-                    when (doc.charAt(i)) {
-                        ' ' -> c++
-                        '\t' -> c += unit
-                        else -> return c
-                    }
-                    i++
-                }
-                return -1 // blank line
-            }
-            for (line in visibleLines) {
-                var cols = indentCols(line)
-                if (cols < 0) { // blank: bridge with the shallower of the nearest non-blank neighbours
-                    var up = line - 1
-                    while (up >= 0 && indentCols(up) < 0) up--
-                    var dn = line + 1
-                    while (dn < doc.lineCount && indentCols(dn) < 0) dn++
-                    val a = if (up >= 0) indentCols(up) else 0
-                    val b = if (dn < doc.lineCount) indentCols(dn) else 0
-                    cols = min(a, b)
-                }
-                var level = unit
-                while (level < cols) {
-                    val x = textLeft + level * metrics.charWidth
-                    if (x >= gutterWidth) {
-                        drawLine(colors.indentGuide, Offset(x, lineTop(line)), Offset(x, lineTop(line) + lineH), strokeWidth = 1f)
-                    }
-                    level += unit
-                }
-            }
-        }
-
-        // text — cached per-line layouts; only a cache miss (edited or newly-visible line) shapes text. A line
-        // hidden inside a collapsed fold is skipped; the line that STARTS a collapsed fold draws its composite
-        // (`prefix + placeholder + suffix`) instead of its raw text.
-        for (line in visibleLines) {
-            if (foldModel.foldStartingAt(line) != null) {
-                drawText(compositeLayoutFor(line), topLeft = Offset(textLeft, lineTop(line)))
-            } else if (doc.lineLength(line) != 0) {
-                drawText(layoutFor(line), topLeft = Offset(textLeft, lineTop(line)))
-            }
-        }
-
-        // IME composing underline
-        session.composing?.let { comp ->
-            val cs = doc.lineForOffset(comp.min)
-            val ce = doc.lineForOffset(comp.max)
-            for (line in max(cs, firstVisible)..min(ce, lastVisible)) {
-                if (foldModel.isHidden(line)) continue
-                val x0 = if (line == cs) xOf(line, comp.min) else textLeft
-                val x1 = if (line == ce) xOf(line, comp.max) else textLeft + layoutFor(line).size.width
-                if (x1 > x0) {
-                    val y = lineTop(line) + lineH - 2f
-                    drawLine(colors.composing, Offset(x0, y), Offset(x1, y), strokeWidth = 1.5f)
-                }
-            }
-        }
-
-        // diagnostic squiggles
-        for (line in visibleLines) {
-            val segs = diagByLine[line] ?: continue
-            val layout = layoutFor(line)
-            val maxCol = doc.lineLength(line)
-            for (seg in segs) {
-                val color = when (seg.severity) {
-                    UiSeverity.Error -> colors.error
-                    UiSeverity.Warning -> if (seg.unused) colors.muted else colors.warning
-                    UiSeverity.Info -> colors.info
-                    UiSeverity.Hint -> colors.muted
-                }
-                val c0 = seg.startCol.coerceIn(0, maxCol)
-                val c1 = seg.endCol.coerceIn(c0, maxCol)
-                if (c1 <= c0) continue
-                val x0 = textLeft + layout.getHorizontalPosition(rawToVisual(line, c0), usePrimaryDirection = true)
-                val x1 = textLeft + layout.getHorizontalPosition(rawToVisual(line, c1), usePrimaryDirection = true)
-                wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f)
-            }
-        }
-
-        // matching-bracket boxes
-        bracketPair?.let { (open, close) ->
-            for (off in intArrayOf(open, close)) {
-                if (off < 0 || off >= doc.length) continue
-                val line = doc.lineForOffset(off)
-                if (line !in firstVisible..lastVisible) continue
-                val x0 = xOf(line, off)
-                val x1 = xOf(line, off + 1)
-                drawRect(
-                    color = colors.caret.copy(alpha = 0.45f),
-                    topLeft = Offset(x0, lineTop(line)),
-                    size = Size(x1 - x0, lineH),
-                    style = Stroke(width = 1f),
-                )
-            }
-        }
-
-        // caret — drawn at the animated content position (minus scroll), so it glides to a new spot
-        if (caretVisible && sel.collapsed) {
-            val cx = caretContent.x - hOff
-            val cy = caretContent.y - vOff
-            if (cy + lineH > 0f && cy < size.height) {
-                drawRect(colors.caret, Offset(cx - 1f, cy), Size(2.dp.toPx(), lineH))
-            }
-        }
-    }
-
-    // gutter: opaque background over anything scrolled beneath it, then the band slice + numbers
-    drawRect(colors.background, Offset(0f, 0f), Size(gutterWidth, size.height))
-    if (sel.collapsed && caretLine in firstVisible..lastVisible) {
-        drawRect(colors.currentLine, Offset(0f, lineTop(caretLine)), Size(gutterWidth, lineH))
-    }
-    val dotR = 2.5.dp.toPx()
-    // The fold strip occupies the inner [gutterWidth - foldStripWidth, gutterWidth) band; numbers right-align
-    // just left of it so a chevron never overlaps a number.
-    val numberRight = gutterWidth - foldStripWidth - 4.dp.toPx()
-    val chevronCx = gutterWidth - foldStripWidth / 2f
-    for (line in visibleLines) {
-        val segs = diagByLine[line]
-        val hasError = segs?.any { it.severity == UiSeverity.Error } == true
-        val hasWarning = !hasError && segs?.any { it.severity == UiSeverity.Warning } == true
-        val numColor = when {
-            hasError -> colors.error
-            hasWarning -> colors.warning
-            line == caretLine -> colors.gutterCurrent
-            else -> colors.gutterText
-        }
-        if (hasError || hasWarning) {
-            drawCircle(
-                color = if (hasError) colors.error else colors.warning,
-                radius = dotR,
-                center = Offset(5.dp.toPx() + dotR, lineTop(line) + lineH / 2f),
-            )
-        }
-        // Fold chevron: a collapsed fold always shows ▸ (so it can be re-expanded); an open foldable line
-        // shows ▾ on the caret line and on mouse hover (IntelliJ-style — hover is a no-op on touch).
-        val collapsed = foldModel.foldStartingAt(line) != null
-        val expandable = !collapsed && line in foldableStartLines
-        if (collapsed || (expandable && (line == caretLine || line == hoveredLine))) {
-            drawFoldChevron(chevronCx, lineTop(line) + lineH / 2f, expanded = !collapsed, color = colors.gutterCurrent)
-        }
-        val num = numberLayout(line + 1)
-        drawText(
-            num,
-            color = numColor,
-            topLeft = Offset(
-                numberRight - num.size.width,
-                lineTop(line) + (lineH - num.size.height) / 2f,
-            ),
-        )
-    }
-    // A hairline at the gutter's right edge separates it from the code area.
-    drawLine(colors.gutterBorder, Offset(gutterWidth, 0f), Offset(gutterWidth, size.height), strokeWidth = 1f)
-
-    // touch selection handles (under the selection edges / the caret)
-    if (handlesVisible) {
-        val r = 6.dp.toPx()
-        val points = if (sel.collapsed) listOf(sel.start) else listOf(sel.min, sel.max)
-        for (off in points) {
-            val line = doc.lineForOffset(off)
-            if (line !in firstVisible..lastVisible) continue
-            val x = xOf(line, off)
-            if (x < gutterWidth) continue
-            drawCircle(handleColor, r, Offset(x, lineTop(line) + lineH + r * 0.8f))
-        }
-    }
-}
-
-/** A small fold chevron centered at ([cx], [cy]): ▾ when [expanded] (an open foldable line), ▸ when collapsed. */
-private fun DrawScope.drawFoldChevron(cx: Float, cy: Float, expanded: Boolean, color: Color) {
-    val r = 3.2.dp.toPx()
-    val path = Path().apply {
-        if (expanded) { // ▾ points down
-            moveTo(cx - r, cy - r * 0.6f); lineTo(cx + r, cy - r * 0.6f); lineTo(cx, cy + r * 0.7f)
-        } else {        // ▸ points right
-            moveTo(cx - r * 0.6f, cy - r); lineTo(cx + r * 0.7f, cy); lineTo(cx - r * 0.6f, cy + r)
-        }
-        close()
-    }
-    drawPath(path, color.copy(alpha = 0.8f))
-}
-
-/** A squiggly underline from [x1] to [x2] at baseline [y] (a tight triangle wave reads as wavy). */
-private fun DrawScope.wavyUnderline(color: Color, x1: Float, x2: Float, y: Float) {
-    if (x2 <= x1) return
-    val amplitude = 1.6f
-    val step = 2.2f
-    val path = Path().apply {
-        moveTo(x1, y)
-        var x = x1
-        var up = true
-        while (x < x2) {
-            val nx = (x + step).coerceAtMost(x2)
-            lineTo(nx, if (up) y - amplitude else y + amplitude)
-            x = nx
-            up = !up
-        }
-    }
-    drawPath(path, color, style = Stroke(width = 1.4f))
-}
-
-// ---- chrome ----
-
-/** The inline diagnostic chip: a pill at the right of a diagnostic line — severity-tinted fill, icon,
- *  message. Colour/icon follow [severity]; an [unused] warning is muted rather than alarming. */
-@Composable
-private fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: String, onClick: () -> Unit, modifier: Modifier) {
-    val color = when (severity) {
-        UiSeverity.Error -> Ca.colors.error
-        UiSeverity.Warning -> if (unused) Ca.colors.textTertiary else Ca.colors.warning
-        UiSeverity.Info -> Ca.colors.info
-        UiSeverity.Hint -> Ca.colors.textTertiary
-    }
-    val icon = when (severity) {
-        UiSeverity.Error -> CaIcons.error
-        UiSeverity.Warning -> CaIcons.warning
-        UiSeverity.Info, UiSeverity.Hint -> CaIcons.info
-    }
-    Row(
-        modifier
-            .background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(icon, null, Modifier.size(13.dp), tint = color)
-        Text(
-            message,
-            color = color,
-            fontSize = 11.5f.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun SelectionToolbar(
-    hasSelection: Boolean,
-    hasActions: Boolean,
-    onActions: () -> Unit,
-    onCopy: () -> Unit,
-    onCut: () -> Unit,
-    onPaste: () -> Unit,
-    onSelectAll: () -> Unit,
-) {
-    Row(
-        Modifier
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (hasSelection) {
-            ToolbarAction("Copy", onCopy)
-            ToolbarAction("Cut", onCut)
-        }
-        ToolbarAction("Paste", onPaste)
-        ToolbarAction("Select all", onSelectAll)
-        // Quick-fixes / intentions for the caret position, when any exist.
-        if (hasActions) {
-            Box(
-                Modifier
-                    .clickable(onClick = onActions)
-                    .padding(horizontal = 9.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CaIcons.lightbulb, "Quick actions", Modifier.size(16.dp), tint = Ca.colors.warning)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ToolbarAction(label: String, onClick: () -> Unit) {
-    Text(
-        label,
-        color = Ca.colors.textPrimary,
-        style = Ca.type.caption,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 7.dp),
-    )
-}
-
-// ---- popup positioning ----
-
-/** Doc-strip + chrome height to subtract from the room-below before capping the scrollable list. */
-private val DocStripReserve = 44.dp
-
-/** Floor for the list so it stays usable (≈1.5 rows) even when the caret is near the pane's bottom. */
-private val MinListHeight = 64.dp
-
-/**
- * Positions the completion popup just below the caret line and clamps it horizontally so it never
- * overflows the window. [anchorX]/[lineBottom] are in the editor pane's coordinate space.
- */
-private class CompletionPopupPositionProvider(
-    private val anchorX: Int,
-    private val lineBottom: Int,
-    private val gapPx: Int,
-    private val marginPx: Int,
-) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        val maxX = (windowSize.width - popupContentSize.width - marginPx).coerceAtLeast(marginPx)
-        val x = (anchorBounds.left + anchorX).coerceIn(marginPx, maxX)
-        val y = anchorBounds.top + lineBottom + gapPx
-        return IntOffset(x, y)
-    }
-}
-
-/** Positions the selection toolbar centered above an anchor point in the pane's coordinate space. */
-private class AboveAnchorPositionProvider(
-    private val anchorX: Int,
-    private val anchorTop: Int,
-    private val gapPx: Int,
-) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        val x = (anchorBounds.left + anchorX - popupContentSize.width / 2)
-            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
-        val y = (anchorBounds.top + anchorTop - popupContentSize.height - gapPx).coerceAtLeast(0)
-        return IntOffset(x, y)
-    }
-}
-
-// ---- helpers ----
-
-/**
- * A cheap, bounded backward scan: is the caret inside an open `(...)` call argument list? Used only as a gate
- * so signature help hits the backend just when the caret is plausibly in a call (the backend does the real,
- * literal-aware resolution). It bails at a statement boundary (`;`/`{`) or an opening `[`/`{` at depth 0 so an
- * array index / lambda body doesn't read as a call. False positives only cost one backend call that returns null.
- */
-private fun caretInsideCall(chars: CharSequence, caret: Int): Boolean {
-    var depth = 0
-    var i = (caret - 1).coerceAtMost(chars.length - 1)
-    var guard = 0
-    while (i >= 0 && guard < 4000) {
-        when (chars[i]) {
-            ')', ']', '}' -> depth++
-            '(' -> { if (depth == 0) return true; depth-- }
-            '[' -> { if (depth == 0) return false; depth-- }
-            '{', ';' -> if (depth == 0) return false
-        }
-        i--; guard++
-    }
-    return false
-}
-
-private fun paletteFor(syntax: SyntaxColors): Array<SpanStyle?> {
-    val palette = arrayOfNulls<SpanStyle>(TokenType.entries.size)
-    palette[TokenType.KEYWORD.ordinal] = SpanStyle(color = syntax.keyword)
-    palette[TokenType.STRING.ordinal] = SpanStyle(color = syntax.string)
-    palette[TokenType.COMMENT.ordinal] = SpanStyle(color = syntax.comment, fontStyle = FontStyle.Italic)
-    palette[TokenType.NUMBER.ordinal] = SpanStyle(color = syntax.number)
-    palette[TokenType.ANNOTATION.ordinal] = SpanStyle(color = syntax.annotation)
-    palette[TokenType.FUNC.ordinal] = SpanStyle(color = syntax.func)
-    palette[TokenType.TYPE.ordinal] = SpanStyle(color = syntax.type)
-    palette[TokenType.PUNCT.ordinal] = SpanStyle(color = syntax.punctuation)
-    palette[TokenType.PROPERTY.ordinal] = SpanStyle(color = syntax.property)
-    return palette
-}
-
-/** Editor zoom limits (× the theme code size) and the clamp the pinch/keyboard zoom both go through. */
-private const val MIN_FONT_SCALE = 0.6f
-private const val MAX_FONT_SCALE = 2.6f
-private fun clampFontScale(s: Float): Float = s.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE)
-
-private fun codePointToString(cp: Int): String = when {
-    cp < 0x10000 -> cp.toChar().toString()
-    else -> {
-        val v = cp - 0x10000
-        charArrayOf(((v ushr 10) + 0xD800).toChar(), ((v and 0x3FF) + 0xDC00).toChar()).concatToString()
     }
 }

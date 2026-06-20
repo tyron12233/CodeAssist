@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,14 +63,11 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
 import dev.ide.ui.backend.UiDepKind
-import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiDependencyNode
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.DropdownOverlay
-import dev.ide.ui.components.GlassMaterial
-import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.components.entranceSlideUp
@@ -85,8 +81,9 @@ private enum class DepView(val label: String, val icon: ImageVector) {
     List("List", CaIcons.resources), Tree("Tree", CaIcons.layers), Graph("Graph", CaIcons.gitBranch)
 }
 
-/** The Add flow can add a normal library/AAR or import a BOM as a platform (Gradle `platform(...)`). */
-private enum class AddMode(val label: String) { Library("Library"), Platform("Platform (BOM)") }
+/** The Add flow can add a library/AAR, import a BOM as a platform (Gradle `platform(...)`), or depend on
+ *  another module in the project. */
+private enum class AddMode(val label: String) { Library("Library"), Platform("Platform (BOM)"), Module("Module") }
 
 /** A typed string is treated as a direct coordinate when it carries a `:` — `group:name[:version]`. */
 private fun looksLikeCoordinate(s: String): Boolean =
@@ -99,90 +96,78 @@ private data class ToastMsg(val text: String, val error: Boolean)
 private val DEPS_EXPANDED_BREAKPOINT = 860.dp
 
 /**
- * The per-module dependency manager. Adaptive: a **two-pane desktop layout** (module list pane · content)
- * above [DEPS_EXPANDED_BREAKPOINT], a single column with module chips below it. List / Tree / Graph views
- * over the resolved picture; a live **download/resolution panel** while resolving; an Add flow (centered
- * dialog on desktop, bottom sheet on phone) that searches Maven Central and blocks incompatible artifacts;
- * a **remove confirmation**; and success/error **toasts**. Talks only to [IdeBackend].
+ * The per-module dependency manager, **embedded in a module's detail screen** (the host owns the module
+ * header / back / tab chrome). A toolbar (List/Tree/Graph toggle · Repositories · Add) over the resolved
+ * picture; a live **download/resolution panel** while resolving; an Add flow (centered dialog on desktop,
+ * bottom sheet on phone) that adds a **library/AAR**, imports a **BOM platform**, or depends on **another
+ * module**; a **Repositories** manager for custom Maven repos; a remove confirmation; and toasts. Talks
+ * only to [IdeBackend].
  */
 @Composable
-fun DependenciesScreen(
+fun DependenciesPane(
     backend: IdeBackend,
-    initialModule: String?,
-    onBack: () -> Unit,
+    moduleName: String,
     codeFont: FontFamily = FontFamily.Monospace,
+    modifier: Modifier = Modifier,
 ) {
-    var modules by remember { mutableStateOf(backend.dependencyModules()) }
-    var selected by remember { mutableStateOf(initialModule ?: modules.firstOrNull()?.name) }
     var view by remember { mutableStateOf(DepView.List) }
     var deps by remember { mutableStateOf<UiModuleDeps?>(null) }
     var loading by remember { mutableStateOf(false) }
-    var reloadKey by remember { mutableStateOf(0) }
+    var reloadKey by remember(moduleName) { mutableStateOf(0) }
     var addOpen by remember { mutableStateOf(false) }
+    var reposOpen by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<String?>(null) }
     var toast by remember { mutableStateOf<ToastMsg?>(null) }
     val resolveState by backend.depsState.collectAsState()
 
-    LaunchedEffect(selected, reloadKey) {
-        val module = selected ?: return@LaunchedEffect
+    LaunchedEffect(moduleName, reloadKey) {
         loading = true
-        deps = runCatching { backend.moduleDependencies(module) }.getOrNull()
+        deps = runCatching { backend.moduleDependencies(moduleName) }.getOrNull()
         loading = false
     }
-    LaunchedEffect(reloadKey) { modules = backend.dependencyModules() }
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
 
-    val onRemoveRequest: (String) -> Unit = { pendingRemove = it }
     val resolving = loading || resolveState.resolving
-
-    BoxWithConstraints(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    BoxWithConstraints(modifier.fillMaxSize().background(Ca.colors.bg)) {
         val expanded = maxWidth >= DEPS_EXPANDED_BREAKPOINT
         Column(Modifier.fillMaxSize()) {
-            DepsHeader(onBack, view, { view = it }, { addOpen = true }, resolving, resolveState.message, compact = !expanded)
+            DepPaneToolbar(view, { view = it }, { addOpen = true }, { reposOpen = true }, resolving, resolveState.message, compact = !expanded)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
-
-            if (expanded) {
-                Row(Modifier.fillMaxSize()) {
-                    GlassSurface(Modifier.width(290.dp).fillMaxHeight(), GlassMaterial.Regular) {
-                        ModulePane(modules, selected) { selected = it }
-                    }
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
-                    DepBody(deps, loading, view, resolveState, codeFont, Modifier.weight(1f).fillMaxHeight(), onRemoveRequest)
-                }
-            } else {
-                if (modules.size > 1) ModuleChips(modules, selected) { selected = it }
-                DepBody(deps, loading, view, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth(), onRemoveRequest)
-            }
+            DepBody(deps, loading, view, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth()) { pendingRemove = it }
         }
 
-        // ---- Add flow: a centered dialog on desktop, a bottom sheet on phone ----
+        // ---- Add flow + Repositories: centered dialogs on desktop, bottom sheets on phone ----
         val onResult: (UiAddResult) -> Unit = { result ->
             if (result.success) { addOpen = false; reloadKey++; toast = ToastMsg(result.message, error = false) }
         }
         if (expanded) {
             DropdownOverlay(visible = addOpen, onDismiss = { addOpen = false }, topPadding = 64.dp) {
-                Column(
-                    Modifier.padding(horizontal = 12.dp).widthIn(max = 640.dp).fillMaxWidth()
-                        .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-                        .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)),
-                ) {
-                    AddDependencyContent(backend, selected, codeFont, onResult, Modifier.padding(20.dp).fillMaxWidth())
+                OverlayCard(maxWidth = 640.dp) {
+                    AddDependencyContent(backend, moduleName, codeFont, onResult, Modifier.padding(20.dp).fillMaxWidth())
+                }
+            }
+            DropdownOverlay(visible = reposOpen, onDismiss = { reposOpen = false }, topPadding = 64.dp) {
+                OverlayCard(maxWidth = 560.dp) {
+                    RepositoriesContent(backend, codeFont, Modifier.padding(20.dp).fillMaxWidth())
                 }
             }
         } else {
             BottomSheet(visible = addOpen, onDismiss = { addOpen = false }, heightFraction = 0.82f) {
-                AddDependencyContent(backend, selected, codeFont, onResult, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                AddDependencyContent(backend, moduleName, codeFont, onResult, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+            }
+            BottomSheet(visible = reposOpen, onDismiss = { reposOpen = false }, heightFraction = 0.7f) {
+                RepositoriesContent(backend, codeFont, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
             }
         }
 
         // ---- remove confirmation ----
         ConfirmRemoveDialog(
             coordinate = pendingRemove,
-            moduleName = selected,
+            moduleName = moduleName,
             onDismiss = { pendingRemove = null },
             onConfirm = {
-                val coord = pendingRemove; val module = selected
-                if (coord != null && module != null && backend.removeDependency(module, coord)) {
+                val coord = pendingRemove
+                if (coord != null && backend.removeDependency(moduleName, coord)) {
                     toast = ToastMsg("Removed ${shortCoord(coord)}", error = false)
                     reloadKey++
                 }
@@ -195,102 +180,109 @@ fun DependenciesScreen(
     }
 }
 
-// ---- header -------------------------------------------------------------------------------------
+@Composable
+private fun OverlayCard(maxWidth: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) {
+    Column(
+        Modifier.padding(horizontal = 12.dp).widthIn(max = maxWidth).fillMaxWidth()
+            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)),
+    ) { content() }
+}
+
+// ---- toolbar ------------------------------------------------------------------------------------
 
 @Composable
-private fun DepsHeader(
-    onBack: () -> Unit,
+private fun DepPaneToolbar(
     view: DepView,
     onView: (DepView) -> Unit,
     onAdd: () -> Unit,
+    onRepos: () -> Unit,
     resolving: Boolean,
     resolveMessage: String,
     compact: Boolean,
 ) {
-    GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
-        Row(
-            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButtonCa(CaIcons.chevronLeft, "Back", onBack)
-            if (!compact) Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-            // On compact widths the title yields space (ellipsizes) so the toggle + Add never clip off-screen.
-            Text("Dependencies", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = if (compact) Modifier.weight(1f, fill = false) else Modifier)
-            AnimatedVisibility(resolving && !compact, enter = fadeIn(tween(Motion.FAST)), exit = fadeOut(tween(Motion.FAST))) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(start = 4.dp).background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                    CircularProgressIndicator(Modifier.size(12.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-                    Text(resolveMessage.ifBlank { "Resolving…" }, color = Ca.colors.accent, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            Spacer(Modifier.weight(1f))
-            // Compact: a spinning indicator stands in for the resolving pill (which is hidden to save room).
-            if (compact && resolving) CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-            ViewToggle(view, onView, compact = compact)
-            Spacer(Modifier.width(4.dp))
-            PrimaryButton("Add", onClick = onAdd, icon = CaIcons.plus, iconOnly = compact)
-        }
-    }
-}
-
-// ---- module switchers ---------------------------------------------------------------------------
-
-@Composable
-private fun ModulePane(modules: List<UiDepModule>, selected: String?, onSelect: (String) -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        Text("MODULES", color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 6.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-            items(modules, key = { it.name }) { m -> ModuleRow(m, m.name == selected) { onSelect(m.name) } }
-        }
-    }
-}
-
-@Composable
-private fun ModuleRow(module: UiDepModule, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accentSoft else Color.Transparent, tween(Motion.FAST), label = "moduleRowBg")
     Row(
-        Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .background(bg, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(if (module.acceptsAar) CaIcons.androidLogo else CaIcons.layers, null, Modifier.size(18.dp),
-            tint = if (selected) Ca.colors.accent else Ca.colors.textSecondary)
-        Column(Modifier.weight(1f)) {
-            Text(module.name, color = if (selected) Ca.colors.accent else Ca.colors.textPrimary, style = Ca.type.footnote,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${if (module.acceptsAar) "Android" else "Java/JVM"} · ${module.dependencyCount} dep${plural(module.dependencyCount)}",
-                color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        ViewToggle(view, onView, compact = compact)
+        if (resolving) {
+            CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            if (!compact) Text(resolveMessage.ifBlank { "Resolving…" }, color = Ca.colors.accent, style = Ca.type.caption2,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        }
+        Spacer(Modifier.weight(1f))
+        IconButtonCa(CaIcons.pkg, "Repositories", onClick = onRepos)
+        PrimaryButton("Add", onClick = onAdd, icon = CaIcons.plus, iconOnly = compact)
+    }
+}
+
+// ---- repositories manager -----------------------------------------------------------------------
+
+@Composable
+private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modifier: Modifier = Modifier) {
+    var repos by remember { mutableStateOf(backend.repositories()) }
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val add = {
+        if (backend.addRepository(name, url)) { repos = backend.repositories(); name = ""; url = ""; error = null }
+        else error = "Enter a valid http(s) URL that isn't already added."
+    }
+
+    Column(modifier) {
+        Text("Repositories", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text("Where libraries resolve from. Built-in repos can't be removed.", color = Ca.colors.textTertiary, style = Ca.type.caption)
+        Spacer(Modifier.height(12.dp))
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+            items(repos, key = { it.url }) { r -> RepoRow(r) { if (backend.removeRepository(r.url)) repos = backend.repositories() } }
+        }
+        Spacer(Modifier.height(12.dp))
+        // add a custom repository
+        RepoField("Name (optional)", name, codeFont) { name = it; error = null }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) { RepoField("https://repo.example.com/maven", url, codeFont) { url = it; error = null } }
+            PrimaryButton("Add", onClick = add, icon = CaIcons.plus)
+        }
+        error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = Ca.colors.error, style = Ca.type.caption2)
         }
     }
 }
 
 @Composable
-private fun ModuleChips(modules: List<UiDepModule>, selected: String?, onSelect: (String) -> Unit) {
+private fun RepoRow(repo: dev.ide.ui.backend.UiRepository, onRemove: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        modules.forEach { m -> ModuleChip(m.name, m.acceptsAar, m.name == selected) { onSelect(m.name) } }
+        LetterBox(if (repo.builtin) "•" else "+", if (repo.builtin) Ca.colors.textTertiary else Ca.colors.accent)
+        Column(Modifier.weight(1f)) {
+            Text(repo.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(repo.url, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (!repo.builtin) IconButtonCa(CaIcons.close, "Remove ${repo.name}", onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
+        else Text("built-in", color = Ca.colors.textTertiary, style = Ca.type.caption2)
     }
 }
 
 @Composable
-private fun ModuleChip(name: String, acceptsAar: Boolean, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "moduleChipBg")
+private fun RepoField(hint: String, value: String, codeFont: FontFamily, onChange: (String) -> Unit) {
     Row(
-        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill))
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(if (acceptsAar) CaIcons.androidLogo else CaIcons.layers, null, Modifier.size(14.dp),
-            tint = if (selected) Ca.colors.accent else Ca.colors.textSecondary)
-        Text(name, color = if (selected) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) Text(hint, color = Ca.colors.textTertiary, style = Ca.type.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicTextField(value, onChange, singleLine = true,
+                textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
+                cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
@@ -381,7 +373,7 @@ private fun DepContent(deps: UiModuleDeps, view: DepView, codeFont: FontFamily, 
                     Column(Modifier.fillMaxWidth().animateItem()) {
                         DependencyRow(node, codeFont, depth = 0, expandable = node.children.isNotEmpty(), expanded = open,
                             onToggle = { expanded["list:${node.coordinate}"] = !open },
-                            onRemove = if (node.declared && node.kind != UiDepKind.Module) ({ onRemove(node.coordinate) }) else null)
+                            onRemove = if (node.declared) ({ onRemove(node.coordinate) }) else null)
                         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
                             Column {
                                 node.children.forEach { childCoord -> nodesByCoord[childCoord]?.let { TransitiveRow(it, codeFont, depth = 1) } }
@@ -499,7 +491,7 @@ private fun TransitiveRow(node: UiDependencyNode, codeFont: FontFamily, depth: I
 @Composable
 private fun AddDependencyContent(
     backend: IdeBackend,
-    moduleName: String?,
+    moduleName: String,
     codeFont: FontFamily,
     onResult: (UiAddResult) -> Unit,
     modifier: Modifier = Modifier,
@@ -509,6 +501,7 @@ private fun AddDependencyContent(
     var results by remember { mutableStateOf<List<UiArtifactHit>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var scope by remember { mutableStateOf("implementation") }
+    var moduleTargets by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf<String?>(null) }
@@ -518,20 +511,24 @@ private fun AddDependencyContent(
 
     LaunchedEffect(query, mode) {
         val q = query.trim()
-        if (q.length < 2 || moduleName == null) { results = emptyList(); return@LaunchedEffect }
+        if (q.length < 2 || mode == AddMode.Module) { results = emptyList(); return@LaunchedEffect }
         searching = true
         delay(320)
         results = runCatching { backend.searchArtifacts(q, moduleName) }.getOrDefault(emptyList())
         searching = false
     }
+    // Load candidate modules when the Module tab is selected.
+    LaunchedEffect(mode) { if (mode == AddMode.Module) moduleTargets = runCatching { backend.moduleDependencyTargets(moduleName) }.getOrDefault(emptyList()) }
 
-    // Add either a versioned library/AAR or, in Platform mode, import a BOM via addPlatform.
-    val performAdd: (String) -> Unit = add@{ coordinate ->
-        if (moduleName == null) return@add
+    // Add a versioned library/AAR, a BOM platform, or (Module mode) a module-on-module dependency.
+    val performAdd: (String) -> Unit = { coordinate ->
         busy = true; error = null; adding = coordinate
         coroutine.launch {
-            val result = if (mode == AddMode.Platform) backend.addPlatform(moduleName, coordinate)
-                else backend.addDependency(moduleName, coordinate, scope)
+            val result = when (mode) {
+                AddMode.Platform -> backend.addPlatform(moduleName, coordinate)
+                AddMode.Module -> backend.addModuleDependency(moduleName, coordinate, scope)
+                AddMode.Library -> backend.addDependency(moduleName, coordinate, scope)
+            }
             busy = false; adding = null
             if (result.success) onResult(result) else error = result.message
         }
@@ -540,13 +537,13 @@ private fun AddDependencyContent(
     Column(modifier) {
         Text("Add dependency", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
 
-        // Library vs Platform (BOM) toggle
+        // Library / Platform (BOM) / Module toggle
         Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AddMode.entries.forEach { m -> ModeChip(m.label, m == mode) { if (!busy) { mode = m; error = null } } }
         }
 
-        // search field
-        Row(
+        // search field — library/platform only (Module mode picks from the project's other modules)
+        if (mode != AddMode.Module) Row(
             Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
                 .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -563,8 +560,8 @@ private fun AddDependencyContent(
             if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
         }
 
-        // scope selector — libraries only (a platform carries no scope)
-        if (mode == AddMode.Library) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // scope selector — libraries + module deps (a platform carries no scope)
+        if (mode != AddMode.Platform) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("scope", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
             scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
         } else Spacer(Modifier.height(10.dp))
@@ -577,7 +574,7 @@ private fun AddDependencyContent(
             }
         }
 
-        // While adding: a live download panel. Otherwise: the results list.
+        // While adding: a live download panel. Otherwise: the results / module list.
         Crossfade(targetState = busy, animationSpec = tween(Motion.BASE), label = "addBody") { isBusy ->
             if (isBusy) {
                 Column(Modifier.fillMaxWidth().heightIn(min = 160.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -586,6 +583,13 @@ private fun AddDependencyContent(
                     Text("Adding ${adding?.let(::shortCoord) ?: ""}", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
                     Text(resolveState.message.ifBlank { "Resolving transitive dependencies…" }, color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     ResolveBar(resolveState.fraction)
+                }
+            } else if (mode == AddMode.Module) {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    if (moduleTargets.isEmpty()) item { EmptyRow("No other modules available to depend on.") }
+                    items(moduleTargets, key = { it }) { target ->
+                        ModuleTargetRow(target, Modifier.animateItem()) { performAdd(target) }
+                    }
                 }
             } else {
                 val typed = query.trim()
@@ -603,6 +607,19 @@ private fun AddDependencyContent(
                 }
             }
         }
+    }
+}
+
+/** A pickable module to depend on (Module mode). */
+@Composable
+private fun ModuleTargetRow(name: String, modifier: Modifier, onAdd: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().height(48.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAdd).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LetterBox("M", Ca.colors.accent)
+        Text(":$name", color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        IconButtonCa(CaIcons.plus, "Add $name", onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
     }
 }
 

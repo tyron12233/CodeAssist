@@ -19,7 +19,7 @@ import dev.ide.ui.platform.isMobilePlatform
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, Editor, Dependencies, ModuleConfig, SdkManager }
+enum class Screen { Projects, CreateProject, Editor, ModuleConfig, SdkManager }
 
 /**
  * Top-level editor destinations in the side rail / bottom nav. Per Apple's HIG these are peer
@@ -106,6 +106,9 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
 
     /** A transient destination shown as a sheet/overlay (Source, More) — null when none is open. */
     var sheetDest by mutableStateOf<RailDestination?>(null)
+
+    /** Whether the Logs viewer sheet (editor & analysis logs, opened from the More menu) is showing. */
+    var logsOpen by mutableStateOf(false)
 
     /** The module whose Add-Source-Root dialog is open, or null when closed. */
     var addSourceRootModule by mutableStateOf<String?>(null)

@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.analysis.CodeActionKind
 import dev.ide.block.BlockEdit
 import dev.ide.block.BlockId
 import dev.ide.block.BlockNode
@@ -55,6 +56,8 @@ import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.backend.UiModuleRef
+import dev.ide.ui.backend.UiModuleTypeOption
+import dev.ide.ui.backend.UiRepository
 import dev.ide.ui.backend.UiPermissionDecision
 import dev.ide.ui.backend.UiPermissionRequest
 import dev.ide.ui.backend.UiSearchOptions
@@ -83,7 +86,9 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.UiTextEdit
 import dev.ide.analysis.DiagnosticTag
+import dev.ide.analytics.AnalyticsService
 import dev.ide.lang.dom.Severity
+import dev.ide.lang.highlight.HighlightModifier
 import dev.ide.model.ContentRole
 import dev.ide.model.IconTarget
 import dev.ide.model.Module
@@ -94,21 +99,25 @@ import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.backend.UiTemplateParam
-import dev.ide.platform.CancelToken
-import dev.ide.platform.EngineCancellation
 import dev.ide.platform.EngineCanceledException
+import dev.ide.platform.EngineScheduler
 import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.LogLevel
 import dev.ide.platform.log.LogSink
+import dev.ide.preview.LayoutPreviewBackend
+import dev.ide.ui.backend.UiHighlightModifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
@@ -119,29 +128,44 @@ import java.nio.file.Paths
 import java.util.stream.Collectors
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Implements the UI's [IdeBackend] port over the JVM [IdeServices] facade.
  *
  * When a [ProjectManager] is supplied the backend is **project-aware**: `createProject`/`openProject`
- * swap the active [services] and bump [projectEpoch], on which the UI keys its per-project state. The
- * flow getters ([buildState]/[indexStatus]/[depsState]) delegate to the live [services], so a project
- * swap re-points them automatically once the UI subtree recomposes on the new epoch. With no manager the
- * backend is single-project (the pre-existing behaviour; create/open are unsupported).
+ * swap the active engine and bump [projectEpoch], on which the UI keys its per-project state. The
+ * flow getters ([buildState]/[indexStatus]/[depsState]) re-point to the live engine on each epoch, so a
+ * project swap updates them automatically. With no manager the backend is single-project (the pre-existing
+ * behaviour; create/open are unsupported).
+ *
+ * [initial] may be null: the backend then starts with **no project open** (the picker is shown, since
+ * [projectEpoch] stays 0) and the first engine is created lazily on `openProject`/`createProject`. The
+ * editor-screen call sites are only reachable once a project is open, so they go through the non-null
+ * [services] accessor; the few surfaces reachable from the picker (the StateFlow getters, tab persistence,
+ * close) tolerate a null engine.
  */
 class IdeServicesBackend(
-    initial: IdeServices,
+    initial: IdeServices? = null,
     private val manager: ProjectManager? = null,
     /**
      * Opt-in usage analytics. Defaults to the no-op service (desktop, or when no transport is configured);
      * the on-device host injects a [dev.ide.analytics.impl.DefaultAnalyticsService] backed by Supabase. The
      * backend gates it on the persisted consent preference — see [analyticsConsent]/[setAnalyticsConsent].
      */
-    private val analytics: dev.ide.analytics.AnalyticsService = dev.ide.analytics.NoopAnalyticsService,
-) : IdeBackend, dev.ide.preview.LayoutPreviewBackend {
+    private val analytics: AnalyticsService = dev.ide.analytics.NoopAnalyticsService,
+) : IdeBackend, LayoutPreviewBackend {
 
     @Volatile
-    private var services: IdeServices = initial
+    private var activeServices: IdeServices? = initial
+
+    /**
+     * The active engine. Throws when accessed with no project open; only the editor-screen call sites use it,
+     * and those are unreachable until a project is open ([projectEpoch] > 0 gates the editor UI). Picker-
+     * reachable surfaces read [activeServices] directly and handle null.
+     */
+    private val services: IdeServices
+        get() = activeServices ?: error("No project is open")
 
     /**
      * The thread the editor's language work (parse/complete/analyze/hints/actions/rename) runs on.
@@ -160,82 +184,40 @@ class IdeServicesBackend(
     private val engineDispatcher = Dispatchers.Default.limitedParallelism(1)
 
     /**
-     * Three priority lanes over the single [engineDispatcher]:
+     * The priority scheduler the editor's engine calls run through (extracted to [EngineScheduler] so the
+     * threading/scheduling policy is testable + instrumentable in isolation). Shares [engineDispatcher] with
+     * the direct `withContext(engineDispatcher)` call sites below, so all engine work stays on the one worker.
      *
      *  1. [interactive] — completion: highest priority, preempts both background and preview.
-     *  2. [background] — analysis/hints/detection: preempts preview, preempted by interactive.
+     *  2. [background] — analysis/hints/semantic/folding/signature: preempts preview, preempted by interactive
+     *     (throws [EngineCanceledException]; callers map it to a "skipped, retry next edit" result).
      *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
-     *
-     * Each lane uses a [CancelToken] that higher-priority callers flip from their thread before queuing, so
-     * an in-flight lower-priority pass bails at its next [EngineCancellation.checkCanceled] poll and frees
-     * the worker. The `*Pending` counters let a lower-priority lane bail immediately at the start of its
-     * engine-thread slot when a higher-priority call is already waiting in the queue.
      */
-    @Volatile private var backgroundToken: CancelToken? = null
-    @Volatile private var previewToken: CancelToken? = null
-    private val interactivePending = AtomicInteger(0)
-    private val backgroundPending = AtomicInteger(0)
+    private val scheduler = EngineScheduler(engineDispatcher)
+    private suspend fun <T> interactive(block: () -> T): T = logEditorFailures("completion") { scheduler.interactive(block = block) }
+    private suspend fun <T> background(block: () -> T): T = logEditorFailures("analysis") { scheduler.background(block = block) }
+    private suspend fun <T> preview(block: suspend () -> T): T = logEditorFailures("preview") { scheduler.preview(block = block) }
 
-    /** Latency-critical engine work (completion): preempts both background and preview lanes. */
-    private suspend fun <T> interactive(block: () -> T): T {
-        interactivePending.incrementAndGet()
-        backgroundToken?.cancel()
-        previewToken?.cancel()
+    private val editorLog = Log.logger("ide.editor")
+
+    /**
+     * Records an unexpected failure of an editor engine call (completion/analysis/preview) into the logging
+     * facade before rethrowing, so it shows up in the Logs viewer — the common "this feature does nothing"
+     * case where an exception was previously swallowed silently upstream. Logged at WARN (not ERROR) so a
+     * routine editor hiccup doesn't pop the critical-error dialog. Preemption (the priority scheduler
+     * cancelling lower-priority work) and ordinary coroutine cancellation are normal control flow, not failures.
+     */
+    private suspend fun <T> logEditorFailures(lane: String, run: suspend () -> T): T =
         try {
-            return withContext(engineDispatcher) { block() }
-        } finally {
-            interactivePending.decrementAndGet()
+            run()
+        } catch (e: EngineCanceledException) {
+            throw e
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            editorLog.warn("Editor $lane failed", t)
+            throw t
         }
-    }
-
-    /**
-     * Preemptible per-keystroke engine work (analysis/hints/breadcrumb/preview-detection). Preempts the
-     * preview lane; throws [EngineCanceledException] when a completion request preempts it — callers map that
-     * to their own "skipped" result (re-run on the next edit, or retried by the host).
-     */
-    private suspend fun <T> background(block: () -> T): T {
-        backgroundPending.incrementAndGet()
-        previewToken?.cancel()
-        return try {
-            withContext(engineDispatcher) {
-                val token = CancelToken()
-                backgroundToken = token
-                if (interactivePending.get() > 0) token.cancel()
-                try {
-                    EngineCancellation.withToken(token) { block() }
-                } finally {
-                    if (backgroundToken === token) backgroundToken = null
-                }
-            }
-        } finally {
-            backgroundPending.decrementAndGet()
-        }
-    }
-
-    /**
-     * Lowest-priority engine work (preview rendering/lowering). Preempted by both [interactive] and
-     * [background]; retries automatically after a short delay so the caller suspends until the engine is
-     * free rather than getting a one-shot cancellation. Only [CancellationException] (outer coroutine
-     * cancelled) escapes — [EngineCanceledException] is handled internally by the retry loop.
-     */
-    private suspend fun <T> preview(block: suspend () -> T): T {
-        while (true) {
-            try {
-                return withContext(engineDispatcher) {
-                    val token = CancelToken()
-                    previewToken = token
-                    if (interactivePending.get() > 0 || backgroundPending.get() > 0) token.cancel()
-                    try {
-                        EngineCancellation.withToken(token) { block() }
-                    } finally {
-                        if (previewToken === token) previewToken = null
-                    }
-                }
-            } catch (e: EngineCanceledException) {
-                delay(150)
-            }
-        }
-    }
 
     private val _projectEpoch = MutableStateFlow(0)
     override val projectEpoch: StateFlow<Int> get() = _projectEpoch
@@ -245,6 +227,20 @@ class IdeServicesBackend(
 
     /** Background scope for the analytics build/index watchers (see [init]); cancelled in [close]. */
     private val analyticsScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** Scope that keeps the epoch-keyed engine flows (build/index/deps/permission/sdk) alive; cancelled in [close]. */
+    private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * A [StateFlow] that re-points to the live engine's [select] flow on every project swap (keyed on
+     * [projectEpoch]) and yields [default] while no project is open. Lets the picker collect these app-wide
+     * surfaces (notably the permission dialog) without an engine, and have them start working once one opens.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun <T> engineFlow(default: T, select: (IdeServices) -> StateFlow<T>): StateFlow<T> =
+        _projectEpoch
+            .flatMapLatest { activeServices?.let(select) ?: MutableStateFlow(default) }
+            .stateIn(engineScope, SharingStarted.Eagerly, default)
 
     /** Aggregates per-keystroke latencies (completion/analysis) into periodic summary events. */
     private val perf = PerfSampler { name, props -> track(name, props) }
@@ -264,6 +260,8 @@ class IdeServicesBackend(
         }
     }
 
+    private val log = Log.logger("ide.backend")
+
     init {
         Log.addSink(errorDialogSink)
 
@@ -271,9 +269,10 @@ class IdeServicesBackend(
         // (once per build/reindex). Re-subscribes per project (collectLatest on the epoch).
         analyticsScope.launch {
             projectEpoch.collectLatest {
+                val svc = activeServices ?: return@collectLatest
                 var startNs = 0L
                 var building = false
-                services.indexStatus.collectLatest { st ->
+                svc.indexStatus.collectLatest { st ->
                     if (st.building && !building) { building = true; startNs = System.nanoTime() }
                     else if (!st.building && building) {
                         building = false
@@ -288,8 +287,9 @@ class IdeServicesBackend(
         // no-ops while consent is absent, so this is harmless when analytics is off.
         analyticsScope.launch {
             projectEpoch.collectLatest {
+                val svc = activeServices ?: return@collectLatest
                 var prev = dev.ide.ui.backend.RunStatus.Idle
-                services.buildState.collectLatest { bs ->
+                svc.buildState.collectLatest { bs ->
                     val terminal = bs.status == dev.ide.ui.backend.RunStatus.Succeeded || bs.status == dev.ide.ui.backend.RunStatus.Failed
                     if (terminal && prev == dev.ide.ui.backend.RunStatus.Running) {
                         track(
@@ -314,9 +314,15 @@ class IdeServicesBackend(
             moduleCount = services.modules().size,
         )
 
-    override fun fileTree(mode: TreeViewMode): TreeNode = when (mode) {
-        TreeViewMode.Project -> projectTree()
-        TreeViewMode.AllFiles -> allFilesTree()
+    override fun fileTree(mode: TreeViewMode): TreeNode {
+        // Picker-safe: with no project open (the lazy-start path), the engine-backed tree builders would hit
+        // the non-null `services` accessor. Hand back an empty root so the shared UI state can be constructed
+        // before a project is opened; it is rebuilt for real once `openProject` bumps the epoch.
+        if (activeServices == null) return TreeNode(id = "empty", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "module")
+        return when (mode) {
+            TreeViewMode.Project -> projectTree()
+            TreeViewMode.AllFiles -> allFilesTree()
+        }
     }
 
     /** module-root dir → module name, for surfacing `module.toml` as a "open module settings" node. */
@@ -734,21 +740,21 @@ class IdeServicesBackend(
         )
     }
 
-    override val indexStatus: StateFlow<IndexUiStatus> get() = services.indexStatus
+    override val indexStatus: StateFlow<IndexUiStatus> = engineFlow(IndexUiStatus()) { it.indexStatus }
     override fun reindex() = services.reindex()
 
-    override val buildState: StateFlow<BuildState> get() = services.buildState
+    override val buildState: StateFlow<BuildState> = engineFlow(BuildState()) { it.buildState }
     override fun runTasks(): List<RunTaskOption> = services.runTasks()
     override fun runTask(id: String) = services.runTask(id)
     override fun runBuild() = services.runBuild()
     override fun stopBuild() = services.stopBuild()
 
-    override val permissionRequest: StateFlow<UiPermissionRequest?> get() = services.permissionRequest
+    override val permissionRequest: StateFlow<UiPermissionRequest?> = engineFlow<UiPermissionRequest?>(null) { it.permissionRequest }
     override fun answerPermission(id: Int, decision: UiPermissionDecision) = services.answerPermission(id, decision)
 
     // ---- dependency management ----
 
-    override val depsState: StateFlow<DepsResolveState> get() = services.depsState
+    override val depsState: StateFlow<DepsResolveState> = engineFlow(DepsResolveState()) { it.depsState }
 
     override fun startPendingDependencyResolution() = services.startPendingDependencyResolution()
 
@@ -783,6 +789,30 @@ class IdeServicesBackend(
 
     override fun removeDependency(moduleName: String, coordinate: String): Boolean =
         services.removeDependency(moduleName, coordinate)
+
+    override fun moduleDependencyTargets(moduleName: String): List<String> =
+        services.moduleDependencyTargets(moduleName)
+
+    override suspend fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult =
+        withContext(Dispatchers.IO) { services.addModuleDependency(moduleName, targetModule, scope) }
+
+    // ---- repositories ----
+
+    override fun repositories(): List<UiRepository> = services.repositories()
+    override fun addRepository(name: String, url: String): Boolean = services.addRepository(name, url)
+    override fun removeRepository(url: String): Boolean = services.removeRepository(url)
+
+    // ---- module management ----
+
+    override fun availableModuleTypes(): List<UiModuleTypeOption> = services.availableModuleTypes()
+
+    override suspend fun createModule(name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>): UiConfigResult =
+        withContext(Dispatchers.IO) {
+            services.createModule(name, typeId, languageLevel, facetValues).also { if (it.success) _fsEpoch.value += 1 }
+        }
+
+    override fun removeModule(name: String): Boolean =
+        services.removeModule(name).also { if (it) _fsEpoch.value += 1 }
 
     // ---- module configuration ----
 
@@ -824,9 +854,14 @@ class IdeServicesBackend(
         val mgr = manager ?: return false
         return withContext(Dispatchers.IO) {
             runCatching {
-                if (Paths.get(rootPath) == services.workspaceRoot) return@runCatching true
+                if (Paths.get(rootPath) == activeServices?.workspaceRoot) return@runCatching true
                 swap(mgr.open(rootPath)); true
-            }.getOrDefault(false)
+            }.getOrElse { e ->
+                // Surface the failure (console + the critical-error dialog) instead of swallowing it, so a
+                // broken project doesn't silently strand the caller — the picker stays put on a false return.
+                log.error("Couldn't open the project at $rootPath", e)
+                false
+            }
         }
     }
 
@@ -918,10 +953,10 @@ class IdeServicesBackend(
     // Open tabs are persisted per project, alongside the other workspace state under `.platform/`. Format:
     // line 1 = active index, each following line = one open file path (tab order). Best-effort — a missing or
     // unreadable file just means "no remembered tabs". Kept out of `.platform/caches/` so a backup includes it.
-    private val openTabsFile: Path get() = services.workspaceRoot.resolve(".platform/open-tabs.txt")
+    private val openTabsFile: Path? get() = activeServices?.workspaceRoot?.resolve(".platform/open-tabs.txt")
 
     override fun openTabs(): UiOpenTabs {
-        val file = openTabsFile.toFile()
+        val file = (openTabsFile ?: return UiOpenTabs()).toFile()
         if (!file.exists()) return UiOpenTabs()
         return runCatching {
             val lines = file.readText().split('\n')
@@ -933,7 +968,7 @@ class IdeServicesBackend(
 
     override fun saveOpenTabs(tabs: UiOpenTabs) {
         runCatching {
-            val file = openTabsFile
+            val file = openTabsFile ?: return
             Files.createDirectories(file.parent)
             file.toFile().writeText(
                 buildString {
@@ -949,14 +984,56 @@ class IdeServicesBackend(
         return withContext(Dispatchers.IO) { runCatching { mgr.exportBackup().toString() }.getOrNull() }
     }
 
+    // --- diagnostics / logs (the in-app Logs viewer) ---
+
+    override fun recentLogs(): List<dev.ide.ui.backend.UiLogEntry> = Log.recent().map { r ->
+        dev.ide.ui.backend.UiLogEntry(
+            level = r.level.name,
+            tag = r.tag,
+            message = r.message,
+            timestampMs = r.timestampMs,
+            timeLabel = logTimeLabel(r.timestampMs),
+            thread = r.threadName,
+            stackTrace = r.throwable?.let { stackString(it) },
+        )
+    }
+
+    /** Local time-of-day label (HH:mm:ss.SSS) for a log record's epoch-millis timestamp. */
+    private fun logTimeLabel(ms: Long): String = runCatching {
+        java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS"))
+    }.getOrDefault(ms.toString())
+
+    override suspend fun exportLogs(): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = manager?.storageRoot ?: activeServices?.workspaceRoot ?: return@runCatching null
+            Files.createDirectories(dir)
+            val file = dir.resolve("codeassist-log-${System.currentTimeMillis()}.txt")
+            file.toFile().writeText(renderLogs(Log.recent()))
+            file.toString()
+        }.getOrNull()
+    }
+
+    /** Render log records as a plain-text dump (one record per block, stack traces inline) for export/copy. */
+    private fun renderLogs(records: List<dev.ide.platform.log.LogRecord>): String = buildString {
+        append("CodeAssist log — ${records.size} records\n")
+        append("exported ${runCatching { java.time.LocalDateTime.now().withNano(0) }.getOrDefault("")}\n\n")
+        for (r in records) {
+            val time = runCatching { java.time.Instant.ofEpochMilli(r.timestampMs).toString() }.getOrDefault(r.timestampMs.toString())
+            append("$time [${r.level}] ${r.tag} (${r.threadName}): ${r.message}\n")
+            r.throwable?.let { append(stackString(it)).append('\n') }
+        }
+    }
+
     /** Close the active engine — the host calls this on teardown (window close / activity destroy). */
     fun close() {
         runCatching { Log.removeSink(errorDialogSink) }
         runCatching { analyticsScope.cancel() }
+        runCatching { engineScope.cancel() }
         runCatching { perf.flushAll() } // drain partial latency windows so the last session's samples ship
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
-        services.close()
+        activeServices?.close()
     }
 
     private companion object {
@@ -965,10 +1042,10 @@ class IdeServicesBackend(
 
     /** Make [next] the active project: swap it in, bump the epoch (re-keys UI state), and close the old one. */
     private fun swap(next: IdeServices) {
-        val prev = services
-        services = next
+        val prev = activeServices
+        activeServices = next
         _projectEpoch.value += 1
-        if (prev !== next) runCatching { prev.close() }
+        if (prev !== next) runCatching { prev?.close() }
     }
 
     private fun toUiTemplate(t: ProjectTemplate): UiProjectTemplate = UiProjectTemplate(
@@ -1058,7 +1135,7 @@ class IdeServicesBackend(
 
     override suspend fun downloadAndroidSources(): String = services.downloadAndroidSources()
 
-    override val sdkManagerState: StateFlow<UiSdkManagerState> get() = services.sdkManager.state
+    override val sdkManagerState: StateFlow<UiSdkManagerState> = engineFlow(UiSdkManagerState()) { it.sdkManager.state }
     override suspend fun sdkPackages(): List<UiSdkPackage> = services.sdkManager.androidPackages()
     override suspend fun installSdkPackage(path: String): String = services.sdkManager.installAndroidPackage(path)
     override fun cancelSdkDownload(id: String) = services.sdkManager.cancelSdkDownload(id)
@@ -1132,16 +1209,16 @@ class IdeServicesBackend(
         }
     }
 
-    private fun mapHighlightModifier(m: dev.ide.lang.highlight.HighlightModifier): dev.ide.ui.backend.UiHighlightModifier = when (m) {
-        dev.ide.lang.highlight.HighlightModifier.DECLARATION -> dev.ide.ui.backend.UiHighlightModifier.Declaration
-        dev.ide.lang.highlight.HighlightModifier.STATIC -> dev.ide.ui.backend.UiHighlightModifier.Static
-        dev.ide.lang.highlight.HighlightModifier.ABSTRACT -> dev.ide.ui.backend.UiHighlightModifier.Abstract
-        dev.ide.lang.highlight.HighlightModifier.DEPRECATED -> dev.ide.ui.backend.UiHighlightModifier.Deprecated
-        dev.ide.lang.highlight.HighlightModifier.READONLY -> dev.ide.ui.backend.UiHighlightModifier.Readonly
-        dev.ide.lang.highlight.HighlightModifier.MUTABLE -> dev.ide.ui.backend.UiHighlightModifier.Mutable
-        dev.ide.lang.highlight.HighlightModifier.EXTENSION -> dev.ide.ui.backend.UiHighlightModifier.Extension
-        dev.ide.lang.highlight.HighlightModifier.COMPOSABLE -> dev.ide.ui.backend.UiHighlightModifier.Composable
-        dev.ide.lang.highlight.HighlightModifier.SUSPEND -> dev.ide.ui.backend.UiHighlightModifier.Suspend
+    private fun mapHighlightModifier(m: HighlightModifier): UiHighlightModifier = when (m) {
+        HighlightModifier.DECLARATION -> UiHighlightModifier.Declaration
+        HighlightModifier.STATIC -> UiHighlightModifier.Static
+        HighlightModifier.ABSTRACT -> UiHighlightModifier.Abstract
+        HighlightModifier.DEPRECATED -> UiHighlightModifier.Deprecated
+        HighlightModifier.READONLY -> UiHighlightModifier.Readonly
+        HighlightModifier.MUTABLE -> UiHighlightModifier.Mutable
+        HighlightModifier.EXTENSION -> UiHighlightModifier.Extension
+        HighlightModifier.COMPOSABLE -> UiHighlightModifier.Composable
+        HighlightModifier.SUSPEND -> UiHighlightModifier.Suspend
     }
 
     override suspend fun codeFolds(path: String, text: String): List<dev.ide.ui.backend.UiFoldRegion> {
@@ -1171,10 +1248,10 @@ class IdeServicesBackend(
         withContext(engineDispatcher) { services.applyEditorAction(Paths.get(path), text, selStart, selEnd, actionId) }
             .map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
 
-    private fun mapActionKind(k: dev.ide.analysis.CodeActionKind): UiActionKind = when (k) {
-        dev.ide.analysis.CodeActionKind.QUICK_FIX -> UiActionKind.QUICK_FIX
-        dev.ide.analysis.CodeActionKind.INTENTION -> UiActionKind.INTENTION
-        dev.ide.analysis.CodeActionKind.REFACTOR -> UiActionKind.REFACTOR
+    private fun mapActionKind(k: CodeActionKind): UiActionKind = when (k) {
+        CodeActionKind.QUICK_FIX -> UiActionKind.QUICK_FIX
+        CodeActionKind.INTENTION -> UiActionKind.INTENTION
+        CodeActionKind.REFACTOR -> UiActionKind.REFACTOR
     }
 
     // ---- block-based editing ----

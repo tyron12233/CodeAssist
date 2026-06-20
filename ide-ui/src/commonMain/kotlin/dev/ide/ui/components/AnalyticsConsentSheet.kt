@@ -93,7 +93,7 @@ private fun ConsentBody(
                 "We collect: your app version and device model, how long builds, indexing, and code completion " +
                 "take, build success/failure, and scrubbed crash reports.\n\n" +
                 "We never collect your code, file or project names, which features you use, or anything that " +
-                "identifies you. You can change this anytime in the project picker.",
+                "identifies you. You can change this anytime under More while a project is open.",
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             textAlign = TextAlign.Center,
@@ -123,7 +123,7 @@ private fun ConsentBody(
     }
 }
 
-/** A compact reusable analytics on/off row for a settings surface (the project picker's about area). */
+/** A compact reusable analytics on/off row for a settings surface (the editor's More menu). */
 @Composable
 fun AnalyticsToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     Row(

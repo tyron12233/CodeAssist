@@ -61,6 +61,14 @@ class KotlinCompletionQolTest {
         assertEquals("rows() { }", it.insertText)
     }
 
+    @Test
+    fun composableWithLeadingParamsKeepsParens() {
+        // `card(elevation, content)` — a @Composable trailing lambda but with other params, so the parens stay
+        // and the caret lands inside them (a content-only composable would drop the parens; this one must not).
+        val it = symbol("package demo\nfun g() { car|d }", "card")
+        assertEquals("card() { }", it.insertText)
+    }
+
     // --- C: don't duplicate call syntax already present ---
 
     @Test
@@ -93,6 +101,7 @@ class KotlinCompletionQolTest {
                     fun box(width: Int = 0, height: Int = 0) {}
                     fun column(content: () -> Unit) {}
                     fun columnC(content: @Composable () -> Unit) {}
+                    fun card(elevation: Int = 0, content: @Composable () -> Unit) {}
                     fun rows(count: Int, item: (Int) -> Unit) {}
                     class Hue { companion object { val Clear: Hue = Hue(); val Solid: Hue = Hue() } }
                     fun paint(color: Hue = Hue()) {}

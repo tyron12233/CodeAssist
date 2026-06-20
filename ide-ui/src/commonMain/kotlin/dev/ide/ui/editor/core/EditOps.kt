@@ -80,6 +80,18 @@ fun smartInsert(text: CharSequence, selStart: Int, selEnd: Int, ch: Char, langua
     if ((ch in CLOSE_TO_OPEN || ch in QUOTES) && nextChar == ch) {
         return RangeEdit(pos, pos, "", pos + 1)
     }
+    // 1b. Dedent a typed closing bracket to its opener's indent when it's the first thing on its line — the
+    // classic auto-align (typing `}` under `fun foo() {\n    …\n    ` snaps it to the opener's column).
+    if (ch in CLOSE_TO_OPEN) {
+        val ls = lineStartOf(text, pos)
+        if (isBlankBefore(text, ls, pos)) {
+            val openerIndent = matchingOpenerIndent(text, pos, ch)
+            if (openerIndent != null && openerIndent != text.subSequence(ls, pos).toString()) {
+                val replacement = openerIndent + ch
+                return RangeEdit(ls, pos, replacement, ls + replacement.length)
+            }
+        }
+    }
     // 2. Auto-close brackets — but only when a matching closer doesn't already exist further on.
     if (ch in OPEN_TO_CLOSE && shouldAutoClose(nextChar)) {
         return if (shouldInsertClosingBracket(text, ch)) {
@@ -111,6 +123,24 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int): RangeEdit? {
     val emptyPair = (deleted in OPEN_TO_CLOSE && next == OPEN_TO_CLOSE[deleted]) ||
         (deleted in QUOTES && next == deleted)
     if (emptyPair) return RangeEdit(pos - 1, pos + 1, "", pos - 1)
+    // Smart backspace across blank lines: when the caret sits in the leading indent of a line that still has
+    // content, and one or more fully-blank lines sit directly above, remove that whole blank gap in ONE press
+    // and re-indent this line to the previous non-blank line's indent — collapsing e.g. `Column(\n\n) {` back
+    // to `Column(\n) {`. (A truly blank current line falls through to the per-line case below.)
+    run {
+        val lineStart = lineStartOf(text, pos)
+        if (isBlankBefore(text, lineStart, pos) && !isBlankToLineEnd(text, pos)) {
+            var p = lineStart
+            while (p > 0 && (text[p - 1] == '\n' || text[p - 1] == ' ' || text[p - 1] == '\t')) p--
+            if (p > 0 && countCharIn(text, p, lineStart, '\n') >= 2) {
+                val prevLineStart = lineStartOf(text, p - 1)
+                var k = prevLineStart
+                while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
+                val ins = "\n" + text.subSequence(prevLineStart, k).toString()
+                return RangeEdit(p, pos, ins, p + ins.length)
+            }
+        }
+    }
     // Smart-indent backspace (IntelliJ-style): on a blank, whitespace-only line, a single Backspace
     // removes the whole line (all of its whitespace, including any after the caret) together with the
     // preceding line break, hopping the caret to the end of the previous line — rather than peeling off
@@ -133,6 +163,56 @@ private fun lineStartOf(text: CharSequence, pos: Int): Int {
     var i = pos
     while (i > 0 && text[i - 1] != '\n') i--
     return i
+}
+
+/** True when `[lineStart, pos)` is only spaces/tabs (the typed closer is the first non-blank on its line). */
+private fun isBlankBefore(text: CharSequence, lineStart: Int, pos: Int): Boolean {
+    var i = lineStart
+    while (i < pos) { val c = text[i]; if (c != ' ' && c != '\t') return false; i++ }
+    return true
+}
+
+/** True when `[pos, end-of-line)` is only spaces/tabs — i.e. the caret has no real content after it. */
+private fun isBlankToLineEnd(text: CharSequence, pos: Int): Boolean {
+    var i = pos
+    while (i < text.length && text[i] != '\n') { if (text[i] != ' ' && text[i] != '\t') return false; i++ }
+    return true
+}
+
+/** Count of [ch] in `[start, end)`. */
+private fun countCharIn(text: CharSequence, start: Int, end: Int, ch: Char): Int {
+    var n = 0
+    var i = start
+    while (i < end) { if (text[i] == ch) n++; i++ }
+    return n
+}
+
+/**
+ * The leading-whitespace indent of the opener matching [close] at [pos], via a depth-tracked backward scan
+ * (bounded by [BRACKET_SCAN_LIMIT]), or null when none is found. Best-effort: it does not skip brackets that
+ * sit inside string/char literals or comments, which is acceptable for the on-type dedent.
+ */
+private fun matchingOpenerIndent(text: CharSequence, pos: Int, close: Char): String? {
+    val open = CLOSE_TO_OPEN[close] ?: return null
+    var depth = 0
+    var i = pos - 1
+    val limit = maxOf(0, pos - BRACKET_SCAN_LIMIT)
+    while (i >= limit) {
+        val c = text[i]
+        if (c == close) {
+            depth++
+        } else if (c == open) {
+            if (depth == 0) {
+                val ls = lineStartOf(text, i)
+                var k = ls
+                while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
+                return text.subSequence(ls, k).toString()
+            }
+            depth--
+        }
+        i--
+    }
+    return null
 }
 
 /** Offset of the end of the line beginning at [lineStart] (the next '\n', or EOF). */

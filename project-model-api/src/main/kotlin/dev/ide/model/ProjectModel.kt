@@ -2,6 +2,7 @@ package dev.ide.model
 
 import dev.ide.platform.ContentHash
 import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceScope
 import dev.ide.vfs.VirtualFile
 
 /**
@@ -75,7 +76,20 @@ interface Module {
 
     /** Assemble the classpath for a scope, enforcing api/implementation export rules (see ClasspathSnapshot). */
     fun classpath(scope: DependencyScope, transitive: Boolean = true): ClasspathSnapshot
+
+    /** This module's MODULE-scoped service for [key], falling back to the workspace then application scope. */
+    fun <T : Any> service(key: ServiceKey<T>): T
 }
+
+/** The bound [Workspace], resolvable from a workspace- or module-scoped service factory. */
+val WORKSPACE_SERVICE = ServiceKey<Workspace>("model.workspace")
+
+/** The [Module] a MODULE-scoped service factory is bound to. */
+fun ServiceScope.module(): Module =
+    scopeObject as? Module ?: error("module() is only valid in a MODULE-scoped service (scope=$level)")
+
+/** The [Workspace] above a workspace- or module-scoped service factory. */
+fun ServiceScope.workspace(): Workspace = getService(WORKSPACE_SERVICE)
 
 interface SourceSet {
     val name: String                        // "main", "test", "debug", ...

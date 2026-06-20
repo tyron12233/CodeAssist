@@ -41,7 +41,7 @@ class CrossLanguageInteropTest {
         override fun <V : Any> fuzzy(id: IndexId, pattern: String, limit: Int): Sequence<Hit<V>> = emptySequence()
         override suspend fun ensureUpToDate(scope: IndexScope) {}
         override suspend fun reindexSource(path: Path, text: String) {}
-        override val status = IndexStatus()
+        override val status = IndexStatus(ready = true)
         override fun observeStatus(listener: (IndexStatus) -> Unit) = Disposable { }
     }
 

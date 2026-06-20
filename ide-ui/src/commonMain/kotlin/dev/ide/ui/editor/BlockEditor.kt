@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -121,6 +122,7 @@ fun BlockEditor(
     var editing by remember(path) { mutableStateOf<EditTarget?>(null) }
     var selected by remember(path) { mutableStateOf<Selection?>(null) }
     var paletteOpen by remember(path) { mutableStateOf(false) }
+    var focusStack by remember(path) { mutableStateOf<List<UiBlockNode>>(emptyList()) } // drill-in breadcrumb
     val drag = remember(path) { DragState() }
     val scope = rememberCoroutineScope()
 
@@ -133,7 +135,7 @@ fun BlockEditor(
         tree = projected.getOrNull()
         failed = projected.isFailure || projected.getOrNull() == null
         projectedText = text
-        editing = null; selected = null
+        editing = null; selected = null; focusStack = emptyList() // node ids/offsets change on reproject
         drag.targets.clear()
     }
 
@@ -141,7 +143,7 @@ fun BlockEditor(
     // block edit's own edits, surgically on the shared session (applyEdits sorts descending), so untouched
     // code survives byte-for-byte and the text editor sees the same buffer.
     val applyEdit: (UiBlockEdit, List<UiTextEdit>) -> Unit = { edit, extra ->
-        editing = null; selected = null
+        editing = null; selected = null; focusStack = emptyList()
         scope.launch {
             val edits = runCatching { backend.applyBlockEdit(path, projectedText, edit) }.getOrDefault(emptyList())
             val all = edits + extra
@@ -152,7 +154,7 @@ fun BlockEditor(
         }
     }
     val ctx = remember(projectedText, editing, selected, drag) {
-        Ctx(path, backend, scope, projectedText, editing, selected?.blockId, drag, { editing = it }, { selected = it }, applyEdit, { paletteOpen = true })
+        Ctx(path, backend, scope, projectedText, editing, selected?.blockId, drag, { editing = it }, { selected = it }, applyEdit, { paletteOpen = true }, { focusStack = focusStack + it })
     }
 
     Box(modifier.background(Ca.colors.editorBg).canvasOrigin(drag)) {
@@ -170,6 +172,9 @@ fun BlockEditor(
             BlockBar(drag, onAddBlock = { paletteOpen = !paletteOpen })
         }
         if (paletteOpen) Palette(ctx) { paletteOpen = false }
+        focusStack.lastOrNull()?.let { node ->
+            FocusSheet(node, ctx, canBack = focusStack.size > 1, onBack = { focusStack = focusStack.dropLast(1) }, onClose = { focusStack = emptyList() })
+        }
         selected?.let { sel -> ActionBar(sel, ctx, Modifier.align(Alignment.BottomCenter).padding(bottom = 58.dp)) }
         if (drag.isDragging) DragGhost(drag)
     }
@@ -180,7 +185,7 @@ fun BlockEditor(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun PuzzleCanvas(file: UiBlockNode, ctx: Ctx) {
+internal fun PuzzleCanvas(file: UiBlockNode, ctx: Ctx) {
     val tops = bodyChildren(file)?.children ?: listOf(file)
     val pkg = tops.firstOrNull { it.label == "package" }?.let { sliceSource(ctx.source, it.start, it.end).removePrefix("package").trim().removeSuffix(";").trim() }
     val imports = tops.count { it.label == "import" }
@@ -422,8 +427,15 @@ private fun keywordFor(node: UiBlockNode): String? = when (node.label) {
     "if" -> "if"; "while" -> "while"; "do" -> "do"; "try" -> "try"; "switch" -> "switch"
     "for" -> if (node.kind == "EnhancedForStatement") "for each" else "for"
     "return" -> "return"; "throw" -> "throw"
+    "var" -> "set"                                              // B1: `set <type> <name> to <value>`
+    "" -> if (isCallStatement(node)) "call" else null          // B1: `call foo(args)`
     else -> null
 }
+
+/** An expression statement whose expression is a method call — gets the `call` lead-in (B1). */
+private fun isCallStatement(node: UiBlockNode): Boolean =
+    node.kind == "ExpressionStatement" &&
+        node.parts.filterIsInstance<UiBlockPart.Slot>().any { it.children.singleOrNull()?.kind == "method_call" }
 
 /** A bold keyword label drawn directly on the block. */
 @Composable
@@ -464,9 +476,11 @@ private fun Chrome(text: String, onPill: Boolean, strip: Set<String>, node: UiBl
 }
 
 /** A value input: the typed socket (hexagon = boolean, pill = number, …). Empty → a recessed hole
- *  hinting the expected kind; filled → a reporter; tap → type code (with inline completion). */
+ *  hinting the expected kind; filled → a reporter; tap → type code (with inline completion). [depth] is the
+ *  reporter-nesting level the filled value renders at — 0 for a statement-level socket, deeper for an
+ *  operand inside a chain/operator block so its pill picks up the [Color.deepen] tint and the cap applies. */
 @Composable
-private fun Socket(ownerId: String, slotIndex: Int, slot: UiBlockPart.Slot, ctx: Ctx) {
+private fun Socket(ownerId: String, slotIndex: Int, slot: UiBlockPart.Slot, ctx: Ctx, depth: Int = 0) {
     val active = ctx.editing?.let { it.blockId == ownerId && it.slotIndex == slotIndex && it.role == null } == true
     if (active) {
         InlineInput(sliceSource(ctx.source, slot.start, slot.end), docStart = slot.start, expectedValueKind = slot.valueKind, ctx = ctx) { text, extra ->
@@ -493,56 +507,165 @@ private fun Socket(ownerId: String, slotIndex: Int, slot: UiBlockPart.Slot, ctx:
         }
         return
     }
-    Box(Modifier.clickable(remember(ownerId + slotIndex) { MutableInteractionSource() }, null, onClick = onTap)) { Value(child, ctx) }
+    Box(Modifier.clickable(remember(ownerId + slotIndex) { MutableInteractionSource() }, null, onClick = onTap)) { Value(child, ctx, depth) }
 }
 
 /** A reporter value: a white pill for literals/types/raw, a colored pill for variables/calls/operators.
  *  Both take the [ValueShape] of the kind the node produces: `a < b` becomes a green hexagon, a string
- *  literal a sharp white rect; UNKNOWN keeps the rounded pill. */
-@OptIn(ExperimentalLayoutApi::class)
+ *  literal a sharp white rect; UNKNOWN keeps the rounded pill. [depth] is the reporter-nesting level
+ *  (0 = a top-level socket); deeper pills lose their drop shadow and darken slightly so layers read
+ *  cleanly instead of stacking shadows. A fluent chain of ≥3 links lays out vertically (one link per row)
+ *  rather than wrapping mid-expression. [depth] counts *drawn pills*, so a transparent grouping (a `var`
+ *  fragment, a paren) keeps it — only entering a pill's content steps it. */
 @Composable
-private fun Value(node: UiBlockNode, ctx: Ctx) {
+private fun Value(node: UiBlockNode, ctx: Ctx, depth: Int = 0) {
     val vShape = valueShapeOf(node.valueKind)
+    // Past the nesting cap, a compound expression collapses to a chip you tap to drill into (A2). Plain
+    // leaves (a name/literal with no nested slot) stay inline however deep — they aren't noisy.
+    if (depth >= VALUE_DEPTH_CAP && node.parts.any { it is UiBlockPart.Slot }) { CollapsedChip(node, ctx); return }
     val onlyField = node.parts.singleOrNull() as? UiBlockPart.Field
     if (onlyField != null && onlyField.editable) {
-        if (onlyField.role == "name") Pill(BlockCat.Data, vShape) { Text(onlyField.text, color = Ca.colors.block.text, style = Ca.type.code) }
+        if (onlyField.role == "name") Pill(BlockCat.Data, vShape, depth) { Text(onlyField.text, color = Ca.colors.block.text, style = Ca.type.code) }
         else White(onlyField.text, vShape)
         return
     }
     when {
         node.kind == "type_ref" || node.kind.endsWith("Type") -> White(sliceSource(ctx.source, node.start, node.end), vShape) // a whole type, not its generics
-        node.kind == "method_call" || node.kind == "member_access" -> Pill(BlockCat.Call, vShape) { ValueInline(node, ctx) }
-        node.kind == "InfixExpression" -> Pill(BlockCat.Op, vShape) { ValueInline(node, ctx) }
-        node.parts.any { it is UiBlockPart.Slot } -> ValueInline(node, ctx) // transparent grouping (a fragment, paren…)
+        node.kind == "method_call" && chainLinkCount(node) >= 3 -> Pill(BlockCat.Call, vShape, depth) { ChainStack(node, ctx, depth + 1) }
+        node.kind == "method_call" || node.kind == "member_access" -> Pill(BlockCat.Call, vShape, depth) { ValueInline(node, ctx, depth + 1) }
+        node.kind == "InfixExpression" && infixOperands(node).size >= 3 -> Pill(BlockCat.Op, vShape, depth) { OpStack(node, ctx, depth + 1) }
+        node.kind == "InfixExpression" -> Pill(BlockCat.Op, vShape, depth) { ValueInline(node, ctx, depth + 1) }
+        node.parts.any { it is UiBlockPart.Slot } -> ValueInline(node, ctx, depth) // transparent grouping (a fragment, paren…) — no pill, same depth
         else -> White(sliceSource(ctx.source, node.start, node.end), vShape)
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** A reporter's inline content on ONE line (no FlowRow wrap — a wide reporter pushes the *statement* row
+ *  to wrap at pill boundaries, which are meaningful, instead of fragmenting the pill itself). */
 @Composable
-private fun ValueInline(node: UiBlockNode, ctx: Ctx) {
+private fun ValueInline(node: UiBlockNode, ctx: Ctx, depth: Int) {
     val dividers = remember(node) { chainDividerIndices(node) }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.Center) {
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
         node.parts.forEachIndexed { i, part ->
             if (i in dividers) ChainDivider()
-            when (part) {
-                is UiBlockPart.Field -> if (part.editable) {
-                    // role-aware: the collapsed qualifier reads dimmed, chain method names bold
-                    val qualifier = part.role == "qualifier"
-                    val name = node.kind == "method_call" && NAME_ROLE.matches(part.role)
-                    Text(
-                        part.text,
-                        color = if (qualifier) Ca.colors.block.text.copy(alpha = 0.66f) else Ca.colors.block.text,
-                        style = Ca.type.code,
-                        fontWeight = if (qualifier) FontWeight.Normal else if (name) FontWeight.SemiBold else FontWeight.Medium,
-                    )
-                } else {
-                    val s = part.text.trim(); if (s.isNotEmpty()) Text(s, color = Ca.colors.block.text.copy(alpha = 0.7f), style = Ca.type.code)
+            ValuePart(node, part, ctx, depth)
+        }
+    }
+}
+
+/** One part of a reporter's inline content: an editable token, read-only chrome, or a nested value slot. */
+@Composable
+private fun ValuePart(node: UiBlockNode, part: UiBlockPart, ctx: Ctx, depth: Int) {
+    when (part) {
+        is UiBlockPart.Field -> if (part.editable) {
+            // role-aware: the collapsed qualifier reads dimmed, chain method names bold
+            val qualifier = part.role == "qualifier"
+            val name = node.kind == "method_call" && NAME_ROLE.matches(part.role)
+            Text(
+                part.text,
+                color = if (qualifier) Ca.colors.block.text.copy(alpha = 0.66f) else Ca.colors.block.text,
+                style = Ca.type.code,
+                fontWeight = if (qualifier) FontWeight.Normal else if (name) FontWeight.SemiBold else FontWeight.Medium,
+            )
+        } else {
+            val s = part.text.trim()
+            when {
+                // B1: a declaration's `=` reads as the word "to" (`set x to 1`).
+                s == "=" && (node.label == "var" || node.kind == "local_var" || node.kind == "field_decl") ->
+                    Text("to", color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
+                s.isNotEmpty() -> Text(s, color = Ca.colors.block.text.copy(alpha = 0.7f), style = Ca.type.code)
+            }
+        }
+        is UiBlockPart.Slot -> if (!part.multiple) {
+            val c = part.children.singleOrNull()
+            // Same depth: the pill step is applied by the enclosing pill's content call, not per slot.
+            if (c != null) Value(c, ctx, depth) else White("")
+        }
+    }
+}
+
+/** The number of flattened chain links (`name`/`name1`/…) a collapsed method call carries. */
+private fun chainLinkCount(node: UiBlockNode): Int =
+    node.parts.count { it is UiBlockPart.Field && it.editable && NAME_ROLE.matches(it.role) }
+
+/**
+ * A long fluent chain laid out vertically — the receiver and first call on the first row, then each
+ * `.method(args)` link on its own indented row. Punctuation (`.`, `(`, `)`, `,`) is synthesized for the
+ * display only; tapping anywhere on the enclosing socket still edits the whole call as text, and args
+ * render as nested value reporters. This keeps `sb.append(a).append(b).append(c)` readable top-to-bottom
+ * instead of wrapping into a pill-soup. */
+@Composable
+private fun ChainStack(node: UiBlockNode, ctx: Ctx, depth: Int) {
+    val parts = node.parts
+    val nameIdxs = remember(node) {
+        parts.indices.filter { val p = parts[it]; p is UiBlockPart.Field && p.editable && NAME_ROLE.matches(p.role) }
+    }
+    val first = nameIdxs.first()
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.wrapContentWidth()) {
+        // Row 0: the receiver (parts before the first method name) + the first link, on one line. Each
+        // editable piece is a real Token / Socket so it edits in place — not just the first row.
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+            parts.subList(0, first).forEach { p ->
+                when (p) {
+                    is UiBlockPart.Field -> if (p.editable) Token(node.id, p, onPill = true, ctx = ctx)
+                    is UiBlockPart.Slot -> if (!p.multiple) Socket(node.id, slotIndexInNode(node, p), p, ctx, depth)
                 }
-                is UiBlockPart.Slot -> if (!part.multiple) {
-                    val c = part.children.singleOrNull()
-                    if (c != null) Value(c, ctx) else White("")
+            }
+            ChainLink(node, parts, first, nameIdxs.getOrNull(1) ?: parts.size, ctx, depth, leadingDot = first > 0)
+        }
+        // Each subsequent link on its own row, indented under the first dot.
+        for (li in 1 until nameIdxs.size) {
+            Row(Modifier.padding(start = 10.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                ChainLink(node, parts, nameIdxs[li], nameIdxs.getOrNull(li + 1) ?: parts.size, ctx, depth, leadingDot = true)
+            }
+        }
+    }
+}
+
+/** One `.method(arg, arg)` chain link, parts in `[nameIdx, end)`. The name is an editable [Token] and each
+ *  argument a real [Socket], so every row edits in place. Parens render only for an actual call (a `(` in
+ *  the link's chrome, or any argument) so a bare field hop (`.bar`) stays paren-less. */
+@Composable
+private fun ChainLink(node: UiBlockNode, parts: List<UiBlockPart>, nameIdx: Int, end: Int, ctx: Ctx, depth: Int, leadingDot: Boolean) {
+    val name = parts[nameIdx] as UiBlockPart.Field
+    val argSlots = parts.subList(nameIdx + 1, end).filterIsInstance<UiBlockPart.Slot>().filter { !it.multiple }
+    val isCall = argSlots.isNotEmpty() || (nameIdx + 1 until end).any { val p = parts[it]; p is UiBlockPart.Field && !p.editable && '(' in p.text }
+    val punct = Ca.colors.block.text.copy(alpha = 0.6f)
+    if (leadingDot) Text(".", color = punct, style = Ca.type.code)
+    Token(node.id, name, onPill = true, ctx = ctx)
+    if (isCall) {
+        Text("(", color = punct, style = Ca.type.code)
+        argSlots.forEachIndexed { i, slot ->
+            if (i > 0) Text(",", color = punct, style = Ca.type.code)
+            Socket(node.id, slotIndexInNode(node, slot), slot, ctx, depth)
+        }
+        Text(")", color = punct, style = Ca.type.code)
+    }
+}
+
+/** The operand slots of a (possibly flattened) infix expression — `a && b && c` has three. */
+private fun infixOperands(node: UiBlockNode): List<UiBlockPart.Slot> =
+    node.parts.filterIsInstance<UiBlockPart.Slot>().filter { !it.multiple }
+
+/** The operator symbol of an infix expression — the trimmed chrome between its operands (`&&`, `+`, …). */
+private fun infixOperator(node: UiBlockNode): String =
+    node.parts.firstNotNullOfOrNull { (it as? UiBlockPart.Field)?.takeIf { f -> !f.editable }?.text?.trim()?.ifEmpty { null } } ?: ""
+
+/**
+ * A long same-operator infix chain (`x > 0 && y > 0 && z > 0 && w > 0`) laid out vertically (A3): each
+ * operand on its own row as an editable [Socket], the operator in a fixed gutter so the operands align —
+ * faithful to Scratch's hexagonal `and`/`or` blocks. A two-operand infix (`a < b`) stays inline. */
+@Composable
+private fun OpStack(node: UiBlockNode, ctx: Ctx, depth: Int) {
+    val operands = infixOperands(node)
+    val op = infixOperator(node)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.wrapContentWidth()) {
+        operands.forEachIndexed { i, slot ->
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(22.dp), contentAlignment = Alignment.CenterEnd) {
+                    if (i > 0) Text(op, color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
                 }
+                Socket(node.id, slotIndexInNode(node, slot), slot, ctx, depth)
             }
         }
     }
@@ -579,12 +702,15 @@ private fun ChainDivider() {
 }
 
 @Composable
-private fun Pill(cat: BlockCat, shape: ValueShape = ValueShape.Unknown, content: @Composable () -> Unit) {
-    val color = blockColor(cat)
+private fun Pill(cat: BlockCat, shape: ValueShape = ValueShape.Unknown, depth: Int = 0, content: @Composable () -> Unit) {
+    val color = blockColor(cat).deepen(depth)
     val s = rememberValueShape(shape)
+    val hpad = (if (depth == 0) 8.dp else 6.dp) + valueShapePadding(shape) // tighten nested padding
     Box(
-        Modifier.clip(s).shadow(2.dp, s, clip = false).background(color, s)
-            .heightIn(min = 22.dp).padding(horizontal = 8.dp + valueShapePadding(shape), vertical = 2.dp),
+        Modifier.clip(s)
+            .then(if (depth == 0) Modifier.shadow(2.dp, s, clip = false) else Modifier) // shadow only on the top layer
+            .background(color, s)
+            .heightIn(min = 22.dp).padding(horizontal = hpad, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) { content() }
 }
@@ -592,12 +718,101 @@ private fun Pill(cat: BlockCat, shape: ValueShape = ValueShape.Unknown, content:
 @Composable
 private fun White(text: String, shape: ValueShape = ValueShape.Unknown) {
     val s = rememberValueShape(shape)
+    val long = shape == ValueShape.Text && text.length > 28 // a long string literal: ellipsize, tap to edit
     Box(
         Modifier.heightIn(min = 22.dp).clip(s).background(Ca.colors.block.socket, s)
             .then(if (shape == ValueShape.Type) Modifier.border(1.dp, Ca.colors.block.socketText.copy(alpha = 0.3f), s) else Modifier) // the type tag's outline
+            .then(if (long) Modifier.widthIn(max = 220.dp) else Modifier)
             .padding(horizontal = 8.dp + valueShapePadding(shape), vertical = 2.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(text.ifEmpty { " " }, color = Ca.colors.block.socketText, style = Ca.type.code, maxLines = 1) }
+    ) { Text(text.ifEmpty { " " }, color = literalColor(shape), style = Ca.type.code, maxLines = 1, overflow = if (long) TextOverflow.Ellipsis else TextOverflow.Clip) }
+}
+
+// Literal syntax colors for the value sockets. The socket is white in BOTH themes (see BlockColors), so
+// these are fixed dark-on-white tones rather than the theme-flipping editor syntax palette.
+private val LITERAL_STRING = Color(0xFF067D17)
+private val LITERAL_NUMBER = Color(0xFF1750EB)
+private val LITERAL_KEYWORD = Color(0xFF9B2393)
+
+/** A literal/value socket's text color, by the kind its shape encodes — string green, number blue, etc. */
+@Composable
+private fun literalColor(shape: ValueShape): Color = when (shape) {
+    ValueShape.Text -> LITERAL_STRING
+    ValueShape.Number -> LITERAL_NUMBER
+    ValueShape.Boolean -> LITERAL_KEYWORD
+    else -> Ca.colors.block.socketText
+}
+
+/** Darken a nested reporter's fill slightly per [depth] so layers read without stacking drop shadows. */
+private fun Color.deepen(depth: Int): Color {
+    if (depth <= 0) return this
+    val f = 1f - 0.07f * depth.coerceAtMost(3)
+    return Color(red * f, green * f, blue * f, alpha)
+}
+
+/** How deep reporter pills nest inline before collapsing to a drill-in chip (A2). Tunable. */
+private const val VALUE_DEPTH_CAP = 3
+
+/** The block category color a value reporter would use — mirrors [Value]'s dispatch. */
+private fun catForValue(node: UiBlockNode): BlockCat = when {
+    node.kind == "method_call" || node.kind == "member_access" -> BlockCat.Call
+    node.kind == "InfixExpression" -> BlockCat.Op
+    else -> BlockCat.Data
+}
+
+/** A short one-line summary of an expression for its collapsed chip — its source, middle-elided if long. */
+private fun summaryOf(node: UiBlockNode, source: String): String {
+    val t = sliceSource(source, node.start, node.end).replace(Regex("\\s+"), " ").trim()
+    return if (t.length <= 22) t else t.take(12) + "…" + t.takeLast(7)
+}
+
+/** A collapsed deep expression: a category-tinted chip showing a summary + an expand glyph; tap to drill in. */
+@Composable
+private fun CollapsedChip(node: UiBlockNode, ctx: Ctx) {
+    val s = rememberValueShape(valueShapeOf(node.valueKind))
+    Row(
+        Modifier.heightIn(min = 22.dp).clip(s).background(blockColor(catForValue(node)).deepen(2), s)
+            .clickable(remember(node.id) { MutableInteractionSource() }, null) { ctx.focus(node) }
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(summaryOf(node, ctx.source), color = Ca.colors.block.text, style = Ca.type.code, maxLines = 1)
+        Icon(CaIcons.braces, "expand", Modifier.size(13.dp), tint = Ca.colors.block.text.copy(alpha = 0.7f))
+    }
+}
+
+/**
+ * The drill-in focus sheet (A2): a deeply-nested expression re-rooted on its own, full-width and clutter-
+ * free, with its immediate parts editable (names as tokens, arguments as real sockets via [BlockInline]).
+ * Nesting inside the sheet re-expands from depth 0, so a chip here drills another level (breadcrumb stack).
+ */
+@Composable
+internal fun FocusSheet(node: UiBlockNode, ctx: Ctx, canBack: Boolean, onBack: () -> Unit, onClose: () -> Unit) {
+    val color = blockColor(catForValue(node))
+    val shape = rememberBlockShape(notchTop = false, bumpBottom = false)
+    Box(
+        Modifier.fillMaxSize().background(Ca.colors.glassThick)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.padding(20.dp).widthIn(max = 540.dp).clip(RoundedCornerShape(Ca.radius.sheet)).background(Ca.colors.surface)
+                .clickable(remember { MutableInteractionSource() }, null) {} // swallow taps so the scrim's close doesn't fire
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canBack) Icon(CaIcons.chevronLeft, "back", Modifier.size(20.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onBack), tint = Ca.colors.textSecondary)
+                Icon(CaIcons.braces, null, Modifier.size(16.dp), tint = Ca.colors.accent)
+                Text("Edit expression", color = Ca.colors.textPrimary, style = Ca.type.headline, modifier = Modifier.weight(1f))
+                Icon(CaIcons.close, "close", Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = Ca.colors.textTertiary)
+            }
+            Box(
+                Modifier.fillMaxWidth().clip(shape).background(color, shape).padding(horizontal = 14.dp, vertical = 10.dp),
+            ) { BlockInline(node, ctx, onPill = true, skipBody = false) }
+            Text("Tap a socket to edit it; tap a nested chip to go deeper.", color = Ca.colors.textTertiary, style = Ca.type.caption)
+        }
+    }
 }
 
 /** The trailing "add block" ghost in a stack — a dashed pill that's also a drop zone. */
@@ -811,6 +1026,9 @@ internal class Ctx(
     val select: (Selection?) -> Unit,
     private val applyEdit: (UiBlockEdit, List<UiTextEdit>) -> Unit,
     val openPalette: () -> Unit,
+    /** Drill into a deeply-nested expression — re-roots the focus sheet at [node] so it can be read/edited
+     *  in isolation. Default no-op (previews supply their own). */
+    val focus: (UiBlockNode) -> Unit = {},
 ) {
     /** Apply a block edit, plus [extra] doc-level edits held by inline completion (auto-imports). */
     fun apply(edit: UiBlockEdit, extra: List<UiTextEdit> = emptyList()) = applyEdit(edit, extra)
@@ -1056,7 +1274,8 @@ private fun BlockSample.printlnStmt(): UiBlockNode = build("ExpressionStatement"
     listOf(single("EXPRESSION", call), chrome(";"))
 }
 
-/** `sb.append(x).append(y);` flattened to ONE block — name/name1 segments, a divider between links. */
+/** `sb.append(x).append(y).append(z);` flattened to ONE block — with ≥3 links it lays out vertically
+ *  (one `.append(..)` per row) via [ChainStack] instead of wrapping inline. */
 private fun BlockSample.chainStmt(): UiBlockNode = build("ExpressionStatement", "") {
     val call = build("method_call", "call") {
         listOf(
@@ -1064,6 +1283,8 @@ private fun BlockSample.chainStmt(): UiBlockNode = build("ExpressionStatement", 
             single("ARGUMENT", leaf("name_ref", "name", "name", "x")),
             chrome(")."), field("name1", "append"), chrome("("),
             single("ARGUMENT", leaf("name_ref", "name", "name", "y")),
+            chrome(")."), field("name2", "append"), chrome("("),
+            single("ARGUMENT", leaf("name_ref", "name", "name", "z")),
             chrome(")"),
         )
     }
@@ -1101,7 +1322,7 @@ private fun BlockSample.whileEmptyStmt(): UiBlockNode = build("WhileStatement", 
 }
 
 /** Typed sockets + collapsed calls in one unit: decls, a println, a fluent chain, an if, an empty while. */
-private fun typedSampleFile(): Pair<UiBlockNode, String> {
+internal fun typedSampleFile(): Pair<UiBlockNode, String> {
     val x = BlockSample()
     val file = x.build("compilation_unit", "file") {
         val pkg = x.leaf("package_decl", "package", "code", "package com.example.notes.demo;")
@@ -1134,8 +1355,124 @@ private fun typedSampleFile(): Pair<UiBlockNode, String> {
     return file to x.sb.toString()
 }
 
+/** A 5-deep nested call `sanitize(normalize(trim(lower(read(text)))))` for the A2 depth-cap demo: past 3
+ *  reporter levels the inner call collapses to a drill-in chip. Built outer-in so the text lands in order. */
+private fun BlockSample.deepCall(): UiBlockNode {
+    fun nest(name: String, inner: () -> UiBlockNode) = build("method_call", "call") {
+        listOf(single("NAME", leaf("name_ref", "name", "name", name)), chrome("("), single("ARGUMENT", inner()), chrome(")"))
+    }
+    return nest("sanitize") { nest("normalize") { nest("trim") { nest("lower") { nest("read") {
+        leaf("name_ref", "name", "name", "text")
+    } } } } }
+}
+
+/** A unit with one statement whose initializer is [deepCall] — the canvas shows 3 nested pills then a chip. */
+internal fun deepSampleFile(): Pair<UiBlockNode, String> {
+    val x = BlockSample()
+    val file = x.build("compilation_unit", "file") {
+        val pkg = x.leaf("package_decl", "package", "code", "package com.example.notes.demo;")
+        x.chrome("\n\n")
+        val cls = x.build("class_decl", "class") {
+            val pre = x.chrome("public final class ")
+            val name = x.single("NAME", x.leaf("name_ref", "name", "name", "Deep"))
+            x.chrome(" {\n    ")
+            val method = x.build("method_decl", "method") {
+                val sig = x.chrome("String demo(String text) ")
+                val block = x.build("block", "block") {
+                    val open = x.chrome("{")
+                    val stmt = x.build("local_var", "var") {
+                        val t = x.single("TYPE", x.leaf("type_ref", "type", "type", "String", valueKind = "type"))
+                        val sp = x.chrome(" ")
+                        val frag = x.build("local_var", "var") {
+                            val nm = x.single("NAME", x.leaf("name_ref", "name", "name", "r"))
+                            val eq = x.chrome(" = ")
+                            val init = x.single("EXPRESSION", x.deepCall())
+                            listOf(nm, eq, init)
+                        }
+                        listOf(t, sp, x.single("EXPRESSION", frag), x.chrome(";"))
+                    }
+                    val close = x.chrome("}")
+                    listOf(open, x.list("STATEMENT", listOf(stmt)), close)
+                }
+                listOf(sig, x.single("STATEMENT", block))
+            }
+            x.chrome("\n}")
+            listOf(pre, name, x.list("DECLARATION", listOf(method)))
+        }
+        listOf(x.list("DECLARATION", listOf(pkg, cls)))
+    }
+    return file to x.sb.toString()
+}
+
+/** The expression a user drills into from the chip: `lower(read(text))`, for the [FocusSheet] demo. */
+internal fun deepFocusExpr(): Pair<UiBlockNode, String> {
+    val x = BlockSample()
+    val node = x.build("method_call", "call") {
+        listOf(
+            x.single("NAME", x.leaf("name_ref", "name", "name", "lower")), x.chrome("("),
+            x.single("ARGUMENT", x.build("method_call", "call") {
+                listOf(x.single("NAME", x.leaf("name_ref", "name", "name", "read")), x.chrome("("), x.single("ARGUMENT", x.leaf("name_ref", "name", "name", "text")), x.chrome(")"))
+            }),
+            x.chrome(")"),
+        )
+    }
+    return node to x.sb.toString()
+}
+
+/** A `name > 0` boolean comparison, for [opSampleFile]'s operands. */
+private fun BlockSample.cmp(nm: String): UiBlockNode = build("InfixExpression", "", valueKind = "boolean") {
+    listOf(
+        single("EXPRESSION", leaf("name_ref", "name", "name", nm)),
+        chrome(" > "),
+        single("EXPRESSION", leaf("literal", "value", "code", "0", valueKind = "number"), valueKind = "number"),
+    )
+}
+
+/** A unit with `if (x > 0 && y > 0 && z > 0 && w > 0)` — the 4-operand `&&` chain renders as an [OpStack]. */
+internal fun opSampleFile(): Pair<UiBlockNode, String> {
+    val x = BlockSample()
+    val file = x.build("compilation_unit", "file") {
+        val pkg = x.leaf("package_decl", "package", "code", "package com.example.notes.demo;")
+        x.chrome("\n\n")
+        val cls = x.build("class_decl", "class") {
+            val pre = x.chrome("public final class ")
+            val name = x.single("NAME", x.leaf("name_ref", "name", "name", "Ops"))
+            x.chrome(" {\n    ")
+            val method = x.build("method_decl", "method") {
+                val sig = x.chrome("void demo(int x, int y, int z, int w) ")
+                val block = x.build("block", "block") {
+                    val open = x.chrome("{")
+                    val ifS = x.build("IfStatement", "if") {
+                        val preIf = x.chrome("if (")
+                        val cond = x.build("InfixExpression", "", valueKind = "boolean") {
+                            listOf(
+                                x.single("EXPRESSION", x.cmp("x"), valueKind = "boolean"), x.chrome(" && "),
+                                x.single("EXPRESSION", x.cmp("y"), valueKind = "boolean"), x.chrome(" && "),
+                                x.single("EXPRESSION", x.cmp("z"), valueKind = "boolean"), x.chrome(" && "),
+                                x.single("EXPRESSION", x.cmp("w"), valueKind = "boolean"),
+                            )
+                        }
+                        val cl = x.chrome(") ")
+                        val body = x.build("block", "block") {
+                            listOf(x.chrome("{"), x.list("STATEMENT", listOf(x.printlnStmt())), x.chrome("}"))
+                        }
+                        listOf(preIf, x.single("EXPRESSION", cond, valueKind = "boolean"), cl, x.single("STATEMENT", body))
+                    }
+                    val close = x.chrome("}")
+                    listOf(open, x.list("STATEMENT", listOf(ifS)), close)
+                }
+                listOf(sig, x.single("STATEMENT", block))
+            }
+            x.chrome("\n}")
+            listOf(pre, name, x.list("DECLARATION", listOf(method)))
+        }
+        listOf(x.list("DECLARATION", listOf(pkg, cls)))
+    }
+    return file to x.sb.toString()
+}
+
 /** A no-op backend so previews can build a [Ctx] (completion/search return nothing). */
-private object PreviewBackend : IdeBackend {
+internal object PreviewBackend : IdeBackend {
     override val project = ProjectInfo("preview", "/preview", 1)
     override fun fileTree(mode: TreeViewMode) = TreeNode("root", "preview", NodeKind.Workspace, null)
     override fun readFile(path: String) = ""

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +71,11 @@ fun ComposePreviewPane(
         delay(PREVIEW_DEBOUNCE_MS)
         renderText = text
     }
+    // The engine is "working" either while the host is actively lowering/interpreting the rendered buffer
+    // (it reports this via onBusy) or while a live edit is still settling through the debounce before the
+    // host even sees it. Either way the on-screen render is stale, so the badge shows a loading state.
+    var busy by remember(path) { mutableStateOf(false) }
+    val loading = host != null && (busy || (live && renderText != text))
 
     // Detect the @Preview functions from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
@@ -78,6 +84,7 @@ fun ComposePreviewPane(
     }
     // Render the user's selected preview when it still exists in the file; otherwise the first one.
     val fn = selected?.takeIf { it in previews } ?: previews.firstOrNull()
+
 
     PreviewSurface(
         modifier = modifier,
@@ -98,14 +105,26 @@ fun ComposePreviewPane(
             }
             if (host != null) {
                 Divider()
-                val badge = if (live) Ca.colors.run else Ca.colors.textTertiary
                 Row(
                     Modifier.padding(horizontal = Ca.spacing.s1),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Box(Modifier.size(6.dp).background(badge, RoundedCornerShape(Ca.radius.pill)))
-                    Text(if (live) "Live" else "Paused", color = badge, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                    when {
+                        // Engine catching up to a fresh buffer (compiling/interpreting): a spinner, not a dot.
+                        loading -> {
+                            CircularProgressIndicator(Modifier.size(9.dp), color = Ca.colors.warning, strokeWidth = 1.5.dp)
+                            Text("Loading", color = Ca.colors.warning, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                        }
+                        live -> {
+                            Box(Modifier.size(6.dp).background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill)))
+                            Text("Live", color = Ca.colors.run, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                        }
+                        else -> {
+                            Box(Modifier.size(6.dp).background(Ca.colors.textTertiary, RoundedCornerShape(Ca.radius.pill)))
+                            Text("Paused", color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
             }
         },
@@ -138,11 +157,11 @@ fun ComposePreviewPane(
                     // surface's pan/zoom graphicsLayer scales the result. Night drives the host's uiMode; the
                     // host reports interpret/render problems back up to the shared chip.
                     CompositionLocalProvider(LocalDensity provides Density(density, base.fontScale)) {
-                        host.Preview(path, fn, renderText, state.night, { problems = it }, Modifier.fillMaxSize())
+                        host.Preview(path, fn, renderText, state.night, { problems = it }, { busy = it }, Modifier.fillMaxSize())
                     }
                 }
                 else -> {
-                    LaunchedEffect(Unit) { problems = emptyList() }
+                    LaunchedEffect(Unit) { problems = emptyList(); busy = false }
                     Text(
                         if (fn == null) "No @Preview found" else "Compose preview renders on device",
                         color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,

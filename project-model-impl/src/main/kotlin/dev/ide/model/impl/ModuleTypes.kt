@@ -20,6 +20,9 @@ class ModuleTypeRegistry(private val extensions: ExtensionRegistry) {
     fun byId(id: String): ModuleType? =
         extensions.extensions(ModuleTypeExtensionPoint).firstOrNull { it.id == id }
 
+    /** Every module type contributed to the extension point, in registration order (for the New-Module picker). */
+    fun all(): List<ModuleType> = extensions.extensions(ModuleTypeExtensionPoint)
+
     fun resolve(id: String): ModuleType = byId(id) ?: UnknownModuleType(id)
 }
 

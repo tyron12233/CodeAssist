@@ -37,12 +37,31 @@ class EditorImeHandle {
     internal var onShow: (() -> Unit)? = null
     internal var onHide: (() -> Unit)? = null
 
+    /**
+     * Supplies the primary caret's geometry for `InputConnection.requestCursorUpdates` / `CursorAnchorInfo`
+     * (the IME uses it to place its floating UI, handwriting box, etc.). The editor's render layer sets this;
+     * the platform IME bridge reads it. Coordinates are in the IME root view's pixel space. Null when no layout
+     * is available yet. Only the Android bridge consults it; desktop leaves it unset.
+     */
+    var caretGeometryProvider: (() -> EditorCaretGeometry?)? = null
+
     /** Ask the platform to raise the soft keyboard for the editor (no-op until the node is attached/focused). */
     fun show() { onShow?.invoke() }
 
     /** Ask the platform to dismiss the soft keyboard / end the input session. */
     fun hide() { onHide?.invoke() }
 }
+
+/**
+ * The primary caret's pixel geometry in the IME root view's coordinate space, for `CursorAnchorInfo`'s
+ * insertion-marker location. [baseline] is where glyphs sit; [top]/[bottom] bound the caret line.
+ */
+class EditorCaretGeometry(
+    val horizontalPosition: Float,
+    val top: Float,
+    val baseline: Float,
+    val bottom: Float,
+)
 
 /**
  * The Unicode code point to insert for a hardware key-down [event], or **-1** when the event is not text

@@ -2,6 +2,7 @@ package dev.ide.ui.editor
 
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.core.EditSpan
 import dev.ide.ui.editor.core.EditorDocument
@@ -145,4 +146,21 @@ fun shiftFoldRegions(regions: List<dev.ide.ui.editor.folding.FoldRegion>, edit: 
         out.add(r.copy(start = start, end = end))
     }
     return out
+}
+
+/**
+ * Re-anchor inlay-hint offsets across a single [edit], so the phantom type/parameter hints stay attached to
+ * their anchor between debounced daemon passes. A hint before the edit holds; one after it shifts by the
+ * length delta; one inside the replaced span is dropped (the next pass repositions it).
+ */
+fun shiftInlayHints(hints: List<UiInlayHint>, edit: EditSpan, docLength: Int): List<UiInlayHint> {
+    if (hints.isEmpty() || edit.isNoOp) return hints
+    val removedEnd = edit.start + edit.removed
+    return hints.mapNotNull { h ->
+        when {
+            h.offset <= edit.start -> h
+            h.offset >= removedEnd -> h.copy(offset = (h.offset + edit.delta).coerceIn(0, docLength))
+            else -> null
+        }
+    }
 }
