@@ -110,6 +110,12 @@ import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.platform.Disposable
 import dev.ide.platform.PluginId
+import dev.ide.platform.SERVICE_EP
+import dev.ide.platform.ServiceDescriptor
+import dev.ide.platform.ServiceFactory
+import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceScopeLevel
+import dev.ide.model.module
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.deps.ArtifactKind
 import dev.ide.deps.ConflictPolicy
@@ -271,6 +277,14 @@ interface ComposePreviewRunner {
     ): PreviewRunResult
 }
 
+/** APPLICATION-scoped: the warm K2 compiler shared across every opened project. */
+private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinJvmCompiler>("ide.kotlin.jvmCompiler")
+
+/** MODULE-scoped: the per-module source analyzer for each language. */
+private val ANALYZER_JAVA = ServiceKey<SourceAnalyzer>("ide.analyzer.java")
+private val ANALYZER_KOTLIN = ServiceKey<SourceAnalyzer>("ide.analyzer.kotlin")
+private val ANALYZER_XML = ServiceKey<SourceAnalyzer>("ide.analyzer.xml")
+
 class IdeServices private constructor(
     val platform: PlatformCore,
     val store: ProjectModelStore,
@@ -319,7 +333,6 @@ class IdeServices private constructor(
     private fun isKotlin(file: Path): Boolean =
         file.fileName?.toString()?.let { it.endsWith(".kt") || it.endsWith(".kts") } == true
 
-    private val analyzers = ConcurrentHashMap<String, SourceAnalyzer>()
     private val docVersion = AtomicLong(0)
 
     private val indexScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -355,11 +368,47 @@ class IdeServices private constructor(
     val indexStatus: StateFlow<IndexUiStatus> get() = _indexStatus
 
     init {
+        // Register the scoped services this engine contributes before anything resolves them.
+        registerScopedServices()
         // Provision kotlin-stdlib as a real project dependency (bundled jar, never the host runtime) before
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
         indexService.observeStatus { s -> _indexStatus.value = IndexUiStatus(s.building, s.message, s.fraction) }
         indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
+        // Pre-warm the Kotlin parser environment (the ~200ms KotlinCoreEnvironment standup) off-thread, so the
+        // first Kotlin completion/diagnostics/preview doesn't pay it on the interaction path. Gated on the
+        // project actually containing Kotlin so a pure-Java project never stands up the Kotlin frontend.
+        indexScope.launch { runCatching { if (projectHasKotlin()) dev.ide.lang.kotlin.parse.KotlinParserHost.warmUp() } }
+    }
+
+    /** Cheap check (bounded, short-circuiting) for any `.kt` under the project's source roots. */
+    private fun projectHasKotlin(): Boolean = runCatching {
+        modules().any { m ->
+            sourceRoots(m).any { root ->
+                Files.exists(root) && Files.walk(root).use { s -> s.anyMatch { it.fileName?.toString()?.endsWith(".kt") == true } }
+            }
+        }
+    }.getOrDefault(false)
+
+    /**
+     * Contribute this engine's scoped services. The application-scoped K2 compiler registers idempotently
+     * on the shared application container (the next project reuses the warm one). The module-scoped
+     * analyzers register through the `platform.service` EP, so every module container resolves them and
+     * disposes them with the module (prompt library-jar handle release).
+     */
+    private fun registerScopedServices() {
+        store.appContainer.registerServiceIfAbsent(KOTLIN_JVM_COMPILER) { KotlinJvmCompiler() }
+        val plugin = PluginId("ide-core-services")
+        platform.extensions.register(SERVICE_EP, ServiceDescriptor(ANALYZER_JAVA, ServiceScopeLevel.MODULE, ServiceFactory { buildAnalyzer(module(), LanguageId("java")) }, plugin), plugin)
+        platform.extensions.register(SERVICE_EP, ServiceDescriptor(ANALYZER_KOTLIN, ServiceScopeLevel.MODULE, ServiceFactory { buildAnalyzer(module(), KotlinLanguageBackend.LANGUAGE_ID) }, plugin), plugin)
+        platform.extensions.register(SERVICE_EP, ServiceDescriptor(ANALYZER_XML, ServiceScopeLevel.MODULE, ServiceFactory { buildAnalyzer(module(), XmlLanguageBackend.LANGUAGE_ID) }, plugin), plugin)
+    }
+
+    /** The MODULE-scoped analyzer service key for [language]. */
+    private fun analyzerKeyFor(language: LanguageId): ServiceKey<SourceAnalyzer> = when (language) {
+        KotlinLanguageBackend.LANGUAGE_ID -> ANALYZER_KOTLIN
+        XmlLanguageBackend.LANGUAGE_ID -> ANALYZER_XML
+        else -> ANALYZER_JAVA
     }
 
     private fun buildIndexScope(): IndexScope {
@@ -557,7 +606,11 @@ class IdeServices private constructor(
      * classpath the Java compile uses ([compileBootClasspath]: empty on desktop → host JDK; `android.jar` on
      * ART) is threaded in, so a Kotlin module sees the right platform. Modules with no `.kt` never invoke it.
      */
-    private val kotlinJvmCompiler = KotlinJvmCompiler()
+    // APPLICATION-scoped: one warm K2 compiler shared across every opened project (its environment/jar
+    // filesystem is reused build-to-build; the boot classpath is passed per compile, so one instance
+    // serves all projects). Registered idempotently on the shared application container in init.
+    private val kotlinJvmCompiler: KotlinJvmCompiler get() = store.appContainer.getService(KOTLIN_JVM_COMPILER)
+    // Incremental state is per-output-dir, so the incremental wrapper stays workspace-scoped.
     private val incrementalKotlin = IncrementalKotlinCompiler(kotlinJvmCompiler)
     private val kotlinCompile = KotlinCompile { kotlinSources, javaSources, classpath, out, jvmTarget ->
         // A module that depends on the Compose runtime must be compiled with the Compose compiler plugin
@@ -1645,7 +1698,8 @@ class IdeServices private constructor(
         path.writeText(text)
         // A write to disk can change how OTHER files resolve (a dependency's saved edit). The JDT binding-parse
         // cache keys only on the focal text, so drop it on any save to avoid a same-text focal parse going stale.
-        analyzers.values.forEach { (it as? JdtSourceAnalyzer)?.invalidateBindingCache() }
+        // Peek the live module containers so this never forces an analyzer to build.
+        store.liveModuleContainers().forEach { (it.peekService(ANALYZER_JAVA) as? JdtSourceAnalyzer)?.invalidateBindingCache() }
         if (isResourcePath(path)) {
             invalidateSyntheticClasses() // an edited res file changes R
             if (path.toString().endsWith(".xml")) {
@@ -1835,8 +1889,13 @@ class IdeServices private constructor(
         return modules().firstOrNull { module -> sourceRoots(module).any { target.startsWith(it) } }
     }
 
+    /** The per-(module, language) analyzer, resolved (and cached) as a MODULE-scoped service. */
     private fun analyzerFor(module: Module, language: LanguageId = LanguageId("java")): SourceAnalyzer =
-        analyzers.getOrPut("${module.id.value}:${language.id}") {
+        module.service(analyzerKeyFor(language))
+
+    /** Construct the analyzer for [module] in [language]. Invoked once by the module-scoped analyzer
+     *  service factory; the module container caches and disposes the result. */
+    private fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer =
             backendFor(language).createAnalyzer(ModuleCompilationContext.create(store.workspace, module)).also {
                 when (it) {
                     is JdtSourceAnalyzer -> {
@@ -1878,25 +1937,21 @@ class IdeServices private constructor(
                         )
                     }
                 }
-                // NB: disposal is driven by invalidateAnalyzers()/close() below, NOT platform.register — an
-                // evicted analyzer must be disposed promptly so its cached library-jar handles (the Kotlin
-                // ClasspathReader's ZipFiles, the JDT env cache) are released. Registering them with the
-                // platform only disposed at workspace close, so every eviction leaked open jars until GC —
-                // surfacing on ART as a flood of "A ZipFile failed to close" CloseGuard warnings.
+                // NB: the module container owns disposal. An evicted/removed module's container disposes
+                // its analyzer promptly so the cached library-jar handles (the Kotlin ClasspathReader's
+                // ZipFiles, the JDT env cache) are released right away, not deferred to workspace close —
+                // which on ART had surfaced as a flood of "A ZipFile failed to close" CloseGuard warnings.
             }
-        }
 
     /**
      * Drop every cached per-module analyzer. A dependency change on one module affects the compile
      * classpath of every module that depends on it (an exported (`api`) library flows downstream), so a
-     * per-module eviction would leave dependents analyzing against a stale classpath. Analyzers rebuild
-     * lazily on the next analyze/complete. Each evicted analyzer is disposed so its open library-jar
-     * handles are closed immediately (dispose is idempotent — a final close() pass is harmless).
+     * per-module eviction would leave dependents analyzing against a stale classpath. Disposing all module
+     * containers releases every analyzer's library-jar handles immediately and rebuilds them lazily (and
+     * against the current snapshot) on the next analyze/complete.
      */
     private fun invalidateAnalyzers() {
-        val evicted = analyzers.values.toList()
-        analyzers.clear()
-        evicted.forEach { (it as? Disposable)?.let { d -> runCatching { d.dispose() } } }
+        store.disposeAllModuleContainers()
         // The preview caches' fingerprints track res/source FILES but not the dependency classpath, which
         // changes here (deps/SDK/facet/language-level edits) — so drop them to force a rebuild.
         repoCache.clear()
@@ -3294,8 +3349,10 @@ class IdeServices private constructor(
         indexScope.cancel()
         depsScope.cancel()
         sdkManager.dispose()
-        // Dispose the live analyzers so their cached library-jar handles close (no longer platform-registered).
-        analyzers.values.toList().also { analyzers.clear() }.forEach { (it as? Disposable)?.let { d -> runCatching { d.dispose() } } }
+        // Dispose the workspace + module service containers (the application container, the parent, is owned
+        // by ProjectManager). This disposes the per-module analyzers, closing their library-jar handles,
+        // before the index's segment channels are released.
+        runCatching { store.close() }
         runCatching { (indexService as? AutoCloseable)?.close() } // release the on-disk index segment file channels
         platform.dispose()
     }
@@ -3360,6 +3417,52 @@ class IdeServices private constructor(
             )
             store.save()
             return IdeServices(platform, store, sharedCachesRoot = sharedCachesRoot)
+        }
+
+        /**
+         * Seed the Android sample to [root] on disk **without** opening an engine, so a launcher can show it
+         * in the picker on first run and open it lazily (via [ProjectManager.open]) only when the user taps it.
+         * No-op when a project already exists at [root]. The transient platform used to write the model is
+         * disposed before returning, so this leaks nothing.
+         */
+        fun seedDemo(root: Path) {
+            if (dev.ide.model.impl.ModelPersistence.exists(root)) return
+            Files.createDirectories(root)
+            val (platform, store) = openStore(root)
+            try {
+                store.replaceSdks(listOf(detectAndroidSdk() ?: JdkSdkProvider.detect()))
+                val types = ModuleTypeRegistry(platform.extensions)
+                dev.ide.android.support.SampleAndroidProject.generate(
+                    store, types.resolve("android-app"), types.resolve("android-lib"), types.resolve("java-lib"),
+                )
+                store.save()
+            } finally {
+                platform.dispose()
+            }
+        }
+
+        /**
+         * The on-device counterpart to [seedDemo]: seed the Android sample to [root] **without** opening an
+         * engine, using an explicitly supplied platform boot classpath (ART has no JDK/SDK to detect, so the
+         * launcher passes the bundled `android.jar`). No-op when a project already exists at [root]. The
+         * launcher opens it lazily via [ProjectManager.open] when the user taps it. Java 8 level keeps JDT's
+         * DOM analysis working against the non-modular bundled `android.jar` (see [bootstrapWithBootClasspath]).
+         */
+        fun seedDemoWithBootClasspath(root: Path, bootClasspath: List<String>, sdkName: String = "android") {
+            if (dev.ide.model.impl.ModelPersistence.exists(root)) return
+            Files.createDirectories(root)
+            val (platform, store) = openStore(root)
+            try {
+                store.replaceSdks(listOf(SdkData(sdkName, bootClasspath, buildToolsPath = null)))
+                val types = ModuleTypeRegistry(platform.extensions)
+                dev.ide.android.support.SampleAndroidProject.generate(
+                    store, types.resolve("android-app"), types.resolve("android-lib"), types.resolve("java-lib"),
+                    languageLevel = dev.ide.model.LanguageLevel.JAVA_8,
+                )
+                store.save()
+            } finally {
+                platform.dispose()
+            }
         }
 
         /** The plain-Java multi-module demo (`app → util → core`) — the fixture for the Java build/run/completion tests. */
@@ -3443,7 +3546,14 @@ class IdeServices private constructor(
             return IdeServices(platform, store, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot)
         }
 
-        private fun openStore(root: Path): Pair<PlatformCore, ProjectModelStore> {
+        private fun openStore(
+            root: Path,
+            // The process-global application container (the workspace container's parent). When a host
+            // (ProjectManager) does not supply one, a transient per-open container is created so the
+            // standalone bootstrap/test paths still work; app-scoped services then live only as long as
+            // the project does.
+            appContainer: dev.ide.platform.ServiceContainer? = null,
+        ): Pair<PlatformCore, ProjectModelStore> {
             val platform = PlatformCore()
             val moduleTypes = ModuleTypeRegistry(platform.extensions)
             moduleTypes.register(JavaLibModuleType, PluginId("java-support"))
@@ -3469,7 +3579,7 @@ class IdeServices private constructor(
             templates.register(KotlinConsoleAppTemplate, PluginId("kotlin-support"))
             templates.register(KotlinLibraryTemplate, PluginId("kotlin-support"))
             dev.ide.android.support.AndroidSupport.registerTemplates(templates)
-            val store = ProjectModel.open(root, platform, codecs)
+            val store = ProjectModel.open(root, platform, codecs, appContainer ?: dev.ide.platform.impl.ApplicationContainer())
             return platform to store
         }
 
@@ -3495,9 +3605,11 @@ class IdeServices private constructor(
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
+            /** The host's application container, so app-scoped services are shared across projects. */
+            appContainer: dev.ide.platform.ServiceContainer? = null,
         ): IdeServices {
             Files.createDirectories(root)
-            val (platform, store) = openStore(root)
+            val (platform, store) = openStore(root, appContainer)
             store.replaceSdks(listOf(sdk))
             val template = ProjectTemplateRegistry(platform.extensions).byId(TemplateId(templateId))
                 ?: error("Unknown project template '$templateId'")
@@ -3522,8 +3634,10 @@ class IdeServices private constructor(
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
+            /** The host's application container, so app-scoped services are shared across projects. */
+            appContainer: dev.ide.platform.ServiceContainer? = null,
         ): IdeServices {
-            val (platform, store) = openStore(root)
+            val (platform, store) = openStore(root, appContainer)
             if (store.workspace.sdkTable.sdks.isEmpty()) store.replaceSdks(listOf(sdk))
             return IdeServices(platform, store, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot)
         }
