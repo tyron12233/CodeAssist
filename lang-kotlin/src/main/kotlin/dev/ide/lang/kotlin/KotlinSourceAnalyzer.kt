@@ -205,30 +205,61 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     fun lowerFileClasses(file: VirtualFile): List<dev.ide.lang.kotlin.interp.ResolvedClass> =
         loweredFor(file)?.classes ?: emptyList()
 
-    // The lowered preview program + classes, cached per file keyed on the parsed text's content hash. The
-    // preview re-renders on every keystroke AND redundantly without a text change (the pane renders light +
-    // dark frames, detection runs alongside render, and zoom/device switches re-fire) — PSI→ResolvedTree
-    // lowering (overload resolution against the classpath) is the dominant interpreter-side cost, so it's
-    // memoized. A real text edit changes the hash and re-lowers; a classpath change disposes the analyzer
-    // (host's invalidateAnalyzers), dropping this with it.
+    // The lowered preview program + classes, cached per file. The preview re-renders on every keystroke AND
+    // redundantly without a text change (the pane renders light + dark frames, detection runs alongside render,
+    // and zoom/device switches re-fire) — PSI→ResolvedTree lowering (overload resolution against the classpath)
+    // is the dominant interpreter-side cost, so it's memoized. Granularity is PER FUNCTION: a function's
+    // lowering depends only on its own body + the file's *signatures* (a callee's params/return, a class header,
+    // a top-level val's type), so editing one function's BODY (the hot case — typing inside a @Composable) only
+    // re-lowers that function and reuses every sibling + the classes. `fileSigHash` is the file text with all
+    // top-level function bodies stripped: it changes on any signature/import/class edit (→ re-lower everything,
+    // conservative) but NOT on a body edit. A classpath change disposes the analyzer (host's invalidateAnalyzers),
+    // dropping this with it. Cross-file source edits are best-effort (unchanged from the prior per-file cache).
+    // textHash + startOffset: a function is reused only if its text AND its position are unchanged. The
+    // offset guard keeps the lowered tree's SourceSpans valid — an edit that SHIFTS a sibling (e.g. typing in
+    // an earlier function) moves its offset, so it re-lowers with fresh spans rather than serving stale ones.
+    private class FnEntry(val textHash: Int, val startOffset: Int, val fn: dev.ide.lang.kotlin.interp.ResolvedFunction)
     private class Lowered(
-        val contentHash: Int,
-        val program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction>,
+        val fileSigHash: Int,
+        val functions: Map<String, FnEntry>,
         val classes: List<dev.ide.lang.kotlin.interp.ResolvedClass>,
-    )
+    ) {
+        val program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction> by lazy { functions.mapValues { it.value.fn } }
+    }
     private val loweredCache = ConcurrentHashMap<String, Lowered>()
+
+    /** The file text with every TOP-LEVEL function body elided — a hash of everything a sibling's lowering can
+     *  depend on (signatures, imports, properties, class bodies). Stable across function-body edits. */
+    private fun fileSignatureHash(ktFile: org.jetbrains.kotlin.psi.KtFile): Int {
+        val text = ktFile.text
+        val sb = StringBuilder(text.length)
+        var pos = 0
+        for (fn in ktFile.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>()) {
+            val body = fn.bodyExpression ?: continue
+            val r = body.textRange
+            if (r.startOffset >= pos) { sb.append(text, pos, r.startOffset); pos = r.endOffset }
+        }
+        sb.append(text, pos, text.length)
+        return sb.toString().hashCode()
+    }
 
     private fun loweredFor(file: VirtualFile): Lowered? {
         val parsed = lastByFile[file.path] ?: return null
-        val hash = parsed.ktFile.text.hashCode()
-        loweredCache[file.path]?.let { if (it.contentHash == hash) return it }
-        val resolver = dev.ide.lang.kotlin.interp.KotlinTreeResolver(parsed.ktFile, parsed, service)
-        val program = parsed.ktFile.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>().associate { fn ->
-            val f = lowerOneFunction(resolver, fn)
-            "${f.name}/${f.params.size}" to f
+        val sigHash = fileSignatureHash(parsed.ktFile)
+        val prev = loweredCache[file.path]
+        val sigMatch = prev != null && prev.fileSigHash == sigHash
+        // Reuse the classes whole when no signature/class-body changed (only function bodies can change without
+        // moving sigHash, and those never affect a class's lowering); else build the resolver lazily and re-lower.
+        val resolver by lazy(LazyThreadSafetyMode.NONE) { dev.ide.lang.kotlin.interp.KotlinTreeResolver(parsed.ktFile, parsed, service) }
+        val functions = parsed.ktFile.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>().associate { fn ->
+            val ownHash = fn.text.hashCode()
+            val start = fn.textRange.startOffset
+            val key = "${fn.name}/${fn.valueParameters.size}"
+            val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
+            key to (reused ?: FnEntry(ownHash, start, lowerOneFunction(resolver, fn)))
         }
-        val classes = runCatching { resolver.lowerClasses() }.getOrDefault(emptyList())
-        return Lowered(hash, program, classes).also { loweredCache[file.path] = it }
+        val classes = if (sigMatch) prev!!.classes else runCatching { resolver.lowerClasses() }.getOrDefault(emptyList())
+        return Lowered(sigHash, functions, classes).also { loweredCache[file.path] = it }
     }
 
     private fun lowerOneFunction(
