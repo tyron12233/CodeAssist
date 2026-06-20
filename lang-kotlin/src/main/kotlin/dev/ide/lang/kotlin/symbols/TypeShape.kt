@@ -19,6 +19,15 @@ class TypeShape(
      *  a member inherited through a generic supertype substitutes (`CompositionLocal<T>` → `current: TextStyle`). */
     val supertypes: List<TypeRef>,
     val members: List<KotlinSymbol>,
+    /** This classpath type is a Kotlin `object` singleton (a bare reference denotes the instance). False for a
+     *  Java type or a non-object Kotlin class. Indexed so the consumer needn't re-decode the `@Metadata`. */
+    val isObject: Boolean = false,
+    /** The simple name of this type's companion object (`Companion`/a custom name), or null when it has none —
+     *  so `Type.` can surface the companion's members without a live decode. */
+    val companionObjectName: String? = null,
+    /** True when this shape came from a Kotlin `@Metadata` class (vs plain Java bytecode). Lets the consumer
+     *  answer "is this a Kotlin binary?" (e.g. constructor-default-argument soundness) from the index. */
+    val isKotlin: Boolean = false,
 ) {
     /** Rebind every contained [KotlinType] to [ctx] (used after reading a context-free index entry). */
     fun withContext(ctx: KotlinTypeContext?): TypeShape = TypeShape(
@@ -26,10 +35,12 @@ class TypeShape(
         typeParameterBounds.map { it.rebind(ctx) },
         supertypes.map { it.rebind(ctx) },
         members.map { it.rebindTypes(ctx) },
+        isObject, companionObjectName, isKotlin,
     )
 
     companion object {
-        fun of(js: JavaShape): TypeShape = TypeShape(js.typeParameters, js.typeParameterBounds, js.superTypes, js.members)
+        fun of(js: JavaShape): TypeShape =
+            TypeShape(js.typeParameters, js.typeParameterBounds, js.superTypes, js.members, isKotlin = false)
 
         /** A Kotlin `@Metadata` class: supertypes carry their type arguments (so inherited generic members
          *  substitute); metadata carries no type-parameter bounds. The class's MEMBER extensions (`RowScope`'s
@@ -39,6 +50,7 @@ class TypeShape(
         fun of(d: KotlinMetadata.Decoded, ctx: KotlinTypeContext?): TypeShape = TypeShape(
             d.typeParameters, emptyList(),
             d.supertypes.map { it.rebind(ctx) }, d.ownMembers + d.extensions,
+            isObject = d.isObject, companionObjectName = d.companionObjectName, isKotlin = true,
         )
     }
 }

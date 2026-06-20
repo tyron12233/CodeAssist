@@ -28,6 +28,12 @@ object JdtBatchCompiler {
 
     data class Result(val success: Boolean, val messages: List<String>)
 
+    /** Compliance level parsed from an ecj `-source`/`-target` string (`"8"`, `"11"`, `"1.8"`, …) is >= 9. */
+    private fun complianceAtLeast9(level: String): Boolean {
+        val n = level.removePrefix("1.").takeWhile { it.isDigit() }.toIntOrNull() ?: return false
+        return n >= 9
+    }
+
     /** True on Android's runtime (ART/Dalvik), where ecj cannot read the platform library off the VM. */
     private val isAndroidRuntime: Boolean =
         System.getProperty("java.vm.name").orEmpty().contains("Dalvik", ignoreCase = true) ||
@@ -46,6 +52,17 @@ object JdtBatchCompiler {
         // Explicit boot library if given; otherwise the compile classpath on ART (carries android.jar),
         // since the running VM exposes no platform classes ecj can read. Empty on desktop → host JDK.
         val boot = bootClasspath.ifEmpty { if (isAndroidRuntime) classpath else emptyList() }
+
+        // When a boot library is the platform (android.jar, the ART path) at compliance >= 9, the batch
+        // front-end is unusable: it would put android.jar on `-bootclasspath`, which ecj rejects at >= 9, and a
+        // non-modular jar isn't a valid `--system` (and ART has no jimage). Compile instead via the internal ecj
+        // compiler over a CLASSIC (non-module-aware) name environment, which keeps ecj in non-modular mode at any
+        // compliance and resolves `java.*` straight from android.jar's bytes — no JRT image, no level cap. The
+        // desugar stubs (`StringConcatFactory`, …) must be on [bootClasspath]/[classpath] for Java 9+ concat;
+        // D8 desugars the resulting invokedynamic. See [ImageFreeJavaCompiler].
+        if (boot.isNotEmpty() && complianceAtLeast9(sourceLevel)) {
+            return ImageFreeJavaCompiler.compile(sources, boot + classpath, outputDir, sourceLevel)
+        }
 
         val args = ArrayList<String>()
         args += listOf("-source", sourceLevel, "-target", sourceLevel, "-proc:none", "-nowarn", "-g")

@@ -38,7 +38,16 @@ class KotlinInteropCompletionTest {
             """.trimIndent(),
         )
         s.invalidateSyntheticClasses() // the .kt was written after bootstrap; rebuild the facade overlay
+        awaitIndexReady(s)
         return s
+    }
+
+    /** Block until the background index finishes its first build. The Kotlin unresolved-symbol diagnostics are
+     *  suppressed in "dumb mode" (while the classpath index isn't ready) so they never false-flag a library
+     *  symbol, so a diagnostic assertion is only meaningful once the index is ready. */
+    private fun awaitIndexReady(s: IdeServices) {
+        val deadline = System.currentTimeMillis() + 90_000
+        while (System.currentTimeMillis() < deadline && !s.indexService.status.ready) Thread.sleep(50)
     }
 
     private fun write(rel: String, content: String) {
@@ -85,6 +94,19 @@ class KotlinInteropCompletionTest {
         val text = "package com.example.core\nfun f() { println(\"hi\") }"
         val msgs = s.analyzeDiagnostics(ktFile, text).map { it.message }
         assertTrue(msgs.none { it.contains("Unresolved") }, "valid Kotlin must not be flagged: $msgs")
+    }
+
+    @Test
+    fun builtinMembersResolveThroughTheIndex() {
+        // Kotlin built-ins (List/Int/String) come from the `kotlin.builtins` index (decoded from the stdlib's
+        // `.kotlin_builtins`), NOT a live jar read. A read-only `List` must show its REAL Kotlin shape: `size`
+        // is present, but the mutating `add` of java.util.List is NOT.
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.kt")
+        val withSize = labels(s, probe, "package com.example.core\nfun m(xs: List<Int>) { xs.si }", "xs.si")
+        assertTrue("size" in withSize, "List built-in member 'size' via the kotlin.builtins index: $withSize")
+        val withAdd = labels(s, probe, "package com.example.core\nfun m(xs: List<Int>) { xs.ad }", "xs.ad")
+        assertTrue(withAdd.none { it == "add" }, "read-only List must NOT expose java.util.List's add: $withAdd")
     }
 
     @Test

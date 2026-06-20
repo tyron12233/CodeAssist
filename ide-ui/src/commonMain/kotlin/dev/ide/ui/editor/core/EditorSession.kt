@@ -7,11 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.shiftComposePreviews
 import dev.ide.ui.editor.shiftDiagnostics
 import dev.ide.ui.editor.shiftFoldRegions
+import dev.ide.ui.editor.shiftInlayHints
 import dev.ide.ui.editor.shiftSemanticTokens
 import kotlin.math.max
 import kotlin.math.min
@@ -85,6 +87,15 @@ class EditorSession(
         private set
 
     /**
+     * Inlay hints (inferred `val`/lambda types, parameter names) anchored to this buffer. Like
+     * [diagnostics]/[semanticTokens] the editor shifts their offsets in place on each edit
+     * ([dev.ide.ui.editor.shiftInlayHints]) so the phantom text tracks its anchor between debounced daemon
+     * passes; the host refills the authoritative set via [applyInlayHints].
+     */
+    var inlayHints by mutableStateOf<List<UiInlayHint>>(emptyList())
+        private set
+
+    /**
      * Foldable regions anchored to this buffer (imports, type/function bodies, comments) with each one's
      * collapsed/expanded toggle. Like [diagnostics] the editor shifts their offsets on each edit
      * ([dev.ide.ui.editor.shiftFoldRegions]) so a collapsed fold keeps covering its block while typing; the
@@ -135,14 +146,28 @@ class EditorSession(
     var imeListener: ImeListener? = null
 
     interface ImeListener {
-        /** Selection and/or composition changed — push `InputMethodManager.updateSelection`. */
+        /** Selection and/or composition changed (no text edit) — push `InputMethodManager.updateSelection`. */
         fun onStateChanged()
+        /**
+         * The buffer's text changed. [span] is the single contiguous edit, so the platform can push a partial
+         * `updateExtractedText` (cheap — only the changed run is materialized); a null [span] (emitted once at
+         * the end of a multi-edit batch) asks for a full-snapshot refresh. Default: a plain selection push, so a
+         * listener that doesn't mirror text keeps behaving as it did before.
+         */
+        fun onTextChanged(span: EditSpan?) { onStateChanged() }
         /** The buffer was replaced externally — the IME must `restartInput`. */
         fun onRestartInput()
+        /**
+         * Whether an IME is continuously mirroring our text (an extracted-text monitor is active). When true a
+         * smart edit needn't `restartInput` to resync: the per-edit [onTextChanged] push already keeps the IME's
+         * model exact, so [resyncIme] skips the (disruptive) restart and only the legacy non-monitoring path uses it.
+         */
+        fun isSyncingExtractedText(): Boolean = false
     }
 
     private var batchDepth = 0
     private var pendingIme = false // an IME state push was deferred while a batch was open
+    private var pendingImeText = false // ...and at least one of those deferred pushes was a text edit
     private var goalColumn = -1 // sticky column for consecutive vertical caret moves
 
     // ---- undo / redo ----
@@ -204,11 +229,12 @@ class EditorSession(
         if (semanticTokens.isNotEmpty()) semanticTokens = shiftSemanticTokens(semanticTokens, edit, doc.length)
         if (previewMarkers.isNotEmpty()) previewMarkers = shiftComposePreviews(previewMarkers, edit, doc.length)
         if (foldRegions.isNotEmpty()) foldRegions = shiftFoldRegions(foldRegions, edit, doc.length)
+        if (inlayHints.isNotEmpty()) inlayHints = shiftInlayHints(inlayHints, edit, doc.length)
         if (!applyingUndo) recordEdit(s, removedText, text, selBefore)
         // Host hook for save-state only (mark dirty); no String is built. Fires per edit, including in a batch.
         onTextEdit?.invoke(edit)
         onSnippetEdit?.invoke(edit)
-        notifyIme()
+        notifyImeText(edit)
     }
 
     /** Swap in a fresh authoritative analysis (aligned to the current text). The host calls this debounced. */
@@ -224,6 +250,11 @@ class EditorSession(
     /** Swap in fresh `@Preview` gutter markers (aligned to the current text). The host calls this debounced. */
     fun applyComposePreviews(result: List<UiComposePreview>) {
         previewMarkers = result
+    }
+
+    /** Swap in fresh inlay hints (aligned to the current text). The host calls this debounced (daemon pass). */
+    fun applyInlayHints(result: List<UiInlayHint>) {
+        inlayHints = result
     }
 
     /**
@@ -289,6 +320,17 @@ class EditorSession(
         imeListener?.onStateChanged()
     }
 
+    /** Like [notifyIme] but for a text edit: carries the [span] so the platform can push a partial extracted-text
+     *  update. Coalesced across a batch into a single full-refresh push at [endBatch]. */
+    private fun notifyImeText(span: EditSpan) {
+        if (batchDepth > 0) {
+            pendingIme = true
+            pendingImeText = true
+            return
+        }
+        imeListener?.onTextChanged(span)
+    }
+
     /** IME batch edits (and multi-edit completion accepts): one IME push for the whole group, and ONE undo step. */
     fun beginBatch() {
         if (batchDepth == 0 && !applyingUndo) {
@@ -311,7 +353,9 @@ class EditorSession(
             }
             if (pendingIme) {
                 pendingIme = false
-                imeListener?.onStateChanged()
+                val l = imeListener
+                if (pendingImeText) { pendingImeText = false; l?.onTextChanged(null) } // null span → full refresh
+                else l?.onStateChanged()
             }
         }
     }
@@ -440,14 +484,41 @@ class EditorSession(
         imeListener?.onRestartInput()
     }
 
+    /**
+     * Make the IME drop its internal cursor/composition model and re-read our post-edit text + selection.
+     * The IME only learns our new selection offset (via `updateSelection`), never that the surrounding text
+     * shifted by a different amount than the keystroke it delivered. After a smart edit (auto-close pair,
+     * skip-over closer, newline + indent, pair-aware backspace, indent/dedent, forward-delete) its model
+     * drifts, and a later absolute `setSelection`/`setComposingRegion` computed against that stale model lands
+     * the caret on the wrong line. Restarting resyncs it — the same fix [applyEdits] uses on a completion
+     * accept. NOT called on a plain insert or on a multi-char IME commit (the keyboard's own compose path),
+     * where its model is already coherent and a restart would needlessly reset prediction/gesture state.
+     *
+     * Skipped entirely when an extracted-text monitor is active: that IME is kept exact by the per-edit
+     * [ImeListener.onTextChanged] push (a partial `updateExtractedText`), so it never drifts and the restart
+     * would be pure churn. The restart remains the fallback for IMEs that don't mirror our text.
+     */
+    private fun resyncIme() {
+        val l = imeListener ?: return
+        if (!l.isSyncingExtractedText()) l.onRestartInput()
+    }
+
     // ---- editing ops (keyboard + UI) ----
 
     /** Type [text] at the selection. Single chars get the smart-edit rules (auto-close, skip-over…). */
     fun commitText(text: String) {
         if (text.length == 1) {
-            val edit = smartInsert(doc.chars, selection.min, selection.max, text[0], language)
+            val selMin = selection.min
+            val selMax = selection.max
+            val edit = smartInsert(doc.chars, selMin, selMax, text[0], language)
             replaceRange(edit.start, edit.end, edit.text, TextRange(edit.caret))
+            // A smart rule that didn't simply replace the selection with the typed char shifted the buffer by a
+            // different amount than the IME delivered, so its model is now stale.
+            if (edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1) {
+                resyncIme()
+            }
         } else {
+            // The IME's own commit of a composed word lands here too — it matches the buffer, so no resync.
             val s = selection.min
             replaceRange(s, selection.max, text, TextRange(s + text.length))
         }
@@ -477,6 +548,7 @@ class EditorSession(
             }
             updateSelectionAndComposing(TextRange(doc.lineStart(firstLine), doc.lineEnd(lastLine)), null)
             endBatch()
+            resyncIme()
             return
         }
 
@@ -485,6 +557,7 @@ class EditorSession(
         val spaces = tabWidth - (col % tabWidth)
         val s = sel.min
         replaceRange(s, sel.max, " ".repeat(spaces), TextRange(s + spaces))
+        resyncIme()
     }
 
     /**
@@ -515,6 +588,7 @@ class EditorSession(
             updateSelectionAndComposing(TextRange((sel.start - removedOnFirst).coerceAtLeast(ls)), null)
         }
         endBatch()
+        resyncIme()
     }
 
     /** Visual column of [offset] within its line starting at [lineStartOffset], expanding tabs to [tabWidth]. */
@@ -539,21 +613,36 @@ class EditorSession(
     fun backspace(word: Boolean = false) {
         if (word && selection.collapsed) {
             val s = wordBoundaryLeft(doc.chars, selection.start)
-            if (s < selection.start) replaceRange(s, selection.start, "", TextRange(s))
+            if (s < selection.start) {
+                replaceRange(s, selection.start, "", TextRange(s))
+                resyncIme() // a word delete removes more than the IME asked for
+            }
             return
         }
-        val edit = smartBackspace(doc.chars, selection.min, selection.max) ?: return
+        val selMin = selection.min
+        val selMax = selection.max
+        val edit = smartBackspace(doc.chars, selMin, selMax) ?: return
         replaceRange(edit.start, edit.end, edit.text, TextRange(edit.caret))
+        // Pair-aware / blank-line backspace can delete more than the single char deleteSurroundingText(1,0) asked
+        // for, so its result diverges from the IME's model.
+        val literalStart = if (selMin == selMax) selMin - 1 else selMin
+        if (edit.start != literalStart || edit.end != selMax || edit.text.isNotEmpty() || edit.caret != edit.start) {
+            resyncIme()
+        }
     }
 
     fun deleteForward(word: Boolean = false) {
         if (!selection.collapsed) {
             replaceRange(selection.min, selection.max, "", TextRange(selection.min))
+            resyncIme()
             return
         }
         val p = selection.start
         val e = if (word) wordBoundaryRight(doc.chars, p) else nextCharBoundary(doc.chars, p)
-        if (e > p) replaceRange(p, e, "", TextRange(p))
+        if (e > p) {
+            replaceRange(p, e, "", TextRange(p))
+            resyncIme()
+        }
     }
 
     fun moveHorizontal(dir: Int, select: Boolean, word: Boolean = false) {
@@ -645,6 +734,7 @@ class EditorSession(
     fun cutSelection(): String? {
         val t = selectedText() ?: return null
         replaceRange(selection.min, selection.max, "", TextRange(selection.min))
+        resyncIme()
         return t
     }
 

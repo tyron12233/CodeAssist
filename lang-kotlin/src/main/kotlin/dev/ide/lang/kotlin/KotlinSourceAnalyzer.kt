@@ -32,12 +32,15 @@ import dev.ide.lang.resolve.TypeRef
 import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCatchClause
+import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtContinueExpression
@@ -55,9 +58,12 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
+import org.jetbrains.kotlin.psi.KtNullableType
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
+import org.jetbrains.kotlin.psi.KtPrimaryConstructor
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
+import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
@@ -205,30 +211,61 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     fun lowerFileClasses(file: VirtualFile): List<dev.ide.lang.kotlin.interp.ResolvedClass> =
         loweredFor(file)?.classes ?: emptyList()
 
-    // The lowered preview program + classes, cached per file keyed on the parsed text's content hash. The
-    // preview re-renders on every keystroke AND redundantly without a text change (the pane renders light +
-    // dark frames, detection runs alongside render, and zoom/device switches re-fire) — PSI→ResolvedTree
-    // lowering (overload resolution against the classpath) is the dominant interpreter-side cost, so it's
-    // memoized. A real text edit changes the hash and re-lowers; a classpath change disposes the analyzer
-    // (host's invalidateAnalyzers), dropping this with it.
+    // The lowered preview program + classes, cached per file. The preview re-renders on every keystroke AND
+    // redundantly without a text change (the pane renders light + dark frames, detection runs alongside render,
+    // and zoom/device switches re-fire) — PSI→ResolvedTree lowering (overload resolution against the classpath)
+    // is the dominant interpreter-side cost, so it's memoized. Granularity is PER FUNCTION: a function's
+    // lowering depends only on its own body + the file's *signatures* (a callee's params/return, a class header,
+    // a top-level val's type), so editing one function's BODY (the hot case — typing inside a @Composable) only
+    // re-lowers that function and reuses every sibling + the classes. `fileSigHash` is the file text with all
+    // top-level function bodies stripped: it changes on any signature/import/class edit (→ re-lower everything,
+    // conservative) but NOT on a body edit. A classpath change disposes the analyzer (host's invalidateAnalyzers),
+    // dropping this with it. Cross-file source edits are best-effort (unchanged from the prior per-file cache).
+    // textHash + startOffset: a function is reused only if its text AND its position are unchanged. The
+    // offset guard keeps the lowered tree's SourceSpans valid — an edit that SHIFTS a sibling (e.g. typing in
+    // an earlier function) moves its offset, so it re-lowers with fresh spans rather than serving stale ones.
+    private class FnEntry(val textHash: Int, val startOffset: Int, val fn: dev.ide.lang.kotlin.interp.ResolvedFunction)
     private class Lowered(
-        val contentHash: Int,
-        val program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction>,
+        val fileSigHash: Int,
+        val functions: Map<String, FnEntry>,
         val classes: List<dev.ide.lang.kotlin.interp.ResolvedClass>,
-    )
+    ) {
+        val program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction> by lazy { functions.mapValues { it.value.fn } }
+    }
     private val loweredCache = ConcurrentHashMap<String, Lowered>()
+
+    /** The file text with every TOP-LEVEL function body elided — a hash of everything a sibling's lowering can
+     *  depend on (signatures, imports, properties, class bodies). Stable across function-body edits. */
+    private fun fileSignatureHash(ktFile: org.jetbrains.kotlin.psi.KtFile): Int {
+        val text = ktFile.text
+        val sb = StringBuilder(text.length)
+        var pos = 0
+        for (fn in ktFile.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>()) {
+            val body = fn.bodyExpression ?: continue
+            val r = body.textRange
+            if (r.startOffset >= pos) { sb.append(text, pos, r.startOffset); pos = r.endOffset }
+        }
+        sb.append(text, pos, text.length)
+        return sb.toString().hashCode()
+    }
 
     private fun loweredFor(file: VirtualFile): Lowered? {
         val parsed = lastByFile[file.path] ?: return null
-        val hash = parsed.ktFile.text.hashCode()
-        loweredCache[file.path]?.let { if (it.contentHash == hash) return it }
-        val resolver = dev.ide.lang.kotlin.interp.KotlinTreeResolver(parsed.ktFile, parsed, service)
-        val program = parsed.ktFile.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>().associate { fn ->
-            val f = lowerOneFunction(resolver, fn)
-            "${f.name}/${f.params.size}" to f
+        val sigHash = fileSignatureHash(parsed.ktFile)
+        val prev = loweredCache[file.path]
+        val sigMatch = prev != null && prev.fileSigHash == sigHash
+        // Reuse the classes whole when no signature/class-body changed (only function bodies can change without
+        // moving sigHash, and those never affect a class's lowering); else build the resolver lazily and re-lower.
+        val resolver by lazy(LazyThreadSafetyMode.NONE) { dev.ide.lang.kotlin.interp.KotlinTreeResolver(parsed.ktFile, parsed, service) }
+        val functions = parsed.ktFile.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>().associate { fn ->
+            val ownHash = fn.text.hashCode()
+            val start = fn.textRange.startOffset
+            val key = "${fn.name}/${fn.valueParameters.size}"
+            val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
+            key to (reused ?: FnEntry(ownHash, start, lowerOneFunction(resolver, fn)))
         }
-        val classes = runCatching { resolver.lowerClasses() }.getOrDefault(emptyList())
-        return Lowered(hash, program, classes).also { loweredCache[file.path] = it }
+        val classes = if (sigMatch) prev!!.classes else runCatching { resolver.lowerClasses() }.getOrDefault(emptyList())
+        return Lowered(sigHash, functions, classes).also { loweredCache[file.path] = it }
     }
 
     private fun lowerOneFunction(
@@ -332,12 +369,19 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *    extension that is on the classpath but not in scope (an unimported `16.dp`/`14.sp`);
      *  - an unresolved bare reference: a lower-case name in value position that resolves to nothing;
      *  - a named argument whose name matches no parameter of any function the call could resolve to;
-     *  - a type mismatch for an initializer (`val a: Int = ""`) or a `return` value (`fun f(): Int { return "" }`);
+     *  - a type mismatch for an initializer (`val a: Int = ""`) or a `return` value (`fun f(): Int { return "" }`),
+     *    including a value returned from a `Unit` function (`fun f() { return 5 }`);
+     *  - a useless cast (`x as String` where `x` is already `String`) and a useless elvis (`x!! ?: y`);
+     *  - conflicting/repeated modifiers (`final open`, `private public`, `open open`);
      *  - a `val` reassignment (`val x = 1; x = 2`);
      *  - a missing `return` in a block-body function with a non-Unit declared return type;
      *  - conflicting declarations in one scope (duplicate names / same-signature functions);
      *  - an argument-count mismatch for a call to a same-file function (where arity is readable from PSI);
      *  - a missing initializer on a top-level / concrete-class property;
+     *  - a `val`/`var` with no type AND no initializer/delegate/accessor (`val test`);
+     *  - misuse of `lateinit` (on a `val`, with an initializer/delegate, or a nullable type);
+     *  - misuse of `abstract` (a body/initializer on an abstract member, or one in a non-abstract class);
+     *  - `val`/`var` on a parameter outside a primary constructor (`fun f(val x: Int)`);
      *  - an unsafe nullable access (`s.length` where `s: String?`, no guard);
      *  - unused imports, `private` declarations, and locals, and a `var` that could be `val` (warnings/hints).
      * Capitalized names (types/constructors), type-position references (generic params), qualified receivers,
@@ -346,7 +390,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     // Per-file incremental-analyze cache. The semantic pass re-resolves the whole file, which is the editor's
     // dominant cost on a large file; this lets a body-only edit re-analyze ONLY the changed function and reuse
     // every other declaration's diagnostics (re-anchored to its shifted offset). See [semanticDiagnostics].
-    private class DeclDiags(val header: String, val fullText: String, val rel: List<Diagnostic>)
+    // One top-level body statement's expensive (resolution) diagnostics, relative to the STATEMENT's start.
+    // [declares] = the statement introduces a name (a later statement's scope depends on it), so a change to it
+    // invalidates the reuse of everything after it.
+    private class StmtDiags(val text: String, val declares: Boolean, val rel: List<Diagnostic>)
+    // [bodyStmts] is present for a block-bodied function — it enables INTRA-function reuse (a keystroke in a
+    // 150-line @Composable re-checks only the touched statement, not all ~50 calls). Null for other declarations.
+    private class DeclDiags(val header: String, val fullText: String, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>? = null)
     private class AnalyzeCache(val importsKey: String, val decls: List<DeclDiags>)
     private val analyzeCache = ConcurrentHashMap<String, AnalyzeCache>()
 
@@ -389,10 +439,22 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                 perDecl += cached.rel.map { it.copy(range = TextRange(it.range.start + base, it.range.end + base)) }
                 newEntries += cached
             } else {
-                val diags = ArrayList<Diagnostic>()
-                walkDecl(d, resolver, localAliases, diags)
-                perDecl += diags
-                newEntries += DeclDiags(headerOf(d), d.text, diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
+                // A body-only edit to a single block-bodied function (header + imports unchanged, guaranteed by
+                // [recomputeIndices]) → reuse the unchanged statements WITHIN it. `prev` is index-aligned only in
+                // that single-change case, so intra-function reuse is enabled there alone; a full re-analyze still
+                // records per-statement entries so the NEXT edit can reuse them.
+                val fn = d as? KtNamedFunction
+                if (fn != null && fn.bodyBlockExpression != null) {
+                    val fineReuse = recompute != null && recompute.size == 1 && recompute[0] == i
+                    val (diags, stmts) = analyzeFunctionBody(fn, if (fineReuse) prev?.decls?.getOrNull(i) else null, resolver, localAliases)
+                    perDecl += diags
+                    newEntries += DeclDiags(headerOf(d), d.text, diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }, stmts)
+                } else {
+                    val diags = ArrayList<Diagnostic>()
+                    walkDecl(d, resolver, localAliases, diags)
+                    perDecl += diags
+                    newEntries += DeclDiags(headerOf(d), d.text, diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
+                }
             }
         }
         analyzeCache[parsed.file.path] = AnalyzeCache(importsKey, newEntries)
@@ -430,30 +492,62 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *  those run once in [semanticDiagnostics]; a declaration subtree never contains the KtFile node). Only
      *  declaration-LOCAL checks live here; whole-file ones (unused-private, unused-import) are file-level so a
      *  body edit elsewhere can't leave a stale reused result. */
-    private fun walkDecl(psi: PsiElement, resolver: KotlinResolver, localAliases: Set<String>, out: MutableList<Diagnostic>) {
+    private fun walkDecl(
+        psi: PsiElement,
+        resolver: KotlinResolver,
+        localAliases: Set<String>,
+        out: MutableList<Diagnostic>,
+        // Don't descend into these subtrees — used by the intra-function incremental path to walk a function's
+        // header/block frame while handling each top-level body statement separately (see [analyzeFunctionBody]).
+        stopAt: Set<PsiElement> = emptySet(),
+        // Skip the cross-statement local checks (unused-local / var-could-be-val). They read sibling statements,
+        // so they CANNOT be cached per statement; the incremental path runs them once over the whole function.
+        skipLocalDeclChecks: Boolean = false,
+    ) {
+        if (psi in stopAt) return
         // Poll between nodes (never mid-I/O) so a higher-priority call — code completion sharing the one
         // engine thread — can preempt this pass instead of waiting it out. The host retries.
         dev.ide.platform.EngineCancellation.checkCanceled()
+        // "Dumb mode": until the classpath index is ready we can't tell a genuinely-unresolved reference from
+        // one that just isn't indexed yet, so the unresolved-symbol checks would light up every library symbol
+        // (`println`, `String`, …) as a false error. Suppress them while not ready — like IDEA pausing
+        // inspections during indexing — and let them run once the index is built. Other checks (type mismatch on
+        // built-ins, duplicate/unused, arg counts) stay on; they don't depend on classpath resolution.
+        val resolveReady = service.classpathReady()
+        // Modifier-list conflicts (repeated / incompatible / multiple-visibility) — purely syntactic, runs for
+        // every declaration node (a class, member, parameter, …), so it's checked once here, not per type below.
+        if (psi is KtDeclaration) out += modifierConflicts(psi)
         when (psi) {
             is KtNameReferenceExpression -> KotlinPerf.span("sem.nameRef") {
-                (unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))?.let { out += it }
+                if (resolveReady) (unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))?.let { out += it }
             }
-            is KtUserType -> KotlinPerf.span("sem.type") { unresolvedTypeReference(psi, resolver, localAliases)?.let { out += it } }
+            is KtUserType -> KotlinPerf.span("sem.type") { if (resolveReady) unresolvedTypeReference(psi, resolver, localAliases)?.let { out += it } }
             is KtProperty -> {
                 typeMismatch(psi.typeReference?.text, psi.initializer, resolver)?.let { out += it }
-                unusedLocal(psi)?.let { out += it }
+                if (!skipLocalDeclChecks) unusedLocal(psi)?.let { out += it }
                 missingInitializer(psi)?.let { out += it }
-                varCouldBeVal(psi)?.let { out += it }
+                noTypeNoInitializer(psi)?.let { out += it }
+                lateinitMisuse(psi)?.let { out += it }
+                abstractMisuse(psi)?.let { out += it }
+                if (!skipLocalDeclChecks) varCouldBeVal(psi)?.let { out += it }
                 delegateOperatorNotInScope(psi, resolver)?.let { out += it }
             }
-            is KtParameter -> typeMismatch(psi.typeReference?.text, psi.defaultValue, resolver)?.let { out += it }
+            is KtParameter -> {
+                typeMismatch(psi.typeReference?.text, psi.defaultValue, resolver)?.let { out += it }
+                valVarOnParameter(psi)?.let { out += it }
+            }
             is KtNamedFunction -> {
+                abstractMisuse(psi)?.let { out += it }
                 // a block-body function must return a value (missing-return); an expression body is type-checked.
                 if (psi.hasBlockBody()) missingReturn(psi, resolver)?.let { out += it }
                 else typeMismatch(psi.typeReference?.text, psi.bodyExpression, resolver)?.let { out += it }
             }
             is KtReturnExpression -> returnTypeMismatch(psi, resolver)?.let { out += it }
-            is KtBinaryExpression -> valReassignment(psi)?.let { out += it }
+            is KtBinaryExpression -> {
+                valReassignment(psi)?.let { out += it }
+                uselessElvis(psi, resolver)?.let { out += it }
+            }
+            is KtBinaryExpressionWithTypeRHS -> uselessCast(psi, resolver)?.let { out += it }
             is KtCallExpression -> KotlinPerf.span("sem.call") {
                 // The same-file PSI check first (it also catches "too many arguments"); only fall back to the
                 // overload-aware binary check when it didn't fire, so a call is never double-reported.
@@ -479,7 +573,74 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             else -> {}
         }
         var c = psi.firstChild
-        while (c != null) { walkDecl(c, resolver, localAliases, out); c = c.nextSibling }
+        while (c != null) { walkDecl(c, resolver, localAliases, out, stopAt, skipLocalDeclChecks); c = c.nextSibling }
+    }
+
+    /** Emit unused-local / var-could-be-val for every LOCAL property anywhere in [root]'s subtree. These read
+     *  sibling statements (an unused `val` becomes used by an edit elsewhere in the block), so they live OUTSIDE
+     *  the per-statement cache and are recomputed over the whole function on any body edit. Cheap (PSI name
+     *  scans, no resolution). */
+    private fun localDeclarationChecks(root: PsiElement, out: MutableList<Diagnostic>) {
+        fun rec(p: PsiElement) {
+            if (p is KtProperty && p.parent is KtBlockExpression) {
+                unusedLocal(p)?.let { out += it }
+                varCouldBeVal(p)?.let { out += it }
+            }
+            var c = p.firstChild
+            while (c != null) { rec(c); c = c.nextSibling }
+        }
+        rec(root)
+    }
+
+    /**
+     * Analyze one block-bodied function, reusing the per-statement diagnostics of unchanged top-level body
+     * statements (against [prev]). Returns the function's diagnostics (absolute offsets) plus the per-statement
+     * cache to store for next time. Equivalent to [walkDecl] of the whole function — verified by
+     * `KotlinIncrementalAnalyzeTest` (incremental == full).
+     *
+     * Three parts, composed so the result is identical to a full walk:
+     *  - **frame** — the function node + header + the body-block-level checks (missing-return, param/return
+     *    types, duplicate/unreachable across statements), walked fresh each edit but excluding the statement
+     *    subtrees. Cheap (no per-call overload resolution lives here).
+     *  - **local-declaration checks** — unused-local / var-could-be-val over the whole body (they read sibling
+     *    statements, so they can't be cached per statement).
+     *  - **per-statement** — each top-level body statement's resolution diagnostics, REUSED when its text is
+     *    unchanged AND no earlier statement that declares a name changed (so its visible scope is identical).
+     */
+    private fun analyzeFunctionBody(
+        fn: KtNamedFunction, prev: DeclDiags?, resolver: KotlinResolver, localAliases: Set<String>,
+    ): Pair<List<Diagnostic>, List<StmtDiags>> {
+        val body = fn.bodyBlockExpression!!
+        val statements = body.statements
+        val out = ArrayList<Diagnostic>()
+        // Frame: walk the function but stop at each top-level statement (handled per-statement below); skip the
+        // cross-statement local checks (done next). This still runs the block-node checks (duplicate/unreachable).
+        walkDecl(fn, resolver, localAliases, out, stopAt = statements.toHashSet(), skipLocalDeclChecks = true)
+        localDeclarationChecks(fn, out)
+
+        val prevStmts = prev?.bodyStmts
+        // A structural change (statement added/removed/reordered) → no index alignment, recompute every statement.
+        var scopeDirty = prevStmts == null || prevStmts.size != statements.size
+        val newStmts = ArrayList<StmtDiags>(statements.size)
+        for ((i, st) in statements.withIndex()) {
+            val sBase = st.textRange.startOffset
+            val text = st.text
+            val declares = st is KtDeclaration
+            val prevS = prevStmts?.getOrNull(i)
+            val changed = prevS == null || prevS.text != text
+            if (!changed && !scopeDirty) {
+                prevS!!.rel.forEach { out += it.copy(range = TextRange(it.range.start + sBase, it.range.end + sBase)) }
+                newStmts += prevS
+            } else {
+                val sd = ArrayList<Diagnostic>()
+                walkDecl(st, resolver, localAliases, sd, skipLocalDeclChecks = true)
+                out += sd
+                newStmts += StmtDiags(text, declares, sd.map { it.copy(range = TextRange(it.range.start - sBase, it.range.end - sBase)) })
+            }
+            // A changed declaration alters the scope every later statement resolves against → recompute the rest.
+            if (changed && declares) scopeDirty = true
+        }
+        return out to newStmts
     }
 
     /** Unused `private` declarations — a whole-file check (its used-ness depends on references ANYWHERE in the
@@ -694,6 +855,143 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val nameId = prop.nameIdentifier ?: return null
         val r = nameId.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Property must be initialized", "kt.mustBeInitialized")
+    }
+
+    /**
+     * A `val`/`var` with NO type annotation AND no initializer, delegate, or accessor (`val test`) — Kotlin's
+     * PROPERTY/VARIABLE_WITH_NO_TYPE_NO_INITIALIZER. Purely syntactic (no resolution), so it runs in dumb mode
+     * too. Disjoint from [missingInitializer] (which handles a TYPED property with no initializer). `lateinit`
+     * has its own diagnostic ([lateinitMisuse]); destructuring entries / loop / catch parameters are never
+     * `KtProperty`, so they don't reach here.
+     */
+    private fun noTypeNoInitializer(prop: KtProperty): Diagnostic? {
+        if (prop.typeReference != null) return null
+        if (prop.hasInitializer() || prop.hasDelegate()) return null
+        if (prop.getter != null || prop.setter != null) return null
+        if (prop.hasModifier(KtTokens.LATEINIT_KEYWORD)) return null // reported by lateinitMisuse
+        val nameId = prop.nameIdentifier ?: return null
+        val isMember = prop.parent is KtFile || prop.parent is KtClassBody
+        val msg = if (isMember) "This property must either have a type annotation, be initialized or be delegated"
+        else "This variable must either have a type annotation or be initialized"
+        val r = nameId.textRange
+        return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, msg, "kt.noTypeNoInitializer")
+    }
+
+    /**
+     * Misuse of the `lateinit` modifier, all syntactic: it is allowed only on a mutable (`var`) property with
+     * an explicit, non-nullable type and no initializer or delegate. (Local `lateinit` is legal since Kotlin
+     * 1.2, so a local var is not flagged here for the modifier itself.) The diagnostic is anchored on the
+     * `lateinit` keyword.
+     */
+    private fun lateinitMisuse(prop: KtProperty): Diagnostic? {
+        val range = modifierRange(prop, KtTokens.LATEINIT_KEYWORD) ?: return null
+        fun d(msg: String) = Diagnostic(range, Severity.ERROR, msg, "kt.lateinit")
+        if (!prop.isVar) return d("'lateinit' modifier is allowed only on mutable properties")
+        if (prop.hasInitializer()) return d("'lateinit' modifier is not allowed on properties with an initializer")
+        if (prop.hasDelegate()) return d("'lateinit' modifier is not allowed on delegated properties")
+        val typeRef = prop.typeReference ?: return d("'lateinit' modifier requires the property to have an explicit type")
+        if (typeRef.typeElement is KtNullableType) return d("'lateinit' modifier is not allowed on properties of nullable types")
+        return null
+    }
+
+    /**
+     * Misuse of the `abstract` modifier on a member, all syntactic:
+     *  - an abstract function with a body, or an abstract property with an initializer / delegate / accessor body
+     *    (an abstract member declares no implementation);
+     *  - an `abstract` member inside a plain (non-abstract, non-sealed, non-interface) class — Kotlin's
+     *    ABSTRACT_*_IN_NON_ABSTRACT_CLASS. Enum/expect/external containers can carry abstract members, so they
+     *    back off. Anchored on the `abstract` keyword.
+     */
+    private fun abstractMisuse(decl: KtDeclaration): Diagnostic? {
+        val range = modifierRange(decl, KtTokens.ABSTRACT_KEYWORD) ?: return null
+        fun d(msg: String) = Diagnostic(range, Severity.ERROR, msg, "kt.abstractModifier")
+        when (decl) {
+            is KtNamedFunction -> if (decl.bodyExpression != null) return d("Abstract function '${decl.name}' cannot have a body")
+            is KtProperty -> {
+                if (decl.hasInitializer()) return d("Abstract property '${decl.name}' cannot have an initializer")
+                if (decl.hasDelegate()) return d("Abstract property '${decl.name}' cannot be delegated")
+                if (decl.getter?.bodyExpression != null || decl.setter?.bodyExpression != null)
+                    return d("Abstract property '${decl.name}' cannot have an accessor with a body")
+            }
+            else -> return null
+        }
+        // An abstract member is only legal in a container that can hold one.
+        val cls = (decl.parent as? KtClassBody)?.parent as? KtClass ?: return null
+        if (cls.isInterface() || cls.isSealed() || cls.isEnum() ||
+            cls.hasModifier(KtTokens.ABSTRACT_KEYWORD) || cls.hasModifier(KtTokens.EXPECT_KEYWORD) ||
+            cls.hasModifier(KtTokens.EXTERNAL_KEYWORD)
+        ) return null
+        val kind = if (decl is KtNamedFunction) "function" else "property"
+        return d("Abstract $kind '${decl.name}' in non-abstract class '${cls.name}'")
+    }
+
+    /**
+     * `val`/`var` on a parameter outside a primary constructor (`fun f(val x: Int)`, a lambda/catch/secondary-
+     * constructor parameter) — Kotlin's VAL_OR_VAR_ON_*_PARAMETER. Property parameters are legal only on a
+     * primary constructor. Anchored on the `val`/`var` keyword.
+     */
+    private fun valVarOnParameter(param: KtParameter): Diagnostic? {
+        val kw = param.valOrVarKeyword ?: return null
+        if (param.parent?.parent is KtPrimaryConstructor) return null
+        val place = when (param.parent?.parent) {
+            is KtSecondaryConstructor -> "a secondary constructor parameter"
+            is KtFunction -> "a function parameter"
+            else -> "this parameter"
+        }
+        val r = kw.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "'${kw.text}' is not allowed on $place", "kt.valVarParameter",
+        )
+    }
+
+    /** The text range of [decl]'s [kw] modifier keyword (e.g. `lateinit`, `abstract`), or null if absent. */
+    private fun modifierRange(decl: KtDeclaration, kw: KtModifierKeywordToken): TextRange? {
+        val el = decl.modifierList?.getModifier(kw) ?: return null
+        val r = el.textRange
+        return TextRange(r.startOffset, r.endOffset)
+    }
+
+    /**
+     * Modifier-list errors on a declaration, all syntactic (no resolution):
+     *  - a repeated modifier (`open open fun`) — REPEATED_MODIFIER;
+     *  - two incompatible inheritance modifiers (`final` with `open`/`abstract`/`sealed`) — INCOMPATIBLE_MODIFIERS;
+     *  - more than one visibility modifier (`private public`) — REDUNDANT/INCOMPATIBLE visibility.
+     * Each offending keyword is flagged on its own range (so the editor underlines each).
+     */
+    private fun modifierConflicts(decl: KtDeclaration): List<Diagnostic> {
+        val ml = decl.modifierList ?: return emptyList()
+        val present = LinkedHashMap<KtModifierKeywordToken, PsiElement>()
+        val out = ArrayList<Diagnostic>()
+        var c = ml.firstChild
+        while (c != null) {
+            val et = c.node.elementType
+            if (et is KtModifierKeywordToken) {
+                if (present.containsKey(et)) {
+                    val r = c.textRange
+                    out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Repeated '${c.text}' modifier", "kt.modifiers")
+                } else {
+                    present[et] = c
+                }
+            }
+            c = c.nextSibling
+        }
+        fun flag(a: PsiElement, b: PsiElement, msg: String) {
+            for (e in listOf(a, b)) {
+                val r = e.textRange
+                out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, msg, "kt.modifiers")
+            }
+        }
+        for ((x, y) in INCOMPATIBLE_MODIFIERS) {
+            val ex = present[x]; val ey = present[y]
+            if (ex != null && ey != null) flag(ex, ey, "Modifier '${ex.text}' is incompatible with '${ey.text}'")
+        }
+        val visible = VISIBILITY_MODIFIERS.mapNotNull { present[it] }
+        if (visible.size > 1) for (e in visible) {
+            val r = e.textRange
+            out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Multiple visibility modifiers", "kt.modifiers")
+        }
+        return out
     }
 
     /** A LOCAL `var` never reassigned could be a `val` (a hint). Reassignment = `name = …`, an augmented
@@ -1002,6 +1300,18 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     )
     private val INCDEC = setOf(KtTokens.PLUSPLUS, KtTokens.MINUSMINUS)
 
+    private val VISIBILITY_MODIFIERS = listOf(
+        KtTokens.PUBLIC_KEYWORD, KtTokens.PRIVATE_KEYWORD, KtTokens.PROTECTED_KEYWORD, KtTokens.INTERNAL_KEYWORD,
+    )
+
+    // Inheritance-modifier pairs that cannot co-occur (Kotlin's INCOMPATIBLE_MODIFIERS). `final` excludes every
+    // form of openness; `abstract` and `open`/`sealed` together is merely redundant, so it's left alone here.
+    private val INCOMPATIBLE_MODIFIERS = listOf(
+        KtTokens.FINAL_KEYWORD to KtTokens.OPEN_KEYWORD,
+        KtTokens.FINAL_KEYWORD to KtTokens.ABSTRACT_KEYWORD,
+        KtTokens.FINAL_KEYWORD to KtTokens.SEALED_KEYWORD,
+    )
+
     // Convention/operator function names: imported for use via `+`, `[]`, `in`, `by`, destructuring, etc.,
     // which don't surface the name as a textual reference — so an unused-import check must not flag them.
     private val OPERATOR_NAMES = setOf(
@@ -1021,18 +1331,37 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }
 
     /** `return <expr>` whose value type isn't assignable to the enclosing block-body function's declared
-     *  return type (`fun f(): Int { return "" }`). Skips labeled returns (they target a lambda). */
+     *  return type (`fun f(): Int { return "" }`), OR a value returned from a function whose return type is
+     *  `Unit` — explicitly (`fun f(): Unit`) or implicitly (a block body with no declared type) — which is
+     *  Kotlin's RETURN_TYPE_MISMATCH (`fun f() { return 5 }`). Skips labeled returns (they target a lambda). */
     private fun returnTypeMismatch(ret: KtReturnExpression, resolver: KotlinResolver): Diagnostic? {
         if (ret.getTargetLabel() != null) return null
         val value = ret.returnedExpression ?: return null
         val fn = ret.getStrictParentOfType<KtNamedFunction>() ?: return null
         if (!fn.hasBlockBody()) return null
-        val declared = service.typeFromText(fn.typeReference?.text ?: return null, resolver.fileContext)
-        if (declared?.qualifiedName == "kotlin.Unit") return null
         val actual = resolver.inferType(value)
+        val declaredText = fn.typeReference?.text
+        // A block body with no declared return type has the type Unit; returning a value from it is an error.
+        if (declaredText == null) return unitReturnMismatch(value, actual)
+        val declared = service.typeFromText(declaredText, resolver.fileContext)
+        if (declared?.qualifiedName == "kotlin.Unit") return unitReturnMismatch(value, actual)
         if (!isMismatch(declared, actual)) return null
         val r = value.textRange
         return mismatchDiagnostic(r.startOffset, r.endOffset, actual!!, declared!!)
+    }
+
+    /** A value returned where `Unit` was expected (see [returnTypeMismatch]). Conservative: the returned value's
+     *  type must be a fully-known, non-`Unit`/`Nothing`, non-type-parameter type — so an unmodeled expression
+     *  (whose type the parse-only model can't pin) never false-flags. */
+    private fun unitReturnMismatch(value: KtExpression, actual: KotlinType?): Diagnostic? {
+        if (actual == null || actual.isTypeParameter) return null
+        if (actual.qualifiedName == "kotlin.Unit" || actual.qualifiedName == "kotlin.Nothing") return null
+        if (!service.isKnownType(actual.qualifiedName)) return null
+        val r = value.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Type mismatch: inferred type is ${renderType(actual)} but Unit was expected", "kt.typeMismatch",
+        )
     }
 
     /** Whether [actual] is a confidently-incompatible value for a declaration of type [declared].
@@ -1057,6 +1386,60 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val args = if (t.typeArguments.isEmpty()) ""
         else t.typeArguments.joinToString(", ", "<", ">") { it.qualifiedName.substringAfterLast('.') }
         return simple + args + if (t.nullable) "?" else ""
+    }
+
+    /**
+     * A cast (`x as T`) whose operand is already exactly type `T` — Kotlin's USELESS_CAST ("No cast needed").
+     * Conservative: only an unchecked `as` cast (not `as?`) where both the operand's inferred type and the
+     * target are fully-known concrete types that are structurally identical (FQN + nullability + type
+     * arguments). A type-parameter / unknown / generics-differing case backs off, so a real narrowing or
+     * unchecked cast is never flagged. A warning (not an error), matching Kotlin.
+     */
+    private fun uselessCast(expr: KtBinaryExpressionWithTypeRHS, resolver: KotlinResolver): Diagnostic? {
+        if (expr.operationReference.getReferencedNameElementType() != KtTokens.AS_KEYWORD) return null // skip `as?`
+        val typeRef = expr.right ?: return null
+        val target = service.typeFromText(typeRef.text, resolver.fileContext) ?: return null
+        val actual = resolver.inferType(expr.left) ?: return null
+        if (actual.isTypeParameter || target.isTypeParameter) return null
+        if (!service.isKnownType(actual.qualifiedName) || !service.isKnownType(target.qualifiedName)) return null
+        if (!sameType(actual, target)) return null
+        val r = expr.textRange
+        return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.WARNING, "No cast needed", "kt.uselessCast")
+    }
+
+    /** Structural type equality: same FQN, nullability, and (recursively) type arguments. */
+    private fun sameType(a: KotlinType, b: KotlinType): Boolean {
+        if (a.qualifiedName != b.qualifiedName || a.nullable != b.nullable) return false
+        if (a.typeArguments.size != b.typeArguments.size) return false
+        return a.typeArguments.indices.all { i ->
+            val x = a.typeArguments[i] as? KotlinType
+            val y = b.typeArguments[i] as? KotlinType
+            if (x == null || y == null) (x?.qualifiedName == y?.qualifiedName) else sameType(x, y)
+        }
+    }
+
+    /**
+     * An elvis (`x ?: y`) whose left operand can never be null — Kotlin's USELESS_ELVIS. To stay
+     * false-positive-free over the parse-only model (a Java platform type can be inferred non-null when it is
+     * actually nullable), this fires ONLY when the left operand is STRUCTURALLY non-null: a `!!` assertion or a
+     * non-`null` literal (`s!! ?: x`, `"a" ?: x`). A warning, matching Kotlin.
+     */
+    private fun uselessElvis(expr: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
+        if (expr.operationToken != KtTokens.ELVIS) return null
+        if (!isStructurallyNonNull(expr.left)) return null
+        val op = expr.operationReference.textRange
+        return Diagnostic(
+            TextRange(op.startOffset, expr.textRange.endOffset), Severity.WARNING,
+            "Elvis operator (?:) always returns the left operand of non-nullable type", "kt.uselessElvis",
+        )
+    }
+
+    /** Whether [expr] is structurally guaranteed non-null: a `!!` assertion, or a literal other than `null`. */
+    private fun isStructurallyNonNull(expr: KtExpression?): Boolean = when (val e = expr?.let { unwrapParen(it) }) {
+        is KtPostfixExpression -> e.operationToken == KtTokens.EXCLEXCL
+        is KtConstantExpression -> e.text != "null"
+        is KtStringTemplateExpression -> true
+        else -> false
     }
 
     /**
@@ -1180,7 +1563,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         // members/extensions are materialized + receiver-bound — not the type's whole extension set (the
         // `kotlin.Any` bucket alone is thousands on a Compose classpath). A `Type.member` reference (`Color.Red`)
         // also sees the type's companion-object members/statics, which instance membersNamed doesn't list.
-        val matching = service.membersNamed(recvType.qualifiedName, recvType.typeArguments, name) +
+        val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
             if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()
         if (matching.isNotEmpty()) {
             // A plain member resolves outright. An EXTENSION resolves only when it is actually in scope —

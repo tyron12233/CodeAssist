@@ -43,8 +43,9 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
     private val log = Log.logger("AndroidComposePreviewHost")
 
     @Composable
-    override fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, modifier: Modifier) {
+    override fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier) {
         val report by rememberUpdatedState(onProblems)
+        val reportBusy by rememberUpdatedState(onBusy)
         val state by produceState<PreviewState>(PreviewState.Loading, path, functionName, text) {
             val lowered = runCatching { backend.lowerComposePreview(path, functionName, text) }.getOrNull()
             value = if (lowered != null) PreviewState.Ready(lowered) else {
@@ -73,6 +74,10 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // Track the last error identity (type + message) and update state only when it actually changes — incl.
         // clearing to null. Keyed alongside `partialError` so both reset together on a new buffer.
         val partialKey = remember(path, functionName, text) { arrayOfNulls<String>(1) }
+
+        // Tell the pane when the engine is busy lowering/interpreting the buffer (the Loading phase) vs. settled,
+        // so its badge can show a loading state while a fresh edit is being caught up to.
+        LaunchedEffect(state) { reportBusy(state is PreviewState.Loading) }
 
         // Report interpret/render problems to the pane's shared problem chip (cleared when it renders cleanly),
         // so the details live in the tappable chip rather than covering the device frame.

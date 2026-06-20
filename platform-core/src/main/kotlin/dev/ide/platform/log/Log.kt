@@ -49,8 +49,8 @@ class Logger internal constructor(private val tag: String) {
 object Log {
     private val sinks = CopyOnWriteArrayList<LogSink>()
 
-    /** The default in-memory ring — recent records for diagnostics / attaching to a future report. */
-    val ring = RingBufferSink(capacity = 500)
+    /** The default in-memory ring — recent records for the in-app Logs viewer / attaching to a report. */
+    val ring = RingBufferSink(capacity = 1000)
 
     /** Records below this level are dropped before reaching any sink. */
     @Volatile

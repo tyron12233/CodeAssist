@@ -24,6 +24,50 @@ fun newlineHandlerFor(language: CodeLanguage): NewlineHandler = when (language) 
     else -> DefaultNewlineHandler
 }
 
+/**
+ * Smart Enter / "Complete Statement" (Shift+Enter): the edit that finishes the line containing [caret] and
+ * opens an indented new line. A control-flow / loop header missing its body gets a `{ … }` block with the
+ * caret inside it; a Java statement missing its `;` gets one appended; otherwise it falls back to dropping a
+ * smartly-indented line at the line's end. Pure over the buffer, like the [NewlineHandler]s.
+ */
+fun smartEnter(text: CharSequence, caret: Int, language: CodeLanguage): RangeEdit {
+    val c = caret.coerceIn(0, text.length)
+    val lineStart = lineStartOf(text, c)
+    val lineEnd = lineEndFrom(text, c)
+    val lineText = text.subSequence(lineStart, lineEnd).toString()
+    val indent = lineText.takeWhile { it == ' ' || it == '\t' }
+    val unit = detectIndentUnit(text)
+    val code = lineText.trim()
+
+    if (controlFlowNeedsBraces(code)) {
+        val open = if (lineText.isEmpty() || lineText.endsWith(" ")) "{" else " {"
+        val body = "\n" + indent + unit
+        val insert = open + body + "\n" + indent + "}"
+        return RangeEdit(lineEnd, lineEnd, insert, lineEnd + open.length + body.length)
+    }
+    val lastCh = code.lastOrNull()
+    val endsOpen = lastCh != null && lastCh in "+-*/%=&|<>.,(?:"
+    val needsSemi = language == CodeLanguage.Java && code.isNotEmpty() && !endsOpen &&
+        !code.endsWith(";") && !code.endsWith("{") && !code.endsWith("}") &&
+        !code.startsWith("//") && !code.startsWith("*") && !code.startsWith("@")
+    val insert = (if (needsSemi) ";" else "") + "\n" + indent
+    return RangeEdit(lineEnd, lineEnd, insert, lineEnd + insert.length)
+}
+
+/**
+ * Whether [code] (a trimmed line) is a control-flow / loop header whose body is missing — so Smart Enter
+ * completes it with a `{ }` block. `else` / `try` / `do` / `finally` qualify on their own; the rest (`if`,
+ * `for`, `while`, `switch`, `when`, `catch`) qualify when they end on a closed `)`.
+ */
+private fun controlFlowNeedsBraces(code: String): Boolean {
+    if (code.endsWith("{") || code.endsWith("}")) return false
+    val c = code.removePrefix("}").trim() // tolerate `} else …`
+    if (c == "else" || c == "try" || c == "do" || c == "finally") return true
+    if (!c.endsWith(")")) return false
+    val first = c.takeWhile { it.isLetter() }
+    return first in setOf("if", "for", "while", "switch", "when", "catch", "else")
+}
+
 private val OPEN_TO_CLOSE = mapOf('(' to ')', '[' to ']', '{' to '}')
 private val CLOSE_TO_OPEN = OPEN_TO_CLOSE.entries.associate { (k, v) -> v to k }
 
@@ -54,29 +98,43 @@ private open class BraceNewlineHandler(
     private val arrowIndents: Boolean,
     private val caseIndents: Boolean,
     private val stringSplits: Boolean,
+    private val rawStrings: Boolean,
 ) : NewlineHandler {
 
     override fun onEnter(text: CharSequence, pos: Int): RangeEdit {
         val lineStart = lineStartOf(text, pos)
         val indent = leadingIndent(text, lineStart, pos)
+        val unit = detectIndentUnit(text) // respect the document's own indent style (tabs / 2-space / 4-space)
 
         if (insideBlockComment(text, pos)) return continueBlockComment(text, pos, lineStart, indent)
 
+        // Inside a raw string (Kotlin `"""…"""`, Java text block) the content is literal — keep the current
+        // line's indent so `.trimIndent()` margins line up, and apply none of the code rules below.
+        if (rawStrings && insideRawString(text, pos)) {
+            return RangeEdit(pos, pos, "\n" + indent, pos + 1 + indent.length)
+        }
+
         // Split a string literal across two lines, joined with `+`: `"foo|bar"` → `"foo" +` / `"bar"`.
         if (stringSplits && insideStringLiteral(text, lineStart, pos)) {
-            val insert = "\" +\n" + indent + INDENT_UNIT + "\""
+            val insert = "\" +\n" + indent + unit + "\""
             return RangeEdit(pos, pos, insert, pos + insert.length)
         }
 
-        // A full-line `//` comment continues with a fresh `// ` on the next line.
+        // A full-line `//` comment continues with a fresh `// ` on the next line — carrying a list bullet
+        // (`// - `, `// 1. `, …) when the comment is a bulleted list.
         val lineComment = lineCommentStart(text, lineStart, pos)
-        if (lineComment >= 0) return RangeEdit(pos, pos, "\n$indent// ", pos + 1 + indent.length + 3)
+        if (lineComment >= 0) {
+            var c = lineComment + 2
+            while (c < pos && (text[c] == ' ' || text[c] == '\t')) c++
+            val prefix = "// " + (listMarker(text, c, pos)?.next ?: "")
+            return RangeEdit(pos, pos, "\n$indent$prefix", pos + 1 + indent.length + prefix.length)
+        }
 
         // Caret inside an empty pair `{|}` / `(|)` / `[|]` → open onto three lines, the closer de-dented.
         val before = text.charOrNull(pos - 1)
         val after = text.charOrNull(pos)
         if (before != null && before in OPEN_TO_CLOSE && after == OPEN_TO_CLOSE[before]) {
-            val mid = "\n" + indent + INDENT_UNIT
+            val mid = "\n" + indent + unit
             return RangeEdit(pos, pos, mid + "\n" + indent, pos + mid.length)
         }
 
@@ -87,20 +145,58 @@ private open class BraceNewlineHandler(
             // the base indent and land the caret on the deeper body line, swallowing the blanks between.
             val closer = nextNonBlankOnLine(text, pos)
             if (closer >= 0 && text[closer] in CLOSE_TO_OPEN) {
-                val deeperIndent = indent + INDENT_UNIT
+                val deeperIndent = indent + unit
                 val mid = "\n" + deeperIndent
                 // Swallow blanks on both sides of the caret so the broken line keeps no trailing space.
                 var start = pos
                 while (start > lineStart && (text[start - 1] == ' ' || text[start - 1] == '\t')) start--
                 return RangeEdit(start, closer, mid + "\n" + indent, start + mid.length)
             }
+        } else {
+            // Breaking right before a closer that pairs with an opener earlier in the buffer (the multi-line
+            // list/call form): drop the closer onto its own line at the base indent and land the caret one
+            // level deeper. `Column(\n    a = 1,|)` → the `)` falls under `Column`, the caret at the item indent.
+            val closer = nextNonBlankOnLine(text, pos)
+            if (closer >= 0 && text[closer] in CLOSE_TO_OPEN) {
+                // Opener on THIS line → the line is the base; opener on an earlier line → this line is already
+                // a body/item line, so the closer dedents one level below it.
+                val base = if (openBracketBalance(text, lineStart, pos) > 0) indent else dropIndentLevel(indent, unit)
+                val mid = "\n" + base + unit
+                var start = pos
+                while (start > lineStart && (text[start - 1] == ' ' || text[start - 1] == '\t')) start--
+                return RangeEdit(start, closer, mid + "\n" + base, start + mid.length)
+            }
         }
-        // Continuation indent: a line that ends on a dangling operator (`+`, `=`, `.`, `,`, `&&`, …) or a
-        // chained `.` indents its wrapped tail one level — but only the FIRST wrap, so a run of continued
-        // lines stays at one level instead of marching right.
+
+        val code = text.subSequence(lineStart, codeEnd(text, lineStart, pos)).toString().trim()
+
+        // A line of only annotations / modifiers (`@Composable`, `private`, `@Preview(...)`) is not a statement
+        // that wraps — the declaration it precedes stays at the same indent.
+        if (!deeper && isAnnotationOrModifierOnly(code)) {
+            return RangeEdit(pos, pos, "\n" + indent, pos + 1 + indent.length)
+        }
+
+        // Wrap BEFORE a leading binary operator: `val x = a |+ b`, breaking before `.bar()` in a call chain →
+        // the wrapped tail drops one level deeper (the mirror of the trailing-operator rule). Only the first
+        // wrap indents — a line that already starts with an operator is mid-chain and stays put. Swallows the
+        // blanks before the caret so the broken line keeps no trailing space.
+        if (!deeper && startsWithLeadingOp(text, pos) && !startsWithLeadingOp(text, lineStart)) {
+            var start = pos
+            while (start > lineStart && (text[start - 1] == ' ' || text[start - 1] == '\t')) start--
+            val nl = "\n" + indent + unit
+            return RangeEdit(start, pos, nl, start + nl.length)
+        }
+
+        // Continuation indent: a line that ends on a dangling operator (`+`, `=`, `.`, `&&`, …) or a chained
+        // `.` indents its wrapped tail one level — but only the FIRST wrap, so a run of continued lines stays
+        // at one level instead of marching right. A trailing `,` is special: inside an already-open bracket
+        // list its lines are siblings (same indent), so it wraps deeper ONLY when the line itself leaves an
+        // opener unclosed — `listOf(1, 2,` → next line deeper, but `modifier = foo(),` (balanced) inside an
+        // earlier `Column(` → next line stays aligned with it.
         val extra = when {
-            deeper -> INDENT_UNIT
-            isContinuation(text, lineStart, pos) -> INDENT_UNIT
+            deeper -> unit
+            code.endsWith(",") -> if (openBracketBalance(text, lineStart, pos) > 0) unit else ""
+            isContinuation(text, lineStart, pos) -> unit
             else -> ""
         }
         return RangeEdit(pos, pos, "\n" + indent + extra, pos + 1 + indent.length + extra.length)
@@ -118,8 +214,8 @@ private open class BraceNewlineHandler(
     }
 }
 
-private val JavaNewlineHandler = BraceNewlineHandler(arrowIndents = false, caseIndents = true, stringSplits = true)
-private val KotlinNewlineHandler = BraceNewlineHandler(arrowIndents = true, caseIndents = false, stringSplits = false)
+private val JavaNewlineHandler = BraceNewlineHandler(arrowIndents = false, caseIndents = true, stringSplits = true, rawStrings = true)
+private val KotlinNewlineHandler = BraceNewlineHandler(arrowIndents = true, caseIndents = false, stringSplits = false, rawStrings = true)
 
 /**
  * The fallback for plain/markup files: continue the current indent, step one deeper after an opening
@@ -129,13 +225,28 @@ private object DefaultNewlineHandler : NewlineHandler {
     override fun onEnter(text: CharSequence, pos: Int): RangeEdit {
         val lineStart = lineStartOf(text, pos)
         val indent = leadingIndent(text, lineStart, pos)
+        val unit = detectIndentUnit(text)
+
+        // Markdown / plain-text list continuation: `- item` / `* item` / `1. item` → the next line repeats the
+        // bullet (ordered markers auto-increment). Pressing Enter on an EMPTY item (only the marker) ends the
+        // list: the marker is cleared and a plain blank line is dropped.
+        val marker = listMarker(text, lineStart + indent.length, pos)
+        if (marker != null) {
+            val lineEnd = lineEndFrom(text, pos)
+            if (isBlankRange(text, marker.end, lineEnd)) {
+                return RangeEdit(lineStart + indent.length, pos, "\n" + indent, lineStart + indent.length + 1 + indent.length)
+            }
+            val cont = "\n" + indent + marker.next
+            return RangeEdit(pos, pos, cont, pos + cont.length)
+        }
+
         val before = text.charOrNull(pos - 1)
         val after = text.charOrNull(pos)
         if (before != null && before in OPEN_TO_CLOSE && after == OPEN_TO_CLOSE[before]) {
-            val mid = "\n" + indent + INDENT_UNIT
+            val mid = "\n" + indent + unit
             return RangeEdit(pos, pos, mid + "\n" + indent, pos + mid.length)
         }
-        val newIndent = if (before != null && before in OPEN_TO_CLOSE) indent + INDENT_UNIT else indent
+        val newIndent = if (before != null && before in OPEN_TO_CLOSE) indent + unit else indent
         return RangeEdit(pos, pos, "\n" + newIndent, pos + 1 + newIndent.length)
     }
 }
@@ -149,12 +260,13 @@ private object XmlNewlineHandler : NewlineHandler {
     override fun onEnter(text: CharSequence, pos: Int): RangeEdit {
         val lineStart = lineStartOf(text, pos)
         val indent = leadingIndent(text, lineStart, pos)
+        val unit = detectIndentUnit(text)
 
         // Inside an unclosed start tag → we're in its attribute list; align the wrapped attribute.
         val tagOpen = enclosingStartTag(text, pos)
         if (tagOpen >= 0) {
             // Tag opener on an earlier line → this line is already a wrapped attribute; just keep its indent.
-            val pad = if (lineStartOf(text, tagOpen) == lineStart) " ".repeat(attributeAlignColumn(text, tagOpen)) else indent
+            val pad = if (lineStartOf(text, tagOpen) == lineStart) " ".repeat(attributeAlignColumn(text, tagOpen, unit.length)) else indent
             return RangeEdit(pos, pos, "\n" + pad, pos + 1 + pad.length)
         }
 
@@ -164,7 +276,7 @@ private object XmlNewlineHandler : NewlineHandler {
         if (gt >= 0 && text[gt] == '>' && text.charOrNull(gt - 1) != '/' &&
             closeLt >= 0 && text[closeLt] == '<' && text.charOrNull(closeLt + 1) == '/'
         ) {
-            val mid = "\n" + indent + INDENT_UNIT
+            val mid = "\n" + indent + unit
             var start = pos
             while (start > lineStart && (text[start - 1] == ' ' || text[start - 1] == '\t')) start--
             return RangeEdit(start, closeLt, mid + "\n" + indent, start + mid.length)
@@ -172,7 +284,7 @@ private object XmlNewlineHandler : NewlineHandler {
 
         // After an opening start tag (close elsewhere / none) → one level deeper.
         if (gt >= 0 && text[gt] == '>' && isOpenStartTagEnd(text, gt)) {
-            val deeperIndent = indent + INDENT_UNIT
+            val deeperIndent = indent + unit
             return RangeEdit(pos, pos, "\n" + deeperIndent, pos + 1 + deeperIndent.length)
         }
 
@@ -237,7 +349,7 @@ private fun enclosingStartTag(text: CharSequence, pos: Int): Int {
 }
 
 /** Spaces to align a wrapped attribute under the first attribute of the start tag opening at [tagOpen]. */
-private fun attributeAlignColumn(text: CharSequence, tagOpen: Int): Int {
+private fun attributeAlignColumn(text: CharSequence, tagOpen: Int, unitLen: Int): Int {
     val tagLineStart = lineStartOf(text, tagOpen)
     var i = tagOpen + 1 // past '<'
     while (i < text.length && isTagNameChar(text[i])) i++
@@ -245,7 +357,7 @@ private fun attributeAlignColumn(text: CharSequence, tagOpen: Int): Int {
     while (j < text.length && (text[j] == ' ' || text[j] == '\t')) j++
     // First attribute on the tag line → align under it; otherwise fall back to one level deeper than the tag.
     val attrPresent = j < text.length && text[j] != '\n' && text[j] != '>' && text[j] != '/'
-    return if (attrPresent) j - tagLineStart else (tagOpen - tagLineStart) + INDENT_UNIT.length
+    return if (attrPresent) j - tagLineStart else (tagOpen - tagLineStart) + unitLen
 }
 
 private fun isTagNameChar(c: Char) = c.isLetterOrDigit() || c == '_' || c == ':' || c == '.' || c == '-'
@@ -350,6 +462,195 @@ private fun bracelessControlFlow(code: String): Boolean {
     val tokens = head.split(Regex("[^A-Za-z]+")).filter { it.isNotEmpty() }
     val first = tokens.firstOrNull() ?: return false
     return first in setOf("if", "for", "while") || (first == "else" && tokens.getOrNull(1) == "if")
+}
+
+/**
+ * Net bracket balance of `[lineStart, pos)` — opens minus closes — ignoring brackets inside string/char
+ * literals and stopping at a `//` line comment. A positive result means the line leaves an opener unclosed,
+ * so its wrapped tail belongs one level deeper; zero (balanced) means a trailing `,` is just separating
+ * siblings already at the right indent.
+ */
+private fun openBracketBalance(text: CharSequence, lineStart: Int, pos: Int): Int {
+    var depth = 0
+    var inStr = false
+    var inChar = false
+    var i = lineStart
+    while (i < pos) {
+        val c = text[i]
+        when {
+            inStr -> if (c == '\\') i++ else if (c == '"') inStr = false
+            inChar -> if (c == '\\') i++ else if (c == '\'') inChar = false
+            c == '"' -> inStr = true
+            c == '\'' -> inChar = true
+            c == '/' && text.charOrNull(i + 1) == '/' -> return depth
+            c == '(' || c == '[' || c == '{' -> depth++
+            c == ')' || c == ']' || c == '}' -> depth--
+        }
+        i++
+    }
+    return depth
+}
+
+/**
+ * Whether the first non-blank char at/after [from] begins a binary operator that, at the START of a wrapped
+ * line, marks it a continuation (`.`, `+`, `*`, `/`, `%`, `&&`, `||`, elvis `?:`, safe-call `?.`, binary `-`).
+ * Excludes `--`/`->` and the comparison/assignment operators (`<`, `>`, `=`) whose start is ambiguous.
+ */
+private fun startsWithLeadingOp(text: CharSequence, from: Int): Boolean {
+    var i = from
+    while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+    if (i >= text.length || text[i] == '\n') return false
+    val c = text[i]
+    val c2 = text.charOrNull(i + 1)
+    return when (c) {
+        '.', '+', '*', '/', '%' -> true
+        '?' -> c2 == ':' || c2 == '.'
+        '&' -> c2 == '&'
+        '|' -> c2 == '|'
+        '-' -> c2 != '-' && c2 != '>'
+        else -> false
+    }
+}
+
+/** A list marker found at the line's content start: where it ends (past the trailing space) + the marker to
+ *  put on the continuation line (ordered numbers auto-incremented). */
+private class ListMarker(val end: Int, val next: String)
+
+/** Detects a `- ` / `* ` / `+ ` bullet or an ordered `N. ` / `N) ` marker beginning at [from] (before [pos]). */
+private fun listMarker(text: CharSequence, from: Int, pos: Int): ListMarker? {
+    if (from < 0 || from >= pos) return null
+    val c = text[from]
+    if ((c == '-' || c == '*' || c == '+') && from + 1 < text.length && text[from + 1] == ' ') {
+        return ListMarker(from + 2, "$c ")
+    }
+    var j = from
+    while (j < text.length && text[j].isDigit()) j++
+    if (j > from && j < text.length && (text[j] == '.' || text[j] == ')') && j + 1 < text.length && text[j + 1] == ' ') {
+        val n = text.subSequence(from, j).toString().toIntOrNull() ?: return null
+        return ListMarker(j + 2, "${n + 1}${text[j]} ")
+    }
+    return null
+}
+
+/** True when `[start, end)` is empty or only whitespace. */
+private fun isBlankRange(text: CharSequence, start: Int, end: Int): Boolean {
+    var i = start
+    while (i < end) { if (!text[i].isWhitespace()) return false; i++ }
+    return true
+}
+
+/** Offset of the end of the line containing [pos] (the next '\n', or EOF). */
+private fun lineEndFrom(text: CharSequence, pos: Int): Int {
+    var i = pos
+    while (i < text.length && text[i] != '\n') i++
+    return i
+}
+
+private const val INDENT_SCAN_LIMIT = 10_000
+
+/**
+ * The document's indentation unit, inferred from its existing lines: a tab when leading tabs dominate the
+ * indented code lines, otherwise the most common positive indent *increment* between consecutive code lines
+ * (the increment histogram — robust against stray alignment lines that a min/GCD would be fooled by),
+ * clamped to {2, 4, 8} spaces with a four-space fallback. Bounded scan so it stays cheap on every Enter.
+ */
+internal fun detectIndentUnit(text: CharSequence): String {
+    val limit = minOf(text.length, INDENT_SCAN_LIMIT)
+    var tabLines = 0
+    var spaceLines = 0
+    val diffCounts = HashMap<Int, Int>() // positive space-indent increments → frequency
+    var prevWidth = 0
+    var i = 0
+    while (i < limit) {
+        var j = i
+        var sawTab = false
+        while (j < text.length && (text[j] == ' ' || text[j] == '\t')) { if (text[j] == '\t') sawTab = true; j++ }
+        val lineChar = if (j < text.length) text[j] else '\n'
+        if (lineChar != '\n' && lineChar != '*') { // a real code line (skip blanks + javadoc `*` continuations)
+            if (sawTab) {
+                tabLines++
+            } else {
+                spaceLines++
+                val d = (j - i) - prevWidth
+                if (d in 1..8) diffCounts[d] = (diffCounts[d] ?: 0) + 1
+                prevWidth = j - i
+            }
+        }
+        i = j
+        while (i < text.length && text[i] != '\n') i++
+        i++
+    }
+    // Require corroborating evidence (≥2 lines) before overriding the four-space default, so a single
+    // artificially-indented line can't mis-set the unit for the whole document.
+    if (tabLines > spaceLines && tabLines >= 2) return "\t"
+    val best = diffCounts.maxByOrNull { it.value }
+    val unit = if (best != null && best.value >= 2) best.key else 4
+    return " ".repeat(if (unit == 2 || unit == 4 || unit == 8) unit else 4)
+}
+
+/** Remove one indentation level ([unit]) from the end of [indent], or whatever leading width is there. */
+private fun dropIndentLevel(indent: String, unit: String): String = when {
+    indent.endsWith(unit) -> indent.substring(0, indent.length - unit.length)
+    else -> indent.substring(0, (indent.length - unit.length).coerceAtLeast(0))
+}
+
+/**
+ * Whether [pos] sits inside a raw string / text block (`"""…"""`), by counting whole `"""` triples before it
+ * (odd ⇒ inside). Bounded from the start of the buffer; gives up (returns false) past the scan limit so a
+ * huge file stays cheap — raw strings far down a long file are rare.
+ */
+private fun insideRawString(text: CharSequence, pos: Int): Boolean {
+    if (pos > COMMENT_SCAN_LIMIT) return false
+    var i = 0
+    var count = 0
+    while (i + 2 < pos) {
+        if (text[i] == '"' && text[i + 1] == '"' && text[i + 2] == '"') { count++; i += 3 } else i++
+    }
+    return count % 2 == 1
+}
+
+private val MODIFIER_KEYWORDS = setOf(
+    "public", "private", "protected", "internal", "abstract", "final", "open", "sealed", "override",
+    "inline", "infix", "operator", "suspend", "lateinit", "const", "vararg", "tailrec", "external",
+    "data", "enum", "annotation", "inner", "companion", "expect", "actual", "crossinline", "noinline",
+    "reified", "static", "default", "native", "strictfp", "synchronized", "transient", "volatile",
+)
+
+/**
+ * True when [code] is only annotation(s) and/or declaration modifiers — `@Composable`, `private`,
+ * `@Preview(showBackground = true)`, `@JvmStatic private` — i.e. nothing that wraps onto the next line. Such
+ * a line precedes a declaration that stays at the same indent. An `@`-token swallows a balanced `(…)`; bare
+ * words must all be modifier keywords. Anything else (a name, `fun`, `val`, an expression) returns false.
+ */
+private fun isAnnotationOrModifierOnly(code: String): Boolean {
+    if (code.isEmpty()) return false
+    val n = code.length
+    var i = 0
+    while (i < n) {
+        while (i < n && code[i].isWhitespace()) i++
+        if (i >= n) break
+        when {
+            code[i] == '@' -> {
+                i++
+                while (i < n && (code[i].isLetterOrDigit() || code[i] == '.' || code[i] == '_' || code[i] == ':')) i++
+                if (i < n && code[i] == '(') { // consume a balanced argument list
+                    var depth = 0
+                    while (i < n) {
+                        if (code[i] == '(') depth++ else if (code[i] == ')') { depth--; if (depth == 0) { i++; break } }
+                        i++
+                    }
+                    if (depth != 0) return false // unbalanced → not a complete annotation
+                }
+            }
+            code[i].isLetter() -> {
+                val start = i
+                while (i < n && (code[i].isLetterOrDigit() || code[i] == '_')) i++
+                if (code.substring(start, i) !in MODIFIER_KEYWORDS) return false
+            }
+            else -> return false
+        }
+    }
+    return true
 }
 
 /** Offset where the line's code ends — i.e. before a trailing `// …` line comment (or [pos] when there is none). */

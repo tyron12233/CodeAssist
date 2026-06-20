@@ -43,8 +43,9 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
     // no LocalConfiguration uiMode to override, so the frame renders under the host's system theme. The
     // Light/Night split is meaningful on device, where the night-mode override drives isSystemInDarkTheme().
     @Composable
-    override fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, modifier: Modifier) {
+    override fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier) {
         val report by rememberUpdatedState(onProblems)
+        val reportBusy by rememberUpdatedState(onBusy)
         // The project's own library jars (material-icons, third-party widgets, sibling modules) aren't on the
         // IDE process classpath, so build a parent-first loader over them — standard composables still dispatch
         // against the bundled Compose-for-Desktop, but a project-only class (`Icons.Default.Home`) now loads.
@@ -72,6 +73,10 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // Track the last error identity (type + message) and update state only when it actually changes — incl.
         // clearing to null. Keyed alongside `partialError` so both reset together on a new buffer.
         val partialKey = remember(path, functionName, text) { arrayOfNulls<String>(1) }
+
+        // Tell the pane when the engine is busy lowering/interpreting the buffer (the Loading phase) vs. settled,
+        // so its badge can show a loading state while a fresh edit is being caught up to.
+        LaunchedEffect(state) { reportBusy(state is PreviewState.Loading) }
 
         // Report interpret/render problems to the pane's shared problem chip (cleared when it renders cleanly),
         // so the details live in the tappable chip rather than covering the device frame.

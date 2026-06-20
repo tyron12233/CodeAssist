@@ -29,12 +29,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -51,9 +53,28 @@ import dev.ide.ui.theme.Ca
 class PaletteEntry(val section: String, val label: String, val sub: String?, val run: () -> Unit)
 
 /**
+ * The IntelliJ-style scope tabs across the top of the palette: a narrowing lens over the result sections.
+ * [All] searches everything; the rest restrict the result list (and the index queries) to one kind, so
+ * "Symbols" won't bury a class under file-name or command matches. [sections] is the set of [PaletteEntry]
+ * section labels this tab keeps (empty = keep all); Tab cycles forward through them.
+ */
+enum class PaletteFilter(val label: String, val sections: Set<String>) {
+    All("All", emptySet()),
+    Commands("Commands", setOf("Commands", "Run")),
+    Files("Files", setOf("Files", "Go to")),
+    Symbols("Symbols", setOf("Symbols")),
+    Members("Members", setOf("Members"));
+
+    fun keeps(section: String): Boolean = sections.isEmpty() || section in sections
+    val wantsSymbols: Boolean get() = this == All || this == Symbols
+    val wantsMembers: Boolean get() = this == All || this == Members
+}
+
+/**
  * The command palette: drops from the top (glass-thick). One input over commands, files, and — backed
  * by the index — **Go-to-Symbol** (navigable project declarations) and **Member search** across the
- * classpath. Enter runs the top result; Esc closes.
+ * classpath, with IntelliJ-style scope tabs (All / Commands / Files / Symbols / Members) to narrow the
+ * results. Enter runs the top result; Tab cycles the scope; Esc closes.
  */
 @Composable
 fun CommandPalette(
@@ -68,20 +89,23 @@ fun CommandPalette(
     onClose: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(PaletteFilter.All) }
     var symbols by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
     var members by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    LaunchedEffect(query) {
+    // Only hit the index for the kinds the active scope actually shows — picking "Files" shouldn't pay for a
+    // member scan. Re-runs when the scope changes so switching tabs fills in results that were skipped.
+    LaunchedEffect(query, filter) {
         val q = query.trim()
         if (q.length >= 2) {
-            symbols = runCatching { backend.searchSymbols(q, 20) }.getOrDefault(emptyList())
-            members = runCatching { backend.searchMembers(q, 20) }.getOrDefault(emptyList())
+            symbols = if (filter.wantsSymbols) runCatching { backend.searchSymbols(q, 20) }.getOrDefault(emptyList()) else emptyList()
+            members = if (filter.wantsMembers) runCatching { backend.searchMembers(q, 20) }.getOrDefault(emptyList()) else emptyList()
         } else { symbols = emptyList(); members = emptyList() }
     }
 
     val q = query.trim()
-    val entries = buildList {
+    val allEntries = buildList {
         if (q.isEmpty()) {
             add(PaletteEntry("Run", "Run build", "⌘R") {})
             add(PaletteEntry("Commands", "Manage dependencies", null, onOpenDependencies))
@@ -112,6 +136,7 @@ fun CommandPalette(
             }
         }
     }
+    val entries = allEntries.filter { filter.keeps(it.section) }
 
     // The scrim + drop-from-top entrance are provided by the hosting DropdownOverlay; this is just the
     // glass body. Adaptive width: full-bleed (minus 12dp margins) on phone, capped at 600 on desktop.
@@ -144,6 +169,13 @@ fun CommandPalette(
                         when (ev.key) {
                             Key.Escape -> { onClose(); true }
                             Key.Enter -> { entries.firstOrNull()?.let { it.run(); onClose() }; true }
+                            // Tab cycles the scope (Search-Everywhere style); Shift-Tab steps back.
+                            Key.Tab -> {
+                                val all = PaletteFilter.entries
+                                val step = if (ev.isShiftPressed) -1 else 1
+                                filter = all[(filter.ordinal + step + all.size) % all.size]
+                                true
+                            }
                             else -> false
                         }
                     },
@@ -151,10 +183,50 @@ fun CommandPalette(
             }
             Chip("esc", fill = Ca.colors.surface3, textColor = Ca.colors.textSecondary)
         }
+        // The scope tabs: a narrowing lens over the result sections (IntelliJ's All/Classes/Files/… tabs).
+        FilterTabs(filter) { filter = it }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
 
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
-            items(entries) { entry -> PaletteRow(entry, onClose) }
+        if (entries.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 22.dp)) {
+                Text(
+                    if (q.isEmpty() && filter != PaletteFilter.All) "Type to search ${filter.label.lowercase()}…"
+                    else "No matches",
+                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                )
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
+                items(entries) { entry -> PaletteRow(entry, onClose) }
+            }
+        }
+    }
+}
+
+/** The horizontal scope-tab strip: a pill per [PaletteFilter], the active one filled in the accent tint. */
+@Composable
+private fun FilterTabs(active: PaletteFilter, onSelect: (PaletteFilter) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PaletteFilter.entries.forEach { f ->
+            val selected = f == active
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(Ca.radius.pill))
+                    .background(if (selected) Ca.colors.accentSoft else Ca.colors.surface3)
+                    .clickable { onSelect(f) }
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    f.label,
+                    color = if (selected) Ca.colors.accent else Ca.colors.textSecondary,
+                    style = Ca.type.caption,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                )
+            }
         }
     }
 }

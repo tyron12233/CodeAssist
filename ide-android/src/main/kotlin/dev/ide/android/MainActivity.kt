@@ -53,10 +53,9 @@ class MainActivity : ComponentActivity() {
     private val inbound = mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Keep the app alive after an unexpected UI-thread exception (shows a non-fatal dialog instead of
-        // crashing). Installed first, on the main thread, so it guards everything below.
         MainThreadGuard.install()
         enableEdgeToEdge()
+
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
         setContent {
@@ -68,7 +67,8 @@ class MainActivity : ComponentActivity() {
                     .onFailure { e -> error = e.message ?: e.toString() }
             }
 
-            // --- file import/share bridge (created once; no-ops until the backend is ready) ---
+            Column() { }
+
             var pendingTarget by remember { mutableStateOf<String?>(null) }
             var pendingCallback by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
             val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -98,7 +98,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Import an inbound "Open with" / shared file into the active project's first source root.
             LaunchedEffect(backend, inbound.value) {
                 val b = backend
                 val uri = inbound.value

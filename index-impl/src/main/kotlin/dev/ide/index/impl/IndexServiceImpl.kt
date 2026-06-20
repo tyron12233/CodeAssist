@@ -12,6 +12,7 @@ import dev.ide.lang.dom.ParsedFile
 import dev.ide.platform.ContentHash
 import dev.ide.platform.Disposable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import java.io.Closeable
@@ -50,8 +51,9 @@ class IndexServiceImpl(
     private class State(val ext: IndexExtension<*, *>) {
         /** Static (SDK + library) partitions, read from disk on demand. CopyOnWrite ⇒ lock-free query reads. */
         val segments = CopyOnWriteArrayList<Segment>()
-        /** Content hashes whose segment is already open, so a repeated build doesn't open it twice. */
-        val openHashes = HashSet<String>()
+        /** Content hashes whose segment is already open, so a repeated build doesn't open it twice. Concurrent
+         *  because artifacts are indexed in parallel (each adds its OWN distinct key, so no key races). */
+        val openHashes: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         /** Project source: in-memory + incremental. */
         val source = IndexData(ext.matching)
         val sourceByFile = LinkedHashMap<String, List<IndexEntry>>()
@@ -134,13 +136,24 @@ class IndexServiceImpl(
                 scope.sourceArchives.forEach { if (Files.exists(it)) add(Artifact.SourceArchive(it)) }
             }
             val total = artifacts.size + 1
-            artifacts.forEachIndexed { i, art ->
-                setStatus(IndexStatus(true, "Indexing ${art.label}", i.toDouble() / total))
-                indexArtifact(art)
+            // Index artifacts in parallel (bounded). Each artifact is independent — it scans its own jar and
+            // writes its own per-(ext,hash) segment file; the only shared state is each State's `segments`
+            // (CopyOnWrite) and `openHashes` (concurrent set, distinct key per artifact). Sequential, this was
+            // the dominant first-load cost gating the first completion/diagnostics on a `.kt` file.
+            val concurrency = minOf(4, maxOf(1, Runtime.getRuntime().availableProcessors() - 1))
+            val done = AtomicInteger(0)
+            val buildDispatcher = Dispatchers.IO.limitedParallelism(concurrency)
+            kotlinx.coroutines.coroutineScope {
+                for (art in artifacts) {
+                    launch(buildDispatcher) {
+                        indexArtifact(art)
+                        setStatus(IndexStatus(true, "Indexing ${art.label}", done.incrementAndGet().toDouble() / total))
+                    }
+                }
             }
             setStatus(IndexStatus(true, "Indexing project source", artifacts.size.toDouble() / total))
             indexSource(scope.sourceRoots, scope.resourceRoots)
-            setStatus(IndexStatus(false, "Indexed", 1.0))
+            setStatus(IndexStatus(false, "Indexed", 1.0, ready = true))
         } catch (t: Throwable) {
             setStatus(IndexStatus(false, "Indexing failed: ${t.message}", 1.0))
             throw t
@@ -290,7 +303,11 @@ class IndexServiceImpl(
             override fun open(): Pair<Sequence<IndexInput>, Closeable> {
                 val zip = ZipFile(path.toFile())
                 val hash = contentHash()
-                val seq = zip.entries().asSequence().filter { !it.isDirectory && it.name.endsWith(".class") }
+                // `.class` (the bytecode indexes) plus `.kotlin_builtins` (Kotlin's intrinsic List/Int/String/…
+                // shapes, kept in kotlin-stdlib as protobuf, not bytecode). Each extension's inputFilter selects
+                // its own, so the `.class`-only indexes ignore the builtins entries and vice versa.
+                val seq = zip.entries().asSequence()
+                    .filter { !it.isDirectory && (it.name.endsWith(".class") || it.name.endsWith(".kotlin_builtins")) }
                     .map { entry -> LibraryInput(IndexOrigin.LIBRARY, hash, entry.name) { zip.getInputStream(entry).readBytes() } }
                 return seq to Closeable { zip.close() }
             }

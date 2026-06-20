@@ -110,9 +110,16 @@ import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.platform.Disposable
 import dev.ide.platform.PluginId
+import dev.ide.platform.SERVICE_EP
+import dev.ide.platform.ServiceDescriptor
+import dev.ide.platform.ServiceFactory
+import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceScopeLevel
+import dev.ide.model.module
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.deps.ArtifactKind
 import dev.ide.deps.ConflictPolicy
+import dev.ide.deps.Repository
 import dev.ide.deps.impl.DEFAULT_REPOSITORIES
 import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
@@ -124,6 +131,7 @@ import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.ModuleDependency
+import dev.ide.model.ModuleId
 import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
 import dev.ide.android.support.resources.AndroidResources
@@ -172,6 +180,8 @@ import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.backend.UiModuleRef
+import dev.ide.ui.backend.UiModuleTypeOption
+import dev.ide.ui.backend.UiRepository
 import dev.ide.ui.backend.UiSearchOptions
 import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.backend.UiTextMatch
@@ -221,6 +231,10 @@ class AndroidDeviceTools(
     /** The running device's API level (`Build.VERSION.SDK_INT`): the min-api the ephemeral Java dex-run
      *  targets, so D8 desugars only what this device needs. */
     val apiLevel: Int = 21,
+    /** Java 9+ desugar stubs (`core-lambda-stubs.jar`: `StringConcatFactory`/`LambdaMetafactory`), part of the
+     *  compile platform so a Java 9+ build's string concatenation/lambdas resolve at compile time (D8 desugars
+     *  the resulting invokedynamic). `android.jar` omits them; on ART they ship as a bundled asset. */
+    val desugarStubs: List<Path> = emptyList(),
 )
 
 /**
@@ -271,6 +285,14 @@ interface ComposePreviewRunner {
     ): PreviewRunResult
 }
 
+/** APPLICATION-scoped: the warm K2 compiler shared across every opened project. */
+private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinJvmCompiler>("ide.kotlin.jvmCompiler")
+
+/** MODULE-scoped: the per-module source analyzer for each language. */
+private val ANALYZER_JAVA = ServiceKey<SourceAnalyzer>("ide.analyzer.java")
+private val ANALYZER_KOTLIN = ServiceKey<SourceAnalyzer>("ide.analyzer.kotlin")
+private val ANALYZER_XML = ServiceKey<SourceAnalyzer>("ide.analyzer.xml")
+
 class IdeServices private constructor(
     val platform: PlatformCore,
     val store: ProjectModelStore,
@@ -319,7 +341,6 @@ class IdeServices private constructor(
     private fun isKotlin(file: Path): Boolean =
         file.fileName?.toString()?.let { it.endsWith(".kt") || it.endsWith(".kts") } == true
 
-    private val analyzers = ConcurrentHashMap<String, SourceAnalyzer>()
     private val docVersion = AtomicLong(0)
 
     private val indexScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -331,6 +352,7 @@ class IdeServices private constructor(
             JavaClassNamesIndex, JavaPackagesIndex, JavaPackageTypesIndex, JavaSourceSymbolsIndex, JavaMembersIndex,
             JavaMembersByOwnerIndex, // cross-language: a Kotlin file enumerating a Java SOURCE class's members
             dev.ide.lang.kotlin.index.KotlinTypeShapeIndex, // Kotlin backend: persistent owner-keyed member shapes
+            dev.ide.lang.kotlin.index.KotlinBuiltinsIndex, // Kotlin backend: intrinsic List/Int/String shapes (.kotlin_builtins)
             dev.ide.lang.kotlin.index.KotlinCallableIndex, // Kotlin backend: persistent extensions + top-level callables
             dev.ide.lang.jdt.index.JavaSourceDocIndex, // param names + javadoc from attached Java sources
             dev.ide.lang.kotlin.index.KotlinSourceDocIndex, // param names + KDoc from attached Kotlin sources
@@ -355,18 +377,57 @@ class IdeServices private constructor(
     val indexStatus: StateFlow<IndexUiStatus> get() = _indexStatus
 
     init {
+        // Register the scoped services this engine contributes before anything resolves them.
+        registerScopedServices()
         // Provision kotlin-stdlib as a real project dependency (bundled jar, never the host runtime) before
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
         indexService.observeStatus { s -> _indexStatus.value = IndexUiStatus(s.building, s.message, s.fraction) }
         indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
+        // Pre-warm the Kotlin parser environment (the ~200ms KotlinCoreEnvironment standup) off-thread, so the
+        // first Kotlin completion/diagnostics/preview doesn't pay it on the interaction path. Gated on the
+        // project actually containing Kotlin so a pure-Java project never stands up the Kotlin frontend.
+        indexScope.launch { runCatching { if (projectHasKotlin()) dev.ide.lang.kotlin.parse.KotlinParserHost.warmUp() } }
+    }
+
+    /** Cheap check (bounded, short-circuiting) for any `.kt` under the project's source roots. */
+    private fun projectHasKotlin(): Boolean = runCatching {
+        modules().any { m ->
+            sourceRoots(m).any { root ->
+                Files.exists(root) && Files.walk(root).use { s -> s.anyMatch { it.fileName?.toString()?.endsWith(".kt") == true } }
+            }
+        }
+    }.getOrDefault(false)
+
+    /**
+     * Contribute this engine's scoped services. The application-scoped K2 compiler registers idempotently
+     * on the shared application container (the next project reuses the warm one). The module-scoped
+     * analyzers register through the `platform.service` EP, so every module container resolves them and
+     * disposes them with the module (prompt library-jar handle release).
+     */
+    private fun registerScopedServices() {
+        store.appContainer.registerServiceIfAbsent(KOTLIN_JVM_COMPILER) { KotlinJvmCompiler() }
+        val plugin = PluginId("ide-core-services")
+        platform.extensions.register(SERVICE_EP, ServiceDescriptor(ANALYZER_JAVA, ServiceScopeLevel.MODULE, ServiceFactory { buildAnalyzer(module(), LanguageId("java")) }, plugin), plugin)
+        platform.extensions.register(SERVICE_EP, ServiceDescriptor(ANALYZER_KOTLIN, ServiceScopeLevel.MODULE, ServiceFactory { buildAnalyzer(module(), KotlinLanguageBackend.LANGUAGE_ID) }, plugin), plugin)
+        platform.extensions.register(SERVICE_EP, ServiceDescriptor(ANALYZER_XML, ServiceScopeLevel.MODULE, ServiceFactory { buildAnalyzer(module(), XmlLanguageBackend.LANGUAGE_ID) }, plugin), plugin)
+    }
+
+    /** The MODULE-scoped analyzer service key for [language]. */
+    private fun analyzerKeyFor(language: LanguageId): ServiceKey<SourceAnalyzer> = when (language) {
+        KotlinLanguageBackend.LANGUAGE_ID -> ANALYZER_KOTLIN
+        XmlLanguageBackend.LANGUAGE_ID -> ANALYZER_XML
+        else -> ANALYZER_JAVA
     }
 
     private fun buildIndexScope(): IndexScope {
         val jdt = modules().map { analyzerFor(it) }.filterIsInstance<JdtSourceAnalyzer>()
         return IndexScope(
             sourceRoots = jdt.flatMap { it.sourceRootPaths }.distinct(),
-            libraryJars = jdt.flatMap { it.classpathJarPaths }.distinct(),
+            // The bundled kotlin-stdlib is always in scope (even for an editor-only Kotlin project that never
+            // declared the dependency) so the Kotlin backend's callable/type-shape indexes carry `println`/
+            // `listOf`/`String.trim`/… — the backend is a pure index consumer with no live stdlib jar scan.
+            libraryJars = (jdt.flatMap { it.classpathJarPaths } + listOfNotNull(BundledKotlinStdlib.jar())).distinct(),
             jdkHome = jdt.firstNotNullOfOrNull { it.jdkHome },
             // Attached library/SDK SOURCE archives (incl. the downloaded JDK src.zip, folded in by the JDT
             // branch of analyzerFor) → the source-doc index: real param names + javadoc/KDoc.
@@ -546,7 +607,8 @@ class IdeServices private constructor(
      * On the desktop this is empty and ecj keeps using the host JDK's platform classes (so the desktop Java
      * build still targets the real JRE, not android.jar).
      */
-    private val compileBootClasspath: List<Path> = listOfNotNull(androidTools?.androidJar)
+    private val compileBootClasspath: List<Path> =
+        listOfNotNull(androidTools?.androidJar) + (androidTools?.desugarStubs ?: emptyList())
     private val javaCompile = JavaCompile { sources, classpath, out, level ->
         val r = JdtBatchCompiler.compile(sources, classpath, out, level, bootClasspath = compileBootClasspath)
         JavaCompileResult(r.success, r.messages)
@@ -557,7 +619,11 @@ class IdeServices private constructor(
      * classpath the Java compile uses ([compileBootClasspath]: empty on desktop → host JDK; `android.jar` on
      * ART) is threaded in, so a Kotlin module sees the right platform. Modules with no `.kt` never invoke it.
      */
-    private val kotlinJvmCompiler = KotlinJvmCompiler()
+    // APPLICATION-scoped: one warm K2 compiler shared across every opened project (its environment/jar
+    // filesystem is reused build-to-build; the boot classpath is passed per compile, so one instance
+    // serves all projects). Registered idempotently on the shared application container in init.
+    private val kotlinJvmCompiler: KotlinJvmCompiler get() = store.appContainer.getService(KOTLIN_JVM_COMPILER)
+    // Incremental state is per-output-dir, so the incremental wrapper stays workspace-scoped.
     private val incrementalKotlin = IncrementalKotlinCompiler(kotlinJvmCompiler)
     private val kotlinCompile = KotlinCompile { kotlinSources, javaSources, classpath, out, jvmTarget ->
         // A module that depends on the Compose runtime must be compiled with the Compose compiler plugin
@@ -978,7 +1044,7 @@ class IdeServices private constructor(
             .distinctBy { it.first }
         if (directs.isEmpty()) return ModuleAssembly(false, emptyList(), 0)
 
-        val result = depsResolver.resolve(directs.map { it.second }, DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, progress, platforms = declaredPlatforms(module))
+        val result = depsResolver.resolve(directs.map { it.second }, currentRepositories(), ConflictPolicy.NEWEST, progress, platforms = declaredPlatforms(module))
         val byGa = result.resolved.associateBy { it.coordinate.group to it.coordinate.name }
         val partition = DependencyPartition.partition(directs, result.resolved)
 
@@ -1133,7 +1199,7 @@ class IdeServices private constructor(
 
         val result = if (externalCoords.isEmpty()) null else {
             _depsState.value = DepsResolveState(resolving = true, message = "Resolving ${module.name}…")
-            runCatching { depsResolver.resolve(externalCoords, DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, depsProgress(), platforms = declaredPlatforms(module)) }
+            runCatching { depsResolver.resolve(externalCoords, currentRepositories(), ConflictPolicy.NEWEST, depsProgress(), platforms = declaredPlatforms(module)) }
                 .getOrNull()
                 .also { _depsState.update { s -> s.copy(resolving = false) } }
         }
@@ -1278,7 +1344,7 @@ class IdeServices private constructor(
             return UiAddResult(false, "$coordinate is already a dependency of '$moduleName'.")
 
         val result = try {
-            depsResolver.resolve(listOf(coord), DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, progress, platforms = platforms)
+            depsResolver.resolve(listOf(coord), currentRepositories(), ConflictPolicy.NEWEST, progress, platforms = platforms)
         } catch (e: Exception) {
             return UiAddResult(false, "Resolution failed: ${e.message}")
         }
@@ -1333,7 +1399,7 @@ class IdeServices private constructor(
 
         _depsState.value = DepsResolveState(resolving = true, message = "Importing BOM $coordinate…", log = listOf("Importing BOM $coordinate…"))
         val result = try {
-            depsResolver.resolve(emptyList(), DEFAULT_REPOSITORIES, ConflictPolicy.NEWEST, depsProgress(), platforms = listOf(bom))
+            depsResolver.resolve(emptyList(), currentRepositories(), ConflictPolicy.NEWEST, depsProgress(), platforms = listOf(bom))
         } catch (e: Exception) {
             return UiAddResult(false, "Couldn't import BOM: ${e.message}")
         } finally {
@@ -1356,7 +1422,8 @@ class IdeServices private constructor(
         val module = modules().firstOrNull { it.name == moduleName } ?: return false
         val entry = module.dependencies.firstOrNull {
             (it is LibraryDependency && it.library.name == coordinate) ||
-                (it is PlatformDependency && it.bom.toString() == coordinate)
+                (it is PlatformDependency && it.bom.toString() == coordinate) ||
+                (it is ModuleDependency && it.target.value == coordinate)
         } ?: return false
         val project = projectOf(module) ?: return false
         project.beginModification().apply {
@@ -1380,6 +1447,50 @@ class IdeServices private constructor(
         }
         return true
     }
+
+    // ---- repositories (where libraries resolve from) ----
+
+    /** User-added repositories, persisted one `name<TAB>url` per line; the built-ins are always prepended. */
+    private val repositoriesFile: Path get() = store.rootPath.resolve(".platform/repositories.txt")
+
+    private fun userRepositories(): List<Repository> =
+        runCatching { repositoriesFile.readText() }.getOrNull()
+            ?.lineSequence()
+            ?.mapNotNull { line ->
+                val parts = line.split('\t')
+                if (parts.size == 2 && parts[1].isNotBlank()) Repository(parts[0].trim(), parts[1].trim()) else null
+            }?.toList().orEmpty()
+
+    /** The repository list every resolve uses: the built-ins (Maven Central, Google) plus the user's. */
+    private fun currentRepositories(): List<Repository> = DEFAULT_REPOSITORIES + userRepositories()
+
+    /** Built-in repos (locked) + user-added repos (removable), for the Repositories manager. */
+    fun repositories(): List<UiRepository> =
+        DEFAULT_REPOSITORIES.map { UiRepository(it.name, it.url, builtin = true) } +
+            userRepositories().map { UiRepository(it.name, it.url, builtin = false) }
+
+    /** Add a custom repository. Rejects a blank/non-http URL or one already provided (built-in or user). */
+    fun addRepository(name: String, url: String): Boolean {
+        val u = url.trim()
+        if (!(u.startsWith("http://") || u.startsWith("https://"))) return false
+        if (currentRepositories().any { it.url.trimEnd('/') == u.trimEnd('/') }) return false
+        val next = userRepositories() + Repository(name.trim().ifEmpty { u }, u)
+        return writeRepositories(next)
+    }
+
+    /** Remove a user-added repository by URL (built-ins can't be removed). */
+    fun removeRepository(url: String): Boolean {
+        val u = url.trim().trimEnd('/')
+        val current = userRepositories()
+        val remaining = current.filterNot { it.url.trimEnd('/') == u }
+        if (remaining.size == current.size) return false
+        return writeRepositories(remaining)
+    }
+
+    private fun writeRepositories(repos: List<Repository>): Boolean = runCatching {
+        Files.createDirectories(repositoriesFile.parent)
+        repositoriesFile.writeText(repos.joinToString("") { "${it.name}\t${it.url}\n" })
+    }.isSuccess
 
     // ---- module configuration (the Module Settings editor) ----
 
@@ -1438,6 +1549,164 @@ class IdeServices private constructor(
         invalidateSyntheticClasses() // an Android facet change can move the R package
         resyncIndex()
         return UiConfigResult(true, "Saved ${module.name}")
+    }
+
+    // ---- module management (add / remove modules) ----
+
+    private fun moduleTypeRegistry() = ModuleTypeRegistry(platform.extensions)
+
+    private fun isValidModuleName(n: String): Boolean =
+        n.isNotEmpty() && n.first().isLetter() && n.all { it.isLetterOrDigit() || it == '-' || it == '_' }
+
+    /**
+     * The module types a new module can be created as, each with the language-level choices and starter
+     * facet panels derived from the type's default facets (so an Android module surfaces namespace/SDK
+     * fields). Fields are codec-derived, so a new facet type appears here without bespoke UI.
+     */
+    fun availableModuleTypes(): List<UiModuleTypeOption> {
+        val levels = LanguageLevel.values().map { it.name }
+        return moduleTypeRegistry().all().map { type ->
+            val facets = type.defaultFacets().mapNotNull { tmpl ->
+                val codec = store.facetCodecs.codecFor(tmpl.key) ?: return@mapNotNull null
+                UiFacetConfig(codec.tomlTable, titleCase(codec.tomlTable), tmpl.defaults.map { (k, v) -> configFieldFor(k, v) })
+            }
+            UiModuleTypeOption(
+                id = type.id,
+                displayName = type.displayName,
+                languageLevels = levels,
+                defaultLanguageLevel = LanguageLevel.JAVA_17.name,
+                defaultFacets = facets,
+            )
+        }
+    }
+
+    /**
+     * Create a new module [name] of [typeId] with [languageLevel] and [facetValues], laying down the type's
+     * default source-set directories on disk, persisting `module.toml`, and refreshing analyzers/index.
+     */
+    fun createModule(name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>): UiConfigResult {
+        val moduleName = name.trim()
+        if (!isValidModuleName(moduleName)) return UiConfigResult(false, "Invalid module name — start with a letter; use letters, digits, '-' or '_'.")
+        if (modules().any { it.name == moduleName }) return UiConfigResult(false, "A module named '$moduleName' already exists.")
+        val type = moduleTypeRegistry().byId(typeId) ?: return UiConfigResult(false, "Unknown module type '$typeId'.")
+        val project = store.workspace.projects.firstOrNull() ?: return UiConfigResult(false, "No project to add a module to.")
+        val level = languageLevel?.let { runCatching { LanguageLevel.valueOf(it) }.getOrNull() }
+        if (languageLevel != null && level == null) return UiConfigResult(false, "Unknown language level '$languageLevel'.")
+        val facets = ArrayList<dev.ide.model.Facet>()
+        for ((table, values) in facetValues) {
+            val facet = store.facetCodecs.decode(dev.ide.model.impl.FacetData(table, values))
+                ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
+            facets += facet
+        }
+        try {
+            project.beginModification().apply {
+                val mod = addModule(moduleName, type)
+                if (level != null) mod.languageLevel = level
+                facets.forEach { mod.putFacet(it) }
+                // Types that contribute no default source sets (e.g. java-lib) still need somewhere to put
+                // code — give them a conventional `src/main/java` so the module is usable immediately.
+                if (type.defaultSourceSets().isEmpty()) {
+                    mod.addSourceSet(SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE))))
+                }
+                commit()
+            }
+        } catch (e: Exception) {
+            return UiConfigResult(false, "Couldn't create module: ${e.message}")
+        }
+        store.save()
+        // Lay down the default source-set directories so the tree shows them immediately.
+        modules().firstOrNull { it.name == moduleName }?.sourceSets?.forEach { ss ->
+            ss.contentRoots.forEach { cr -> runCatching { Files.createDirectories(Paths.get(cr.dir.path)) } }
+        }
+        invalidateAnalyzers()
+        invalidateSyntheticClasses()
+        resyncIndex()
+        return UiConfigResult(true, "Created module '$moduleName'")
+    }
+
+    /**
+     * Remove [name] from the project model (files left on disk), also dropping any module-on-module
+     * dependency other modules declared on it. Refreshes analyzers/index.
+     */
+    fun removeModule(name: String): Boolean {
+        val module = modules().firstOrNull { it.name == name } ?: return false
+        val project = projectOf(module) ?: return false
+        val id = module.id
+        try {
+            project.beginModification().apply {
+                project.modules.forEach { other ->
+                    if (other.id != id) other.dependencies.filterIsInstance<ModuleDependency>()
+                        .filter { it.target == id }
+                        .forEach { module(other.id).removeDependency(it) }
+                }
+                removeModule(id)
+                commit()
+            }
+        } catch (e: Exception) {
+            return false
+        }
+        store.save()
+        invalidateAnalyzers()
+        invalidateSyntheticClasses()
+        resyncIndex()
+        return true
+    }
+
+    // ---- module-on-module dependencies ----
+
+    /** Modules [moduleName] may depend on: same project, not itself, not already a dep, and no cycle. */
+    fun moduleDependencyTargets(moduleName: String): List<String> {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return emptyList()
+        val project = projectOf(module) ?: return emptyList()
+        val existing = module.dependencies.filterIsInstance<ModuleDependency>().map { it.target.value }.toSet()
+        return project.modules.asSequence()
+            .filter { it.id != module.id && it.id.value !in existing }
+            .filterNot { dependsOnTransitively(it, module.id, project) } // it depends on us → would cycle
+            .map { it.name }
+            .toList()
+    }
+
+    /** True if [from] depends on [targetId] directly or transitively (module-graph walk, cycle-guarded). */
+    private fun dependsOnTransitively(from: Module, targetId: ModuleId, project: Project): Boolean {
+        val byId = project.modules.associateBy { it.id }
+        val seen = HashSet<ModuleId>()
+        val stack = ArrayDeque<Module>().apply { add(from) }
+        while (stack.isNotEmpty()) {
+            val m = stack.removeLast()
+            if (!seen.add(m.id)) continue
+            for (dep in m.dependencies.filterIsInstance<ModuleDependency>()) {
+                if (dep.target == targetId) return true
+                byId[dep.target]?.let { stack.add(it) }
+            }
+        }
+        return false
+    }
+
+    /** Add a module-on-module dependency from [moduleName] onto [targetModule]. An `api` scope is exported
+     *  (Gradle semantics). Blocked on self/cycle/dup. */
+    fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(false, "No module '$moduleName'.")
+        if (targetModule == moduleName) return UiAddResult(false, "A module can't depend on itself.")
+        val project = projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
+        val target = project.modules.firstOrNull { it.name == targetModule }
+            ?: return UiAddResult(false, "No module '$targetModule' in this project.")
+        if (module.dependencies.any { it is ModuleDependency && it.target == target.id })
+            return UiAddResult(false, "'$moduleName' already depends on '$targetModule'.")
+        if (dependsOnTransitively(target, module.id, project))
+            return UiAddResult(false, "That would create a cycle ('$targetModule' already depends on '$moduleName').")
+        val resolvedScope = parseScope(scope)
+        try {
+            project.beginModification().apply {
+                module(module.id).addDependency(ModuleDependency(target.id, resolvedScope, exported = resolvedScope == DependencyScope.API))
+                commit()
+            }
+        } catch (e: Exception) {
+            return UiAddResult(false, "Couldn't add: ${e.message}")
+        }
+        store.save()
+        invalidateAnalyzers()
+        resyncIndex()
+        return UiAddResult(true, "Added module dependency on '$targetModule'", 0)
     }
 
     /** Conventional source-set leaf-folder name → the [ContentRole] it implies. Drives both explicit
@@ -1645,7 +1914,8 @@ class IdeServices private constructor(
         path.writeText(text)
         // A write to disk can change how OTHER files resolve (a dependency's saved edit). The JDT binding-parse
         // cache keys only on the focal text, so drop it on any save to avoid a same-text focal parse going stale.
-        analyzers.values.forEach { (it as? JdtSourceAnalyzer)?.invalidateBindingCache() }
+        // Peek the live module containers so this never forces an analyzer to build.
+        store.liveModuleContainers().forEach { (it.peekService(ANALYZER_JAVA) as? JdtSourceAnalyzer)?.invalidateBindingCache() }
         if (isResourcePath(path)) {
             invalidateSyntheticClasses() // an edited res file changes R
             if (path.toString().endsWith(".xml")) {
@@ -1835,8 +2105,13 @@ class IdeServices private constructor(
         return modules().firstOrNull { module -> sourceRoots(module).any { target.startsWith(it) } }
     }
 
+    /** The per-(module, language) analyzer, resolved (and cached) as a MODULE-scoped service. */
     private fun analyzerFor(module: Module, language: LanguageId = LanguageId("java")): SourceAnalyzer =
-        analyzers.getOrPut("${module.id.value}:${language.id}") {
+        module.service(analyzerKeyFor(language))
+
+    /** Construct the analyzer for [module] in [language]. Invoked once by the module-scoped analyzer
+     *  service factory; the module container caches and disposes the result. */
+    private fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer =
             backendFor(language).createAnalyzer(ModuleCompilationContext.create(store.workspace, module)).also {
                 when (it) {
                     is JdtSourceAnalyzer -> {
@@ -1878,25 +2153,21 @@ class IdeServices private constructor(
                         )
                     }
                 }
-                // NB: disposal is driven by invalidateAnalyzers()/close() below, NOT platform.register — an
-                // evicted analyzer must be disposed promptly so its cached library-jar handles (the Kotlin
-                // ClasspathReader's ZipFiles, the JDT env cache) are released. Registering them with the
-                // platform only disposed at workspace close, so every eviction leaked open jars until GC —
-                // surfacing on ART as a flood of "A ZipFile failed to close" CloseGuard warnings.
+                // NB: the module container owns disposal. An evicted/removed module's container disposes
+                // its analyzer promptly so the cached library-jar handles (the Kotlin ClasspathReader's
+                // ZipFiles, the JDT env cache) are released right away, not deferred to workspace close —
+                // which on ART had surfaced as a flood of "A ZipFile failed to close" CloseGuard warnings.
             }
-        }
 
     /**
      * Drop every cached per-module analyzer. A dependency change on one module affects the compile
      * classpath of every module that depends on it (an exported (`api`) library flows downstream), so a
-     * per-module eviction would leave dependents analyzing against a stale classpath. Analyzers rebuild
-     * lazily on the next analyze/complete. Each evicted analyzer is disposed so its open library-jar
-     * handles are closed immediately (dispose is idempotent — a final close() pass is harmless).
+     * per-module eviction would leave dependents analyzing against a stale classpath. Disposing all module
+     * containers releases every analyzer's library-jar handles immediately and rebuilds them lazily (and
+     * against the current snapshot) on the next analyze/complete.
      */
     private fun invalidateAnalyzers() {
-        val evicted = analyzers.values.toList()
-        analyzers.clear()
-        evicted.forEach { (it as? Disposable)?.let { d -> runCatching { d.dispose() } } }
+        store.disposeAllModuleContainers()
         // The preview caches' fingerprints track res/source FILES but not the dependency classpath, which
         // changes here (deps/SDK/facet/language-level edits) — so drop them to force a rebuild.
         repoCache.clear()
@@ -3294,8 +3565,10 @@ class IdeServices private constructor(
         indexScope.cancel()
         depsScope.cancel()
         sdkManager.dispose()
-        // Dispose the live analyzers so their cached library-jar handles close (no longer platform-registered).
-        analyzers.values.toList().also { analyzers.clear() }.forEach { (it as? Disposable)?.let { d -> runCatching { d.dispose() } } }
+        // Dispose the workspace + module service containers (the application container, the parent, is owned
+        // by ProjectManager). This disposes the per-module analyzers, closing their library-jar handles,
+        // before the index's segment channels are released.
+        runCatching { store.close() }
         runCatching { (indexService as? AutoCloseable)?.close() } // release the on-disk index segment file channels
         platform.dispose()
     }
@@ -3360,6 +3633,52 @@ class IdeServices private constructor(
             )
             store.save()
             return IdeServices(platform, store, sharedCachesRoot = sharedCachesRoot)
+        }
+
+        /**
+         * Seed the Android sample to [root] on disk **without** opening an engine, so a launcher can show it
+         * in the picker on first run and open it lazily (via [ProjectManager.open]) only when the user taps it.
+         * No-op when a project already exists at [root]. The transient platform used to write the model is
+         * disposed before returning, so this leaks nothing.
+         */
+        fun seedDemo(root: Path) {
+            if (dev.ide.model.impl.ModelPersistence.exists(root)) return
+            Files.createDirectories(root)
+            val (platform, store) = openStore(root)
+            try {
+                store.replaceSdks(listOf(detectAndroidSdk() ?: JdkSdkProvider.detect()))
+                val types = ModuleTypeRegistry(platform.extensions)
+                dev.ide.android.support.SampleAndroidProject.generate(
+                    store, types.resolve("android-app"), types.resolve("android-lib"), types.resolve("java-lib"),
+                )
+                store.save()
+            } finally {
+                platform.dispose()
+            }
+        }
+
+        /**
+         * The on-device counterpart to [seedDemo]: seed the Android sample to [root] **without** opening an
+         * engine, using an explicitly supplied platform boot classpath (ART has no JDK/SDK to detect, so the
+         * launcher passes the bundled `android.jar`). No-op when a project already exists at [root]. The
+         * launcher opens it lazily via [ProjectManager.open] when the user taps it. Java 8 level keeps JDT's
+         * DOM analysis working against the non-modular bundled `android.jar` (see [bootstrapWithBootClasspath]).
+         */
+        fun seedDemoWithBootClasspath(root: Path, bootClasspath: List<String>, sdkName: String = "android") {
+            if (dev.ide.model.impl.ModelPersistence.exists(root)) return
+            Files.createDirectories(root)
+            val (platform, store) = openStore(root)
+            try {
+                store.replaceSdks(listOf(SdkData(sdkName, bootClasspath, buildToolsPath = null)))
+                val types = ModuleTypeRegistry(platform.extensions)
+                dev.ide.android.support.SampleAndroidProject.generate(
+                    store, types.resolve("android-app"), types.resolve("android-lib"), types.resolve("java-lib"),
+                    languageLevel = dev.ide.model.LanguageLevel.JAVA_8,
+                )
+                store.save()
+            } finally {
+                platform.dispose()
+            }
         }
 
         /** The plain-Java multi-module demo (`app → util → core`) — the fixture for the Java build/run/completion tests. */
@@ -3437,13 +3756,22 @@ class IdeServices private constructor(
                 store.save()
             }
             // On-device the launcher supplies the native build tools + keystore (the android.jar is the first
-            // boot-classpath entry); the in-process Android build (AndroidBuildSystem.inProcess) runs off these.
+            // boot-classpath entry; any later entries are the desugar stubs); the in-process Android build
+            // (AndroidBuildSystem.inProcess) runs off these.
             val androidTools = if (androidToolsDir != null && debugKeystore != null && bootClasspath.isNotEmpty())
-                AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel) else null
+                AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
+                    desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }) else null
             return IdeServices(platform, store, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot)
         }
 
-        private fun openStore(root: Path): Pair<PlatformCore, ProjectModelStore> {
+        private fun openStore(
+            root: Path,
+            // The process-global application container (the workspace container's parent). When a host
+            // (ProjectManager) does not supply one, a transient per-open container is created so the
+            // standalone bootstrap/test paths still work; app-scoped services then live only as long as
+            // the project does.
+            appContainer: dev.ide.platform.ServiceContainer? = null,
+        ): Pair<PlatformCore, ProjectModelStore> {
             val platform = PlatformCore()
             val moduleTypes = ModuleTypeRegistry(platform.extensions)
             moduleTypes.register(JavaLibModuleType, PluginId("java-support"))
@@ -3469,7 +3797,7 @@ class IdeServices private constructor(
             templates.register(KotlinConsoleAppTemplate, PluginId("kotlin-support"))
             templates.register(KotlinLibraryTemplate, PluginId("kotlin-support"))
             dev.ide.android.support.AndroidSupport.registerTemplates(templates)
-            val store = ProjectModel.open(root, platform, codecs)
+            val store = ProjectModel.open(root, platform, codecs, appContainer ?: dev.ide.platform.impl.ApplicationContainer())
             return platform to store
         }
 
@@ -3495,9 +3823,11 @@ class IdeServices private constructor(
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
+            /** The host's application container, so app-scoped services are shared across projects. */
+            appContainer: dev.ide.platform.ServiceContainer? = null,
         ): IdeServices {
             Files.createDirectories(root)
-            val (platform, store) = openStore(root)
+            val (platform, store) = openStore(root, appContainer)
             store.replaceSdks(listOf(sdk))
             val template = ProjectTemplateRegistry(platform.extensions).byId(TemplateId(templateId))
                 ?: error("Unknown project template '$templateId'")
@@ -3522,8 +3852,10 @@ class IdeServices private constructor(
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
+            /** The host's application container, so app-scoped services are shared across projects. */
+            appContainer: dev.ide.platform.ServiceContainer? = null,
         ): IdeServices {
-            val (platform, store) = openStore(root)
+            val (platform, store) = openStore(root, appContainer)
             if (store.workspace.sdkTable.sdks.isEmpty()) store.replaceSdks(listOf(sdk))
             return IdeServices(platform, store, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot)
         }

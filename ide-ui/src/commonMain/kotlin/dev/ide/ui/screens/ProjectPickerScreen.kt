@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,11 +27,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.ProjectInfo
-import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BetaBadge
 import dev.ide.ui.components.BetaBanner
 import dev.ide.ui.components.CenteredDialog
@@ -50,60 +51,68 @@ fun ProjectPickerScreen(
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
     onSubmitSuggestions: (() -> Unit)? = null,
+    onJoinDiscord: (() -> Unit)? = null,
     storagePath: String? = null,
     onOpenInFiles: (() -> Unit)? = null,
     showLegacyRecovery: Boolean = false,
     onDismissLegacyRecovery: () -> Unit = {},
-    /** Analytics consent for the settings row: true/false = on/off, null = analytics unavailable (hide row). */
-    analyticsEnabled: Boolean? = null,
-    onAnalyticsChange: (Boolean) -> Unit = {},
 ) {
     var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
     val compatibilityCount = projects.count { it.compatibility }
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+        // Small phones squeeze the header (title + "Beta" badge + Back-up button) — tighten the margins and
+        // collapse Back-up to an icon so nothing clips or wraps awkwardly.
+        val narrow = maxWidth < 380.dp
         Column(
-            Modifier.widthIn(max = 640.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 48.dp),
+            Modifier.widthIn(max = 640.dp).fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = if (narrow) 16.dp else 24.dp, vertical = if (narrow) 28.dp else 48.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Projects", color = Ca.colors.textPrimary, style = Ca.type.large)
+                        Text(
+                            "Projects",
+                            color = Ca.colors.textPrimary,
+                            style = Ca.type.large,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
                         BetaBadge()
                     }
-                    Text("Open a project or start a new one.", color = Ca.colors.textSecondary, style = Ca.type.subhead)
+                    Text(
+                        "Open a project or start a new one.",
+                        color = Ca.colors.textSecondary,
+                        style = Ca.type.subhead,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                if (onBackup != null) BackupButton(onBackup)
+                if (onBackup != null) BackupButton(onBackup, compact = narrow)
             }
             Spacer(Modifier.size(12.dp))
 
-            BetaBanner(onSubmit = onSubmitSuggestions)
-
+            // Top of the screen stays action-focused: the important first-run recovery notice, the primary
+            // "New project" action, the community link, and the project list. The informational/utility cards
+            // (Beta notice, storage location) sink to the bottom so the picker no longer feels crowded.
             if (showLegacyRecovery && compatibilityCount > 0) {
                 LegacyRecoveryBanner(count = compatibilityCount, onDismiss = onDismissLegacyRecovery)
             }
 
-            StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
-
-            if (analyticsEnabled != null) {
-                Box(
-                    Modifier.fillMaxWidth()
-                        .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md))
-                        .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.md))
-                        .padding(horizontal = 14.dp),
-                ) {
-                    AnalyticsToggleRow(enabled = analyticsEnabled, onChange = onAnalyticsChange)
-                }
-            }
-
             NewProjectCard(onNewProject)
 
+            if (onJoinDiscord != null) DiscordCard(onJoinDiscord)
+
             Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (projects.isEmpty()) {
                     Text("No projects yet — create one to get started.", color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                } else {
+                    SectionLabel("Your projects")
                 }
                 projects.forEachIndexed { i, project ->
                     ProjectCard(
@@ -114,6 +123,10 @@ fun ProjectPickerScreen(
                     )
                 }
             }
+
+            Spacer(Modifier.size(4.dp))
+            BetaBanner(onSubmit = onSubmitSuggestions)
+            StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
         }
         DeleteProjectDialog(
             project = pendingDelete,
@@ -186,19 +199,19 @@ private fun DestructiveAction(text: String, modifier: Modifier = Modifier, onCli
 }
 
 @Composable
-private fun BackupButton(onClick: () -> Unit) {
+private fun BackupButton(onClick: () -> Unit, compact: Boolean = false) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
             .pressScale(interaction)
             .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
             .clickable(interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(CaIcons.box, null, Modifier.size(16.dp), tint = Ca.colors.textSecondary)
-        Text("Back up", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        Icon(CaIcons.box, "Back up", Modifier.size(16.dp), tint = Ca.colors.textSecondary)
+        if (!compact) Text("Back up", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -227,6 +240,51 @@ private fun NewProjectCard(onClick: () -> Unit) {
             Text("Android app, Java console app, library…", color = Ca.colors.textSecondary, style = Ca.type.footnote)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+    }
+}
+
+/** A small uppercase section heading used to group the project list. */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        color = Ca.colors.textTertiary,
+        style = Ca.type.caption2,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 2.dp, top = 2.dp),
+    )
+}
+
+/** Discord brand "blurple" — used only for the community card's icon/accent. */
+private val DiscordBlurple = Color(0xFF5865F2)
+
+/** A slim, blurple-tinted card inviting the user to join the community Discord. */
+@Composable
+private fun DiscordCard(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(Ca.radius.lg)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressScale(interaction)
+            .background(DiscordBlurple.copy(alpha = 0.12f), shape)
+            .border(1.dp, DiscordBlurple.copy(alpha = 0.35f), shape)
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(40.dp).background(DiscordBlurple, RoundedCornerShape(Ca.radius.md)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CaIcons.discord, null, Modifier.size(22.dp), tint = Color.White)
+        }
+        Column(Modifier.weight(1f)) {
+            Text("Join the community", color = Ca.colors.textPrimary, style = Ca.type.headline)
+            Text("Chat, get help, and share what you build on Discord.", color = Ca.colors.textSecondary, style = Ca.type.footnote)
+        }
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = DiscordBlurple)
     }
 }
 

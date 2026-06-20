@@ -153,8 +153,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 35
-        versionName = "3.0.4"
+        versionCode = 36
+        versionName = "3.0.5"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -470,4 +470,8 @@ dependencies {
     // jar. Like the compiler API, lang-kotlin reaches the app only transitively, so add it compileOnly: the
     // type to compile against, with the app's dexed copy providing it at runtime.
     androidTestCompileOnly(project(":lang-kotlin"))
+    // The Java-17-on-ART build spike calls JdtBatchCompiler (lang-jdt). Like the above, lang-jdt reaches the
+    // app only transitively (via :ide-core), so add it compileOnly — the app's dexed copy provides it (and the
+    // relocated ecj-art) at runtime.
+    androidTestCompileOnly(project(":lang-jdt"))
 }

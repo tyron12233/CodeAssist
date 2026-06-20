@@ -3,6 +3,9 @@ package dev.ide.ui.editor.core
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiInlayHint
+import dev.ide.ui.backend.UiInlayKind
+import dev.ide.ui.backend.UiInlayPart
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.applySmartEdit
@@ -70,6 +73,26 @@ class EditorSessionTest {
         s.commitText("{")
         assertEquals("class A {\n    if (x) {}\n}", s.doc.text)
         assertEquals(TextRange(22), s.selection)
+    }
+
+    // ---- inlay hints are session-owned overlays now (set by the daemon), shifted in place like diagnostics ----
+
+    private fun hint(offset: Int) = UiInlayHint(offset, listOf(UiInlayPart(": Int")), UiInlayKind.Type)
+
+    @Test
+    fun inlayHintsShiftWhenTypingBeforeThem() {
+        val s = session("val x = 1\n", caret = 0)
+        s.applyInlayHints(listOf(hint(5))) // a `: Int` hint after `x`
+        s.commitText("abc")                // insert 3 chars at offset 0
+        assertEquals(8, s.inlayHints.single().offset, "a hint after the edit shifts by the inserted length")
+    }
+
+    @Test
+    fun inlayHintInsideAnEditIsDropped() {
+        val s = session("val xy = 1\n", caret = 0)
+        s.applyInlayHints(listOf(hint(5)))    // anchored at offset 5 (between x and y)
+        s.replaceRange(4, 6, "", TextRange(4)) // delete "xy" — the anchor was inside the removed span
+        assertTrue(s.inlayHints.isEmpty(), "a hint whose anchor the edit consumed is dropped (refetch repositions)")
     }
 
     @Test
@@ -345,6 +368,239 @@ class EditorSessionTest {
         assertEquals(0, restarts, "an edit with no active composing region must not restart the IME")
     }
 
+    // ---- typing-path IME resync: a smart edit shifts the buffer by a different amount than the keystroke the
+    // IME delivered, so its model drifts; left unsynced a later absolute setSelection lands on the wrong line. ----
+
+    private fun countingImeSession(text: String, caret: Int, language: CodeLanguage = CodeLanguage.Java): Pair<EditorSession, () -> Int> {
+        val s = session(text, caret, language)
+        var restarts = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() { restarts++ }
+        }
+        return s to { restarts }
+    }
+
+    @Test
+    fun plainTypingDoesNotRestartTheIme() {
+        // The common case: typing a letter inserts exactly the char the IME delivered, so its model stays
+        // coherent and we must NOT churn it (a restart would reset prediction/gesture state every keystroke).
+        val (s, restarts) = countingImeSession("ab", 1)
+        s.commitText("x")
+        assertEquals("axb", s.doc.text)
+        assertEquals(0, restarts(), "a plain insert must not restart the IME")
+    }
+
+    @Test
+    fun autoCloseTypingRestartsTheIme() {
+        val (s, restarts) = countingImeSession("foo", 3)
+        s.commitText("(") // smartInsert auto-closes to "()" — one more char than the IME delivered
+        assertEquals("foo()", s.doc.text)
+        assertEquals(1, restarts(), "auto-closing a pair shifts the buffer the IME didn't author")
+    }
+
+    @Test
+    fun skipOverTypingRestartsTheIme() {
+        val (s, restarts) = countingImeSession("foo()", 4)
+        s.commitText(")") // skip-over inserts nothing, just hops the caret
+        assertEquals("foo()", s.doc.text)
+        assertEquals(TextRange(5), s.selection)
+        assertEquals(1, restarts(), "a skip-over inserts fewer chars than the IME delivered")
+    }
+
+    @Test
+    fun smartEnterRestartsTheIme() {
+        // The worst offender: Enter inserts "\n" + indent (here a three-line `{ }` expansion), so the IME's
+        // cursor drifts by the whole indent on every newline. This is the dominant cause of the line jump.
+        val (s, restarts) = countingImeSession("if (x) {}", 8)
+        s.commitText("\n")
+        assertEquals(1, restarts(), "a smart Enter adds indentation the IME didn't author")
+    }
+
+    @Test
+    fun imeCommitOfComposedWordDoesNotRestart() {
+        // The keyboard's own multi-char commit (a composed/gesture-typed word) matches the buffer exactly, so
+        // it must NOT restart — that would break prediction continuity.
+        val (s, restarts) = countingImeSession("", 0)
+        s.imeSetComposingText("hello", 1)
+        val before = restarts()
+        s.imeCommitText("hello", 1)
+        assertEquals("hello", s.doc.text)
+        assertEquals(before, restarts(), "committing a composed word must not restart the IME")
+    }
+
+    @Test
+    fun pairBackspaceRestartsButPlainBackspaceDoesNot() {
+        val (plain, plainRestarts) = countingImeSession("abc", 2)
+        plain.backspace()
+        assertEquals("ac", plain.doc.text)
+        assertEquals(0, plainRestarts(), "a plain single-char backspace matches deleteSurroundingText(1,0)")
+
+        val (pair, pairRestarts) = countingImeSession("a()", 2) // caret inside the empty pair
+        pair.backspace()
+        assertEquals("a", pair.doc.text) // both chars of the pair go
+        assertEquals(1, pairRestarts(), "a pair-aware backspace deletes more than the IME asked for")
+    }
+
+    // ---- continuous IME sync (the extracted-text upgrade): per-edit onTextChanged keeps a monitoring keyboard
+    // exact, so a smart edit no longer needs the disruptive restart. ----
+
+    @Test
+    fun singleEditPushesAPartialOnTextChanged() {
+        val s = session("ab", 1)
+        var calls = 0
+        var seen: EditSpan? = null
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onTextChanged(span: EditSpan?) { calls++; seen = span }
+            override fun onRestartInput() {}
+        }
+        s.commitText("x")
+        assertEquals(1, calls, "one text edit → one onTextChanged")
+        val sp = seen
+        assertNotNull(sp, "a single edit carries its span so the platform can push a PARTIAL extracted-text update")
+        assertEquals(1, sp.start)
+        assertEquals(0, sp.removed)
+        assertEquals(1, sp.added)
+    }
+
+    @Test
+    fun batchCoalescesToOneFullRefresh() {
+        // A multi-edit op (completion accept here) defers its per-edit pushes and emits a single null-span
+        // onTextChanged at the end — a full-snapshot refresh, not one partial per edit.
+        val s = session("foo", 3)
+        var fullRefreshes = 0
+        var partials = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onTextChanged(span: EditSpan?) { if (span == null) fullRefreshes++ else partials++ }
+            override fun onRestartInput() {}
+        }
+        s.applyEdits(listOf(RangeEdit(0, 0, "import x\n", 0), RangeEdit(3, 3, "()", 0)), TextRange(5))
+        assertEquals(1, fullRefreshes, "a batch pushes exactly one full-snapshot refresh")
+        assertEquals(0, partials, "edits inside a batch don't each push a partial")
+    }
+
+    @Test
+    fun monitoringImeIsNotRestartedOnSmartEdit() {
+        // The whole point of the upgrade: an IME that mirrors our text stays coherent through the per-edit push,
+        // so a smart edit (here auto-close) must NOT churn it with a restart.
+        val s = session("foo", 3)
+        var restarts = 0
+        var textChanges = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onTextChanged(span: EditSpan?) { textChanges++ }
+            override fun onRestartInput() { restarts++ }
+            override fun isSyncingExtractedText() = true
+        }
+        s.commitText("(")
+        assertEquals("foo()", s.doc.text)
+        assertTrue(textChanges >= 1, "the edit is pushed to the monitoring IME")
+        assertEquals(0, restarts, "a monitoring IME is kept synced without a disruptive restart")
+    }
+
+    // ---- extracted-text snapshot arithmetic (the offset contract that, if wrong, lands the caret on the wrong
+    // line). The android IME bridge copies these fields straight into ExtractedText, so testing them here covers
+    // the bug-prone math on the JVM without an emulator. ----
+
+    @Test
+    fun fullSnapshotOfSmallBufferIsTheWholeText() {
+        val snap = session("hello", 2).extractedTextSnapshot(maxChars = 1000)
+        assertEquals("hello", snap.text)
+        assertEquals(0, snap.startOffset)
+        assertEquals(2, snap.selectionStart)
+        assertEquals(2, snap.selectionEnd)
+        assertEquals(-1, snap.partialStartOffset, "a full snapshot has no partial range")
+        assertEquals(-1, snap.partialEndOffset)
+    }
+
+    @Test
+    fun largeBufferSnapshotWindowsAroundTheCaret() {
+        // 20 chars, caret at 10, window of 8 → start = (10-4) clamped to [0, 20-8] = 6, end = 14; selection relative.
+        val snap = session("0123456789ABCDEFGHIJ", 10).extractedTextSnapshot(maxChars = 8)
+        assertEquals(6, snap.startOffset)
+        assertEquals("6789ABCD", snap.text)
+        assertEquals(4, snap.selectionStart, "selection is relative to the window start")
+        assertEquals(4, snap.selectionEnd)
+    }
+
+    /** Capture the snapshot the platform would push for the LAST edit, exactly as the android bridge does. */
+    private fun snapshotAfter(before: String, caret: Int, build: (EditorSession) -> Unit): ExtractedTextSnapshot {
+        val s = session(before, caret)
+        var snap: ExtractedTextSnapshot? = null
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onTextChanged(span: EditSpan?) {
+                snap = if (span == null) s.extractedTextSnapshot(1000) else s.partialExtractedSnapshot(span)
+            }
+            override fun onRestartInput() {}
+        }
+        build(s)
+        return assertNotNull(snap)
+    }
+
+    @Test
+    fun partialSnapshotForAutoClose() {
+        // type '(' on "foo|" → buffer "foo()", caret between the parens (4). The IME replaces the empty range
+        // [3,3) with "()" and the caret sits 1 char into the new content.
+        val snap = snapshotAfter("foo", 3) { it.commitText("(") }
+        assertEquals("()", snap.text)
+        assertEquals(3, snap.startOffset)
+        assertEquals(3, snap.partialStartOffset)
+        assertEquals(3, snap.partialEndOffset)
+        assertEquals(1, snap.selectionStart)
+        assertEquals(1, snap.selectionEnd)
+    }
+
+    @Test
+    fun skipOverIsASelectionOnlyUpdateNotATextChange() {
+        // type ')' on "foo(|)" → no text changes, the caret just hops past the ')'. So it must NOT push an
+        // extracted-text update (no onTextChanged); the IME learns the new caret via a plain selection push.
+        val s = session("foo()", 4)
+        var textChanges = 0
+        var selectionPushes = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() { selectionPushes++ }
+            override fun onTextChanged(span: EditSpan?) { textChanges++ }
+            override fun onRestartInput() {}
+        }
+        s.commitText(")")
+        assertEquals("foo()", s.doc.text, "skip-over inserts nothing")
+        assertEquals(TextRange(5), s.selection, "the caret advances past the closer")
+        assertEquals(0, textChanges, "no text changed, so no extracted-text update")
+        assertEquals(1, selectionPushes, "the caret move is a plain selection update")
+    }
+
+    @Test
+    fun partialSnapshotForPairBackspace() {
+        // backspace inside "a(|)" deletes both pair chars: replace [1,3) with "", caret at 1.
+        val snap = snapshotAfter("a()", 2) { it.backspace() }
+        assertEquals("", snap.text)
+        assertEquals(1, snap.startOffset)
+        assertEquals(1, snap.partialStartOffset)
+        assertEquals(3, snap.partialEndOffset, "both chars of the empty pair are in the replaced range")
+        assertEquals(0, snap.selectionStart)
+    }
+
+    @Test
+    fun partialSnapshotSplicesBackToTheNewBuffer() {
+        // The core invariant: applying the partial (replace [partialStart,partialEnd) with text) to the PRE-EDIT
+        // buffer must reproduce the post-edit buffer — i.e. the IME's mirror stays byte-identical to ours.
+        val before = "if (x) {}"
+        val s = session(before, 8) // caret inside the braces
+        var snap: ExtractedTextSnapshot? = null
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onTextChanged(span: EditSpan?) { if (span != null) snap = s.partialExtractedSnapshot(span) }
+            override fun onRestartInput() {}
+        }
+        s.commitText("\n") // smart Enter: inserts newline + indentation
+        val sp = assertNotNull(snap)
+        val reconstructed = before.substring(0, sp.partialStartOffset) + sp.text + before.substring(sp.partialEndOffset)
+        assertEquals(s.doc.text, reconstructed, "the partial update reproduces our buffer in the IME's mirror")
+    }
+
     @Test
     fun applyEditsWithAutoImport() {
         // completion accept: replace token at 20.. + insert an import line above
@@ -569,6 +825,255 @@ class EditorSessionTest {
         val s = session("    int x = a +\n        b +", "    int x = a +\n        b +".length, CodeLanguage.Java)
         val (text, _) = enter(s)
         assertEquals("    int x = a +\n        b +\n        ", text) // still 8, not 12
+    }
+
+    @Test
+    fun enterAfterTrailingCommaInArgListKeepsSiblingIndent() {
+        // `Column(\n    modifier = Modifier.fillMaxSize(),|` — the line's brackets are balanced, so the comma
+        // separates siblings: the next argument lines up with `modifier`, not one level deeper.
+        val src = "Column(\n    modifier = Modifier.fillMaxSize(),"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("$src\n    ", text) // aligned with `modifier`, not 8 spaces
+    }
+
+    @Test
+    fun enterAfterTrailingCommaWithUnclosedOpenerIndentsDeeper() {
+        // `val list = listOf(1, 2, 3,|` — the line leaves `(` unclosed, so its wrapped tail goes one deeper.
+        val src = "    val list = listOf(1, 2, 3,"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("$src\n        ", text) // 8 spaces (one level deeper than the 4-space line)
+    }
+
+    @Test
+    fun enterAfterSecondArgKeepsSiblingIndent() {
+        // a run of comma-separated args all stay at the same indent (no marching right)
+        val src = "Column(\n    modifier = foo(),\n    color = bar(),"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("$src\n    ", text)
+    }
+
+    // ---- closer-dedent: Enter before a closing bracket in a multi-line list/call ----
+
+    @Test
+    fun enterBeforeCloserInArgListDropsCloserDedented() {
+        // `Column(\n    modifier = x,|)` → the `)` falls under `Column`, caret on a body line at the item indent.
+        val src = "Column(\n    modifier = x,)"
+        val s = session(src, src.length - 1, CodeLanguage.Kotlin) // caret right before the final ')'
+        val (text, c) = enter(s)
+        assertEquals("Column(\n    modifier = x,\n    \n)", text)
+        assertEquals("Column(\n    modifier = x,\n    ".length, c)
+    }
+
+    @Test
+    fun enterBeforeCloserWithOpenerOnSameLineGoesDeeper() {
+        // `listOf(1, 2|)` — opener is on this line, so the base is this line's indent and the body one deeper.
+        val src = "    listOf(1, 2)"
+        val s = session(src, src.length - 1, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    listOf(1, 2\n        \n    )", text)
+    }
+
+    // ---- indent-style detection (tabs / 2-space) ----
+
+    @Test
+    fun enterUsesDetectedTwoSpaceUnit() {
+        // a clearly 2-space-indented buffer → Enter after `{` adds 2 spaces, not 4
+        val src = "class A {\n  fun f() {\n    g()\n  }\n  val x = {"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("$src\n    ", text) // line indent 2 + one 2-space level = 4
+    }
+
+    @Test
+    fun enterUsesDetectedTabUnit() {
+        val src = "class A {\n\tfun f() {\n\t\tg()\n\t}\n\tval x = {"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("$src\n\t\t", text) // line's one tab + one tab level
+    }
+
+    // ---- Kotlin raw string / Java text block ----
+
+    @Test
+    fun enterInsideRawStringKeepsLineIndent() {
+        // inside `"""…"""` the content is literal — keep the line's margin, no continuation/deeper rules
+        val src = "val q = \"\"\"\n    SELECT *"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("$src\n    ", text)
+    }
+
+    // ---- annotation / modifier-only lines ----
+
+    @Test
+    fun enterAfterAnnotationKeepsSameIndent() {
+        val src = "    @Composable"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    @Composable\n    ", text)
+    }
+
+    @Test
+    fun enterAfterAnnotationWithArgsKeepsSameIndent() {
+        val src = "    @Preview(showBackground = true)"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("$src\n    ", text)
+    }
+
+    // ---- wrap before a leading operator ----
+
+    @Test
+    fun enterBeforeLeadingOperatorIndents() {
+        val src = "    val x = a + b"
+        val s = session(src, src.indexOf("+ b"), CodeLanguage.Kotlin) // caret right before '+'
+        val (text, _) = enter(s)
+        assertEquals("    val x = a\n        + b", text) // tail one level deeper, trailing space swallowed
+    }
+
+    @Test
+    fun enterBeforeDotInChainIndents() {
+        val src = "    builder.append(x).append(y)"
+        val s = session(src, src.lastIndexOf(".append"), CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    builder.append(x)\n        .append(y)", text)
+    }
+
+    @Test
+    fun enterBeforeDotMidChainDoesNotCompound() {
+        // the current line already begins with `.` → it's mid-chain, so the next wrap stays at the same level
+        val src = "    a\n        .b().c()"
+        val s = session(src, src.indexOf(".c()"), CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    a\n        .b()\n        .c()", text)
+    }
+
+    // ---- typed closing bracket dedents to its opener ----
+
+    @Test
+    fun typingClosingBraceDedentsToOpener() {
+        val src = "fun f() {\n    g()\n    " // caret on the blank indented line
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        s.commitText("}")
+        assertEquals("fun f() {\n    g()\n}", s.doc.text)
+    }
+
+    @Test
+    fun typingClosingParenOnBlankLineDedents() {
+        val src = "foo(\n    a,\n    " // caret on the blank line
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        s.commitText(")")
+        assertEquals("foo(\n    a,\n)", s.doc.text)
+    }
+
+    @Test
+    fun typingClosingBraceMidLineDoesNotReindent() {
+        // not the first thing on its line → plain insert, no reindent
+        val src = "val m = mapOf(a to b"
+        val s = session(src, src.length, CodeLanguage.Kotlin)
+        s.commitText("}")
+        assertEquals("val m = mapOf(a to b}", s.doc.text)
+    }
+
+    // ---- Smart Enter (Complete Statement) — the pure smartEnter() edit ----
+
+    private fun applySmart(src: String, caret: Int, lang: CodeLanguage): Pair<String, Int> {
+        val s = session(src, caret, lang)
+        val e = smartEnter(s.doc.chars, s.selection.start, lang)
+        s.applyEdits(listOf(e), TextRange(e.caret))
+        return s.doc.text to s.selection.start
+    }
+
+    @Test
+    fun smartEnterCompletesJavaStatementWithSemicolon() {
+        val (text, caret) = applySmart("    foo()", 4, CodeLanguage.Java) // caret mid-line
+        assertEquals("    foo();\n    ", text)
+        assertEquals(text.length, caret)
+    }
+
+    @Test
+    fun smartEnterCompletesControlFlowWithBraces() {
+        val (text, caret) = applySmart("    if (x)", 6, CodeLanguage.Kotlin)
+        assertEquals("    if (x) {\n        \n    }", text)
+        assertEquals("    if (x) {\n        ".length, caret) // caret inside the block
+    }
+
+    @Test
+    fun smartEnterDoesNotDoubleSemicolon() {
+        val (text, _) = applySmart("    foo();", 4, CodeLanguage.Java)
+        assertEquals("    foo();\n    ", text)
+    }
+
+    @Test
+    fun smartEnterKotlinAddsNoSemicolon() {
+        val (text, _) = applySmart("    foo()", 4, CodeLanguage.Kotlin)
+        assertEquals("    foo()\n    ", text)
+    }
+
+    // ---- Markdown / line-comment list continuation ----
+
+    @Test
+    fun enterContinuesMarkdownBullet() {
+        val (text, _) = enter(session("- first", 7, CodeLanguage.Plain))
+        assertEquals("- first\n- ", text)
+    }
+
+    @Test
+    fun enterIncrementsOrderedListMarker() {
+        val (text, _) = enter(session("1. one", 6, CodeLanguage.Plain))
+        assertEquals("1. one\n2. ", text)
+    }
+
+    @Test
+    fun enterOnEmptyBulletEndsList() {
+        val (text, _) = enter(session("- first\n- ", 10, CodeLanguage.Plain))
+        assertEquals("- first\n\n", text)
+    }
+
+    @Test
+    fun enterContinuesBulletInLineComment() {
+        val (text, _) = enter(session("    // - item", 13, CodeLanguage.Kotlin))
+        assertEquals("    // - item\n    // - ", text)
+    }
+
+    // ---- smart backspace: collapse blank lines above a content line ----
+
+    @Test
+    fun backspaceCollapsesBlankLineAboveContent() {
+        // `Column(\n\n|) {` → the empty line is removed and `) {` lines up with `Column(`
+        val src = "Column(\n\n) {\n\n}"
+        val s = session(src, src.indexOf(") {"), CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("Column(\n) {\n\n}", s.doc.text)
+        assertEquals("Column(\n".length, s.selection.start)
+    }
+
+    @Test
+    fun backspaceCollapsesMultipleBlankLinesInOnePress() {
+        val src = "foo(\n\n\n\n)"
+        val s = session(src, src.lastIndexOf(")"), CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("foo(\n)", s.doc.text)
+    }
+
+    @Test
+    fun backspaceCollapsesBlankLinesAndMatchesPrevIndent() {
+        // the content line is re-indented to the previous non-blank line's indent
+        val src = "    foo(\n\n        bar)"
+        val s = session(src, src.indexOf("bar)"), CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("    foo(\n    bar)", s.doc.text)
+    }
+
+    @Test
+    fun backspaceAtLineStartWithNoBlankAboveJoinsNormally() {
+        val src = "foo\nbar"
+        val s = session(src, src.indexOf("bar"), CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("foobar", s.doc.text)
     }
 
     @Test

@@ -387,8 +387,38 @@ interface IdeBackend {
     suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
-    /** Remove the declared dependency or platform [coordinate] from [moduleName]. False if it wasn't present. */
+    /** Remove the declared dependency or platform [coordinate] from [moduleName]. False if it wasn't present.
+     *  For a module-on-module dependency, [coordinate] is the target module's name. */
     fun removeDependency(moduleName: String, coordinate: String): Boolean = false
+
+    /**
+     * Other modules [moduleName] may depend on: every module in the same project except itself, those it
+     * already depends on, and any that would form a cycle (a module that depends on [moduleName]). Drives
+     * the "add module dependency" picker.
+     */
+    fun moduleDependencyTargets(moduleName: String): List<String> = emptyList()
+
+    /**
+     * Add a module-on-module dependency from [moduleName] onto [targetModule] at [scope] (`implementation`,
+     * `api`, …). An `api` scope is exported (visible to this module's dependers), like Gradle. Re-assembles
+     * the module classpath so completion/analysis pick up the target's output. Blocked (with a reason) on a
+     * self/cycle/duplicate.
+     */
+    suspend fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
+    // ---- repositories (where libraries resolve from) ----
+
+    /** The Maven repositories libraries resolve from — the built-in ones (Maven Central, Google) plus any
+     *  the user added. Built-in repos are flagged [UiRepository.builtin] and can't be removed. */
+    fun repositories(): List<UiRepository> = emptyList()
+
+    /** Add a custom Maven repository [url] (named [name]) to resolve from. False if the URL is invalid or
+     *  already present. */
+    fun addRepository(name: String, url: String): Boolean = false
+
+    /** Remove the user-added repository at [url]. False when it wasn't present or is a built-in repo. */
+    fun removeRepository(url: String): Boolean = false
 
     // ---- module configuration (the Module Settings editor) ----
 
@@ -410,6 +440,29 @@ interface IdeBackend {
      */
     suspend fun updateModuleConfig(moduleName: String, edit: UiModuleConfigEdit): UiConfigResult =
         UiConfigResult(false, "Module configuration not supported by this backend")
+
+    // ---- module management (add / remove modules) ----
+
+    /**
+     * The module types a new module can be created as (`java-lib`, `android-app`, `android-lib`, …), each
+     * with the language-level choices and a generic, codec-derived set of starter [UiFacetConfig] panels
+     * (e.g. an Android module's namespace/SDK fields) the New-Module dialog prefills and lets the user edit.
+     */
+    fun availableModuleTypes(): List<UiModuleTypeOption> = emptyList()
+
+    /**
+     * Create a new module [name] of [typeId] (from [availableModuleTypes]) with [languageLevel] and the
+     * (possibly edited) [facetValues] — same `Map<String, Any?>` shape the facet codec round-trips. Lays down
+     * the type's default source-set directories and writes `module.toml`. Bumps [fileSystemEpoch].
+     */
+    suspend fun createModule(name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>): UiConfigResult =
+        UiConfigResult(false, "Module management not supported by this backend")
+
+    /**
+     * Remove the module [name] from the project model (its files are left on disk). Also drops any
+     * module-on-module dependency other modules declared on it. Bumps [fileSystemEpoch]. False if absent.
+     */
+    fun removeModule(name: String): Boolean = false
 
     // ---- project management (Create Project + the picker) ----
 
@@ -534,7 +587,40 @@ interface IdeBackend {
      * unsupported or the backup failed. Used by the build-system migration flow.
      */
     suspend fun backupProjects(): String? = null
+
+    // ---- diagnostics / logs (the in-app Logs viewer) ----
+
+    /**
+     * A snapshot of the most recent in-memory log records — editor, analysis, indexing, build, and crash
+     * activity — oldest first. Surfaced by the Logs viewer so a user (or a bug report) can see what actually
+     * went wrong when a feature "does nothing". Empty for backends without a logging facade.
+     */
+    fun recentLogs(): List<UiLogEntry> = emptyList()
+
+    /**
+     * Write the current logs to a shareable text file and return its path (handed to [FileActions.share]),
+     * or null when unsupported / the write failed.
+     */
+    suspend fun exportLogs(): String? = null
 }
+
+// ---- logging DTOs ----
+
+/**
+ * One in-memory log record for the Logs viewer. [level] is `DEBUG`/`INFO`/`WARN`/`ERROR`; [stackTrace] is
+ * present when the record carried an exception (the viewer lets the user expand it). [timestampMs] is
+ * wall-clock (epoch millis) for grouping by time; [tag] names the subsystem (`ide.editor`, `ide.backend`…).
+ */
+data class UiLogEntry(
+    val level: String,
+    val tag: String,
+    val message: String,
+    val timestampMs: Long,
+    /** Host-formatted local time-of-day label (e.g. `14:03:21.482`) — the UI is platform-neutral. */
+    val timeLabel: String,
+    val thread: String,
+    val stackTrace: String? = null,
+)
 
 // ---- editor-session DTOs ----
 
@@ -759,6 +845,22 @@ data class UiTextMatch(
 
 /** A configurable module for the settings screen's switcher. */
 data class UiModuleRef(val name: String, val typeDisplay: String)
+
+/** A Maven repository libraries resolve from. [builtin] repos (Maven Central, Google) can't be removed. */
+data class UiRepository(val name: String, val url: String, val builtin: Boolean)
+
+/**
+ * A module type a new module can be created as, for the New-Module dialog. [defaultFacets] are the
+ * starter facet panels (codec-derived, editable) the dialog prefills; [languageLevels] are the selectable
+ * Java levels with [defaultLanguageLevel] preselected.
+ */
+data class UiModuleTypeOption(
+    val id: String,
+    val displayName: String,
+    val languageLevels: List<String>,
+    val defaultLanguageLevel: String,
+    val defaultFacets: List<UiFacetConfig>,
+)
 
 /**
  * The editable configuration of one module. [facets] is rendered as one collapsible panel each; its

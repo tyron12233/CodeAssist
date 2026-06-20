@@ -1,10 +1,14 @@
 package dev.ide.ui.editor.core
 
 import android.content.Context
+import android.graphics.Matrix
 import android.text.InputType
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedText
+import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.Modifier
@@ -115,25 +119,16 @@ private class EditorTextInputNode(
     private fun startSession() {
         job?.cancel()
         val s = session
+        val h = ime
         job = coroutineScope.launch {
             establishTextInputSession {
                 val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                val listener = object : EditorSession.ImeListener {
-                    override fun onStateChanged() {
-                        val sel = s.selection
-                        val comp = s.composing
-                        imm.updateSelection(view, sel.min, sel.max, comp?.min ?: -1, comp?.max ?: -1)
-                    }
-
-                    override fun onRestartInput() {
-                        imm.restartInput(view)
-                    }
-                }
-                s.imeListener = listener
+                val bridge = EditorImeBridge(s, view, imm, h)
+                s.imeListener = bridge
                 try {
-                    startInputMethod(EditorImeRequest(s, view))
+                    startInputMethod(EditorImeRequest(s, view, bridge))
                 } finally {
-                    if (s.imeListener === listener) s.imeListener = null
+                    if (s.imeListener === bridge) s.imeListener = null
                 }
             }
         }
@@ -158,6 +153,7 @@ private class EditorTextInputNode(
 private class EditorImeRequest(
     private val session: EditorSession,
     private val view: View,
+    private val bridge: EditorImeBridge,
 ) : PlatformTextInputMethodRequest {
     override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
         outAttributes.inputType = InputType.TYPE_CLASS_TEXT or
@@ -168,8 +164,112 @@ private class EditorImeRequest(
             EditorInfo.IME_ACTION_NONE
         outAttributes.initialSelStart = session.selection.min
         outAttributes.initialSelEnd = session.selection.max
-        return EditorInputConnection(session, view)
+        return EditorInputConnection(session, view, bridge)
     }
+}
+
+/** Cap on a full extracted-text snapshot sent over the binder; larger buffers window around the caret so a big
+ *  file never risks `TransactionTooLargeException`. Per-keystroke updates are partial, so this only bounds the
+ *  one-shot/initial snapshot. */
+private const val MAX_EXTRACT_CHARS = 100_000
+private const val NO_MONITOR = -1
+
+/**
+ * Owns the editor's IME-push side. Set as the [EditorSession.ImeListener], it forwards every edit/selection
+ * change to the keyboard: a partial `updateExtractedText` so an IME that monitors our text stays exact without
+ * us materializing the whole document per keystroke ([onTextChanged]), the canonical `updateSelection`
+ * ([onStateChanged]), and `updateCursorAnchorInfo` when the IME asked for cursor updates. Because a monitoring
+ * IME never drifts, smart edits no longer need a disruptive `restartInput` (see [EditorSession.resyncIme]).
+ *
+ * The [InputConnection] writes [monitorToken]/[cursorUpdateMode] here as the IME turns those features on.
+ */
+private class EditorImeBridge(
+    private val session: EditorSession,
+    private val view: View,
+    private val imm: InputMethodManager,
+    private val handle: EditorImeHandle,
+) : EditorSession.ImeListener {
+
+    /** Token from a `GET_EXTRACTED_TEXT_MONITOR` request, or [NO_MONITOR] when the IME isn't mirroring text. */
+    var monitorToken = NO_MONITOR
+    /** Last `requestCursorUpdates` mode (`CURSOR_UPDATE_IMMEDIATE`/`MONITOR` bits), 0 when off. */
+    var cursorUpdateMode = 0
+
+    override fun onStateChanged() {
+        pushSelection()
+        maybePushCursorAnchor()
+    }
+
+    override fun onTextChanged(span: EditSpan?) {
+        if (monitorToken != NO_MONITOR) {
+            val et = if (span == null) fullExtractedText(session) else partialExtractedText(session, span)
+            imm.updateExtractedText(view, monitorToken, et)
+        }
+        pushSelection()
+        maybePushCursorAnchor()
+    }
+
+    override fun onRestartInput() {
+        imm.restartInput(view)
+    }
+
+    override fun isSyncingExtractedText(): Boolean = monitorToken != NO_MONITOR
+
+    private fun pushSelection() {
+        val sel = session.selection
+        val comp = session.composing
+        imm.updateSelection(view, sel.min, sel.max, comp?.min ?: -1, comp?.max ?: -1)
+    }
+
+    private fun maybePushCursorAnchor() {
+        if (cursorUpdateMode and InputConnection.CURSOR_UPDATE_MONITOR != 0) pushCursorAnchor()
+    }
+
+    fun pushCursorAnchor() {
+        imm.updateCursorAnchorInfo(view, buildCursorAnchorInfo(session, view, handle))
+    }
+}
+
+/** Initial/one-shot snapshot + once-per-batch full refresh (windowed around the caret past [MAX_EXTRACT_CHARS]). */
+private fun fullExtractedText(session: EditorSession): ExtractedText =
+    session.extractedTextSnapshot(MAX_EXTRACT_CHARS).toAndroid()
+
+/** Per-edit partial update; the offset/selection arithmetic is the commonMain (unit-tested) [partialExtractedSnapshot]. */
+private fun partialExtractedText(session: EditorSession, span: EditSpan): ExtractedText =
+    session.partialExtractedSnapshot(span).toAndroid()
+
+private fun ExtractedTextSnapshot.toAndroid(): ExtractedText {
+    val et = ExtractedText()
+    et.text = text
+    et.startOffset = startOffset
+    et.selectionStart = selectionStart
+    et.selectionEnd = selectionEnd
+    et.partialStartOffset = partialStartOffset
+    et.partialEndOffset = partialEndOffset
+    et.flags = 0
+    return et
+}
+
+/** Build `CursorAnchorInfo` from [session] state plus the editor's caret geometry (when wired). Coordinates from
+ *  the provider are in the view's pixel space, so the matrix is just the view's on-screen translation. */
+private fun buildCursorAnchorInfo(session: EditorSession, view: View, handle: EditorImeHandle): CursorAnchorInfo {
+    val sel = session.selection
+    val comp = session.composing
+    val b = CursorAnchorInfo.Builder()
+    b.setSelectionRange(sel.min, sel.max)
+    if (comp != null && comp.min < comp.max) {
+        b.setComposingText(comp.min, session.doc.substring(comp.min, comp.max))
+    }
+    val loc = IntArray(2)
+    view.getLocationOnScreen(loc)
+    b.setMatrix(Matrix().apply { setTranslate(loc[0].toFloat(), loc[1].toFloat()) })
+    handle.caretGeometryProvider?.invoke()?.let { c ->
+        b.setInsertionMarkerLocation(
+            c.horizontalPosition, c.top, c.baseline, c.bottom,
+            CursorAnchorInfo.FLAG_HAS_VISIBLE_REGION,
+        )
+    }
+    return b.build()
 }
 
 /**
@@ -180,6 +280,7 @@ private class EditorImeRequest(
 private class EditorInputConnection(
     private val session: EditorSession,
     view: View,
+    private val bridge: EditorImeBridge,
 ) : BaseInputConnection(view, true) {
 
     private var batchDepth = 0
@@ -266,13 +367,28 @@ private class EditorInputConnection(
         return true
     }
 
-    override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean = false
+    // Hand the IME a real view of our buffer so it can mirror text + cursor continuously (and not drift after a
+    // smart edit). A MONITOR request arms per-edit `updateExtractedText` pushes via the bridge.
+    override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText {
+        if (request != null && flags and InputConnection.GET_EXTRACTED_TEXT_MONITOR != 0) {
+            bridge.monitorToken = request.token
+        }
+        return fullExtractedText(session)
+    }
+
+    override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean {
+        bridge.cursorUpdateMode = cursorUpdateMode
+        if (cursorUpdateMode and InputConnection.CURSOR_UPDATE_IMMEDIATE != 0) bridge.pushCursorAnchor()
+        return true
+    }
 
     override fun closeConnection() {
         while (batchDepth > 0) {
             batchDepth--
             session.endBatch()
         }
+        bridge.monitorToken = NO_MONITOR
+        bridge.cursorUpdateMode = 0
         session.imeFinishComposing()
         super.closeConnection()
     }

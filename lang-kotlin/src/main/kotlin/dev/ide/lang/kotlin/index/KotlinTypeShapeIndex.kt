@@ -37,7 +37,7 @@ import java.io.DataOutput
  */
 object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.typeShape")
-    override val version = 11 // v11: + KotlinSymbol.paramHasDefault (missing-required-argument detection)
+    override val version = 12 // v12: + TypeShape.isObject/companionObjectName/isKotlin (index-only, no live decode)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN
@@ -74,6 +74,9 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         writeTypes(out, value.supertypes)
         out.writeInt(value.members.size)
         value.members.forEach { writeSymbol(out, it) }
+        out.writeBoolean(value.isObject)
+        out.writeUTF(value.companionObjectName ?: "")
+        out.writeBoolean(value.isKotlin)
     }
 
     override fun read(inp: DataInput): TypeShape {
@@ -81,7 +84,10 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val bounds = readTypes(inp)
         val supers = readTypes(inp)
         val members = List(inp.readInt()) { readSymbol(inp) }
-        return TypeShape(tps, bounds, supers, members)
+        val isObject = inp.readBoolean()
+        val companion = inp.readUTF().ifEmpty { null }
+        val isKotlin = inp.readBoolean()
+        return TypeShape(tps, bounds, supers, members, isObject, companion, isKotlin)
     }
 
     private fun writeSymbol(out: DataOutput, s: KotlinSymbol) {

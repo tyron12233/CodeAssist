@@ -28,9 +28,9 @@ import dev.ide.ui.components.PermissionDialog
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.screens.CreateProjectScreen
-import dev.ide.ui.screens.DependenciesScreen
 import dev.ide.ui.screens.EditorScreen
 import dev.ide.ui.screens.ModuleConfigScreen
+import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.ProjectPickerScreen
 import dev.ide.ui.screens.SdkManagerScreen
 import dev.ide.ui.theme.Ca
@@ -61,15 +61,14 @@ fun CodeAssistApp(
 ) {
     var dark by remember { mutableStateOf(true) }
     var screen by remember { mutableStateOf(Screen.Projects) }
-    var depsModule by remember { mutableStateOf<String?>(null) }
     var configModule by remember { mutableStateOf<String?>(null) }
+    var modulesTab by remember { mutableStateOf(ModulesTab.Settings) }
     var showMigration by remember { mutableStateOf(backend.preference("migration.acknowledged") != "true") }
     var showLegacyRecovery by remember { mutableStateOf(backend.preference("legacy.recovery.seen") != "true") }
     var showOnboarding by remember { mutableStateOf(backend.preference("onboarding.seen") != "true") }
-    // Opt-in analytics: prompt only when collection is available and the user hasn't decided yet (null).
+    // Opt-in analytics: prompt only when collection is available and the user hasn't decided yet (null). The
+    // re-toggle lives in the editor's More menu (a settings surface), not permanently on the project picker.
     var showAnalytics by remember { mutableStateOf(backend.analyticsAvailable() && backend.analyticsConsent() == null) }
-    // The live toggle state for the picker's settings row (null = analytics unavailable → hide the row).
-    var analyticsOn by remember { mutableStateOf(backend.analyticsConsent() == true) }
     // Bumped after a project is deleted so the picker re-reads the (now-smaller) on-disk project list.
     var projectsRefresh by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -115,7 +114,7 @@ fun CodeAssistApp(
                 showOnboarding -> { showOnboarding = false; backend.setPreference("onboarding.seen", "true") }
                 showMigration -> { showMigration = false; backend.setPreference("migration.acknowledged", "true") }
                 showAnalytics -> { showAnalytics = false; backend.setAnalyticsConsent(false) }
-                screen == Screen.Dependencies || screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen = Screen.Editor
+                screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen = Screen.Editor
                 screen == Screen.CreateProject -> screen = Screen.Projects
                 screen == Screen.Editor -> screen = Screen.Projects
                 else -> {}
@@ -131,12 +130,15 @@ fun CodeAssistApp(
                             val projects = remember(epoch, projectsRefresh) { backend.projects() }
                             ProjectPickerScreen(
                                 projects = projects,
-                                onOpen = { p -> scope.launch { backend.openProject(p.rootPath); screen = Screen.Editor } },
+                                onOpen = { p -> scope.launch { if (backend.openProject(p.rootPath)) screen = Screen.Editor } },
                                 onNewProject = { screen = Screen.CreateProject },
                                 onDeleteProject = { p -> scope.launch { backend.deleteProject(p.rootPath); projectsRefresh++ } },
                                 onBackup = { scope.launch { backupAndShare() } },
                                 onSubmitSuggestions = if (fileActions.canOpenUrl) {
                                     { fileActions.openUrl(BetaInfo.FEEDBACK_URL) }
+                                } else null,
+                                onJoinDiscord = if (fileActions.canOpenUrl) {
+                                    { fileActions.openUrl(BetaInfo.DISCORD_URL) }
                                 } else null,
                                 storagePath = backend.storageRootPath(),
                                 onOpenInFiles = if (fileActions.canReveal) {
@@ -147,8 +149,6 @@ fun CodeAssistApp(
                                     showLegacyRecovery = false
                                     backend.setPreference("legacy.recovery.seen", "true")
                                 },
-                                analyticsEnabled = if (backend.analyticsAvailable()) analyticsOn else null,
-                                onAnalyticsChange = { on -> analyticsOn = on; backend.setAnalyticsConsent(on) },
                             )
                         }
                         Screen.CreateProject -> CreateProjectScreen(
@@ -159,21 +159,16 @@ fun CodeAssistApp(
                         Screen.Editor -> EditorScreen(
                             state = state,
                             onToggleTheme = { dark = !dark },
-                            onOpenDependencies = { module -> depsModule = module; screen = Screen.Dependencies },
-                            onOpenModuleConfig = { module -> configModule = module; screen = Screen.ModuleConfig },
+                            onOpenDependencies = { module -> configModule = module; modulesTab = ModulesTab.Dependencies; screen = Screen.ModuleConfig },
+                            onOpenModuleConfig = { module -> configModule = module; modulesTab = ModulesTab.Settings; screen = Screen.ModuleConfig },
                             onOpenSdkManager = { screen = Screen.SdkManager },
                             onCloseProject = { screen = Screen.Projects },
                             fileActions = fileActions,
                         )
-                        Screen.Dependencies -> DependenciesScreen(
-                            backend = state.backend,
-                            initialModule = depsModule,
-                            onBack = { screen = Screen.Editor },
-                            codeFont = codeFont,
-                        )
                         Screen.ModuleConfig -> ModuleConfigScreen(
                             backend = state.backend,
                             initialModule = configModule,
+                            initialTab = modulesTab,
                             onBack = { screen = Screen.Editor },
                             codeFont = codeFont,
                         )
@@ -200,7 +195,7 @@ fun CodeAssistApp(
                 // the editor — the same use case the picker's "open" runs.
                 onOpenSample = {
                     backend.projects().firstOrNull()?.let { sample ->
-                        scope.launch { backend.openProject(sample.rootPath); screen = Screen.Editor }
+                        scope.launch { if (backend.openProject(sample.rootPath)) screen = Screen.Editor }
                     }
                 },
                 onFinish = {
@@ -211,8 +206,8 @@ fun CodeAssistApp(
             // Opt-in analytics consent — last of the first-launch sheets, after onboarding/migration.
             AnalyticsConsentSheet(
                 visible = showAnalytics && !showOnboarding && !showMigration && screen == Screen.Projects,
-                onAllow = { showAnalytics = false; analyticsOn = true; backend.setAnalyticsConsent(true) },
-                onDecline = { showAnalytics = false; analyticsOn = false; backend.setAnalyticsConsent(false) },
+                onAllow = { showAnalytics = false; backend.setAnalyticsConsent(true) },
+                onDecline = { showAnalytics = false; backend.setAnalyticsConsent(false) },
                 onLearnMore = if (fileActions.canOpenUrl) {
                     { fileActions.openUrl(BetaInfo.PRIVACY_URL) }
                 } else null,

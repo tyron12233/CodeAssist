@@ -1,13 +1,21 @@
 package dev.ide.android
 
 import android.content.Context
+import android.os.Build
+import dev.ide.analytics.DeviceInfo
+import dev.ide.analytics.impl.AnalyticsLogSink
+import dev.ide.analytics.impl.DefaultAnalyticsService
+import dev.ide.analytics.impl.SupabaseSink
 import dev.ide.core.IdeServices
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
+import dev.ide.platform.log.Log.addSink
 import java.io.File
 import java.nio.file.Path
 import java.util.zip.ZipInputStream
 import java.nio.file.Paths
+import java.util.Locale
+import java.util.UUID
 
 /**
  * On-device bootstrap for the IDE engine, the Android counterpart to :ide-desktop's wiring. ART has no
@@ -31,6 +39,12 @@ object AndroidIde {
         // only if external isn't mounted (rare). The location is resolved identically by the provider.
         val home = appHomeDir(context).apply { mkdirs() }
         val androidJar = copyAsset(context, "android.jar", File(home, "android.jar"))
+        // The Java 9+ desugar stubs (`java.lang.invoke.StringConcatFactory`/`LambdaMetafactory`): `android.jar`
+        // omits them, but the compiler emits an `invokedynamic` against `StringConcatFactory` for every string
+        // concatenation at source >= 9 (D8 desugars it at build time). Without this on the boot classpath the
+        // editor reports a spurious "StringConcatFactory cannot be resolved" on any Java 9+ buffer. Desktop
+        // pulls it from build-tools (IdeServices.detectAndroidSdk); on ART it ships as an asset.
+        val coreLambdaStubs = copyAsset(context, "core-lambda-stubs.jar", File(home, "core-lambda-stubs.jar"))
         // The on-device Kotlin compiler (K2JVMCompiler) is dexed, but IntelliJ-core boots its extension
         // registry by reading XML descriptors (META-INF/extensions/*.xml) from a real filesystem path, which
         // a dex APK doesn't expose. Extract the bundled kotlinc-resources.zip (the compiler jar minus its
@@ -46,7 +60,9 @@ object AndroidIde {
         val nativeLibDir = Paths.get(context.applicationInfo.nativeLibraryDir)
 
         val projectsRoot = File(home, "projects").toPath()
-        val bootClasspath = listOf(androidJar.absolutePath)
+        // android.jar MUST stay first: bootstrapWithBootClasspath / ProjectManager.onDevice treat
+        // bootClasspath.first() as the SDK android.jar. The desugar stubs ride alongside it as the platform.
+        val bootClasspath = listOf(androidJar.absolutePath, coreLambdaStubs.absolutePath)
         // Runs a dexed Java console app in-process (ART has no `java` to fork); the oat cache is transient.
         val dexRunner = DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
         // Installs + launches a built APK (the android Run) via the system package installer.
@@ -54,7 +70,7 @@ object AndroidIde {
         // Renders live custom views in the layout preview: D8-dex the instrumented classes + DexClassLoader.
         val previewRuntime = dev.ide.preview.bridge.DexCustomViewRuntime(
             context.applicationContext, androidJar.toPath(),
-            File(context.cacheDir, "preview"), android.os.Build.VERSION.SDK_INT,
+            File(context.cacheDir, "preview"), Build.VERSION.SDK_INT,
         )
         // Project data left by previous app versions (same `com.tyron.code` package, so the same external
         // files dir survives a Play update). Swept into backups, and recovered into the picker by
@@ -72,7 +88,7 @@ object AndroidIde {
             storageRoot = externalHome(context).toPath(),
             legacyDataDirs = legacyDataDirs,
             dexRunner = dexRunner,
-            deviceApiLevel = android.os.Build.VERSION.SDK_INT,
+            deviceApiLevel = Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
             customViewRuntime = previewRuntime,
         )
@@ -83,30 +99,19 @@ object AndroidIde {
         // first-run demo being seeded over it.
         runCatching { manager.importLegacyProjects() }
 
-        val services = if (manager.isEmpty()) {
-            // Seed the rich Android multi-module sample (app → feature → core) into its own workspace dir.
-            // Java 8 level: a bundled non-modular android.jar keeps JDT DOM analysis working on ART.
-            IdeServices.bootstrapWithBootClasspath(
-                root = projectsRoot.resolve("android-sample"),
-                bootClasspath = bootClasspath,
-                sdkName = "android-36",
-                generateDemo = true,
-                androidToolsDir = nativeLibDir,
-                debugKeystore = debugKeystore.toPath(),
-                dexRunner = dexRunner,
-                deviceApiLevel = android.os.Build.VERSION.SDK_INT,
-                apkInstaller = apkInstaller,
-                customViewRuntime = previewRuntime,
-                // Share the download cache with every later project (the app home, sibling of projects/).
-                sharedCachesRoot = home.toPath(),
-            )
-        } else {
-            manager.open(manager.list().first().rootPath)
+        // First launch: seed the rich Android multi-module sample (app → feature → core) to disk so the
+        // picker isn't empty, but do NOT open it — the engine for a project is created lazily when the user
+        // taps it (via ProjectManager.open), so the app starts straight on the picker, the same as desktop.
+        // Java 8 level: a bundled non-modular android.jar keeps JDT DOM analysis working on ART.
+        if (manager.isEmpty()) {
+            IdeServices.seedDemoWithBootClasspath(projectsRoot.resolve("android-sample"), bootClasspath, sdkName = "android-36")
         }
 
         // Opt-in usage analytics (no collection until the user grants consent — see docs/analytics.md).
         val analytics = buildAnalytics(manager, home)
-        val backend = IdeServicesBackend(services, manager, analytics)
+        // Start with no project open (the picker is shown); opening one from it creates that project's engine
+        // on demand. The download cache is shared across projects via the ProjectManager (sharedCachesRoot).
+        val backend = IdeServicesBackend(initial = null, manager = manager, analytics = analytics)
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
         // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
         backend.installCrashReporting()
@@ -116,7 +121,7 @@ object AndroidIde {
             backend.track(dev.ide.analytics.Events.COLD_START, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
         }
 
-        return Session(services, backend)
+        return Session(backend)
     }
 
     /**
@@ -131,27 +136,27 @@ object AndroidIde {
         if (url.isBlank() || key.isBlank()) return dev.ide.analytics.NoopAnalyticsService
 
         val installId = manager.preference("analytics.install.id")
-            ?: java.util.UUID.randomUUID().toString().also { manager.setPreference("analytics.install.id", it) }
-        val device = dev.ide.analytics.DeviceInfo(
+            ?: UUID.randomUUID().toString().also { manager.setPreference("analytics.install.id", it) }
+        val device = DeviceInfo(
             appVersion = BuildConfig.VERSION_NAME,
             appBuild = BuildConfig.VERSION_CODE,
-            osApi = android.os.Build.VERSION.SDK_INT,
-            deviceModel = android.os.Build.MODEL ?: "",
-            deviceManufacturer = android.os.Build.MANUFACTURER ?: "",
-            abi = android.os.Build.SUPPORTED_ABIS?.firstOrNull() ?: "",
-            locale = java.util.Locale.getDefault().toLanguageTag(),
+            osApi = Build.VERSION.SDK_INT,
+            deviceModel = Build.MODEL ?: "",
+            deviceManufacturer = Build.MANUFACTURER ?: "",
+            abi = Build.SUPPORTED_ABIS?.firstOrNull() ?: "",
+            locale = Locale.getDefault().toLanguageTag(),
         )
-        val service = dev.ide.analytics.impl.DefaultAnalyticsService(
+        val service = DefaultAnalyticsService(
             installId = installId,
-            sessionId = java.util.UUID.randomUUID().toString(),
+            sessionId = UUID.randomUUID().toString(),
             device = device,
-            sink = dev.ide.analytics.impl.SupabaseSink(url, key),
+            sink = SupabaseSink(url, key),
             initialConsent = manager.preference("analytics.consent") == "granted",
             queueFile = File(home, "analytics-queue.txt").toPath(),
         )
         // Bridge the logging facade to analytics: caught ERROR logs become scrubbed `error_logged` events
         // (no messages/paths). No-ops while the service is disabled, and starts working on consent.
-        dev.ide.platform.log.Log.addSink(dev.ide.analytics.impl.AnalyticsLogSink(service))
+        addSink(AnalyticsLogSink(service))
         return service
     }
 
@@ -218,6 +223,7 @@ object AndroidIde {
         System.setProperty("kotlinc.art.home", home.absolutePath)
     }
 
-    /** The live engine + its UI-port adapter; [backend] is held so the Activity can close it on teardown. */
-    class Session(val services: IdeServices, val backend: IdeServicesBackend)
+    /** The UI-port adapter; [backend] is held so the Activity can close the active engine on teardown.
+     *  No engine is created until the user opens a project from the picker (the lazy-start path). */
+    class Session(val backend: IdeServicesBackend)
 }

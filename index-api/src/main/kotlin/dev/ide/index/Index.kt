@@ -90,6 +90,11 @@ data class IndexStatus(
     val message: String = "",
     /** 0.0..1.0, or negative for indeterminate. */
     val fraction: Double = -1.0,
+    /** True only after a build has SUCCESSFULLY completed and the indexes hold queryable data. Stays false
+     *  before the first build, while (re)building, and after a failure. Index-backed completion uses this as
+     *  the "dumb mode" gate: a classpath/library lookup returns nothing (rather than falling back to a live
+     *  jar scan / `@Metadata` decode) until the index is `ready`. */
+    val ready: Boolean = false,
 )
 
 interface IndexService {

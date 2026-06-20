@@ -78,6 +78,10 @@ class KotlinResolver(
     // an instant preview. Safe because a [KotlinResolver] is created per parse snapshot (never reused across edits).
     private val inferCache = HashMap<KtExpression, KotlinType?>()
     private val calleeCache = HashMap<KtCallExpression, KotlinSymbol?>()
+    // The call's overload set (all candidates by name+receiver). Resolving it is classpath member/scope lookup;
+    // the analyze pass probes it more than once per call (missing-required-arg AND unknown-named-arg checks,
+    // plus named-argument completion), so memoize it per snapshot like the callee/infer caches above.
+    private val callTargetsCache = HashMap<KtCallExpression, List<KotlinSymbol>>()
     private val implicitReceiversCache = HashMap<Int, List<KotlinType>>()
     // Composable context is identical for every position inside one boundary (a function/accessor/lambda), and
     // it's queried per call expression in the analyze pass, so memoize by that boundary element.
@@ -683,9 +687,6 @@ class KotlinResolver(
     }
 
     private fun composableContextWalk(offset: Int): ComposableContext {
-        if (offset in 8095..8098) {
-            println()
-        }
         var node: PsiElement? = elementAt(offset)
         while (node != null) {
             when (node) {
@@ -1056,6 +1057,11 @@ class KotlinResolver(
      *  functions + the constructors of a capitalized callee (source and classpath). Used to surface a call's
      *  parameters; resolution stays best-effort (overloads are all returned, the consumer unions them). */
     fun callTargets(call: KtCallExpression): List<KotlinSymbol> {
+        callTargetsCache[call]?.let { return it }
+        return computeCallTargets(call).also { callTargetsCache[call] = it }
+    }
+
+    private fun computeCallTargets(call: KtCallExpression): List<KotlinSymbol> {
         val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return emptyList()
         val q = call.parent as? KtQualifiedExpression
         val receiverType = if (q != null && q.selectorExpression === call) inferType(q.receiverExpression) else null

@@ -77,8 +77,10 @@ class SyntheticRCompletionTest {
     fun kotlinResolvesFrameworkAndroidR() {
         // `android.R` is the FRAMEWORK R from android.jar (distinct from the app's synthetic `com.example.app.R`).
         // A package-qualified type used directly must resolve, exposing its nested resource-type classes and
-        // their fields — entirely from classpath bytecode (no index, no synthetic provider).
+        // their fields — from the classpath index (in "dumb mode", before the index is ready, classpath symbols
+        // intentionally don't resolve, so wait for the build rather than falling back to a live bytecode read).
         val s = IdeServices.bootstrapDemo(root).also { services = it }
+        awaitIndexed(s)
         val probe = root.resolve("app/src/main/kotlin/com/example/app/Probe.kt")
 
         val onR = kotlinLabels(s, probe, "package com.example.app\nfun m() { val x = android.R. }", "android.R.")
