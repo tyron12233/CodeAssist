@@ -98,10 +98,23 @@ class KotlinSymbolService(
     // re-run on every keystroke; caching it makes a repeat query free. Holds the index portion only (the
     // stdlib scan + source extensions + per-receiver type-arg binding are applied fresh by the caller).
     private val classpathExtMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
-    // Tracks the index's last-seen build state so the memo above is dropped the moment a (re)build STARTS — a
-    // rebuilt index can carry different extensions (a dependency was added), and a query mid-build sees only a
-    // partial index, so partial results must never be cached.
+    // Per-(receiver-fqn, member-name) memo of the same-named-member lookup for a CLASSPATH receiver type,
+    // session-stable for the same reason. The diagnostics pass's unresolved-member check probes the same
+    // receiver+name repeatedly (every `s.uppercase()`, `modifier.padding`, …), and it only needs the members'
+    // existence + isExtension + import identity (all type-argument-independent), so the unbound result is cached.
+    private val checkMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+    // Tracks the index's last-seen build state so the classpath memos above are dropped the moment a (re)build
+    // STARTS — a rebuilt index can carry different members/extensions (a dependency was added), and a query
+    // mid-build sees only a partial index, so partial results must never be cached.
     @Volatile private var extMemoBuilding = false
+
+    /** True when the classpath memos are safe to use: clears them on a (re)build start, never caches mid-build. */
+    private fun classpathCacheUsable(idx: IndexService): Boolean {
+        val building = idx.status.building
+        if (building && !extMemoBuilding) { classpathExtMemo.clear(); checkMembersMemo.clear() }
+        extMemoBuilding = building
+        return !building
+    }
 
     /**
      * Replace the live editor buffers (VirtualFile path → text) the source model overlays on top of disk, so
@@ -466,6 +479,18 @@ class KotlinSymbolService(
         return membersForCompletion(typeFqn, typeArgs, name).filter { it.name == name }
     }
 
+    /** Same-named members for the diagnostics existence / extension-in-scope check. Cached for a CLASSPATH
+     *  receiver (session-stable, index-invalidated); a source receiver — whose members change on edit — goes
+     *  uncached. Type arguments don't affect a member's existence / isExtension / import identity, so the
+     *  unbound (no-type-args) result is what's cached and reused. */
+    fun membersNamedForCheck(typeFqn: String, typeArgs: List<TypeRef>, name: String): List<KotlinSymbol> {
+        if (name.isEmpty()) return emptyList()
+        val idx = index
+        if (idx == null || sourceClass(typeFqn) != null || !classpathCacheUsable(idx))
+            return membersNamed(typeFqn, typeArgs, name)
+        return checkMembersMemo.getOrPut("$typeFqn $name") { membersNamed(typeFqn, emptyList(), name) }
+    }
+
     override fun supertypesOf(typeFqn: String): List<TypeRef> =
         kotlinSupertypesMemo(typeFqn).map { typeByFqn(it) }
 
@@ -529,14 +554,11 @@ class KotlinSymbolService(
         // is applied BEFORE bindExtensionReceiver, which allocates a fresh symbol per generic receiver.
         val idx = index
         val fromClasspath = if (idx != null) {
-            // Drop the memo when a (re)build starts; don't cache while building (the index is only partial then).
-            val building = idx.status.building
-            if (building && !extMemoBuilding) classpathExtMemo.clear()
-            extMemoBuilding = building
+            val cacheable = classpathCacheUsable(idx) // clears memos on a build start; false while building
             fun query(t: String) = idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.extPrefix(t, namePrefix), EXTENSION_QUERY_LIMIT)
                 .map { it.value.toSymbol(this) }.toList()
             val viaIndex = dev.ide.lang.kotlin.KotlinPerf.span("ext.index") { targets.flatMap { t ->
-                if (building) query(t) else classpathExtMemo.getOrPut(t + ' ' + namePrefix) { query(t) }
+                if (cacheable) classpathExtMemo.getOrPut(t + ' ' + namePrefix) { query(t) } else query(t)
             } }
             // Always fold in the bundled stdlib's extensions (`Iterable.map`, `String.trim`) — see [stdlibReader].
             val scan = dev.ide.lang.kotlin.KotlinPerf.span("ext.stdlib") { stdlibScan() }

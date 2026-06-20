@@ -1211,7 +1211,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         // members/extensions are materialized + receiver-bound — not the type's whole extension set (the
         // `kotlin.Any` bucket alone is thousands on a Compose classpath). A `Type.member` reference (`Color.Red`)
         // also sees the type's companion-object members/statics, which instance membersNamed doesn't list.
-        val matching = service.membersNamed(recvType.qualifiedName, recvType.typeArguments, name) +
+        val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
             if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()
         if (matching.isNotEmpty()) {
             // A plain member resolves outright. An EXTENSION resolves only when it is actually in scope —
