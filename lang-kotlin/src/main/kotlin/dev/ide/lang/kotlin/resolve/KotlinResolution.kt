@@ -683,9 +683,6 @@ class KotlinResolver(
     }
 
     private fun composableContextWalk(offset: Int): ComposableContext {
-        if (offset in 8095..8098) {
-            println()
-        }
         var node: PsiElement? = elementAt(offset)
         while (node != null) {
             when (node) {

@@ -1,0 +1,16 @@
+{
+  "alloc.chain.bytes": 129928,
+  "alloc.member-access-editing.bytes": 204536,
+  "alloc.member-access.bytes": 132812,
+  "alloc.member-prefix.bytes": 108888,
+  "alloc.parse.bytes": 6776,
+  "alloc.scope.bytes": 214754,
+  "alloc.type-ref.bytes": 90784,
+  "latency.chain.ns": 434125,
+  "latency.member-access-editing.ns": 593958.3333333334,
+  "latency.member-access.ns": 562132,
+  "latency.member-prefix.ns": 446687.5,
+  "latency.parse.ns": 43263.833333333336,
+  "latency.scope.ns": 618722.1666666666,
+  "latency.type-ref.ns": 168854.16666666666
+}

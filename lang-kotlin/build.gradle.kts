@@ -29,6 +29,8 @@ dependencies {
     // parser/symbol/completion pipeline end to end.
     testImplementation(project(":project-model-impl"))
     testImplementation(project(":index-impl")) // wire the real persistent index to reproduce the device path
+    // Opt-in regression suites (`regressionTest`): shared benchmark/baseline/memory harness.
+    testImplementation(project(":bench-support"))
     testImplementation(libs.kotlinx.coroutines.test)
     // Real Compose runtime jar on the test classpath: KotlinComposeBuildTest compiles a @Composable against
     // it (with the bundled Compose plugin) and asserts the synthetic-param transform. The test self-gates

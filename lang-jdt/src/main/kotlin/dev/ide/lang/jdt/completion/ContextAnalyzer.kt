@@ -33,11 +33,19 @@ import org.eclipse.jdt.internal.compiler.lookup.VariableBinding
  */
 internal object ContextAnalyzer {
 
+    /** Stackless control-flow signal: thrown once the marker context is captured to stop the AST traversal. */
+    private object MarkerFound : RuntimeException() {
+        private fun readResolve(): Any = MarkerFound
+        override fun fillInStackTrace(): Throwable = this
+    }
+
     fun analyze(cud: CompilationUnitDeclaration, markerStart: Int, prefix: String): AnalyzedContext {
         val unit = unitInfo(cud)
         importContext(cud, prefix, unit)?.let { return it } // marker inside an `import …;`
         val visitor = Visitor(prefix, markerStart, unit)
-        runCatching { cud.traverse(visitor, cud.scope) }
+        // The visitor captures the context the moment it reaches the marker and then throws [MarkerFound]
+        // to unwind the traversal early — without it, ecj walks the whole AST past the marker for nothing.
+        try { cud.traverse(visitor, cud.scope) } catch (_: MarkerFound) {} catch (_: Throwable) {}
         return visitor.result ?: AnalyzedContext.none(prefix, unit)
     }
 
@@ -229,6 +237,7 @@ internal object ContextAnalyzer {
                 unit = unit,
                 typeScope = typeScope,
             )
+            throw MarkerFound
         }
     }
 }

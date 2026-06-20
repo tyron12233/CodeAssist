@@ -91,6 +91,18 @@ class KotlinSymbolService(
     private val classpathSupertypeMemo = ConcurrentHashMap<String, List<String>>()
     @Volatile private var sourceSupertypeMemo = ConcurrentHashMap<String, List<String>>()
 
+    // Per-(receiver-target, name-prefix) memo of the classpath extension-index query. Like the classpath
+    // supertype memo, this is session-stable: the persistent `kotlin.callables` index can't gain a project
+    // extension (the classpath can't extend your code), and any re-index rebuilds this whole service. The
+    // bare-dot (empty-prefix) query pulls the entire `kotlin.Any` bucket — ~0.6ms at Compose scale — and was
+    // re-run on every keystroke; caching it makes a repeat query free. Holds the index portion only (the
+    // stdlib scan + source extensions + per-receiver type-arg binding are applied fresh by the caller).
+    private val classpathExtMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+    // Tracks the index's last-seen build state so the memo above is dropped the moment a (re)build STARTS — a
+    // rebuilt index can carry different extensions (a dependency was added), and a query mid-build sees only a
+    // partial index, so partial results must never be cached.
+    @Volatile private var extMemoBuilding = false
+
     /**
      * Replace the live editor buffers (VirtualFile path → text) the source model overlays on top of disk, so
      * cross-file completion/resolution/diagnostics see UNSAVED edits in other open files. Diffs against the
@@ -517,9 +529,14 @@ class KotlinSymbolService(
         // is applied BEFORE bindExtensionReceiver, which allocates a fresh symbol per generic receiver.
         val idx = index
         val fromClasspath = if (idx != null) {
+            // Drop the memo when a (re)build starts; don't cache while building (the index is only partial then).
+            val building = idx.status.building
+            if (building && !extMemoBuilding) classpathExtMemo.clear()
+            extMemoBuilding = building
+            fun query(t: String) = idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.extPrefix(t, namePrefix), EXTENSION_QUERY_LIMIT)
+                .map { it.value.toSymbol(this) }.toList()
             val viaIndex = dev.ide.lang.kotlin.KotlinPerf.span("ext.index") { targets.flatMap { t ->
-                idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.extPrefix(t, namePrefix), EXTENSION_QUERY_LIMIT)
-                    .map { it.value.toSymbol(this) }.toList()
+                if (building) query(t) else classpathExtMemo.getOrPut(t + ' ' + namePrefix) { query(t) }
             } }
             // Always fold in the bundled stdlib's extensions (`Iterable.map`, `String.trim`) — see [stdlibReader].
             val scan = dev.ide.lang.kotlin.KotlinPerf.span("ext.stdlib") { stdlibScan() }

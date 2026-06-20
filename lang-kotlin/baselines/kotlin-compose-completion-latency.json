@@ -1,0 +1,8 @@
+{
+  "alloc.member-bare.bytes": 485542,
+  "alloc.member-prefix.bytes": 39913,
+  "alloc.scope.bytes": 51336,
+  "latency.member-bare.ns": 958555.6666666666,
+  "latency.member-prefix.ns": 277701.3333333333,
+  "latency.scope.ns": 278930.5
+}
