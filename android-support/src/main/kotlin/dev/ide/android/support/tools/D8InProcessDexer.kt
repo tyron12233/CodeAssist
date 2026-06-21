@@ -21,44 +21,96 @@ import java.util.concurrent.Executors
  */
 class D8InProcessDexer : Dexer {
 
-    override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
-        run(inputs, emptyList(), androidJar, minApi, release, outDir, OutputMode.DexIndexed, threads)
+    override fun dex(
+        inputs: List<Path>,
+        androidJar: Path,
+        minApi: Int,
+        release: Boolean,
+        outDir: Path,
+        threads: Int
+    ): ToolResult = run(
+        inputs, emptyList(), androidJar, minApi, release, outDir, OutputMode.DexIndexed, threads
+    )
 
-    override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
-        run(inputs, classpath, androidJar, minApi, release, outDir, OutputMode.DexFilePerClassFile, threads)
+    override fun dexArchive(
+        inputs: List<Path>,
+        classpath: List<Path>,
+        androidJar: Path,
+        minApi: Int,
+        release: Boolean,
+        outDir: Path,
+        threads: Int
+    ): ToolResult = run(
+        inputs,
+        classpath,
+        androidJar,
+        minApi,
+        release,
+        outDir,
+        OutputMode.DexFilePerClassFile,
+        threads
+    )
 
-    private fun run(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, mode: OutputMode, threads: Int): ToolResult {
+    private fun run(
+        inputs: List<Path>,
+        classpath: List<Path>,
+        androidJar: Path,
+        minApi: Int,
+        release: Boolean,
+        outDir: Path,
+        mode: OutputMode,
+        threads: Int
+    ): ToolResult {
         Files.createDirectories(outDir)
         val programs = inputs.filter { Files.exists(it) }
-        if (programs.isEmpty()) return ToolResult.fail("no class inputs to dex")
-        // Collect D8's diagnostics so benign desugaring warnings (guava's MethodHandle helpers at a
-        // low min-api, etc.) don't spam the console; real warnings/errors are surfaced.
+        if (programs.isEmpty()) {
+            return ToolResult.fail("no class inputs to dex")
+        }
+
         val diagnostics = ArrayList<String>()
-        var suppressed = 0
+
         val handler = object : DiagnosticsHandler {
-            override fun info(d: Diagnostic) {}
-            override fun warning(d: Diagnostic) {
-                if (isBenignDexWarning(d.diagnosticMessage)) suppressed++ else diagnostics.add("warning: ${d.diagnosticMessage}")
+            override fun info(d: Diagnostic) {
+                diagnostics.add("info: ${d.diagnosticMessage}")
             }
-            override fun error(d: Diagnostic) { diagnostics.add("error: ${d.diagnosticMessage}") }
+
+            override fun warning(d: Diagnostic) {
+                diagnostics.add("warning: ${d.diagnosticMessage}")
+            }
+
+            override fun error(d: Diagnostic) {
+                diagnostics.add("error: ${d.diagnosticMessage}")
+            }
         }
         return try {
-            val builder = D8Command.builder(handler)
-                .addProgramFiles(programs)
-                .setMinApiLevel(minApi)
-                .setMode(if (release) CompilationMode.RELEASE else CompilationMode.DEBUG)
-                .setOutput(outDir, mode)
+            val builder =
+                D8Command.builder(handler)
+                    .addProgramFiles(programs)
+                    .setMinApiLevel(minApi)
+                    .setMode(if (release) CompilationMode.RELEASE else CompilationMode.DEBUG)
+                    .setOutput(outDir, mode)
             // Per-class-file output is an *intermediate* result: cross-class desugaring is deferred to the
             // merge (the merger gets the same library and finalizes it), exactly as AGP's archive→merge flow.
-            if (mode == OutputMode.DexFilePerClassFile) builder.setIntermediate(true)
-            classpath.filter { Files.exists(it) }.takeIf { it.isNotEmpty() }?.let { builder.addClasspathFiles(it) }
-            if (Files.exists(androidJar)) builder.addLibraryFiles(androidJar)
+            if (mode == OutputMode.DexFilePerClassFile) {
+                builder.setIntermediate(true)
+            }
+            classpath.filter { Files.exists(it) }.takeIf { it.isNotEmpty() }
+                ?.let { builder.addClasspathFiles(it) }
+
+            if (Files.exists(androidJar)) {
+                builder.addLibraryFiles(androidJar)
+            }
+
             val command = builder.build()
             // Bound D8's internal worker pool when the dex pipeline runs many invocations in parallel (the
             // builder has no setThreadCount on this r8 version, so cap via the executor overload instead).
             if (threads > 0) {
                 val pool = Executors.newFixedThreadPool(threads)
-                try { D8.run(command, pool) } finally { pool.shutdown() }
+                try {
+                    D8.run(command, pool)
+                } finally {
+                    pool.shutdown()
+                }
             } else {
                 D8.run(command)
             }
@@ -66,7 +118,6 @@ class D8InProcessDexer : Dexer {
             val summary = buildList {
                 add("D8 (in-process) $role ${programs.size} input(s) -> ${outDir.fileName}")
                 addAll(diagnostics)
-                if (suppressed > 0) add("($suppressed D8 desugaring warning(s) suppressed — library APIs needing a higher min-api; benign)")
             }
             ToolResult.ok(summary)
         } catch (t: Throwable) {

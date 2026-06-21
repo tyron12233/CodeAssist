@@ -101,7 +101,7 @@ class AnalysisEngine(
             val target = scope.targetFor(file)
             val raw = ArrayList<Diagnostic>()
             raw += collect(target, fileAnalyzers.filter { isEnabled(it) && matchesLanguage(it, environment.languageOf(file)) })
-            for (provider in diagnosticProviders) raw += provider.diagnose(target)
+            for (provider in diagnosticProviders) if (providerMatches(provider.languages, target.file)) raw += provider.diagnose(target)
             val kept = SuppressionFilter.from(target.parsed).retain(raw)
             if (kept.isNotEmpty()) perFile.getOrPut(file.path) { MutableEntry(file) }.diagnostics += kept
         }
@@ -220,7 +220,7 @@ class AnalysisEngine(
     private suspend fun runCompiler(target: AnalysisTarget) {
         if (diagnosticProviders.isEmpty()) return
         val raw = ArrayList<Diagnostic>()
-        for (provider in diagnosticProviders) raw += provider.diagnose(target)
+        for (provider in diagnosticProviders) if (providerMatches(provider.languages, target.file)) raw += provider.diagnose(target)
         record(target, PublishedState.Bucket.COMPILER, raw)
     }
 
@@ -284,7 +284,8 @@ class AnalysisEngine(
 
     private fun providerFixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
         val code = diagnostic.code ?: return emptyList()
-        return quickFixProviders.filter { code in it.forCodes }.flatMap { it.fixes(diagnostic, target) }
+        return quickFixProviders.filter { code in it.forCodes && providerMatches(it.languages, target.file) }
+            .flatMap { it.fixes(diagnostic, target) }
     }
 
     private fun notify(file: VirtualFile) {
@@ -304,6 +305,18 @@ class AnalysisEngine(
 
     private fun matchesLanguage(analyzer: Analyzer, language: LanguageId?): Boolean =
         language == null || language in analyzer.languages
+
+    /**
+     * Language gate for [DiagnosticProvider]/[QuickFixProvider], which (unlike [Analyzer]) use **empty =
+     * all languages**: a provider with no declared languages runs everywhere, otherwise only for files in
+     * one of its languages. Keeps a language-specific provider (the JDT compiler, the Kotlin/XML analyzers)
+     * off foreign files now that every language flows through the one pipeline.
+     */
+    private fun providerMatches(languages: Set<LanguageId>, file: VirtualFile): Boolean {
+        if (languages.isEmpty()) return true
+        val lang = environment.languageOf(file) ?: return true
+        return lang in languages
+    }
 
     private fun lintSink(analyzer: Analyzer, into: MutableMap<String, MutableEntry>) =
         object : ProjectDiagnosticSink {

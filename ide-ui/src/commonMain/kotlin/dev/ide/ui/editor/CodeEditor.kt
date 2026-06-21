@@ -101,6 +101,7 @@ import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.InlayPiece
@@ -1304,7 +1305,7 @@ private fun CodeEditorContent(
                 onDismissRequest = { sig.dismiss() },
                 properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
             ) {
-                SignatureHelpPopup(sigHelp)
+                SignatureHelpPopup(sigHelp, mobile = isMobilePlatform)
             }
         }
 

@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.DepsResolveState
+import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
@@ -81,9 +82,9 @@ private enum class DepView(val label: String, val icon: ImageVector) {
     List("List", CaIcons.resources), Tree("Tree", CaIcons.layers), Graph("Graph", CaIcons.gitBranch)
 }
 
-/** The Add flow can add a library/AAR, import a BOM as a platform (Gradle `platform(...)`), or depend on
- *  another module in the project. */
-private enum class AddMode(val label: String) { Library("Library"), Platform("Platform (BOM)"), Module("Module") }
+/** The Add flow can add a library/AAR, import a BOM as a platform (Gradle `platform(...)`), depend on
+ *  another module, or attach a local jar/aar file. */
+private enum class AddMode(val label: String) { Library("Library"), Platform("Platform (BOM)"), Module("Module"), Local("Local file") }
 
 /** A typed string is treated as a direct coordinate when it carries a `:` — `group:name[:version]`. */
 private fun looksLikeCoordinate(s: String): Boolean =
@@ -108,6 +109,7 @@ fun DependenciesPane(
     backend: IdeBackend,
     moduleName: String,
     codeFont: FontFamily = FontFamily.Monospace,
+    fileActions: FileActions = FileActions.None,
     modifier: Modifier = Modifier,
 ) {
     var view by remember { mutableStateOf(DepView.List) }
@@ -143,7 +145,7 @@ fun DependenciesPane(
         if (expanded) {
             DropdownOverlay(visible = addOpen, onDismiss = { addOpen = false }, topPadding = 64.dp) {
                 OverlayCard(maxWidth = 640.dp) {
-                    AddDependencyContent(backend, moduleName, codeFont, onResult, Modifier.padding(20.dp).fillMaxWidth())
+                    AddDependencyContent(backend, moduleName, codeFont, fileActions, onResult, Modifier.padding(20.dp).fillMaxWidth())
                 }
             }
             DropdownOverlay(visible = reposOpen, onDismiss = { reposOpen = false }, topPadding = 64.dp) {
@@ -153,7 +155,7 @@ fun DependenciesPane(
             }
         } else {
             BottomSheet(visible = addOpen, onDismiss = { addOpen = false }, heightFraction = 0.82f) {
-                AddDependencyContent(backend, moduleName, codeFont, onResult, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                AddDependencyContent(backend, moduleName, codeFont, fileActions, onResult, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
             }
             BottomSheet(visible = reposOpen, onDismiss = { reposOpen = false }, heightFraction = 0.7f) {
                 RepositoriesContent(backend, codeFont, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
@@ -421,8 +423,7 @@ private fun GraphRow(node: UiDependencyNode, nodesByCoord: Map<String, UiDepende
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DepBadge(node)
-            Text(coordLabel(node), color = Ca.colors.textPrimary, style = Ca.type.footnote.copy(fontFamily = codeFont),
-                fontWeight = if (node.declared) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Box(Modifier.weight(1f, fill = false)) { Column { DepPrimary(node, codeFont, dimmed = !node.declared); DepSubtitle(node) } }
             if (node.declared) Chip(node.scope ?: "declared", fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
             if (node.inConflict) Chip("conflict", fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
         }
@@ -458,12 +459,12 @@ private fun DependencyRow(
         else Spacer(Modifier.width(14.dp))
         DepBadge(node)
         Column(Modifier.weight(1f)) {
-            Text(coordLabel(node), color = if (node.compatible) Ca.colors.textPrimary else Ca.colors.error,
-                style = Ca.type.footnote.copy(fontFamily = codeFont), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            DepPrimary(node, codeFont)
             when {
                 !node.compatible && node.incompatibleReason != null ->
                     Text(node.incompatibleReason, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 cycle -> Text("cycle — already shown above", color = Ca.colors.warning, style = Ca.type.caption2)
+                else -> DepSubtitle(node)
             }
         }
         node.scope?.let { Chip(it, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
@@ -480,8 +481,10 @@ private fun TransitiveRow(node: UiDependencyNode, codeFont: FontFamily, depth: I
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         DepBadge(node, small = true)
-        Text(coordLabel(node), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont),
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            DepPrimary(node, codeFont, dimmed = true)
+            DepSubtitle(node)
+        }
         Text("transitive", color = Ca.colors.textTertiary, style = Ca.type.caption2)
     }
 }
@@ -493,6 +496,7 @@ private fun AddDependencyContent(
     backend: IdeBackend,
     moduleName: String,
     codeFont: FontFamily,
+    fileActions: FileActions,
     onResult: (UiAddResult) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -502,6 +506,7 @@ private fun AddDependencyContent(
     var searching by remember { mutableStateOf(false) }
     var scope by remember { mutableStateOf("implementation") }
     var moduleTargets by remember { mutableStateOf<List<String>>(emptyList()) }
+    var localCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf<String?>(null) }
@@ -511,14 +516,18 @@ private fun AddDependencyContent(
 
     LaunchedEffect(query, mode) {
         val q = query.trim()
-        if (q.length < 2 || mode == AddMode.Module) { results = emptyList(); return@LaunchedEffect }
+        if (q.length < 2 || mode == AddMode.Module || mode == AddMode.Local) { results = emptyList(); return@LaunchedEffect }
         searching = true
         delay(320)
-        results = runCatching { backend.searchArtifacts(q, moduleName) }.getOrDefault(emptyList())
+        // distinctBy coordinate: the same GAV can come back from more than one repo; duplicate keys crash the list.
+        results = runCatching { backend.searchArtifacts(q, moduleName) }.getOrDefault(emptyList()).distinctBy { it.coordinate }
         searching = false
     }
-    // Load candidate modules when the Module tab is selected.
-    LaunchedEffect(mode) { if (mode == AddMode.Module) moduleTargets = runCatching { backend.moduleDependencyTargets(moduleName) }.getOrDefault(emptyList()) }
+    // Load candidate modules / project-local jars when their tab is selected.
+    LaunchedEffect(mode) {
+        if (mode == AddMode.Module) moduleTargets = runCatching { backend.moduleDependencyTargets(moduleName) }.getOrDefault(emptyList())
+        if (mode == AddMode.Local) localCandidates = runCatching { backend.localLibraryCandidates(moduleName) }.getOrDefault(emptyList())
+    }
 
     // Add a versioned library/AAR, a BOM platform, or (Module mode) a module-on-module dependency.
     val performAdd: (String) -> Unit = { coordinate ->
@@ -527,10 +536,27 @@ private fun AddDependencyContent(
             val result = when (mode) {
                 AddMode.Platform -> backend.addPlatform(moduleName, coordinate)
                 AddMode.Module -> backend.addModuleDependency(moduleName, coordinate, scope)
+                AddMode.Local -> backend.addLocalLibrary(moduleName, coordinate, scope)
                 AddMode.Library -> backend.addDependency(moduleName, coordinate, scope)
             }
             busy = false; adding = null
             if (result.success) onResult(result) else error = result.message
+        }
+    }
+
+    // Pick a jar/aar via the platform file picker; it's copied into the module's libs/ then attached.
+    val pickLocalFile = {
+        val dropDir = backend.localLibraryDropDir(moduleName)
+        if (dropDir != null) fileActions.importInto(dropDir) { imported ->
+            if (imported.isNotEmpty()) {
+                busy = true; error = null; adding = imported.first().substringAfterLast('/').substringAfterLast('\\')
+                coroutine.launch {
+                    var last: UiAddResult? = null
+                    for (p in imported) { last = backend.addLocalLibrary(moduleName, p, scope); if (last?.success != true) break }
+                    busy = false; adding = null
+                    last?.let { if (it.success) onResult(it) else error = it.message }
+                }
+            }
         }
     }
 
@@ -542,8 +568,8 @@ private fun AddDependencyContent(
             AddMode.entries.forEach { m -> ModeChip(m.label, m == mode) { if (!busy) { mode = m; error = null } } }
         }
 
-        // search field — library/platform only (Module mode picks from the project's other modules)
-        if (mode != AddMode.Module) Row(
+        // search field — library/platform only (Module picks project modules; Local picks files)
+        if (mode != AddMode.Module && mode != AddMode.Local) Row(
             Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
                 .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -591,6 +617,14 @@ private fun AddDependencyContent(
                         ModuleTargetRow(target, Modifier.animateItem()) { performAdd(target) }
                     }
                 }
+            } else if (mode == AddMode.Local) {
+                LocalLibraryBody(
+                    candidates = localCandidates,
+                    canPick = fileActions.canImport && backend.localLibraryDropDir(moduleName) != null,
+                    codeFont = codeFont,
+                    onPick = pickLocalFile,
+                    onAttach = { path -> performAdd(path) },
+                )
             } else {
                 val typed = query.trim()
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
@@ -645,6 +679,68 @@ private fun DirectAddRow(coordinate: String, mode: AddMode, codeFont: FontFamily
             )
         }
         IconButtonCa(CaIcons.plus, "Add $coordinate", onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
+    }
+}
+
+/**
+ * The Local-file add mode: pick a `.jar`/`.aar` from the device (copied into the module's `libs/`), or
+ * attach one already in the project tree (e.g. imported earlier). AAR compatibility is enforced by the
+ * backend; rejected picks surface as the inline error.
+ */
+@Composable
+private fun LocalLibraryBody(
+    candidates: List<String>,
+    canPick: Boolean,
+    codeFont: FontFamily,
+    onPick: () -> Unit,
+    onAttach: (String) -> Unit,
+) {
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (canPick) item("pick") {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                    .background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.md))
+                    .clickable(remember { MutableInteractionSource() }, null, onClick = onPick)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(CaIcons.plus, null, Modifier.size(18.dp), tint = Ca.colors.accent)
+                Column(Modifier.weight(1f)) {
+                    Text("Choose a .jar or .aar file", color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                    Text("Copied into the module's libs/ folder", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                }
+            }
+        }
+        if (candidates.isNotEmpty()) {
+            item("from-project") {
+                Text("Already in the project", color = Ca.colors.textTertiary, style = Ca.type.caption,
+                    fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+            }
+            items(candidates, key = { "local:$it" }) { path ->
+                LocalCandidateRow(path, codeFont, Modifier.animateItem()) { onAttach(path) }
+            }
+        }
+        if (!canPick && candidates.isEmpty()) item("empty") {
+            EmptyRow("No local jars/aars found. Import one into the project, or open this on a device to pick a file.")
+        }
+    }
+}
+
+/** A `.jar`/`.aar` file already in the project tree, offered for one-tap attach as a local library. */
+@Composable
+private fun LocalCandidateRow(path: String, codeFont: FontFamily, modifier: Modifier, onAttach: () -> Unit) {
+    val fileName = path.substringAfterLast('/').substringAfterLast('\\')
+    val isAar = fileName.endsWith(".aar", ignoreCase = true)
+    Row(
+        modifier.fillMaxWidth().height(52.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAttach).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LetterBox(if (isAar) "A" else "J", if (isAar) Ca.colors.run else Ca.colors.warning)
+        Column(Modifier.weight(1f)) {
+            Text(fileName, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(path, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButtonCa(CaIcons.plus, "Attach $fileName", onClick = onAttach, active = true, boxSize = 32, iconSize = 18)
     }
 }
 
@@ -822,10 +918,50 @@ private fun EmptyRow(text: String) {
     }
 }
 
-private fun coordLabel(node: UiDependencyNode): String = when {
-    node.kind == UiDepKind.Module -> ":${node.name}"
-    node.group.isEmpty() || node.version.isEmpty() -> node.name
-    else -> "${node.group}:${node.name}:${node.version}"
+/**
+ * A dependency's identity, laid out for readability instead of one run-on `group:name:version` string:
+ * the artifact **name** reads first (bold for a declared root, dimmed for a transitive), the **version**
+ * sits beside it as a subtle monospace tag, and the **group** (or a "module"/"local"/"BOM" descriptor)
+ * is the dimmed subtitle on the line below ([DepSubtitle]).
+ */
+@Composable
+private fun DepPrimary(node: UiDependencyNode, codeFont: FontFamily, dimmed: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            primaryName(node),
+            color = if (!node.compatible) Ca.colors.error else if (dimmed) Ca.colors.textSecondary else Ca.colors.textPrimary,
+            style = Ca.type.footnote.copy(fontFamily = codeFont),
+            fontWeight = if (node.declared) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+        )
+        if (node.version.isNotEmpty()) VersionTag(node.version, codeFont)
+    }
+}
+
+@Composable
+private fun DepSubtitle(node: UiDependencyNode) {
+    depSubtitle(node)?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+}
+
+/** A small, dimmed monospace tag for a dependency's version, kept visually separate from its name. */
+@Composable
+private fun VersionTag(version: String, codeFont: FontFamily) {
+    Box(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.xs)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+        Text(version, color = Ca.colors.textSecondary, style = Ca.type.caption2.copy(fontFamily = codeFont))
+    }
+}
+
+/** The primary label: a module reads as `:name`; everything else by its artifact/file name. */
+private fun primaryName(node: UiDependencyNode): String =
+    if (node.kind == UiDepKind.Module) ":${node.name}" else node.name
+
+/** The dimmed subtitle: the Maven group, or a kind descriptor when there's no group. */
+private fun depSubtitle(node: UiDependencyNode): String? = when {
+    node.kind == UiDepKind.Module -> "module"
+    node.kind == UiDepKind.Platform -> node.group.ifEmpty { "platform (BOM)" }
+    node.local -> if (node.kind == UiDepKind.Aar) "local aar" else "local jar"
+    node.group.isNotEmpty() -> node.group
+    else -> null
 }
 
 private fun shortCoord(coord: String): String = coord.split(":").let { if (it.size >= 3) "${it[1]}:${it[2]}" else coord }

@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiFacetConfig
@@ -99,13 +100,14 @@ fun ModuleConfigScreen(
     initialTab: ModulesTab = ModulesTab.Settings,
     onBack: () -> Unit,
     codeFont: FontFamily = FontFamily.Monospace,
+    fileActions: FileActions = FileActions.None,
 ) {
     var selected by remember { mutableStateOf(initialModule) }
     val module = selected
     if (module == null) {
         ModulesList(backend, codeFont, onOpen = { selected = it }, onBack = onBack)
     } else {
-        ModuleDetail(backend, module, initialTab, codeFont, onBack = { selected = null })
+        ModuleDetail(backend, module, initialTab, codeFont, fileActions, onBack = { selected = null })
     }
 }
 
@@ -206,7 +208,7 @@ private fun ModuleListItem(module: UiModuleRef, onOpen: () -> Unit, onRemove: ()
 // ---- module detail (Settings | Dependencies) ---------------------------------------------------
 
 @Composable
-private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: ModulesTab, codeFont: FontFamily, onBack: () -> Unit) {
+private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: ModulesTab, codeFont: FontFamily, fileActions: FileActions, onBack: () -> Unit) {
     var tab by remember(moduleName) { mutableStateOf(initialTab) }
     Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -215,7 +217,7 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
             when (tab) {
                 ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
-                ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
+                ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, fileActions, Modifier.weight(1f).fillMaxWidth())
             }
         }
     }

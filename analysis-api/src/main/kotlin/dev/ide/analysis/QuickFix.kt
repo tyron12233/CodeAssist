@@ -61,6 +61,11 @@ interface QuickFixProvider {
     /** Diagnostic codes this provider offers fixes for, e.g. `{ Codes.UNRESOLVED_REFERENCE }`. */
     val forCodes: Set<String>
 
+    /** Languages this provider applies to; **empty = all languages**. Lets a code-keyed fix stay
+     *  language-scoped even when several languages emit a diagnostic sharing the code (e.g. Java's
+     *  "Add import" on `UNRESOLVED_REFERENCE` must not attach to a Kotlin/XML diagnostic of the same code). */
+    val languages: Set<LanguageId> get() = emptySet()
+
     fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix>
 }
 

@@ -1,7 +1,9 @@
 package dev.ide.build.engine
 
+import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildOutcome
 import dev.ide.build.CyclicTaskDependencyException
+import dev.ide.build.DiagnosticSink
 import dev.ide.build.Task
 import dev.ide.build.TaskContainer
 import dev.ide.build.TaskContext
@@ -276,7 +278,23 @@ class TaskExecutorImpl(
             }
         }
         onEvent(t.name, TaskStatus.Running)
-        when (val r = t.execute(ctx)) {
+        // A task is expected to signal failure by returning TaskResult.Failed. An *unexpected* throwable
+        // (e.g. a tool that blows up instead of reporting) would otherwise escape this coroutine, cancel the
+        // whole scope, and be discarded by the caller — the build would look stuck or fail with no message.
+        // Convert it into a reported Failed here so the cause always reaches the build log. Cooperative
+        // cancellation (stopBuild) is re-thrown so the executor still unwinds cleanly.
+        val r = try {
+            t.execute(perTask(ctx, t))
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            throw c
+        } catch (e: Throwable) {
+            failed.add(t.name)
+            ctx.logger()("FAILED ${t.name.value}: ${e.message ?: e.toString()}")
+            e.stackTrace.take(20).forEach { ctx.logger()("\tat $it") }
+            onEvent(t.name, TaskStatus.Failed)
+            return
+        }
+        when (r) {
             is TaskResult.Failed -> {
                 failed.add(t.name); ctx.logger()("FAILED ${t.name.value}: ${r.message}"); onEvent(t.name, TaskStatus.Failed)
             }
@@ -290,11 +308,30 @@ class TaskExecutorImpl(
             }
         }
     }
+
+    /**
+     * A per-task view of [ctx] whose [TaskContext.diagnostics] stamps each reported diagnostic with the
+     * running task before forwarding — so producers never have to know their own [TaskName] and the host
+     * always gets a correctly-attributed stream. Progress/logger/cancel delegate straight through.
+     */
+    private fun perTask(ctx: TaskContext, t: Task): TaskContext = object : TaskContext {
+        override val progress get() = ctx.progress
+        override fun checkCanceled() = ctx.checkCanceled()
+        override fun logger() = ctx.logger()
+        override val diagnostics = DiagnosticSink { d ->
+            ctx.diagnostics.report(if (d.task == null) d.copy(task = t.name) else d)
+        }
+    }
 }
 
-/** A no-frills [TaskContext]: a sink logger + a progress reporter, optionally cancellable via [canceled]. */
+/**
+ * A no-frills [TaskContext]: a sink logger, a structured-diagnostic sink, and a progress reporter,
+ * optionally cancellable via [canceled]. [onDiagnostic] receives every diagnostic a task streams (already
+ * task-tagged by the engine); it defaults to a no-op so a text-only caller can ignore the channel.
+ */
 class SimpleTaskContext(
     private val log: (String) -> Unit = {},
+    private val onDiagnostic: (BuildDiagnostic) -> Unit = {},
     @Volatile var canceled: Boolean = false,
 ) : TaskContext {
     override val progress: ProgressReporter = object : ProgressReporter {
@@ -304,4 +341,5 @@ class SimpleTaskContext(
     }
     override fun checkCanceled() { if (canceled) throw kotlinx.coroutines.CancellationException("canceled") }
     override fun logger(): (String) -> Unit = log
+    override val diagnostics = DiagnosticSink { onDiagnostic(it) }
 }

@@ -42,11 +42,13 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.BuildStepUi
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.StepStatus
+import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 
@@ -66,14 +68,108 @@ fun BuildConsole(
     onStop: () -> Unit,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenDiagnostic: (BuildDiagnosticUi) -> Unit = {},
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Header(buildState, onRun, onStop, onCollapse)
         IndexingSection(indexStatus)
         buildState.banner?.let { FirstBuildBanner(it) }
         StepGraph(buildState.steps, buildState.status)
+        ProblemsSection(buildState.diagnostics, onOpenDiagnostic)
         LogBody(buildState.log)
     }
+}
+
+/**
+ * The structured diagnostics a build streamed (see [BuildDiagnosticUi]), grouped by file with a
+ * severity-count summary — the build console's "Problems" view. Each row is click-to-open at its line.
+ * Errors sort first; un-located tool messages (a dexer summary) land under a "General" bucket. Like the
+ * step graph it's collapsible + height-capped so the raw log below always keeps its space; it
+ * auto-expands when the build fails so the errors are foremost. Empty diagnostics → renders nothing.
+ */
+@Composable
+private fun ProblemsSection(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiagnosticUi) -> Unit) {
+    if (diagnostics.isEmpty()) return
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    val errors = diagnostics.count { it.severity == UiSeverity.Error }
+    val warnings = diagnostics.count { it.severity == UiSeverity.Warning }
+    // Stable grouping: located diagnostics by file (errors-first within), then the un-located bucket last.
+    val groups = remember(diagnostics) {
+        diagnostics.withIndex()
+            .sortedWith(compareBy({ it.value.severity != UiSeverity.Error }, { it.index }))
+            .groupBy { it.value.file ?: "" }
+            .map { (file, items) -> file to items.map { it.value } }
+            .sortedBy { it.first.isEmpty() } // "" (General) sinks to the bottom
+    }
+
+    Column {
+        Row(
+            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+            Text("Problems", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.weight(1f))
+            if (errors > 0) Text("$errors error${if (errors == 1) "" else "s"}", color = Ca.colors.error, style = Ca.type.caption)
+            if (warnings > 0) Text("$warnings warning${if (warnings == 1) "" else "s"}", color = Ca.colors.warning, style = Ca.type.caption)
+        }
+        AnimatedVisibility(expanded) {
+            Column(
+                Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                for ((file, items) in groups) {
+                    if (file.isNotEmpty()) ProblemFileHeader(file, items.size)
+                    for (d in items) ProblemRow(d, indented = file.isNotEmpty(), onOpen)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProblemFileHeader(file: String, count: Int) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(CaIcons.file, null, Modifier.size(13.dp), tint = Ca.colors.textTertiary)
+        Text(file.substringAfterLast('/').substringAfterLast('\\'), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text("$count", color = Ca.colors.textTertiary, style = Ca.type.caption)
+    }
+}
+
+@Composable
+private fun ProblemRow(d: BuildDiagnosticUi, indented: Boolean, onOpen: (BuildDiagnosticUi) -> Unit) {
+    val clickable = d.file != null
+    Row(
+        Modifier.fillMaxWidth()
+            .then(if (clickable) Modifier.clickable { onOpen(d) } else Modifier)
+            .padding(start = if (indented) 19.dp else 0.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(severityIcon(d.severity), null, Modifier.size(14.dp).padding(top = 1.dp), tint = severityColor(d.severity))
+        Text(d.message, color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f))
+        if (d.line > 0) Text(":${d.line}", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+        Text(d.source.ifEmpty { d.kind }, color = Ca.colors.textTertiary, style = Ca.type.caption)
+    }
+}
+
+@Composable
+private fun severityIcon(s: UiSeverity) = when (s) {
+    UiSeverity.Error -> CaIcons.error
+    UiSeverity.Warning -> CaIcons.warning
+    else -> CaIcons.info
+}
+
+@Composable
+private fun severityColor(s: UiSeverity): Color = when (s) {
+    UiSeverity.Error -> Ca.colors.error
+    UiSeverity.Warning -> Ca.colors.warning
+    else -> Ca.colors.accent
 }
 
 /**

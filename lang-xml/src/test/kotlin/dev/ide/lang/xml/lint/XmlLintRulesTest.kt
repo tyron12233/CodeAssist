@@ -1,4 +1,4 @@
-package dev.ide.core
+package dev.ide.lang.xml.lint
 
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.incremental.DocumentSnapshot
@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Unit tests for the pure phase-4 XML lint detection (no IDE bootstrap). */
+/** Unit tests for the pure XML lint detection (no IDE bootstrap). */
 class XmlLintRulesTest {
 
     private fun parse(xml: String): ParsedFile = XmlIncrementalParser().parseFull(Doc(xml))

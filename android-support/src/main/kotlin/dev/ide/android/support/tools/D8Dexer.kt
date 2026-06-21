@@ -15,26 +15,64 @@ class D8Dexer(
     private val javaLauncher: Path,
 ) : Dexer {
 
-    override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
-        run(inputs, emptyList(), androidJar, minApi, release, outDir, archive = false, threads = threads)
+    override fun dex(
+        inputs: List<Path>,
+        androidJar: Path,
+        minApi: Int,
+        release: Boolean,
+        outDir: Path,
+        threads: Int
+    ): ToolResult = run(
+        inputs, emptyList(), androidJar, minApi, release, outDir, archive = false, threads = threads
+    )
 
-    override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult =
-        run(inputs, classpath, androidJar, minApi, release, outDir, archive = true, threads = threads)
+    override fun dexArchive(
+        inputs: List<Path>,
+        classpath: List<Path>,
+        androidJar: Path,
+        minApi: Int,
+        release: Boolean,
+        outDir: Path,
+        threads: Int
+    ): ToolResult = run(
+        inputs, classpath, androidJar, minApi, release, outDir, archive = true, threads = threads
+    )
 
-    private fun run(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, archive: Boolean, threads: Int): ToolResult {
+    private fun run(
+        inputs: List<Path>,
+        classpath: List<Path>,
+        androidJar: Path,
+        minApi: Int,
+        release: Boolean,
+        outDir: Path,
+        archive: Boolean,
+        threads: Int
+    ): ToolResult {
         Files.createDirectories(outDir)
         val existing = inputs.filter { Files.exists(it) }
         if (existing.isEmpty()) return ToolResult.fail("no class inputs to dex")
         val cmd = buildList {
-            add(javaLauncher.toString()); add("-cp"); add(d8Jar.toString()); add("com.android.tools.r8.D8")
+            add(javaLauncher.toString());
+            add("-cp");
+            add(d8Jar.toString());
+            add("com.android.tools.r8.D8")
             add(if (release) "--release" else "--debug")
             // Archive mode = one intermediate .dex per input class file (D8 OutputMode.DexFilePerClassFile),
             // the per-class dexing dexBuilder runs; merge resolves the intermediates.
-            if (archive) { add("--file-per-class-file"); add("--intermediate") }
+            if (archive) {
+                add("--file-per-class-file");
+                add("--intermediate")
+            }
             // Desugaring classpath for an incremental subset (types not (re-)dexed but needed to desugar).
-            classpath.filter { Files.exists(it) }.forEach { add("--classpath"); add(it.toString()) }
-            add("--min-api"); add(minApi.toString())
-            if (threads > 0) { add("--thread-count"); add(threads.toString()) }
+            classpath.filter { Files.exists(it) }.forEach {
+                add("--classpath");
+                add(it.toString())
+            }
+            add("--min-api");
+            add(minApi.toString())
+            if (threads > 0) {
+                add("--thread-count"); add(threads.toString())
+            }
             add("--lib"); add(androidJar.toString())
             add("--output"); add(outDir.toString())
             addAll(existing.map { it.toString() })

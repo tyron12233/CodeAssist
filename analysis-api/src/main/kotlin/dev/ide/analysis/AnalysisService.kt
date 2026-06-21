@@ -1,5 +1,6 @@
 package dev.ide.analysis
 
+import dev.ide.lang.LanguageId
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.platform.Disposable
@@ -23,6 +24,12 @@ import dev.ide.vfs.VirtualFile
  */
 interface DiagnosticProvider {
     val id: String
+
+    /** Languages this provider applies to; **empty = all languages**. The engine skips it for files in
+     *  any other language, so a language-specific provider (the JDT compiler, the Kotlin/XML analyzers)
+     *  no longer runs on foreign files once the pipeline is multi-language. */
+    val languages: Set<LanguageId> get() = emptySet()
+
     suspend fun diagnose(target: AnalysisTarget): List<Diagnostic>
 }
 

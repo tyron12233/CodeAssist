@@ -89,6 +89,7 @@ internal class KotlinCompileTask(
         val kt = kotlinSourceFiles(module)
         if (kt.isEmpty()) return TaskResult.Success
         val r = compile.compile(kt, sourceFiles(module), classpath(), out, levelOf(module.languageLevel))
+        ctx.reportToolDiagnostics("kotlin", r.messages)
         ctx.logger()(":${module.name}:compileKotlin ${if (r.success) "OK" else "FAILED"}")
         return if (r.success) TaskResult.Success
         else TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "kotlin compilation failed" })

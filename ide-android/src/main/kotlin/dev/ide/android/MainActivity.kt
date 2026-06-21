@@ -53,11 +53,11 @@ class MainActivity : ComponentActivity() {
     private val inbound = mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        MainThreadGuard.install()
         enableEdgeToEdge()
 
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
+
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
             var error by remember { mutableStateOf<String?>(null) }

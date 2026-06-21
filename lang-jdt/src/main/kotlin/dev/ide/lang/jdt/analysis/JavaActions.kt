@@ -1,4 +1,4 @@
-package dev.ide.core
+package dev.ide.lang.jdt.analysis
 
 import dev.ide.analysis.ActionProvider
 import dev.ide.analysis.AnalysisTarget
@@ -24,13 +24,13 @@ import dev.ide.lang.incremental.DocumentEdit
  *
  *  - [QuickFixProvider]s keyed by [Diagnostic.code]: "Add import" on an unresolved reference, "Remove
  *    unused import" on the unused-import warning. The compiler/analyzer stays fix-agnostic; these attach
- *    by code.
+ *    by code (and declare `languages = {java}` so the same code from another language won't pick them up).
  *  - [ActionProvider]s keyed by caret/selection position: "Introduce local variable", "Surround with
  *    try/catch". No diagnostic needed; the engine unions them with the quick-fixes in
  *    `AnalysisService.editorActionsAt`.
  *
- * Registered with the [dev.ide.analysis.impl.AnalysisEngine] in [IdeServices]; surfaced to the editor
- * lightbulb / Alt-Enter menu through `IdeBackend.actionsAt` / `applyAction`.
+ * Contributed through [JdtAnalysisSupport.register]; surfaced to the editor lightbulb / Alt-Enter menu
+ * through `IdeBackend.actionsAt` / `applyAction`.
  */
 private val JAVA = LanguageId("java")
 private val CLASS_NAMES = IndexId("java.classNames")
@@ -46,6 +46,7 @@ private val CLASS_NAMES = IndexId("java.classNames")
  */
 class AddImportQuickFixProvider : QuickFixProvider {
     override val forCodes = setOf(Codes.UNRESOLVED_REFERENCE)
+    override val languages = setOf(JAVA)
 
     override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
         val text = target.parsed.text()
@@ -84,6 +85,7 @@ class AddImportQuickFixProvider : QuickFixProvider {
 /** On the unused-import warning, delete the whole import line. Keyed on [UnusedImportAnalyzer]'s code. */
 class RemoveUnusedImportQuickFixProvider : QuickFixProvider {
     override val forCodes = setOf("java.unusedImport")
+    override val languages = setOf(JAVA)
 
     override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> = listOf(
         object : QuickFix {

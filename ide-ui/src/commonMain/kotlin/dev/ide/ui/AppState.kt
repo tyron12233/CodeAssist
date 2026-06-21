@@ -144,6 +144,15 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
         active?.session?.setCaret(offset) // setCaret coerces into the buffer
     }
 
+    /** Open [path] and move the caret to 1-based [line]/[column] — the build console's jump-to-diagnostic. */
+    fun openAtLine(path: String, line: Int, column: Int) {
+        val name = path.substringAfterLast('/').substringAfterLast('\\')
+        open(path, name)
+        val session = active?.session ?: return
+        val base = session.doc.lineStart((line - 1).coerceAtLeast(0))
+        session.setCaret(base + (column - 1).coerceAtLeast(0)) // setCaret coerces into the buffer
+    }
+
     fun close(file: OpenFile) {
         val idx = openFiles.indexOf(file)
         if (idx < 0) return

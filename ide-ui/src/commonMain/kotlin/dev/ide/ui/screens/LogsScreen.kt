@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
@@ -150,7 +150,10 @@ fun LogsScreen(
             }
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp)) {
-                items(shown, key = { it.timestampMs.toString() + it.tag + it.message.hashCode() }) { LogRow(it) }
+                itemsIndexed(
+                    shown,
+                    key = { index, it -> "$index:${it.timestampMs}:${it.tag}:${it.message.hashCode()}" },
+                ) { _, it -> LogRow(it) }
             }
         }
     }

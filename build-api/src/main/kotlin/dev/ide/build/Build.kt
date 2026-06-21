@@ -115,6 +115,13 @@ interface TaskContext {
     val progress: ProgressReporter
     fun checkCanceled()
     fun logger(): (String) -> Unit
+
+    /**
+     * Structured diagnostics streamed as the task runs (see [BuildDiagnostic]). Defaults to a no-op so
+     * every existing [TaskContext] stays source-compatible; the engine wires a real sink that tags each
+     * diagnostic with the running task and forwards it to the host.
+     */
+    val diagnostics: DiagnosticSink get() = DiagnosticSink.NOOP
 }
 
 sealed interface TaskResult {

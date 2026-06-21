@@ -10,9 +10,11 @@ import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
+import dev.ide.build.DiagnosticKind
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.JavaCompile
 import dev.ide.build.engine.KotlinCompile
+import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.TaskInputsImpl
 import dev.ide.build.engine.TaskOutputsImpl
 import kotlinx.coroutines.Dispatchers
@@ -199,12 +201,14 @@ internal class GenerateLibraryRTask(
         val m = if (Files.isRegularFile(manifest)) manifest else synthesizeManifest()
         val compile = aapt2.compile(resDirs, compiledResDir)
         compile.result.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("aapt2", compile.result.log, DiagnosticKind.RESOURCE)
         if (!compile.result.success) return TaskResult.Failed("aapt2 compile (library R) failed")
         val r = aapt2.link(
             compile.archives, m, androidJar, packageName, emptyList(), minSdk, minSdk, genDir, throwawayAp,
             nonFinalIds = true,
         )
         r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link (library R) failed")
     }
 
@@ -231,6 +235,7 @@ internal class Aapt2CompileTask(
         Files.createDirectories(outDir)
         val r = aapt2.compile(resDirs, outDir)
         r.result.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("aapt2", r.result.log, DiagnosticKind.RESOURCE)
         return if (r.result.success) TaskResult.Success else TaskResult.Failed("aapt2 compile failed")
     }
 }
@@ -276,6 +281,7 @@ internal class Aapt2LinkTask(
         ctx.checkCanceled()
         val r = aapt2.link(archives(), manifest, androidJar, customPackage, extraPackages, minSdk, targetSdk, genJavaDir, resourcesAp, versionCode, versionName)
         r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
     }
 }
@@ -310,6 +316,7 @@ internal class AndroidCompileTask(
         if (srcs.isEmpty()) return TaskResult.Success
         val r = compile.compile(srcs, classpath, outClasses, level)
         r.messages.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("java", r.messages)
         return if (r.success) TaskResult.Success
         else TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "compilation failed" })
     }
@@ -351,6 +358,7 @@ internal class AndroidKotlinCompileTask(
         if (kt.isEmpty()) return TaskResult.Success
         val r = compile.compile(kt, javaSources(), classpath, outClasses, level)
         r.messages.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("kotlin", r.messages)
         return if (r.success) TaskResult.Success
         else TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "kotlin compilation failed" })
     }
@@ -481,7 +489,8 @@ internal class DexArchiveBuilderTask(
             classpath.addAll(classpathFor(universeByHash.values, classesOf, exclude = current.keys))
             val r = dexer.dexArchive(listOf(changedJar), classpath, androidJar, minApi, release, projectDexRoot,
                 threads = DexConcurrency.plan(1).threadsPerInvocation)
-            r.log.forEach(ctx.logger()); if (!r.success) { ok = false; ctx.logger()("dex archive failed for project classes") }
+            r.log.forEach(ctx.logger()); ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
+            if (!r.success) { ok = false; ctx.logger()("dex archive failed for project classes") }
         }
         // Verify every (re)dexed class actually produced a `.dex`. A dexer can report success yet silently drop
         // a class it couldn't process (e.g. D8 choking on Kotlin metadata newer than it supports) — which would
@@ -582,6 +591,7 @@ internal class DexArchiveBuilderTask(
         DexArchives.clearDir(bucket); Files.createDirectories(bucket)
         val r = dexer.dexArchive(listOf(jar), classpath, androidJar, minApi, release, bucket, threads)
         r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
         if (!r.success) { ctx.logger()("dex archive failed for ${jar.fileName}"); return false }
         if (shared != null && !DexArchives.hasDex(shared)) DexArchives.publishToCache(bucket, shared)
         return true
@@ -899,6 +909,7 @@ internal class DexMergeTask(
                                 val group = outDexDir.resolve("g$i"); Files.createDirectories(group)
                                 val r = dexer.dex(dexes, androidJar, minApi, release, group, plan.threadsPerInvocation)
                                 r.log.forEach(ctx.logger())
+                                ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
                                 if (!r.success) ok.set(false)
                             }
                         }
@@ -912,6 +923,7 @@ internal class DexMergeTask(
         if (dexes.isEmpty()) return TaskResult.Success
         val r = dexer.dex(dexes, androidJar, minApi, release, outDexDir, DexConcurrency.plan(1).threadsPerInvocation)
         r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
         if (!r.success) return TaskResult.Failed("dex merge failed")
         val produced = dexesIn(outDexDir).size
         ctx.logger()("${name.value}: merged ${dexes.size} class dex -> $produced output dex")
@@ -962,6 +974,7 @@ internal class R8MinifyTask(
         val r = shrinker.shrink(inputs, androidJar, keepRules, minApi, release = true, outDexDir,
             threads = DexConcurrency.plan(1).threadsPerInvocation)
         r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("r8", r.log, DiagnosticKind.DEX)
         return if (r.success) TaskResult.Success else TaskResult.Failed("R8 minify failed")
     }
 }
@@ -1014,6 +1027,7 @@ internal class SignApkTask(
         ctx.checkCanceled()
         val r = signer.sign(unsignedApk, signedApk, config)
         r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("apksigner", r.log, DiagnosticKind.PACKAGING)
         return if (r.success) TaskResult.Success else TaskResult.Failed("apk signing failed")
     }
 }

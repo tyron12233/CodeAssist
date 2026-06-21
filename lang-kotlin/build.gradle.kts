@@ -13,6 +13,7 @@ plugins {
 dependencies {
     api(project(":language-api"))            // the SPI (+ project-model-api / vfs-api / platform-core, transitively)
     implementation(project(":index-api"))    // Java/Android interop: member & type shape via the shared indexes
+    implementation(project(":analysis-api")) // owns the Kotlin diagnostic + import-fix providers
 
     // The Kotlin frontend's PARSER only — a resolution-free standalone PSI host (text -> KtFile). We never
     // build a BindingContext or run the analyzer; all semantics are ours. compiler-embeddable bundles the

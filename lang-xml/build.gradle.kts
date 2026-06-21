@@ -13,6 +13,7 @@ plugins {
 dependencies {
     api(project(":language-api"))
     implementation(project(":index-api"))
+    implementation(project(":analysis-api")) // owns the XML lint diagnostic provider (host data via XmlResourceHost)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

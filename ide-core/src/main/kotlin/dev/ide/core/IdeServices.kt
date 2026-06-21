@@ -35,12 +35,15 @@ import dev.ide.index.IndexService
 import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidVariants
+import dev.ide.android.support.tools.AarExtractor
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
+import dev.ide.build.BuildSeverity
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.TaskGraph
 import dev.ide.build.VariantSelector
@@ -159,6 +162,7 @@ import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticClassContext
 import dev.ide.platform.ProgressReporter
+import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.BuildStepUi
 import dev.ide.ui.backend.DepsResolveState
@@ -167,6 +171,7 @@ import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.UiPermissionDecision
 import dev.ide.ui.backend.UiPermissionRequest
+import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.StepStatus
 import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
@@ -840,7 +845,7 @@ class IdeServices private constructor(
             .any { root -> Files.walk(root).use { s -> s.anyMatch { p -> p.toString().endsWith(".kt") } } }
 
     private fun fail(message: String) {
-        _buildState.value = BuildState(RunStatus.Failed, "", emptyList(), listOf(message), 0)
+        _buildState.value = BuildState(RunStatus.Failed, "", emptyList(), listOf(message), elapsedMs = 0)
     }
 
     /**
@@ -869,9 +874,12 @@ class IdeServices private constructor(
      *  launch an APK) runs after a successful build, receiving the console log appender. */
     private fun launch(moduleName: String, graph: TaskGraph, header: String, banner: String? = null, onSuccess: (suspend (log: (String) -> Unit) -> Unit)? = null) {
         val order = graph.topologicalLevels().flatten().map { BuildStepUi(it.name.value, StepStatus.Pending) }
-        _buildState.value = BuildState(RunStatus.Running, moduleName, order, listOf(header), 0, banner)
+        _buildState.value = BuildState(RunStatus.Running, moduleName, order, listOf(header), elapsedMs = 0, banner = banner)
         val start = System.currentTimeMillis()
-        val ctx = SimpleTaskContext(log = { line -> _buildState.update { it.copy(log = it.log + line) } })
+        val ctx = SimpleTaskContext(
+            log = { line -> _buildState.update { it.copy(log = it.log + line) } },
+            onDiagnostic = { d -> _buildState.update { it.copy(diagnostics = it.diagnostics + d.toUi()) } },
+        )
         buildCtx = ctx
         // Arm the run-time guard for this run: fresh per-run decisions + this engine's broker. Only the
         // in-process dex-run executes instrumented code that consults it; other graphs never touch it.
@@ -883,7 +891,16 @@ class IdeServices private constructor(
             }
         })
         buildJob = indexScope.launch {
-            val outcome = runCatching { exec.execute(graph, ctx, maxParallel = 2) }.getOrNull()
+            val outcome = try {
+                exec.execute(graph, ctx, maxParallel = 2)
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (e: Throwable) {
+                // The executor reports per-task failures itself; this only catches anything that still escaped,
+                // so the build never ends as a silent failure with an empty log.
+                ctx.logger()("Build failed: ${e.message ?: e.toString()}")
+                null
+            }
             Guards.broker = null
             _permissionRequest.value = null
             if (outcome?.succeeded == true && onSuccess != null) {
@@ -908,6 +925,23 @@ class IdeServices private constructor(
         _permissionRequest.value = null
         _buildState.update { if (it.status == RunStatus.Running) it.copy(status = RunStatus.Failed, log = it.log + "Stopped.") else it }
     }
+
+    /** A build-engine [BuildDiagnostic] → the UI DTO (paths/ids as plain strings for the surface-agnostic UI). */
+    private fun BuildDiagnostic.toUi(): BuildDiagnosticUi = BuildDiagnosticUi(
+        severity = when (severity) {
+            BuildSeverity.ERROR -> UiSeverity.Error
+            BuildSeverity.WARNING -> UiSeverity.Warning
+            BuildSeverity.INFO -> UiSeverity.Info
+        },
+        message = message,
+        kind = kind.id,
+        source = source,
+        file = location?.path,
+        line = location?.line ?: -1,
+        column = location?.column ?: -1,
+        detail = detail,
+        task = task?.value,
+    )
 
     private fun mapStatus(status: TaskStatus): StepStatus = when (status) {
         TaskStatus.Running -> StepStatus.Running
@@ -1259,6 +1293,7 @@ class IdeServices private constructor(
                         coordinate = entry.library.name, group = "", name = entry.library.name, version = "",
                         kind = kind, declared = true, scope = scopeLabel(entry.scope),
                         compatible = compatible, incompatibleReason = if (!compatible) aarReason(module) else null,
+                        local = true,
                     )
                     declaredRoots += node
                     nodes.putIfAbsent(node.coordinate, node)
@@ -1290,7 +1325,10 @@ class IdeServices private constructor(
             moduleName = moduleName,
             buildSystem = buildSystem,
             acceptsAar = accepts,
-            declared = declaredRoots,
+            // Dedup by coordinate: two declared coordinates that share a group:name (e.g. two versions of the
+            // same artifact) collapse to the SAME resolved node after conflict resolution, so the same node
+            // would otherwise appear twice — which crashes the LazyColumn (duplicate item key). Keep the first.
+            declared = declaredRoots.distinctBy { it.coordinate },
             nodes = nodes.values.toList(),
             conflicts = result?.conflicts?.map { UiVersionConflict(it.coordinate, it.requested, it.chosen) }.orEmpty(),
             cycles = detectCycles(edges),
@@ -1446,6 +1484,90 @@ class IdeServices private constructor(
             }
         }
         return true
+    }
+
+    // ---- local libraries (file-based jar/aar, no Maven coordinate) ----
+
+    /** Where a picked local library is copied: a `libs/` folder under the module's directory. */
+    fun localLibraryDropDir(moduleName: String): String? {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return null
+        return moduleRoot(module)?.resolve("libs")?.toString()
+    }
+
+    /**
+     * Existing `.jar`/`.aar` files under the project the module could attach — excluding build/platform dirs,
+     * `.aar`s on a non-Android module, and ones already declared. Scans the project dir (so files imported
+     * into any module/source root are offered).
+     */
+    fun localLibraryCandidates(moduleName: String): List<String> {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return emptyList()
+        val accepts = acceptsAar(module)
+        val declaredRoots = module.dependencies.filterIsInstance<LibraryDependency>()
+            .mapNotNull { findLibrary(it.library.name) }
+            .flatMap { it.classesRoots.map { r -> r.path } }.toSet()
+        val base = moduleRoot(module)?.parent ?: store.rootPath
+        if (!Files.isDirectory(base)) return emptyList()
+        return runCatching {
+            Files.walk(base).use { s ->
+                s.filter { Files.isRegularFile(it) }
+                    .map { it.toAbsolutePath().normalize().toString() }
+                    .filter { p ->
+                        val low = p.lowercase()
+                        (low.endsWith(".jar") || (accepts && low.endsWith(".aar"))) &&
+                            !p.contains("/.platform/") && !p.contains("/build/") && !p.contains("/.git/") &&
+                            p !in declaredRoots
+                    }
+                    .sorted().distinct().collect(java.util.stream.Collectors.toList())
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Attach the local library at [path] (an absolute `.jar`/`.aar` already on disk) to [moduleName]. A jar is
+     * registered as-is; an aar is exploded at add time into the Maven "exploded" form (classes.jar + res/ +
+     * manifest siblings) so the editor reads its classes and the Android build routes its resources. No Maven
+     * resolution — a local library has no transitive closure.
+     */
+    suspend fun addLocalLibrary(moduleName: String, path: String, scope: String): UiAddResult {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(false, "No module '$moduleName'.")
+        val src = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull()
+            ?: return UiAddResult(false, "Invalid file path.")
+        if (!Files.isRegularFile(src)) return UiAddResult(false, "File not found: ${src.fileName}.")
+        val low = src.toString().lowercase()
+        val isAar = low.endsWith(".aar")
+        if (!isAar && !low.endsWith(".jar"))
+            return UiAddResult(false, "Only .jar and .aar files can be added as a local library.")
+        if (isAar && !acceptsAar(module))
+            return UiAddResult(false, "${src.fileName} is an Android library (.aar) — ${aarReason(module)}.")
+
+        val libName = src.fileName.toString()
+        if (module.dependencies.any { it is LibraryDependency && it.library.name == libName })
+            return UiAddResult(false, "$libName is already a dependency of '$moduleName'.")
+        val project = projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
+
+        val registered = runCatching {
+            store.workspace.libraryTable.create(libName).apply {
+                if (isAar) {
+                    kind = LibraryKind.AAR
+                    val into = store.rootPath.resolve(".platform/libs").resolve(libName.substringBeforeLast('.'))
+                    AarExtractor.explode(src, into).classesJars.forEach { addClassesRoot(store.vfs.fileFor(it)) }
+                } else {
+                    kind = LibraryKind.JAR
+                    addClassesRoot(store.vfs.fileFor(src))
+                }
+                commit()
+            }
+        }
+        registered.exceptionOrNull()?.let { return UiAddResult(false, "Couldn't read ${src.fileName}: ${it.message}") }
+
+        project.beginModification().apply {
+            module(module.id).addDependency(LibraryDependency(LibraryRef(libName), parseScope(scope)))
+            commit()
+        }
+        store.save()
+        invalidateAnalyzers()
+        resyncIndex()
+        return UiAddResult(true, "Added $libName", 1)
     }
 
     // ---- repositories (where libraries resolve from) ----
@@ -2369,21 +2491,17 @@ class IdeServices private constructor(
     private val analysisEnvironment = IdeAnalysisEnvironment()
 
     /**
-     * The diagnostics engine: the JDT compiler (as a provider) + built-in Java analyzers, merged into one
-     * set. The built-ins are registered into the `platform.analyzer` / `platform.diagnosticProvider`
-     * extension points and the engine is assembled by *querying* the registry — so a plugin can contribute
-     * analyzers, diagnostic providers, or quick-fixes and have them merge into the same pipeline.
+     * The diagnostics engine: one multi-language pipeline. Each language module contributes its own
+     * analyzers / diagnostic providers / quick-fix + action providers onto the `platform.*` extension
+     * points through its `*AnalysisSupport.register` hook (mirroring `AndroidSupport.register`); the engine
+     * is assembled by *querying* the registry and dispatches each provider by the file's language (see the
+     * `languages` filters in [dev.ide.analysis.impl.AnalysisEngine]). So adding a language's editor features
+     * is a registration, not a host edit — and the host no longer contains any per-language analysis logic.
      */
     private val analysisEngine = run {
-        val plugin = PluginId("java-analysis")
-        platform.extensions.register(ANALYZER_EP, SystemOutCallAnalyzer(), plugin)
-        platform.extensions.register(ANALYZER_EP, UnusedImportAnalyzer(), plugin)
-        platform.extensions.register(DIAGNOSTIC_PROVIDER_EP, CompilerDiagnosticProvider(), plugin)
-        // Code actions: quick-fixes attach to diagnostics by code; action providers offer caret intentions.
-        platform.extensions.register(QUICK_FIX_PROVIDER_EP, AddImportQuickFixProvider(), plugin)
-        platform.extensions.register(QUICK_FIX_PROVIDER_EP, RemoveUnusedImportQuickFixProvider(), plugin)
-        platform.extensions.register(ACTION_PROVIDER_EP, IntroduceVariableActionProvider(), plugin)
-        platform.extensions.register(ACTION_PROVIDER_EP, SurroundWithTryCatchActionProvider(), plugin)
+        dev.ide.lang.jdt.analysis.JdtAnalysisSupport.register(platform.extensions)
+        dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport.register(platform.extensions)
+        dev.ide.lang.xml.lint.XmlAnalysisSupport.register(platform.extensions, IdeXmlResourceHost())
         AnalysisEngine(
             analyzers = platform.extensions.extensions(ANALYZER_EP),
             quickFixProviders = platform.extensions.extensions(QUICK_FIX_PROVIDER_EP),
@@ -2398,21 +2516,26 @@ class IdeServices private constructor(
     // classes absent from the runtime (e.g. java.lang.Runtime$Version, surfaced as a LinkageError, not a
     // catchable Exception). If that happens once, analysis is disabled rather than throwing on every edit.
     // On a JVM (desktop) this never trips. Completion is unaffected; it uses the low-level compiler path.
-    @Volatile private var analysisUnavailable = false
+    //
+    // Tracked PER LANGUAGE: now that one engine serves Java/Kotlin/XML, a LinkageError from one backend
+    // (in practice only JDT's ASTParser) must disable *that* language alone — never silence the others.
+    private val analysisUnavailable = java.util.concurrent.ConcurrentHashMap.newKeySet<LanguageId>()
 
-    /** Run the full pipeline (JDT compiler + Java analyzers, suppression + profile) over [file]'s live buffer. */
+    /** Whether analysis for [file]'s language has been disabled by a prior unrecoverable error. */
+    private fun analysisDisabled(file: Path): Boolean = languageFor(file) in analysisUnavailable
+
+    /** Run the full pipeline (per-language analyzers + diagnostic providers, suppression + profile) over
+     *  [file]'s live buffer. ONE engine serves Java/Kotlin/XML: the environment picks the analyzer by the
+     *  file's language and each provider is dispatched by its declared `languages`, so there are no more
+     *  per-language special cases here. `moduleForEditableFile` (not `moduleForFile`) gates so XML resource
+     *  files and the manifest — which sit outside the source roots — still analyze. */
     fun analyzeDiagnostics(file: Path, text: String): List<dev.ide.analysis.Diagnostic> {
-        val name = file.fileName?.toString()
-        if (name?.endsWith(".xml") == true) return analyzeXml(file, text)
-        // Kotlin has its own tolerant PSI parse + diagnostics; it must NOT go through the JDT engine
-        // (which would parse `.kt` as Java and report spurious "Syntax error / insert ';'" diagnostics).
-        if (name?.endsWith(".kt") == true || name?.endsWith(".kts") == true) return analyzeKotlin(file, text)
-        if (analysisUnavailable || moduleForFile(file) == null) return emptyList()
+        if (analysisDisabled(file) || moduleForEditableFile(file) == null) return emptyList()
         updateDocument(file, text)
         return try {
             runSync { analysisEngine.analyzeNow(store.vfs.fileFor(file)) }
         } catch (e: LinkageError) {
-            analysisUnavailable = true
+            analysisUnavailable.add(languageFor(file))
             emptyList()
         }
     }
@@ -2529,19 +2652,6 @@ class IdeServices private constructor(
         return ComposePreviewLibs(jars, fingerprint, previewAndroidJar(), minApi, cacheDir)
     }
 
-    /** Kotlin diagnostics: the tolerant PSI parser's syntax errors + semantic checks (unresolved
-     *  references). No Java/JDT involvement. */
-    private fun analyzeKotlin(file: Path, text: String): List<dev.ide.analysis.Diagnostic> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        val analyzer = analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID)
-        val vf = store.vfs.fileFor(file)
-        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return runSync { analyzer.analyze(vf) }.diagnostics.map { d ->
-            // The tolerant parser tags syntax errors `kt.syntax`; everything else is a semantic finding.
-            val id = if (d.code == "kt.syntax") "kotlin.syntax" else "kotlin.semantic"
-            dev.ide.analysis.Diagnostic(d.range, d.severity, d.message, DiagnosticSource.Analyzer(AnalyzerId(id)), d.code)
-        }
-    }
 
     /**
      * Code actions (quick-fixes + caret intentions) available for [file]'s live buffer [text] over the
@@ -2549,16 +2659,12 @@ class IdeServices private constructor(
      * round-trips a chosen action back through [applyEditorAction] by its list [Int] index.
      */
     fun editorActions(file: Path, text: String, start: Int, end: Int): List<dev.ide.analysis.QuickFix> {
-        if (file.fileName?.toString()?.endsWith(".xml") == true)
-            return xmlActionsAt(file, text, start).map { StaticQuickFix(it.title) } // XML quick-fixes
-        if (isKotlin(file)) // Kotlin quick-fixes (import unresolved refs); the JDT engine stays off `.kt`.
-            return runCatching { kotlinActionsAt(file, text, start) }.getOrDefault(emptyList()).map { StaticQuickFix(it.title) }
-        if (analysisUnavailable || moduleForFile(file) == null) return emptyList()
+        if (analysisDisabled(file) || moduleForEditableFile(file) == null) return emptyList()
         updateDocument(file, text)
         return try {
             runSync { analysisEngine.editorActionsAt(store.vfs.fileFor(file), TextRange(start, end)) }
         } catch (e: LinkageError) {
-            analysisUnavailable = true
+            analysisUnavailable.add(languageFor(file))
             emptyList()
         }
     }
@@ -2570,18 +2676,14 @@ class IdeServices private constructor(
      * built-ins do this) are not returned here.
      */
     fun applyEditorAction(file: Path, text: String, start: Int, end: Int, index: Int): List<DocumentEdit> {
-        if (file.fileName?.toString()?.endsWith(".xml") == true)
-            return runCatching { xmlActionsAt(file, text, start).getOrNull(index)?.apply() }.getOrNull() ?: emptyList()
-        if (isKotlin(file))
-            return runCatching { kotlinActionsAt(file, text, start).getOrNull(index)?.edits }.getOrNull() ?: emptyList()
-        if (analysisUnavailable || moduleForFile(file) == null) return emptyList()
+        if (analysisDisabled(file) || moduleForEditableFile(file) == null) return emptyList()
         updateDocument(file, text)
         val vf = store.vfs.fileFor(file)
         return try {
             runSync { analysisEngine.computeActionEdits(vf, TextRange(start, end), index) }
                 .edits.entries.firstOrNull { it.key.path == vf.path }?.value ?: emptyList()
         } catch (e: LinkageError) {
-            analysisUnavailable = true
+            analysisUnavailable.add(languageFor(file))
             emptyList()
         }
     }
@@ -2590,13 +2692,13 @@ class IdeServices private constructor(
 
     /** The renameable symbol under the caret (its current name + a kind label), or null. Java only. */
     fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? {
-        if (analysisUnavailable || !file.toString().endsWith(".java")) return null
+        if (!file.toString().endsWith(".java") || analysisDisabled(file)) return null
         val module = moduleForFile(file) ?: return null
         val analyzer = analyzerFor(module) as? JdtSourceAnalyzer ?: return null
         return try {
             JdtRename.targetAt(analyzer.parse(store.vfs.fileFor(file), text), offset)?.let { RenameInfo(it.oldName, it.kind) }
         } catch (e: LinkageError) {
-            analysisUnavailable = true; null
+            analysisUnavailable.add(languageFor(file)); null
         }
     }
 
@@ -2610,7 +2712,7 @@ class IdeServices private constructor(
     suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome {
         val name = newName.trim()
         if (!isValidJavaIdentifier(name)) return RenameOutcome(false, "'$newName' is not a valid Java identifier.")
-        if (analysisUnavailable) return RenameOutcome(false, "Java analysis is unavailable.")
+        if (analysisDisabled(file)) return RenameOutcome(false, "Java analysis is unavailable.")
         val module = moduleForFile(file) ?: return RenameOutcome(false, "This file is not in a source module.")
         val analyzer = analyzerFor(module) as? JdtSourceAnalyzer ?: return RenameOutcome(false, "Rename is only supported for Java.")
         val fileAbs = file.toAbsolutePath().normalize()
@@ -2642,7 +2744,7 @@ class IdeServices private constructor(
                 }
             }
         } catch (e: LinkageError) {
-            analysisUnavailable = true
+            analysisUnavailable.add(languageFor(file))
             return RenameOutcome(false, "Java analysis is unavailable.")
         }
         if (editsByPath.isEmpty()) return RenameOutcome(false, "No occurrences of '${target.oldName}' found.")
@@ -2829,7 +2931,7 @@ class IdeServices private constructor(
 
         // Java class-aware path: when the file actually declares a top-level type matching its name, rename the
         // type (and every reference) — which also moves the backing file — instead of a bare filesystem rename.
-        if (!analysisUnavailable && abs.toString().endsWith(".java")) {
+        if (!analysisDisabled(abs) && abs.toString().endsWith(".java")) {
             val oldType = abs.fileName.toString().removeSuffix(".java")
             val newType = name.removeSuffix(".java")
             if (isValidJavaIdentifier(newType)) {
@@ -2969,96 +3071,46 @@ class IdeServices private constructor(
     }
 
     /**
-     * Diagnostics for an XML file: XML well-formedness (from the XML language backend's tolerant parser:
-     * unclosed/mismatched tags, unterminated values) merged with the Android resource-reference checks.
-     * Both flow into the one [dev.ide.analysis.Diagnostic] stream the editor renders, as for Java.
+     * The host the XML lint provider ([dev.ide.lang.xml.lint.XmlDiagnosticProvider]) calls for the data that
+     * lives in ide-core, not lang-xml: the SDK widget catalog, the Android resource index/repository, and the
+     * `res/` filesystem. Resolves the module per file via [moduleForEditableFile] (XML files live under `res/`,
+     * outside the source roots). The detection rules + fix construction live in lang-xml; this only supplies
+     * resources, keeping lang-xml a generic XML backend.
      */
-    private fun analyzeXml(file: Path, text: String): List<dev.ide.analysis.Diagnostic> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        val analyzer = analyzerFor(module, XmlLanguageBackend.LANGUAGE_ID)
-        val vf = store.vfs.fileFor(file)
-        val parsed = analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        val out = ArrayList<dev.ide.analysis.Diagnostic>()
-        // Well-formedness (the tolerant parser's own diagnostics).
-        parsed.diagnostics.forEach { d ->
-            out += dev.ide.analysis.Diagnostic(d.range, d.severity, d.message, DiagnosticSource.Analyzer(AnalyzerId("xml.syntax")), d.code)
+    private inner class IdeXmlResourceHost : dev.ide.lang.xml.lint.XmlResourceHost {
+        override fun isViewLike(tag: String): Boolean = this@IdeServices.isViewLike(tag)
+
+        override fun scanResourceReferences(text: String): List<dev.ide.lang.xml.lint.XmlResourceRef> =
+            ResourceReferences.scan(text)
+                .filter { it.isLocal && !it.create && !it.themeAttr && it.type != null && it.name !in setOf("null", "empty", "undefined") }
+                .map { dev.ide.lang.xml.lint.XmlResourceRef(it.type!!.rClass, it.name, it.range.first, it.range.last + 1) }
+
+        override fun typeHasAny(file: VirtualFile, rClass: String): Boolean {
+            val type = ResourceType.byRClass(rClass) ?: return false
+            if (indexTypeHasAny(type)) return true
+            val module = moduleForEditableFile(Paths.get(file.path)) ?: return false
+            val repo = runCatching { AndroidResources.repository(module, store.workspace) }.getOrNull()
+            return repo?.names(type)?.isNotEmpty() == true
         }
-        // Android/lint inspections.
-        for (f in xmlFindings(module, file, text, parsed)) {
-            out += dev.ide.analysis.Diagnostic(f.range, f.severity, f.message, DiagnosticSource.Analyzer(AnalyzerId("android.xml")), f.code)
+
+        override fun hasResource(file: VirtualFile, rClass: String, name: String): Boolean {
+            val type = ResourceType.byRClass(rClass) ?: return true // unknown type → don't flag
+            if (indexHasResource(type, name)) return true
+            val module = moduleForEditableFile(Paths.get(file.path)) ?: return false
+            val repo = runCatching { AndroidResources.repository(module, store.workspace) }.getOrNull()
+            return repo?.has(type, name) == true
         }
-        return out
+
+        override fun isValueType(rClass: String): Boolean = ResourceType.byRClass(rClass)?.isValueType() == true
+
+        override fun appendValueResource(file: VirtualFile, rClass: String, name: String, value: String): String {
+            val type = ResourceType.byRClass(rClass) ?: return name
+            val module = moduleForEditableFile(Paths.get(file.path)) ?: return name
+            return this@IdeServices.appendValueResource(module, type, name, value)
+        }
     }
 
-    // ---- XML inspections + quick-fixes ----
-
-    /** A fix: a user-facing [title] and an [apply] that performs any file side effects (e.g. writing a new
-     *  `<string>` into strings.xml) and returns the edits to splice into the *current* buffer. */
-    private data class XmlFix(val title: String, val apply: () -> List<DocumentEdit>)
-    private data class XmlFinding(
-        val range: TextRange, val severity: Severity, val message: String, val code: String,
-        val fixes: List<XmlFix> = emptyList(),
-    )
-
-    /** Run the Android XML inspections over [parsed]. Detection is pure ([XmlLintRules]); a fix's I/O happens
-     *  only on apply. */
-    private fun xmlFindings(module: Module, file: Path, text: String, parsed: ParsedFile): List<XmlFinding> {
-        val out = ArrayList<XmlFinding>()
-        val isLayout = file.toString().replace('\\', '/').contains("/res/layout")
-
-        // A) Missing xmlns:android when android: attributes are used.
-        XmlLintRules.missingNamespace(parsed)?.let { hit ->
-            out += XmlFinding(
-                hit.range, Severity.ERROR, "Missing xmlns:android namespace declaration", "android.missingNamespace",
-                listOf(XmlFix("Add xmlns:android declaration") { listOf(DocumentEdit(hit.insertAt, 0, " xmlns:android=\"${hit.uri}\"")) }),
-            )
-        }
-
-        if (isLayout) {
-            // B) Hardcoded user-facing text → extract to @string.
-            for (h in XmlLintRules.hardcodedText(parsed)) {
-                val resName = snakeName(h.value)
-                out += XmlFinding(
-                    h.range, Severity.WARNING, "Hardcoded string should be a @string resource", "android.hardcodedText",
-                    listOf(XmlFix("Extract to @string resource") {
-                        val n = appendValueResource(module, ResourceType.STRING, resName, h.value)
-                        listOf(DocumentEdit(h.range.start, h.range.length, "@string/$n"))
-                    }),
-                )
-            }
-            // C) A view element missing layout_width / layout_height.
-            for (m in XmlLintRules.missingSize(parsed, ::isViewLike)) {
-                out += XmlFinding(
-                    m.range, Severity.WARNING, "<${m.tag}> is missing android:${m.dim}", "android.missingSize",
-                    listOf(XmlFix("Add android:${m.dim}=\"wrap_content\"") {
-                        listOf(DocumentEdit(m.insertAt, 0, "\n    android:${m.dim}=\"wrap_content\""))
-                    }),
-                )
-            }
-        }
-
-        // D) Unresolved local resource references. Resolved via the resource index, falling back to the
-        // (synchronous) repository while the index is still building, so a fresh workspace still validates.
-        val refs = ResourceReferences.scan(text).filter {
-            it.isLocal && !it.create && !it.themeAttr && it.type != null && it.name !in setOf("null", "empty", "undefined")
-        }
-        if (refs.isNotEmpty()) {
-            val repo by lazy { runCatching { AndroidResources.repository(module, store.workspace) }.getOrNull() }
-            for (ref in refs) {
-                val type = ref.type!!
-                val resName = sanitizeResName(ref.name)
-                val typeHasAny = indexTypeHasAny(type) || (repo?.names(type)?.isNotEmpty() == true)
-                if (!typeHasAny) continue                    // type only sourced from framework/unindexed → don't flag
-                if (indexHasResource(type, resName) || repo?.has(type, resName) == true) continue
-                val range = TextRange(ref.range.first, ref.range.last + 1)
-                val fixes = if (type.isValueType()) listOf(XmlFix("Create @${type.rClass}/$resName") {
-                    appendValueResource(module, type, resName, ""); emptyList()
-                }) else emptyList()
-                out += XmlFinding(range, Severity.WARNING, "Cannot resolve @${type.rClass}/${ref.name}", "android.unresolvedResource", fixes)
-            }
-        }
-        return out
-    }
+    // ---- Android resource helpers shared by the XML lint host + go-to-definition ----
 
     private fun ResourceType.isValueType(): Boolean = this in setOf(
         ResourceType.STRING, ResourceType.COLOR, ResourceType.DIMEN, ResourceType.BOOL, ResourceType.INTEGER, ResourceType.ID,
@@ -3067,13 +3119,6 @@ class IdeServices private constructor(
     /** A tag that should carry layout params: a known framework widget (from the SDK metadata) or a custom view. */
     private fun isViewLike(tag: String): Boolean =
         sdkLayoutMetadata().isWidgetTag(tag) || tag.contains('.')
-
-    /** A deterministic snake_case resource name from arbitrary [value] (for extract-to-@string). */
-    private fun snakeName(value: String): String {
-        val base = value.trim().lowercase().map { if (it.isLetterOrDigit()) it else '_' }.joinToString("")
-            .trim('_').replace(Regex("_+"), "_").take(40).ifEmpty { "text" }
-        return if (base.first().isDigit()) "_$base" else base
-    }
 
     /** Append `<type name="name">value</type>` to the module's `res/values/<file>.xml` (creating it if needed),
      *  de-duplicating the name, then refresh R + the resource index. Returns the (possibly suffixed) name. */
@@ -3108,31 +3153,6 @@ class IdeServices private constructor(
 
     private fun escapeXml(s: String): String =
         s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    /** XML code actions at the caret: the fixes of every finding whose range contains [offset]. Stable order. */
-    private fun xmlActionsAt(file: Path, text: String, offset: Int): List<XmlFix> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        val analyzer = analyzerFor(module, XmlLanguageBackend.LANGUAGE_ID)
-        val parsed = analyzer.incrementalParser.parseFull(EditorDocument(store.vfs.fileFor(file), docVersion.incrementAndGet(), text))
-        return xmlFindings(module, file, text, parsed).filter { offset in it.range }.flatMap { it.fixes }
-    }
-
-    /** Kotlin code actions at the caret: "Import …" fixes for unresolved references overlapping [offset].
-     *  Recomputed (not cached) so [editorActions] and [applyEditorAction] agree on the stable list order. */
-    private fun kotlinActionsAt(file: Path, text: String, offset: Int): List<KotlinSourceAnalyzer.KotlinImportFix> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        val analyzer = analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer ?: return emptyList()
-        val vf = store.vfs.fileFor(file)
-        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return analyzer.importFixesAt(vf, offset)
-    }
-
-    /** A title-only [dev.ide.analysis.QuickFix] for the XML lightbulb. Edits are applied via [applyEditorAction]
-     *  (by list index), so [computeEdits] is never invoked through this object. */
-    private class StaticQuickFix(override val title: String) : dev.ide.analysis.QuickFix {
-        override val kind = dev.ide.analysis.CodeActionKind.QUICK_FIX
-        override suspend fun computeEdits(ctx: dev.ide.analysis.FixContext): WorkspaceEdit = WorkspaceEdit.EMPTY
-    }
 
     /**
      * Namespace-aware resource-reference checks for an Android res XML: `@string/x`, `@drawable/y`, … are
@@ -3508,21 +3528,25 @@ class IdeServices private constructor(
     private inner class IdeAnalysisEnvironment : AnalysisEnvironment {
         override suspend fun targetFor(file: VirtualFile, needsBindings: Boolean): AnalysisTarget? {
             val path = Paths.get(file.path)
-            val module = moduleForFile(path) ?: return null
+            // `moduleForEditableFile` (not `moduleForFile`) so XML resource files + the manifest, which sit
+            // outside the source roots, still resolve to a module and get analyzed.
+            val module = moduleForEditableFile(path) ?: return null
             val key = path.toAbsolutePath().normalize()
             val text = openDocuments[key] ?: runCatching { key.readText() }.getOrNull() ?: return null
-            val analyzer = analyzerFor(module)
+            // Pick the analyzer by the file's language (Java / Kotlin / XML); each backend's diagnostic +
+            // action providers are language-gated, so the one pipeline serves every language.
+            val analyzer = analyzerFor(module, languageFor(path))
             // Tier gate: a SEMANTIC+ pass gets the binding-resolved tree (so analyzers can resolve types/
             // symbols and the one pass also yields the compiler diagnostics); a SYNTAX-only pass gets the
             // cheap syntax tree (no classpath scan, no shadow-file move) the incremental parser produces.
+            // Binding resolution is a JDT-only path; Kotlin/XML always take the incremental parse.
             val doc = EditorDocument(file, docVersion.incrementAndGet(), text)
             val parsed = if (needsBindings && analyzer is JdtSourceAnalyzer) analyzer.parse(file, text)
             else analyzer.incrementalParser.parseFull(doc)
-            return JdtAnalysisTarget(file, parsed, parsed.documentVersion, analyzer, indexService, module)
+            return IdeAnalysisTarget(file, parsed, parsed.documentVersion, analyzer, indexService, module)
         }
 
-        override fun languageOf(file: VirtualFile): LanguageId? =
-            if (file.path.endsWith(".java")) LanguageId("java") else null
+        override fun languageOf(file: VirtualFile): LanguageId? = languageFor(Paths.get(file.path))
 
         override fun projectScope(): ProjectAnalysisScope = IdeProjectScope()
 
@@ -3773,6 +3797,20 @@ class IdeServices private constructor(
             appContainer: dev.ide.platform.ServiceContainer? = null,
         ): Pair<PlatformCore, ProjectModelStore> {
             val platform = PlatformCore()
+            val (_, codecs) = registerStaticPlugins(platform)
+            val store = ProjectModel.open(root, platform, codecs, appContainer ?: dev.ide.platform.impl.ApplicationContainer())
+            return platform to store
+        }
+
+        /**
+         * Register the **project-independent** plugin contributions on [platform]'s extension registry:
+         * module types, facet codecs, synthetic-class providers, file icons, and the Create-Project
+         * templates. These are static (read once into cached registries, never mutated at runtime), so the
+         * same set is registered both per-project (via [openStore]) and once at **application** scope (by
+         * [ProjectManager], over its own app-level [PlatformCore]) — letting the picker enumerate templates
+         * without an open project. Returns the [ModuleTypeRegistry]/[FacetCodecRegistry] the model needs.
+         */
+        internal fun registerStaticPlugins(platform: PlatformCore): Pair<ModuleTypeRegistry, FacetCodecRegistry> {
             val moduleTypes = ModuleTypeRegistry(platform.extensions)
             moduleTypes.register(JavaLibModuleType, PluginId("java-support"))
             val codecs = FacetCodecRegistry()
@@ -3797,8 +3835,7 @@ class IdeServices private constructor(
             templates.register(KotlinConsoleAppTemplate, PluginId("kotlin-support"))
             templates.register(KotlinLibraryTemplate, PluginId("kotlin-support"))
             dev.ide.android.support.AndroidSupport.registerTemplates(templates)
-            val store = ProjectModel.open(root, platform, codecs, appContainer ?: dev.ide.platform.impl.ApplicationContainer())
-            return platform to store
+            return moduleTypes to codecs
         }
 
         /** Desktop default SDK: an installed Android SDK's `android.jar` if present, else a detected JDK. */
@@ -3886,8 +3923,9 @@ private val TREE_ROOT_ROLES = setOf(
     ContentRole.SOURCE, ContentRole.GENERATED, ContentRole.RESOURCE, ContentRole.ANDROID_RES, ContentRole.ASSETS,
 )
 
-/** The per-file analysis context the engine consumes: live DOM + the module's resolver + the index. */
-private class JdtAnalysisTarget(
+/** The per-file analysis context the engine consumes: live DOM + the module's resolver (Java/Kotlin/XML)
+ *  + the index. Backend-neutral — it holds whatever [SourceAnalyzer] the file's language resolved to. */
+private class IdeAnalysisTarget(
     override val file: VirtualFile,
     override val parsed: ParsedFile,
     override val documentVersion: Long,
@@ -3896,7 +3934,7 @@ private class JdtAnalysisTarget(
     override val module: Module,
 ) : AnalysisTarget {
     // The engine polls this between analyzers; delegate to the editor-thread cancel token so a completion
-    // request can preempt an in-flight Java analysis pass (the Kotlin path polls its own walk directly).
+    // request can preempt an in-flight analysis pass (the Kotlin path polls its own walk directly).
     override fun checkCanceled() = dev.ide.platform.EngineCancellation.checkCanceled()
 }
 

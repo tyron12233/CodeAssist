@@ -2,7 +2,11 @@
 // commonMain composables the desktop launcher uses — over an Android [AndroidIdeBackend]. It is the
 // Android counterpart to :ide-desktop. Under AGP 9, Kotlin is built into `com.android.application` (no
 // kotlin-android plugin); Compose comes from the Compose Multiplatform + Compose-compiler plugins.
+import dev.ide.build.ArtAbsentApiScanner
 import dev.ide.build.RelocateTypesInJar
+import dev.ide.build.ScanForArtAbsentApis
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.attributes.Attribute
 // Imported (not fully-qualified) because the Java plugin's `java` project extension shadows the `java.*`
 // package inside a build script — `java.io.File` would parse as `(java extension).io`.
 import java.io.File
@@ -44,6 +48,59 @@ val relocateEcjForArt = tasks.register<RelocateTypesInJar>("relocateEcjForArt") 
     outputJar.set(layout.buildDirectory.file("ecj-art/ecj-art.jar"))
     renames.put("java/lang/Runtime\$Version", "dev/ide/lang/jdt/compat/RuntimeVersion")
 }
+
+// --- Eclipse-runtime-on-ART patch (java.lang.StackWalker) -----------------------------------------
+// Eclipse's org.eclipse.core.runtime.Status and org.eclipse.core.internal.runtime.InternalPlatform each
+// hold a `static StackWalker` field (StackWalker.getInstance(Option.RETAIN_CLASS_REFERENCE)) used by the
+// caller-class-aware Status.error/info/warning + ILog.get factories. java.lang.StackWalker is a Java-9 API
+// absent from ART at our minSdk and (being in java.*) un-stubbable, so on-device that <clinit> throws an
+// uncatchable NoClassDefFoundError (java.lang.StackWalker$Option) — and because Status is ubiquitous, it
+// disables editor analysis entirely. As with ecj's Runtime$Version, relocate the references onto a shim we
+// ship (dev.ide.lang.jdt.compat.StackWalker in :lang-jdt) and dex the patched jars. These two modules
+// reach the app only transitively via :ide-core → lang-jdt → jdt.core, so resolve jdt.core's graph here and
+// pick the two jars out by name (tracks the `jdt` catalog version automatically). Desktop runs on a real
+// JVM and is left untouched. The single `java/lang/StackWalker` rename also covers the nested
+// `java/lang/StackWalker$Option` (it shares that prefix).
+val eclipseRuntimeUnpatched: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { eclipseRuntimeUnpatched(libs.jdt.core) } // transitive: brings core.runtime + equinox.common
+
+fun eclipseRuntimeJar(prefix: String) =
+    eclipseRuntimeUnpatched.elements.map { set -> set.map { it.asFile }.single { it.name.startsWith(prefix) } }
+
+val relocateCoreRuntimeForArt = tasks.register<RelocateTypesInJar>("relocateCoreRuntimeForArt") {
+    inputJar.fileProvider(eclipseRuntimeJar("org.eclipse.core.runtime-"))
+    outputJar.set(layout.buildDirectory.file("eclipse-art/org.eclipse.core.runtime-art.jar"))
+    renames.put("java/lang/StackWalker", "dev/ide/lang/jdt/compat/StackWalker")
+}
+val relocateEquinoxCommonForArt = tasks.register<RelocateTypesInJar>("relocateEquinoxCommonForArt") {
+    inputJar.fileProvider(eclipseRuntimeJar("org.eclipse.equinox.common-"))
+    outputJar.set(layout.buildDirectory.file("eclipse-art/org.eclipse.equinox.common-art.jar"))
+    renames.put("java/lang/StackWalker", "dev/ide/lang/jdt/compat/StackWalker")
+}
+
+// --- ART-absent-API guard ------------------------------------------------------------------------
+// Build-time backstop for the StackWalker / Runtime$Version class of bug: scan the dexed dependency set
+// for references to java.* APIs absent on ART at minSdk (see buildSrc ArtAbsentApiScanner) and FAIL the
+// build when one sits in a load-bearing position (a supertype or a static field) — which on-device is an
+// uncatchable NoClassDefFoundError that silently disables a feature. Lazily-reached uses (instance fields,
+// method bodies) are reported as advisory only. Scans `debugRuntimeClasspath` because that is exactly what
+// gets dexed and it EXCLUDES the compile-only android.jar (whose stubs DO carry these types on recent API
+// levels — scanning it would false-positive). Depends on the relocate tasks so it sees the patched jars.
+val scanArtAbsentApis = tasks.register<ScanForArtAbsentApis>("scanArtAbsentApis") {
+    description = "Fail if a dexed dependency references a java.* API absent on ART in a load-bearing position."
+    group = "verification"
+    dependsOn(relocateEcjForArt, relocateCoreRuntimeForArt, relocateEquinoxCommonForArt)
+    denylist.convention(ArtAbsentApiScanner.DEFAULT_DENYLIST)
+    report.set(layout.buildDirectory.file("art-api-scan/report.txt"))
+    // `classpath` is supplied from the debug variant's runtime configuration in the androidComponents
+    // block below (the configuration doesn't exist yet at script-evaluation time).
+}
+// Gate both CI (`check`) and every APK assembly (`preBuild` runs before all variant builds). The task is
+// @CacheableTask, so it re-runs only when the dependency set changes.
+tasks.named("check").configure { dependsOn(scanArtAbsentApis) }
 
 // --- kotlin-stdlib asset (on-device Kotlin-compiler spike) ---------------------------------------
 // The discovery spike (KotlinCompilerArtSpikeTest) runs K2JVMCompiler on device and needs the Kotlin
@@ -153,8 +210,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 36
-        versionName = "3.0.5"
+        versionCode = 38
+        versionName = "3.0.6-snapshot2"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -226,7 +283,10 @@ android {
         // dexing reasons above); only the signing differs so `adb install` works without the release keystore.
         create("profile") {
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
+            // Sign with the release/upload key when a keystore is configured (so testers get a build with
+            // the published signature identity); fall back to the debug key so the variant still installs
+            // locally when no release keystore is present.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
     }
@@ -277,6 +337,25 @@ android {
             useLegacyPackaging = true
             keepDebugSymbols += setOf("**/libaapt2.so")
         }
+    }
+}
+
+// Feed the ART-absent-API guard the debug variant's runtime classpath (the dexed set), resolved through an
+// ArtifactView so AGP's variant attributes don't make it ambiguous, and filtered to external module jars —
+// the third-party risk set (eclipse, kotlinc, r8, apksig, trove4j, …) where the next StackWalker would land.
+// It deliberately omits (a) our own project modules — source we control — and (b) the relocated `files(...)`
+// jars, which are clean by construction and already verified. Lenient so AAR-packaged deps (compose/androidx,
+// compiled for Android, not a java.* risk) drop out rather than erroring. Done here, not at script-eval time,
+// because the variant's runtimeConfiguration only exists once AGP has configured the variants.
+androidComponents {
+    onVariants(selector().withName("debug")) { variant ->
+        val artifactTypeAttr = Attribute.of("artifactType", String::class.java)
+        val externalJars = variant.runtimeConfiguration.incoming.artifactView {
+            isLenient = true
+            componentFilter { it is ModuleComponentIdentifier }
+            attributes { attribute(artifactTypeAttr, "jar") }
+        }.files
+        scanArtAbsentApis.configure { classpath.from(externalJars) }
     }
 }
 
@@ -376,6 +455,8 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
     dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset)
+    // No device artifact ships without passing the ART-absent-API guard (cached when deps are unchanged).
+    dependsOn(scanArtAbsentApis)
 }
 
 dependencies {
@@ -392,7 +473,20 @@ dependencies {
     // patched). See the `relocateEcjForArt` task above.
     implementation(project(":ide-core")) {
         exclude(group = "org.eclipse.jdt", module = "ecj")
+        // Drop the stock core.runtime / equinox.common — the StackWalker-relocated copies are added back
+        // below (see relocateCoreRuntimeForArt / relocateEquinoxCommonForArt). Both reach the app only
+        // through this :ide-core path, so excluding here removes the unpatched jars cleanly.
+        exclude(group = "org.eclipse.platform", module = "org.eclipse.core.runtime")
+        exclude(group = "org.eclipse.platform", module = "org.eclipse.equinox.common")
     }
+    // Excluding core.runtime above also drops org.eclipse.core.contenttype (it reaches the graph only
+    // through core.runtime). JDT's public DOM / JavaCore.getOptions() path references IContentTypeManager
+    // at class-load time, so without it analysis throws NoClassDefFoundError on-device. It is a plain jar
+    // with no ART-absent / StackWalker references, so dex it as-is (no relocation needed). isTransitive =
+    // false: take ONLY the contenttype jar — its transitive equinox.common/core.runtime are the unpatched
+    // (StackWalker-bearing) jars we relocate-and-readd above, and the rest of its graph (osgi, registry)
+    // is already present via :ide-core's core.resources.
+    implementation(libs.eclipse.contenttype) { isTransitive = false }
     // Layout-preview live custom-view runtime: the Bridge classes + DexClassLoader factory live here and
     // need the contracts (api), the CustomViewRuntime/StyledAttrResolver seam (impl), and D8InProcessDexer.
     implementation(project(":layout-preview-api"))
@@ -405,6 +499,9 @@ dependencies {
     // reaches :ide-core only as `implementation` (not transitive), so depend on it explicitly.
     implementation(project(":platform-core"))
     implementation(files(relocateEcjForArt.flatMap { it.outputJar }))
+    // The StackWalker-relocated Eclipse runtime jars (replacing the stock ones excluded from :ide-core above).
+    implementation(files(relocateCoreRuntimeForArt.flatMap { it.outputJar }))
+    implementation(files(relocateEquinoxCommonForArt.flatMap { it.outputJar }))
 
     // The JDK `java.compiler` module's javax.* classes (javax.lang.model / .tools / .annotation.processing),
     // extracted from the JBR. ecj's DOM ASTParser + batch compiler reference these at class-load time

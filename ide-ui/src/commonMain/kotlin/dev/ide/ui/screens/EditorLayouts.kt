@@ -119,6 +119,7 @@ internal fun ExpandedLayout(
                         onStop = { state.backend.stopBuild() },
                         onCollapse = { state.consoleOpen = false },
                         modifier = Modifier.fillMaxSize().padding(14.dp),
+                        onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
                     )
                 }
             }
@@ -214,6 +215,8 @@ internal fun CompactLayout(
                 onStop = { state.backend.stopBuild() },
                 onCollapse = { state.consoleOpen = false },
                 modifier = Modifier.fillMaxWidth().weight(1f).padding(14.dp),
+                // On phone the console is a sheet over the editor; jump to the file and dismiss it.
+                onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column); state.consoleOpen = false } },
             )
         }
         DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenSdkManager, onCloseProject, fileActions)

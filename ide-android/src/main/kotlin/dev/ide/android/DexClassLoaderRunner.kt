@@ -30,50 +30,84 @@ import java.util.stream.Collectors
  */
 class DexClassLoaderRunner(private val cacheDir: File) : DexRunner {
 
-    override suspend fun run(dexDir: Path, mainClass: String, args: List<String>, log: (String) -> Unit): Int =
-        withContext(Dispatchers.IO) {
-            val dexes = if (Files.isDirectory(dexDir))
-                Files.walk(dexDir).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
-            else emptyList()
-            if (dexes.isEmpty()) { log("No dex to run."); return@withContext 1 }
-
-            val dexPath = dexes.joinToString(File.pathSeparator) { it.toString() }
-            val optimized = File(cacheDir, "dexrun-oat").apply { mkdirs() }
-            val loader = dalvik.system.DexClassLoader(dexPath, optimized.absolutePath, null, javaClass.classLoader)
-
-            val main = try {
-                loader.loadClass(mainClass).getDeclaredMethod("main", Array<String>::class.java).also { it.isAccessible = true }
-            } catch (t: Throwable) {
-                log("Cannot find $mainClass.main(String[]): ${t.message}")
-                return@withContext 1
-            }
-
-            val sink = LineStream(log)
-            val printer = PrintStream(sink, true, "UTF-8")
-            val origOut = System.out
-            val origErr = System.err
-            var code = 0
-            try {
-                System.setOut(printer); System.setErr(printer)
-                runInterruptible { main.invoke(null, args.toTypedArray()) }
-            } catch (e: InvocationTargetException) {
-                when (val cause = e.targetException) {
-                    is ControlledExit -> code = cause.code   // instrumented System.exit / Runtime.exit|halt
-                    null -> code = 1
-                    else -> { code = 1; logThrowable(cause, log) }
-                }
-            } catch (e: ControlledExit) {
-                code = e.code
-            } catch (e: InterruptedException) {
-                code = 130; log("Run interrupted.")
-            } catch (t: Throwable) {
-                code = 1; logThrowable(t, log)
-            } finally {
-                printer.flush(); sink.flushPartial()
-                System.setOut(origOut); System.setErr(origErr)
-            }
-            code
+    override suspend fun run(
+        dexDir: Path, mainClass: String, args: List<String>, log: (String) -> Unit
+    ): Int = withContext(Dispatchers.IO) {
+        val dexes = if (Files.isDirectory(dexDir)) Files.walk(dexDir).use { s ->
+            s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList())
         }
+        else emptyList()
+
+        if (dexes.isEmpty()) {
+            log("No dex to run."); return@withContext 1
+        }
+
+        val madeReadOnlyDexes = dexes.map { path ->
+            val file = path.toFile()
+
+            val madeReadOnly = runCatching {
+                file.setWritable(false, false)
+            }.getOrDefault(false)
+
+            return@map file to madeReadOnly
+        }
+
+        val hasErrors = madeReadOnlyDexes.any { !it.second }
+        if (hasErrors) {
+            val files = madeReadOnlyDexes.filter { !it.second }
+                .joinToString(",") { it.first.path }
+            log("Fatal: Cannot make dex file(s) read-only $files")
+            return@withContext 1
+        }
+
+        val dexPath = dexes.joinToString(File.pathSeparator) { it.toString() }
+        val optimized = File(cacheDir, "dexrun-oat").apply { mkdirs() }
+        val loader = try {
+            dalvik.system.DexClassLoader(
+                dexPath, optimized.absolutePath, null, javaClass.classLoader
+            )
+        } catch (t: Throwable) {
+            log("Cannot load dex for $mainClass: ${t.message ?: t}")
+            return@withContext 1
+        }
+
+        val main = try {
+            loader.loadClass(mainClass).getDeclaredMethod("main", Array<String>::class.java)
+                .also { it.isAccessible = true }
+        } catch (t: Throwable) {
+            log("Cannot find $mainClass.main(String[]): ${t.message}")
+            return@withContext 1
+        }
+
+        val sink = LineStream(log)
+        val printer = PrintStream(sink, true, "UTF-8")
+        val origOut = System.out
+        val origErr = System.err
+        var code = 0
+        try {
+            System.setOut(printer); System.setErr(printer)
+            runInterruptible { main.invoke(null, args.toTypedArray()) }
+        } catch (e: InvocationTargetException) {
+            when (val cause = e.targetException) {
+                is ControlledExit -> code =
+                    cause.code   // instrumented System.exit / Runtime.exit|halt
+                null -> code = 1
+                else -> {
+                    code = 1; logThrowable(cause, log)
+                }
+            }
+        } catch (e: ControlledExit) {
+            code = e.code
+        } catch (e: InterruptedException) {
+            code = 130; log("Run interrupted.")
+        } catch (t: Throwable) {
+            code = 1; logThrowable(t, log)
+        } finally {
+            printer.flush(); sink.flushPartial()
+            System.setOut(origOut); System.setErr(origErr)
+        }
+        code
+    }
 
     private fun logThrowable(t: Throwable, log: (String) -> Unit) {
         log("Exception in thread \"main\" $t")
@@ -83,18 +117,31 @@ class DexClassLoaderRunner(private val cacheDir: File) : DexRunner {
     /** Buffers bytes and emits one [log] line per '\n' (UTF-8, '\r' trimmed); [flushPartial] flushes a tail. */
     private class LineStream(private val log: (String) -> Unit) : OutputStream() {
         private val buf = ByteArrayOutputStream()
-        @Synchronized override fun write(b: Int) {
+
+        @Synchronized
+        override fun write(b: Int) {
             if (b == '\n'.code) emit() else buf.write(b)
         }
-        @Synchronized override fun write(b: ByteArray, off: Int, len: Int) {
+
+        @Synchronized
+        override fun write(b: ByteArray, off: Int, len: Int) {
             var start = off
             val end = off + len
             for (i in off until end) {
-                if (b[i] == '\n'.code.toByte()) { buf.write(b, start, i - start); emit(); start = i + 1 }
+                if (b[i] == '\n'.code.toByte()) {
+                    buf.write(b, start, i - start); emit(); start = i + 1
+                }
             }
             if (start < end) buf.write(b, start, end - start)
         }
-        @Synchronized fun flushPartial() { if (buf.size() > 0) emit() }
-        private fun emit() { log(buf.toString("UTF-8").trimEnd('\r')); buf.reset() }
+
+        @Synchronized
+        fun flushPartial() {
+            if (buf.size() > 0) emit()
+        }
+
+        private fun emit() {
+            log(buf.toString("UTF-8").trimEnd('\r')); buf.reset()
+        }
     }
 }

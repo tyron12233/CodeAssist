@@ -48,8 +48,12 @@ object ComposeLibraryLoader {
             runCatching { marker.writeText(libs.fingerprint) }
         }
 
-        val dexes = dexDir.walkTopDown().filter { it.extension == "dex" }.map { it.absolutePath }.toList()
-        if (dexes.isEmpty()) return null
+        val dexFiles = dexDir.walkTopDown().filter { it.extension == "dex" }.toList()
+        if (dexFiles.isEmpty()) return null
+        // ART refuses to load a still-writable dex (W^X); D8 emits owner-writable files, so clear the write
+        // bits before constructing the loader (same fix as the dex-run and preview paths).
+        dexFiles.forEach { runCatching { it.setWritable(false, false) } }
+        val dexes = dexFiles.map { it.absolutePath }
         return DexClassLoader(dexes.joinToString(File.pathSeparator), oatDir.absolutePath, null, javaClass.classLoader)
     }
 }

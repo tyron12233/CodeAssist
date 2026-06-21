@@ -171,6 +171,7 @@ fun CodeAssistApp(
                             initialTab = modulesTab,
                             onBack = { screen = Screen.Editor },
                             codeFont = codeFont,
+                            fileActions = fileActions,
                         )
                         Screen.SdkManager -> SdkManagerScreen(
                             backend = state.backend,

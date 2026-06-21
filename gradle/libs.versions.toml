@@ -25,6 +25,11 @@ jdt-core = { module = "org.eclipse.jdt:org.eclipse.jdt.core", version.ref = "jdt
 # ecj (the standalone Eclipse compiler) arrives transitively via jdt.core; named here so :ide-android
 # can resolve it on its own and feed it to the ART bytecode-relocation task (see RelocateTypesInJar).
 jdt-ecj = { module = "org.eclipse.jdt:ecj", version.ref = "jdt" }
+# org.eclipse.core.contenttype — JDT's public DOM/JavaCore path touches IContentTypeManager at class-load
+# time. It normally arrives transitively via org.eclipse.core.runtime, but :ide-android excludes that
+# (to swap in a StackWalker-relocated copy), which drops contenttype too. Name it here so :ide-android can
+# add it back explicitly. Version tracks what jdt.core 3.40.0 resolves transitively. See RelocateTypesInJar.
+eclipse-contenttype = { module = "org.eclipse.platform:org.eclipse.core.contenttype", version = "3.9.600" }
 # lang-kotlin (editor-only Kotlin backend): the Kotlin frontend's PARSER only — a resolution-free
 # standalone PSI host (text -> KtFile). We discard all analysis/FIR and build our own symbols/inference/
 # completion on the neutral DOM. compiler-embeddable bundles intellij-core + the PSI/parser; metadata-jvm

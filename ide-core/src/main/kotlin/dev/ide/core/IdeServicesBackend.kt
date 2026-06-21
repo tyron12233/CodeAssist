@@ -796,6 +796,17 @@ class IdeServicesBackend(
     override suspend fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult =
         withContext(Dispatchers.IO) { services.addModuleDependency(moduleName, targetModule, scope) }
 
+    // ---- local libraries ----
+
+    override fun localLibraryDropDir(moduleName: String): String? = services.localLibraryDropDir(moduleName)
+
+    override fun localLibraryCandidates(moduleName: String): List<String> =
+        services.localLibraryCandidates(moduleName)
+
+    // Exploding an aar reads/writes disk — keep it off the caller's (possibly UI) dispatcher.
+    override suspend fun addLocalLibrary(moduleName: String, path: String, scope: String): UiAddResult =
+        withContext(Dispatchers.IO) { services.addLocalLibrary(moduleName, path, scope) }
+
     // ---- repositories ----
 
     override fun repositories(): List<UiRepository> = services.repositories()
@@ -837,7 +848,12 @@ class IdeServicesBackend(
     // caches, and any sibling data such as a previous app version's projects.
     override fun storageRootPath(): String? = manager?.storageRoot?.toString()
 
-    override fun projectTemplates(): List<UiProjectTemplate> = services.projectTemplates().map(::toUiTemplate)
+    // Prefer the open engine's registry, but fall back to the ProjectManager's APPLICATION-scoped registry
+    // so the picker's Create-Project gallery enumerates templates BEFORE any project is open — reaching the
+    // throwing `services` accessor here would crash composition and freeze the whole UI (only external
+    // intents like the Discord link would keep working).
+    override fun projectTemplates(): List<UiProjectTemplate> =
+        (activeServices?.projectTemplates() ?: manager?.projectTemplates() ?: emptyList()).map(::toUiTemplate)
 
     override suspend fun createProject(templateId: String, args: Map<String, String>): UiProjectResult {
         val mgr = manager ?: return UiProjectResult(false, "Project creation not supported by this backend")
@@ -920,10 +936,11 @@ class IdeServicesBackend(
     }
 
     /**
-     * Install the process-wide uncaught-exception handler: surface the non-fatal dialog, report `app_crash`,
-     * and **swallow** (don't chain to the system killer) so the app stays alive. Hosts call this once at
-     * startup. On Android the [dev.ide.android] main-thread guard additionally keeps the UI looper running;
-     * this handler then mainly catches background-thread failures.
+     * Install the process-wide uncaught-exception handler ([Thread.setDefaultUncaughtExceptionHandler], so it
+     * covers every thread including the UI thread): surface the non-fatal dialog, report `app_crash`, and
+     * **swallow** (don't chain to the system killer) so the app stays alive where it can. Hosts call this once
+     * at startup. A UI-thread crash unwinds the looper, so after this handler reports it the process still
+     * exits — an honest, reported crash rather than a silently-resumed corrupt state.
      */
     fun installCrashReporting() {
         Thread.setDefaultUncaughtExceptionHandler { thread, t ->

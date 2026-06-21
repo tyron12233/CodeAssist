@@ -407,6 +407,31 @@ interface IdeBackend {
     suspend fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
+    // ---- local libraries (file-based jar/aar, no Maven coordinate) ----
+
+    /**
+     * The directory a picked local library should be copied into (a `libs/` folder under [moduleName]'s
+     * project), for [FileActions.importInto]. Null for an unknown module / backend without local-library
+     * support. The UI imports the file here, then calls [addLocalLibrary] with the returned path.
+     */
+    fun localLibraryDropDir(moduleName: String): String? = null
+
+    /**
+     * Existing `.jar`/`.aar` files already under the project tree that [moduleName] could depend on (e.g.
+     * ones the user imported earlier), minus any already declared. Lets the user attach a local library
+     * without re-picking it.
+     */
+    fun localLibraryCandidates(moduleName: String): List<String> = emptyList()
+
+    /**
+     * Attach the local library at [path] (an absolute `.jar` or `.aar` already on disk — freshly imported
+     * into `libs/` or an existing project file) to [moduleName] at [scope]. An `.aar` is exploded at add
+     * time so the editor sees its classes and the build routes its resources; an `.aar` on a non-Android
+     * module is rejected. No Maven resolution — local libraries have no transitive closure.
+     */
+    suspend fun addLocalLibrary(moduleName: String, path: String, scope: String): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
     // ---- repositories (where libraries resolve from) ----
 
     /** The Maven repositories libraries resolve from — the built-in ones (Maven Central, Google) plus any
@@ -738,6 +763,8 @@ data class UiDependencyNode(
     val incompatibleReason: String? = null,
     /** Its `group:name` is requested at more than one version somewhere in the graph. */
     val inConflict: Boolean = false,
+    /** A file-based local library (a jar/aar with no Maven coordinate) rather than a resolved artifact. */
+    val local: Boolean = false,
     val children: List<String> = emptyList(),
 )
 
@@ -772,11 +799,33 @@ enum class StepStatus { Pending, Running, Done, UpToDate, NoSource, Skipped, Fai
 
 data class BuildStepUi(val name: String, val status: StepStatus)
 
+/**
+ * A structured diagnostic streamed from a build tool (compiler / aapt2 / d8 / signer) while the build
+ * runs — the build console's parallel to the editor's [UiDiagnostic]. [kind] is an open id (compiler /
+ * resource / dex / packaging / …) driving the icon + grouping; [source] is the producing tool; [file]/
+ * [line]/[column] point into the project when known (line/column 1-based, -1 when absent); [detail] is
+ * extra context (a snippet or the raw tool line); [task] is the emitting build task.
+ */
+data class BuildDiagnosticUi(
+    val severity: UiSeverity,
+    val message: String,
+    val kind: String = "generic",
+    val source: String = "",
+    val file: String? = null,
+    val line: Int = -1,
+    val column: Int = -1,
+    val detail: String? = null,
+    val task: String? = null,
+)
+
 data class BuildState(
     val status: RunStatus = RunStatus.Idle,
     val moduleName: String = "",
     val steps: List<BuildStepUi> = emptyList(),
     val log: List<String> = emptyList(),
+    /** Structured diagnostics, appended live as tools report them (see [BuildDiagnosticUi]). The raw text
+     *  transcript still lives in [log]; this is the typed layer a UI groups, counts, and links from. */
+    val diagnostics: List<BuildDiagnosticUi> = emptyList(),
     val elapsedMs: Long = 0,
     /** An informational notice shown above the step graph (e.g. the first-build dex-cache warning). */
     val banner: String? = null,

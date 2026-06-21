@@ -1,4 +1,4 @@
-package dev.ide.core
+package dev.ide.lang.xml.lint
 
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
@@ -8,8 +8,8 @@ import dev.ide.lang.xml.XmlNodeKinds
 
 /**
  * Pure (I/O-free, index-free) Android XML lint rules over the tolerant DOM (the detection half).
- * Each rule returns the location and the data a host needs to build a quick-fix (the fix's file writes live in
- * `IdeServices`). Kept separate from the host so the detection is unit-testable on a bare parse tree.
+ * Each rule returns the location and the data a host needs to build a quick-fix (the fix's file writes live
+ * behind [XmlResourceHost]). Kept separate from the host so the detection is unit-testable on a bare parse tree.
  */
 object XmlLintRules {
 

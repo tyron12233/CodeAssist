@@ -44,6 +44,39 @@ interface Task {
   dispatcher, supports cooperative cancellation, and streams per-task status and logs to the build
   console.
 
+### Structured diagnostics
+
+Alongside the raw text log (`ctx.logger(): (String) -> Unit`, which stays the untyped transcript — a
+program's stdout, step banners, tool chatter), a task streams **structured** diagnostics through
+`ctx.diagnostics: DiagnosticSink` *as it discovers them*, rather than concatenating text into a final
+`TaskResult.Failed`:
+
+```kotlin
+data class BuildDiagnostic(
+    val severity: BuildSeverity,                 // ERROR / WARNING / INFO
+    val message: String,
+    val kind: DiagnosticKind = DiagnosticKind.GENERIC,   // compiler / resource / dex / dependency / lint / packaging — extensible
+    val source: String = "",                     // "java", "kotlin", "aapt2", "d8", "apksigner", …
+    val location: DiagnosticLocation? = null,    // path + 1-based line/column range (-1 when unknown)
+    val code: String? = null,
+    val detail: String? = null,                  // a snippet, a hint, or the raw tool line
+    val task: TaskName? = null,                  // filled in by the engine
+)
+```
+
+- **Tagging.** The engine wraps the `TaskContext` per task so every reported diagnostic is stamped with
+  the running `TaskName` automatically — producers never need to know their own name.
+- **Producing them.** Tool output is text, so `TaskContext.reportToolDiagnostics(source, messages, kind)`
+  (build-engine) feeds it through `CompilerOutputParser`, which understands the GNU/javac/kotlinc/aapt2
+  single-line form (`path:line[:col]: error|warning: message`) and the ecj batch block form
+  (`N. ERROR in <file> (at line L)` … `----------`), streaming one structured diagnostic per problem.
+  Un-classifiable but clearly-problematic lines are surfaced location-less so nothing is silently
+  dropped; pure chatter is ignored (it still rides the text log). The native compile tasks, and the
+  Android `aapt2`/`d8`/`r8`/`apksigner` tasks, all report through this path.
+- **To the UI.** The host wires `SimpleTaskContext(onDiagnostic = …)` to append each diagnostic (mapped
+  to `BuildDiagnosticUi`) to `BuildState.diagnostics` live; the build console groups them by file into a
+  "Problems" view with severity counts, click-to-open at the line — separate from the raw log pane.
+
 ## The native Java pipeline
 
 For `java-lib` / `java-cli` modules the graph is `compileJava → jar`, plus a run graph whose exec task

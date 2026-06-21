@@ -10,6 +10,9 @@ pluginManagement {
         google()
     }
 }
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
 
 dependencyResolutionManagement {
     // Modules must not declare their own repositories; all resolution flows through here.

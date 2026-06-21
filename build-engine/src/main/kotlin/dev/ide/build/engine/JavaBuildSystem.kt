@@ -156,6 +156,7 @@ internal class JavaCompileTask(
         val sources = sourceFiles(module)
         if (sources.isEmpty()) { Files.createDirectories(outputDir(module)); return TaskResult.Success }
         val result = compile.compile(sources, classpath(), outputDir(module), levelOf(module.languageLevel))
+        ctx.reportToolDiagnostics("java", result.messages)
         ctx.logger()(":${module.name}:compileJava ${if (result.success) "OK" else "FAILED"}")
         return if (result.success) TaskResult.Success
         else TaskResult.Failed(result.messages.joinToString("\n").ifBlank { "compilation failed" })

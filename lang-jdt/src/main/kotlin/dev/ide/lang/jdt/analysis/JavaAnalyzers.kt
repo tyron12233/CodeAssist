@@ -1,4 +1,4 @@
-package dev.ide.core
+package dev.ide.lang.jdt.analysis
 
 import dev.ide.analysis.AnalysisTarget
 import dev.ide.analysis.AnalyzerId
@@ -17,9 +17,9 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 
 /**
- * Built-in Java analyzers and the JDT compiler adapter, registered with the [dev.ide.analysis.impl.AnalysisEngine]
- * in [IdeServices]. They run the two analyzer tiers over the neutral DOM alongside the
- * compiler, all merging into one diagnostic stream the editor renders inline.
+ * Built-in Java analyzers and the JDT compiler adapter, contributed through [JdtAnalysisSupport.register].
+ * They run the two analyzer tiers over the neutral DOM alongside the compiler, all merging into one
+ * diagnostic stream the editor renders inline.
  */
 private val JAVA = LanguageId("java")
 
@@ -95,9 +95,12 @@ class UnusedImportAnalyzer : FileAnalyzer {
  * The compiler unified into the pipeline: adapts the JDT analyzer's diagnostics
  * (which already carry source ranges over the live buffer) into [Diagnostic]s with
  * `source = `[DiagnosticSource.Compiler] and a stable [Codes] join key, so fixes can be attached by
- * code. From here it is indistinguishable from analyzer output.
+ * code. From here it is indistinguishable from analyzer output. Scoped to `{java}` so it no longer runs
+ * on Kotlin/XML targets now that every language flows through the one pipeline.
  */
 class CompilerDiagnosticProvider(override val id: String = "jdt") : DiagnosticProvider {
+    override val languages = setOf(JAVA)
+
     override suspend fun diagnose(target: AnalysisTarget): List<Diagnostic> {
         // Binding-level diagnostics come from the JDT analyzer's cached in-memory compiler (no disk
         // environment scan, no shadow-file move), reusing the target's already-parsed syntactic tree for

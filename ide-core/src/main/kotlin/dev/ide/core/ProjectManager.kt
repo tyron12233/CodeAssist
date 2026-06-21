@@ -3,8 +3,14 @@ package dev.ide.core
 import dev.ide.build.engine.DexRunner
 import dev.ide.model.LanguageLevel
 import dev.ide.model.impl.ModelPersistence
+import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.impl.SdkData
+import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
+import dev.ide.platform.ServiceContainer
+import dev.ide.platform.ServiceKey
+import dev.ide.platform.impl.ApplicationContainer
+import dev.ide.platform.impl.PlatformCore
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -13,6 +19,10 @@ import java.util.Properties
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import java.nio.file.Paths
+
+/** APPLICATION-scoped Create-Project template registry, built over [ProjectManager]'s application platform
+ *  so the picker can enumerate templates with no project open. */
+private val PROJECT_TEMPLATES = ServiceKey<ProjectTemplateRegistry>("ide.projectTemplates")
 
 /** A project listed in the picker, read cheaply from disk without opening the full engine. */
 data class ProjectSummary(
@@ -54,11 +64,30 @@ class ProjectManager private constructor(
     }
 
     /**
+     * Application-scoped platform substrate. Holds the **project-independent** plugin contributions
+     * (module types, facet codecs, file icons, and the Create-Project templates) so they're reachable
+     * WITHOUT an open project — the picker enumerates templates from here ([projectTemplates]) before any
+     * engine exists. Each opened project still gets its own per-project [PlatformCore] for the model lock /
+     * message bus / activities; this one only carries the static registries. Disposed by [dispose].
+     */
+    private val appPlatform: PlatformCore = PlatformCore().also { IdeServices.registerStaticPlugins(it) }
+
+    /**
      * The process-global application service container. One per running app; it parents every opened
      * project's workspace container, so APPLICATION-scoped services are shared across projects and
-     * survive project switches. Disposed by [dispose] on app exit.
+     * survive project switches. Disposed by [dispose] on app exit. The Create-Project template registry
+     * is registered here (an APPLICATION-scoped service over [appPlatform]) so the picker resolves it
+     * through the scope container, with no open project.
      */
-    val applicationContainer: dev.ide.platform.ServiceContainer = dev.ide.platform.impl.ApplicationContainer()
+    val applicationContainer: ServiceContainer = ApplicationContainer().also { container ->
+        container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(appPlatform.extensions) }
+    }
+
+    /**
+     * The Create-Project gallery templates, enumerable without an open project (the picker shows them
+     * before any engine exists). Resolved from the APPLICATION-scoped [PROJECT_TEMPLATES] service.
+     */
+    fun projectTemplates(): List<ProjectTemplate> = applicationContainer.getService(PROJECT_TEMPLATES).all()
 
     private val prefsFile: Path get() = homeDir.resolve("prefs.properties")
 
@@ -236,9 +265,11 @@ class ProjectManager private constructor(
         }
     }
 
-    /** Dispose application-scoped services. Call on app exit, after the open project is closed. */
+    /** Dispose application-scoped services + the application platform. Call on app exit, after the open
+     *  project is closed. */
     fun dispose() {
         runCatching { applicationContainer.dispose() }
+        runCatching { appPlatform.dispose() }
     }
 
     private fun uniqueProjectDir(name: String): Path {
