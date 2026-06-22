@@ -11,6 +11,7 @@
 [![License](https://img.shields.io/github/license/tyron12233/CodeAssist)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/tyron12233/CodeAssist?style=flat&logo=github)](https://github.com/tyron12233/CodeAssist/stargazers)
 [![Forks](https://img.shields.io/github/forks/tyron12233/CodeAssist?style=flat&logo=github)](https://github.com/tyron12233/CodeAssist/network/members)
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/y2gycT6pDW)
 
 <img src="docs/assets/01-ide-on-phone.png" alt="CodeAssist running on a phone" width="320" />
 
@@ -187,3 +188,8 @@ CodeAssist is free software licensed under the **GNU General Public License v3.0
 - **F-Droid / IzzyOnDroid** — built from this repo, signed with the project's own key. See
   [docs/fdroid-izzyondroid.md](docs/fdroid-izzyondroid.md). (The IzzyOnDroid and Play builds have
   different signatures and cannot update across stores.)
+
+## Community
+
+Join the **[CodeAssist Discord](https://discord.gg/y2gycT6pDW)** to chat, get help, report bugs, and
+share what you build.
