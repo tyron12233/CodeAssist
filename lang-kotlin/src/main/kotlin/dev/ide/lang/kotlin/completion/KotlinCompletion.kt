@@ -375,16 +375,16 @@ class KotlinCompletionService(
         val detail = buildString {
             s.type?.let { append(typeLabel(it)) } // return type (funcs) / declared type (vals, props)
             if (s.isExtension) append(if (isEmpty()) "(extension)" else "  (extension)")
-            if (importEdit.isNotEmpty()) {
-                (s.type as? KotlinType)?.qualifiedName?.substringBeforeLast('.')
-                    ?.let { append(if (isEmpty()) "($it)" else "  ($it)") }
-            }
         }.ifBlank { null }
+        // Right-aligned origin: a top-level callable's package, else its declaring class (skip the synthetic
+        // `…Kt` file facade — that's an implementation detail, not a place the user thinks of the symbol living).
+        val container = s.packageName ?: s.declaringClassFqn?.takeUnless { it.endsWith("Kt") }
         return CompletionItem(
             label = label,
             insertText = insert,
             kind = itemKind(s.kind),
             detail = detail,
+            container = container,
             documentation = s.documentation(), // javadoc/KDoc from attached sources → the popup's doc panel
             sortPriority = proximity(s.kind),
             symbol = s,

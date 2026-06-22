@@ -17,7 +17,7 @@ internal object CompletionRanker {
             .map { (c, s) ->
                 CompletionItem(
                     label = c.presentation, insertText = c.insertText, kind = c.kind, detail = c.tail,
-                    documentation = c.documentation,
+                    container = c.container, documentation = c.documentation,
                     sortPriority = s, additionalEdits = c.importEdits, caret = c.caret,
                 )
             }

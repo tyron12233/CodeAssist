@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
@@ -74,7 +75,8 @@ fun CodeAssistApp(
     val scope = rememberCoroutineScope()
 
     // Create a project backup zip and hand it to the host's share/save sheet.
-    val backupAndShare: suspend () -> Unit = { backend.backupProjects()?.let { fileActions.share(it) } }
+    val backupAndShare: suspend () -> Unit =
+        { backend.backupProjects()?.let { fileActions.share(it) } }
 
     // The active project changes (create/open) bump the epoch; re-key per-project state on it.
     val epoch by backend.projectEpoch.collectAsState()
@@ -88,8 +90,7 @@ fun CodeAssistApp(
         if (!state.restoreTabs()) {
             state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
         }
-        snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }
-            .drop(1)
+        snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }.drop(1)
             .collectLatest {
                 delay(300)
                 state.backend.saveOpenTabs(state.tabsSnapshot())
@@ -111,10 +112,21 @@ fun CodeAssistApp(
         // back exits the app as usual.
         PlatformBackHandler(enabled = screen != Screen.Projects || showOnboarding || showMigration || showAnalytics) {
             when {
-                showOnboarding -> { showOnboarding = false; backend.setPreference("onboarding.seen", "true") }
-                showMigration -> { showMigration = false; backend.setPreference("migration.acknowledged", "true") }
-                showAnalytics -> { showAnalytics = false; backend.setAnalyticsConsent(false) }
-                screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen = Screen.Editor
+                showOnboarding -> {
+                    showOnboarding = false; backend.setPreference("onboarding.seen", "true")
+                }
+
+                showMigration -> {
+                    showMigration = false; backend.setPreference("migration.acknowledged", "true")
+                }
+
+                showAnalytics -> {
+                    showAnalytics = false; backend.setAnalyticsConsent(false)
+                }
+
+                screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen =
+                    Screen.Editor
+
                 screen == Screen.CreateProject -> screen = Screen.Projects
                 screen == Screen.Editor -> screen = Screen.Projects
                 else -> {}
@@ -130,7 +142,11 @@ fun CodeAssistApp(
                             val projects = remember(epoch, projectsRefresh) { backend.projects() }
                             ProjectPickerScreen(
                                 projects = projects,
-                                onOpen = { p -> scope.launch { if (backend.openProject(p.rootPath)) screen = Screen.Editor } },
+                                onOpen = { p ->
+                                    scope.launch {
+                                        if (backend.openProject(p.rootPath)) screen = Screen.Editor
+                                    }
+                                },
                                 onNewProject = { screen = Screen.CreateProject },
                                 onDeleteProject = { p -> scope.launch { backend.deleteProject(p.rootPath); projectsRefresh++ } },
                                 onBackup = { scope.launch { backupAndShare() } },
@@ -151,20 +167,29 @@ fun CodeAssistApp(
                                 },
                             )
                         }
+
                         Screen.CreateProject -> CreateProjectScreen(
                             backend = backend,
                             onCancel = { screen = Screen.Projects },
                             onCreated = { screen = Screen.Editor },
                         )
+
                         Screen.Editor -> EditorScreen(
                             state = state,
                             onToggleTheme = { dark = !dark },
-                            onOpenDependencies = { module -> configModule = module; modulesTab = ModulesTab.Dependencies; screen = Screen.ModuleConfig },
-                            onOpenModuleConfig = { module -> configModule = module; modulesTab = ModulesTab.Settings; screen = Screen.ModuleConfig },
+                            onOpenDependencies = { module ->
+                                configModule = module; modulesTab =
+                                ModulesTab.Dependencies; screen = Screen.ModuleConfig
+                            },
+                            onOpenModuleConfig = { module ->
+                                configModule = module; modulesTab = ModulesTab.Settings; screen =
+                                Screen.ModuleConfig
+                            },
                             onOpenSdkManager = { screen = Screen.SdkManager },
                             onCloseProject = { screen = Screen.Projects },
                             fileActions = fileActions,
                         )
+
                         Screen.ModuleConfig -> ModuleConfigScreen(
                             backend = state.backend,
                             initialModule = configModule,
@@ -173,6 +198,7 @@ fun CodeAssistApp(
                             codeFont = codeFont,
                             fileActions = fileActions,
                         )
+
                         Screen.SdkManager -> SdkManagerScreen(
                             backend = state.backend,
                             onBack = { screen = Screen.Editor },
@@ -196,7 +222,9 @@ fun CodeAssistApp(
                 // the editor — the same use case the picker's "open" runs.
                 onOpenSample = {
                     backend.projects().firstOrNull()?.let { sample ->
-                        scope.launch { if (backend.openProject(sample.rootPath)) screen = Screen.Editor }
+                        scope.launch {
+                            if (backend.openProject(sample.rootPath)) screen = Screen.Editor
+                        }
                     }
                 },
                 onFinish = {

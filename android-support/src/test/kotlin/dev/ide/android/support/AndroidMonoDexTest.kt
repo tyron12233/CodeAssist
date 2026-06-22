@@ -6,11 +6,8 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -85,7 +82,7 @@ class AndroidMonoDexTest {
             write(dir, "app/src/main/res/values/strings.xml", STRINGS)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
-            val graph = AndroidBuildSystem.inProcess(jdtCompile(sdk.androidJar), sdk, signing).createBuildGraph(
+            val graph = AndroidBuildSystem.inProcess(sdk, signing, bootClasspath = listOf(sdk.androidJar)).createBuildGraph(
                 store.workspace.projects.single(),
                 BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE),
             )
@@ -111,14 +108,6 @@ class AndroidMonoDexTest {
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    // At compliance 8 (the android app), compile against android.jar as the boot classpath to dodge the
-    // JAVA_17 modular split-package conflict; the plain java-lib (level 17) compiles against the host JDK.
-    private fun jdtCompile(androidJar: Path): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val boot = if (level == "8") listOf(androidJar) else emptyList()
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level, bootClasspath = boot)
-        JavaCompileResult(r.success, r.messages)
     }
 
     private fun write(root: Path, rel: String, content: String) {

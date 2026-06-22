@@ -50,7 +50,7 @@ class AndroidSdk(
     /**
      * True when the on-device ([forDevice]) pipeline can run: it dexes/signs in-process (no `d8.jar`/
      * `apksigner.jar`/`java` launcher), so it needs only the bootclasspath jar and the native `aapt2`
-     * binary. `zipalign` is optional ([ApksigSigner] signs unaligned when it is absent).
+     * binary. `zipalign` is not needed ([ApksigSigner] aligns the APK in-process via apksig).
      */
     fun hasNativeTools(): Boolean = Files.exists(androidJar) && Files.exists(aapt2)
 

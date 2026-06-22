@@ -31,14 +31,34 @@ class ClasspathReader(
     private val cacheDir: Path? = null,
 ) : Closeable {
 
-    private val zips = ConcurrentHashMap<String, ZipFile>()
+    // A BOUNDED LRU of open jar handles, NOT one-per-jar-forever. Each open ZipFile holds a file descriptor,
+    // and a real (Compose) classpath is hundreds of jars; Android's per-process FD limit is ~1024 (lower on
+    // older releases), so keeping every jar open exhausts descriptors and any later open — even
+    // `Files.list` while walking the project tree — fails with "Too many open files". The eldest handle is
+    // closed on eviction; an evicted jar is simply reopened on its next access (gated behind the decode and
+    // jar-scan caches, so reopens are infrequent).
+    private val zips = object : LinkedHashMap<String, ZipFile>(16, 0.75f, /* accessOrder = */ true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ZipFile>): Boolean {
+            if (size <= MAX_OPEN_ZIPS) return false
+            runCatching { eldest.value.close() }
+            return true
+        }
+    }
     private val decodeCache = ConcurrentHashMap<String, Holder<KotlinMetadata.Decoded>>()
     private val jarDataCache = ConcurrentHashMap<String, JarScanData>()
 
     private class Holder<T>(val value: T?)
 
-    private fun zipFor(path: Path): ZipFile? =
-        zips.getOrPut(path.toString()) { runCatching { ZipFile(path.toFile()) }.getOrElse { return null } }
+    /**
+     * Run [block] with an open [ZipFile] for [path] from the bounded LRU, opening it if absent. The block
+     * runs while the LRU lock is held, so the handle it reads can never be the one a concurrent caller
+     * evicts and closes. Returns null when the jar can't be opened (the block may also return null).
+     */
+    private fun <T> withZip(path: Path, block: (ZipFile) -> T?): T? = synchronized(zips) {
+        val key = path.toString()
+        val z = zips[key] ?: runCatching { ZipFile(path.toFile()) }.getOrNull()?.also { zips[key] = it }
+        if (z == null) null else block(z)
+    }
 
     /** Raw bytes of [fqn]'s class file, searching jars then directories. A nested type may be written with
      *  `.` (`android.R.string`) instead of the binary `$` (`android/R$string`), so when the direct path
@@ -61,9 +81,11 @@ class ClasspathReader(
                 val f = c.resolve(rel)
                 if (Files.isRegularFile(f)) return runCatching { Files.readAllBytes(f) }.getOrNull()
             } else {
-                val z = zipFor(c) ?: continue
-                val e = z.getEntry(rel) ?: continue
-                return runCatching { z.getInputStream(e).use { it.readBytes() } }.getOrNull()
+                val bytes = withZip(c) { z ->
+                    val e = z.getEntry(rel) ?: return@withZip null
+                    runCatching { z.getInputStream(e).use { it.readBytes() } }.getOrNull()
+                }
+                if (bytes != null) return bytes
             }
         }
         return null
@@ -110,8 +132,10 @@ class ClasspathReader(
                 if (d != null) { jarDataCache[key] = d; return d }
             }
         }
-        val z = zipFor(path) ?: return JarScanData.EMPTY
-        val data = if (!hasKotlinModule(z)) JarScanData.EMPTY else scanJar(z)
+        // Open a fresh handle and close it immediately: the full-jar scan runs once per jar (then the .kxt /
+        // jarDataCache memoize it), so it should not occupy a slot in the LRU of hot read handles.
+        val z0 = runCatching { ZipFile(path.toFile()) }.getOrNull() ?: return JarScanData.EMPTY
+        val data = z0.use { z -> if (!hasKotlinModule(z)) JarScanData.EMPTY else scanJar(z) }
         jarDataCache[key] = data
         if (data !== JarScanData.EMPTY) cacheDir?.let { dir ->
             runCatching {
@@ -157,7 +181,7 @@ class ClasspathReader(
         return "${path.fileName}_${size}_$mtime".replace(Regex("[^A-Za-z0-9._-]"), "_")
     }
 
-    override fun close() {
+    override fun close() = synchronized(zips) {
         zips.values.forEach { runCatching { it.close() } }
         zips.clear()
     }
@@ -318,6 +342,9 @@ class ClasspathReader(
 
     private companion object {
         const val FORMAT_VERSION = 11 // v11: + RawCallableData.paramHasDefault (missing-required-argument detection)
+        // Cap on simultaneously-open jar handles (file descriptors). Small: the hot working set during
+        // completion is a handful of jars, and reopening an evicted one is cheap behind the decode caches.
+        const val MAX_OPEN_ZIPS = 24
         val BINARY = SymbolOrigin(fromSource = false, file = null)
     }
 }

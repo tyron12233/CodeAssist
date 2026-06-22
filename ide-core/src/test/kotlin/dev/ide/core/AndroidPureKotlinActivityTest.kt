@@ -11,13 +11,9 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
-import dev.ide.build.engine.KotlinCompile
-import dev.ide.build.engine.KotlinCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.DependencyScope
@@ -76,7 +72,7 @@ class AndroidPureKotlinActivityTest {
             write(dir, "app/src/main/kotlin/com/example/app/MainActivity.kt", ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
-            val build = AndroidBuildSystem.subprocess(jdtCompile(sdk.androidJar), sdk, signing, kotlinCompile(sdk.androidJar))
+            val build = AndroidBuildSystem.subprocess(sdk, signing, kotlin = IncrementalKotlinCompiler(KotlinJvmCompiler()))
             val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE)
             val log = StringBuilder()
             val outcome = runBlocking {
@@ -104,17 +100,6 @@ class AndroidPureKotlinActivityTest {
     }
 
     private fun stdlibJar(): Path = Path.of(Unit::class.java.protectionDomain.codeSource.location.toURI())
-
-    private fun jdtCompile(androidJar: Path): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val boot = if (level == "8") listOf(androidJar) else emptyList()
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level, bootClasspath = boot)
-        JavaCompileResult(r.success, r.messages)
-    }
-
-    private fun kotlinCompile(androidJar: Path): KotlinCompile = KotlinCompile { kt, java, cp, out, target ->
-        val r = KotlinJvmCompiler().compile(kt, java, cp, out, target, bootClasspath = listOf(androidJar))
-        KotlinCompileResult(r.success, r.messages)
-    }
 
     private fun write(root: Path, rel: String, content: String) {
         val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())

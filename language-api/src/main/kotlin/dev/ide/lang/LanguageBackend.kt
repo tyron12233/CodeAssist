@@ -14,25 +14,25 @@ import dev.ide.model.LanguageLevel
 import dev.ide.vfs.VirtualFile
 
 /**
- * language-api — the seam for "own parser / javac / Eclipse JDT". The core never depends on a
- * concrete parser; it depends on [LanguageBackend] and the backend-neutral DOM/resolve/completion
- * types. The project model supplies the [CompilationContext] (roots + classpath + language level);
- * the backend produces ASTs, diagnostics, resolution, completion, and (for builds) class output.
+ * language-api — the seam for "own parser / Eclipse JDT / a custom frontend". The core never depends on a
+ * concrete parser; it depends on [LanguageBackend] and the backend-neutral DOM/resolve/completion types.
+ * The project model supplies the [CompilationContext] (roots + classpath + language level); the backend
+ * produces ASTs, diagnostics, resolution, and completion.
+ *
+ * **Editor-side only.** Emitting bytecode is the build system's job: each language module owns its own
+ * build compile task (lang-jdt drives ecj, lang-kotlin drives K2) and the build graph calls it directly.
+ * The LanguageBackend is therefore not a compiler factory; it never sees the build.
  *
  * Recommended wiring: JDT is the default analyzer + completion backend (error recovery, working-copy
- * reconcile, a built-in completion engine, light on ART) and a valid compiler; javac is an optional
- * compile backend; a custom parser slots into the same interfaces.
+ * reconcile, a built-in completion engine, light on ART); a custom parser slots into the same interfaces.
  */
 interface LanguageBackend {
-    val id: String                          // "jdt" | "javac" | "custom"
+    val id: String                          // "jdt" | "kotlin" | "xml" | "custom"
     val languages: Set<LanguageId>
     val capabilities: Set<BackendCapability>
 
     /** Editor-time: tolerant parsing, resolution, completion. */
     fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer
-
-    /** Build-time: emit .class. Null if this backend can analyze but not compile. */
-    fun createCompiler(ctx: CompilationContext): SourceCompiler?
 }
 
 @JvmInline value class LanguageId(val id: String)
@@ -56,7 +56,6 @@ enum class BackendCapability {
     SIGNATURE_HELP,     // provides a SignatureHelpService (parameter-info popup)
     SEMANTIC_HIGHLIGHT, // provides a SemanticHighlightService (type-aware editor coloring)
     CODE_FOLDING,       // provides a FoldingService (collapse imports / blocks / comments)
-    COMPILE,            // can emit bytecode
     FORMAT,
 }
 
@@ -137,14 +136,3 @@ interface SourceAnalyzer {
 }
 
 data class AnalysisResult(val file: VirtualFile, val diagnostics: List<Diagnostic>)
-
-/** Build-time compilation. Consumes the same [CompilationContext]; emits class files to outputDir. */
-interface SourceCompiler {
-    suspend fun compile(sources: List<VirtualFile>): CompileResult
-}
-
-data class CompileResult(
-    val success: Boolean,
-    val diagnostics: List<Diagnostic>,
-    val outputClasses: List<VirtualFile>,
-)

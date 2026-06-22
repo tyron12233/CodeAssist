@@ -83,7 +83,9 @@ data class CompletionItem(
     val label: String,                      // shown in the popup
     val insertText: String,                 // what gets inserted (may differ from label)
     val kind: CompletionItemKind,
-    val detail: String? = null,             // signature / type, shown to the right
+    val detail: String? = null,             // signature / type, shown under the label (second line)
+    /** Origin shown right-aligned on the row: a type's package, or a member's declaring class. Null hides it. */
+    val container: String? = null,
     val documentation: String? = null,
     /** Lower sorts first; backends set this from prefix match + expected-type match + proximity. */
     val sortPriority: Int = 0,

@@ -16,8 +16,8 @@ import dev.ide.vfs.VirtualFile
 
 /**
  * A non-[Analyzer] producer of diagnostics, run by the scheduler exactly like an analyzer. The
- * compiler is the built-in one: it adapts a backend's `SourceAnalyzer.analyze(file)` /
- * `SourceCompiler` output into [Diagnostic]s with `source = `[DiagnosticSource.Compiler] and a stable
+ * compiler is the built-in one: it adapts a backend's `SourceAnalyzer.analyze(file)` and the build
+ * system's compiler output into [Diagnostic]s with `source = `[DiagnosticSource.Compiler] and a stable
  * [Diagnostic.code]. From the merge step on it is indistinguishable from analyzer output, and its fixes
  * come from code-keyed [QuickFixProvider]s — the compiler itself stays fix-agnostic. Registered on
  * [DIAGNOSTIC_PROVIDER_EP].

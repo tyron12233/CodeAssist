@@ -67,8 +67,6 @@ class MainActivity : ComponentActivity() {
                     .onFailure { e -> error = e.message ?: e.toString() }
             }
 
-            Column() { }
-
             var pendingTarget by remember { mutableStateOf<String?>(null) }
             var pendingCallback by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
             val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->

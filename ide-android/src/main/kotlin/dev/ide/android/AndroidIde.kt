@@ -172,9 +172,21 @@ object AndroidIde {
     /** The on-disk projects directory (`<external-files>/codeassist/projects`). */
     fun projectsDir(context: Context): File = File(appHomeDir(context), "projects")
 
-    /** Copy a bundled asset into app storage once (assets are read-only in the APK). */
+    /**
+     * Copy a bundled asset into app storage, re-extracting when the APK has been updated since the last
+     * copy (assets are read-only in the APK). The re-extract-on-update check is essential: app storage lives
+     * under the external files dir, which survives an APK update, so a copy-once would pin the FIRST version
+     * of every asset forever. That stranded a stale `debug.keystore` (the pre-fix one keytool wrote with an
+     * ART-unreadable HmacPBESHA256 MAC) even after shipping a new legacy-PKCS12 asset, so on-device signing
+     * kept failing with "PKCS12 key store mac invalid". A fresh copy's mtime is after the install, so a
+     * subsequent launch with no new update sees it as current.
+     */
     private fun copyAsset(context: Context, name: String, dest: File): File {
-        if (!dest.exists() || dest.length() == 0L) {
+        val updatedAt = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L)
+        if (!dest.exists() || dest.length() == 0L || dest.lastModified() < updatedAt) {
+            dest.parentFile?.mkdirs()
             context.assets.open(name).use { input ->
                 dest.outputStream().use { output -> input.copyTo(output) }
             }

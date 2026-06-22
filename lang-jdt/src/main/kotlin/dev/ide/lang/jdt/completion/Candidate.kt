@@ -26,6 +26,8 @@ internal class Candidate(
     val insertText: String,
     val presentation: String,
     val tail: String?,
+    /** Right-aligned origin: a type's package, or a member's declaring class. Null hides it. */
+    val container: String? = null,
     val kind: CompletionItemKind,
     val type: TypeBinding?,
     val proximity: Proximity,

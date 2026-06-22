@@ -46,7 +46,8 @@ object JdtBatchCompiler {
         sourceLevel: String = "17",
         bootClasspath: List<Path> = emptyList(),
     ): Result {
-        runCatching { Files.createDirectories(outputDir) }
+        Files.createDirectories(outputDir)
+
         if (sources.isEmpty()) return Result(true, emptyList())
 
         // Explicit boot library if given; otherwise the compile classpath on ART (carries android.jar),

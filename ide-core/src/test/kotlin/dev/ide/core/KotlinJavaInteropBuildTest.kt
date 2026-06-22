@@ -4,15 +4,11 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaBuildSystem
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
-import dev.ide.build.engine.KotlinCompile
-import dev.ide.build.engine.KotlinCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.jarPath
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.build.jvm.JavaBuildSystem
+import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
@@ -58,19 +54,6 @@ class KotlinJavaInteropBuildTest {
         override fun supportedBuildSystems(): Set<BuildSystemId> = setOf(BuildSystemId.NATIVE)
     }
 
-    private fun javaCompile() = JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
-    }
-
-    private fun kotlinCompile(): KotlinCompile {
-        val compiler = KotlinJvmCompiler()
-        return KotlinCompile { kt, java, cp, out, target ->
-            val r = compiler.compile(kt, java, cp, out, target)
-            KotlinCompileResult(r.success, r.messages)
-        }
-    }
-
     /** The loaded kotlin-stdlib jar — added as a module library so the program links + runs. */
     private fun stdlibJar(): Path = Path.of(Unit::class.java.protectionDomain.codeSource.location.toURI())
 
@@ -104,7 +87,9 @@ class KotlinJavaInteropBuildTest {
         val platform = PlatformCore()
         try {
             val (_, project) = buildWorkspace(dir, platform)
-            val build = JavaBuildSystem(javaCompile(), kotlinCompile())
+            // Desktop wiring, exactly as IdeServices builds it: empty boot classpath (ecj/K2 use the host
+            // JRE) and the real incremental K2 compiler. compileJava/compileKotlin call ecj/K2 directly.
+            val build = JavaBuildSystem(kotlin = IncrementalKotlinCompiler(KotlinJvmCompiler()))
             val graph = build.createBuildGraph(
                 project, BuildRequest(listOf(ModuleId("app")), VariantSelector("main"), BuildGoal.PACKAGE),
             )

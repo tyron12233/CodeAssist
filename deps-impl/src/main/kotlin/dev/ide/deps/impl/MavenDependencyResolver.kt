@@ -43,8 +43,13 @@ class MavenDependencyResolver(
     private val fileFor: (Path) -> VirtualFile,
     private val fetcher: ArtifactFetcher = HttpArtifactFetcher(),
     private val searchEndpoint: String = MAVEN_CENTRAL_SEARCH,
-    /** Max concurrent network fetches (POM metadata + artifact downloads). */
-    private val concurrency: Int = 12,
+    /**
+     * Concurrency is split because the two phases have opposite profiles. POM fetches are tiny and
+     * latency-bound (the graph walk is a chain of small round-trips), so a high fan-out keeps the pipe full;
+     * artifact downloads are bandwidth-bound, where too many parallel large transfers just thrash the link.
+     */
+    private val pomConcurrency: Int = 24,
+    private val downloadConcurrency: Int = 8,
 ) : DependencyResolver {
 
     /**
@@ -110,7 +115,7 @@ class MavenDependencyResolver(
         // its exclusions — so resolution outcomes are unchanged, just far less wall-clock on big graphs.
         val processed = AtomicInteger(0)
         coroutineScope {
-            val sem = Semaphore(concurrency)
+            val sem = Semaphore(pomConcurrency)
             while (queue.isNotEmpty() && chosen.size < MAX_NODES) {
                 progress.checkCanceled()
                 val frontier = ArrayList<Req>(queue.size)
@@ -167,11 +172,15 @@ class MavenDependencyResolver(
         }
 
         // --- download + assemble results ---------------------------------------------------------
-        // Every chosen artifact is independent, so download + AAR-explode them in parallel too.
+        // Two passes, so the build-critical jars/aars all land first at full concurrency and editor-only
+        // sources never share a download slot with (or queue ahead of) a jar something is waiting to build
+        // against. Pass 1 fetches + AAR-explodes every chosen artifact in parallel; pass 2 fetches the
+        // matching `-sources.jar`s (optional, often absent → a 404 we don't want on the critical path) and
+        // grafts them onto the already-resolved artifacts.
         val total = chosen.size.coerceAtLeast(1)
         val downloaded = AtomicInteger(0)
         val outcomes = coroutineScope {
-            val sem = Semaphore(concurrency)
+            val sem = Semaphore(downloadConcurrency)
             chosen.entries.map { (ga, ver) ->
                 async(Dispatchers.IO) {
                     sem.withPermit {
@@ -190,10 +199,9 @@ class MavenDependencyResolver(
                         // library were complete — invisible until completion couldn't resolve the type.
                         if (artifact == null) return@withPermit DownloadOutcome(coord, null, failed = true)
                         val classesRoot = if (kind == ArtifactKind.AAR) fileFor(extractClassesJar(coord, artifact)) else fileFor(artifact)
-                        val sources = fetchArtifact(coord, "jar", repos, classifier = "sources")?.let { fileFor(it) }
                         val dependsOn = edges[ga].orEmpty().mapNotNull { c -> chosen[c]?.let { Coordinate(c.group, c.name, it) } }
                         progress.report(downloaded.incrementAndGet().toDouble() / total, "Downloaded ${coord.name}")
-                        DownloadOutcome(coord, ResolvedArtifact(coord, kind, classesRoot, sources, dependsOn), failed = false)
+                        DownloadOutcome(coord, ResolvedArtifact(coord, kind, classesRoot, sourcesRoot = null, dependsOn), failed = false)
                     }
                 }
             }.awaitAll()
@@ -202,6 +210,24 @@ class MavenDependencyResolver(
         for (o in outcomes) {
             if (o == null) continue
             if (o.artifact != null) resolved += o.artifact else if (o.failed) unresolved += o.coord
+        }
+
+        // Pass 2: editor-only sources, off the build-critical path. Failures are ignored (sources are best-
+        // effort) and never affect `unresolved`.
+        if (resolved.isNotEmpty()) coroutineScope {
+            val sem = Semaphore(downloadConcurrency)
+            val withSources = resolved.map { art ->
+                async(Dispatchers.IO) {
+                    sem.withPermit {
+                        progress.checkCanceled()
+                        val sources = runCatching { fetchArtifact(art.coordinate, "jar", repos, classifier = "sources") }
+                            .getOrNull()?.let { fileFor(it) } ?: return@withPermit art
+                        art.copy(sourcesRoot = sources)
+                    }
+                }
+            }.awaitAll()
+            resolved.clear()
+            resolved.addAll(withSources)
         }
 
         val conflicts = seenVersions
@@ -309,12 +335,21 @@ class MavenDependencyResolver(
 
     // --- download helpers ----------------------------------------------------------------------
 
-    /** Returns the cached path for an artifact, fetching it if absent. Null when no repo carries it. */
+    /**
+     * Returns the cached path for an artifact, fetching it if absent. Null when no repo carries it. Unlike
+     * the POM path ([fetchBytes]), the bytes stream socket → disk (never resident in heap) — jars/aars are
+     * large and many download in parallel.
+     */
     private fun fetchArtifact(coord: Coordinate, ext: String, repos: List<Repository>, classifier: String? = null): Path? {
         val rel = cache.relativePath(coord, ext, classifier)
         if (cache.exists(rel)) return cache.fileFor(rel)
-        val bytes = fetchBytes(rel, reposFor(coord, repos)) ?: return null
-        return cache.write(rel, bytes)
+        val ordered = reposFor(coord, repos)
+        return cache.writeStreaming(rel) { tmp ->
+            ordered.any { repo ->
+                val url = repo.url.removeSuffix("/") + "/" + rel
+                runCatching { fetcher.fetchTo(url, tmp) }.getOrDefault(false)
+            }
+        }
     }
 
     /**

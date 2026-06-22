@@ -36,12 +36,11 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskContainer
 import dev.ide.build.engine.DefaultTaskContainer
 import dev.ide.build.engine.JarTask
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaPlugin
-import dev.ide.build.engine.KotlinCompile
 import dev.ide.build.engine.LifecycleTask
 import dev.ide.build.engine.ProcessResourcesTask
 import dev.ide.build.engine.jarPath
+import dev.ide.build.jvm.JavaPlugin
+import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
@@ -61,21 +60,28 @@ import java.nio.file.Paths
  * The native, Gradle-free Android build system. It turns an
  * `android-app` module + a selected [dev.ide.android.support.AndroidVariant] into the incremental task
  * DAG `aapt2Compile -> aapt2Link(+R.java) -> compileJava -> dex -> packageApk -> sign`, run by
- * build-engine's generic [dev.ide.build.TaskExecutor]. Compilation is the injected [JavaCompile] port
- * (JDT in production); the Android tools are injected ports defaulting to the SDK subprocess wirings.
+ * build-engine's generic [dev.ide.build.TaskExecutor]. Java/Kotlin compilation is owned by the language
+ * modules (lang-jdt's ecj via [dev.ide.lang.jdt.compile.JdtBatchCompiler], lang-kotlin's K2 via
+ * [IncrementalKotlinCompiler]), called directly by the Android compile tasks; the Android tools stay
+ * injected ports defaulting to the SDK subprocess wirings.
  *
  * It shares [BuildSystemId.NATIVE] with the Java build system and distinguishes itself by [supports];
  * a host composes the two into one native build system that dispatches by module type.
  */
 class AndroidBuildSystem(
-    private val javaCompile: JavaCompile,
     private val sdk: AndroidSdk,
     private val signing: SigningConfig,
+    /**
+     * The ecj/K2 `-bootclasspath`: empty on the desktop (ecj/kotlinc use the host JRE) and `android.jar` +
+     * desugar stubs on ART (no host JRE to read). Host-specific, so the host supplies it. Distinct from
+     * [compileBootclasspath], which separately puts `android.jar` on the regular compile `-classpath`.
+     */
+    private val bootClasspath: List<Path> = emptyList(),
     private val aapt2: Aapt2 = Aapt2Subprocess(sdk.aapt2),
     private val dexer: Dexer = D8Dexer(sdk.d8Jar, sdk.javaLauncher),
     private val shrinker: Shrinker = R8Subprocess(sdk.d8Jar, sdk.javaLauncher),
     private val signer: ApkSigner = ApkSignerTool(sdk.apksignerJar, sdk.zipalign, sdk.javaLauncher),
-    private val kotlinCompile: KotlinCompile? = null,
+    private val kotlin: IncrementalKotlinCompiler? = null,
     /** Global content-addressed library-dex cache (e.g. the host's shared caches dir); null = per-project only. */
     private val dexCacheRoot: Path? = null,
 ) : BuildSystem {
@@ -112,7 +118,7 @@ class AndroidBuildSystem(
         // (compileJava/processResources/classes/jar); the android tasks are added here and wired to the
         // Java tasks by name (e.g. dexBuilderLib dependsOn `:lib:jar`). The container realizes it at build().
         val tasks = DefaultTaskContainer()
-        val javaPlugin = JavaPlugin(javaCompile, kotlinCompile)
+        val javaPlugin = JavaPlugin(bootClasspath, kotlin)
         val withJar = request.goal != BuildGoal.COMPILE_ONLY
         val registered = HashSet<ModuleId>()
         for (app in targets) {
@@ -170,7 +176,7 @@ class AndroidBuildSystem(
         // Kotlin: upstream modules' `kotlin-classes` (sibling of their Java output) join the compile classpath;
         // when the app itself has `.kt`, its own `compileKotlin` runs first and its output is added too.
         val upstreamKotlin = appModuleOutputs.map { it.resolveSibling("kotlin-classes") }
-        val appHasKotlin = kotlinCompile != null && containsKotlin(sourceRoots)
+        val appHasKotlin = kotlin != null && containsKotlin(sourceRoots)
         val directDepKotlin = directModuleDeps(app, byId).filter { moduleHasKotlin(it) }
             .map { TaskName(":${it.name}:compileKotlin") }
         val kotlinClasspath = compileBootclasspath + libs.compileJars + appModuleOutputs + upstreamKotlin
@@ -181,21 +187,55 @@ class AndroidBuildSystem(
         val aapt2Link = step("aapt2Link")
         val compileKotlin = step("compileKotlin")
         val compile = step("compileJava")
+
         tasks.task(mergeRes) { MergeResourcesTask(mergeRes, mergeResInputs, layout.mergedRes) }
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
         tasks.task(aapt2Link, listOf(aapt2Compile)) {
-            Aapt2LinkTask(aapt2Link, layout.compiledRes, layout.manifest(facet), sdk.androidJar,
-                facet.namespace, extraPackages, facet.minSdk, facet.targetSdk, versionCode, versionName,
-                layout.genJava, layout.resourcesAp, aapt2)
+            Aapt2LinkTask(
+                aapt2Link,
+                layout.compiledRes,
+                layout.manifest(facet),
+                sdk.androidJar,
+                facet.namespace,
+                extraPackages,
+                facet.minSdk,
+                facet.targetSdk,
+                versionCode,
+                versionName,
+                layout.genJava,
+                layout.resourcesAp,
+                aapt2
+            )
         }
         if (appHasKotlin) {
             tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin) {
-                AndroidKotlinCompileTask(compileKotlin, sourceRoots, layout.genJava, kotlinClasspath, layout.kotlinClasses, level, kotlinCompile!!)
+                AndroidKotlinCompileTask(
+                    compileKotlin,
+                    sourceRoots,
+                    layout.genJava,
+                    kotlinClasspath,
+                    layout.kotlinClasses,
+                    level,
+                    bootClasspath,
+                    kotlin,
+                )
             }
         }
+
         // The app compiles the WHOLE gen tree — its own R plus the final R for every dependency-lib package.
-        tasks.task(compile, listOf(aapt2Link) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList())) {
-            AndroidCompileTask(compile, sourceRoots, layout.genJava, compileClasspath, layout.classes, level, javaCompile)
+        tasks.task(
+            compile,
+            listOf(aapt2Link) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList())
+        ) {
+            AndroidCompileTask(
+                compile,
+                sourceRoots,
+                layout.genJava,
+                compileClasspath,
+                layout.classes,
+                level,
+                bootClasspath,
+            )
         }
         // The app's project-scope dex covers both the Java and (when present) the Kotlin output.
         val appProjectClasses = listOf(layout.classes) + if (appHasKotlin) listOf(layout.kotlinClasses) else emptyList()
@@ -300,32 +340,50 @@ class AndroidBuildSystem(
         val generateR = TaskName(":${m.name}:generateR")
         val compileR = TaskName(":${m.name}:compileR")
         tasks.task(generateR) {
-            GenerateLibraryRTask(generateR, moduleRoots(m, ContentRole.ANDROID_RES), buildDir.parent.resolve(facet.manifest),
-                sdk.androidJar, facet.namespace, facet.minSdk,
-                rRoot.resolve("res"), rRoot.resolve("gen"), rRoot.resolve("lib.ap_"), rRoot.resolve("AndroidManifest.xml"), aapt2)
+            GenerateLibraryRTask(
+                generateR,
+                moduleRoots(m, ContentRole.ANDROID_RES),
+                buildDir.parent.resolve(facet.manifest),
+                sdk.androidJar,
+                facet.namespace,
+                facet.minSdk,
+                rRoot.resolve("res"),
+                rRoot.resolve("gen"),
+                rRoot.resolve("lib.ap_"),
+                rRoot.resolve("AndroidManifest.xml"),
+                aapt2
+            )
         }
         val rClasses = rRoot.resolve("classes")
-        tasks.task(compileR, listOf(generateR)) { AndroidCompileTask(compileR, emptyList(), rRoot.resolve("gen"), compileBootclasspath, rClasses, level, javaCompile) }
+        tasks.task(compileR, listOf(generateR)) { AndroidCompileTask(compileR, emptyList(), rRoot.resolve("gen"), compileBootclasspath, rClasses, level, bootClasspath) }
         classpath.add(rClasses); compileDeps.add(compileR)
 
         // compileKotlin (when the lib has `.kt`): runs against android.jar + the lib's own non-final R, ahead
         // of compileJava, which then sees its output. The Kotlin output IS dexed (it's the lib's code) — only
         // the R classes are kept out. Emits to the `kotlin-classes` sibling so dependers' classpaths find it.
         val libKotlin = classesOut.resolveSibling("kotlin-classes")
-        val libHasKotlin = kotlinCompile != null && containsKotlin(sourceRoots)
+        val libHasKotlin = kotlin != null && containsKotlin(sourceRoots)
         if (libHasKotlin) {
             val compileKotlin = TaskName(":${m.name}:compileKotlin")
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
             val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + rClasses
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
-                AndroidKotlinCompileTask(compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, kotlinCompile!!)
+                AndroidKotlinCompileTask(compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin)
             }
             classpath.add(libKotlin); compileDeps.add(compileKotlin)
         }
 
         val compile = TaskName(":${m.name}:compileJava")
         tasks.task(compile, compileDeps) {
-            AndroidCompileTask(compile, sourceRoots, classesOut.resolveSibling("nogen"), classpath, classesOut, level, javaCompile)
+            AndroidCompileTask(
+                compile,
+                sourceRoots,
+                classesOut.resolveSibling("nogen"),
+                classpath,
+                classesOut,
+                level,
+                bootClasspath,
+            )
         }
         val procRes = TaskName(":${m.name}:processResources")
         tasks.task(procRes) { ProcessResourcesTask(procRes, moduleRoots(m, ContentRole.RESOURCE), buildDir.resolve("resources")) }
@@ -346,7 +404,7 @@ class AndroidBuildSystem(
         .any { root -> Files.walk(root).use { s -> s.anyMatch { it.toString().endsWith(".kt") } } }
 
     /** True if module [m] carries Kotlin sources (and Kotlin compilation is wired). */
-    private fun moduleHasKotlin(m: Module): Boolean = kotlinCompile != null && containsKotlin(moduleRoots(m, ContentRole.SOURCE))
+    private fun moduleHasKotlin(m: Module): Boolean = kotlin != null && containsKotlin(moduleRoots(m, ContentRole.SOURCE))
 
     /** A module's content roots tagged with [role], across its non-test source sets. */
     private fun moduleRoots(m: Module, role: ContentRole): List<Path> =
@@ -428,8 +486,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(javaCompile: JavaCompile, sdk: AndroidSdk, signing: SigningConfig, kotlinCompile: KotlinCompile? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
-            AndroidBuildSystem(javaCompile, sdk, signing, kotlinCompile = kotlinCompile, dexCacheRoot = dexCacheRoot)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, dexCacheRoot = dexCacheRoot)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -438,18 +496,18 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(javaCompile: JavaCompile, sdk: AndroidSdk, signing: SigningConfig, kotlinCompile: KotlinCompile? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
             AndroidBuildSystem(
-                javaCompile, sdk, signing,
+                sdk, signing, bootClasspath,
                 dexer = D8InProcessDexer(),
                 shrinker = R8InProcessShrinker(),
-                signer = ApksigSigner(sdk.zipalign),
-                kotlinCompile = kotlinCompile,
+                signer = ApksigSigner(),
+                kotlin = kotlin,
                 dexCacheRoot = dexCacheRoot,
             )
 
         /** A debug-signed [subprocess] build system, creating the shared debug keystore on demand. */
-        fun debug(javaCompile: JavaCompile, sdk: AndroidSdk, debugKeystore: Path): AndroidBuildSystem =
-            subprocess(javaCompile, sdk, DebugKeystore.getOrCreate(debugKeystore, sdk.keytool))
+        fun debug(sdk: AndroidSdk, debugKeystore: Path, bootClasspath: List<Path> = emptyList()): AndroidBuildSystem =
+            subprocess(sdk, DebugKeystore.getOrCreate(debugKeystore, sdk.keytool), bootClasspath)
     }
 }

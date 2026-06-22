@@ -20,12 +20,19 @@ object DebugKeystore {
                 listOf(
                     keytool.toString(), "-genkeypair",
                     "-keystore", keystore.toString(),
+                    "-storetype", "PKCS12",
                     "-storepass", STORE_PASS,
                     "-keypass", KEY_PASS,
                     "-alias", KEY_ALIAS,
                     "-keyalg", "RSA", "-keysize", "2048",
                     "-validity", "10000",
                     "-dname", "CN=Android Debug,O=Android,C=US",
+                    // Force the legacy SHA1/3DES/RC2 PKCS12 algorithms. Modern keytool defaults to an
+                    // HmacPBESHA256 MAC + AES bags, which Android's BouncyCastle cannot verify on-device
+                    // ("PKCS12 key store mac invalid"). A desktop JVM reads both, so this only matters when
+                    // the keystore is consumed on ART, but it keeps every keystore the project mints
+                    // consistent with the shipped `debug.keystore` asset.
+                    "-J-Dkeystore.pkcs12.legacy",
                 ),
             )
             check(r.success && Files.isRegularFile(keystore)) {

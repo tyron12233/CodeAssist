@@ -43,7 +43,6 @@ internal class IndexEntry(val term: String, val value: Any, val origin: IndexOri
  * resolves straight to a name entry without any resident term→offset table.
  */
 internal class Segment private constructor(
-    private val channel: FileChannel,
     private val cache: BlockCache,
     private val segId: Int,
     private val externalizer: Externalizer<Any>,
@@ -130,8 +129,8 @@ internal class Segment private constructor(
     }
 
     override fun close() {
+        // Drops this segment's cached blocks AND closes + forgets its pooled channel.
         cache.evictSegment(segId)
-        runCatching { channel.close() }
     }
 
     // ---- on-disk reads ----
@@ -177,7 +176,7 @@ internal class Segment private constructor(
 
         private fun ensure() {
             val base = pos / cache.blockSize * cache.blockSize
-            if (blk == null || base != blkBase) { blk = cache.block(segId, channel, pos); blkBase = base }
+            if (blk == null || base != blkBase) { blk = cache.block(segId, pos); blkBase = base }
         }
 
         fun readByte(): Int { ensure(); val b = blk!![(pos - blkBase).toInt()]; pos++; return b.toInt() and 0xFF }
@@ -213,9 +212,10 @@ internal class Segment private constructor(
         const val SPARSE_INTERVAL = 64
 
         /** Open an existing segment file: read the footer (resident sparse index), keep the channel for reads. */
-        fun open(file: Path, ext: IndexExtension<*, *>, cache: BlockCache, segId: Int): Segment {
-            val channel = FileChannel.open(file, StandardOpenOption.READ)
-            try {
+        fun open(file: Path, ext: IndexExtension<*, *>, cache: BlockCache, segId: Int): Segment =
+            // The footer is read through a transient channel, closed immediately by `use`; later block reads
+            // reopen the file lazily through the cache's bounded channel pool (see [BlockCache]).
+            FileChannel.open(file, StandardOpenOption.READ).use { channel ->
                 val size = channel.size()
                 val footerStart = readLongAt(channel, size - 8)
                 val footer = readFully(channel, footerStart, (size - 8 - footerStart).toInt())
@@ -245,18 +245,15 @@ internal class Segment private constructor(
                 val tgPostingsBase = r.readVarLong(); r.readVarLong() // tgPostingsLen (unused)
                 require(r.readInt() == MAGIC) { "bad index segment magic in $file" }
 
+                cache.registerSegment(segId, file)
                 @Suppress("UNCHECKED_CAST")
-                return Segment(
-                    channel, cache, segId, ext.valueExternalizer as Externalizer<Any>,
+                Segment(
+                    cache, segId, ext.valueExternalizer as Externalizer<Any>,
                     fuzzy, numTerms, postingsBase, namesBase, namesLen,
                     tgNamesBase, tgNamesLen, tgPostingsBase,
                     sparseTerms, sparseTermOff, sparseGrams, sparseGramOff,
                 )
-            } catch (t: Throwable) {
-                runCatching { channel.close() }
-                throw t
             }
-        }
 
         /** Build a segment file from [entries] (sorted + front-loaded into the immutable layout above). */
         @Suppress("UNCHECKED_CAST")

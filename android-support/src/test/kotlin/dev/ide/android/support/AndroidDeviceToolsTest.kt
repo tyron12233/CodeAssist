@@ -6,11 +6,8 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleId
@@ -31,9 +28,9 @@ import kotlin.test.assertTrue
 
 /**
  * Covers the on-device build wiring added for mobile assembly: [AndroidSdk.forDevice] (native tools
- * resolved from the app's `nativeLibraryDir` as `lib*.so`) and the [dev.ide.android.support.tools.ApksigSigner]
- * fallback that signs unaligned when no `zipalign` binary is present. The device app uses
- * `AndroidBuildSystem.inProcess` over exactly such an `AndroidSdk`.
+ * resolved from the app's `nativeLibraryDir` as `lib*.so`) and the in-process
+ * [dev.ide.android.support.tools.ApksigSigner], which aligns + signs without a native `zipalign` binary.
+ * The device app uses `AndroidBuildSystem.inProcess` over exactly such an `AndroidSdk`.
  */
 class AndroidDeviceToolsTest {
 
@@ -60,13 +57,14 @@ class AndroidDeviceToolsTest {
     }
 
     /**
-     * The on-device dex/sign path with a missing zipalign: build a real one-module APK via
-     * `inProcess` over an `AndroidSdk` whose `zipalign` path does not exist (the real native aapt2 is kept so
-     * resources still compile). Asserts a valid, v1-signed APK is still produced and the signer logged the
-     * unaligned fallback. Skipped (not failed) without an installed SDK.
+     * The on-device dex/sign path produces a valid signed APK with no native `zipalign` at all: build a real
+     * one-module APK via `inProcess` (which wires [dev.ide.android.support.tools.ApksigSigner], aligning the
+     * archive itself via apksig's `setAlignmentPreserved(false)`) and assert it is v1-signed. Also exercises
+     * the legacy-PKCS12 debug keystore [DebugKeystore.getOrCreate] mints (the format Android's BouncyCastle
+     * can read on-device). Skipped (not failed) without an installed SDK.
      */
     @Test
-    fun inProcessSignsUnalignedWhenZipalignMissing() {
+    fun inProcessSignsAndAlignsApkWithoutZipalign() {
         val detected = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
         assumeTrue(detected != null && detected.isComplete(), "Android SDK not installed; skipping")
         detected!!
@@ -74,21 +72,12 @@ class AndroidDeviceToolsTest {
         val dir = Files.createTempDirectory("device-apk")
         val platform = PlatformCore()
         try {
-            // Real aapt2 (so resources/R compile), but a zipalign path that intentionally does not exist.
-            val absentZipalign = dir.resolve("no-such-zipalign")
-            val deviceLikeSdk = AndroidSdk(
-                androidJar = detected.androidJar,
-                buildToolsDir = detected.buildToolsDir,
-                aapt2 = detected.aapt2,
-                zipalign = absentZipalign,
-            )
-            assertFalse(Files.exists(absentZipalign))
-
             val store = buildAppWorkspace(dir, platform)
             val project = store.workspace.projects.single()
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), detected.keytool)
 
-            val buildSystem = AndroidBuildSystem.inProcess(jdtCompile(), deviceLikeSdk, signing)
+            // inProcess uses ApksigSigner(), which aligns + signs without any native zipalign binary.
+            val buildSystem = AndroidBuildSystem.inProcess(detected, signing)
             val graph = buildSystem.createBuildGraph(
                 project, BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE),
             )
@@ -98,7 +87,6 @@ class AndroidDeviceToolsTest {
                     .execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2)
             }
             assertTrue(outcome.succeeded, "APK build failed:\n$log")
-            assertTrue(log.contains("zipalign unavailable"), "expected unaligned-sign fallback in log:\n$log")
 
             val apk = dir.resolve("app/build/outputs/apk/debug/app-debug.apk")
             assertTrue(Files.isRegularFile(apk), "signed APK missing at $apk\n$log")
@@ -109,11 +97,6 @@ class AndroidDeviceToolsTest {
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun jdtCompile(): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
     }
 
     private fun buildAppWorkspace(dir: Path, platform: PlatformCore): ProjectModelStore {

@@ -1043,6 +1043,8 @@ data class UiCompletionItem(
     val label: String,
     val insertText: String,
     val detail: String?,
+    /** Right-aligned origin shown on the row: a type's package, or a member's declaring class. Null hides it. */
+    val container: String? = null,
     /** Documentation (javadoc) for the side doc panel; null when none is known. */
     val documentation: String? = null,
     val kind: UiCompletionKind,

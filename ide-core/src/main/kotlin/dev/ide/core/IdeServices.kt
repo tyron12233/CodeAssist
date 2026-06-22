@@ -54,14 +54,10 @@ import dev.ide.build.engine.DexRunner
 import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.build.engine.PermissionBroker
-import dev.ide.build.engine.JavaBuildSystem
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
-import dev.ide.build.engine.KotlinCompile
-import dev.ide.build.engine.KotlinCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
+import dev.ide.build.jvm.JavaBuildSystem
 import dev.ide.index.MemberValue
 import dev.ide.index.SymbolValue
 import dev.ide.index.impl.IndexServiceImpl
@@ -73,7 +69,6 @@ import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
-import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.lang.xml.XmlLanguageBackend
@@ -614,36 +609,23 @@ class IdeServices private constructor(
      */
     private val compileBootClasspath: List<Path> =
         listOfNotNull(androidTools?.androidJar) + (androidTools?.desugarStubs ?: emptyList())
-    private val javaCompile = JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level, bootClasspath = compileBootClasspath)
-        JavaCompileResult(r.success, r.messages)
-    }
-
     /**
-     * The Kotlin compile backend: K2 in-process (`:lang-kotlin`'s [KotlinJvmCompiler]). The same boot
-     * classpath the Java compile uses ([compileBootClasspath]: empty on desktop → host JDK; `android.jar` on
-     * ART) is threaded in, so a Kotlin module sees the right platform. Modules with no `.kt` never invoke it.
+     * The Kotlin compiler: K2 in-process (`:lang-kotlin`'s [KotlinJvmCompiler]). APPLICATION-scoped — one
+     * warm compiler shared across every opened project (its environment/jar filesystem is reused
+     * build-to-build; the boot classpath is passed per compile, so one instance serves all projects).
+     * Registered idempotently on the shared application container in init.
      */
-    // APPLICATION-scoped: one warm K2 compiler shared across every opened project (its environment/jar
-    // filesystem is reused build-to-build; the boot classpath is passed per compile, so one instance
-    // serves all projects). Registered idempotently on the shared application container in init.
     private val kotlinJvmCompiler: KotlinJvmCompiler get() = store.appContainer.getService(KOTLIN_JVM_COMPILER)
-    // Incremental state is per-output-dir, so the incremental wrapper stays workspace-scoped.
+    // Incremental state is per-output-dir, so the incremental wrapper stays workspace-scoped. The build's
+    // `compileKotlin` task (lang-kotlin's KotlinCompileTask) drives this directly — Compose-plugin detection
+    // and the boot classpath now live in that task, not in a port lambda here.
     private val incrementalKotlin = IncrementalKotlinCompiler(kotlinJvmCompiler)
-    private val kotlinCompile = KotlinCompile { kotlinSources, javaSources, classpath, out, jvmTarget ->
-        // A module that depends on the Compose runtime must be compiled with the Compose compiler plugin
-        // (otherwise @Composable functions emit unusable bytecode). The plugin jar is bundled in lang-kotlin;
-        // on ART its registrar is also dexed into :ide-android so kotlinc can resolve it. boot classpath is
-        // android.jar on ART (so the detector sees the project's own Compose deps on `classpath`).
-        val composePlugin = if (ComposeCompilerPlugin.isComposeModule(classpath + compileBootClasspath))
-            listOfNotNull(ComposeCompilerPlugin.jar()) else emptyList()
-        val r = incrementalKotlin.compile(
-            kotlinSources, javaSources, classpath, out, jvmTarget,
-            bootClasspath = compileBootClasspath, compilerPlugins = composePlugin,
-        )
-        KotlinCompileResult(r.success, r.messages)
-    }
-    private val buildSystem = JavaBuildSystem(javaCompile, kotlinCompile)
+
+    // The native Java/Kotlin build system (`:jvm-build`): JavaPlugin wires each module's own compile task
+    // (lang-jdt's JdtCompileTask, lang-kotlin's KotlinCompileTask), which drive ecj / K2 directly. The only
+    // host inputs are the boot classpath ([compileBootClasspath]: empty on desktop → host JRE; android.jar +
+    // desugar stubs on ART) and the incremental Kotlin compiler.
+    private val buildSystem = JavaBuildSystem(compileBootClasspath, incrementalKotlin)
 
     /**
      * The native Android build. On-device ([androidTools] non-null) it is the in-process wiring (D8/R8/
@@ -661,11 +643,11 @@ class IdeServices private constructor(
             if (!Files.exists(t.androidJar) || !Files.exists(t.nativeLibDir)) return@lazy null
             val sdk = AndroidSdk.forDevice(t.androidJar, t.nativeLibDir).takeIf { it.hasNativeTools() } ?: return@lazy null
             val signing = SigningConfig(t.debugKeystore, DebugKeystore.STORE_PASS, DebugKeystore.KEY_ALIAS, DebugKeystore.KEY_PASS)
-            return@lazy AndroidBuildSystem.inProcess(javaCompile, sdk, signing, kotlinCompile, dexCacheRoot = dexCache)
+            return@lazy AndroidBuildSystem.inProcess(sdk, signing, bootClasspath = compileBootClasspath, kotlin = incrementalKotlin, dexCacheRoot = dexCache)
         }
         val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }?.takeIf { it.isComplete() } ?: return@lazy null
         val signing = DebugKeystore.getOrCreate(store.rootPath.resolve(".platform/debug.ks"), sdk.keytool)
-        AndroidBuildSystem.subprocess(javaCompile, sdk, signing, kotlinCompile, dexCacheRoot = dexCache)
+        AndroidBuildSystem.subprocess(sdk, signing, bootClasspath = compileBootClasspath, kotlin = incrementalKotlin, dexCacheRoot = dexCache)
     }
 
     /**

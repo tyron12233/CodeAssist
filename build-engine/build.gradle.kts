@@ -18,7 +18,7 @@ dependencies {
     implementation(libs.ow2.asm.tree)
 
     testImplementation(project(":project-model-impl"))
-    testImplementation(project(":lang-jdt")) // the JDT batch compiler, for the build-and-run exit test
-    testImplementation(project(":bench-support")) // opt-in regression suite: build-at-scale benchmark
     testImplementation(libs.kotlinx.coroutines.core)
+    // The native build system (JavaBuildSystem) + its build-and-run exit test and the build-at-scale
+    // regression benchmark moved to :jvm-build (which owns JavaBuildSystem now); their deps moved with them.
 }

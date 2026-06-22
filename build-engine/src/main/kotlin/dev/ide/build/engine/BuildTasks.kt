@@ -1,9 +1,7 @@
 package dev.ide.build.engine
 
 import dev.ide.build.BuildConfiguration
-import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
-import dev.ide.build.Plugin
 import dev.ide.build.Task
 import dev.ide.build.TaskContainer
 import dev.ide.build.TaskContext
@@ -28,68 +26,13 @@ class SimpleBuildConfiguration(
     override val tasks: TaskContainer,
 ) : BuildConfiguration
 
-/**
- * The Java plugin (Gradle's `java`/`java-library`): for each module it registers the standard chain
- * `compileJava → processResources → classes (lifecycle) → jar`, plus a `compileKotlin` step ahead of
- * `compileJava` for any module that carries `.kt` sources (when a [kotlinCompile] backend is injected).
- * Other plugins (e.g. Android) reuse [registerModule] for library modules and simply depend on the
- * resulting tasks by name (`:lib:jar`, `:lib:classes`). Created with the injected [JavaCompile] (and,
- * optionally, [KotlinCompile]) backends.
- */
-class JavaPlugin(
-    private val javaCompile: JavaCompile,
-    private val kotlinCompile: KotlinCompile? = null,
-) : Plugin {
-
-    override fun apply(config: BuildConfiguration) {
-        val byId = config.project.modules.associateBy { it.id }
-        val packaging = config.request.goal in setOf(BuildGoal.ASSEMBLE, BuildGoal.PACKAGE, BuildGoal.INSTALL)
-        for (m in moduleClosure(config.request.targets, byId)) registerModule(config.tasks, m, byId, withJar = packaging)
-    }
-
-    /**
-     * Register [module]'s task chain into [tasks]. Call once per module (the caller iterates a deduped
-     * closure). [withJar] adds the packaging `jar` task (the library's artifact); compile/classes/resources
-     * are always registered. A `compileKotlin` step is added (and `compileJava` made to depend on it + see
-     * its output) when [module] has Kotlin sources and a [kotlinCompile] backend is available.
-     */
-    fun registerModule(tasks: TaskContainer, module: Module, byId: Map<ModuleId, Module>, withJar: Boolean) {
-        val hasKt = kotlinCompile != null && hasKotlinSources(module)
-        if (hasKt) {
-            val kc = TaskName(":${module.name}:compileKotlin")
-            tasks.register(kc) { KotlinCompileTask(module, kc, kotlinCompile!!) }.configure {
-                directModuleDeps(module, byId).forEach {
-                    dependsOn(TaskName(":${it.name}:compileJava"))
-                    if (hasKotlinSources(it)) dependsOn(TaskName(":${it.name}:compileKotlin"))
-                }
-            }
-        }
-        val compile = TaskName(":${module.name}:compileJava")
-        tasks.register(compile) { JavaCompileTask(module, compile, javaCompile, ownKotlinOut = hasKt) }.configure {
-            directModuleDeps(module, byId).forEach { dependsOn(TaskName(":${it.name}:compileJava")) }
-            if (hasKt) dependsOn(TaskName(":${module.name}:compileKotlin"))
-        }
-        val procRes = TaskName(":${module.name}:processResources")
-        tasks.register(procRes) { ProcessResourcesTask(procRes, resourceRoots(module), resourcesDir(module)) }
-
-        val classes = TaskName(":${module.name}:classes")
-        tasks.register(classes) { LifecycleTask(classes, trackedDirs = classOutputs(module) + resourcesDir(module)) }
-            .configure { dependsOn(compile, procRes) }
-
-        if (withJar) {
-            val jar = TaskName(":${module.name}:jar")
-            tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module)) }.configure { dependsOn(classes) }
-        }
-    }
-}
-
 /** A module's compiled-class output dirs — the Java output plus, when present, the Kotlin output. Packaged
  *  together (jar/dex) and tracked together (the `classes` lifecycle). */
-internal fun classOutputs(module: Module): List<Path> =
+fun classOutputs(module: Module): List<Path> =
     listOf(outputDir(module)) + if (hasKotlinSources(module)) listOf(kotlinOutputDir(module)) else emptyList()
 
 /** Targets plus their transitive module dependencies (all modules when [targets] is empty). */
-internal fun moduleClosure(targets: List<ModuleId>, byId: Map<ModuleId, Module>): List<Module> {
+fun moduleClosure(targets: List<ModuleId>, byId: Map<ModuleId, Module>): List<Module> {
     val out = LinkedHashMap<ModuleId, Module>()
     fun visit(id: ModuleId) {
         if (id in out) return
@@ -101,13 +44,13 @@ internal fun moduleClosure(targets: List<ModuleId>, byId: Map<ModuleId, Module>)
     return out.values.toList()
 }
 
-internal fun directModuleDeps(module: Module, byId: Map<ModuleId, Module>): List<Module> =
+fun directModuleDeps(module: Module, byId: Map<ModuleId, Module>): List<Module> =
     module.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
 
-internal fun resourceRoots(module: Module): List<Path> = module.sourceSets
+fun resourceRoots(module: Module): List<Path> = module.sourceSets
     .flatMap { it.contentRoots }.filter { ContentRole.RESOURCE in it.roles }.map { Paths.get(it.dir.path) }
 
-internal fun resourcesDir(module: Module): Path = outputDir(module).resolveSibling("resources")
+fun resourcesDir(module: Module): Path = outputDir(module).resolveSibling("resources")
 
 /** `processResources`: copy a module's JVM resource roots into the packaged output. No resource roots ⇒
  *  it declares no inputs, so the engine reports it NO-SOURCE (skipped), exactly like Gradle. */

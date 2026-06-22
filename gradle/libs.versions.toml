@@ -30,6 +30,14 @@ jdt-ecj = { module = "org.eclipse.jdt:ecj", version.ref = "jdt" }
 # (to swap in a StackWalker-relocated copy), which drops contenttype too. Name it here so :ide-android can
 # add it back explicitly. Version tracks what jdt.core 3.40.0 resolves transitively. See RelocateTypesInJar.
 eclipse-contenttype = { module = "org.eclipse.platform:org.eclipse.core.contenttype", version = "3.9.600" }
+# org.eclipse.core.jobs — the public DOM ASTParser constructor reads DefaultWorkingCopyOwner.PRIMARY, whose
+# enclosing IJavaElement/working-copy hierarchy reaches org.eclipse.core.runtime.jobs.ISchedulingRule at
+# class-load time. It normally arrives transitively via org.eclipse.core.runtime, which :ide-android excludes
+# (to swap in a StackWalker-relocated copy), dropping core.jobs too. ART links class hierarchies more eagerly
+# than HotSpot, so the missing ISchedulingRule is an uncatchable NoClassDefFoundError that kills editor
+# analysis + source indexing. Add it back explicitly; it is a plain jar (no StackWalker/Runtime$Version refs),
+# so dex as-is. Version tracks what jdt.core 3.40.0 resolves transitively.
+eclipse-jobs = { module = "org.eclipse.platform:org.eclipse.core.jobs", version = "3.15.400" }
 # lang-kotlin (editor-only Kotlin backend): the Kotlin frontend's PARSER only — a resolution-free
 # standalone PSI host (text -> KtFile). We discard all analysis/FIR and build our own symbols/inference/
 # completion on the neutral DOM. compiler-embeddable bundles intellij-core + the PSI/parser; metadata-jvm

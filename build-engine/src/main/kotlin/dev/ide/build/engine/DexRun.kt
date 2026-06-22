@@ -42,7 +42,7 @@ interface DexRunner {
  * [stagingDir] first (D8 reads jars/class files, not raw dirs); library jars pass through. A normal
  * incremental task — re-dexes only when the runtime classpath content changes.
  */
-internal class JavaDexTask(
+class JavaDexTask(
     override val name: TaskName,
     private val runtimeClasspath: () -> List<Path>,
     private val minApi: Int,
@@ -86,7 +86,7 @@ internal class JavaDexTask(
  * `runDex`: the on-device console `run` — hand the dexed program to the injected [DexRunner]. Always runs
  * (an [AlwaysRun], like [JavaExecTask]); the runner streams output and returns the exit code.
  */
-internal class DexExecTask(
+class DexExecTask(
     override val name: TaskName,
     private val mainClass: String,
     private val dexDir: Path,

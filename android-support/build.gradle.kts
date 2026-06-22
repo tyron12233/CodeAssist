@@ -11,7 +11,10 @@ plugins {
 // subprocess behind injectable ports, so the core never links android.jar.
 dependencies {
     api(project(":build-api"))                 // BuildSystem SPI + Task engine contracts (brings project-model-api)
-    implementation(project(":build-engine"))   // TaskGraphImpl / TaskInputsImpl / TaskOutputsImpl / JavaCompile port
+    implementation(project(":build-engine"))   // TaskGraphImpl / TaskInputsImpl / TaskOutputsImpl + neutral tasks
+    implementation(project(":jvm-build"))       // JavaPlugin.registerModule for plain java-lib modules in an Android project
+    implementation(project(":lang-jdt"))        // JdtBatchCompiler — the Android compile tasks drive ecj directly
+    implementation(project(":lang-kotlin"))     // IncrementalKotlinCompiler + ComposeCompilerPlugin — drive K2 directly
     implementation(project(":project-model-impl")) // FacetCodec / FacetCodecRegistry / ModuleTypeRegistry
     implementation(project(":language-api"))   // SyntheticClassProvider — the light `R` class for completion/analysis
     implementation(project(":index-api"))       // resource-declaration IndexExtension
@@ -25,9 +28,8 @@ dependencies {
     compileOnly(libs.android.r8)
     compileOnly(libs.android.apksig)
 
-    // The end-to-end APK test compiles real Java (R.java + an Activity) through the JDT batch compiler,
-    // exactly as the host wires the `JavaCompile` port in production, and exercises the in-process tools.
-    testImplementation(project(":lang-jdt"))
+    // The end-to-end APK test compiles real Java (R.java + an Activity) through the JDT batch compiler
+    // (lang-jdt, now a main dependency) and exercises the in-process tools.
     testImplementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.android.r8)
     testImplementation(libs.android.apksig)

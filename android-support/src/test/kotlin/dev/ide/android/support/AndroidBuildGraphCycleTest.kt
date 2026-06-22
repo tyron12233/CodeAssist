@@ -6,8 +6,6 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.VariantSelector
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -71,7 +69,7 @@ class AndroidBuildGraphCycleTest {
                 buildToolsDir = dir.resolve("fake/build-tools"),
             )
             val signing = SigningConfig(dir.resolve("fake/debug.ks"), "android", "android", "android")
-            val buildSystem = AndroidBuildSystem.subprocess(noopJavaCompile(), sdk, signing)
+            val buildSystem = AndroidBuildSystem.subprocess(sdk, signing)
 
             val project = reopened.workspace.projects.single { it.name == SampleAndroidProject.PROJECT }
             for (goal in listOf(BuildGoal.COMPILE_ONLY, BuildGoal.PACKAGE)) {
@@ -89,6 +87,4 @@ class AndroidBuildGraphCycleTest {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
-
-    private fun noopJavaCompile(): JavaCompile = JavaCompile { _, _, _, _ -> JavaCompileResult(true, emptyList()) }
 }

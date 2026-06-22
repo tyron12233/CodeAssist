@@ -74,7 +74,7 @@ class GenericsImportReproTest {
     fun collidingUnimportedTypeIsInsertedFullyQualifiedWithoutImport() {
         val index = FakeIndex(listOf(ClassNameValue("java.util.List", IndexOrigin.SDK, "interface")))
         val item = result("package app; import java.awt.List; class T { void m() { Lis|CARET| } }", index)
-            .items.firstOrNull { it.detail == "java.util" }
+            .items.firstOrNull { it.container == "java.util" }
         assertNotNull(item, "expected the unimported java.util.List candidate")
         assertEquals("java.util.List", item.insertText, "must insert the FQN to avoid a duplicate-import clash")
         assertTrue(item.additionalEdits.isEmpty(), "must NOT add an import that would clash: ${item.additionalEdits.map { it.newText }}")

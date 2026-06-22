@@ -2,6 +2,8 @@ package dev.ide.deps.impl
 
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * The single injectable I/O seam of the resolver: fetch the bytes at an absolute [url] (a `.pom`,
@@ -14,6 +16,19 @@ import java.net.URL
  */
 fun interface ArtifactFetcher {
     fun fetch(url: String): ByteArray?
+
+    /**
+     * Stream the resource at [url] directly into [dest], returning true if it was written and false when
+     * the resource is absent (404 / not carried by this repo). Used for large artifacts (jars/aars) so the
+     * bytes flow socket → disk instead of buffering the whole file in heap — a real difference on ART, where
+     * a dozen concurrent Compose-sized jars would otherwise be resident at once. The default buffers via
+     * [fetch] so fixture fetchers (which only implement [fetch]) keep working; [HttpArtifactFetcher] streams.
+     */
+    fun fetchTo(url: String, dest: Path): Boolean {
+        val bytes = fetch(url) ?: return false
+        Files.write(dest, bytes)
+        return true
+    }
 }
 
 /**
@@ -26,7 +41,24 @@ class HttpArtifactFetcher(
     private val readTimeoutMs: Int = 30_000,
     private val userAgent: String = "CodeAssist-deps/1.0",
 ) : ArtifactFetcher {
-    override fun fetch(url: String): ByteArray? {
+    override fun fetch(url: String): ByteArray? =
+        openResolved(url)?.inputStream?.use { it.readBytes() }
+
+    override fun fetchTo(url: String, dest: Path): Boolean {
+        val conn = openResolved(url) ?: return false
+        // Pipe the socket straight to disk — never hold the whole jar in heap.
+        conn.inputStream.use { input -> Files.newOutputStream(dest).use { out -> input.copyTo(out, STREAM_BUFFER) } }
+        return true
+    }
+
+    /**
+     * Open [url], follow redirects, and return a connection sitting on a 200 response (its body unread), or
+     * null when the resource is absent (404/403). Throws for genuine I/O failures. Callers read & close
+     * `inputStream` themselves; the connection is never `disconnect()`ed — draining the body and closing the
+     * stream returns the socket to the JVM's keep-alive pool, so the many parallel fetches against one repo
+     * reuse connections instead of paying a fresh TCP+TLS handshake each time.
+     */
+    private fun openResolved(url: String): HttpURLConnection? {
         var current = url
         repeat(MAX_REDIRECTS) {
             val conn = (URL(current).openConnection() as HttpURLConnection).apply {
@@ -37,12 +69,9 @@ class HttpArtifactFetcher(
                 setRequestProperty("User-Agent", userAgent)
                 setRequestProperty("Accept", "*/*")
             }
-            // NB: never `disconnect()` — draining the body and letting the stream close returns the socket
-            // to the JVM's keep-alive pool, so the many parallel fetches against one repo reuse connections
-            // instead of paying a fresh TCP+TLS handshake each time. disconnect() would defeat that pooling.
             val code = conn.responseCode
             when {
-                code == HttpURLConnection.HTTP_OK -> return conn.inputStream.use { it.readBytes() }
+                code == HttpURLConnection.HTTP_OK -> return conn
                 code == HttpURLConnection.HTTP_NOT_FOUND || code == HttpURLConnection.HTTP_FORBIDDEN -> {
                     conn.errorStream?.use { it.readBytes() }   // drain so the connection can be reused
                     return null
@@ -64,6 +93,7 @@ class HttpArtifactFetcher(
 
     private companion object {
         const val MAX_REDIRECTS = 5
+        const val STREAM_BUFFER = 64 * 1024
         val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
     }
 }

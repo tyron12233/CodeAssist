@@ -78,8 +78,16 @@ import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** Top-level split: what the module DECLARES (the roots you added) vs the RESOLVED transitive closure. The
+ *  Declared tab is the place a declared-but-unresolved dependency stays visible (with a red badge) instead of
+ *  silently vanishing from the resolved graph. */
+private enum class DepTab(val label: String, val icon: ImageVector) {
+    Declared("Declared", CaIcons.resources), Resolved("Resolved", CaIcons.gitBranch)
+}
+
+/** Sub-views of the Resolved tab: the transitive closure as an expandable tree or a flat listing. */
 private enum class DepView(val label: String, val icon: ImageVector) {
-    List("List", CaIcons.resources), Tree("Tree", CaIcons.layers), Graph("Graph", CaIcons.gitBranch)
+    Tree("Tree", CaIcons.layers), Graph("Graph", CaIcons.gitBranch)
 }
 
 /** The Add flow can add a library/AAR, import a BOM as a platform (Gradle `platform(...)`), depend on
@@ -98,8 +106,8 @@ private val DEPS_EXPANDED_BREAKPOINT = 860.dp
 
 /**
  * The per-module dependency manager, **embedded in a module's detail screen** (the host owns the module
- * header / back / tab chrome). A toolbar (List/Tree/Graph toggle · Repositories · Add) over the resolved
- * picture; a live **download/resolution panel** while resolving; an Add flow (centered dialog on desktop,
+ * header / back / tab chrome). A toolbar (Declared/Resolved tabs, a Tree/Graph sub-toggle on Resolved ·
+ * Repositories · Add); a live **download/resolution panel** while resolving; an Add flow (centered dialog on desktop,
  * bottom sheet on phone) that adds a **library/AAR**, imports a **BOM platform**, or depends on **another
  * module**; a **Repositories** manager for custom Maven repos; a remove confirmation; and toasts. Talks
  * only to [IdeBackend].
@@ -112,7 +120,8 @@ fun DependenciesPane(
     fileActions: FileActions = FileActions.None,
     modifier: Modifier = Modifier,
 ) {
-    var view by remember { mutableStateOf(DepView.List) }
+    var tab by remember { mutableStateOf(DepTab.Declared) }
+    var resolvedView by remember { mutableStateOf(DepView.Tree) }
     var deps by remember { mutableStateOf<UiModuleDeps?>(null) }
     var loading by remember { mutableStateOf(false) }
     var reloadKey by remember(moduleName) { mutableStateOf(0) }
@@ -133,9 +142,9 @@ fun DependenciesPane(
     BoxWithConstraints(modifier.fillMaxSize().background(Ca.colors.bg)) {
         val expanded = maxWidth >= DEPS_EXPANDED_BREAKPOINT
         Column(Modifier.fillMaxSize()) {
-            DepPaneToolbar(view, { view = it }, { addOpen = true }, { reposOpen = true }, resolving, resolveState.message, compact = !expanded)
+            DepPaneToolbar(tab, { tab = it }, resolvedView, { resolvedView = it }, { addOpen = true }, { reposOpen = true }, resolving, resolveState.message, compact = !expanded)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
-            DepBody(deps, loading, view, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth()) { pendingRemove = it }
+            DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth()) { pendingRemove = it }
         }
 
         // ---- Add flow + Repositories: centered dialogs on desktop, bottom sheets on phone ----
@@ -195,7 +204,9 @@ private fun OverlayCard(maxWidth: androidx.compose.ui.unit.Dp, content: @Composa
 
 @Composable
 private fun DepPaneToolbar(
-    view: DepView,
+    tab: DepTab,
+    onTab: (DepTab) -> Unit,
+    resolvedView: DepView,
     onView: (DepView) -> Unit,
     onAdd: () -> Unit,
     onRepos: () -> Unit,
@@ -207,7 +218,8 @@ private fun DepPaneToolbar(
         Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ViewToggle(view, onView, compact = compact)
+        TabToggle(tab, onTab, compact = compact)
+        if (tab == DepTab.Resolved) ViewToggle(resolvedView, onView, compact = true)
         if (resolving) {
             CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
             if (!compact) Text(resolveMessage.ifBlank { "Resolving…" }, color = Ca.colors.accent, style = Ca.type.caption2,
@@ -294,7 +306,8 @@ private fun RepoField(hint: String, value: String, codeFont: FontFamily, onChang
 private fun DepBody(
     deps: UiModuleDeps?,
     loading: Boolean,
-    view: DepView,
+    tab: DepTab,
+    resolvedView: DepView,
     resolveState: DepsResolveState,
     codeFont: FontFamily,
     modifier: Modifier,
@@ -304,7 +317,7 @@ private fun DepBody(
         when {
             isLoading -> ResolvingPanel(resolveState)
             deps == null -> Empty("Couldn't load dependencies.")
-            else -> DepContent(deps, view, codeFont, onRemove)
+            else -> DepContent(deps, tab, resolvedView, codeFont, onRemove)
         }
     }
 }
@@ -343,9 +356,10 @@ private fun ResolveBar(fraction: Double) {
 }
 
 @Composable
-private fun DepContent(deps: UiModuleDeps, view: DepView, codeFont: FontFamily, onRemove: (String) -> Unit) {
+private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, onRemove: (String) -> Unit) {
     val nodesByCoord = remember(deps) { deps.nodes.associateBy { it.coordinate } }
     val expanded = remember(deps) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    val unresolvedSet = remember(deps) { deps.unresolved.toSet() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
         if (deps.conflicts.isNotEmpty()) item("conflicts") {
@@ -367,15 +381,18 @@ private fun DepContent(deps: UiModuleDeps, view: DepView, codeFont: FontFamily, 
             }
         }
 
-        when (view) {
-            DepView.List -> {
+        when (tab) {
+            // What the module declares: the roots you added, each showing its resolved version + scope, or a
+            // red "unresolved" badge when resolution couldn't satisfy it. Expand a row to peek at its
+            // (resolved) transitive children.
+            DepTab.Declared -> {
                 if (deps.declared.isEmpty()) item("empty") { EmptyRow("No dependencies declared. Tap Add to download one.") }
-                items(deps.declared, key = { "list:${it.coordinate}" }) { node ->
-                    val open = expanded["list:${node.coordinate}"] == true
+                items(deps.declared, key = { "decl:${it.coordinate}" }) { node ->
+                    val open = expanded["decl:${node.coordinate}"] == true
                     Column(Modifier.fillMaxWidth().animateItem()) {
                         DependencyRow(node, codeFont, depth = 0, expandable = node.children.isNotEmpty(), expanded = open,
-                            onToggle = { expanded["list:${node.coordinate}"] = !open },
-                            onRemove = if (node.declared) ({ onRemove(node.coordinate) }) else null)
+                            onToggle = { expanded["decl:${node.coordinate}"] = !open },
+                            onRemove = { onRemove(node.coordinate) }, unresolved = node.coordinate in unresolvedSet)
                         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
                             Column {
                                 node.children.forEach { childCoord -> nodesByCoord[childCoord]?.let { TransitiveRow(it, codeFont, depth = 1) } }
@@ -384,13 +401,18 @@ private fun DepContent(deps: UiModuleDeps, view: DepView, codeFont: FontFamily, 
                     }
                 }
             }
-            DepView.Tree -> {
-                if (deps.declared.isEmpty()) item("empty") { EmptyRow("No dependencies declared.") }
-                deps.declared.forEach { root -> treeRows(root, nodesByCoord, 0, emptyList(), expanded, codeFont) { onRemove(root.coordinate) } }
-            }
-            DepView.Graph -> {
-                val sorted = deps.nodes.sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
-                items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont) } }
+            // The resolved transitive closure (declared + everything pulled in), as a tree rooted at the
+            // declared deps or a flat listing.
+            DepTab.Resolved -> when (resolvedView) {
+                DepView.Tree -> {
+                    if (deps.declared.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
+                    deps.declared.forEach { root -> treeRows(root, nodesByCoord, 0, emptyList(), expanded, codeFont) { onRemove(root.coordinate) } }
+                }
+                DepView.Graph -> {
+                    if (deps.nodes.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
+                    val sorted = deps.nodes.sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
+                    items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont) } }
+                }
             }
         }
     }
@@ -449,6 +471,7 @@ private fun DependencyRow(
     onToggle: () -> Unit,
     onRemove: (() -> Unit)?,
     cycle: Boolean = false,
+    unresolved: Boolean = false,
 ) {
     Row(
         Modifier.fillMaxWidth().height(46.dp).clickable(enabled = expandable, onClick = onToggle)
@@ -459,8 +482,9 @@ private fun DependencyRow(
         else Spacer(Modifier.width(14.dp))
         DepBadge(node)
         Column(Modifier.weight(1f)) {
-            DepPrimary(node, codeFont)
+            DepPrimary(node, codeFont, dimmed = unresolved)
             when {
+                unresolved -> Text("not resolved — check the version/repository or re-resolve", color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 !node.compatible && node.incompatibleReason != null ->
                     Text(node.incompatibleReason, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 cycle -> Text("cycle — already shown above", color = Ca.colors.warning, style = Ca.type.caption2)
@@ -468,6 +492,7 @@ private fun DependencyRow(
             }
         }
         node.scope?.let { Chip(it, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
+        if (unresolved) Chip("unresolved", fill = Ca.colors.error.copy(alpha = 0.16f), textColor = Ca.colors.error)
         if (node.inConflict) Chip("conflict", fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
         if (!node.compatible) Icon(CaIcons.warning, "Incompatible", Modifier.size(16.dp), tint = Ca.colors.error)
         if (onRemove != null) IconButtonCa(CaIcons.close, "Remove ${node.name}", onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
@@ -842,6 +867,13 @@ private fun ToastHost(toast: ToastMsg?, modifier: Modifier) {
 private fun ViewToggle(view: DepView, onSelect: (DepView) -> Unit, compact: Boolean = false) {
     Row(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         DepView.entries.forEach { v -> SegItem(v.icon, v.label, v == view, compact) { onSelect(v) } }
+    }
+}
+
+@Composable
+private fun TabToggle(tab: DepTab, onSelect: (DepTab) -> Unit, compact: Boolean = false) {
+    Row(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        DepTab.entries.forEach { t -> SegItem(t.icon, t.label, t == tab, compact) { onSelect(t) } }
     }
 }
 

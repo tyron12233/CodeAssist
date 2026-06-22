@@ -43,6 +43,27 @@ class ResolverCache(val root: Path) {
         return target
     }
 
+    /**
+     * Stream an artifact into [relative] without buffering it in heap: [download] is handed the temp `.part`
+     * path and writes to it (e.g. via [ArtifactFetcher.fetchTo]), returning true if it produced content.
+     * On true the temp is atomically moved into place (same crash-safety as [write]); on false (resource
+     * absent) the temp is removed and null returned, so the caller can fall through to the next repo. The
+     * temp is always cleaned up if [download] throws.
+     */
+    fun writeStreaming(relative: String, download: (Path) -> Boolean): Path? {
+        val target = fileFor(relative)
+        Files.createDirectories(target.parent)
+        val tmp = Files.createTempFile(target.parent, "${target.fileName}.", ".part")
+        val ok = try {
+            download(tmp)
+        } catch (t: Throwable) {
+            Files.deleteIfExists(tmp); throw t
+        }
+        if (!ok) { Files.deleteIfExists(tmp); return null }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        return target
+    }
+
     /** Directory an `.aar` is exploded into (e.g. its `classes.jar`, `res/`, `assets/`). */
     fun explodedDir(c: Coordinate): Path =
         base.resolve(c.group.replace('.', '/')).resolve(c.name).resolve(c.version).resolve("${c.name}-${c.version}-exploded")

@@ -6,12 +6,9 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -85,7 +82,7 @@ class AndroidAgpTasksTest {
             write(dir, "app/src/main/res/values/strings.xml", STRINGS)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
-            val graph = AndroidBuildSystem.inProcess(jdtCompile(), sdk, signing).createBuildGraph(
+            val graph = AndroidBuildSystem.inProcess(sdk, signing).createBuildGraph(
                 store.workspace.projects.single(),
                 BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE),
             )
@@ -123,11 +120,6 @@ class AndroidAgpTasksTest {
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun jdtCompile(): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
     }
 
     private fun write(root: Path, rel: String, content: String) {

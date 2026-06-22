@@ -1010,9 +1010,16 @@ private fun CodeEditorContent(
                                     }
                                     gutterDiag != null -> acts.openSheet(gutterDiag)
                                     else -> {
-                                        editorSession.setCaret(offsetAt(pos))
+                                        val newCaret = offsetAt(pos)
+                                        // Re-tap the existing caret position (same line/column) to TOGGLE the
+                                        // Paste/Select-all toolbar; a first tap just places the caret. Tapping a
+                                        // new spot hides it. This is the dismiss path (Android places the bar on a
+                                        // re-tap, not on every tap, so it isn't stuck open).
+                                        val prev = editorSession.selection
+                                        val reTap = prev.collapsed && prev.start == newCaret
+                                        editorSession.setCaret(newCaret)
                                         if (lastInputWasTouch) {
-                                            handlesVisible = true
+                                            handlesVisible = reTap && !handlesVisible
                                             editorIme.show() // explicit tap → raise the keyboard
                                         }
                                     }
@@ -1267,7 +1274,7 @@ private fun CodeEditorContent(
             ) {
                 BoxWithConstraints {
                     val compact = maxWidth < 600.dp
-                    val popupWidth = if (compact) (maxWidth * 0.8f).coerceIn(220.dp, 300.dp) else 420.dp
+                    val popupWidth = if (compact) (maxWidth * 0.85f).coerceIn(240.dp, 340.dp) else 440.dp
                     val listCap = if (compact) 240.dp else 296.dp
                     val listMax = (roomBelowDp - DocStripReserve).coerceIn(MinListHeight, listCap)
                     val items = shown.items

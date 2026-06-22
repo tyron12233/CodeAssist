@@ -13,9 +13,9 @@ import java.nio.file.Path
 
 /**
  * Kotlin to `.class` codegen for the build. A thin wrapper over the embeddable K2 `K2JVMCompiler`, run
- * in-process: the same compiler the editor parse-host loads, and one that runs on ART. `:build-engine` never
- * links it; it injects a [dev.ide.build.engine.KotlinCompile] lambda that calls this (the mirror of the JDT
- * `JavaCompile` wiring).
+ * in-process: the same compiler the editor parse-host loads, and one that runs on ART. The build's
+ * `compileKotlin` task ([dev.ide.lang.kotlin.build.KotlinCompileTask], via [IncrementalKotlinCompiler])
+ * drives it directly; `:build-engine` names no Kotlin compiler.
  *
  * Java interop: kotlinc is handed the module's `.java` sources alongside its `.kt`: it parses the Java for
  * symbol resolution (so Kotlin can reference same-module Java types) but emits `.class` only for Kotlin.

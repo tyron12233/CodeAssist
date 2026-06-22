@@ -729,6 +729,7 @@ class IdeServicesBackend(
             items = result.items.map { item ->
                 UiCompletionItem(
                     label = item.label, insertText = item.insertText, detail = item.detail,
+                    container = item.container,
                     documentation = item.documentation, kind = mapKind(item.kind), sortPriority = item.sortPriority,
                     additionalEdits = item.additionalEdits.map { UiTextEdit(it.range.start, it.range.end, it.newText) },
                     caret = mapCaret(item.caret),

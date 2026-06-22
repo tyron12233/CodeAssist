@@ -1,9 +1,15 @@
-package dev.ide.build.engine
+package dev.ide.build.jvm
 
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.build.engine.BuildCache
+import dev.ide.build.engine.DexBackend
+import dev.ide.build.engine.DexResult
+import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.build.engine.TaskExecutorImpl
+import dev.ide.build.engine.jarPath
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -28,9 +34,10 @@ import kotlin.test.assertTrue
 
 /**
  * Native build + the console-app run task: builds `app → util → core` (api-exported) via the native
- * [JavaBuildSystem] on the JDT compile backend, then (1) packages to jars and runs them, (2) runs the app
- * through the `run` task (the Gradle `application`-plugin equivalent) which always re-executes, and (3)
- * exercises the on-device `createDexRunGraph` (`compileJava → dexRun → runDex`) with fake dex ports.
+ * [JavaBuildSystem] on the JDT compile backend (lang-jdt's JdtCompileTask), then (1) packages to jars and
+ * runs them, (2) runs the app through the `run` task (the Gradle `application`-plugin equivalent) which
+ * always re-executes, and (3) exercises the on-device `createDexRunGraph` (`compileJava → dexRun → runDex`)
+ * with fake dex ports.
  */
 class JavaBuildTest {
 
@@ -45,10 +52,8 @@ class JavaBuildTest {
     private fun mainSources() =
         SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE)))
 
-    private fun javaBuildSystem() = JavaBuildSystem(JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
-    })
+    // Java-only build: no boot classpath (ecj uses the host JRE on the desktop) and no Kotlin compiler.
+    private fun javaBuildSystem() = JavaBuildSystem()
 
     /** Build the demo workspace (model + sources on disk) and return its single project. */
     private fun buildWorkspace(dir: Path, platform: PlatformCore): Pair<ProjectModelStore, Project> {

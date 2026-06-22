@@ -6,11 +6,8 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.FacetTemplate
 import dev.ide.model.ModuleId
@@ -61,7 +58,7 @@ class SampleAndroidProjectTest {
             SampleAndroidProject.generate(store, types.resolve("android-app"), types.resolve("android-lib"), types.resolve("java-lib"))
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
-            val buildSystem = AndroidBuildSystem.inProcess(jdtCompile(), sdk, signing)
+            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
             val project = store.workspace.projects.single { it.name == SampleAndroidProject.PROJECT }
             val graph = buildSystem.createBuildGraph(
                 project, BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE),
@@ -88,10 +85,5 @@ class SampleAndroidProjectTest {
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun jdtCompile(): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
     }
 }

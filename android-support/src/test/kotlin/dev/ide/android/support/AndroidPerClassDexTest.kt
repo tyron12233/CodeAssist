@@ -6,11 +6,8 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleId
@@ -61,7 +58,7 @@ class AndroidPerClassDexTest {
             write(dir, "app/src/main/java/com/example/app/MainActivity.java", activity("one"))
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
-            val buildSystem = AndroidBuildSystem.inProcess(jdtCompile(sdk.androidJar), sdk, signing)
+            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing, bootClasspath = listOf(sdk.androidJar))
             val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE)
             val cache = BuildCache(dir.resolve(".caches/build"))
             val log = StringBuilder()
@@ -96,14 +93,6 @@ class AndroidPerClassDexTest {
 
     private fun listing(dir: Path): List<String> =
         if (Files.isDirectory(dir)) Files.list(dir).use { s -> s.map { it.fileName.toString() }.toList() } else emptyList()
-
-    // At compliance 8, compile against android.jar as the BOOT classpath (the on-device model) so java.* +
-    // android.* resolve without the JAVA_17 modular split-package conflict. (-bootclasspath is rejected at ≥ 9.)
-    private fun jdtCompile(androidJar: Path): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val boot = if (level == "8") listOf(androidJar) else emptyList()
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level, bootClasspath = boot)
-        JavaCompileResult(r.success, r.messages)
-    }
 
     private fun write(root: Path, rel: String, content: String) {
         val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())

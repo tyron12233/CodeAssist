@@ -12,17 +12,19 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.DiagnosticKind
 import dev.ide.build.TaskResult
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.KotlinCompile
 import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.TaskInputsImpl
 import dev.ide.build.engine.TaskOutputsImpl
+import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
+import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import org.objectweb.asm.AnnotationVisitor
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
@@ -73,16 +75,24 @@ internal class MergeResourcesTask(
         Files.createDirectories(outDir)
         val values = ValuesMerger()
         resDirs.filter { Files.isDirectory(it) }.forEach { dir ->
-            Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) }.forEach { f ->
-                val rel = dir.relativize(f)
-                val qualifier = rel.getName(0).toString()
-                if (qualifier.startsWith("values")) {
-                    // Accumulate entries; ascending priority means a later source's entry wins.
-                    if (!values.add(qualifier, f)) copyRaw(f, outDir.resolve(qualifier).resolve("unparsed_${values.bump()}_${f.fileName}"))
-                } else {
-                    copyRaw(f, outDir.resolve(rel)) // overlay: a higher-priority source overwrites
+            Files.walk(dir).use { s ->
+                s.filter { Files.isRegularFile(it) }.forEach { f ->
+                    val rel = dir.relativize(f)
+                    val qualifier = rel.getName(0).toString()
+                    if (qualifier.startsWith("values")) {
+                        // Accumulate entries; ascending priority means a later source's entry wins.
+                        if (!values.add(qualifier, f)) copyRaw(
+                            f,
+                            outDir.resolve(qualifier)
+                                .resolve("unparsed_${values.bump()}_${f.fileName}")
+                        )
+                    } else {
+                        copyRaw(
+                            f, outDir.resolve(rel)
+                        ) // overlay: a higher-priority source overwrites
+                    }
                 }
-            } }
+            }
         }
         values.writeTo(outDir)
         ctx.logger()("mergeResources -> ${outDir.fileName}")
@@ -96,7 +106,9 @@ internal class MergeResourcesTask(
 
     private fun clear(dir: Path) {
         if (!Files.exists(dir)) return
-        Files.walk(dir).use { s -> s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } } }
+        Files.walk(dir).use { s ->
+            s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } }
+        }
     }
 }
 
@@ -109,9 +121,11 @@ internal class MergeResourcesTask(
 private class ValuesMerger {
     // qualifier -> (entry key -> imported element); LinkedHashMap keeps a stable, insertion-ordered output.
     private val byQualifier = LinkedHashMap<String, LinkedHashMap<String, org.w3c.dom.Element>>()
-    private val rootAttrs = LinkedHashMap<String, String>()   // xmlns:* (and other root attrs) seen on any <resources>
-    private val doc = javax.xml.parsers.DocumentBuilderFactory.newInstance()
-        .apply { isNamespaceAware = true }.newDocumentBuilder().newDocument()
+    private val rootAttrs =
+        LinkedHashMap<String, String>()   // xmlns:* (and other root attrs) seen on any <resources>
+    private val doc =
+        javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().newDocument()
     private var counter = 0
 
     fun bump(): Int = counter++
@@ -139,7 +153,8 @@ private class ValuesMerger {
             val name = el.getAttribute("name")
             val type = el.getAttribute("type")   // <item type="id" name="…">; empty for typed tags
             // Nameless entries (e.g. <eat-comment/>) can't be keyed for override — keep each uniquely.
-            val key = if (name.isEmpty()) "${el.tagName}#${counter++}" else "${el.tagName}|$type|$name"
+            val key =
+                if (name.isEmpty()) "${el.tagName}#${counter++}" else "${el.tagName}|$type|$name"
             bucket[key] = doc.importNode(el, true) as org.w3c.dom.Element   // last source wins
         }
         return true
@@ -160,7 +175,10 @@ private class ValuesMerger {
             Files.createDirectories(dir)
             val target = dir.resolve("values.xml")
             Files.newOutputStream(target).use { os ->
-                tf.transform(javax.xml.transform.dom.DOMSource(out), javax.xml.transform.stream.StreamResult(os))
+                tf.transform(
+                    javax.xml.transform.dom.DOMSource(out),
+                    javax.xml.transform.stream.StreamResult(os)
+                )
             }
             // appendChild moves nodes out of `out`; rebuild not needed since each entry is written once.
         }
@@ -188,12 +206,13 @@ internal class GenerateLibraryRTask(
     private val synthManifest: Path,
     private val aapt2: Aapt2,
 ) : Task {
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        dirPaths("res", resDirs)
-        if (Files.isRegularFile(manifest)) filePaths("manifest", listOf(manifest))
-        property("package", packageName)
-        property("androidJar", androidJar.toString())
-    }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("res", resDirs)
+            if (Files.isRegularFile(manifest)) filePaths("manifest", listOf(manifest))
+            property("package", packageName)
+            property("androidJar", androidJar.toString())
+        }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("R", genDir) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
@@ -204,7 +223,15 @@ internal class GenerateLibraryRTask(
         ctx.reportToolDiagnostics("aapt2", compile.result.log, DiagnosticKind.RESOURCE)
         if (!compile.result.success) return TaskResult.Failed("aapt2 compile (library R) failed")
         val r = aapt2.link(
-            compile.archives, m, androidJar, packageName, emptyList(), minSdk, minSdk, genDir, throwawayAp,
+            compile.archives,
+            m,
+            androidJar,
+            packageName,
+            emptyList(),
+            minSdk,
+            minSdk,
+            genDir,
+            throwawayAp,
             nonFinalIds = true,
         )
         r.log.forEach(ctx.logger())
@@ -214,8 +241,9 @@ internal class GenerateLibraryRTask(
 
     private fun synthesizeManifest(): Path {
         synthManifest.parent?.let { Files.createDirectories(it) }
-        synthManifest.writeText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
-                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$packageName\"/>\n")
+        synthManifest.writeText(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" + "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$packageName\"/>\n"
+        )
         return synthManifest
     }
 }
@@ -228,7 +256,12 @@ internal class Aapt2CompileTask(
     private val aapt2: Aapt2,
 ) : Task {
     override val inputs: TaskInputs get() = TaskInputsImpl().apply { dirPaths("res", resDirs) }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("compiled", outDir) }
+    override val outputs: TaskOutputs
+        get() = TaskOutputsImpl().apply {
+            dirPath(
+                "compiled", outDir
+            )
+        }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
@@ -257,29 +290,44 @@ internal class Aapt2LinkTask(
     private val aapt2: Aapt2,
 ) : Task {
     private fun archives(): List<Path> =
-        if (Files.isDirectory(compiledDir))
-            Files.list(compiledDir).use { s -> s.filter { it.toString().endsWith(".zip") }.sorted().collect(Collectors.toList()) }
+        if (Files.isDirectory(compiledDir)) Files.list(compiledDir).use { s ->
+            s.filter { it.toString().endsWith(".zip") }.sorted().collect(Collectors.toList())
+        }
         else emptyList()
 
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        dirPaths("compiled", listOf(compiledDir))
-        filePaths("manifest", listOf(manifest))
-        property("package", customPackage)
-        property("extraPackages", extraPackages.joinToString(":"))
-        property("minSdk", minSdk)
-        property("targetSdk", targetSdk)
-        property("versionCode", versionCode)
-        property("versionName", versionName)
-        property("androidJar", androidJar.toString())
-    }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
-        filePath("ap", resourcesAp)
-        dirPath("R", genJavaDir)
-    }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("compiled", listOf(compiledDir))
+            filePaths("manifest", listOf(manifest))
+            property("package", customPackage)
+            property("extraPackages", extraPackages.joinToString(":"))
+            property("minSdk", minSdk)
+            property("targetSdk", targetSdk)
+            property("versionCode", versionCode)
+            property("versionName", versionName)
+            property("androidJar", androidJar.toString())
+        }
+    override val outputs: TaskOutputs
+        get() = TaskOutputsImpl().apply {
+            filePath("ap", resourcesAp)
+            dirPath("R", genJavaDir)
+        }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        val r = aapt2.link(archives(), manifest, androidJar, customPackage, extraPackages, minSdk, targetSdk, genJavaDir, resourcesAp, versionCode, versionName)
+        val r = aapt2.link(
+            archives(),
+            manifest,
+            androidJar,
+            customPackage,
+            extraPackages,
+            minSdk,
+            targetSdk,
+            genJavaDir,
+            resourcesAp,
+            versionCode,
+            versionName
+        )
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
         return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 link failed")
@@ -294,27 +342,43 @@ internal class AndroidCompileTask(
     private val classpath: List<Path>,   // android.jar (compileOnly) + dependency outputs/jars
     private val outClasses: Path,
     private val level: String,
-    private val compile: JavaCompile,
+    /** ecj `-bootclasspath`: empty on the desktop (host JRE), `android.jar` + desugar stubs on ART. */
+    private val bootClasspath: List<Path>,
 ) : Task {
     // NB: `sourceRoots + genJavaDir` would bind Collection.plus(Iterable) — a Path is an Iterable<Path>
     // of its name components — and silently scatter the gen dir into segments. Append as a single element.
-    private fun sources(): List<Path> = (sourceRoots + listOf(genJavaDir))
-        .filter { Files.isDirectory(it) }
-        .flatMap { root -> Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".java") }.collect(Collectors.toList()) } }
+    private fun sources(): List<Path> =
+        (sourceRoots + listOf(genJavaDir)).filter { Files.isDirectory(it) }.flatMap { root ->
+            Files.walk(root).use { s ->
+                s.filter { Files.isRegularFile(it) && it.toString().endsWith(".java") }
+                    .collect(Collectors.toList())
+            }
+        }
 
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        filePaths("sources", sources())
-        filePaths("classpath", classpath)
-        property("level", level)
-    }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("classes", outClasses) }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            filePaths("sources", sources())
+            filePaths("classpath", classpath)
+            property("level", level)
+        }
+    override val outputs: TaskOutputs
+        get() = TaskOutputsImpl().apply {
+            dirPath(
+                "classes", outClasses
+            )
+        }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        Files.createDirectories(outClasses)
+        withContext(Dispatchers.IO) {
+            Files.createDirectories(outClasses)
+        }
         val srcs = sources()
-        if (srcs.isEmpty()) return TaskResult.Success
-        val r = compile.compile(srcs, classpath, outClasses, level)
+        if (srcs.isEmpty()) {
+            return TaskResult.Success
+        }
+
+        val r = JdtBatchCompiler.compile(srcs, classpath, outClasses, level, bootClasspath = bootClasspath)
         r.messages.forEach(ctx.logger())
         ctx.reportToolDiagnostics("java", r.messages)
         return if (r.success) TaskResult.Success
@@ -335,32 +399,52 @@ internal class AndroidKotlinCompileTask(
     private val classpath: List<Path>,   // android.jar (+ desugar stubs) + dependency outputs/jars + R classes
     private val outClasses: Path,        // the kotlin-classes output dir
     private val level: String,
-    private val compile: KotlinCompile,
+    /** K2 bootclasspath: empty on the desktop (host JDK), `android.jar` + desugar stubs on ART. */
+    private val bootClasspath: List<Path>,
+    private val compiler: IncrementalKotlinCompiler,
 ) : Task {
-    private fun walk(roots: List<Path>, ext: String): List<Path> = roots.filter { Files.isDirectory(it) }
-        .flatMap { root -> Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(ext) }.collect(Collectors.toList()) } }
+    private fun walk(roots: List<Path>, ext: String): List<Path> =
+        roots.filter { Files.isDirectory(it) }.flatMap { root ->
+            Files.walk(root).use { s ->
+                s.filter { Files.isRegularFile(it) && it.toString().endsWith(ext) }
+                    .collect(Collectors.toList())
+            }
+        }
 
     private fun kotlinSources(): List<Path> = walk(sourceRoots, ".kt")
     private fun javaSources(): List<Path> = walk(sourceRoots + listOf(genJavaDir), ".java")
 
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        filePaths("kotlinSources", kotlinSources())
-        filePaths("javaSources", javaSources())
-        filePaths("classpath", classpath)
-        property("level", level)
-    }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("classes", outClasses) }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            filePaths("kotlinSources", kotlinSources())
+            filePaths("javaSources", javaSources())
+            filePaths("classpath", classpath)
+            property("level", level)
+        }
+    override val outputs: TaskOutputs
+        get() = TaskOutputsImpl().apply {
+            dirPath(
+                "classes", outClasses
+            )
+        }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         Files.createDirectories(outClasses)
         val kt = kotlinSources()
         if (kt.isEmpty()) return TaskResult.Success
-        val r = compile.compile(kt, javaSources(), classpath, outClasses, level)
+        // A module that depends on the Compose runtime must be compiled with the Compose compiler plugin.
+        val composePlugin = if (ComposeCompilerPlugin.isComposeModule(classpath + bootClasspath))
+            listOfNotNull(ComposeCompilerPlugin.jar()) else emptyList()
+        val r = compiler.compile(
+            kt, javaSources(), classpath, outClasses, level,
+            bootClasspath = bootClasspath, compilerPlugins = composePlugin,
+        )
         r.messages.forEach(ctx.logger())
         ctx.reportToolDiagnostics("kotlin", r.messages)
         return if (r.success) TaskResult.Success
-        else TaskResult.Failed(r.messages.joinToString("\n").ifBlank { "kotlin compilation failed" })
+        else TaskResult.Failed(
+            r.messages.joinToString("\n").ifBlank { "kotlin compilation failed" })
     }
 }
 
@@ -393,19 +477,21 @@ internal class DexArchiveBuilderTask(
     private val dexer: Dexer,
     private val dexCacheRoot: Path? = null,   // global content-addressed library-dex cache (null = per-project only)
 ) : Task {
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        dirPaths("project", projectClasses)
-        filePaths("sub", subProjectJars)
-        filePaths("ext", externalJars)
-        property("minApi", minApi)
-        property("release", release)
-        property("androidJar", androidJar.toString())
-    }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
-        dirPath("projectDex", projectDexRoot)
-        dirPath("subDex", subDexRoot)
-        dirPath("extDex", extDexRoot)
-    }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("project", projectClasses)
+            filePaths("sub", subProjectJars)
+            filePaths("ext", externalJars)
+            property("minApi", minApi)
+            property("release", release)
+            property("androidJar", androidJar.toString())
+        }
+    override val outputs: TaskOutputs
+        get() = TaskOutputsImpl().apply {
+            dirPath("projectDex", projectDexRoot)
+            dirPath("subDex", subDexRoot)
+            dirPath("extDex", extDexRoot)
+        }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
@@ -414,7 +500,8 @@ internal class DexArchiveBuilderTask(
         // desugaring below the native API level — without it D8 warns "Type ... was not found ...". Project
         // (app) classes are deliberately excluded: nothing a library dexes depends on them (deps point down),
         // and folding them in would invalidate the library cache on every app edit.
-        val libUniverse = (subProjectJars + externalJars).filter { Files.exists(it) && Files.size(it) > 0L }
+        val libUniverse =
+            (subProjectJars + externalJars).filter { Files.exists(it) && Files.size(it) > 0L }
         val hashCache = DexArchives.HashCache(subDexRoot.parent ?: subDexRoot)
         val hashOf = libUniverse.associateWith { hashCache.hashOf(it) }
         hashCache.flush()
@@ -436,8 +523,12 @@ internal class DexArchiveBuilderTask(
 
         var ok = archiveProject(ctx, universeByHash, classesOf)
         // Libraries are atomic jars → per-jar content-hash buckets (a changed lib re-dexes alone).
-        ok = dexJars(ctx, subDexRoot, subProjectJars, hashOf, universeByHash, classesOf, desugarDigest) && ok
-        ok = dexJars(ctx, extDexRoot, externalJars, hashOf, universeByHash, classesOf, desugarDigest) && ok
+        ok = dexJars(
+            ctx, subDexRoot, subProjectJars, hashOf, universeByHash, classesOf, desugarDigest
+        ) && ok
+        ok = dexJars(
+            ctx, extDexRoot, externalJars, hashOf, universeByHash, classesOf, desugarDigest
+        ) && ok
         return if (ok) TaskResult.Success else TaskResult.Failed("dexBuilder failed")
     }
 
@@ -447,27 +538,33 @@ internal class DexArchiveBuilderTask(
      * unchanged ones + library jars are the desugaring *classpath* so a changed class still sees its siblings.
      * D8's `DexFilePerClassFile` writes `<class>.dex` straight into [projectDexRoot]; the merge resolves them.
      */
-    private fun archiveProject(ctx: TaskContext, universeByHash: Map<String, Path>, classesOf: Map<Path, Set<String>>): Boolean {
+    private fun archiveProject(
+        ctx: TaskContext, universeByHash: Map<String, Path>, classesOf: Map<Path, Set<String>>
+    ): Boolean {
         Files.createDirectories(projectDexRoot)
         // Collect across every project-class root (Java output + Kotlin output) keyed by package-relative
         // path; a later root wins a (rare) name clash. Relpaths from distinct roots don't otherwise collide.
         val byRel = LinkedHashMap<String, Path>()
-        val perRoot = LinkedHashMap<String, Int>()   // root name -> .class count contributed (Java vs Kotlin output)
+        val perRoot =
+            LinkedHashMap<String, Int>()   // root name -> .class count contributed (Java vs Kotlin output)
         for (root in projectClasses.filter { Files.isDirectory(it) }) {
             var n = 0
             Files.walk(root).use { s ->
-                s.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }.forEach { f ->
-                    byRel[root.relativize(f).toString().replace('\\', '/')] = f; n++
-                }
+                s.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }
+                    .forEach { f ->
+                        byRel[root.relativize(f).toString().replace('\\', '/')] = f; n++
+                    }
             }
             perRoot[root.fileName.toString()] = n
         }
-        val rootSummary = projectClasses.joinToString(", ") { "${it.fileName}=${perRoot[it.fileName.toString()] ?: 0}" }
+        val rootSummary =
+            projectClasses.joinToString(", ") { "${it.fileName}=${perRoot[it.fileName.toString()] ?: 0}" }
         if (byRel.isEmpty()) {
             ctx.logger()("dexBuilder project scope: no class files to dex ($rootSummary) — app code will be absent from the APK")
             DexArchives.clearClassDex(projectDexRoot); return true
         }
-        val current = byRel.mapValues { (_, f) -> DexArchives.fileHash(f) }   // relpath -> content hash
+        val current =
+            byRel.mapValues { (_, f) -> DexArchives.fileHash(f) }   // relpath -> content hash
         val previous = DexArchives.readClassManifest(projectDexRoot)
         val changed = current.keys.filter { previous[it] != current[it] }      // new or modified
         val removed = previous.keys - current.keys
@@ -483,30 +580,47 @@ internal class DexArchiveBuilderTask(
             DexArchives.jarClasses(byRel, changed.toSet(), changedJar, stripKotlinMetadata = true)
             val unchanged = current.keys - changed.toSet()
             val classpath = ArrayList<Path>()
-            if (unchanged.isNotEmpty()) { DexArchives.jarClasses(byRel, unchanged, restJar); classpath.add(restJar) }
+            if (unchanged.isNotEmpty()) {
+                DexArchives.jarClasses(byRel, unchanged, restJar); classpath.add(restJar)
+            }
             // Library universe, class-deduped so D8 never sees a type twice. Exclude the project's own classes
             // (the program + restJar) so a library that happens to redefine one can't collide with them either.
             classpath.addAll(classpathFor(universeByHash.values, classesOf, exclude = current.keys))
-            val r = dexer.dexArchive(listOf(changedJar), classpath, androidJar, minApi, release, projectDexRoot,
-                threads = DexConcurrency.plan(1).threadsPerInvocation)
+            val r = dexer.dexArchive(
+                listOf(changedJar),
+                classpath,
+                androidJar,
+                minApi,
+                release,
+                projectDexRoot,
+                threads = DexConcurrency.plan(1).threadsPerInvocation
+            )
             r.log.forEach(ctx.logger()); ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
-            if (!r.success) { ok = false; ctx.logger()("dex archive failed for project classes") }
+            if (!r.success) {
+                ok = false; ctx.logger()("dex archive failed for project classes")
+            }
         }
         // Verify every (re)dexed class actually produced a `.dex`. A dexer can report success yet silently drop
         // a class it couldn't process (e.g. D8 choking on Kotlin metadata newer than it supports) — which would
         // leave that class out of the APK (a launch-time ClassNotFoundException). Record ONLY classes whose
         // `.dex` exists, so a dropped class is re-dexed next build instead of being remembered as done; fail the
         // task (naming the casualties) rather than package an APK missing app code.
-        val produced = current.keys.filter { Files.isRegularFile(projectDexRoot.resolve(dexRelOf(it))) }.toSet()
+        val produced =
+            current.keys.filter { Files.isRegularFile(projectDexRoot.resolve(dexRelOf(it))) }
+                .toSet()
         // `module-info`/`package-info` carry no runtime code, so D8 emits no `.dex` for them — not a drop.
-        val dropped = current.keys.filter { dexable(it) && it !in produced }   // changed this run or a stale prior drop
+        val dropped =
+            current.keys.filter { dexable(it) && it !in produced }   // changed this run or a stale prior drop
         if (dropped.isNotEmpty()) {
             ok = false
-            ctx.logger()("dexBuilder project scope: ${dropped.size} class(es) produced no .dex and will be ABSENT from the APK " +
-                "(e.g. ${dropped.take(5).joinToString { it.removeSuffix(".class").replace('/', '.') }}) — the dexer dropped them, often Kotlin metadata it can't parse")
+            ctx.logger()(
+                "dexBuilder project scope: ${dropped.size} class(es) produced no .dex and will be ABSENT from the APK " + "(e.g. ${
+                    dropped.take(5).joinToString { it.removeSuffix(".class").replace('/', '.') }
+                }) — the dexer dropped them, often Kotlin metadata it can't parse")
         }
         // Record a class as done only if it dexed (or never needed to), so a dropped class re-dexes next build.
-        DexArchives.writeClassManifest(projectDexRoot, current.filterKeys { it in produced || !dexable(it) })
+        DexArchives.writeClassManifest(
+            projectDexRoot, current.filterKeys { it in produced || !dexable(it) })
         return ok
     }
 
@@ -514,8 +628,8 @@ internal class DexArchiveBuilderTask(
     private fun dexRelOf(classRel: String): String = classRel.removeSuffix(".class") + ".dex"
 
     /** Whether D8 emits a `.dex` for [classRel] — `module-info`/`package-info` (no runtime code) it does not. */
-    private fun dexable(classRel: String): Boolean =
-        classRel.substringAfterLast('/').let { it != "module-info.class" && it != "package-info.class" }
+    private fun dexable(classRel: String): Boolean = classRel.substringAfterLast('/')
+        .let { it != "module-info.class" && it != "package-info.class" }
 
     /**
      * Build a duplicate-free desugaring classpath from [candidates]. D8 aborts when two classpath entries
@@ -525,12 +639,16 @@ internal class DexArchiveBuilderTask(
      * dropped whole; a partial overlap is also dropped, at worst reviving a benign "Type not found" desugaring
      * warning for its unique classes — never a hard failure. Resource-only jars (no classes) are always kept.
      */
-    private fun classpathFor(candidates: Collection<Path>, classesOf: Map<Path, Set<String>>, exclude: Set<String>): List<Path> {
+    private fun classpathFor(
+        candidates: Collection<Path>, classesOf: Map<Path, Set<String>>, exclude: Set<String>
+    ): List<Path> {
         val seen = HashSet(exclude)
         val kept = ArrayList<Path>()
         for (jar in candidates) {
             val cs = classesOf[jar] ?: emptySet()
-            if (cs.isEmpty() || cs.none { it in seen }) { kept.add(jar); seen.addAll(cs) }
+            if (cs.isEmpty() || cs.none { it in seen }) {
+                kept.add(jar); seen.addAll(cs)
+            }
         }
         return kept
     }
@@ -547,15 +665,24 @@ internal class DexArchiveBuilderTask(
      * [desugarDigest] keys the shared cache to it (see [execute]).
      */
     private suspend fun dexJars(
-        ctx: TaskContext, root: Path, jars: List<Path>,
-        hashOf: Map<Path, String>, universeByHash: Map<String, Path>, classesOf: Map<Path, Set<String>>, desugarDigest: String,
+        ctx: TaskContext,
+        root: Path,
+        jars: List<Path>,
+        hashOf: Map<Path, String>,
+        universeByHash: Map<String, Path>,
+        classesOf: Map<Path, Set<String>>,
+        desugarDigest: String,
     ): Boolean {
         Files.createDirectories(root)
-        val byHash = LinkedHashMap<String, Path>()                       // content hash -> a jar (dedups copies)
+        val byHash =
+            LinkedHashMap<String, Path>()                       // content hash -> a jar (dedups copies)
         for (jar in jars) hashOf[jar]?.let { byHash.putIfAbsent(it, jar) }
         val keep = byHash.keys.toHashSet()
-        val todo = byHash.entries.filter { !DexArchives.hasDex(root.resolve(it.key)) }   // tier-1 reuse drops the rest
-        if (todo.isEmpty()) { DexArchives.prune(root, keep); return true }
+        val todo =
+            byHash.entries.filter { !DexArchives.hasDex(root.resolve(it.key)) }   // tier-1 reuse drops the rest
+        if (todo.isEmpty()) {
+            DexArchives.prune(root, keep); return true
+        }
 
         val plan = DexConcurrency.plan(todo.size)
         val sem = Semaphore(plan.workers)
@@ -569,8 +696,18 @@ internal class DexArchiveBuilderTask(
                         // second path can't put it back) and class-deduped (so a different jar can't redefine
                         // this jar's types, nor any type twice across the classpath).
                         val others = universeByHash.filterKeys { it != hash }.values
-                        val classpath = classpathFor(others, classesOf, exclude = classesOf[jar] ?: emptySet())
-                        if (!dexOneLibrary(ctx, jar, root.resolve(hash), hash, classpath, desugarDigest, plan.threadsPerInvocation)) ok.set(false)
+                        val classpath =
+                            classpathFor(others, classesOf, exclude = classesOf[jar] ?: emptySet())
+                        if (!dexOneLibrary(
+                                ctx,
+                                jar,
+                                root.resolve(hash),
+                                hash,
+                                classpath,
+                                desugarDigest,
+                                plan.threadsPerInvocation
+                            )
+                        ) ok.set(false)
                     }
                 }
             }.awaitAll()
@@ -581,7 +718,15 @@ internal class DexArchiveBuilderTask(
 
     /** Tier 2/3 for one library: copy from the shared cache on a hit, else dex it (with [classpath] as the
      *  desugaring classpath) and seed the cache under the [desugarDigest]-keyed namespace. */
-    private fun dexOneLibrary(ctx: TaskContext, jar: Path, bucket: Path, hash: String, classpath: List<Path>, desugarDigest: String, threads: Int): Boolean {
+    private fun dexOneLibrary(
+        ctx: TaskContext,
+        jar: Path,
+        bucket: Path,
+        hash: String,
+        classpath: List<Path>,
+        desugarDigest: String,
+        threads: Int
+    ): Boolean {
         val shared = dexCacheRoot?.resolve(cacheTag(desugarDigest))?.resolve(hash)
         if (shared != null && DexArchives.hasDex(shared)) {
             DexArchives.clearDir(bucket); DexArchives.copyDir(shared, bucket)
@@ -589,11 +734,16 @@ internal class DexArchiveBuilderTask(
             return true
         }
         DexArchives.clearDir(bucket); Files.createDirectories(bucket)
-        val r = dexer.dexArchive(listOf(jar), classpath, androidJar, minApi, release, bucket, threads)
+        val r =
+            dexer.dexArchive(listOf(jar), classpath, androidJar, minApi, release, bucket, threads)
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
-        if (!r.success) { ctx.logger()("dex archive failed for ${jar.fileName}"); return false }
-        if (shared != null && !DexArchives.hasDex(shared)) DexArchives.publishToCache(bucket, shared)
+        if (!r.success) {
+            ctx.logger()("dex archive failed for ${jar.fileName}"); return false
+        }
+        if (shared != null && !DexArchives.hasDex(shared)) DexArchives.publishToCache(
+            bucket, shared
+        )
         return true
     }
 
@@ -620,18 +770,25 @@ internal object DexArchives {
         val md = MessageDigest.getInstance("SHA-256")
         when {
             Files.isDirectory(path) -> {
-                val files = Files.walk(path).use { s -> s.filter { Files.isRegularFile(it) }.sorted().collect(Collectors.toList()) }
+                val files = Files.walk(path).use { s ->
+                    s.filter { Files.isRegularFile(it) }.sorted().collect(Collectors.toList())
+                }
                 for (f in files) {
-                    md.update(path.relativize(f).toString().replace('\\', '/').toByteArray(Charsets.UTF_8))
+                    md.update(
+                        path.relativize(f).toString().replace('\\', '/').toByteArray(Charsets.UTF_8)
+                    )
                     md.update(runCatching { Files.readAllBytes(f) }.getOrDefault(ByteArray(0)))
                 }
             }
+
             isZip(path) -> ZipFile(path.toFile()).use { zf ->
-                zf.entries().toList().filterNot { it.isDirectory }.sortedBy { it.name }.forEach { e ->
-                    md.update(e.name.toByteArray(Charsets.UTF_8))
-                    zf.getInputStream(e).use { md.update(it.readBytes()) }
-                }
+                zf.entries().toList().filterNot { it.isDirectory }.sortedBy { it.name }
+                    .forEach { e ->
+                        md.update(e.name.toByteArray(Charsets.UTF_8))
+                        zf.getInputStream(e).use { md.update(it.readBytes()) }
+                    }
             }
+
             Files.isRegularFile(path) -> md.update(Files.readAllBytes(path))
         }
         return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }.substring(0, 24)
@@ -669,8 +826,8 @@ internal object DexArchives {
         return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }.substring(0, 24)
     }
 
-    fun hasDex(dir: Path): Boolean = Files.isDirectory(dir) &&
-        Files.walk(dir).use { s -> s.anyMatch { it.toString().endsWith(".dex") } }
+    fun hasDex(dir: Path): Boolean = Files.isDirectory(dir) && Files.walk(dir)
+        .use { s -> s.anyMatch { it.toString().endsWith(".dex") } }
 
     private const val CLASS_MANIFEST = ".classmanifest"
 
@@ -680,7 +837,9 @@ internal object DexArchives {
         if (!Files.isRegularFile(f)) return emptyMap()
         return runCatching {
             Files.readAllLines(f).mapNotNull { line ->
-                val i = line.indexOf('\t'); if (i <= 0) null else line.substring(0, i) to line.substring(i + 1)
+                val i = line.indexOf('\t'); if (i <= 0) null else line.substring(
+                0, i
+            ) to line.substring(i + 1)
             }.toMap()
         }.getOrDefault(emptyMap())
     }
@@ -688,7 +847,11 @@ internal object DexArchives {
     /** Write the per-class manifest (sorted, so the bytes are stable when the class set is unchanged). */
     fun writeClassManifest(root: Path, map: Map<String, String>) {
         Files.createDirectories(root)
-        runCatching { Files.write(root.resolve(CLASS_MANIFEST), map.entries.sortedBy { it.key }.map { "${it.key}\t${it.value}" }) }
+        runCatching {
+            Files.write(
+                root.resolve(CLASS_MANIFEST),
+                map.entries.sortedBy { it.key }.map { "${it.key}\t${it.value}" })
+        }
     }
 
     /** Delete the per-class `.dex` for a `com/example/Foo.class` relpath (DexFilePerClassFile names it `Foo.dex`). */
@@ -700,18 +863,25 @@ internal object DexArchives {
     fun clearClassDex(root: Path) {
         if (!Files.isDirectory(root)) return
         Files.walk(root).use { s ->
-            s.filter { Files.isRegularFile(it) && (it.toString().endsWith(".dex") || it.fileName.toString() == CLASS_MANIFEST) }.collect(Collectors.toList())
+            s.filter {
+                Files.isRegularFile(it) && (it.toString()
+                    .endsWith(".dex") || it.fileName.toString() == CLASS_MANIFEST)
+            }.collect(Collectors.toList())
         }.forEach { runCatching { Files.deleteIfExists(it) } }
     }
 
     /** Jar the [keys] subset of [byRel] (relpath -> class file) into [jar], preserving package paths. */
-    fun jarClasses(byRel: Map<String, Path>, keys: Set<String>, jar: Path, stripKotlinMetadata: Boolean = false) {
+    fun jarClasses(
+        byRel: Map<String, Path>, keys: Set<String>, jar: Path, stripKotlinMetadata: Boolean = false
+    ) {
         jar.parent?.let { Files.createDirectories(it) }
         JarOutputStream(Files.newOutputStream(jar)).use { jos ->
             keys.sorted().forEach { rel ->
                 val f = byRel[rel] ?: return@forEach
                 jos.putNextEntry(JarEntry(rel))
-                if (stripKotlinMetadata) jos.write(strippedKotlinMetadata(Files.readAllBytes(f))) else Files.copy(f, jos)
+                if (stripKotlinMetadata) jos.write(strippedKotlinMetadata(Files.readAllBytes(f))) else Files.copy(
+                    f, jos
+                )
                 jos.closeEntry()
             }
         }
@@ -730,10 +900,13 @@ internal object DexArchives {
     fun strippedKotlinMetadata(bytes: ByteArray): ByteArray {
         var found = false
         val reader = ClassReader(bytes)
-        val writer = ClassWriter(0)   // remove only an annotation — frames/maxs are untouched, so no recompute
+        val writer =
+            ClassWriter(0)   // remove only an annotation — frames/maxs are untouched, so no recompute
         reader.accept(object : ClassVisitor(Opcodes.ASM9, writer) {
             override fun visitAnnotation(descriptor: String, visible: Boolean): AnnotationVisitor? {
-                if (descriptor == "Lkotlin/Metadata;") { found = true; return null }
+                if (descriptor == "Lkotlin/Metadata;") {
+                    found = true; return null
+                }
                 return super.visitAnnotation(descriptor, visible)
             }
         }, 0)
@@ -743,13 +916,17 @@ internal object DexArchives {
     /** Delete immediate child buckets of [root] whose name is not in [keep] (removed/changed inputs). */
     fun prune(root: Path, keep: Set<String>) {
         if (!Files.isDirectory(root)) return
-        Files.list(root).use { s -> s.filter { Files.isDirectory(it) && it.fileName.toString() !in keep }.collect(Collectors.toList()) }
-            .forEach { clearDir(it) }
+        Files.list(root).use { s ->
+            s.filter { Files.isDirectory(it) && it.fileName.toString() !in keep }
+                .collect(Collectors.toList())
+        }.forEach { clearDir(it) }
     }
 
     fun clearDir(dir: Path) {
         if (!Files.exists(dir)) return
-        Files.walk(dir).use { s -> s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } } }
+        Files.walk(dir).use { s ->
+            s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } }
+        }
     }
 
     /** Recursively copy [src] dir into [dst] (cheap — moves a few per-class `.dex`, vs re-running D8). */
@@ -760,7 +937,11 @@ internal object DexArchives {
             s.forEach { p ->
                 val target = dst.resolve(src.relativize(p).toString())
                 if (Files.isDirectory(p)) Files.createDirectories(target)
-                else { target.parent?.let { Files.createDirectories(it) }; Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING) }
+                else {
+                    target.parent?.let { Files.createDirectories(it) }; Files.copy(
+                        p, target, StandardCopyOption.REPLACE_EXISTING
+                    )
+                }
             }
         }
     }
@@ -773,12 +954,17 @@ internal object DexArchives {
     fun publishToCache(bucket: Path, shared: Path) {
         runCatching {
             shared.parent?.let { Files.createDirectories(it) }
-            val tmp = shared.resolveSibling(shared.fileName.toString() + ".tmp-" + java.util.UUID.randomUUID())
+            val tmp =
+                shared.resolveSibling(shared.fileName.toString() + ".tmp-" + java.util.UUID.randomUUID())
             clearDir(tmp); copyDir(bucket, tmp)
             try {
                 Files.move(tmp, shared, StandardCopyOption.ATOMIC_MOVE)
             } catch (_: Exception) {
-                if (!hasDex(shared)) runCatching { Files.move(tmp, shared) }.onFailure { clearDir(tmp) } else clearDir(tmp)
+                if (!hasDex(shared)) runCatching { Files.move(tmp, shared) }.onFailure {
+                    clearDir(
+                        tmp
+                    )
+                } else clearDir(tmp)
             }
         }
     }
@@ -795,7 +981,8 @@ internal object DexArchives {
         init {
             if (Files.isRegularFile(file)) runCatching {
                 Files.readAllLines(file).forEach { line ->
-                    val t = line.indexOf('\t'); if (t > 0) entries[line.substring(0, t)] = line.substring(t + 1)
+                    val t = line.indexOf('\t'); if (t > 0) entries[line.substring(0, t)] =
+                    line.substring(t + 1)
                 }
             }
         }
@@ -805,7 +992,8 @@ internal object DexArchives {
             val mtime = runCatching { Files.getLastModifiedTime(jar).toMillis() }.getOrDefault(0L)
             val sig = "${runCatching { Files.size(jar) }.getOrDefault(-1L)}:$mtime"
             entries[key]?.let { v ->
-                val sep = v.lastIndexOf(':')                    // value is "size:mtime:hash"; hash has no ':'
+                val sep =
+                    v.lastIndexOf(':')                    // value is "size:mtime:hash"; hash has no ':'
                 if (sep > 0 && v.substring(0, sep) == sig) return v.substring(sep + 1)
             }
             val h = contentHash(jar)
@@ -815,12 +1003,18 @@ internal object DexArchives {
 
         fun flush() {
             if (!dirty) return
-            runCatching { file.parent?.let { Files.createDirectories(it) }; Files.write(file, entries.map { "${it.key}\t${it.value}" }) }
+            runCatching {
+                file.parent?.let { Files.createDirectories(it) }; Files.write(
+                file, entries.map { "${it.key}\t${it.value}" })
+            }
         }
     }
 
-    private fun isZip(p: Path): Boolean = Files.isRegularFile(p) &&
-        p.toString().let { it.endsWith(".jar", true) || it.endsWith(".zip", true) || it.endsWith(".aar", true) }
+    private fun isZip(p: Path): Boolean = Files.isRegularFile(p) && p.toString().let {
+        it.endsWith(".jar", true) || it.endsWith(".zip", true) || it.endsWith(
+            ".aar", true
+        )
+    }
 }
 
 /**
@@ -853,15 +1047,18 @@ internal class DexMergeTask(
      * so a `.dex`'s path *relative to its bucket* is the class path (`androidx/collection/ArrayMapKt.dex`) —
      * stable across buckets, hence usable as a dedup key.
      */
-    private fun bucketsOf(roots: List<Path>): List<Path> = roots.filter { Files.isDirectory(it) }.flatMap { root ->
-        val hashBuckets = Files.list(root).use { s ->
-            s.filter { Files.isDirectory(it) && HASH_BUCKET.matches(it.fileName.toString()) }.sorted().collect(Collectors.toList())
+    private fun bucketsOf(roots: List<Path>): List<Path> =
+        roots.filter { Files.isDirectory(it) }.flatMap { root ->
+            val hashBuckets = Files.list(root).use { s ->
+                s.filter { Files.isDirectory(it) && HASH_BUCKET.matches(it.fileName.toString()) }
+                    .sorted().collect(Collectors.toList())
+            }
+            if (hashBuckets.isEmpty()) listOf(root) else hashBuckets
         }
-        if (hashBuckets.isEmpty()) listOf(root) else hashBuckets
-    }
 
-    private fun dexesIn(bucket: Path): List<Path> =
-        Files.walk(bucket).use { s -> s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList()) }
+    private fun dexesIn(bucket: Path): List<Path> = Files.walk(bucket).use { s ->
+        s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList())
+    }
 
     /**
      * Collect the `.dex` to merge from [buckets], dropping a class that is defined by more than one bucket so
@@ -872,14 +1069,19 @@ internal class DexMergeTask(
      * dropped (every unique class is kept). [seen] carries the keys across buckets/groups.
      */
     private fun dedupedDexes(bucket: Path, seen: MutableSet<String>): List<Path> =
-        dexesIn(bucket).filter { dex -> seen.add(bucket.relativize(dex).toString().replace('\\', '/')) }
+        dexesIn(bucket).filter { dex ->
+            seen.add(
+                bucket.relativize(dex).toString().replace('\\', '/')
+            )
+        }
 
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        dirPaths("archives", dexArchives)
-        property("minApi", minApi)
-        property("release", release)
-        property("perBucket", groupPerBucket)
-    }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("archives", dexArchives)
+            property("minApi", minApi)
+            property("release", release)
+            property("perBucket", groupPerBucket)
+        }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("dex", outDexDir) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
@@ -888,7 +1090,8 @@ internal class DexMergeTask(
         val buckets = bucketsOf(dexArchives)
         // One global key set so a class defined in two buckets is merged once, whether grouped or merged-all.
         val seen = HashSet<String>()
-        val perBucketDexes = buckets.map { dedupedDexes(it, seen) }   // sequential → deterministic first-wins
+        val perBucketDexes =
+            buckets.map { dedupedDexes(it, seen) }   // sequential → deterministic first-wins
         val dropped = buckets.sumOf { dexesIn(it).size } - seen.size
         if (dropped > 0) ctx.logger()("dex merge: dropped $dropped duplicate class dex (defined by more than one library)")
 
@@ -907,7 +1110,14 @@ internal class DexMergeTask(
                             ctx.checkCanceled()
                             if (dexes.isNotEmpty()) {
                                 val group = outDexDir.resolve("g$i"); Files.createDirectories(group)
-                                val r = dexer.dex(dexes, androidJar, minApi, release, group, plan.threadsPerInvocation)
+                                val r = dexer.dex(
+                                    dexes,
+                                    androidJar,
+                                    minApi,
+                                    release,
+                                    group,
+                                    plan.threadsPerInvocation
+                                )
                                 r.log.forEach(ctx.logger())
                                 ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
                                 if (!r.success) ok.set(false)
@@ -921,7 +1131,14 @@ internal class DexMergeTask(
         val dexes = perBucketDexes.flatten()
         // An empty layer is valid (e.g. mergeLibDex with no sub-module deps) — produce an empty dex dir.
         if (dexes.isEmpty()) return TaskResult.Success
-        val r = dexer.dex(dexes, androidJar, minApi, release, outDexDir, DexConcurrency.plan(1).threadsPerInvocation)
+        val r = dexer.dex(
+            dexes,
+            androidJar,
+            minApi,
+            release,
+            outDexDir,
+            DexConcurrency.plan(1).threadsPerInvocation
+        )
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
         if (!r.success) return TaskResult.Failed("dex merge failed")
@@ -952,13 +1169,14 @@ internal class R8MinifyTask(
     private val outDexDir: Path,
     private val shrinker: Shrinker,
 ) : Task {
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        dirPaths("classes", programs.filter { Files.isDirectory(it) })
-        filePaths("jars", programs.filter { !Files.isDirectory(it) })
-        if (Files.exists(keepRulesFile)) filePaths("keep", listOf(keepRulesFile))
-        property("minApi", minApi)
-        property("androidJar", androidJar.toString())
-    }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("classes", programs.filter { Files.isDirectory(it) })
+            filePaths("jars", programs.filter { !Files.isDirectory(it) })
+            if (Files.exists(keepRulesFile)) filePaths("keep", listOf(keepRulesFile))
+            property("minApi", minApi)
+            property("androidJar", androidJar.toString())
+        }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("dex", outDexDir) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
@@ -966,13 +1184,22 @@ internal class R8MinifyTask(
         Files.createDirectories(stagingDir)
         Files.createDirectories(outDexDir)
         val inputs = programs.filter { Files.exists(it) }.mapIndexed { i, p ->
-            if (Files.isDirectory(p)) stagingDir.resolve("in$i.jar").also { ApkPackaging.jarClasses(p, it) } else p
+            if (Files.isDirectory(p)) stagingDir.resolve("in$i.jar")
+                .also { ApkPackaging.jarClasses(p, it) } else p
         }
         if (inputs.isEmpty()) return TaskResult.Failed("nothing to minify")
-        val keepRules = if (Files.exists(keepRulesFile)) Files.readAllLines(keepRulesFile) else emptyList()
+        val keepRules =
+            if (Files.exists(keepRulesFile)) Files.readAllLines(keepRulesFile) else emptyList()
         // Cap R8's worker pool: it's the heaviest in-process step, so fewer threads = a smaller peak heap.
-        val r = shrinker.shrink(inputs, androidJar, keepRules, minApi, release = true, outDexDir,
-            threads = DexConcurrency.plan(1).threadsPerInvocation)
+        val r = shrinker.shrink(
+            inputs,
+            androidJar,
+            keepRules,
+            minApi,
+            release = true,
+            outDexDir,
+            threads = DexConcurrency.plan(1).threadsPerInvocation
+        )
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("r8", r.log, DiagnosticKind.DEX)
         return if (r.success) TaskResult.Success else TaskResult.Failed("R8 minify failed")
@@ -990,18 +1217,20 @@ internal class PackageApkTask(
     private val jniLibDirs: List<Path>,
     private val outApk: Path,
 ) : Task {
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        filePaths("ap", listOf(resourcesAp))
-        dirPaths("dex", dexDirs)
-        dirPaths("assets", assetsDirs)
-        dirPaths("jni", jniLibDirs)
-    }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            filePaths("ap", listOf(resourcesAp))
+            dirPaths("dex", dexDirs)
+            dirPaths("assets", assetsDirs)
+            dirPaths("jni", jniLibDirs)
+        }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("apk", outApk) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         return runCatching {
-            val names = ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk)
+            val names =
+                ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk)
             ctx.logger()("packageApk -> ${outApk.fileName} (${names.size} entries)")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("packageApk failed: ${it.message}", it) }
@@ -1016,11 +1245,12 @@ internal class SignApkTask(
     private val config: SigningConfig,
     private val signer: ApkSigner,
 ) : Task {
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
-        filePaths("unsigned", listOf(unsignedApk))
-        property("keystore", config.keystore.toString())
-        property("alias", config.keyAlias)
-    }
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            filePaths("unsigned", listOf(unsignedApk))
+            property("keystore", config.keystore.toString())
+            property("alias", config.keyAlias)
+        }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("apk", signedApk) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {

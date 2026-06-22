@@ -5,8 +5,6 @@ import dev.ide.lang.CompilationContext
 import dev.ide.lang.LanguageBackend
 import dev.ide.lang.LanguageId
 import dev.ide.lang.SourceAnalyzer
-import dev.ide.lang.SourceCompiler
-import dev.ide.lang.kotlin.compile.KotlinSourceCompiler
 
 /**
  * The Kotlin [LanguageBackend], providing editor-time code intelligence.
@@ -32,14 +30,9 @@ class KotlinLanguageBackend : LanguageBackend {
         BackendCapability.SIGNATURE_HELP,
         BackendCapability.SEMANTIC_HIGHLIGHT,
         BackendCapability.CODE_FOLDING,
-        BackendCapability.COMPILE,
     )
 
     override fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer = KotlinSourceAnalyzer(ctx)
-
-    /** K2 codegen to `.class`. The build graph normally drives Kotlin through the lighter
-     *  `dev.ide.build.engine.KotlinCompile` port; this is the language-api SPI path. */
-    override fun createCompiler(ctx: CompilationContext): SourceCompiler? = KotlinSourceCompiler(ctx)
 
     companion object {
         val LANGUAGE_ID = LanguageId("kotlin")

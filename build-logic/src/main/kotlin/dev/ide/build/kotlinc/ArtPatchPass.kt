@@ -58,6 +58,9 @@ object ArtPatchPasses {
         ManagementStubPass(),    // java.lang.management.* absent on ART (PerformanceManager + 5 more)
         PathUtilSelfLocatePass(), // PathUtil.getResourcePathForClass → the runtime-provisioned resource dir
         FastJarCleanerArtPass(),  // enable the mmap-backed fast JAR FS (ART can't unmap → no-op cleaner)
+        SwingIconArtPass(),      // intellij icon markers extend javax.swing.Icon (absent on ART) → strip it
+        // Same instrumentation (scope = ALL) also reaches the dexed Eclipse jars, so an ecj fix rides here too.
+        EcjInputStreamArtPass(),  // InputStream.readAllBytes/readNBytes (API 33) absent on ART → shim call sites
     )
 
     /** True if any registered pass rewrites [classFqn]. */

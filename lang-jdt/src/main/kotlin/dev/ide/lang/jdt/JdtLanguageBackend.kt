@@ -5,7 +5,6 @@ import dev.ide.lang.CompilationContext
 import dev.ide.lang.LanguageBackend
 import dev.ide.lang.LanguageId
 import dev.ide.lang.SourceAnalyzer
-import dev.ide.lang.SourceCompiler
 
 /**
  * The default Java [LanguageBackend], engine = Eclipse JDT. Error-tolerant (statement + binding
@@ -25,10 +24,7 @@ class JdtLanguageBackend : LanguageBackend {
         BackendCapability.SIGNATURE_HELP,
         BackendCapability.SEMANTIC_HIGHLIGHT,
         BackendCapability.CODE_FOLDING,
-        BackendCapability.COMPILE,
     )
 
     override fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer = JdtSourceAnalyzer(ctx)
-
-    override fun createCompiler(ctx: CompilationContext): SourceCompiler = JdtSourceCompiler(ctx)
 }

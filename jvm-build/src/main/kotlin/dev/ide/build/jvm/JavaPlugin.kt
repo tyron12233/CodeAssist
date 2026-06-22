@@ -1,0 +1,79 @@
+package dev.ide.build.jvm
+
+import dev.ide.build.BuildConfiguration
+import dev.ide.build.BuildGoal
+import dev.ide.build.Plugin
+import dev.ide.build.TaskContainer
+import dev.ide.build.TaskName
+import dev.ide.build.engine.JarTask
+import dev.ide.build.engine.LifecycleTask
+import dev.ide.build.engine.ProcessResourcesTask
+import dev.ide.build.engine.classOutputs
+import dev.ide.build.engine.directModuleDeps
+import dev.ide.build.engine.hasKotlinSources
+import dev.ide.build.engine.jarPath
+import dev.ide.build.engine.moduleClosure
+import dev.ide.build.engine.resourceRoots
+import dev.ide.build.engine.resourcesDir
+import dev.ide.lang.jdt.build.JdtCompileTask
+import dev.ide.lang.kotlin.build.KotlinCompileTask
+import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
+import dev.ide.model.Module
+import dev.ide.model.ModuleId
+import java.nio.file.Path
+
+/**
+ * The Java plugin (Gradle's `java`/`java-library`): for each module it registers the standard chain
+ * `compileJava → processResources → classes (lifecycle) → jar`, plus a `compileKotlin` step ahead of
+ * `compileJava` for any module that carries `.kt` sources (when a [kotlin] compiler is available). The
+ * compile tasks are the language modules' own: lang-jdt's [JdtCompileTask] and lang-kotlin's
+ * [KotlinCompileTask], constructed here with the host [bootClasspath]. Other plugins (e.g. Android) reuse
+ * [registerModule] for plain library modules and depend on the resulting tasks by name (`:lib:jar`,
+ * `:lib:classes`).
+ */
+class JavaPlugin(
+    private val bootClasspath: List<Path> = emptyList(),
+    private val kotlin: IncrementalKotlinCompiler? = null,
+) : Plugin {
+
+    override fun apply(config: BuildConfiguration) {
+        val byId = config.project.modules.associateBy { it.id }
+        val packaging = config.request.goal in setOf(BuildGoal.ASSEMBLE, BuildGoal.PACKAGE, BuildGoal.INSTALL)
+        for (m in moduleClosure(config.request.targets, byId)) registerModule(config.tasks, m, byId, withJar = packaging)
+    }
+
+    /**
+     * Register [module]'s task chain into [tasks]. Call once per module (the caller iterates a deduped
+     * closure). [withJar] adds the packaging `jar` task (the library's artifact); compile/classes/resources
+     * are always registered. A `compileKotlin` step is added (and `compileJava` made to depend on it + see
+     * its output) when [module] has Kotlin sources and a [kotlin] compiler is available.
+     */
+    fun registerModule(tasks: TaskContainer, module: Module, byId: Map<ModuleId, Module>, withJar: Boolean) {
+        val hasKt = kotlin != null && hasKotlinSources(module)
+        if (hasKt) {
+            val kc = TaskName(":${module.name}:compileKotlin")
+            tasks.register(kc) { KotlinCompileTask(module, kc, bootClasspath, kotlin) }.configure {
+                directModuleDeps(module, byId).forEach {
+                    dependsOn(TaskName(":${it.name}:compileJava"))
+                    if (hasKotlinSources(it)) dependsOn(TaskName(":${it.name}:compileKotlin"))
+                }
+            }
+        }
+        val compile = TaskName(":${module.name}:compileJava")
+        tasks.register(compile) { JdtCompileTask(module, compile, bootClasspath, ownKotlinOut = hasKt) }.configure {
+            directModuleDeps(module, byId).forEach { dependsOn(TaskName(":${it.name}:compileJava")) }
+            if (hasKt) dependsOn(TaskName(":${module.name}:compileKotlin"))
+        }
+        val procRes = TaskName(":${module.name}:processResources")
+        tasks.register(procRes) { ProcessResourcesTask(procRes, resourceRoots(module), resourcesDir(module)) }
+
+        val classes = TaskName(":${module.name}:classes")
+        tasks.register(classes) { LifecycleTask(classes, trackedDirs = classOutputs(module) + resourcesDir(module)) }
+            .configure { dependsOn(compile, procRes) }
+
+        if (withJar) {
+            val jar = TaskName(":${module.name}:jar")
+            tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module)) }.configure { dependsOn(classes) }
+        }
+    }
+}

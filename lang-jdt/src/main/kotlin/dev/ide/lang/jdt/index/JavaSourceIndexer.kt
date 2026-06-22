@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt.index
 
+import dev.ide.lang.jdt.jdtStandaloneCompilerOptions
 import org.eclipse.jdt.core.JavaCore
 import org.eclipse.jdt.core.dom.AST
 import org.eclipse.jdt.core.dom.ASTParser
@@ -37,11 +38,7 @@ object JavaSourceIndexer {
     private fun doParse(text: String): Parsed {
         val parser = ASTParser.newParser(AST.getJLSLatest())
         parser.setKind(ASTParser.K_COMPILATION_UNIT)
-        @Suppress("UNCHECKED_CAST")
-        val options = (JavaCore.getOptions() as MutableMap<String, String>).also {
-            JavaCore.setComplianceOptions(JavaCore.latestSupportedJavaVersion(), it)
-        }
-        parser.setCompilerOptions(options)
+        parser.setCompilerOptions(jdtStandaloneCompilerOptions(JavaCore.latestSupportedJavaVersion()))
         parser.setStatementsRecovery(true)
         parser.setSource(text.toCharArray())
         val cu = runCatching { parser.createAST(null) as CompilationUnit }.getOrNull()

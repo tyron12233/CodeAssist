@@ -1,4 +1,4 @@
-package dev.ide.build.engine
+package dev.ide.build.jvm
 
 import dev.ide.bench.Direction
 import dev.ide.bench.MetricUnit
@@ -6,7 +6,10 @@ import dev.ide.bench.RegressionSuite
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.build.engine.BuildCache
+import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.build.engine.TaskExecutorImpl
+import dev.ide.build.engine.jarPath
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -30,7 +33,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Build-at-scale regression suite (opt-in: `./gradlew :build-engine:regressionTest`).
+ * Build-at-scale regression suite (opt-in: `./gradlew :jvm-build:regressionTest`).
  * It drives the IDE's own native build engine — the same `JavaBuildSystem` + incremental `TaskExecutorImpl`
  * wired behind the Run button — to compile, package, and run a large multi-module Java project, and verifies
  * the incremental engine scales:
@@ -61,10 +64,8 @@ class LargeBuildBenchmark {
     private fun mainSources() =
         SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE)))
 
-    private fun javaBuildSystem() = JavaBuildSystem(JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
-    })
+    // Java-only build: no boot classpath (ecj uses the host JRE on the desktop) and no Kotlin compiler.
+    private fun javaBuildSystem() = JavaBuildSystem()
 
     /** Model + on-disk sources for `core ← lib0..libN-1 ← app`; returns the single project. */
     private fun buildWorkspace(dir: Path, platform: PlatformCore): Project {

@@ -7,11 +7,8 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.LanguageLevel
 import dev.ide.model.ModuleId
@@ -42,12 +39,12 @@ class AndroidApkBuildTest {
 
     @Test
     fun buildsAndSignsApkWithSubprocessTools() = buildAndVerify { sdk, signing ->
-        AndroidBuildSystem.subprocess(jdtCompile(), sdk, signing)
+        AndroidBuildSystem.subprocess(sdk, signing)
     }
 
     @Test
     fun buildsAndSignsApkWithInProcessTools() = buildAndVerify { sdk, signing ->
-        AndroidBuildSystem.inProcess(jdtCompile(), sdk, signing)
+        AndroidBuildSystem.inProcess(sdk, signing)
     }
 
     private fun buildAndVerify(makeBuildSystem: (AndroidSdk, SigningConfig) -> AndroidBuildSystem) {
@@ -85,11 +82,6 @@ class AndroidApkBuildTest {
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun jdtCompile(): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
     }
 
     private fun buildAppWorkspace(dir: Path, platform: PlatformCore): ProjectModelStore {

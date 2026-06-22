@@ -6,11 +6,8 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.JavaCompile
-import dev.ide.build.engine.JavaCompileResult
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
@@ -73,7 +70,7 @@ class AndroidLibResourceMergeTest {
             write(dir, "app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
-            val buildSystem = AndroidBuildSystem.inProcess(jdtCompile(), sdk, signing)
+            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
             val graph = buildSystem.createBuildGraph(
                 store.workspace.projects.single(),
                 BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE),
@@ -103,11 +100,6 @@ class AndroidLibResourceMergeTest {
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun jdtCompile(): JavaCompile = JavaCompile { sources, classpath, out, level ->
-        val r = JdtBatchCompiler.compile(sources, classpath, out, level)
-        JavaCompileResult(r.success, r.messages)
     }
 
     private fun write(root: Path, rel: String, content: String) {

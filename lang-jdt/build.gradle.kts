@@ -10,6 +10,9 @@ dependencies {
     api(project(":language-api"))
     implementation(project(":index-api")) // contributes the `members` index (bytecode via ecj)
     implementation(project(":analysis-api")) // owns the Java analyzers + code-action providers
+    // Owns the `compileJava` build task (JdtCompileTask): the build graph drives ecj directly through it,
+    // so build-engine carries no JavaCompile port. Brings build-api transitively.
+    implementation(project(":build-engine"))
     implementation(libs.jdt.core)
 
     // Tests build a real workspace to exercise the Module -> CompilationContext bridge.

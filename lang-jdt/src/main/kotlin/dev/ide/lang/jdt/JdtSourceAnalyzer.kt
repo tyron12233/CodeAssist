@@ -11,9 +11,14 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.incremental.ReparseResult
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.folding.FoldingService
+import dev.ide.lang.highlight.SemanticHighlightService
+import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.jdt.completion.JdtCompletionService
 import dev.ide.lang.jdt.dom.JdtDomNode
 import dev.ide.lang.jdt.dom.JdtParsedFile
+import dev.ide.lang.jdt.folding.JdtCodeFolder
+import dev.ide.lang.jdt.highlight.JdtSemanticHighlighter
 import dev.ide.lang.jdt.resolve.JdtScope
 import dev.ide.lang.jdt.resolve.JdtSymbol
 import dev.ide.lang.jdt.resolve.JdtTypeRef
@@ -23,6 +28,7 @@ import dev.ide.lang.resolve.ResolveResult
 import dev.ide.lang.resolve.Scope
 import dev.ide.lang.resolve.Symbol
 import dev.ide.lang.resolve.TypeRef
+import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.model.LanguageLevel
 import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
@@ -121,10 +127,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
         // compiler path used for diagnostics/completion (see [diagnose]).
         includeVmBootclasspath = !isAndroidPlatform
 
-        @Suppress("UNCHECKED_CAST")
-        compilerOptions = (JavaCore.getOptions() as MutableMap<String, String>).also {
-            JavaCore.setComplianceOptions(complianceOf(ctx.languageLevel), it)
-        }
+        compilerOptions = jdtStandaloneCompilerOptions(complianceOf(ctx.languageLevel))
 
         // Source attachments for names/javadoc: library -sources.jars (+ exploded source dirs), the JDK
         // src.zip (under the boot JDK image), and the Android platform sources dir (sibling of android.jar).
@@ -183,18 +186,17 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     override val completion: CompletionService = JdtCompletionService(this)
 
     /** Inlay hints (var/lambda types, parameter names, chaining) over the binding DOM. */
-    override val inlayHints: dev.ide.lang.hints.InlayHintService = JdtInlayHintService(this)
+    override val inlayHints: InlayHintService = JdtInlayHintService(this)
 
     /** Parameter-info popup (call overloads + active argument) over the binding DOM. */
-    override val signatureHelp: dev.ide.lang.signature.SignatureHelpService = JdtSignatureHelpService(this)
+    override val signatureHelp: SignatureHelpService = JdtSignatureHelpService(this)
 
     /** Type-aware semantic coloring (fields vs locals, real types, static/final) over the binding DOM. */
-    override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService =
-        dev.ide.lang.jdt.highlight.JdtSemanticHighlighter(this)
+    override val semanticHighlighter: SemanticHighlightService =
+        JdtSemanticHighlighter(this)
 
     /** Structural code folding (imports, type/method bodies, comments) over the syntactic AST. */
-    override val folding: dev.ide.lang.folding.FoldingService =
-        dev.ide.lang.jdt.folding.JdtCodeFolder(this)
+    override val folding: FoldingService = JdtCodeFolder(this)
 
     /**
      * Release the per-module environment cache (open library-jar handles). The host registers each analyzer

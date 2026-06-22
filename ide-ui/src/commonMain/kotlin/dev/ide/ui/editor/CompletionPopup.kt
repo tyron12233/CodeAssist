@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,19 +29,21 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiCompletionItem
-import dev.ide.ui.components.Chip
 import dev.ide.ui.components.KindBadge
 import dev.ide.ui.components.entrancePop
 import dev.ide.ui.theme.Ca
 
 /**
- * The completion list (glass-thick): a top doc strip with the selected item's signature + an "⇥ tab"
- * accept hint, then 42dp rows of [KindBadge] + label (typed prefix bolded in accent) + right-aligned
- * detail. Operable by click and by keyboard (the host handles ↑↓/Tab/Enter/Esc).
+ * The completion list (glass-thick): rows of [KindBadge] + a two-line left column (the label, typed prefix
+ * bolded in accent, over the detail/signature) + the right-aligned origin (package or declaring class). When
+ * the selected item carries javadoc, a doc panel sits to the right. Operable by click and by keyboard (the
+ * host handles ↑↓/Tab/Enter/Esc).
  */
 @Composable
 fun CompletionList(
@@ -68,28 +69,20 @@ fun CompletionList(
                 .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
                 .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
         ) {
-            // doc strip
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Ca.colors.accent.copy(alpha = 0.07f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            // No top signature strip: each row now shows the full info (name + signature + origin), so the
+            // strip was redundant. An empty result still gets a placeholder so the popup isn't a blank box.
+            if (items.isEmpty()) {
                 Text(
-                    text = selected?.let { it.label + (it.detail?.let { d -> "  $d" } ?: "") } ?: "No suggestions",
-                    color = Ca.colors.accent,
+                    "No suggestions",
                     style = Ca.type.codeSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    color = Ca.colors.textTertiary,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 )
-                Chip("⇥ tab", fill = Ca.colors.surface3, textColor = Ca.colors.textSecondary)
-            }
-
-            LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxListHeight)) {
-                itemsIndexed(items) { index, item ->
-                    CompletionRow(item, prefix, index == selectedIndex, width, onPick = { onPick(item) }, onHover = { onHover(index) })
+            } else {
+                LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxListHeight)) {
+                    itemsIndexed(items) { index, item ->
+                        CompletionRow(item, prefix, index == selectedIndex, width, onPick = { onPick(item) }, onHover = { onHover(index) })
+                    }
                 }
             }
         }
@@ -130,36 +123,52 @@ private fun CompletionRow(
     onPick: () -> Unit,
     onHover: () -> Unit,
 ) {
+    // Row text styles: a notch smaller than the editor's code style, with tight line height so the two stacked
+    // lines stay compact. Kept local so the editor's own Ca.type.code is untouched.
+    val labelStyle = Ca.type.code.copy(fontSize = 12.sp, lineHeight = 15.sp)
+    val detailStyle = Ca.type.codeSmall.copy(fontSize = 11.sp, lineHeight = 13.sp)
     Row(
         Modifier
             .fillMaxWidth()
-            .height(42.dp)
+            .heightIn(min = 40.dp)
             .background(if (selected) Ca.colors.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
             .clickable(onClick = onPick)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         KindBadge(item.kind)
-        // The label (the name) keeps priority via weight(1f); the detail is capped to ~half the row and
-        // ellipsizes, so a long `(params): Ret` signature can never squeeze the name out of view.
-        Text(
-            highlightMatch(item.label, prefix),
-            style = Ca.type.code,
-            color = Ca.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (item.detail != null) {
+        // Left: two stacked lines — the name on top, its signature/type below. Right: the origin (a type's
+        // package or a member's declaring class), dimmed and end-aligned. The name/detail column takes the
+        // weight so a long origin can't squeeze it; the origin caps at ~40% of the row and ellipsizes.
+        Column(Modifier.weight(1f)) {
+            Text(
+                highlightMatch(item.label, prefix),
+                style = labelStyle,
+                color = Ca.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (item.detail != null) {
+                Text(
+                    item.detail,
+                    style = detailStyle,
+                    color = Ca.colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (item.container != null) {
             Spacer(Modifier.width(8.dp))
             Text(
-                item.detail,
-                style = Ca.type.codeSmall,
+                item.container,
+                style = detailStyle,
                 color = Ca.colors.textTertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = rowWidth * 0.5f),
+                textAlign = TextAlign.End,
+                modifier = Modifier.widthIn(max = rowWidth * 0.4f),
             )
         }
     }
