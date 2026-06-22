@@ -93,7 +93,6 @@ on each release.
 | Java completion **latency** (per keystroke) | member access / type ref | **4.3 ms** / 2.8 ms |
 | Symbol **index** quality | recall / top-1 / MRR | **100%** / 90% / 0.95 |
 | Symbol **index** query | prefix / fuzzy | ~4.4 µs / ~56 ns |
-| **Build engine** (14-module Java project) | full build / incremental | **~0.30 s** / 4 tasks re-run |
 <!-- AUTOGEN:benchmarks:END -->
 
 **What the metrics mean**
@@ -110,7 +109,7 @@ on each release.
 ## Tests
 
 <!-- AUTOGEN:tests:START -->
-**868** tests passing across **177** suites · 0 failing · 1 skipped (framework / `CI_CORE_ONLY`).
+**871** tests passing across **178** suites · 0 failing · 1 skipped (framework / `CI_CORE_ONLY`).
 <!-- AUTOGEN:tests:END -->
 
 The badges and the numbers in this section are regenerated automatically on each release (see
