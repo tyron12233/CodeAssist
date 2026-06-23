@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projects">项目</string>
+    <string name="help_improve_codeassist">帮助提升 CodeAssist</string>
+    <string name="help_improve_codeassist_content">分享匿名性能数据，以便我们了解哪些环节运行缓慢或出现故障，并进行相应的修复。
+
+我们会收集以下信息：您的应用版本和设备型号、构建、索引和代码补全所需时间、构建成功/失败情况以及已清理的崩溃报告。
+
+我们绝不会收集您的代码、文件或项目名称、您使用的功能，或任何可以识别您身份的信息。您可以在项目打开时随时在 “更多” 选项中更改此设置。</string>
+    <string name="learn_more">了解更多</string>
+    <string name="allow">允许</string>
+    <string name="no_thanks">不需要</string>
+</resources>

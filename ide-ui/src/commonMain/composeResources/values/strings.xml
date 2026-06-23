@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projects">Projects</string>
+    <string name="help_improve_codeassist">Help improve CodeAssist</string>
+    <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing — and fix the right things.
+
+
+We collect: your app version and device model, how long builds, indexing, and code completion take, build success/failure, and scrubbed crash reports.
+
+
+We never collect your code, file or project names, which features you use, or anything that identifies you. You can change this anytime under More while a project is open.]]></string>
+    <string name="learn_more">Learn more</string>
+    <string name="allow">Allow</string>
+    <string name="no_thanks">No thanks</string>
+</resources>

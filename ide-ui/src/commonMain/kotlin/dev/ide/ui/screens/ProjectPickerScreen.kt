@@ -39,8 +39,11 @@ import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.StorageAccessCard
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.projects
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /** The "Projects" picker: large title, a New-Project action, and a card per known project. */
 @Composable
@@ -73,7 +76,7 @@ fun ProjectPickerScreen(
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            "Projects",
+                            stringResource(Res.string.projects),
                             color = Ca.colors.textPrimary,
                             style = Ca.type.large,
                             maxLines = 1,
