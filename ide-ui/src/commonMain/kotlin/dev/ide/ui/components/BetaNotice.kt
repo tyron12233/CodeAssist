@@ -22,8 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.beta_notice
+import dev.ide.ui.generated.resources.beta_notice_content
+import dev.ide.ui.generated.resources.submit_suggestion
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Single source of truth for the Beta program: the version label shown in-app and the destination the
@@ -61,10 +66,10 @@ fun BetaBanner(onSubmit: (() -> Unit)?, modifier: Modifier = Modifier) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.warning)
-            Text("You're on the ${BetaInfo.LABEL}", color = Ca.colors.textPrimary, style = Ca.type.headline)
+            Text(stringResource(Res.string.beta_notice, BetaInfo.LABEL), color = Ca.colors.textPrimary, style = Ca.type.headline)
         }
         Text(
-            "Some features may be incomplete or change. We'd love your feedback — tell us what's missing or broken.",
+            stringResource(Res.string.beta_notice_content),
             color = Ca.colors.textSecondary,
             style = Ca.type.footnote,
         )
@@ -89,7 +94,7 @@ private fun SubmitSuggestionsButton(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(CaIcons.lightbulb, null, Modifier.size(16.dp), tint = Ca.colors.warning)
-        Text("Submit suggestions", color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.submit_suggestion), color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
     }
 }
 

@@ -28,10 +28,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.a_new_build_system
+import dev.ide.ui.generated.resources.a_new_build_system_content
+import dev.ide.ui.generated.resources.backup_projects
+import dev.ide.ui.generated.resources.got_it
+import dev.ide.ui.generated.resources.preparing_backup
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * One-time upgrade notice for users coming from a previous app version. Explains that the rebuilt
@@ -80,26 +87,23 @@ private fun NoticeBody(onBackup: suspend () -> Unit, onDismiss: () -> Unit, modi
             Icon(CaIcons.box, null, Modifier.size(34.dp), tint = Ca.colors.warning)
         }
         Spacer(Modifier.height(20.dp))
-        Text("A new build system", color = Ca.colors.textPrimary, style = Ca.type.title2, textAlign = TextAlign.Center)
+        Text(stringResource(Res.string.a_new_build_system), color = Ca.colors.textPrimary, style = Ca.type.title2, textAlign = TextAlign.Center)
         Spacer(Modifier.height(12.dp))
         Text(
-            "CodeAssist has been rebuilt with a new on-device build system. It uses its own project " +
-                "configuration, so projects from a previous version aren't compatible and won't open " +
-                "automatically.\n\nBack up your projects to a .zip now — your source files stay safe, and you " +
-                "can re-add them to a new project.",
+            stringResource(Res.string.a_new_build_system_content),
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
         PrimaryButton(
-            text = if (busy) "Preparing backup…" else "Back up projects",
+            text = stringResource(if (busy) Res.string.preparing_backup else Res.string.backup_projects),
             onClick = { if (!busy) scope.launch { busy = true; runCatching { onBackup() }; busy = false } },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Got it",
+            stringResource(Res.string.got_it),
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             modifier = Modifier

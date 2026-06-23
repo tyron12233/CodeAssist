@@ -20,11 +20,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.allow
 import dev.ide.ui.generated.resources.help_improve_codeassist
 import dev.ide.ui.generated.resources.help_improve_codeassist_content
 import dev.ide.ui.generated.resources.learn_more
@@ -106,19 +108,19 @@ private fun ConsentBody(
                 color = Ca.colors.accent,
                 style = Ca.type.subhead,
                 modifier = Modifier
-                    .clickable(MutableInteractionSource(), indication = null, onClick = onLearnMore)
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onLearnMore)
                     .padding(6.dp),
             )
         }
         Spacer(Modifier.height(24.dp))
-        PrimaryButton(text = stringResource(Res.string.learn_more), onClick = onAllow, modifier = Modifier.fillMaxWidth())
+        PrimaryButton(text = stringResource(Res.string.allow), onClick = onAllow, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         Text(
             stringResource(Res.string.no_thanks),
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             modifier = Modifier
-                .clickable(MutableInteractionSource(), indication = null, onClick = onDecline)
+                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDecline)
                 .padding(12.dp),
         )
     }
@@ -130,7 +132,7 @@ fun AnalyticsToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit, modifier: 
     Row(
         modifier
             .fillMaxWidth()
-            .clickable(MutableInteractionSource(), indication = null) { onChange(!enabled) }
+            .clickable(remember { MutableInteractionSource() }, indication = null) { onChange(!enabled) }
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -155,7 +157,7 @@ private fun ConsentToggle(on: Boolean, onToggle: (Boolean) -> Unit) {
         Modifier
             .size(width = 44.dp, height = 26.dp)
             .background(if (on) Ca.colors.accent else Ca.colors.surface3, RoundedCornerShape(Ca.radius.pill))
-            .clickable(MutableInteractionSource(), indication = null) { onToggle(!on) }
+            .clickable(remember { MutableInteractionSource() }, indication = null) { onToggle(!on) }
             .padding(3.dp),
         contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
     ) {

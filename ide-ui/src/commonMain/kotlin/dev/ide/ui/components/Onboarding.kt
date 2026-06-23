@@ -46,97 +46,130 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.block_editing
+import dev.ide.ui.generated.resources.block_editing_content
+import dev.ide.ui.generated.resources.block_editing_title
+import dev.ide.ui.generated.resources.build_and_run
+import dev.ide.ui.generated.resources.build_and_run_content
+import dev.ide.ui.generated.resources.build_and_run_title
+import dev.ide.ui.generated.resources.code_completion
+import dev.ide.ui.generated.resources.code_completion_content
+import dev.ide.ui.generated.resources.code_completion_title
+import dev.ide.ui.generated.resources.command_palette
+import dev.ide.ui.generated.resources.command_palette_content
+import dev.ide.ui.generated.resources.command_palette_title
+import dev.ide.ui.generated.resources.`continue`
+import dev.ide.ui.generated.resources.jetpack_compose
+import dev.ide.ui.generated.resources.jetpack_compose_content
+import dev.ide.ui.generated.resources.jetpack_compose_title
+import dev.ide.ui.generated.resources.kotlin_beta
+import dev.ide.ui.generated.resources.kotlin_beta_content
+import dev.ide.ui.generated.resources.kotlin_beta_title
+import dev.ide.ui.generated.resources.maybe_later
+import dev.ide.ui.generated.resources.on_device
+import dev.ide.ui.generated.resources.on_device_content
+import dev.ide.ui.generated.resources.on_device_title
+import dev.ide.ui.generated.resources.open_a_sample_project
+import dev.ide.ui.generated.resources.skip_for_now
+import dev.ide.ui.generated.resources.xml
+import dev.ide.ui.generated.resources.xml_content
+import dev.ide.ui.generated.resources.xml_title
+import dev.ide.ui.generated.resources.your_files
+import dev.ide.ui.generated.resources.your_files_content
+import dev.ide.ui.generated.resources.your_files_title
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * One onboarding step. [hero] is the full-bleed feature mock that fills
  * the 250dp hero region (see [OnboardingMocks]); copy/kicker/icon/cta are fixed, as is the order.
  */
 private data class OnboardingStep(
-    val kicker: String,
+    val kicker: StringResource,
     val icon: ImageVector,
-    val title: String,
-    val body: String,
-    val cta: String,
+    val title: StringResource,
+    val body: StringResource,
+    val cta: StringResource,
     val hero: @Composable () -> Unit,
 )
 
 private val STEPS: List<OnboardingStep> = listOf(
     OnboardingStep(
-        kicker = "On-device",
+        kicker = Res.string.on_device,
         icon = CaIcons.layers,
-        title = "A real IDE. On your phone.",
-        body = "Write, navigate, and build Android & Java projects end to end — no laptop required.",
-        cta = "Continue",
+        title = Res.string.on_device_title,
+        body = Res.string.on_device_content,
+        cta = Res.string.`continue`,
         hero = { IdeMock() },
     ),
     OnboardingStep(
-        kicker = "Code completion",
+        kicker = Res.string.code_completion,
         icon = CaIcons.sparkle,
-        title = "Completion that knows your code.",
-        body = "Eclipse JDT powers precise, ranked suggestions — with signatures and docs — as you type.",
-        cta = "Continue",
+        title = Res.string.code_completion_title,
+        body = Res.string.code_completion_content,
+        cta = Res.string.`continue`,
         hero = { JdtCompletionMock() },
     ),
     OnboardingStep(
-        kicker = "Block editing",
+        kicker = Res.string.block_editing,
         icon = CaIcons.braces,
-        title = "Edit as code, or as blocks.",
-        body = "Project any Java file into interlocking blocks — a live view of the same source, byte for byte.",
-        cta = "Continue",
+        title = Res.string.block_editing_title,
+        body = Res.string.block_editing_content,
+        cta = Res.string.`continue`,
         hero = { BlocksMock() },
     ),
     OnboardingStep(
-        kicker = "Build & run",
+        kicker = Res.string.build_and_run,
         icon = CaIcons.hammer,
-        title = "Build real APKs, on device.",
-        body = "Resolve, compile, dex, package, sign — then install straight to your phone.",
-        cta = "Continue",
+        title = Res.string.build_and_run_title,
+        body = Res.string.build_and_run_content,
+        cta = Res.string.`continue`,
         hero = { BuildConsoleMock() },
     ),
     OnboardingStep(
-        kicker = "Command palette",
+        kicker = Res.string.command_palette,
         icon = CaIcons.command,
-        title = "Jump anywhere, instantly.",
-        body = "One input for commands, files, and symbols — the accelerator behind everything.",
-        cta = "Continue",
+        title = Res.string.command_palette_title,
+        body = Res.string.command_palette_content,
+        cta = Res.string.`continue`,
         hero = { CommandPaletteMock() },
     ),
     OnboardingStep(
-        kicker = "Kotlin · Beta",
+        kicker = Res.string.kotlin_beta,
         icon = CaIcons.code,
-        title = "Kotlin completion, now in beta.",
-        body = "Full Kotlin code completion, tuned to the same calm, ranked experience as Java.",
-        cta = "Continue",
+        title = Res.string.kotlin_beta_title,
+        body = Res.string.kotlin_beta_content,
+        cta = Res.string.`continue`,
         hero = { KotlinCompletionMock() },
     ),
     OnboardingStep(
-        kicker = "XML",
+        kicker = Res.string.xml,
         icon = CaIcons.docText,
-        title = "Layouts, fully assisted.",
-        body = "Tag, attribute, and resource completion for Android XML — with live validation.",
-        cta = "Continue",
+        title = Res.string.xml_title,
+        body = Res.string.xml_content,
+        cta = Res.string.`continue`,
         hero = { XmlCompletionMock() },
     ),
     OnboardingStep(
-        kicker = "Your files",
+        kicker = Res.string.your_files,
         icon = CaIcons.folder,
-        title = "Your projects, in a real folder.",
-        body = "Projects live in app storage you can open from any file manager — drop in icons, layouts, " +
-            "or assets, or edit from a PC. No special permissions, nothing hidden.",
-        cta = "Continue",
+        title = Res.string.your_files_title,
+        body = Res.string.your_files_content,
+        cta = Res.string.`continue`,
         hero = { FilesAccessMock() },
     ),
     OnboardingStep(
-        kicker = "Jetpack Compose",
+        kicker = Res.string.jetpack_compose,
         icon = CaIcons.eye,
-        title = "Rebuilt on Jetpack Compose.",
-        body = "A faster, smoother CodeAssist — native Compose throughout, with live @Preview.",
-        cta = "Open a sample project",
+        title = Res.string.jetpack_compose_title,
+        body = Res.string.jetpack_compose_content,
+        cta = Res.string.open_a_sample_project,
         hero = { ComposePreviewMock() },
     ),
 )
@@ -213,20 +246,20 @@ private fun MarqueeBody(
             val s = STEPS[i]
             val active = i == page
             Column(Modifier.fillMaxSize()) {
-                Hero(kicker = s.kicker, icon = s.icon, active = active, content = s.hero)
+                Hero(kicker = stringResource(s.kicker), icon = s.icon, active = active, content = s.hero)
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                ) { StepCopy(title = s.title, body = s.body, active = active) }
+                ) { StepCopy(title = stringResource(s.title), body = stringResource(s.body), active = active) }
             }
         }
 
         Footer(
-            ctaLabel = step.cta,
+            ctaLabel = stringResource(step.cta),
             showArrow = last,
             onPrimary = {
                 if (last) { onOpenSample(); onFinish() } else scope.launch { pager.animateScrollToPage(page + 1) }
             },
-            skipLabel = if (last) "Maybe later" else "Skip for now",
+            skipLabel = stringResource(if (last) Res.string.maybe_later else Res.string.skip_for_now),
             onSkip = onFinish,
         )
     }

@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="projects">Projects</string>
+    <string name="a_new_build_system">A new build system</string>
+    <string name="a_new_build_system_content">[<![CDATA[CodeAssist has been rebuilt with a new on-device build system. It uses its own project configuration, so projects from a previous version aren't compatible and won't open automatically.
+
+    Back up your projects to a .zip now — your source files stay safe, and you can re-add them to a new project.]]></string>
+    <string name="preparing_backup">Preparing backup…</string>
+    <string name="backup_projects">Back up projects</string>
+    <string name="got_it">Got it</string>
     <string name="help_improve_codeassist">Help improve CodeAssist</string>
     <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing — and fix the right things.
 
@@ -12,4 +19,60 @@ We never collect your code, file or project names, which features you use, or an
     <string name="learn_more">Learn more</string>
     <string name="allow">Allow</string>
     <string name="no_thanks">No thanks</string>
+    <string name="on_device">On-device</string>
+    <string name="on_device_title">A real IDE. On your phone.</string>
+    <string name="on_device_content">Write, navigate, and build Android &amp; Java projects end to end — no laptop required.</string>
+    <string name="continue">Continue</string>
+    <string name="maybe_later">Maybe later</string>
+    <string name="skip_for_now">Skip for now</string>
+    <string name="code_completion">Code completion</string>
+    <string name="code_completion_title">Completion that knows your code.</string>
+    <string name="code_completion_content">Eclipse JDT powers precise, ranked suggestions — with signatures and docs — as you type.</string>
+    <string name="block_editing">Block editing</string>
+    <string name="block_editing_title">Edit as code, or as blocks.</string>
+    <string name="block_editing_content">Project any Java file into interlocking blocks — a live view of the same source, byte for byte.</string>
+    <string name="build_and_run">Build &amp; run</string>
+    <string name="build_and_run_title">Build real APKs, on device.</string>
+    <string name="build_and_run_content">Resolve, compile, dex, package, sign — then install straight to your phone.</string>
+    <string name="command_palette">Command palette</string>
+    <string name="command_palette_title">Jump anywhere, instantly.</string>
+    <string name="command_palette_content">One input for commands, files, and symbols — the accelerator behind everything.</string>
+    <string name="kotlin_beta">Kotlin · Beta</string>
+    <string name="kotlin_beta_title">Kotlin completion, now in beta.</string>
+    <string name="kotlin_beta_content">Full Kotlin code completion, tuned to the same calm, ranked experience as Java.</string>
+    <string name="xml">XML</string>
+    <string name="xml_title">Layouts, fully assisted.</string>
+    <string name="xml_content">Tag, attribute, and resource completion for Android XML — with live validation.</string>
+    <string name="your_files">Your files</string>
+    <string name="your_files_title">Your projects, in a real folder.</string>
+    <string name="your_files_content">Projects live in app storage you can open from any file manager — drop in icons, layouts, or assets, or edit from a PC. No special permissions, nothing hidden.</string>
+    <string name="jetpack_compose">Jetpack Compose</string>
+    <string name="jetpack_compose_title">Rebuilt on Jetpack Compose.</string>
+    <string name="jetpack_compose_content">A faster, smoother CodeAssist — native Compose throughout, with live @Preview.</string>
+    <string name="open_a_sample_project">Open a sample project</string>
+    <string name="open_a_project">Open a project or start a new one.</string>
+    <string name="new_project">New Project</string>
+    <string name="new_project_content">Android app, Java console app, library…</string>
+    <string name="join_the_community">Join the community</string>
+    <string name="join_the_community_content">Chat, get help, and share what you build on Discord.</string>
+    <string name="no_project_yet">No projects yet — create one to get started.</string>
+    <string name="your_projects">Your projects</string>
+    <string name="modules">%1$d modules</string>
+    <string name="beta_notice">You're on the %1$s</string>
+    <string name="beta_notice_content">Some features may be incomplete or change. We'd love your feedback — tell us what's missing or broken.</string>
+    <string name="submit_suggestion">Submit suggestions</string>
+    <string name="your_codeassist_files">Your CodeAssist files</string>
+    <string name="your_codeassist_files_content">Open this folder in any file manager to browse your projects (including any from older versions, under "Projects"), add icons or assets, or edit from a PC.</string>
+    <string name="open_in_the_file_manager">Open in file manager</string>
+    <string name="choose_start_point">Choose a starting point.</string>
+    <string name="backup">Back up</string>
+    <string name="delete_project">Delete project?</string>
+    <string name="delete_project_content">“%1$s” and all of its files will be permanently deleted. This can't be undone.</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="project_name">Project name</string>
+    <string name="package_name">Package name</string>
+    <string name="creating">Creating…</string>
+    <string name="create_project">Create Project</string>
+
 </resources>
