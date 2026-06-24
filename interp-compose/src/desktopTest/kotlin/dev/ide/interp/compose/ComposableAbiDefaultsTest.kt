@@ -38,6 +38,21 @@ class ComposableAbiDefaultsTest {
     }
 
     @Test
+    fun aSuppliedArgThatDoesNotFitItsParameterFallsBackToTheDefault() {
+        // The field bug `ABI invoke mismatch for …Text-fLXpl1I: params=[…Modifier…] args=[…java.lang.Long…]`:
+        // an upstream value lands on a typed parameter it can't fit (here a `String` on the `Int count` slot,
+        // mirroring a value-class `long` on `Text`'s `Modifier` slot). Reflection would throw an argument-type
+        // mismatch and unwind the whole composition; the ABI now drops the non-fitting arg so the parameter
+        // takes its own default instead — the preview renders rather than failing.
+        composeOnce {
+            call(listOf<Any?>("supplied", "notAnInt"))
+        }
+        assertEquals("supplied", Capture.label, "the fitting first arg still binds to parameter 0")
+        assertEquals(42, Capture.count, "the non-fitting `count` arg is dropped → its default (42) is used")
+        assertEquals(true, Capture.flag, "the untouched `flag` keeps its default (true)")
+    }
+
+    @Test
     fun allParametersSuppliedSkipsDefaults() {
         composeOnce {
             call(listOf<Any?>("all", 7, false))

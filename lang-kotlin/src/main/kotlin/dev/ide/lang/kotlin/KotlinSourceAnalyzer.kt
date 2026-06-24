@@ -24,6 +24,7 @@ import dev.ide.lang.kotlin.symbols.DefaultImports
 import dev.ide.lang.kotlin.symbols.FileContext
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
+import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.ResolveResult
 import dev.ide.lang.resolve.Scope
 import dev.ide.lang.resolve.Symbol
@@ -52,6 +53,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtImportDirective
+import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -75,6 +77,9 @@ import org.jetbrains.kotlin.psi.KtThrowExpression
 import org.jetbrains.kotlin.psi.KtTypeReference
 import org.jetbrains.kotlin.psi.KtUserType
 import org.jetbrains.kotlin.psi.KtValueArgumentName
+import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
+import org.jetbrains.kotlin.psi.KtWhenConditionWithExpression
+import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.jetbrains.kotlin.psi.KtWhileExpression
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import dev.ide.lang.kotlin.symbols.KotlinType
@@ -546,16 +551,23 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             is KtBinaryExpression -> {
                 valReassignment(psi)?.let { out += it }
                 uselessElvis(psi, resolver)?.let { out += it }
+                assignmentTypeMismatch(psi, resolver)?.let { out += it }
             }
+            is KtWhenExpression -> whenNotExhaustive(psi, resolver)?.let { out += it }
             is KtBinaryExpressionWithTypeRHS -> uselessCast(psi, resolver)?.let { out += it }
             is KtCallExpression -> KotlinPerf.span("sem.call") {
                 // The same-file PSI check first (it also catches "too many arguments"); only fall back to the
                 // overload-aware binary check when it didn't fire, so a call is never double-reported.
                 KotlinPerf.span("call.argCount") {
-                    val same = argumentCountMismatch(psi)
-                    if (same != null) out += same
-                    else missingRequiredArgument(psi, resolver)?.let { out += it }
+                    // The same-file PSI arity check first (precise for a unique same-file function); then the
+                    // overload-aware applicability check (wrong-typed / too-many args for an overloaded, library,
+                    // or member call); then the missing-required check (which the applicability check defers to).
+                    val arg = argumentCountMismatch(psi)
+                        ?: callNotApplicable(psi, resolver)
+                        ?: missingRequiredArgument(psi, resolver)
+                    if (arg != null) out += arg
                 }
+                KotlinPerf.span("call.notCallable") { notCallable(psi, resolver)?.let { out += it } }
                 KotlinPerf.span("call.ctor") { (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it } }
                 KotlinPerf.span("call.namedArgs") { out += unknownNamedArguments(psi, resolver) }
                 KotlinPerf.span("call.composable") { composableInvocation(psi, resolver)?.let { out += it } }
@@ -1252,6 +1264,298 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         cls.secondaryConstructors.forEach { c: KtSecondaryConstructor -> lists.add(c.valueParameters) }
         if (lists.isEmpty()) lists.add(emptyList()) // no explicit constructor → implicit no-arg
         return lists
+    }
+
+    /** Why a single overload candidate does NOT accept a call's arguments — or [Ok] when it does. Drives
+     *  [callNotApplicable]'s cross-overload verdict + message selection. */
+    private sealed interface Applicability {
+        object Ok : Applicability
+        object TooMany : Applicability        // a positional argument falls past the (non-vararg) arity
+        object MissingRequired : Applicability // a required parameter is unfilled (deferred to missingRequiredArgument)
+        object NamedUnknown : Applicability    // a named argument matches no parameter (deferred to unknownNamedArguments)
+        object LambdaNotApplicable : Applicability // a trailing lambda with no function-typed last parameter to land on
+        /** A positional argument's type isn't assignable to its parameter; [prefix] = how many leading
+         *  arguments this overload matched (higher = better fit, used to pick the overload to report against). */
+        class TypeBad(val arg: KtExpression, val expected: KotlinType, val actual: KotlinType, val prefix: Int) : Applicability
+    }
+
+    /**
+     * A call to a regular function or member whose arguments fit NONE of the resolved overloads — Kotlin's
+     * TOO_MANY_ARGUMENTS / ARGUMENT_TYPE_MISMATCH / NONE_APPLICABLE for the non-constructor case (constructors
+     * go through [constructorCallMismatch]; a missing required argument through [missingRequiredArgument]). This
+     * catches what the narrow same-file [argumentCountMismatch] misses: an OVERLOADED or library callable like
+     * Compose's `Text(...)` invoked as `Text("x", 1231)`, where no overload takes `(String, Int)`.
+     *
+     * Conservative over the parse-only model — judged across the full overload set from the index-backed
+     * [KotlinResolver.callTargets], and flagged only when EVERY candidate is provably inapplicable:
+     *  - only METHOD candidates (a constructor call resolves to CONSTRUCTOR candidates → none here → backs off,
+     *    leaving it to the constructor checks);
+     *  - backs off entirely on a spread argument (arity opaque) or if ANY candidate has unknown per-parameter
+     *    defaults (its `paramHasDefault` size ≠ its arity — Java bytecode / a stale cache might accept the call);
+     *  - the per-argument type check is the same [isMismatch] rule used everywhere else (both types fully-known
+     *    concrete, numeric/numeric + `Nothing` excused, type parameters skipped), so an unmodeled type backs off.
+     * Reports the most specific failure: a positional TYPE mismatch against the best-fitting overload (the one
+     * that matched the most leading arguments — so `Text("x", 1231)` blames the `1231`, not the `"x"`), else a
+     * "too many arguments". Reused codes (`kt.typeMismatch` / `kt.argumentCount`) keep quick-fixes uniform.
+     */
+    private fun callNotApplicable(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        if (call.valueArguments.any { it.getSpreadElement() != null }) return null
+        val candidates = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+            .filter { it.kind == SymbolKind.METHOD }
+        if (candidates.isEmpty()) return null
+        val verdicts = ArrayList<Applicability>(candidates.size)
+        for (c in candidates) verdicts += applicability(c, call, resolver) ?: return null // unjudgeable → back off
+        if (verdicts.any { it is Applicability.Ok }) return null // some overload accepts the call
+        // Prefer the precise type mismatch from the overload that matched the most leading arguments.
+        verdicts.filterIsInstance<Applicability.TypeBad>().maxByOrNull { it.prefix }?.let { tb ->
+            val r = tb.arg.textRange
+            return mismatchDiagnostic(r.startOffset, r.endOffset, tb.actual, tb.expected)
+        }
+        // The trailing lambda can't be placed in ANY overload (every one's last parameter is non-functional) —
+        // `Text("Title") { }`. Reported only when unanimous, so a sibling overload that DOES take a lambda (which
+        // failed for another reason) doesn't get blamed here; the span is the offending lambda.
+        if (verdicts.all { it is Applicability.LambdaNotApplicable }) {
+            val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+            val r = (call.valueArguments.lastOrNull() as? KtLambdaArgument)?.textRange ?: return null
+            return Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "'${callee.getReferencedName()}' has no function-type parameter for this trailing lambda", "kt.argumentCount",
+            )
+        }
+        // No candidate failed on a type; defer the named/missing cases to their dedicated checks and only own the
+        // "too many arguments" verdict (which no other check reports for an overloaded / library / member call).
+        if (verdicts.all { it is Applicability.TooMany }) {
+            val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+            val arities = candidates.mapNotNull { c ->
+                if (c.varargParamIndex >= 0) null else maxOf(c.paramTypes.size, c.paramNames.size)
+            }.toSortedSet().joinToString("/")
+            val r = call.valueArgumentList?.textRange ?: callee.textRange
+            val expected = if (arities.isEmpty()) "" else " (expected $arities)"
+            return Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "Too many arguments for '${callee.getReferencedName()}'$expected", "kt.argumentCount",
+            )
+        }
+        return null
+    }
+
+    /** Evaluate one overload [c] against [call]: map each argument to a parameter (named by name, a trailing
+     *  lambda to the last parameter, the rest by position), type-check the positional non-vararg ones, and
+     *  report the first blocking reason. Returns null when [c] can't be judged soundly (unknown defaults). */
+    private fun applicability(c: KotlinSymbol, call: KtCallExpression, resolver: KotlinResolver): Applicability? {
+        if (c.paramTypes.isNotEmpty() && c.paramHasDefault.size != c.paramTypes.size) return null // unknown defaults
+        val paramCount = maxOf(c.paramTypes.size, c.paramNames.size)
+        val vararg = c.varargParamIndex
+        // A trailing lambda must land on the LAST parameter (Kotlin's rule), which must therefore be a function
+        // type or a SAM. If there's no parameter for it, or the last parameter is a KNOWN non-functional, non-SAM
+        // type (`Text("x") { }` → the last param is `TextStyle`), the lambda can't be placed in this overload.
+        // An unknown last-param type (or a vararg, whose arity is open) backs off — could legitimately take it.
+        val trailingLambda = call.valueArguments.lastOrNull() as? KtLambdaArgument
+        if (trailingLambda != null && vararg < 0) {
+            if (paramCount == 0) return Applicability.LambdaNotApplicable
+            val lpt = c.paramTypes.getOrNull(paramCount - 1) as? KotlinType
+            if (lpt != null && service.isKnownType(lpt.qualifiedName) && !isFunctional(lpt) && service.functionalShape(lpt) == null)
+                return Applicability.LambdaNotApplicable
+        }
+        val supplied = HashSet<Int>()
+        var typeBad: Applicability.TypeBad? = null
+        var prefix = 0
+        call.valueArguments.forEachIndexed { i, arg ->
+            val named = arg.getArgumentName()?.asName?.identifier
+            val idx = when {
+                named != null -> c.paramNames.indexOf(named).let { if (it < 0) return Applicability.NamedUnknown else it }
+                arg is KtLambdaArgument -> (paramCount - 1).coerceAtLeast(0)
+                else -> i
+            }
+            // A positional argument past the fixed arity with no vararg to absorb it → too many.
+            if (named == null && arg !is KtLambdaArgument && idx >= paramCount && vararg < 0) return Applicability.TooMany
+            supplied += idx
+            // Type-check a positional/named argument bound to a non-vararg parameter slot. The vararg slot (and
+            // anything folding into it) is open-typed here — left to other reasoning.
+            if (arg !is KtLambdaArgument && (vararg < 0 || idx < vararg)) {
+                val expr = arg.getArgumentExpression()
+                val pt = c.paramTypes.getOrNull(idx) as? KotlinType
+                val at = expr?.let { resolver.inferType(it) }
+                // Skip functional positions entirely (a lambda / callable reference / function-typed parameter or
+                // SAM): a function value's inferred shape vs. the expected type is too imprecise here to flag
+                // soundly, and these dominate Compose call sites.
+                if (expr != null && pt != null && at != null && !isFunctional(pt) && !isFunctional(at)) {
+                    if (isMismatch(pt, at)) { if (typeBad == null) typeBad = Applicability.TypeBad(expr, pt, at, prefix) }
+                    else if (typeBad == null) prefix++ // a matched leading argument (only before the first mismatch)
+                }
+            }
+        }
+        typeBad?.let { return it }
+        val missing = c.paramTypes.indices.any {
+            it !in supplied && it != vararg && c.paramHasDefault.getOrElse(it) { true } == false
+        }
+        return if (missing) Applicability.MissingRequired else Applicability.Ok
+    }
+
+    /** A Kotlin function type (`(T) -> R`), a receiver function type, or a `@Composable` function type — a
+     *  functional argument/parameter slot, excluded from the positional type check (see [applicability]). */
+    private fun isFunctional(t: KotlinType): Boolean =
+        t.qualifiedName.startsWith("kotlin.Function") || t.isExtensionFunctionType || t.isComposable
+
+    /**
+     * An assignment (`x = expr`) whose right-hand side type isn't assignable to the target's declared type
+     * (`var n: Int = 0; n = "s"`). Only the property INITIALIZER was type-checked before ([typeMismatch]); a
+     * later assignment went unchecked. Same conservative [isMismatch] rule (both types fully-known concrete);
+     * the target must be a simple/qualified reference whose type the resolver pins (else it backs off). Plain
+     * `=` only — augmented assignments (`+=`, …) have operator semantics that aren't modeled here.
+     */
+    private fun assignmentTypeMismatch(expr: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
+        if (expr.operationToken != KtTokens.EQ) return null
+        val left = expr.left ?: return null
+        if (left !is KtNameReferenceExpression && left !is KtDotQualifiedExpression) return null
+        val right = expr.right ?: return null
+        val declared = resolver.inferType(left) ?: return null
+        val actual = resolver.inferType(right) ?: return null
+        if (!isMismatch(declared, actual)) return null
+        val r = right.textRange
+        return mismatchDiagnostic(r.startOffset, r.endOffset, actual, declared)
+    }
+
+    /**
+     * A bare `name(...)` call where `name` is not callable — it resolves to a VALUE (a local/parameter/property)
+     * of a non-function type, so it can't be invoked (Kotlin's FUNCTION_EXPECTED: `val x = 5; x()`). Conservative:
+     *  - only a bare callee (a member call `a.b()` is left to [unresolvedMember]);
+     *  - backs off if ANY function/constructor overload by that name is in scope (it's callable);
+     *  - backs off when the value's type is unknown (an unresolved name is [unresolvedBareReference]'s job), a
+     *    function type, or carries an `invoke` operator (so a functional value / callable object isn't flagged).
+     */
+    private fun notCallable(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+        val parent = call.parent
+        if (parent is KtQualifiedExpression && parent.selectorExpression === call) return null // member call
+        val callable = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        if (callable.any { it.kind == SymbolKind.METHOD || it.kind == SymbolKind.CONSTRUCTOR }) return null
+        val type = resolver.inferType(callee) ?: return null // unknown → unresolvedBareReference handles it
+        if (type.isTypeParameter || isInvocable(type) || !service.isKnownType(type.qualifiedName)) return null
+        val r = callee.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Expression '${callee.getReferencedName()}' of type ${renderType(type)} cannot be invoked as a function", "kt.notCallable",
+        )
+    }
+
+    /** Whether a value of [type] can be invoked with `()`: a Kotlin function type, a receiver function type, or
+     *  a type declaring an `invoke` operator. Kept permissive so a callable value is never flagged. */
+    private fun isInvocable(type: KotlinType): Boolean {
+        if (type.qualifiedName.startsWith("kotlin.Function") || type.isExtensionFunctionType) return true
+        return service.membersNamedForCheck(type.qualifiedName, type.typeArguments, "invoke").isNotEmpty()
+    }
+
+    /**
+     * A `when (subject) { … }` used AS AN EXPRESSION that is not exhaustive and has no `else` — Kotlin's
+     * NO_ELSE_IN_WHEN. Handles the cases the parse-only model can decide soundly:
+     *  - **Boolean** subject → needs both `true` and `false`;
+     *  - **enum** subject → needs every constant (enumerated via the index-backed [KotlinSymbolService.enumConstantsOf]);
+     *  - **sealed** subject whose subclasses are all in THIS file → needs every subclass (`is Sub`).
+     * Backs off entirely on a subjectless `when`, a statement-position `when` (no exhaustiveness requirement), a
+     * nullable subject (the extra `null` branch isn't modeled), and any other / cross-file-sealed subject type —
+     * so it never false-positives.
+     */
+    private fun whenNotExhaustive(expr: KtWhenExpression, resolver: KotlinResolver): Diagnostic? {
+        val subject = expr.subjectExpression ?: return null
+        if (expr.entries.any { it.isElse }) return null
+        if (!whenUsedAsExpression(expr)) return null
+        // Back off if any branch uses a condition we can't map to a concrete label/type — a range (`in …`), a
+        // negated `!is`, or a computed expression. We can't tell what it covers, so we must not claim
+        // non-exhaustiveness (soundness over completeness).
+        if (expr.entries.any { e -> e.conditions.any { !isModeledWhenCondition(it) } }) return null
+        val type = resolver.inferType(subject) ?: return null
+        if (type.nullable) return null
+        val covered = coveredConstants(expr)
+        if (type.qualifiedName == "kotlin.Boolean") {
+            if ("true" in covered && "false" in covered) return null
+            return whenDiag(expr, "'when' on a Boolean must be exhaustive; add 'true'/'false' branches or an 'else'")
+        }
+        val enumConsts = runCatching { service.enumConstantsOf(type.qualifiedName) }.getOrDefault(emptyList())
+        if (enumConsts.isNotEmpty()) {
+            val missing = enumConsts.map { it.name }.filter { it !in covered }
+            if (missing.isEmpty()) return null
+            return whenDiag(expr, "'when' expression must be exhaustive; add branches for ${missing.joinToString(", ")} or an 'else'")
+        }
+        val sealedSubs = sameFileSealedSubtypes(type.qualifiedName, expr) ?: return null
+        if (sealedSubs.isEmpty()) return null
+        val coveredTypes = coveredTypeNames(expr)
+        val missing = sealedSubs.filter { it.substringAfterLast('.') !in coveredTypes }
+        if (missing.isEmpty()) return null
+        return whenDiag(expr, "'when' expression must be exhaustive; add branches for ${missing.joinToString(", ") { it.substringAfterLast('.') }} or an 'else'")
+    }
+
+    private fun whenDiag(expr: KtWhenExpression, msg: String): Diagnostic {
+        val kw = expr.whenKeyword.textRange
+        return Diagnostic(TextRange(kw.startOffset, kw.endOffset), Severity.ERROR, msg, "kt.whenExhaustive")
+    }
+
+    /** A syntactic, false-positive-free subset of "this `when` is used as an expression" (its value is consumed):
+     *  a property initializer, a `return`, a call argument, an operand of a binary expression, or an expression
+     *  function body. A `when` that is a block statement (its parent is a [KtBlockExpression]) needs no
+     *  exhaustiveness, so it isn't flagged; ambiguous nestings simply aren't reported. */
+    private fun whenUsedAsExpression(expr: KtWhenExpression): Boolean = when (val parent = expr.parent) {
+        is KtProperty -> parent.initializer === expr
+        is KtReturnExpression -> parent.returnedExpression === expr
+        is org.jetbrains.kotlin.psi.KtValueArgument -> true
+        is KtBinaryExpression -> parent.left === expr || parent.right === expr
+        is KtNamedFunction -> parent.bodyExpression === expr && !parent.hasBlockBody()
+        else -> false
+    }
+
+    /** A `when` branch condition this check can reason about: a simple label (a name / qualified name / literal,
+     *  for enum + Boolean) or a non-negated `is` pattern (for sealed). A range (`in …`), a negated `!is`, or a
+     *  computed-expression label is NOT modeled — its presence makes [whenNotExhaustive] back off. */
+    private fun isModeledWhenCondition(c: org.jetbrains.kotlin.psi.KtWhenCondition): Boolean = when (c) {
+        is KtWhenConditionWithExpression ->
+            c.expression.let { it is KtNameReferenceExpression || it is KtDotQualifiedExpression || it is KtConstantExpression }
+        is KtWhenConditionIsPattern -> !c.isNegated
+        else -> false
+    }
+
+    /** The constant/literal labels a `when`'s branches cover: a bare name (`RED`), the selector of a qualified
+     *  one (`Color.RED` → `RED`), or a literal (`true`/`false`). */
+    private fun coveredConstants(expr: KtWhenExpression): Set<String> {
+        val out = HashSet<String>()
+        for (e in expr.entries) for (c in e.conditions) {
+            if (c is KtWhenConditionWithExpression) when (val ce = c.expression) {
+                is KtNameReferenceExpression -> out += ce.getReferencedName()
+                is KtDotQualifiedExpression -> (ce.selectorExpression as? KtNameReferenceExpression)?.let { out += it.getReferencedName() }
+                is KtConstantExpression -> out += ce.text
+                else -> {}
+            }
+        }
+        return out
+    }
+
+    /** The simple type names a `when`'s `is`-pattern branches cover (`is Loading` → `Loading`). */
+    private fun coveredTypeNames(expr: KtWhenExpression): Set<String> {
+        val out = HashSet<String>()
+        for (e in expr.entries) for (c in e.conditions) {
+            if (c is KtWhenConditionIsPattern) c.typeReference?.text?.let { out += it.substringBefore('<').substringAfterLast('.').trim() }
+        }
+        return out
+    }
+
+    /** The same-file subclasses of the sealed type [fqn] (FQNs), or null when [fqn] is not a sealed class
+     *  declared in this file — the only case the parse-only model can enumerate soundly (a cross-file/binary
+     *  sealed hierarchy might have subclasses elsewhere, so it backs off rather than under-report as exhaustive).
+     *  Listing only real same-file subclasses can never produce a false "missing branch". */
+    private fun sameFileSealedSubtypes(fqn: String, ctx: org.jetbrains.kotlin.psi.KtElement): List<String>? {
+        val file = ctx.containingKtFile
+        val simple = fqn.substringAfterLast('.')
+        val all = ArrayList<KtClassOrObject>()
+        fun collect(decls: List<KtDeclaration>) {
+            for (d in decls) if (d is KtClassOrObject) { all += d; collect(d.declarations) }
+        }
+        collect(file.declarations)
+        val sealed = all.filterIsInstance<KtClass>().firstOrNull { (it.fqName?.asString() == fqn || it.name == simple) && it.isSealed() }
+            ?: return null
+        return all.filter { d ->
+            d !== sealed && d.superTypeListEntries.any {
+                it.typeReference?.text?.substringBefore('<')?.substringAfterLast('.')?.trim() == simple
+            }
+        }.mapNotNull { it.fqName?.asString() ?: it.name }
     }
 
     /**

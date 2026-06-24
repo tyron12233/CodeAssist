@@ -120,11 +120,17 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
         // class owned by a dirty source): it goes on the compile classpath and into -Xfriend-paths, and kotlinc
         // emits "Classpath entry points to a non-existent location" for a missing dir. An empty dir is silent.
         Files.createDirectories(cleanDir)
-        // Copy every output class NOT owned by a dirty source: the binary view of the unchanged module half.
+        // Materialize the binary view of the unchanged module half: every output class NOT owned by a dirty
+        // source. Hardlink rather than copy — the compiler only READS these, and clearDir later drops the link
+        // (the original under outputDir, a second link to the same inode, is untouched), so on a large module a
+        // one-file edit no longer copies the bytes of every other class. Falls back to a real copy on a
+        // filesystem that can't hardlink (cross-device, or one without link support); cleanDir is a sibling of
+        // outputDir, so they are normally on the same FS and the link succeeds.
         for (rel in currentClasses(outputDir)) {
             if (rel in dirtyOwned) continue
             val dest = cleanDir.resolve(rel); Files.createDirectories(dest.parent)
-            Files.copy(outputDir.resolve(rel), dest)
+            val from = outputDir.resolve(rel)
+            runCatching { Files.createLink(dest, from) }.getOrElse { Files.copy(from, dest) }
         }
         Files.createDirectories(stagingDir)
 
@@ -208,19 +214,26 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
         compilerPlugins.map { it.toAbsolutePath().normalize().toString() }.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
         pluginOptions.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
         boot.map { it.toAbsolutePath().normalize().toString() }.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
-        // Java interop sources resolve from source → their content matters.
+        // Java interop sources AND classpath entries (dep outputs, libs) both get a cheap path+size+mtime
+        // signature rather than a content hash. The build engine already re-runs this task only when an input
+        // truly changed (a content-based fingerprint at the task level), so this is the secondary guard — and a
+        // .java save always bumps its mtime, so a real interop change still invalidates the baseline. This
+        // avoids reading every .java byte (mixed modules) and halves the stat syscalls per jar (one
+        // readAttributes vs. exists+size+mtime), both of which ran on every single compile.
         javaSources.map { it.toAbsolutePath().normalize() }.filter { Files.isRegularFile(it) }.sortedBy { it.toString() }
-            .forEach { md.update(it.toString().toByteArray(Charsets.UTF_8)); md.update(fileHash(it).toByteArray(Charsets.UTF_8)) }
-        // Classpath entries (dep outputs, libs) arrive as binary → a cheap path+size+mtime signature; the
-        // build engine only re-runs this task when one truly changed, so this is the secondary guard.
-        classpath.map { it.toAbsolutePath().normalize() }.sortedBy { it.toString() }.forEach { p ->
-            md.update(p.toString().toByteArray(Charsets.UTF_8))
-            if (Files.exists(p)) {
-                md.update(runCatching { Files.size(p) }.getOrDefault(0L).toString().toByteArray(Charsets.UTF_8))
-                md.update(runCatching { Files.getLastModifiedTime(p).toMillis() }.getOrDefault(0L).toString().toByteArray(Charsets.UTF_8))
-            }
-        }
+            .forEach { statSignature(md, it) }
+        classpath.map { it.toAbsolutePath().normalize() }.sortedBy { it.toString() }.forEach { statSignature(md, it) }
         return hex(md)
+    }
+
+    /** Feed a path + size + last-modified signature for [p] into [md] using a single stat (readAttributes). */
+    private fun statSignature(md: MessageDigest, p: Path) {
+        md.update(p.toString().toByteArray(Charsets.UTF_8))
+        val attrs = runCatching {
+            Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes::class.java)
+        }.getOrNull() ?: return
+        md.update(attrs.size().toString().toByteArray(Charsets.UTF_8))
+        md.update(attrs.lastModifiedTime().toMillis().toString().toByteArray(Charsets.UTF_8))
     }
 
     private fun fileHash(p: Path): String {

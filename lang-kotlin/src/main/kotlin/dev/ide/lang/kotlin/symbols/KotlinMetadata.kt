@@ -82,12 +82,24 @@ object KotlinMetadata {
         }
     }
 
+    /** One-shot guard so a decode failure (e.g. `kotlin-metadata-jvm` missing on ART) is logged once, not per class. */
+    private val loggedDecodeFailure = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun decode(classBytes: ByteArray, ctx: KotlinTypeContext?): Decoded? {
         val metadata = extract(classBytes) ?: return null
         // `@Composable` isn't in the @Metadata blob; detect it from the bytecode (the annotation and/or the
         // synthetic `Composer` parameter the plugin appends), correlated to the metadata function by name.
         val composable = composableMethodNames(classBytes)
-        return when (val km = runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull()) {
+        val kmResult = runCatching { KotlinClassMetadata.readLenient(metadata) }
+        // DIAGNOSTIC: if reading the @Metadata blob throws (a missing kotlin-metadata-jvm class on ART, or an
+        // unparseable blob), every Kotlin library symbol silently vanishes — log the first occurrence with the
+        // real cause so a device-only "0 candidates" is explained.
+        kmResult.exceptionOrNull()?.let { e ->
+            if (loggedDecodeFailure.compareAndSet(false, true))
+                dev.ide.platform.log.Log.logger("kotlin.metadata")
+                    .warn("readLenient failed (first occurrence): ${e.javaClass.name}: ${e.message}", e)
+        }
+        return when (val km = kmResult.getOrNull()) {
             is KotlinClassMetadata.Class -> decodeClass(km.kmClass, ctx, composable)
             is KotlinClassMetadata.FileFacade -> decodePackage(km.kmPackage, ctx, null, composable)
             is KotlinClassMetadata.MultiFileClassPart -> decodePackage(km.kmPackage, ctx, km.facadeClassName.replace('/', '.'), composable)

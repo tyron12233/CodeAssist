@@ -126,6 +126,14 @@ object ComposableAbi {
         val m = transformedMethod(owner, method, originalArgs, declaredParamCount)
         val n = composerIndex(m)
         val paramTypes = m.parameterTypes
+        val trailingInts = m.parameterCount - n - 1
+        // Whether this composable has a `$default` mechanism: its transformed shape is `(params…, Composer,
+        // int $changed…[, int $default…])`, with one `$default` int per 31 value parameters present ONLY when
+        // some parameter has a default. The `$changed` ints number `ceil(n / 10)` (≥ 1) — so any trailing int
+        // beyond those is a `$default` int. This gates the not-fitting-arg fallback below: a parameter can only
+        // be left to "its default" when a default actually exists.
+        val changedInts = maxOf(1, (n + 9) / 10)
+        val hasDefaults = trailingInts > changedInts
 
         // Bind supplied args to parameter slots. After named-arg reordering the args are already in declaration
         // order (with `OmittedArg` holes); otherwise a trailing lambda binds to the last declared parameter.
@@ -141,15 +149,25 @@ object ComposableAbi {
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
-            slots[slot] = if (a is InterpretedLambda) lambdaProxy(a, paramTypes[slot]) else boxValueClassIfNeeded(a, paramTypes[slot])
-            provided[slot] = true
+            val value = if (a is InterpretedLambda) lambdaProxy(a, paramTypes[slot]) else boxValueClassIfNeeded(a, paramTypes[slot])
+            // A supplied value that can't fit its parameter would make the reflective invoke throw an
+            // argument-type mismatch that unwinds the WHOLE composition (a hard "preview failed" instead of a
+            // partial render) — e.g. a value-class `long` landing on the typed `Modifier` slot (a placeholder/
+            // mis-evaluated arg, or a named arg bound to a slot whose runtime overload differs from the
+            // resolver's decoded signature). When the composable HAS defaults, drop the non-fitting arg: the
+            // slot stays unprovided, so the composable substitutes its own default (via the `$default` bit set
+            // below) and the preview renders. When it has NO defaults there's nothing to fall back to, so bind
+            // it anyway and let the honest mismatch surface (a genuinely malformed call should still report).
+            if (a is InterpretedLambda || !hasDefaults || fitsParam(value, paramTypes[slot])) {
+                slots[slot] = value
+                provided[slot] = true
+            }
         }
         for (i in 0 until n) if (!provided[i]) slots[i] = zeroValue(paramTypes[i])
 
         val args = ArrayList<Any?>(m.parameterCount)
         args.addAll(slots)
         args.add(composer)
-        val trailingInts = m.parameterCount - n - 1
         // The `$default` mask numbers VALUE parameters only — an extension/dispatch receiver prepended into the
         // slots (receiverCount) is excluded, so a value param at slot `i` is bit `i - receiverCount`.
         val valueParamCount = n - receiverCount
@@ -319,6 +337,18 @@ object ComposableAbi {
             }
         }
         return true
+    }
+
+    /** Whether [value] (already run through [boxValueClassIfNeeded]) can be passed to a parameter of [paramType]
+     *  by reflection: null fits any reference; a boxed value fits a primitive of the same kind (the invoke
+     *  unboxes); otherwise the value must be an instance of the (boxed) parameter type, or an unboxed value-class
+     *  underlying that still needs boxing. Used to skip a non-fitting supplied arg (falling back to the default)
+     *  rather than letting the reflective invoke throw and unwind the composition. */
+    private fun fitsParam(value: Any?, paramType: Class<*>): Boolean = when {
+        value == null -> !paramType.isPrimitive
+        paramType.isPrimitive -> boxed(paramType).isInstance(value)
+        paramType.isInstance(value) -> true
+        else -> acceptsValueClassUnderlying(paramType, value)
     }
 
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed

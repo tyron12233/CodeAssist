@@ -856,13 +856,14 @@ class KotlinTreeResolver(
                 }
                 runCatching { service.resolveTypeName(callName, resolver.fileContext) }.getOrNull()?.let { typeFqn ->
                     // Only fabricate a reflective constructor when there's POSITIVE evidence the name is a
-                    // constructible type: a known/loadable type, an already-qualified FQN, or a name being
-                    // THROWN (`throw IllegalArgumentException("x")` — a stdlib exception the resolver couldn't
-                    // qualify, loaded via `java.lang` at runtime). An unresolved capitalized call with none of
-                    // these is almost always a library FUNCTION not on the index (a Compose composable like
-                    // `SuggestionChip`); fabricating a `SuggestionChip()` constructor would crash the running
-                    // composition with "cannot load class". Fall through to the honest Unsupported instead.
-                    val constructible = service.isKnownType(typeFqn) || '.' in typeFqn || call.parent is KtThrowExpression
+                    // constructible type: a known/loadable type, or a name being THROWN
+                    // (`throw IllegalArgumentException("x")` — a stdlib exception the resolver couldn't qualify,
+                    // loaded via `java.lang` at runtime). An unresolved capitalized call without those is almost
+                    // always a library FUNCTION not on the index (a Compose composable like `Text`/`SuggestionChip`);
+                    // fabricating a `Text()` constructor crashes the running composition with "cannot load class".
+                    // (Do NOT treat a dotted [typeFqn] as evidence: `resolveTypeName` import-qualifies a bare
+                    // function name too, e.g. `Text` -> `androidx.compose.material3.Text`, so dots prove nothing.)
+                    val constructible = service.isKnownType(typeFqn) || call.parent is KtThrowExpression
                     if (constructible) {
                         val ctor = ResolvedCallable.Library(callName, typeFqn, "<init>", List(arity) { null }, isStatic = false, isConstructor = true, isInline = false)
                         return RNode.Call(ctor, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), CallSiteKey(call.textRange.startOffset), span(call))

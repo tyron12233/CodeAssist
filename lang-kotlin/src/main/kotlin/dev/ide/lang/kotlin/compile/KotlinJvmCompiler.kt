@@ -121,6 +121,40 @@ class KotlinJvmCompiler {
         return Result(exit == ExitCode.OK && !collector.hasErrors(), collector.messages, collector.outputs())
     }
 
+    /**
+     * Pay the compiler's one-time cold-start cost — class-loading the embeddable compiler and standing up its
+     * application environment — NOW, off the interaction path, so the user's first real build compile is warm.
+     * On ART the first in-process Kotlin compile measures ~1s (see `KotlinCompilerArtSpikeTest`) versus ~135ms
+     * warm; this front-loads that ~1s, and [KotlinEnvironmentKeepAlive] keeps the environment hot for every
+     * later compile. A single throwaway compile of a trivial source is what loads the frontend + JVM-backend
+     * classes that the editor's parse-only host never touches.
+     *
+     * Idempotent and best-effort: any failure is swallowed (this is an optimization, not a build step) and not
+     * retried. [bootClasspath] should be the platform library the real build uses (android.jar on ART, empty on
+     * desktop) so the warm-up exercises the same `-no-jdk`/boot path. Call from a background thread at project open.
+     */
+    fun warmUp(bootClasspath: List<Path> = emptyList()) {
+        if (warmedUp) return
+        synchronized(warmLock) {
+            if (warmedUp) return
+            warmedUp = true   // set first: a failed warm-up must not re-fire its cost on every project open
+            runCatching {
+                val dir = java.nio.file.Files.createTempDirectory("kotlinc-warmup")
+                try {
+                    val src = dir.resolve("Warmup.kt")
+                    java.nio.file.Files.write(src, "package warmup\nfun warmup() {}\n".toByteArray(Charsets.UTF_8))
+                    val out = java.nio.file.Files.createDirectories(dir.resolve("out"))
+                    compile(listOf(src), emptyList(), emptyList(), out, bootClasspath = bootClasspath)
+                } finally {
+                    runCatching { dir.toFile().deleteRecursively() }
+                }
+            }
+        }
+    }
+
+    @Volatile private var warmedUp = false
+    private val warmLock = Any()
+
     /** The bundled kotlin-stdlib jar, passed to kotlinc explicitly (host-independent; see [BundledKotlinStdlib]). */
     private fun stdlibJar(): Path? = BundledKotlinStdlib.jar()
 
