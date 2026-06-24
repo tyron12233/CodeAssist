@@ -11,8 +11,11 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.xml.completion.XmlCompletionService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
+import dev.ide.lang.completion.CompletionItem
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -32,14 +35,17 @@ class AndroidXmlCompletionTest {
     private val service = XmlCompletionService(contributors = { listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() })) })
 
     // runTest returns a TestResult (not the lambda's value), so collect the labels into a local instead.
-    private fun complete(src: String, path: String = "res/layout/a.xml", svc: XmlCompletionService = service): List<String> {
-        var labels: List<String> = emptyList()
+    private fun complete(src: String, path: String = "res/layout/a.xml", svc: XmlCompletionService = service): List<String> =
+        completeItems(src, path, svc).map { it.label }
+
+    private fun completeItems(src: String, path: String = "res/layout/a.xml", svc: XmlCompletionService = service): List<CompletionItem> {
+        var items: List<CompletionItem> = emptyList()
         runTest {
             val offset = src.indexOf('|')
             val text = src.removeRange(offset, offset + 1)
-            labels = svc.complete(CompletionRequest(Doc(text, path), offset, CompletionTrigger.Explicit)).items.map { it.label }
+            items = svc.complete(CompletionRequest(Doc(text, path), offset, CompletionTrigger.Explicit)).items
         }
-        return labels
+        return items
     }
 
     @Test
@@ -75,6 +81,20 @@ class AndroidXmlCompletionTest {
     }
 
     @Test
+    fun appCompatSubstitutionSurfacesAppAttrsOnPlainTags() {
+        val custom = AttrsXmlParser.parse(
+            """<resources><declare-styleable name="AppCompatImageView"><attr name="srcCompat" format="reference"/></declare-styleable></resources>"""
+        )
+        val customMeta = AndroidSdkMetadata(0, custom.attrs, custom.styleables, emptyMap(), emptyList(),
+            attrPrefix = "app:", viewSubstitutions = AndroidSdkMetadata.APPCOMPAT_SUBSTITUTIONS)
+        val svc = XmlCompletionService(contributors = {
+            listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, customAttrs = { customMeta }))
+        })
+        // A plain <ImageView> is inflated as AppCompatImageView, so its app:srcCompat completes on the typed tag.
+        assertTrue("app:srcCompat" in complete("<ImageView app:|", svc = svc), "srcCompat should appear on <ImageView>")
+    }
+
+    @Test
     fun completesWidgetTags() {
         val labels = complete("<LinearLayout>\n  <T|\n</LinearLayout>")
         assertTrue("TextView" in labels && "TableLayout" in labels, "got $labels")
@@ -104,6 +124,35 @@ class AndroidXmlCompletionTest {
     }
 
     @Test
+    fun acceptingAndroidAttributeAutoDeclaresXmlnsAndroid() {
+        // The root <TextView> has no xmlns:android; accepting android:text should add it.
+        val item = completeItems("<TextView android:|").first { it.label == "android:text" }
+        val edit = item.additionalEdits.single()
+        assertEquals(" xmlns:android=\"http://schemas.android.com/apk/res/android\"", edit.newText)
+        assertEquals("<TextView".length, edit.range.start) // spliced just after the root tag name
+        assertEquals(edit.range.start, edit.range.end)      // a pure insertion
+    }
+
+    @Test
+    fun namespacedAttributeDoesNotReDeclareAnExistingXmlns() {
+        val custom = AttrsXmlParser.parse(
+            """<resources><declare-styleable name="MyView"><attr name="customColor" format="color"/></declare-styleable></resources>"""
+        )
+        val customMeta = AndroidSdkMetadata(0, custom.attrs, custom.styleables, emptyMap(), emptyList(), attrPrefix = "app:")
+        val svc = XmlCompletionService(contributors = {
+            listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, customAttrs = { customMeta }))
+        })
+        // Missing xmlns:app → the create edit is attached…
+        val missing = completeItems("<com.example.MyView app:|", svc = svc).first { it.label == "app:customColor" }
+        assertEquals(" xmlns:app=\"http://schemas.android.com/apk/res-auto\"", missing.additionalEdits.single().newText)
+        // …but not when it's already declared on the root.
+        val declared = completeItems(
+            "<com.example.MyView xmlns:app=\"http://schemas.android.com/apk/res-auto\" app:|", svc = svc
+        ).first { it.label == "app:customColor" }
+        assertTrue(declared.additionalEdits.isEmpty())
+    }
+
+    @Test
     fun completesEnumAttributeValues() {
         val labels = complete("<View android:layout_width=\"|\"")
         assertTrue("match_parent" in labels && "wrap_content" in labels, "got $labels")
@@ -114,6 +163,21 @@ class AndroidXmlCompletionTest {
         val labels = complete("<TextView android:text=\"@string/|\"")
         assertTrue("@string/app_name" in labels && "@string/greeting" in labels, "got $labels")
         assertTrue("@string/ic_launcher" !in labels, "should not offer a drawable for a string attr: $labels")
+    }
+
+    @Test
+    fun resourceReferenceShowsResolvedValueAsHint() {
+        val svc = XmlCompletionService(contributors = {
+            listOf(AndroidXmlContributor(
+                resourceNames = { type -> repo.names(type).toList() },
+                resourceValue = { type, name -> if (type == ResourceType.STRING && name == "app_name") "CodeAssist" else null },
+            ))
+        })
+        val items = completeItems("<TextView android:text=\"@string/|\"", svc = svc)
+        // The resolved value is the popup hint…
+        assertEquals("CodeAssist", items.first { it.label == "@string/app_name" }.detail)
+        // …and an unresolved one falls back to the resource type.
+        assertEquals("string", items.first { it.label == "@string/greeting" }.detail)
     }
 
     @Test
@@ -128,6 +192,47 @@ class AndroidXmlCompletionTest {
         // The `@+id/` declaration form is offered when declaring (e.g. typing `android:id="@+|"`).
         val decl = complete("<Button android:id=\"@+|\"/>", svc = svc)
         assertTrue("@+id/" in decl, "declaration form offered: $decl")
+    }
+
+    @Test
+    fun completesToolsDesignTimeAttributes() {
+        // Typing the tools: namespace offers curated design-time attrs + a tools: mirror of the element's attrs.
+        val labels = complete("<TextView tools:|")
+        assertTrue("tools:context" in labels, "got $labels")  // curated
+        assertTrue("tools:visibility" in labels)              // curated
+        assertTrue("tools:text" in labels)                    // mirror of android:text
+    }
+
+    @Test
+    fun completesToolsListItemOnlyOnListContainers() {
+        assertTrue("tools:listitem" in complete("<androidx.recyclerview.widget.RecyclerView tools:|"))
+        assertTrue("tools:listitem" !in complete("<TextView tools:|"), "listitem is not offered on a plain view")
+    }
+
+    @Test
+    fun completesToolsAttributeValues() {
+        // tools:visibility reuses the android:visibility enum…
+        assertTrue("gone" in complete("<TextView tools:visibility=\"|\""))
+        // …and tools:text reuses the @string references of android:text.
+        assertTrue("@string/app_name" in complete("<TextView tools:text=\"@string/|\""))
+    }
+
+    @Test
+    fun completesXmlnsNamespaceDeclarations() {
+        val items = completeItems("<LinearLayout xmlns:|").associateBy { it.label }
+        assertTrue(items.keys.containsAll(setOf("xmlns:android", "xmlns:app", "xmlns:tools")), "got ${items.keys}")
+        assertEquals("xmlns:app=\"http://schemas.android.com/apk/res-auto\"", items["xmlns:app"]!!.insertText)
+        // An already-declared namespace isn't re-offered.
+        val afterAndroid = completeItems(
+            "<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\" xmlns:|"
+        ).map { it.label }
+        assertTrue("xmlns:android" !in afterAndroid && "xmlns:tools" in afterAndroid, "got $afterAndroid")
+    }
+
+    @Test
+    fun completesXmlnsUriValue() {
+        assertTrue("http://schemas.android.com/apk/res-auto" in complete("<LinearLayout xmlns:app=\"|\""))
+        assertTrue("http://schemas.android.com/tools" in complete("<View xmlns:tools=\"|\""))
     }
 
     @Test

@@ -52,6 +52,13 @@ interface XmlResourceHost {
     /** Create/append `<rClass name=…>value</rClass>` to the module's `res/values/…` (host filesystem I/O),
      *  de-duplicating the name; returns the (possibly suffixed) name actually written. */
     fun appendValueResource(file: VirtualFile, rClass: String, name: String, value: String): String
+
+    /** Can [rClass] be created as a standalone resource FILE (layout/drawable/menu/anim/…)? */
+    fun isFileType(rClass: String): Boolean = false
+
+    /** Create `res/<folder>/<name>.xml` with a minimal stub for [rClass] (host filesystem I/O); returns the
+     *  new file's path, or null on failure. Only called when [isFileType] is true. */
+    fun createResourceFile(file: VirtualFile, rClass: String, name: String): String? = null
 }
 
 /**
@@ -78,12 +85,12 @@ class XmlDiagnosticProvider(
             out += Diagnostic(d.range, d.severity, d.message, DiagnosticSource.Analyzer(AnalyzerId("xml.syntax")), d.code)
         }
 
-        // A) Missing xmlns:android when android: attributes are used.
-        XmlLintRules.missingNamespace(parsed)?.let { hit ->
-            val fix = bufferFix("Add xmlns:android declaration") {
-                DocumentEdit(hit.insertAt, 0, " xmlns:android=\"${hit.uri}\"")
+        // A) A namespace prefix (android/app/tools) is used but not declared on the root.
+        for (hit in XmlLintRules.missingNamespaces(parsed)) {
+            val fix = bufferFix("Add xmlns:${hit.prefix} declaration") {
+                DocumentEdit(hit.insertAt, 0, " xmlns:${hit.prefix}=\"${hit.uri}\"")
             }
-            out += finding(hit.range, Severity.ERROR, "Missing xmlns:android namespace declaration", "android.missingNamespace", listOf(fix))
+            out += finding(hit.range, Severity.ERROR, "Missing xmlns:${hit.prefix} namespace declaration", "android.missingNamespace", listOf(fix))
         }
 
         if (isLayout) {
@@ -115,14 +122,17 @@ class XmlDiagnosticProvider(
             if (!host.typeHasAny(file, ref.rClass)) continue    // type only sourced from framework/unindexed → don't flag
             if (host.hasResource(file, ref.rClass, resName)) continue
             val range = TextRange(ref.start, ref.endExclusive)
-            val fixes = if (host.isValueType(ref.rClass)) listOf(object : QuickFix {
-                override val title = "Create @${ref.rClass}/$resName"
-                override val kind = CodeActionKind.QUICK_FIX
-                override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit {
-                    host.appendValueResource(ctx.target.file, ref.rClass, resName, "")
-                    return WorkspaceEdit.EMPTY
-                }
-            }) else emptyList()
+            val fixes = when {
+                // A value resource (string/color/dimen/…) → append a `<type name=…/>` entry to res/values.
+                host.isValueType(ref.rClass) -> listOf(creatingFix("Create @${ref.rClass}/$resName") {
+                    host.appendValueResource(it.target.file, ref.rClass, resName, "")
+                })
+                // A file resource (layout/drawable/menu/anim/…) → create res/<type>/<name>.xml from a stub.
+                host.isFileType(ref.rClass) -> listOf(creatingFix("Create @${ref.rClass}/$resName file") {
+                    host.createResourceFile(it.target.file, ref.rClass, resName)
+                })
+                else -> emptyList()
+            }
             out += finding(range, Severity.WARNING, "Cannot resolve @${ref.rClass}/${ref.name}", "android.unresolvedResource", fixes)
         }
         return out
@@ -136,6 +146,13 @@ class XmlDiagnosticProvider(
         override val title = title
         override val kind = CodeActionKind.QUICK_FIX
         override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit = WorkspaceEdit.of(ctx.target.file, edit())
+    }
+
+    /** A fix whose effect is host filesystem I/O (creating a resource) rather than an edit to the open buffer. */
+    private fun creatingFix(title: String, create: (FixContext) -> Unit): QuickFix = object : QuickFix {
+        override val title = title
+        override val kind = CodeActionKind.QUICK_FIX
+        override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit { create(ctx); return WorkspaceEdit.EMPTY }
     }
 
     private companion object {

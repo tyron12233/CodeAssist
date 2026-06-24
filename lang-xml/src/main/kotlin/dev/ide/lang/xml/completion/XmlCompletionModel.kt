@@ -37,6 +37,12 @@ data class XmlCompletionPosition(
     val replacementRange: TextRange,
     /** Absolute path of the file being completed — lets a contributor specialize by res folder/file type. */
     val filePath: String,
+    /** Namespace prefixes already declared on the root element (`xmlns:android`/`app`/`tools` → `{android,…}`),
+     *  so a contributor can auto-declare a missing one when a namespaced attribute is accepted. */
+    val declaredNamespaces: Set<String> = emptySet(),
+    /** Offset just after the root element's name — where to splice a ` xmlns:prefix="uri"` declaration — or
+     *  -1 when there's no root element to attach it to. */
+    val namespaceInsertOffset: Int = -1,
 )
 
 /**

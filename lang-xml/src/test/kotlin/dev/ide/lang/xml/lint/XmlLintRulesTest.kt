@@ -18,12 +18,23 @@ class XmlLintRulesTest {
     @Test
     fun flagsMissingNamespace() {
         // android: used but the root has no xmlns:android.
-        val hit = XmlLintRules.missingNamespace(parse("<LinearLayout android:orientation=\"vertical\"></LinearLayout>"))
-        assertTrue(hit != null)
+        val hits = XmlLintRules.missingNamespaces(parse("<LinearLayout android:orientation=\"vertical\"></LinearLayout>"))
+        assertEquals(listOf("android"), hits.map { it.prefix })
         // ...and not flagged once it's declared.
-        assertTrue(XmlLintRules.missingNamespace(
+        assertTrue(XmlLintRules.missingNamespaces(
             parse("<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\" android:orientation=\"vertical\"/>")
-        ) == null)
+        ).isEmpty())
+    }
+
+    @Test
+    fun flagsMissingAppAndToolsNamespaces() {
+        // app: and tools: used, android: declared → only app + tools are reported.
+        val hits = XmlLintRules.missingNamespaces(parse(
+            "<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"" +
+                " app:layout_constraintTop_toTopOf=\"parent\" tools:text=\"x\"/>"
+        ))
+        assertEquals(setOf("app", "tools"), hits.map { it.prefix }.toSet())
+        assertTrue(hits.all { it.uri.startsWith("http://schemas.android.com/") })
     }
 
     @Test

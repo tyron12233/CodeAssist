@@ -108,6 +108,7 @@ object XmlContextScanner {
         var tokenStart = caret
         while (tokenStart > lt + 1 && isNameChar(text[tokenStart - 1])) tokenStart--
         existing.remove(text.subSequence(tokenStart, caret).toString()) // don't count the token being typed
+        val root = rootTag(parsed)
         return XmlCompletionPosition(
             kind = XmlCompletionKind.ATTRIBUTE_NAME,
             tag = tagName.ifEmpty { null },
@@ -117,7 +118,27 @@ object XmlContextScanner {
             prefix = text.subSequence(tokenStart, caret).toString(),
             replacementRange = TextRange(tokenStart, caret),
             filePath = filePath,
+            declaredNamespaces = declaredNamespaces(root),
+            namespaceInsertOffset = root?.let { it.startOffset + 1 + (it.name?.length ?: 0) } ?: -1,
         )
+    }
+
+    /** The prefixes declared by `xmlns:*` attributes on the root element (the Android convention for layouts). */
+    private fun declaredNamespaces(root: XmlNode?): Set<String> =
+        root?.attributes?.mapNotNull { it.name }
+            ?.filter { it.startsWith("xmlns:") }
+            ?.mapTo(LinkedHashSet()) { it.removePrefix("xmlns:") } ?: emptySet()
+
+    /** The document's root element (first TAG node), or null. Namespace declarations are spliced here. */
+    private fun rootTag(parsed: ParsedFile): XmlNode? {
+        var found: XmlNode? = null
+        fun walk(n: DomNode) {
+            if (found != null) return
+            if (n is XmlNode && n.kind == XmlNodeKinds.TAG) { found = n; return }
+            n.children.forEach(::walk)
+        }
+        walk(parsed)
+        return found
     }
 
     private fun content(parsed: ParsedFile, caret: Int, filePath: String) = XmlCompletionPosition(
