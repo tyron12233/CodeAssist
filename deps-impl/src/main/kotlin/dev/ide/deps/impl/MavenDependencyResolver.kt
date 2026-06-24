@@ -9,6 +9,7 @@ import dev.ide.deps.ResolvedArtifact
 import dev.ide.deps.VersionConflict
 import dev.ide.model.Coordinate
 import dev.ide.platform.ProgressReporter
+import dev.ide.platform.log.Log
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -23,6 +24,8 @@ import java.nio.file.StandardCopyOption
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.writeText
@@ -52,6 +55,9 @@ class MavenDependencyResolver(
     private val downloadConcurrency: Int = 8,
 ) : DependencyResolver {
 
+    private val log = Log.logger("deps.resolver")
+
+
     /**
      * Effective-POM cache, keyed by coordinate and shared across `resolve` calls (released POMs are
      * immutable, so this is safe). A single Compose graph re-fetches the same AndroidX parent POMs and
@@ -68,6 +74,11 @@ class MavenDependencyResolver(
         platforms: List<Coordinate>,
     ): ResolutionResult {
         val repos = repositories.ifEmpty { DEFAULT_REPOSITORIES }
+        log.info(
+            "resolve: ${coordinates.size} coordinate(s) ${coordinates.joinToString { it.toString() }} " +
+                "over ${repos.size} repo(s) ${repos.joinToString { it.url }}" +
+                if (platforms.isNotEmpty()) " · platforms ${platforms.joinToString { it.toString() }}" else "",
+        )
 
         val seenVersions = LinkedHashMap<GA, MutableSet<String>>()  // every requested version, per artifact
         val directVersions = HashMap<GA, String>()                  // the version the user declared (for PINNED)
@@ -171,6 +182,8 @@ class MavenDependencyResolver(
             }
         }
 
+        log.info("graph walk done: ${chosen.size} node(s) chosen, ${unresolved.size} POM(s) unresolved so far")
+
         // --- download + assemble results ---------------------------------------------------------
         // Two passes, so the build-critical jars/aars all land first at full concurrency and editor-only
         // sources never share a download slot with (or queue ahead of) a jar something is waiting to build
@@ -198,7 +211,14 @@ class MavenDependencyResolver(
                         // `activity-compose`) silently vanished from the closure and got persisted as if the
                         // library were complete — invisible until completion couldn't resolve the type.
                         if (artifact == null) return@withPermit DownloadOutcome(coord, null, failed = true)
-                        val classesRoot = if (kind == ArtifactKind.AAR) fileFor(extractClassesJar(coord, artifact)) else fileFor(artifact)
+                        // A corrupt/unreadable artifact (e.g. a truncated download, or a non-zip body from a
+                        // captive portal) must not abort the WHOLE resolve — treat just this one as unresolved.
+                        val classesRoot = runCatching {
+                            if (kind == ArtifactKind.AAR) fileFor(extractClassesJar(coord, artifact)) else fileFor(artifact)
+                        }.getOrElse {
+                            log.warn("artifact unusable: $coord (${it.javaClass.simpleName}: ${it.message})")
+                            return@withPermit DownloadOutcome(coord, null, failed = true)
+                        }
                         val dependsOn = edges[ga].orEmpty().mapNotNull { c -> chosen[c]?.let { Coordinate(c.group, c.name, it) } }
                         progress.report(downloaded.incrementAndGet().toDouble() / total, "Downloaded ${coord.name}")
                         DownloadOutcome(coord, ResolvedArtifact(coord, kind, classesRoot, sourcesRoot = null, dependsOn), failed = false)
@@ -211,6 +231,7 @@ class MavenDependencyResolver(
             if (o == null) continue
             if (o.artifact != null) resolved += o.artifact else if (o.failed) unresolved += o.coord
         }
+        log.info("downloads done: ${resolved.size} artifact(s) fetched")
 
         // Pass 2: editor-only sources, off the build-critical path. Failures are ignored (sources are best-
         // effort) and never affect `unresolved`.
@@ -234,6 +255,8 @@ class MavenDependencyResolver(
             .filterValues { it.size > 1 }
             .map { (ga, versions) -> VersionConflict(ga.toString(), versions.sortedWith(MavenVersion), chosen[ga] ?: versions.first()) }
 
+        if (unresolved.isEmpty()) log.info("resolve done: ${resolved.size} artifact(s) resolved, none unresolved")
+        else log.warn("resolve done: ${resolved.size} resolved, ${unresolved.size} UNRESOLVED: ${unresolved.joinToString { it.toString() }}")
         return ResolutionResult(resolved, unresolved.toList(), conflicts)
     }
 
@@ -347,7 +370,12 @@ class MavenDependencyResolver(
         return cache.writeStreaming(rel) { tmp ->
             ordered.any { repo ->
                 val url = repo.url.removeSuffix("/") + "/" + rel
-                runCatching { fetcher.fetchTo(url, tmp) }.getOrDefault(false)
+                log.debug("GET jar: $url")
+                val outcome = runCatching { fetcher.fetchTo(url, tmp) }
+                // A thrown error (not a 404, which returns false) is the real "why it failed": host
+                // unreachable, TLS, timeout, a 5xx. Log it so an on-device resolution failure is diagnosable.
+                outcome.exceptionOrNull()?.let { log.warn("download failed: $url (${it.javaClass.simpleName}: ${it.message})") }
+                outcome.getOrDefault(false)
             }
         }
     }
@@ -371,7 +399,12 @@ class MavenDependencyResolver(
         cache.read(rel)?.let { return it }
         for (repo in repos) {
             val url = repo.url.removeSuffix("/") + "/" + rel
-            val bytes = runCatching { fetcher.fetch(url) }.getOrNull()
+            log.debug("GET pom: $url")
+            val outcome = runCatching { fetcher.fetch(url) }
+            // A thrown error (not a 404, which returns null) is the real cause of an unresolvable POM:
+            // host unreachable, TLS, timeout, a 5xx. Log it so an on-device failure is diagnosable.
+            outcome.exceptionOrNull()?.let { log.warn("POM fetch failed: $url (${it.javaClass.simpleName}: ${it.message})") }
+            val bytes = outcome.getOrNull()
             if (bytes != null) { cache.write(rel, bytes); return bytes }
         }
         return null
@@ -389,7 +422,12 @@ class MavenDependencyResolver(
         val classesJar = dir.resolve("classes.jar")
         val marker = dir.resolve(".extracted")
         // Re-extract if a prior (pre-manifest) explosion left no manifest, so the package name is available.
-        if (Files.isRegularFile(marker) && Files.isRegularFile(dir.resolve("AndroidManifest.xml"))) return classesJar
+        if (Files.isRegularFile(marker) && Files.isRegularFile(dir.resolve("AndroidManifest.xml"))) {
+            // Heal a classes.jar an older build left as a zero-entry zip (resource-only AAR): unusable on ART,
+            // where ZipFile rejects an empty archive. Cheap (central-directory read) and only rewrites the bad ones.
+            if (Files.isRegularFile(classesJar) && !isUsableJar(classesJar)) writeManifestOnlyJar(classesJar)
+            return classesJar
+        }
 
         var foundClasses = false
         ZipInputStream(Files.newInputStream(aar)).use { zin ->
@@ -414,9 +452,24 @@ class MavenDependencyResolver(
                 entry = zin.nextEntry
             }
         }
-        if (!foundClasses) ZipOutputStream(Files.newOutputStream(classesJar)).use { } // resource-only AAR → empty jar
+        // resource-only AAR (no code) → a classes.jar with a single manifest entry (see [writeManifestOnlyJar]).
+        if (!foundClasses) writeManifestOnlyJar(classesJar)
         marker.writeText("")
         return classesJar
+    }
+
+    /** Whether [jar] opens as a zip with at least one entry. ART's ZipFile throws `ZipException: No entries`
+     *  on a zero-entry archive, so this also returns false for the empty jars older builds produced. */
+    private fun isUsableJar(jar: Path): Boolean =
+        runCatching { ZipFile(jar.toFile()).use { it.entries().hasMoreElements() } }.getOrDefault(false)
+
+    /** Write a NON-EMPTY but class-free `classes.jar` (a single `META-INF/MANIFEST.MF`). A zero-entry archive
+     *  is unusable on ART — both `ZipOutputStream.close` and `ZipFile.<init>` throw `ZipException: No entries`,
+     *  and the dexer/editor open this jar — so a resource-only AAR needs one benign entry. Dexes to no classes. */
+    private fun writeManifestOnlyJar(jar: Path) = ZipOutputStream(Files.newOutputStream(jar)).use { zos ->
+        zos.putNextEntry(ZipEntry("META-INF/MANIFEST.MF"))
+        zos.write("Manifest-Version: 1.0\r\n\r\n".toByteArray(Charsets.UTF_8))
+        zos.closeEntry()
     }
 
     private data class Req(val coord: Coordinate, val exclusions: Set<GA>, val direct: Boolean)

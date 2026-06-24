@@ -110,6 +110,30 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun resolvesResourceOnlyAarToUsableClassFreeClassesJar() {
+        // A resource-only AAR (no classes.jar inside, e.g. an Android lib that is all resources) must still
+        // resolve, producing a NON-EMPTY but class-free classes.jar. A zero-entry jar is unusable on ART
+        // (ZipFile/ZipOutputStream throw `ZipException: No entries`), so we write a single manifest entry: it
+        // opens fine everywhere and dexes to no classes.
+        val files = FakeRepo()
+        files.put("res-lib", "1.0", packaging = "aar", jarBytes = aarResOnly())
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("res-lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val art = result.resolved.single()
+        assertEquals("classes.jar", art.classesRoot.name)
+        assertTrue(art.classesRoot.exists)
+        assertTrue(result.unresolved.isEmpty(), "a resource-only AAR resolves; got unresolved=${result.unresolved}")
+        // Openable via ZipFile (the ART-critical property; a zero-entry zip would throw here) with >=1 entry,
+        // and no `.class` entries (so it dexes to nothing).
+        val names = java.util.zip.ZipFile(Path.of(art.classesRoot.path).toFile()).use { zf ->
+            zf.entries().toList().map { it.name }
+        }
+        assertTrue(names.isNotEmpty(), "classes.jar must be a non-empty (ART-openable) archive; got $names")
+        assertTrue(names.none { it.endsWith(".class") }, "a resource-only AAR has no classes; got $names")
+    }
+
+    @Test
     fun terminatesAndRecordsEdgesOnCyclicMetadata() {
         // a → b → a : a cyclic POM graph must not loop forever; both edges must survive for cycle detection.
         val files = FakeRepo()
@@ -285,6 +309,18 @@ class MavenDependencyResolverTest {
     private fun emptyJar(): ByteArray {
         val out = java.io.ByteArrayOutputStream()
         ZipOutputStream(out).use { }
+        return out.toByteArray()
+    }
+
+    /** An AAR with resources/manifest but NO `classes.jar` (a resource-only Android library). */
+    private fun aarResOnly(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { zos ->
+            zos.putNextEntry(ZipEntry("AndroidManifest.xml")); zos.write("<manifest/>".toByteArray()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("res/values/strings.xml"))
+            zos.write("""<resources><string name="x">x</string></resources>""".toByteArray())
+            zos.closeEntry()
+        }
         return out.toByteArray()
     }
 
