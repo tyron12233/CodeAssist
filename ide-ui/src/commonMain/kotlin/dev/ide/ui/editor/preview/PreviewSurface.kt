@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -104,8 +105,8 @@ fun PreviewSurface(
     cardBorderColor: Color,
     blueprint: Boolean = false,
     onSurfaceTap: (() -> Unit)? = null,
-    topBarExtras: @Composable RowScope.() -> Unit = {},
-    bottomBarExtras: @Composable RowScope.() -> Unit = {},
+    topBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
+    bottomBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
     overlays: @Composable BoxScope.() -> Unit = {},
     card: @Composable BoxScope.(widthPx: Int, heightPx: Int, density: Float) -> Unit,
 ) {
@@ -116,6 +117,9 @@ fun PreviewSurface(
     val tapHandler = rememberUpdatedState(onSurfaceTap)
 
     BoxWithConstraints(modifier.fillMaxSize().background(Ca.colors.editorBg).clipToBounds()) {
+        // Below this width the chrome bars can't show full labels without squishing, so they collapse to
+        // icon / dimension-only form and the view-specific extras follow suit (see [topBarExtras]).
+        val compact = maxWidth < 480.dp
         val hostDensity = LocalDensity.current.density
         val devWdp = widthPx / hostDensity
         val devHdp = heightPx / hostDensity
@@ -161,7 +165,11 @@ fun PreviewSurface(
                     .graphicsLayer {
                         scaleX = scale; scaleY = scale; translationX = state.offset.x; translationY = state.offset.y
                     }
-                    .size(devWdp.dp, devHdp.dp)
+                    // requiredSize, NOT size: the card must keep the device's true aspect ratio even when the
+                    // pane is smaller than the device's dp. `size` would clamp the card to the pane (squaring a
+                    // 360×800 phone in a narrow pane); requiredSize holds the real size, overflows, and the fit
+                    // scale above shrinks it back into the clipped surface.
+                    .requiredSize(devWdp.dp, devHdp.dp)
                     .shadow(if (blueprint) 0.dp else 16.dp, RoundedCornerShape(Ca.radius.lg))
                     .clip(RoundedCornerShape(Ca.radius.lg))
                     .background(cardColor)
@@ -171,10 +179,15 @@ fun PreviewSurface(
             }
         }
 
-        // Top bar: device / orientation / night + view-specific extras.
+        // Top bar: device / orientation / night + view-specific extras. On a narrow pane it collapses to a
+        // compact icon/dimension-only form so the cluster shrinks with the surface instead of squishing.
         GlassBar(Modifier.align(Alignment.TopCenter).padding(Ca.spacing.s3)) {
             PillButton({ state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
-                Text("${device.label} · ${state.wdp}×${state.hdp}", color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s2))
+                Text(
+                    if (compact) "${state.wdp}×${state.hdp}" else "${device.label} · ${state.wdp}×${state.hdp}",
+                    color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 1,
+                    modifier = Modifier.padding(horizontal = if (compact) Ca.spacing.s1 else Ca.spacing.s2),
+                )
             }
             Divider()
             PillButton({ state.landscape = !state.landscape }) {
@@ -182,9 +195,13 @@ fun PreviewSurface(
             }
             Divider()
             PillButton({ state.night = !state.night }) {
-                Text("Night", color = if (state.night) Ca.colors.accent else Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
+                if (compact) {
+                    Icon(CaIcons.moon, "Night mode", Modifier.size(15.dp), tint = if (state.night) Ca.colors.accent else Ca.colors.textTertiary)
+                } else {
+                    Text("Night", color = if (state.night) Ca.colors.accent else Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
+                }
             }
-            topBarExtras()
+            topBarExtras(compact)
         }
 
         // Bottom bar: zoom / fit + view-specific extras.
@@ -194,7 +211,7 @@ fun PreviewSurface(
             PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, "Zoom in", Modifier.size(16.dp), tint = Ca.colors.textPrimary) }
             Divider()
             PillButton({ state.userScale = 0f; state.offset = Offset.Zero }) { Icon(CaIcons.refresh, "Fit", Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
-            bottomBarExtras()
+            bottomBarExtras(compact)
         }
 
         overlays()

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ComposePreviewHost
@@ -94,13 +96,19 @@ fun ComposePreviewPane(
         overlays = {
             PreviewProblemChip(problems, Modifier.align(Alignment.TopStart).padding(Ca.spacing.s3))
         },
-        topBarExtras = {
-            // The function currently being previewed (the editor gutter picks it; defaults to the first).
+        topBarExtras = { compact ->
+            // The function currently being previewed (the editor gutter picks it; defaults to the first). It's
+            // the flexible item: weighted + ellipsized so it shrinks (instead of squishing the status badge) as
+            // the bar narrows, and capped tighter when compact.
             if (fn != null) {
                 Divider()
                 Text(
                     fn, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = Ca.spacing.s1),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .widthIn(max = if (compact) 96.dp else 168.dp)
+                        .padding(horizontal = Ca.spacing.s1),
                 )
             }
             if (host != null) {
@@ -110,19 +118,21 @@ fun ComposePreviewPane(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    // When compact the status is icon-only (a colored dot, or a spinner while catching up) — the
+                    // Live/Loading/Paused label is dropped so the bar fits a small surface.
                     when {
                         // Engine catching up to a fresh buffer (compiling/interpreting): a spinner, not a dot.
                         loading -> {
                             CircularProgressIndicator(Modifier.size(9.dp), color = Ca.colors.warning, strokeWidth = 1.5.dp)
-                            Text("Loading", color = Ca.colors.warning, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                            if (!compact) Text("Loading", color = Ca.colors.warning, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
                         }
                         live -> {
-                            Box(Modifier.size(6.dp).background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill)))
-                            Text("Live", color = Ca.colors.run, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                            Box(Modifier.size(if (compact) 7.dp else 6.dp).background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill)))
+                            if (!compact) Text("Live", color = Ca.colors.run, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
                         }
                         else -> {
-                            Box(Modifier.size(6.dp).background(Ca.colors.textTertiary, RoundedCornerShape(Ca.radius.pill)))
-                            Text("Paused", color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                            Box(Modifier.size(if (compact) 7.dp else 6.dp).background(Ca.colors.textTertiary, RoundedCornerShape(Ca.radius.pill)))
+                            if (!compact) Text("Paused", color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

@@ -8,6 +8,7 @@ import dev.ide.ui.backend.UiInlayKind
 import dev.ide.ui.backend.UiInlayPart
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.editor.CodeLanguage
+import dev.ide.ui.editor.XmlEditing
 import dev.ide.ui.editor.applySmartEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -73,6 +74,53 @@ class EditorSessionTest {
         s.commitText("{")
         assertEquals("class A {\n    if (x) {}\n}", s.doc.text)
         assertEquals(TextRange(22), s.selection)
+    }
+
+    // ---- XML tag auto-close: a `>` keystroke on an open tag inserts the matching close, atomically ----
+
+    /** Typing `>` after `<TextView` (xml file) inserts `</TextView>` and parks the caret between them. */
+    @Test
+    fun typingGtAutoClosesXmlTag() {
+        val s = session("<TextView", language = CodeLanguage.Xml)
+        s.commitText(">")
+        assertEquals("<TextView></TextView>", s.doc.text)
+        assertEquals(TextRange(10), s.selection, "caret sits between the open and close tags")
+    }
+
+    /** The regression this fixes: deleting back to a `>` (a text edit, not a `>` keystroke) must NOT re-close. */
+    @Test
+    fun deletingDoesNotReCloseAnXmlTag() {
+        // `<a>|</a>` with the caret right after the `>` — backspace deletes the `>`, then forward-delete is moot.
+        val s = session("<a>X</a>", caret = 4, language = CodeLanguage.Xml) // caret after the stray 'X'
+        s.backspace()                                                       // remove 'X' → caret lands after `>`
+        assertEquals("<a></a>", s.doc.text, "no phantom close tag is inserted by the deletion")
+    }
+
+    /** Typing `>` on an element that already has its close tag ahead doesn't duplicate the closer. */
+    @Test
+    fun typingGtDoesNotDuplicateAnExistingCloseTag() {
+        val s = session("<LinearLayout</LinearLayout>", caret = 13, language = CodeLanguage.Xml)
+        s.commitText(">")
+        assertEquals("<LinearLayout></LinearLayout>", s.doc.text)
+    }
+
+    /** A `>` typed in a non-xml file is just a character (no tag machinery). */
+    @Test
+    fun typingGtInJavaInsertsAPlainChar() {
+        val s = session("a -", caret = 3, language = CodeLanguage.Java)
+        s.commitText(">")
+        assertEquals("a ->", s.doc.text)
+    }
+
+    /** Linked tag editing: applying the rename edit syncs the close tag and leaves the caret in the open tag. */
+    @Test
+    fun linkedRenameSyncsCloseTagAndKeepsCaret() {
+        // The exact call the editor's per-edit effect makes after the user edits an open tag's name.
+        val s = session("<Box></TextView>", caret = 4, language = CodeLanguage.Xml) // caret just after "<Box"
+        val edit = XmlEditing.linkedTagRenameEdit(s.doc.chars, s.selection.start)!!
+        s.applyEdits(listOf(edit), TextRange(s.selection.start))
+        assertEquals("<Box></Box>", s.doc.text)
+        assertEquals(TextRange(4), s.selection, "the caret stays in the open tag (the edit was entirely after it)")
     }
 
     // ---- inlay hints are session-owned overlays now (set by the daemon), shifted in place like diagnostics ----
@@ -174,6 +222,19 @@ class EditorSessionTest {
         assertEquals("ab hello!", s.doc.text)
         assertNull(s.composing)
         assertEquals(TextRange(9), s.selection)
+    }
+
+    @Test
+    fun imeNewlineCommitMidCompositionKeepsTheComposedText() {
+        // Enter pressed while a word is being composed must finish the composition and drop a newline after it —
+        // not overwrite the composing region with the "\n" (which would delete the just-composed word).
+        val s = session("", 0)
+        s.imeSetComposingText("ab", 1)
+        assertEquals("ab", s.doc.text)
+        assertNotNull(s.composing)
+        s.imeCommitText("\n", 1)
+        assertNull(s.composing, "Enter finishes the composition")
+        assertTrue(s.doc.text.startsWith("ab\n"), "the composed word survives and a newline follows: \"${s.doc.text}\"")
     }
 
     @Test
@@ -542,15 +603,15 @@ class EditorSessionTest {
 
     @Test
     fun partialSnapshotForAutoClose() {
-        // type '(' on "foo|" → buffer "foo()", caret between the parens (4). The IME replaces the empty range
-        // [3,3) with "()" and the caret sits 1 char into the new content.
+        // type '(' on "foo|" → buffer "foo()", caret between the parens (absolute offset 4). The IME replaces the
+        // empty range [3,3) with "()"; the splice range and the caret it lands on are all absolute document offsets.
         val snap = snapshotAfter("foo", 3) { it.commitText("(") }
         assertEquals("()", snap.text)
-        assertEquals(3, snap.startOffset)
+        assertEquals(0, snap.startOffset)
         assertEquals(3, snap.partialStartOffset)
         assertEquals(3, snap.partialEndOffset)
-        assertEquals(1, snap.selectionStart)
-        assertEquals(1, snap.selectionEnd)
+        assertEquals(4, snap.selectionStart)
+        assertEquals(4, snap.selectionEnd)
     }
 
     @Test
@@ -574,13 +635,14 @@ class EditorSessionTest {
 
     @Test
     fun partialSnapshotForPairBackspace() {
-        // backspace inside "a(|)" deletes both pair chars: replace [1,3) with "", caret at 1.
+        // backspace inside "a(|)" deletes both pair chars: replace [1,3) with "", caret at absolute offset 1.
         val snap = snapshotAfter("a()", 2) { it.backspace() }
         assertEquals("", snap.text)
-        assertEquals(1, snap.startOffset)
+        assertEquals(0, snap.startOffset)
         assertEquals(1, snap.partialStartOffset)
         assertEquals(3, snap.partialEndOffset, "both chars of the empty pair are in the replaced range")
-        assertEquals(0, snap.selectionStart)
+        assertEquals(1, snap.selectionStart)
+        assertEquals(1, snap.selectionEnd)
     }
 
     @Test
@@ -1060,12 +1122,56 @@ class EditorSessionTest {
     }
 
     @Test
-    fun backspaceCollapsesBlankLinesAndMatchesPrevIndent() {
-        // the content line is re-indented to the previous non-blank line's indent
+    fun backspaceCollapsesBlankLinesIndentsDeeperAfterOpener() {
+        // the previous non-blank line ends with an opener `(`, so the content line lands one level deeper
         val src = "    foo(\n\n        bar)"
         val s = session(src, src.indexOf("bar)"), CodeLanguage.Kotlin)
         s.backspace()
-        assertEquals("    foo(\n    bar)", s.doc.text)
+        assertEquals("    foo(\n        bar)", s.doc.text)
+    }
+
+    @Test
+    fun backspaceCollapsesBlankLinesIndentsDeeperAfterBrace() {
+        // the reported case: a blank line under `Column {`, caret in the next line's (mis-)indent → one
+        // level deeper than the brace, not aligned with it
+        val src = "    Column {\n\n       Text(\"Title\")\n        Text(\"Body\")\n    }"
+        val s = session(src, src.indexOf("Text(\"Title\")"), CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("    Column {\n        Text(\"Title\")\n        Text(\"Body\")\n    }", s.doc.text)
+    }
+
+    @Test
+    fun backspaceCollapsesBlankLinesKeepsCloserAtOpenerIndent() {
+        // a content line that is itself the matching closer stays aligned with the opener (not deeper)
+        val src = "    foo(\n\n    )"
+        val s = session(src, src.indexOf(")"), CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("    foo(\n    )", s.doc.text)
+    }
+
+    @Test
+    fun backspaceCollapsesBlankLinesDeeperAfterBracelessControlFlow() {
+        val src = "    if (x)\n\n        doThing();"
+        val s = session(src, src.indexOf("doThing"), CodeLanguage.Java)
+        s.backspace()
+        assertEquals("    if (x)\n        doThing();", s.doc.text)
+    }
+
+    @Test
+    fun backspaceCollapsesBlankLinesDeeperAfterXmlStartTag() {
+        val src = "<LinearLayout>\n\n    <TextView/>\n</LinearLayout>"
+        val s = session(src, src.indexOf("<TextView/>"), CodeLanguage.Xml)
+        s.backspace()
+        assertEquals("<LinearLayout>\n    <TextView/>\n</LinearLayout>", s.doc.text)
+    }
+
+    @Test
+    fun backspaceCollapsesBlankLinesNoDeeperAfterPlainLine() {
+        // a previous non-blank line that does not open a block → just match its indent
+        val src = "    foo()\n\n    bar()"
+        val s = session(src, src.indexOf("bar()"), CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("    foo()\n    bar()", s.doc.text)
     }
 
     @Test

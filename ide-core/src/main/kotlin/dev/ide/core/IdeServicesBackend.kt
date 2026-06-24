@@ -52,6 +52,7 @@ import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
 import dev.ide.ui.backend.UiConfigResult
 import dev.ide.ui.backend.UiDepModule
+import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleDeps
@@ -68,6 +69,7 @@ import dev.ide.ui.backend.UiBlockPart
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.ProjectInfo
+import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.TreeNode
@@ -750,6 +752,10 @@ class IdeServicesBackend(
     override fun runBuild() = services.runBuild()
     override fun stopBuild() = services.stopBuild()
 
+    override val runConsole: StateFlow<RunConsoleUi?> = engineFlow<RunConsoleUi?>(null) { it.runConsole }
+    override fun sendRunInput(text: String) = services.sendRunInput(text)
+    override fun closeRunInput() = services.closeRunInput()
+
     override val permissionRequest: StateFlow<UiPermissionRequest?> = engineFlow<UiPermissionRequest?>(null) { it.permissionRequest }
     override fun answerPermission(id: Int, decision: UiPermissionDecision) = services.answerPermission(id, decision)
 
@@ -758,6 +764,9 @@ class IdeServicesBackend(
     override val depsState: StateFlow<DepsResolveState> = engineFlow(DepsResolveState()) { it.depsState }
 
     override fun startPendingDependencyResolution() = services.startPendingDependencyResolution()
+
+    override suspend fun retryDependencyResolution() =
+        withContext(Dispatchers.IO) { services.retryDependencyResolution() }
 
     /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
      *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
@@ -836,6 +845,14 @@ class IdeServicesBackend(
     override suspend fun updateModuleConfig(moduleName: String, edit: UiModuleConfigEdit): UiConfigResult =
         withContext(Dispatchers.IO) {
             services.updateModuleConfig(moduleName, edit).also { if (it.success) _fsEpoch.value += 1 }
+        }
+
+    override suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> =
+        withContext(Dispatchers.IO) { services.missingProguardFiles(moduleName) }
+
+    override suspend fun createProguardFile(moduleName: String, entry: String): String? =
+        withContext(Dispatchers.IO) {
+            services.createProguardFile(moduleName, entry)?.toString()?.also { _fsEpoch.value += 1 }
         }
 
     // ---- project management ----

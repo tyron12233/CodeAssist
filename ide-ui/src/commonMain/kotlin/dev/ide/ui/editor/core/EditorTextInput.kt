@@ -11,7 +11,7 @@ import androidx.compose.ui.input.key.KeyEvent
  *
  * - **Android**: a `PlatformTextInputModifierNode` that, while the editor is focused, establishes a
  *   text-input session whose `InputConnection` applies commits/composition to the session immediately
- *   (the sora-editor model — a keystroke mutates the buffer synchronously; nothing waits on analysis).
+ *   (a keystroke mutates the buffer synchronously; nothing waits on analysis).
  * - **Desktop**: a no-op — hardware keys are handled by the editor's common key-event handler.
  *   (Desktop IME composition — CJK — can later implement the skiko text-input session here.)
  *

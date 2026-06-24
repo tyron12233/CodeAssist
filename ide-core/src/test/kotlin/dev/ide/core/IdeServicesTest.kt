@@ -14,12 +14,14 @@ class IdeServicesTest {
         val dir = Files.createTempDirectory("ide-run")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             ide.runBuild()
-            val deadline = System.currentTimeMillis() + 60_000
-            while (ide.buildState.value.status == RunStatus.Running && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            awaitBuild(ide)
             val state = ide.buildState.value
             assertEquals(RunStatus.Succeeded, state.status, "build/run failed; log:\n${state.log.joinToString("\n")}")
-            assertTrue(state.log.any { "HELLO, WORLD!" in it }, "expected program output in log:\n${state.log.joinToString("\n")}")
             assertTrue(state.steps.any { it.name.endsWith(":run") }, "expected a run step: ${state.steps.map { it.name }}")
+            // A console run's program stdout streams to the interactive run console (the full-screen Run
+            // terminal), not the build log — which now carries only the compile/run task lines.
+            val transcript = ide.runConsole.value?.transcript?.joinToString("") { it.text } ?: ""
+            assertTrue("HELLO, WORLD!" in transcript, "expected program output in the run console:\n$transcript")
         }
         dir.toFile().deleteRecursively()
     }
@@ -39,7 +41,8 @@ class IdeServicesTest {
             awaitBuild(ide)
             val state = ide.buildState.value
             assertEquals(RunStatus.Succeeded, state.status, "log:\n${state.log.joinToString("\n")}")
-            assertTrue(state.log.any { "BUFFER EDIT 12345" in it }, "unsaved edit not compiled/run:\n${state.log.joinToString("\n")}")
+            val transcript = ide.runConsole.value?.transcript?.joinToString("") { it.text } ?: ""
+            assertTrue("BUFFER EDIT 12345" in transcript, "unsaved edit not compiled/run:\n$transcript")
         }
         dir.toFile().deleteRecursively()
     }

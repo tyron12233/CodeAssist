@@ -317,7 +317,8 @@ private fun DepBody(
         when {
             isLoading -> ResolvingPanel(resolveState)
             deps == null -> Empty("Couldn't load dependencies.")
-            else -> DepContent(deps, tab, resolvedView, codeFont, onRemove)
+            // The persistent error state carries the (heuristic) why per coordinate — surface it here too.
+            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove)
         }
     }
 }
@@ -356,7 +357,7 @@ private fun ResolveBar(fraction: Double) {
 }
 
 @Composable
-private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, onRemove: (String) -> Unit) {
+private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit) {
     val nodesByCoord = remember(deps) { deps.nodes.associateBy { it.coordinate } }
     val expanded = remember(deps) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     val unresolvedSet = remember(deps) { deps.unresolved.toSet() }
@@ -377,7 +378,10 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
         }
         if (deps.unresolved.isNotEmpty()) item("unresolved") {
             BannerCard(CaIcons.error, Ca.colors.error, "${deps.unresolved.size} unresolved", Modifier.animateItem()) {
-                deps.unresolved.forEach { Text(it, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont)) }
+                deps.unresolved.forEach { coord ->
+                    Text(coord, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
+                    reasons[coord]?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2) }
+                }
             }
         }
 

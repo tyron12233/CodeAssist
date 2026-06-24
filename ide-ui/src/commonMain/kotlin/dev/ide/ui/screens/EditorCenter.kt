@@ -33,6 +33,7 @@ import dev.ide.ui.editor.preview.ResourcePreviewPane
 import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.launch
 
 /**
  * Top bar + deps progress + tabs + breadcrumb row + the code canvas — the editor column shared by both
@@ -43,6 +44,7 @@ import dev.ide.ui.theme.Ca
 internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact: Boolean, modifier: Modifier) {
     val project = state.backend.project
     val depsState by state.backend.depsState.collectAsState()
+    val depsScope = rememberCoroutineScope()
     // @Preview presence (enables the Design view-mode toggle + top-bar shortcut) is set by the editor daemon's
     // PREVIEWS pass below — no separate detection effect.
     var hasPreview by remember(state.active?.path) { mutableStateOf(false) }
@@ -75,7 +77,7 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
             onPreview = { active?.let { it.viewMode = EditorViewMode.Preview } },
             compact = compact,
         )
-        DepsProgressBar(depsState)
+        DepsProgressBar(depsState) { depsScope.launch { state.backend.retryDependencyResolution() } }
         TabsStrip(
             openFiles = state.openFiles,
             activeIndex = state.activeIndex,

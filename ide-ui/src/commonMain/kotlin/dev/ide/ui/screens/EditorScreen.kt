@@ -3,6 +3,7 @@ package dev.ide.ui.screens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -11,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
@@ -55,6 +57,7 @@ fun EditorScreen(
     onOpenModuleConfig: (String?) -> Unit = {},
     onOpenSdkManager: () -> Unit = {},
     onCloseProject: () -> Unit = {},
+    onOpenRun: () -> Unit = {},
     fileActions: FileActions = FileActions.None,
 ) {
     val indexStatus by state.backend.indexStatus.collectAsState()
@@ -140,6 +143,14 @@ fun EditorScreen(
             onCopy = { node, dest -> node.fileOpPath()?.let { state.copyPath(it, dest) } },
             onDelete = { node -> node.fileOpPath()?.let { state.deletePath(it) } },
             onDismiss = { fileOp = null },
+        )
+        // While a console run is active but its terminal isn't on screen (the user backed out mid-run), a
+        // tappable pill returns to it — the run keeps going in the background until then.
+        RunningIndicator(
+            state.backend,
+            onClick = onOpenRun,
+            modifier = Modifier.align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = if (isMobilePlatform) 88.dp else 24.dp),
         )
     }
 }

@@ -1,5 +1,8 @@
 package dev.ide.core
 
+import dev.ide.android.support.templates.JetpackComposeAppTemplate
+import dev.ide.model.LibraryDependency
+import dev.ide.model.template.TemplateArgs
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import kotlin.test.assertEquals
@@ -157,4 +160,41 @@ class ProjectManagerTest {
             root.toFile().deleteRecursively()
         }
     }
+
+    /**
+     * Regression: a template's declared dependencies must be written to `module.toml` (the declared source of
+     * truth) at creation, INDEPENDENT of Maven resolution. They were previously persisted only as a side
+     * effect of a *successful* resolve, so on a slow/offline first run a Jetpack Compose app kept just the
+     * deps that happened to resolve (kotlin-stdlib + activity-compose) and silently dropped the rest of the
+     * Compose graph — which then never came back, since reconciliation only re-resolves what's declared.
+     */
+    @Test
+    fun templateDependenciesAreDeclaredInModuleTomlIndependentOfResolution() {
+        val root = Files.createTempDirectory("cm-template-deps")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            // The Compose template's own declared set is the source of truth for what must end up in module.toml.
+            val expected = JetpackComposeAppTemplate.dependencies(TemplateArgs(emptyMap()))
+                .map { it.coordinate }.toSet()
+            assertTrue(expected.size >= 5, "the Compose template declares its AAR graph; got $expected")
+
+            fun declaredLibs(ide: IdeServices): Set<String> = ide.modules().first { it.name == "app" }
+                .dependencies.filterIsInstance<LibraryDependency>().map { it.library.name }.toSet()
+
+            manager.create("compose-app", mapOf("name" to "ComposeDemo", "packageName" to "com.acme.compose")).use { ide ->
+                // No background resolution has run (the editor never started it), yet every declared dep is present.
+                val declared = declaredLibs(ide)
+                assertTrue(declared.containsAll(expected), "every template dep declared at creation; missing ${expected - declared}")
+                assertTrue("kotlin-stdlib" in declared, "the implicit kotlin-stdlib is declared for the Kotlin module")
+            }
+
+            // And they round-trip through module.toml on reopen (persisted, not merely held in memory).
+            manager.open(manager.list().first().rootPath).use { reopened ->
+                assertTrue(declaredLibs(reopened).containsAll(expected), "declared deps survive a reopen via module.toml")
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
 }

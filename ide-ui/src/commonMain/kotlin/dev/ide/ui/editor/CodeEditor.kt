@@ -687,14 +687,16 @@ private fun CodeEditorContent(
         val caret = editorSession.selection.start
         val before = if (caret in 1..d.length) d.charAt(caret - 1) else null
 
-        // Auto-close XML tags: typing `>` after `<TextView …` inserts `</TextView>` and leaves the caret
-        // between them. Guarded so it never re-fires on its own insertion (see XmlEditing.tagToClose).
-        if (before == '>' && extraWordChars(path).isNotEmpty()) {
-            val tag = XmlEditing.tagToClose(d.chars, caret)
-            if (tag != null) {
-                val close = "</$tag>"
-                editorSession.applyEdits(listOf(RangeEdit(caret, caret, close, caret)), TextRange(caret))
-                completion.dismissed = true
+        // (XML tag auto-close happens atomically in the typing path — smartInsert in EditOps — so it fires
+        // only on a real `>` keystroke, not on the caret moves / IME re-commits that also bump textRevision.)
+
+        // Linked tag editing (XML): as the open tag's name is edited, rewrite its matching close tag to match
+        // (e.g. `<TextView…>` → `<MyView…>` updates `</TextView>`). Driven by the text edit, so it tracks
+        // typing/paste/backspace alike; the re-edit it applies re-enters this effect, converging in one step.
+        if (editorSession.language == CodeLanguage.Xml) {
+            val sync = XmlEditing.linkedTagRenameEdit(d.chars, caret)
+            if (sync != null) {
+                editorSession.applyEdits(listOf(sync), TextRange(caret))
                 return@LaunchedEffect
             }
         }

@@ -58,7 +58,11 @@ class ProjectModelStore internal constructor(
      * [WORKSPACE_SERVICE] so a workspace- or module-scoped factory can reach it.
      */
     val workspaceContainer: ServiceContainer =
-        ServiceContainerImpl(ServiceScopeLevel.WORKSPACE, appContainer, workspace) { extensions.extensions(SERVICE_EP) }
+        ServiceContainerImpl(
+            ServiceScopeLevel.WORKSPACE,
+            appContainer,
+            workspace
+        ) { extensions.extensions(SERVICE_EP) }
             .also { it.registerService(WORKSPACE_SERVICE) { workspace } }
 
     /** Module-scoped containers, created on demand and disposed when their module is removed. */
@@ -79,7 +83,11 @@ class ProjectModelStore internal constructor(
     fun moduleContainer(id: ModuleId): ServiceContainer {
         val moduleView = moduleView(id) ?: error("no module '${id.value}' in the workspace")
         return moduleContainers.computeIfAbsent(id) {
-            ServiceContainerImpl(ServiceScopeLevel.MODULE, workspaceContainer, moduleView) { extensions.extensions(SERVICE_EP) }
+            ServiceContainerImpl(
+                ServiceScopeLevel.MODULE,
+                workspaceContainer,
+                moduleView
+            ) { extensions.extensions(SERVICE_EP) }
         }
     }
 
@@ -132,15 +140,25 @@ class ProjectModelStore internal constructor(
     // --- path helpers shared by the view layer ---
 
     internal fun resolveRel(base: Path, rel: String): Path =
-        if (rel.isEmpty() || rel == ".") base else base.resolve(rel).normalize()
+        if (rel.isEmpty() || rel == ".") {
+            base
+        } else {
+            base.resolve(rel).normalize()
+        }
 
     internal fun projectRoot(p: ProjectData): Path = resolveRel(rootPath, p.rootRelPath)
 
-    internal fun fileFromWorkspace(rel: String): VirtualFile = vfs.fileFor(resolveRel(rootPath, rel))
+    internal fun fileFromWorkspace(rel: String): VirtualFile =
+        vfs.fileFor(resolveRel(rootPath, rel))
 
     internal fun relativizeToWorkspace(file: VirtualFile): String {
         val p = Paths.get(file.path).toAbsolutePath().normalize()
-        return if (p == rootPath) "" else rootPath.relativize(p).toString().replace(File.separatorChar, '/')
+        return if (p == rootPath) {
+            ""
+        } else {
+            rootPath.relativize(p).toString()
+                .replace(File.separatorChar, '/')
+        }
     }
 }
 
@@ -157,7 +175,12 @@ object ProjectModel {
         val root = workspaceRoot.toAbsolutePath().normalize()
         val vfs = LocalFileSystem(root)
         val moduleTypes = ModuleTypeRegistry(platform.extensions)
-        val initial = if (ModelPersistence.exists(root)) ModelPersistence.load(root) else WorkspaceData()
+        val initial =
+            if (ModelPersistence.exists(root)) {
+                ModelPersistence.load(root)
+            } else {
+                WorkspaceData()
+            }
         return ProjectModelStore(
             root, vfs, platform.messageBus, platform.modelLock, moduleTypes, facetCodecs,
             platform.extensions, appContainer, initial,

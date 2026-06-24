@@ -621,7 +621,7 @@ class EditorSession(
         }
         val selMin = selection.min
         val selMax = selection.max
-        val edit = smartBackspace(doc.chars, selMin, selMax) ?: return
+        val edit = smartBackspace(doc.chars, selMin, selMax, language) ?: return
         replaceRange(edit.start, edit.end, edit.text, TextRange(edit.caret))
         // Pair-aware / blank-line backspace can delete more than the single char deleteSurroundingText(1,0) asked
         // for, so its result diverges from the IME's model.
@@ -763,6 +763,13 @@ class EditorSession(
     // ---- IME bridge (called by the platform InputConnection) ----
 
     fun imeCommitText(text: String, newCursorPosition: Int) {
+        // A bare newline commit (Enter on the soft keyboard, or an editor action) runs the editor's smart-Enter —
+        // the same path the hardware Enter key takes — rather than pasting "\n" over the composing region (which
+        // would drop the just-composed word). [commitText] clears any composition as it splices.
+        if (text == "\n") {
+            commitText("\n")
+            return
+        }
         val region = composing ?: selection
         // single-char direct commits (no composition) get the same smart edits as hardware typing
         if (composing == null && selection.collapsed && text.length == 1 && newCursorPosition == 1) {
@@ -830,7 +837,7 @@ class EditorSession(
         else regionStart + newCursorPosition
 
     private companion object {
-        /** Cap for IME text queries — never ship megabytes across the binder (sora's maxIPCTextLength). */
+        /** Cap for IME text queries — never ship megabytes across the binder. */
         const val MAX_IPC_TEXT = 4096
 
         /** Undo-stack depth cap. With coalescing each step can be a whole run, so this is generous. */

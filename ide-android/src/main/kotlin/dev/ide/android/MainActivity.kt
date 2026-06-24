@@ -59,6 +59,12 @@ class MainActivity : ComponentActivity() {
         inbound.value = extractStream(intent)
 
         setContent {
+            Text(
+                "",
+                modifier = Modifier,
+                Color.Gray
+            )
+
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
             var error by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(Unit) {

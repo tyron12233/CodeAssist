@@ -20,8 +20,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -78,6 +81,7 @@ fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false) {
                         sig = sig,
                         activeParameter = sig.activeParameter ?: help.activeParameter,
                         active = index == help.activeSignature,
+                        windowed = mobile,
                     )
                 }
             }
@@ -129,29 +133,86 @@ private fun SteppedSignature(help: UiSignatureHelp) {
             modifier = Modifier.clickable(enabled = index < last) { shown = index + 1 }.padding(horizontal = 2.dp),
         )
     }
+    // SteppedSignature only runs on mobile, so the line is always windowed here.
     SignatureLine(
         sig = sig,
         activeParameter = sig.activeParameter ?: help.activeParameter,
         active = true,
+        windowed = true,
     )
 }
 
 @Composable
-private fun SignatureLine(sig: UiSignature, activeParameter: Int, active: Boolean) {
+private fun SignatureLine(sig: UiSignature, activeParameter: Int, active: Boolean, windowed: Boolean = false) {
     val base = if (active) Ca.colors.textPrimary else Ca.colors.textSecondary
-    val text = buildAnnotatedString {
-        val active2 = sig.parameters.getOrNull(activeParameter)
+    val text = signatureAnnotated(sig, activeParameter, active, Ca.colors.accent, Ca.colors.textTertiary, windowed)
+    Text(text = text, style = Ca.type.codeSmall, color = base)
+}
+
+/**
+ * The rendered signature line: the active parameter bolded + [accent]-coloured against the full [sig.label].
+ *
+ * When [windowed] (small screens) and the call has more than [SIGNATURE_WINDOW_THRESHOLD] parameters, only a
+ * window of [SIGNATURE_WINDOW_RADIUS] parameters either side of the active one is shown, with a [dim] `…`
+ * standing in for the elided runs — so a Compose `Text` (≈20 params) reads as `Text(…, color, modifier, …)`
+ * instead of swallowing the screen. The call prefix (`Text(`) and suffix (`)` / `): Unit`) are always kept.
+ * Pure (non-composable) so it is unit-testable; colours are passed in.
+ */
+internal fun signatureAnnotated(
+    sig: UiSignature,
+    activeParameter: Int,
+    active: Boolean,
+    accent: Color,
+    dim: Color,
+    windowed: Boolean,
+): AnnotatedString = buildAnnotatedString {
+    val params = sig.parameters
+    val rangesValid = params.isNotEmpty() &&
+        params.all { it.start in 0..sig.label.length && it.end in it.start..sig.label.length }
+    val doWindow = windowed && rangesValid && params.size > SIGNATURE_WINDOW_THRESHOLD
+
+    fun ellipsis() { pushStyle(SpanStyle(color = dim)); append("…"); pop() }
+    fun param(i: Int) {
+        val p = params[i]
+        val centerActive = active && i == windowCenter(activeParameter, params.lastIndex)
+        if (centerActive) pushStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold))
+        append(sig.label.substring(p.start, p.end))
+        if (centerActive) pop()
+    }
+
+    if (doWindow) {
+        val last = params.lastIndex
+        val center = windowCenter(activeParameter, last)
+        val lo = (center - SIGNATURE_WINDOW_RADIUS).coerceAtLeast(0)
+        val hi = (center + SIGNATURE_WINDOW_RADIUS).coerceAtMost(last)
+        append(sig.label.substring(0, params[0].start))                       // call prefix, e.g. "Text("
+        if (lo > 0) { ellipsis(); append(sig.label.substring(params[lo - 1].end, params[lo].start)) } // "…, "
+        for (i in lo..hi) {
+            param(i)
+            if (i < hi) append(sig.label.substring(params[i].end, params[i + 1].start))   // real ", " separator
+        }
+        if (hi < last) { append(sig.label.substring(params[hi].end, params[hi + 1].start)); ellipsis() } // ", …"
+        append(sig.label.substring(params[last].end))                         // suffix, e.g. ")" / "): Unit"
+    } else {
+        // Full signature (desktop, or a short call): bold just the active parameter span.
+        val active2 = params.getOrNull(activeParameter)
         var cursor = 0
         if (active && active2 != null && active2.start in 0..sig.label.length && active2.end in active2.start..sig.label.length) {
             append(sig.label.substring(0, active2.start))
-            pushStyle(androidx.compose.ui.text.SpanStyle(color = Ca.colors.accent, fontWeight = FontWeight.Bold))
+            pushStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold))
             append(sig.label.substring(active2.start, active2.end))
             pop()
             cursor = active2.end
         }
         append(sig.label.substring(cursor))
     }
-    Text(text = text, style = Ca.type.codeSmall, color = base)
 }
 
+/** Clamp the active-parameter index to a valid window centre (a trailing/vararg caret centres on the last param). */
+private fun windowCenter(activeParameter: Int, lastIndex: Int): Int = activeParameter.coerceIn(0, lastIndex)
+
 private const val MAX_SIGNATURES = 10
+/** Params shown either side of the active one when windowing a small-screen signature. */
+private const val SIGNATURE_WINDOW_RADIUS = 1
+/** Only window calls with more than this many parameters (short calls show in full even on mobile). */
+private const val SIGNATURE_WINDOW_THRESHOLD = 5

@@ -63,6 +63,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiFacetConfig
+import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
@@ -246,20 +247,32 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
     var reloadKey by remember(moduleName) { mutableStateOf(0) }
     var toast by remember { mutableStateOf<ConfigToast?>(null) }
     var addRootOpen by remember { mutableStateOf(false) }
+    var missingProguard by remember(moduleName) { mutableStateOf<List<UiMissingProguardFile>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(moduleName, reloadKey) {
         loading = true
         config = runCatching { backend.getModuleConfig(moduleName) }.getOrNull()
+        missingProguard = runCatching { backend.missingProguardFiles(moduleName) }.getOrDefault(emptyList())
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
 
     Box(modifier) {
         ConfigBody(
-            config, loading, codeFont, backend.project.rootPath, Modifier.fillMaxSize(),
+            config, loading, codeFont, backend.project.rootPath, missingProguard, Modifier.fillMaxSize(),
             onAddSourceRoot = { addRootOpen = true },
             onRemoveSourceRoot = { set, root -> if (backend.removeSourceRoot(moduleName, set, root)) reloadKey++ },
+            onCreateProguard = { entry ->
+                scope.launch {
+                    val created = backend.createProguardFile(moduleName, entry)
+                    toast = ConfigToast(
+                        if (created != null) "Created $entry" else "Couldn't create $entry",
+                        error = created == null,
+                    )
+                    if (created != null) reloadKey++
+                }
+            },
         ) { edit ->
             scope.launch {
                 val r = backend.updateModuleConfig(moduleName, edit)
@@ -388,9 +401,11 @@ private fun ConfigBody(
     loading: Boolean,
     codeFont: FontFamily,
     projectRoot: String,
+    missingProguard: List<UiMissingProguardFile>,
     modifier: Modifier,
     onAddSourceRoot: () -> Unit,
     onRemoveSourceRoot: (sourceSet: String, rootPath: String) -> Unit,
+    onCreateProguard: (entry: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
 ) {
     Crossfade(targetState = loading, animationSpec = tween(Motion.BASE), label = "cfgBody", modifier = modifier) { isLoading ->
@@ -401,7 +416,7 @@ private fun ConfigBody(
             config == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Couldn't load module configuration.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
             }
-            else -> ConfigForm(config, codeFont, projectRoot, onAddSourceRoot, onRemoveSourceRoot, onSave)
+            else -> ConfigForm(config, codeFont, projectRoot, missingProguard, onAddSourceRoot, onRemoveSourceRoot, onCreateProguard, onSave)
         }
     }
 }
@@ -411,8 +426,10 @@ private fun ConfigForm(
     config: UiModuleConfig,
     codeFont: FontFamily,
     projectRoot: String,
+    missingProguard: List<UiMissingProguardFile>,
     onAddSourceRoot: () -> Unit,
     onRemoveSourceRoot: (sourceSet: String, rootPath: String) -> Unit,
+    onCreateProguard: (entry: String) -> Unit,
     onSave: (UiModuleConfigEdit) -> Unit,
 ) {
     // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
@@ -449,6 +466,11 @@ private fun ConfigForm(
             }
         }
 
+        // ---- Minify: referenced-but-missing keep-rule files ----
+        if (missingProguard.isNotEmpty()) {
+            item("proguardMissing") { MissingProguardCard(missingProguard, codeFont, onCreateProguard) }
+        }
+
         // ---- Facet panels (generic) ----
         items(forms, key = { it.table }) { form -> FacetPanel(form, codeFont) }
 
@@ -462,6 +484,60 @@ private fun ConfigForm(
                 })
             }
         }
+    }
+}
+
+/**
+ * Warns that a build type references keep-rule files (`proguardFiles` / `consumerProguardFiles`) that don't
+ * exist on disk — R8 silently skips those, so a `minifyEnabled` build would shrink without them. Each row
+ * offers to create the file with a starter template so the reference resolves.
+ */
+@Composable
+private fun MissingProguardCard(
+    missing: List<UiMissingProguardFile>,
+    codeFont: FontFamily,
+    onCreate: (entry: String) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.warning.copy(alpha = 0.5f), RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(CaIcons.warning, null, Modifier.size(18.dp), tint = Ca.colors.warning)
+            Text("Missing keep-rule files", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            "These files are referenced by a build type but don't exist, so R8 skips them when minify is on.",
+            color = Ca.colors.textSecondary, style = Ca.type.caption,
+        )
+        missing.forEach { mf ->
+            Row(
+                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(mf.entry, color = Ca.colors.textPrimary,
+                        style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${mf.buildType}${if (mf.consumer) " · consumer" else ""}",
+                        color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                }
+                CreateRuleButton { onCreate(mf.entry) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreateRuleButton(onClick: () -> Unit) {
+    Row(
+        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(CaIcons.plus, null, Modifier.size(14.dp), tint = Ca.colors.accent)
+        Text("Create", color = Ca.colors.accent, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
     }
 }
 

@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.core
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Matrix
 import android.text.InputType
@@ -194,6 +196,10 @@ private class EditorImeBridge(
     var monitorToken = NO_MONITOR
     /** Last `requestCursorUpdates` mode (`CURSOR_UPDATE_IMMEDIATE`/`MONITOR` bits), 0 when off. */
     var cursorUpdateMode = 0
+    /** Whether the last full snapshot we pushed was windowed (huge buffer). A per-edit partial update addresses
+     *  the IME's mirror with absolute offsets, valid only while the mirror is the whole document; a windowed
+     *  mirror is re-based, so we keep pushing full snapshots until it spans the whole buffer from 0 again. */
+    private var mirrorWindowed = false
 
     override fun onStateChanged() {
         pushSelection()
@@ -202,11 +208,23 @@ private class EditorImeBridge(
 
     override fun onTextChanged(span: EditSpan?) {
         if (monitorToken != NO_MONITOR) {
-            val et = if (span == null) fullExtractedText(session) else partialExtractedText(session, span)
+            val et = if (span != null && !mirrorWindowed && session.doc.length <= MAX_EXTRACT_CHARS) {
+                partialExtractedText(session, span)
+            } else {
+                fullExtracted()
+            }
             imm.updateExtractedText(view, monitorToken, et)
         }
         pushSelection()
         maybePushCursorAnchor()
+    }
+
+    /** A full snapshot, recording whether the mirror it establishes is windowed so the next per-edit push knows
+     *  if absolute partial offsets still address it. The InputConnection's one-shot query routes here too. */
+    fun fullExtracted(): ExtractedText {
+        val et = fullExtractedText(session)
+        mirrorWindowed = et.startOffset != 0
+        return et
     }
 
     override fun onRestartInput() {
@@ -279,7 +297,7 @@ private fun buildCursorAnchorInfo(session: EditorSession, view: View, handle: Ed
  */
 private class EditorInputConnection(
     private val session: EditorSession,
-    view: View,
+    private val view: View,
     private val bridge: EditorImeBridge,
 ) : BaseInputConnection(view, true) {
 
@@ -305,7 +323,11 @@ private class EditorInputConnection(
     }
 
     override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        session.imeSetComposingText(text?.toString() ?: "", newCursorPosition)
+        val s = text?.toString() ?: ""
+        // Composing text never spans a line break; refuse one and let the IME fall back to committing the text,
+        // so the underlined composing region can't straddle two lines.
+        if ('\n' in s) return false
+        session.imeSetComposingText(s, newCursorPosition)
         return true
     }
 
@@ -367,13 +389,39 @@ private class EditorInputConnection(
         return true
     }
 
+    // Clipboard / edit actions an IME or accessibility service can fire (its clipboard chip, "select all", …),
+    // routed to the same session ops the editor's own shortcuts use.
+    override fun performContextMenuAction(id: Int): Boolean {
+        when (id) {
+            android.R.id.selectAll -> session.selectAll()
+            android.R.id.cut -> session.cutSelection()?.let(::setClipboardText)
+            android.R.id.copy -> session.selectedText()?.let(::setClipboardText)
+            android.R.id.paste, android.R.id.pasteAsPlainText -> clipboardText()?.let(session::commitText)
+            android.R.id.undo -> session.undo()
+            android.R.id.redo -> session.redo()
+            else -> return super.performContextMenuAction(id)
+        }
+        return true
+    }
+
+    private fun setClipboardText(text: String) {
+        val cm = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+        cm.setPrimaryClip(ClipData.newPlainText(null, text))
+    }
+
+    private fun clipboardText(): String? {
+        val cm = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
+        val item = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0) ?: return null
+        return item.coerceToText(view.context)?.toString()?.takeIf { it.isNotEmpty() }
+    }
+
     // Hand the IME a real view of our buffer so it can mirror text + cursor continuously (and not drift after a
     // smart edit). A MONITOR request arms per-edit `updateExtractedText` pushes via the bridge.
     override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText {
         if (request != null && flags and InputConnection.GET_EXTRACTED_TEXT_MONITOR != 0) {
             bridge.monitorToken = request.token
         }
-        return fullExtractedText(session)
+        return bridge.fullExtracted()
     }
 
     override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean {

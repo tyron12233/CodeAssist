@@ -1,6 +1,7 @@
 package dev.ide.ui.editor.core
 
 import dev.ide.ui.editor.CodeLanguage
+import dev.ide.ui.editor.XmlEditing
 
 /**
  * Smart-editing rules as **range edits** — the same behaviors `applySmartEdit` (EditorEdits.kt)
@@ -104,6 +105,13 @@ fun smartInsert(text: CharSequence, selStart: Int, selEnd: Int, ch: Char, langua
     if (ch in QUOTES && language != CodeLanguage.Plain && shouldAutoClose(nextChar) && !isIdentChar(text.charOrNull(pos - 1))) {
         return RangeEdit(pos, pos, "$ch$ch", pos + 1)
     }
+    // 3b. Auto-close XML tags — typing `>` on an open `<Tag …` inserts its matching `</Tag>` and parks the
+    // caret between them, atomically (one undo). Fires only here, on the real keystroke (never on a caret
+    // move / deletion / IME re-commit), and only when the element isn't already closed ahead.
+    if (ch == '>' && language == CodeLanguage.Xml) {
+        val tag = XmlEditing.tagToCloseOnType(text, pos)
+        if (tag != null) return RangeEdit(pos, pos, "></$tag>", pos + 1)
+    }
     // 4. Smart Enter — per-language (indent continuation, deeper after openers, comment continuation, …).
     if (ch == '\n') return newlineHandlerFor(language).onEnter(text, pos)
 
@@ -114,7 +122,7 @@ fun smartInsert(text: CharSequence, selStart: Int, selEnd: Int, ch: Char, langua
  * The edit for Backspace: deletes the selection; on a collapsed caret deletes the char before it —
  * taking an auto-inserted partner with it when the caret sits inside an empty pair. Null at offset 0.
  */
-fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int): RangeEdit? {
+fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int, language: CodeLanguage): RangeEdit? {
     if (selStart != selEnd) return RangeEdit(selStart, selEnd, "", selStart)
     val pos = selStart
     if (pos <= 0) return null
@@ -125,8 +133,11 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int): RangeEdit? {
     if (emptyPair) return RangeEdit(pos - 1, pos + 1, "", pos - 1)
     // Smart backspace across blank lines: when the caret sits in the leading indent of a line that still has
     // content, and one or more fully-blank lines sit directly above, remove that whole blank gap in ONE press
-    // and re-indent this line to the previous non-blank line's indent — collapsing e.g. `Column(\n\n) {` back
-    // to `Column(\n) {`. (A truly blank current line falls through to the per-line case below.)
+    // and re-indent this line. The base is the previous non-blank line's indent; when that line OPENS a block
+    // (a trailing opener, a Kotlin `->`, a brace-less header, or an XML start tag) the collapsed line lands one
+    // level deeper — `Column {\n\n   |Text(…)` → `Column {\n        Text(…)` — unless the line is itself the
+    // matching closer, which stays at the opener's indent: `Column(\n\n|) {` → `Column(\n) {`. (A truly blank
+    // current line falls through to the per-line case below.)
     run {
         val lineStart = lineStartOf(text, pos)
         if (isBlankBefore(text, lineStart, pos) && !isBlankToLineEnd(text, pos)) {
@@ -136,7 +147,9 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int): RangeEdit? {
                 val prevLineStart = lineStartOf(text, p - 1)
                 var k = prevLineStart
                 while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
-                val ins = "\n" + text.subSequence(prevLineStart, k).toString()
+                val prevIndent = text.subSequence(prevLineStart, k).toString()
+                val deeper = lineOpensBlock(text, prevLineStart, p, language) && !startsWithCloser(text, pos, language)
+                val ins = "\n" + prevIndent + (if (deeper) detectIndentUnit(text) else "")
                 return RangeEdit(p, pos, ins, p + ins.length)
             }
         }
@@ -170,6 +183,19 @@ private fun isBlankBefore(text: CharSequence, lineStart: Int, pos: Int): Boolean
     var i = lineStart
     while (i < pos) { val c = text[i]; if (c != ' ' && c != '\t') return false; i++ }
     return true
+}
+
+/**
+ * True when the first non-blank char at/after [pos] begins a closer that pairs back to an opener on a
+ * preceding line — `)`/`]`/`}` in brace languages, `</` in XML. Such a line lines up with its opener rather
+ * than indenting one level deeper into the block.
+ */
+private fun startsWithCloser(text: CharSequence, pos: Int, language: CodeLanguage): Boolean {
+    var i = pos
+    while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+    val c = text.charOrNull(i) ?: return false
+    return if (language == CodeLanguage.Xml) c == '<' && text.charOrNull(i + 1) == '/'
+    else c == ')' || c == ']' || c == '}'
 }
 
 /** True when `[pos, end-of-line)` is only spaces/tabs — i.e. the caret has no real content after it. */

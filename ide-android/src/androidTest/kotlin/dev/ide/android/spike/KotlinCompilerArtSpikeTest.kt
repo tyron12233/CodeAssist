@@ -194,6 +194,114 @@ class KotlinCompilerArtSpikeTest {
         )
     }
 
+    /**
+     * Latency spike: how long does compiling a trivial `fun main() {}` actually take on ART, and how much of
+     * that is one-time compiler startup vs. paid-every-time overhead? Compiles the same minimal file several
+     * times in-process with `kotlin.environment.keepalive` set (exactly as the build's [KotlinJvmCompiler]
+     * does), timing each `K2JVMCompiler.exec()`. Compile #1 is COLD (class-loads the compiler + stands up the
+     * application environment + indexes the classpath); #2+ are WARM (app env + mmap'd jar FS reused, but a
+     * fresh project environment + classpath index is built per exec). The gap between them is the prize a
+     * warm-session refactor would capture; the warm number is the floor a single edit-run currently pays.
+     *
+     *     ./gradlew :ide-android:connectedDebugAndroidTest \
+     *       -Pandroid.testInstrumentationRunnerArguments.class=dev.ide.android.spike.KotlinCompilerArtSpikeTest#kotlinCompileTimingOnArt
+     *     adb logcat -s KotlincArtSpike
+     */
+    @Test
+    fun kotlinCompileTimingOnArt() {
+        // Match the real build: keep the compiler's application environment + jar FS warm across compiles.
+        // Must be set before the first KotlinCoreEnvironment is created (i.e. before exec #1).
+        System.setProperty("kotlin.environment.keepalive", "true")
+
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val work = File(ctx.filesDir, "kotlinc-timing-spike").apply { deleteRecursively(); mkdirs() }
+
+        val home = provisionKotlincHome(ctx, File(work, "kotlinc-home"))
+        System.setProperty("kotlinc.art.home", home.absolutePath)
+
+        val androidJar = copyAsset(ctx, "android.jar", File(work, "android.jar"))
+        val stdlibJar = copyAsset(ctx, "kotlin-stdlib.jar", File(work, "kotlin-stdlib.jar"))
+
+        val srcDir = File(work, "src").apply { mkdirs() }
+        File(srcDir, "Main.kt").writeText("fun main() {}\n")
+
+        val runs = 5
+        val timings = LongArray(runs)
+        for (i in 0 until runs) {
+            val outDir = File(work, "out$i").apply { deleteRecursively(); mkdirs() }
+            val args = K2JVMCompilerArguments().apply {
+                freeArgs = listOf(srcDir.absolutePath)
+                destination = outDir.absolutePath
+                classpath = listOf(androidJar, stdlibJar).joinToString(File.pathSeparator) { it.absolutePath }
+                noJdk = true
+                noStdlib = true
+                noReflect = true
+                jvmTarget = "1.8"
+            }
+            val messages = RecordingMessageCollector()
+            val start = System.nanoTime()
+            val exit = K2JVMCompiler().exec(messages, Services.EMPTY, args)
+            val ms = (System.nanoTime() - start) / 1_000_000
+            timings[i] = ms
+            val produced = outDir.walkTopDown().count { it.isFile && it.extension == "class" }
+            Log.i(TAG, "TIMING compile #${i + 1} (${if (i == 0) "COLD" else "warm"}): ${ms}ms exit=$exit classes=$produced")
+            assertTrue(
+                "compile #${i + 1} did not succeed: exit=$exit produced=$produced\n${messages.dump()}",
+                exit == ExitCode.OK && produced > 0,
+            )
+        }
+
+        val cold = timings[0]
+        val warm = timings.drop(1)
+        Log.i(
+            TAG,
+            "TIMING SUMMARY fun-main() on ART (keepalive=on): " +
+                "cold=${cold}ms  warm=${warm.joinToString("/") { "${it}ms" }}  warmAvg=${warm.average().toLong()}ms",
+        )
+    }
+
+    /**
+     * Proves the startup pre-warm works on ART end-to-end through the REAL production class
+     * ([dev.ide.lang.kotlin.compile.KotlinJvmCompiler.warmUp] — what `IdeServices` now schedules off-thread at
+     * project open). The warm-up does one throwaway compile that pays the ~1s cold start (class-load + env
+     * standup); the first real compile after it is then warm. Logs both times so the front-loading is visible.
+     */
+    @Test
+    fun kotlinWarmUpFrontLoadsColdStartOnArt() {
+        System.setProperty("kotlin.environment.keepalive", "true")
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val work = File(ctx.filesDir, "kotlinc-warmup-spike").apply { deleteRecursively(); mkdirs() }
+        val home = provisionKotlincHome(ctx, File(work, "kotlinc-home"))
+        System.setProperty("kotlinc.art.home", home.absolutePath)
+        val androidJar = copyAsset(ctx, "android.jar", File(work, "android.jar"))
+        val stdlibJar = copyAsset(ctx, "kotlin-stdlib.jar", File(work, "kotlin-stdlib.jar"))
+
+        val compiler = dev.ide.lang.kotlin.compile.KotlinJvmCompiler()
+
+        // 1) The cost IdeServices now pays in the background at project open (cold: ~1s in a fresh process).
+        val warmStart = System.nanoTime()
+        compiler.warmUp(listOf(androidJar.toPath()))
+        val warmupMs = (System.nanoTime() - warmStart) / 1_000_000
+
+        // 2) The user's first real Run, AFTER the warm-up — should be warm.
+        val srcDir = File(work, "src").apply { mkdirs() }
+        val mainKt = File(srcDir, "Main.kt").apply { writeText("fun main() {}\n") }
+        val outDir = File(work, "out").apply { mkdirs() }
+        val compileStart = System.nanoTime()
+        val result = compiler.compile(
+            kotlinSources = listOf(mainKt.toPath()),
+            javaSources = emptyList(),
+            classpath = listOf(stdlibJar.toPath()),
+            outputDir = outDir.toPath(),
+            bootClasspath = listOf(androidJar.toPath()),
+        )
+        val compileMs = (System.nanoTime() - compileStart) / 1_000_000
+        val produced = outDir.walkTopDown().count { it.isFile && it.extension == "class" }
+
+        Log.i(TAG, "TIMING warmUp=${warmupMs}ms  firstCompileAfterWarmUp=${compileMs}ms  classes=$produced ok=${result.success}")
+        assertTrue("compile after warm-up failed: ${result.messages}", result.success && produced > 0)
+    }
+
     private fun copyAsset(ctx: Context, assetName: String, dest: File): File {
         ctx.assets.open(assetName).use { input -> dest.outputStream().use { input.copyTo(it) } }
         return dest

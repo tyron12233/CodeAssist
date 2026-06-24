@@ -588,6 +588,27 @@ internal fun detectIndentUnit(text: CharSequence): String {
     return " ".repeat(if (unit == 2 || unit == 4 || unit == 8) unit else 4)
 }
 
+/**
+ * Whether the non-blank line `[lineStart, lineEnd)` opens a block that a following line indents one level
+ * deeper into. Shared by smart Enter (via [BraceNewlineHandler]) and smart-backspace's blank-line collapse
+ * ([smartBackspace]). Brace languages: a trailing opener `{`/`(`/`[` (ignoring a trailing `//` comment), a
+ * Kotlin `->`, or a brace-less control-flow header. XML: the line ends with the `>` of an open
+ * (non-self-closing) start tag.
+ */
+internal fun lineOpensBlock(text: CharSequence, lineStart: Int, lineEnd: Int, language: CodeLanguage): Boolean {
+    if (language == CodeLanguage.Xml) {
+        var gt = lineEnd - 1
+        while (gt >= lineStart && (text[gt] == ' ' || text[gt] == '\t')) gt--
+        return gt >= lineStart && text[gt] == '>' && text.charOrNull(gt - 1) != '/' && isOpenStartTagEnd(text, gt)
+    }
+    val end = codeEnd(text, lineStart, lineEnd)
+    val last = lastNonWs(text, lineStart, end) ?: return false
+    if (last == '{' || last == '(' || last == '[') return true
+    val code = text.subSequence(lineStart, end).toString().trim()
+    if (language == CodeLanguage.Kotlin && code.endsWith("->")) return true
+    return bracelessControlFlow(code)
+}
+
 /** Remove one indentation level ([unit]) from the end of [indent], or whatever leading width is there. */
 private fun dropIndentLevel(indent: String, unit: String): String = when {
     indent.endsWith(unit) -> indent.substring(0, indent.length - unit.length)
