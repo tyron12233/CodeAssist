@@ -128,7 +128,8 @@ class IndexServiceImpl(
             // re-syncs to the current scope — segments for artifacts no longer on the classpath fall out, and
             // unchanged artifacts are RE-OPENED from disk (cheap) rather than rebuilt. This is what makes a
             // model-change re-index cheap: a 40k-class android.jar is segmented once and reopened thereafter,
-            // not re-scanned every time. A full rebuild is still available via invalidate() (deletes the .seg).
+            // not re-scanned every time. invalidate() still forces a from-scratch rebuild by deleting THIS
+            // service's segments (it leaves other projects' segments in the shared store untouched).
             closeSegments()
             val artifacts = buildList {
                 scope.jdkHome?.let { add(Artifact.Jrt(it)) }
@@ -146,7 +147,18 @@ class IndexServiceImpl(
             kotlinx.coroutines.coroutineScope {
                 for (art in artifacts) {
                     launch(buildDispatcher) {
-                        indexArtifact(art)
+                        try {
+                            indexArtifact(art)
+                        } catch (c: kotlinx.coroutines.CancellationException) {
+                            throw c
+                        } catch (t: Throwable) {
+                            // One unreadable artifact must NOT cancel the whole index build (a coroutineScope
+                            // child throwing cancels its siblings). The known case: ART's ZipFile throws
+                            // `ZipException: No entries` opening a zero-entry jar (a resource-only AAR's empty
+                            // classes.jar) — on desktop the same jar opens fine, so this aborted only on device.
+                            dev.ide.platform.log.Log.logger("index")
+                                .warn("indexing ${art.label} failed, skipped: ${t.javaClass.simpleName}: ${t.message}")
+                        }
                         setStatus(IndexStatus(true, "Indexing ${art.label}", done.incrementAndGet().toDouble() / total))
                     }
                 }
@@ -161,15 +173,19 @@ class IndexServiceImpl(
     }
 
     override suspend fun invalidate() {
+        // [cacheRoot] holds the STATIC (SDK + library) segments and may be SHARED across projects. Each
+        // artifact is content-addressed to one `.seg`, so two projects depending on the same jar reuse it.
+        // So invalidate must NOT blind-wipe [cacheRoot] (that would delete other projects' segments): it drops
+        // this service's in-memory state and deletes only the segment files THIS service has open (its working
+        // set), so a "Re-index" forces those artifacts to rebuild without disturbing other projects. Reclaiming
+        // orphaned segments (a jar changed → a stale `.seg`) is a shared-store GC concern, intentionally not
+        // done here. The in-memory source side is always per-project. Capture paths before closeSegments()
+        // clears openHashes; close channels first so the files aren't held open when we delete them.
+        val openFiles = states.values.flatMap { st -> st.openHashes.map { key -> segmentFileForKey(st.ext, key) } }
         closeSegments()
         states.values.forEach { it.source.clear(); it.sourceByFile.clear() }
         blockCache.clear()
-        runCatching {
-            if (Files.isDirectory(cacheRoot)) Files.walk(cacheRoot).use { stream ->
-                stream.sorted(compareByDescending { it.toString() }) // children before their parents
-                    .forEach { p -> if (p != cacheRoot) Files.deleteIfExists(p) }
-            }
-        }
+        runCatching { openFiles.forEach { Files.deleteIfExists(it); pruneEmptyParents(it) } }
         setStatus(IndexStatus(building = false, message = "Index cleared", fraction = -1.0))
     }
 
@@ -282,8 +298,23 @@ class IndexServiceImpl(
 
     // ---- segment files ----
 
-    private fun segmentFile(ext: IndexExtension<*, *>, hash: ContentHash): Path =
-        cacheRoot.resolve(ext.id.value).resolve("v${ext.version}").resolve(sanitize(hash.value) + ".seg")
+    private fun segmentFile(ext: IndexExtension<*, *>, hash: ContentHash): Path = segmentFileForKey(ext, sanitize(hash.value))
+
+    /** The segment path for an already-sanitized content-hash key (the on-disk filename is `<key>.seg`). */
+    private fun segmentFileForKey(ext: IndexExtension<*, *>, key: String): Path =
+        cacheRoot.resolve(ext.id.value).resolve("v${ext.version}").resolve("$key.seg")
+
+    /** After removing a segment, delete its now-empty parent dirs up to (but not including) [cacheRoot], so a
+     *  scoped invalidate leaves no empty `<indexId>/v<n>` shells behind. Stops at the first non-empty dir. */
+    private fun pruneEmptyParents(file: Path) {
+        var dir: Path? = file.parent
+        while (dir != null && dir != cacheRoot && dir.startsWith(cacheRoot)) {
+            val d = dir
+            val empty = runCatching { Files.list(d).use { it.findAny().isEmpty } }.getOrDefault(false)
+            if (!empty || !runCatching { Files.deleteIfExists(d) }.getOrDefault(false)) break
+            dir = d.parent
+        }
+    }
 
     private fun sanitize(s: String) = s.map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("")
 
@@ -301,7 +332,11 @@ class IndexServiceImpl(
                 return ContentHash("jar-${path.fileName}-${attrs.first}-${attrs.second}")
             }
             override fun open(): Pair<Sequence<IndexInput>, Closeable> {
-                val zip = ZipFile(path.toFile())
+                // ART's ZipFile throws `ZipException: No entries` on a zero-entry jar (a resource-only AAR's
+                // empty classes.jar) and on a corrupt one; treat an unopenable jar as empty rather than letting
+                // it abort the index build. (The desktop JVM opens an empty jar fine, so this only bit on device.)
+                val zip = runCatching { ZipFile(path.toFile()) }.getOrNull()
+                    ?: return emptySequence<IndexInput>() to Closeable {}
                 val hash = contentHash()
                 // `.class` (the bytecode indexes) plus `.kotlin_builtins` (Kotlin's intrinsic List/Int/String/…
                 // shapes, kept in kotlin-stdlib as protobuf, not bytecode). Each extension's inputFilter selects

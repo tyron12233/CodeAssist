@@ -101,4 +101,59 @@ class IndexEngineTest {
             cache.toFile().deleteRecursively()
         }
     }
+
+    /**
+     * One unreadable library jar must NOT abort the whole index build. On ART, `ZipFile` throws
+     * `ZipException: No entries` opening a zero-entry jar (a resource-only AAR's empty classes.jar); a corrupt
+     * jar throws on any JVM. Either way the build launches one coroutine per artifact under a `coroutineScope`,
+     * so an uncaught throw would cancel every sibling and leave the index empty — exactly the device-only
+     * "tiny/empty segments, no symbols" failure. The good jar must still index.
+     */
+    @Test
+    fun oneUnreadableJarDoesNotAbortTheIndexBuild() {
+        val cache = Files.createTempDirectory("idx")
+        val libs = Files.createTempDirectory("idxlibs")
+        try {
+            val good = libs.resolve("good.jar")
+            java.util.zip.ZipOutputStream(Files.newOutputStream(good)).use { z ->
+                z.putNextEntry(java.util.zip.ZipEntry("com/foo/Bar.class")); z.write(byteArrayOf(1, 2)); z.closeEntry()
+            }
+            // Garbage bytes → ZipFile throws (the desktop-reproducible analog of ART's zero-entry "No entries").
+            val bad = libs.resolve("bad.jar"); Files.write(bad, byteArrayOf(0, 1, 2, 3, 4))
+
+            val svc = service(cache)
+            // `bad` first, so without per-artifact isolation its throw would cancel `good`'s indexing.
+            runBlocking { svc.ensureUpToDate(IndexScope(libraryJars = listOf(bad, good))) }
+            val hits = svc.prefix<ClassNameValue>(CLASS, "Bar", 50).map { it.value.fqn }.toList()
+            assertTrue("com.foo.Bar" in hits, "good jar must index despite a sibling unreadable jar; got $hits")
+        } finally {
+            cache.toFile().deleteRecursively(); libs.toFile().deleteRecursively()
+        }
+    }
+
+    /** The static segment store is shared across projects, so a per-project invalidate() must drop only its
+     *  OWN segments, not another project's segments living in the same content-addressed root. */
+    @Test
+    fun invalidateRemovesOnlyThisServicesSegmentsNotTheSharedRoot() {
+        val cache = Files.createTempDirectory("idx")
+        try {
+            val svc = service(cache)
+            runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
+            // A segment another project put in the SHARED root (a different index id); invalidate must keep it.
+            val foreign = cache.resolve("other.index").resolve("v1").resolve("foreign.seg")
+            Files.createDirectories(foreign.parent); Files.write(foreign, byteArrayOf(1, 2, 3))
+
+            runBlocking { svc.invalidate() }
+
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "List", 50).none(), "invalidate must drop this service's built data")
+            assertTrue(Files.exists(foreign), "invalidate must NOT delete another project's segment in the shared root")
+            val mine = Files.walk(cache).use { s -> s.filter { it.toString().endsWith(".seg") && it != foreign }.toList() }
+            assertTrue(mine.isEmpty(), "invalidate must remove this service's own segments, left: $mine")
+
+            runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
+            assertTrue(svc.prefix<ClassNameValue>(CLASS, "List", 50).any { it.value.fqn == "java.util.List" }, "rebuild after invalidate")
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
 }

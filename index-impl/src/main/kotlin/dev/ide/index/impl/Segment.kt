@@ -18,6 +18,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.util.TreeMap
+import java.util.UUID
 
 /** One (term, value, origin) entry handed to the indexer — the unit both the segment and the source side store. */
 internal class IndexEntry(val term: String, val value: Any, val origin: IndexOrigin)
@@ -322,38 +323,46 @@ internal class Segment private constructor(
             val postingsBytes = postings.toByteArray(); val namesBytes = names.toByteArray()
 
             Files.createDirectories(file.parent)
-            val tmp = file.resolveSibling(file.fileName.toString() + ".tmp")
-            DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmp))).use { out ->
-                var pos = 0L
-                val postingsBase = pos; out.write(postingsBytes); pos += postingsBytes.size
-                val namesBase = pos; out.write(namesBytes); pos += namesBytes.size
-                val tgNamesBase = pos; out.write(tgNamesBytes); pos += tgNamesBytes.size
-                val tgPostingsBase = pos; out.write(tgPostingsBytes); pos += tgPostingsBytes.size
-                val footerStart = pos
+            // Unique temp per writer: the static segment store can be SHARED across projects, so two index
+            // services may build the same content-hashed segment at once. A fixed "<name>.tmp" would let them
+            // clobber each other's half-written temp; a unique suffix keeps the writes independent. The bytes
+            // are deterministic, so the final ATOMIC_MOVE is idempotent: last writer wins with equal content.
+            val tmp = file.resolveSibling("${file.fileName}.${UUID.randomUUID()}.tmp")
+            try {
+                DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmp))).use { out ->
+                    var pos = 0L
+                    val postingsBase = pos; out.write(postingsBytes); pos += postingsBytes.size
+                    val namesBase = pos; out.write(namesBytes); pos += namesBytes.size
+                    val tgNamesBase = pos; out.write(tgNamesBytes); pos += tgNamesBytes.size
+                    val tgPostingsBase = pos; out.write(tgPostingsBytes); pos += tgPostingsBytes.size
+                    val footerStart = pos
 
-                out.writeVarLong(sparseTerms.size.toLong())
-                for (i in sparseTerms.indices) {
-                    val sb = sparseTerms[i].toByteArray(Charsets.UTF_8)
-                    out.writeVarLong(sb.size.toLong()); out.write(sb); out.writeVarLong(sparseTermOff[i])
-                }
-                out.writeByte(if (fuzzy) 1 else 0)
-                if (fuzzy) {
-                    out.writeVarLong(sparseGrams.size.toLong())
-                    for (i in sparseGrams.indices) {
-                        val gb = sparseGrams[i].toByteArray(Charsets.UTF_8)
-                        out.writeVarLong(gb.size.toLong()); out.write(gb); out.writeVarLong(sparseGramOff[i])
+                    out.writeVarLong(sparseTerms.size.toLong())
+                    for (i in sparseTerms.indices) {
+                        val sb = sparseTerms[i].toByteArray(Charsets.UTF_8)
+                        out.writeVarLong(sb.size.toLong()); out.write(sb); out.writeVarLong(sparseTermOff[i])
                     }
+                    out.writeByte(if (fuzzy) 1 else 0)
+                    if (fuzzy) {
+                        out.writeVarLong(sparseGrams.size.toLong())
+                        for (i in sparseGrams.indices) {
+                            val gb = sparseGrams[i].toByteArray(Charsets.UTF_8)
+                            out.writeVarLong(gb.size.toLong()); out.write(gb); out.writeVarLong(sparseGramOff[i])
+                        }
+                    }
+                    out.writeInt(ext.version)
+                    out.writeVarLong(numTerms.toLong())
+                    out.writeVarLong(postingsBase); out.writeVarLong(postingsBytes.size.toLong())
+                    out.writeVarLong(namesBase); out.writeVarLong(namesBytes.size.toLong())
+                    out.writeVarLong(tgNamesBase); out.writeVarLong(tgNamesBytes.size.toLong())
+                    out.writeVarLong(tgPostingsBase); out.writeVarLong(tgPostingsBytes.size.toLong())
+                    out.writeInt(MAGIC)
+                    out.writeLong(footerStart)
                 }
-                out.writeInt(ext.version)
-                out.writeVarLong(numTerms.toLong())
-                out.writeVarLong(postingsBase); out.writeVarLong(postingsBytes.size.toLong())
-                out.writeVarLong(namesBase); out.writeVarLong(namesBytes.size.toLong())
-                out.writeVarLong(tgNamesBase); out.writeVarLong(tgNamesBytes.size.toLong())
-                out.writeVarLong(tgPostingsBase); out.writeVarLong(tgPostingsBytes.size.toLong())
-                out.writeInt(MAGIC)
-                out.writeLong(footerStart)
+                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } finally {
+                Files.deleteIfExists(tmp) // no-op after a successful move; removes a half-written temp on failure
             }
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         }
 
         /** Largest index `i` with `keys[i] <= key`, clamped to 0 (the array is sorted and non-empty here). */

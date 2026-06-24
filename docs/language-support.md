@@ -62,8 +62,13 @@ The indexing engine has two sides:
 
 - **Static (SDK + library) indices** are disk-backed immutable segments — one per artifact, keyed by
   content hash, queried in place through a bounded block cache. Heap stays flat regardless of index
-  size; the only resident state is a sparse term index.
-- **Source indices** are in-memory and incremental on edit.
+  size; the only resident state is a sparse term index. Because the segments are content-addressed
+  (identical jars produce identical segments), they live under the host's **shared cache root** and are
+  **reused across projects** (like the dex and Maven caches), so each project doesn't re-index the same
+  AndroidX/Compose/stdlib jars. Segment writes are atomic (unique temp + atomic rename), so concurrent
+  builders of the same segment can't corrupt it. A per-project `invalidate()` ("Re-index") deletes only
+  that project's own segments, never another project's, in the shared store.
+- **Source indices** are in-memory and incremental on edit (always per-project).
 
 Built-in indices cover class names, packages, source symbols, bytecode members, and Android resources.
 Completion, go-to-symbol, and the unresolved-resource inspection all query the index, with a
