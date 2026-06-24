@@ -21,6 +21,7 @@ object AarExtractor {
         val assetsDir: Path?,
         val manifest: Path?,
         val jniDir: Path?,
+        val proguardTxt: Path?,        // the AAR's consumer keep rules (root `proguard.txt`), applied by the app's R8
     )
 
     fun explode(aar: Path, into: Path): Exploded {
@@ -38,6 +39,7 @@ object AarExtractor {
             assetsDir = into.resolve("assets").takeIf { Files.isDirectory(it) },
             manifest = into.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
             jniDir = into.resolve("jni").takeIf { Files.isDirectory(it) },
+            proguardTxt = into.resolve("proguard.txt").takeIf { Files.isRegularFile(it) },
         )
     }
 

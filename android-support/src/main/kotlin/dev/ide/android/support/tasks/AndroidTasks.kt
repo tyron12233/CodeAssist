@@ -2,7 +2,11 @@ package dev.ide.android.support.tasks
 
 import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.ApkSigner
+import dev.ide.android.support.tools.DesugaredLibrary
 import dev.ide.android.support.tools.Dexer
+import dev.ide.android.support.tools.L8Request
+import dev.ide.android.support.tools.ResourceShrink
+import dev.ide.android.support.tools.ShrinkRequest
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.Task
@@ -288,6 +292,10 @@ internal class Aapt2LinkTask(
     private val genJavaDir: Path,
     private val resourcesAp: Path,
     private val aapt2: Aapt2,
+    /** When set, aapt2 `--proguard` writes the manifest/layout keep rules here for the R8 minify task. */
+    private val proguardRules: Path? = null,
+    /** When true, link to proto resources (the input form R8's resource shrinker reads). */
+    private val protoFormat: Boolean = false,
 ) : Task {
     private fun archives(): List<Path> =
         if (Files.isDirectory(compiledDir)) Files.list(compiledDir).use { s ->
@@ -306,11 +314,14 @@ internal class Aapt2LinkTask(
             property("versionCode", versionCode)
             property("versionName", versionName)
             property("androidJar", androidJar.toString())
+            property("proguard", proguardRules != null)
+            property("proto", protoFormat)
         }
     override val outputs: TaskOutputs
         get() = TaskOutputsImpl().apply {
             filePath("ap", resourcesAp)
             dirPath("R", genJavaDir)
+            proguardRules?.let { filePath("proguard", it) }
         }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
@@ -326,7 +337,9 @@ internal class Aapt2LinkTask(
             genJavaDir,
             resourcesAp,
             versionCode,
-            versionName
+            versionName,
+            proguardRules = proguardRules,
+            protoFormat = protoFormat,
         )
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
@@ -476,7 +489,13 @@ internal class DexArchiveBuilderTask(
     private val extDexRoot: Path,
     private val dexer: Dexer,
     private val dexCacheRoot: Path? = null,   // global content-addressed library-dex cache (null = per-project only)
+    private val desugaredLibConfig: Path? = null, // core-library-desugaring config (null = disabled, behaves as before)
 ) : Task {
+    /** A cache key for the desugaring config: empty when disabled, so all cache namespaces are byte-identical
+     *  to the no-desugaring build. Non-empty (content hash) when enabled, so toggling it busts stale dex. */
+    private fun desugarConfigKey(): String =
+        desugaredLibConfig?.takeIf { Files.exists(it) }?.let { DexArchives.fileHash(it) } ?: ""
+
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             dirPaths("project", projectClasses)
@@ -485,6 +504,7 @@ internal class DexArchiveBuilderTask(
             property("minApi", minApi)
             property("release", release)
             property("androidJar", androidJar.toString())
+            desugarConfigKey().takeIf { it.isNotEmpty() }?.let { property("desugarConfig", it) }
         }
     override val outputs: TaskOutputs
         get() = TaskOutputsImpl().apply {
@@ -518,8 +538,12 @@ internal class DexArchiveBuilderTask(
         // class entries and dedupe the desugaring classpath at the class level (see [classpathFor]).
         val classesOf = universeByHash.values.associateWith { DexArchives.classNamesOf(it) }
         // A library's dexed output can depend on this classpath, so a shared-cache bucket is only safe to reuse
-        // under an identical universe — fold the deduped digest into the cache namespace.
-        val desugarDigest = DexArchives.digestOf(universeByHash.keys)
+        // under an identical universe — fold the deduped digest into the cache namespace. The core-library
+        // desugaring config also changes a jar's dex, so it joins the digest WHEN enabled; when disabled the
+        // digest is byte-identical to a no-desugaring build (so existing caches stay valid).
+        val cfgKey = desugarConfigKey()
+        val desugarExtra = if (cfgKey.isEmpty()) emptyList() else listOf("cfg:$cfgKey")
+        val desugarDigest = DexArchives.digestOf(universeByHash.keys + desugarExtra)
 
         var ok = archiveProject(ctx, universeByHash, classesOf)
         // Libraries are atomic jars → per-jar content-hash buckets (a changed lib re-dexes alone).
@@ -563,8 +587,11 @@ internal class DexArchiveBuilderTask(
             ctx.logger()("dexBuilder project scope: no class files to dex ($rootSummary) — app code will be absent from the APK")
             DexArchives.clearClassDex(projectDexRoot); return true
         }
+        // relpath -> content hash, suffixed with the desugaring-config key so enabling/disabling it re-dexes
+        // every class (its dex depends on the config). Empty suffix when disabled = identical to before.
+        val cfg = desugarConfigKey()
         val current =
-            byRel.mapValues { (_, f) -> DexArchives.fileHash(f) }   // relpath -> content hash
+            byRel.mapValues { (_, f) -> DexArchives.fileHash(f) + if (cfg.isEmpty()) "" else ":$cfg" }
         val previous = DexArchives.readClassManifest(projectDexRoot)
         val changed = current.keys.filter { previous[it] != current[it] }      // new or modified
         val removed = previous.keys - current.keys
@@ -593,7 +620,8 @@ internal class DexArchiveBuilderTask(
                 minApi,
                 release,
                 projectDexRoot,
-                threads = DexConcurrency.plan(1).threadsPerInvocation
+                threads = DexConcurrency.plan(1).threadsPerInvocation,
+                desugaredLibConfig = desugaredLibConfig,
             )
             r.log.forEach(ctx.logger()); ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
             if (!r.success) {
@@ -637,7 +665,9 @@ internal class DexArchiveBuilderTask(
      * already provided — by an earlier-kept jar or by [exclude] (the program's own classes, which belong to
      * the input, not the classpath). A jar that fully overlaps an earlier one (e.g. a second kotlin-stdlib) is
      * dropped whole; a partial overlap is also dropped, at worst reviving a benign "Type not found" desugaring
-     * warning for its unique classes — never a hard failure. Resource-only jars (no classes) are always kept.
+     * warning for its unique classes — never a hard failure. A class-less jar (a resource-only AAR's
+     * classes.jar) adds no types to the desugaring classpath and can't even be opened on ART when it is
+     * empty (zero-entry zip → `ZipException: No entries`), so it is excluded.
      */
     private fun classpathFor(
         candidates: Collection<Path>, classesOf: Map<Path, Set<String>>, exclude: Set<String>
@@ -646,7 +676,7 @@ internal class DexArchiveBuilderTask(
         val kept = ArrayList<Path>()
         for (jar in candidates) {
             val cs = classesOf[jar] ?: emptySet()
-            if (cs.isEmpty() || cs.none { it in seen }) {
+            if (cs.isNotEmpty() && cs.none { it in seen }) {
                 kept.add(jar); seen.addAll(cs)
             }
         }
@@ -676,7 +706,9 @@ internal class DexArchiveBuilderTask(
         Files.createDirectories(root)
         val byHash =
             LinkedHashMap<String, Path>()                       // content hash -> a jar (dedups copies)
-        for (jar in jars) hashOf[jar]?.let { byHash.putIfAbsent(it, jar) }
+        // Skip jars with no class entries (a resource-only AAR's classes.jar): they dex to nothing, and an
+        // empty/zero-entry jar can't be opened by ART's zip layer — never hand it to D8.
+        for (jar in jars) hashOf[jar]?.let { h -> if (DexArchives.classNamesOf(jar).isNotEmpty()) byHash.putIfAbsent(h, jar) }
         val keep = byHash.keys.toHashSet()
         val todo =
             byHash.entries.filter { !DexArchives.hasDex(root.resolve(it.key)) }   // tier-1 reuse drops the rest
@@ -735,7 +767,7 @@ internal class DexArchiveBuilderTask(
         }
         DexArchives.clearDir(bucket); Files.createDirectories(bucket)
         val r =
-            dexer.dexArchive(listOf(jar), classpath, androidJar, minApi, release, bucket, threads)
+            dexer.dexArchive(listOf(jar), classpath, androidJar, minApi, release, bucket, threads, desugaredLibConfig)
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
         if (!r.success) {
@@ -781,12 +813,20 @@ internal object DexArchives {
                 }
             }
 
-            isZip(path) -> ZipFile(path.toFile()).use { zf ->
-                zf.entries().toList().filterNot { it.isDirectory }.sortedBy { it.name }
-                    .forEach { e ->
-                        md.update(e.name.toByteArray(Charsets.UTF_8))
-                        zf.getInputStream(e).use { md.update(it.readBytes()) }
+            isZip(path) -> {
+                val read = runCatching {
+                    ZipFile(path.toFile()).use { zf ->
+                        zf.entries().toList().filterNot { it.isDirectory }.sortedBy { it.name }
+                            .forEach { e ->
+                                md.update(e.name.toByteArray(Charsets.UTF_8))
+                                zf.getInputStream(e).use { md.update(it.readBytes()) }
+                            }
                     }
+                }
+                // A jar that ZipFile can't open (ART throws "No entries" on a zero-entry archive, e.g. a
+                // resource-only AAR's empty classes.jar) must not crash the whole dex build — hash its raw
+                // bytes instead, which still gives a stable per-content fingerprint.
+                if (read.isFailure) md.update(runCatching { Files.readAllBytes(path) }.getOrDefault(ByteArray(0)))
             }
 
             Files.isRegularFile(path) -> md.update(Files.readAllBytes(path))
@@ -876,6 +916,7 @@ internal object DexArchives {
     ) {
         jar.parent?.let { Files.createDirectories(it) }
         JarOutputStream(Files.newOutputStream(jar)).use { jos ->
+            var wrote = false
             keys.sorted().forEach { rel ->
                 val f = byRel[rel] ?: return@forEach
                 jos.putNextEntry(JarEntry(rel))
@@ -883,7 +924,11 @@ internal object DexArchives {
                     f, jos
                 )
                 jos.closeEntry()
+                wrote = true
             }
+            // A JarOutputStream closed with ZERO entries throws `ZipException: No entries` on ART; if this scope
+            // had no classes, write a benign manifest so the (class-free) jar stays valid on device. Dexes to nothing.
+            if (!wrote) { jos.putNextEntry(JarEntry("META-INF/MANIFEST.MF")); jos.write("Manifest-Version: 1.0\r\n\r\n".toByteArray()); jos.closeEntry() }
         }
     }
 
@@ -1155,29 +1200,46 @@ internal class DexMergeTask(
 
 /**
  * `minify<Variant>WithR8`: the release dexing path. R8 shrinks/optimizes/obfuscates and dexes every
- * input in a single step (replacing dexBuilder→mergeProjectDex/mergeLibDex→mergeDex), guided by
- * [keepRulesFile] (aapt2's manifest-derived rules when present). Class directories are jarred into
- * [stagingDir] first (R8 reads jars/class files, not raw dirs). The [Shrinker] is the injected R8 port.
+ * input in a single step (replacing dexBuilder->mergeProjectDex/mergeLibDex->mergeDex). [keepRuleFiles]
+ * (aapt2's manifest-derived rules + the build type's proguardFiles + AAR consumer rules) and [inlineRules]
+ * (the build type's raw `proguardRules`) decide what survives; [fullMode] selects R8 full vs ProGuard-compat
+ * mode; [mappingOutput] receives `mapping.txt`; [resources] (when set) shrinks resources in the same run;
+ * [desugaredLibrary] (when set) applies core-library desugaring and emits the L8 keep rules. Class directories
+ * are jarred into [stagingDir] first (R8 reads jars/class files, not raw dirs). [Shrinker] is the injected R8 port.
  */
 internal class R8MinifyTask(
     override val name: TaskName,
     private val programs: List<Path>,
     private val androidJar: Path,
     private val minApi: Int,
-    private val keepRulesFile: Path,
+    private val keepRuleFiles: List<Path>,
+    private val inlineRules: List<String>,
+    private val fullMode: Boolean,
     private val stagingDir: Path,
     private val outDexDir: Path,
     private val shrinker: Shrinker,
+    private val mappingOutput: Path? = null,
+    private val resources: ResourceShrink? = null,
+    private val desugaredLibrary: DesugaredLibrary? = null,
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             dirPaths("classes", programs.filter { Files.isDirectory(it) })
             filePaths("jars", programs.filter { !Files.isDirectory(it) })
-            if (Files.exists(keepRulesFile)) filePaths("keep", listOf(keepRulesFile))
+            filePaths("keep", keepRuleFiles.filter { Files.exists(it) })
+            property("inlineRules", inlineRules.joinToString("\n"))
+            property("fullMode", fullMode)
             property("minApi", minApi)
             property("androidJar", androidJar.toString())
+            resources?.let { filePaths("resIn", listOf(it.inputAp).filter { p -> Files.exists(p) }) }
+            desugaredLibrary?.let { filePaths("desugarConfig", listOf(it.configJson).filter { p -> Files.exists(p) }) }
         }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("dex", outDexDir) }
+    override val outputs: TaskOutputs
+        get() = TaskOutputsImpl().apply {
+            dirPath("dex", outDexDir)
+            mappingOutput?.let { filePath("mapping", it) }
+            resources?.let { filePath("resOut", it.outputAp) }
+        }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
@@ -1188,21 +1250,92 @@ internal class R8MinifyTask(
                 .also { ApkPackaging.jarClasses(p, it) } else p
         }
         if (inputs.isEmpty()) return TaskResult.Failed("nothing to minify")
-        val keepRules =
-            if (Files.exists(keepRulesFile)) Files.readAllLines(keepRulesFile) else emptyList()
         // Cap R8's worker pool: it's the heaviest in-process step, so fewer threads = a smaller peak heap.
         val r = shrinker.shrink(
-            inputs,
-            androidJar,
-            keepRules,
-            minApi,
-            release = true,
-            outDexDir,
-            threads = DexConcurrency.plan(1).threadsPerInvocation
+            ShrinkRequest(
+                programs = inputs,
+                library = androidJar,
+                keepRuleFiles = keepRuleFiles,
+                inlineRules = inlineRules,
+                minApi = minApi,
+                release = true,
+                fullMode = fullMode,
+                outDir = outDexDir,
+                mappingOutput = mappingOutput,
+                resources = resources,
+                desugaredLibrary = desugaredLibrary,
+                threads = DexConcurrency.plan(1).threadsPerInvocation,
+            )
         )
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("r8", r.log, DiagnosticKind.DEX)
         return if (r.success) TaskResult.Success else TaskResult.Failed("R8 minify failed")
+    }
+}
+
+/**
+ * `shrinkResources<Variant>`: convert the R8-shrunk proto resources back to aapt2's binary format for
+ * packaging (R8's resource shrinker reads/writes proto). Falls back to the un-shrunk proto archive when
+ * R8 emitted no shrunk output, so a resource-shrinker hiccup never yields a broken APK - only a larger one.
+ */
+internal class ConvertResourcesTask(
+    override val name: TaskName,
+    private val shrunkProtoAp: Path,
+    private val protoApFallback: Path,
+    private val outBinaryAp: Path,
+    private val aapt2: Aapt2,
+) : Task {
+    private fun source(): Path = if (Files.isRegularFile(shrunkProtoAp)) shrunkProtoAp else protoApFallback
+
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply { filePaths("proto", listOf(source())) }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("ap", outBinaryAp) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        val src = source()
+        if (!Files.isRegularFile(src)) return TaskResult.Failed("no proto resources to convert: $src")
+        if (src == protoApFallback) ctx.logger()("resource shrinking produced no output; packaging un-shrunk resources")
+        val r = aapt2.convert(src, outBinaryAp, toProto = false)
+        r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
+        return if (r.success) TaskResult.Success else TaskResult.Failed("aapt2 convert (proto->binary) failed")
+    }
+}
+
+/**
+ * `l8DexDesugarLib<Variant>`: compile the core-library desugaring runtime (`desugar_jdk_libs`) to dex via
+ * L8, using the keep rules R8/D8 emitted for it. The resulting dex is packaged alongside the app dex so the
+ * backported `java.*` APIs are present at runtime below the native API level.
+ */
+internal class L8DexTask(
+    override val name: TaskName,
+    private val desugarJdkLibs: Path,
+    private val configJson: Path,
+    private val keepRules: Path,
+    private val androidJar: Path,
+    private val minApi: Int,
+    private val release: Boolean,
+    private val outDexDir: Path,
+    private val shrinker: Shrinker,
+) : Task {
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            filePaths("lib", listOf(desugarJdkLibs).filter { Files.exists(it) })
+            filePaths("config", listOf(configJson).filter { Files.exists(it) })
+            filePaths("keep", listOf(keepRules).filter { Files.exists(it) })
+            property("minApi", minApi)
+            property("release", release)
+        }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("dex", outDexDir) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        Files.createDirectories(outDexDir)
+        val r = shrinker.l8(L8Request(desugarJdkLibs, configJson, keepRules, androidJar, minApi, release, outDexDir))
+        r.log.forEach(ctx.logger())
+        ctx.reportToolDiagnostics("l8", r.log, DiagnosticKind.DEX)
+        return if (r.success) TaskResult.Success else TaskResult.Failed("L8 desugared-library dexing failed")
     }
 }
 

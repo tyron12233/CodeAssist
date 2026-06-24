@@ -127,4 +127,48 @@ class AndroidSdkMetadataTest {
         assertTrue("app:customColor" in names, names.toString())
         assertTrue(!md.isWidgetTag("com.example.MyView")) // custom metadata declares no widgets
     }
+
+    @Test
+    fun appCompatSubstitutionOffersAppAttrsOnPlainTags() {
+        // AppCompat's attrs.xml (AAR) declares its app: attrs on the AppCompat* styleables.
+        val custom = AttrsXmlParser.parse(
+            """<resources>
+                 <declare-styleable name="AppCompatImageView">
+                   <attr name="srcCompat" format="reference"/>
+                   <attr name="tint" format="color"/>
+                 </declare-styleable>
+               </resources>"""
+        )
+        val md = AndroidSdkMetadata(
+            0, custom.attrs, custom.styleables, emptyMap(), emptyList(),
+            attrPrefix = "app:", viewSubstitutions = AndroidSdkMetadata.APPCOMPAT_SUBSTITUTIONS,
+        )
+        // A plain <ImageView> is inflated as AppCompatImageView, so its app: attrs surface on the tag typed.
+        val onImageView = md.attributesFor("ImageView", null).map { it.name }
+        assertTrue("app:srcCompat" in onImageView, onImageView.toString())
+        assertTrue("app:tint" in onImageView)
+        // A substituted tag whose AppCompat styleable isn't present invents nothing (TextView → AppCompatTextView,
+        // which has no styleable here).
+        assertTrue(md.attributesFor("TextView", null).none { it.name == "app:srcCompat" })
+    }
+
+    @Test
+    fun customAppAttrsInheritUpTheViewHierarchy() {
+        val custom = AttrsXmlParser.parse(
+            """<resources>
+                 <declare-styleable name="CardView">
+                   <attr name="cardCornerRadius" format="dimension"/>
+                 </declare-styleable>
+                 <declare-styleable name="MaterialCardView">
+                   <attr name="strokeColor" format="color"/>
+                 </declare-styleable>
+               </resources>"""
+        )
+        // MaterialCardView → CardView (→ framework FrameLayout, absent from the map → chain terminates).
+        val hierarchy = mapOf("MaterialCardView" to "CardView", "CardView" to "FrameLayout")
+        val md = AndroidSdkMetadata(0, custom.attrs, custom.styleables, hierarchy, emptyList(), attrPrefix = "app:")
+        val names = md.attributesFor("com.google.android.material.card.MaterialCardView", null).map { it.name }
+        assertTrue("app:strokeColor" in names, names.toString())   // its own
+        assertTrue("app:cardCornerRadius" in names)                // inherited from CardView
+    }
 }

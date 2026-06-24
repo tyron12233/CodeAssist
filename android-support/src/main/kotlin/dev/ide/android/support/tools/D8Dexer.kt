@@ -21,9 +21,10 @@ class D8Dexer(
         minApi: Int,
         release: Boolean,
         outDir: Path,
-        threads: Int
+        threads: Int,
+        desugaredLibConfig: Path?
     ): ToolResult = run(
-        inputs, emptyList(), androidJar, minApi, release, outDir, archive = false, threads = threads
+        inputs, emptyList(), androidJar, minApi, release, outDir, archive = false, threads = threads, desugaredLibConfig = desugaredLibConfig
     )
 
     override fun dexArchive(
@@ -33,9 +34,10 @@ class D8Dexer(
         minApi: Int,
         release: Boolean,
         outDir: Path,
-        threads: Int
+        threads: Int,
+        desugaredLibConfig: Path?
     ): ToolResult = run(
-        inputs, classpath, androidJar, minApi, release, outDir, archive = true, threads = threads
+        inputs, classpath, androidJar, minApi, release, outDir, archive = true, threads = threads, desugaredLibConfig = desugaredLibConfig
     )
 
     private fun run(
@@ -46,7 +48,8 @@ class D8Dexer(
         release: Boolean,
         outDir: Path,
         archive: Boolean,
-        threads: Int
+        threads: Int,
+        desugaredLibConfig: Path?
     ): ToolResult {
         Files.createDirectories(outDir)
         val existing = inputs.filter { Files.exists(it) }
@@ -74,6 +77,10 @@ class D8Dexer(
                 add("--thread-count"); add(threads.toString())
             }
             add("--lib"); add(androidJar.toString())
+            // Core-library desugaring config (rewrite java.* backports; the L8 step dexes the runtime).
+            if (desugaredLibConfig != null && Files.exists(desugaredLibConfig)) {
+                add("--desugared-lib"); add(desugaredLibConfig.toString())
+            }
             add("--output"); add(outDir.toString())
             addAll(existing.map { it.toString() })
         }

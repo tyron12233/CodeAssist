@@ -121,7 +121,8 @@ plugin's shape:
 
 ```
 mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compileJava
-  → dexBuilder → {mergeProjectDex, mergeLibDex, mergeExtDex} → packageApk → sign
+  → dexBuilder → {mergeProjectDex, mergeLibDex, mergeExtDex} → packageApk → sign   (debug / no minify)
+  → minify<Variant>WithR8 (shrink+optimize+obfuscate+dex, +resource shrink) → [shrinkResources →] packageApk → sign   (release / minify)
 ```
 
 - **Resources.** A real `mergeResources` folds dependency library, AAR, and app resources; aapt2
@@ -151,6 +152,27 @@ mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compi
   shared ART heap, so OOM — not cores — is the limit. The worker/thread plan is sized from `maxMemory()`
   (collapsing to a single worker on a tight heap), R8 (the heaviest whole-program pass) runs with a capped
   worker pool, and the on-device launcher requests `android:largeHeap` to raise the per-app ceiling.
+- **Minification (R8) + ProGuard configuration.** When a build type sets `minifyEnabled`, the
+  dexBuilder→merge chain is replaced by a single `minify<Variant>WithR8` task that shrinks, optimizes,
+  obfuscates, and dexes the app plus every library jar in one pass. Keep rules are gathered AGP-style, in
+  order: aapt2's manifest/layout-derived rules (aapt2 link `--proguard`, so XML-referenced activities and
+  custom views survive), the build type's `proguardFiles` (a bundled default such as
+  `proguard-android-optimize.txt`, resolved like AGP's `getDefaultProguardFile(...)`, plus module-relative
+  files), dependency-library and AAR `consumerProguardFiles`, and inline `proguardRules`. `r8FullMode`
+  (default on) selects R8 full mode versus ProGuard-compatibility mode. The obfuscation mapping is written to
+  `outputs/mapping/<variant>/mapping.txt`. With no keep rules at all, R8 falls back to a pass-through config
+  so the dex stays correct.
+- **Resource shrinking.** `shrinkResources` (requires `minifyEnabled`) drops resources unreachable from the
+  shrunken code. aapt2 links in `--proto-format`, R8's integrated resource shrinker reads/writes the proto
+  resources during the same pass, and a `shrinkResources<Variant>` task converts the result back to binary
+  (`aapt2 convert`) for packaging — falling back to the un-shrunk archive if R8 emits none, so a shrinker
+  hiccup never breaks the APK.
+- **Core-library desugaring.** `coreLibraryDesugaringEnabled` makes D8 (debug) / R8 (release) rewrite
+  `java.time`/`java.util.stream`/etc. backport call sites per the desugar config, and an L8 task
+  (`l8DexDesugarLib<Variant>`) dexes the `desugar_jdk_libs` runtime into its own packaged dex layer (kept
+  whole, since L8 release-shrinking against R8's emitted keep rules drops internal helper classes). The
+  desugar runtime + config jars are an injected host artifact; when a host ships none the flag is a no-op.
+  The config folds into the dex cache key only when enabled, so a no-desugaring build's cache is unchanged.
 - **Library-aware.** JAR and AAR dependencies are routed: code to compile/dex, AAR resources into the
   merged app R, AAR assets and JNI into the package.
 - **Decoupled library R.** Each library module gets a non-final R from its own resources (kept out of

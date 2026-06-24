@@ -70,6 +70,7 @@ kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotl
 android-r8 = { module = "com.android.tools:r8", version.ref = "r8" }
 android-apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+desugar-jdk-libs-configuration = { module = "com.android.tools:desugar_jdk_libs_configuration", version.ref = "desugarJdkLibs" }
 ow2-asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 ow2-asm-tree = { module = "org.ow2.asm:asm-tree", version.ref = "asm" }
 ow2-asm-commons = { module = "org.ow2.asm:asm-commons", version.ref = "asm" } # ClassRemapper/Remapper — bridge reparent + type remap

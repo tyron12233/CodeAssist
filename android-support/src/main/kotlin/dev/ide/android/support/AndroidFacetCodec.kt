@@ -27,6 +27,9 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         if (facet.flavorDimensions.isNotEmpty()) put("flavorDimensions", facet.flavorDimensions)
         put("buildTypes", facet.buildTypes.map { encodeBuildType(it) })
         if (facet.productFlavors.isNotEmpty()) put("productFlavors", facet.productFlavors.map { encodeFlavor(it) })
+        // Emit the R8/D8 knobs only when non-default so the encoded map matches a default-valued reload.
+        if (!facet.r8FullMode) put("r8FullMode", false)
+        if (facet.coreLibraryDesugaringEnabled) put("coreLibraryDesugaringEnabled", true)
     }
 
     override fun decode(values: Map<String, Any?>): AndroidFacet {
@@ -44,6 +47,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             buildTypes = values.tableList("buildTypes").map { decodeBuildType(it) }
                 .ifEmpty { AndroidFacet.DEFAULT_BUILD_TYPES },
             productFlavors = values.tableList("productFlavors").map { decodeFlavor(it) },
+            r8FullMode = values["r8FullMode"] as? Boolean ?: true,
+            coreLibraryDesugaringEnabled = values["coreLibraryDesugaringEnabled"] as? Boolean ?: false,
         )
     }
 
@@ -51,6 +56,10 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         put("name", bt.name)
         put("debuggable", bt.debuggable)
         put("minifyEnabled", bt.minifyEnabled)
+        if (bt.shrinkResources) put("shrinkResources", true)
+        if (bt.proguardFiles.isNotEmpty()) put("proguardFiles", bt.proguardFiles)
+        if (bt.consumerProguardFiles.isNotEmpty()) put("consumerProguardFiles", bt.consumerProguardFiles)
+        if (bt.proguardRules.isNotEmpty()) put("proguardRules", bt.proguardRules)
         bt.applicationIdSuffix?.let { put("applicationIdSuffix", it) }
         bt.versionNameSuffix?.let { put("versionNameSuffix", it) }
     }
@@ -61,6 +70,10 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             name = name,
             debuggable = t["debuggable"] as? Boolean ?: (name == "debug"),
             minifyEnabled = t["minifyEnabled"] as? Boolean ?: false,
+            shrinkResources = t["shrinkResources"] as? Boolean ?: false,
+            proguardFiles = t.stringList("proguardFiles"),
+            consumerProguardFiles = t.stringList("consumerProguardFiles"),
+            proguardRules = t.stringList("proguardRules"),
             applicationIdSuffix = t["applicationIdSuffix"] as? String,
             versionNameSuffix = t["versionNameSuffix"] as? String,
         )

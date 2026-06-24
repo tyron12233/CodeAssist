@@ -36,6 +36,18 @@ data class AndroidFacet(
     val buildTypes: List<BuildType> = DEFAULT_BUILD_TYPES,
     /** Product flavors; empty for the common single-variant-per-build-type project. */
     val productFlavors: List<ProductFlavor> = emptyList(),
+    /**
+     * R8 full mode (AGP's `android.enableR8.fullMode`, default on since AGP 8): R8 optimizes more
+     * aggressively and is NOT bound by ProGuard semantics. When false, R8 runs in ProGuard-compatibility
+     * mode (safer for rule sets written for ProGuard, less effective). Build-wide, not per-build-type.
+     */
+    val r8FullMode: Boolean = true,
+    /**
+     * Enable core-library desugaring (AGP's `compileOptions.coreLibraryDesugaringEnabled`): D8/R8 rewrite
+     * uses of `java.time`, `java.util.stream`, `java.nio.file`, etc. to backports so they run below the
+     * native API level, and the desugared runtime is L8-compiled into the APK. Build-wide.
+     */
+    val coreLibraryDesugaringEnabled: Boolean = false,
 ) : Facet {
     override val key: FacetKey<AndroidFacet> get() = KEY
 
@@ -47,7 +59,12 @@ data class AndroidFacet(
 
         val DEFAULT_BUILD_TYPES: List<BuildType> = listOf(
             BuildType("debug", debuggable = true, minifyEnabled = false),
-            BuildType("release", debuggable = false, minifyEnabled = false),
+            // Mirrors AGP's default release block: the proguardFiles are declared even though minify is off,
+            // so flipping minifyEnabled = true picks up the optimizing defaults + a conventional rules file.
+            BuildType(
+                "release", debuggable = false, minifyEnabled = false,
+                proguardFiles = listOf(DefaultProguardFiles.OPTIMIZE, "proguard-rules.pro"),
+            ),
         )
     }
 }
@@ -56,7 +73,26 @@ data class AndroidFacet(
 data class BuildType(
     val name: String,
     val debuggable: Boolean = name == "debug",
+    /** Run R8 (shrink + optimize + obfuscate + dex) instead of the plain D8 dex pipeline. */
     val minifyEnabled: Boolean = false,
+    /**
+     * Strip unused resources from the APK (AGP's `shrinkResources`). Requires [minifyEnabled]; ignored
+     * with a warning when minify is off (resource shrinking is driven by R8's reachable-code analysis).
+     */
+    val shrinkResources: Boolean = false,
+    /**
+     * ProGuard/R8 configuration files. An entry naming a bundled default ([DefaultProguardFiles]) is
+     * resolved from android-support's assets, like AGP's `getDefaultProguardFile(...)`; any other entry
+     * is a module-relative path (e.g. `proguard-rules.pro`). Missing module-relative files are skipped.
+     */
+    val proguardFiles: List<String> = emptyList(),
+    /**
+     * For an `android-lib`: the keep rules this library exports to its consumers (AGP's
+     * `consumerProguardFiles`), packaged into the AAR's `proguard.txt` and applied by the app's R8 run.
+     */
+    val consumerProguardFiles: List<String> = emptyList(),
+    /** Inline ProGuard/R8 directives appended verbatim (the escape hatch for rules not in a file). */
+    val proguardRules: List<String> = emptyList(),
     val applicationIdSuffix: String? = null,
     val versionNameSuffix: String? = null,
 )

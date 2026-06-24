@@ -60,6 +60,23 @@ class MaterialYouTemplateTest {
     }
 
     @Test
+    fun generatesProguardRulesFileForTheReleaseDefault() {
+        withScaffold { scaffold, root ->
+            MaterialYouAppTemplate.generate(scaffold, args())
+            // The default `release` build type references `proguard-rules.pro`; the template writes it so the
+            // entry resolves (instead of R8 silently skipping a missing module file) when minify is enabled.
+            val rules = root.resolve("app/proguard-rules.pro")
+            assertTrue(Files.isRegularFile(rules), "proguard-rules.pro is generated at the module root")
+            assertEquals(
+                "proguard-rules.pro",
+                AndroidFacet.DEFAULT_BUILD_TYPES.first { it.name == "release" }.proguardFiles
+                    .first { !DefaultProguardFiles.isDefault(it) },
+                "the file matches the release build type's module-relative proguardFiles entry",
+            )
+        }
+    }
+
+    @Test
     fun kotlinVariantEmitsKotlinActivity() {
         withScaffold { scaffold, root ->
             MaterialYouAppTemplate.generate(scaffold, args(mapOf("language" to "kotlin")))

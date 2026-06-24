@@ -4,9 +4,11 @@ import dev.ide.android.support.tasks.Aapt2CompileTask
 import dev.ide.android.support.tasks.Aapt2LinkTask
 import dev.ide.android.support.tasks.AndroidCompileTask
 import dev.ide.android.support.tasks.AndroidKotlinCompileTask
+import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
 import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
+import dev.ide.android.support.tasks.L8DexTask
 import dev.ide.android.support.tasks.MergeResourcesTask
 import dev.ide.android.support.tasks.PackageApkTask
 import dev.ide.android.support.tasks.R8MinifyTask
@@ -20,8 +22,11 @@ import dev.ide.android.support.tools.ApksigSigner
 import dev.ide.android.support.tools.D8Dexer
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
+import dev.ide.android.support.tools.DesugarLib
+import dev.ide.android.support.tools.DesugaredLibrary
 import dev.ide.android.support.tools.Dexer
 import dev.ide.android.support.tools.R8InProcessShrinker
+import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.R8Subprocess
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
@@ -84,6 +89,9 @@ class AndroidBuildSystem(
     private val kotlin: IncrementalKotlinCompiler? = null,
     /** Global content-addressed library-dex cache (e.g. the host's shared caches dir); null = per-project only. */
     private val dexCacheRoot: Path? = null,
+    /** Core-library-desugaring artifacts (desugar runtime + config jar); null = host ships none, so a module's
+     *  `coreLibraryDesugaringEnabled` is a no-op. See [DesugarLib]. */
+    private val desugarLib: DesugarLib? = null,
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -162,7 +170,11 @@ class AndroidBuildSystem(
         val assetsDirs = depAndroidLibs.flatMap { moduleRoots(it, ContentRole.ASSETS) } +
             libs.assetsDirs + roots(variant, ContentRole.ASSETS)
         val level = levelOf(app.languageLevel)
-        val release = facet.buildType(variant.buildTypeName)?.debuggable == false
+        val bt = facet.buildType(variant.buildTypeName)
+        val release = bt?.debuggable == false
+        val minify = bt?.minifyEnabled == true
+        // shrinkResources requires minify (R8's reachable-code analysis drives it); ignored otherwise (AGP errors).
+        val shrinkResources = minify && bt.shrinkResources
 
         // versionName composed as AGP does: flavor override (else defaultConfig) + build-type suffix.
         val flavorVersionName = variant.flavorNames.firstNotNullOfOrNull { fn ->
@@ -190,6 +202,8 @@ class AndroidBuildSystem(
 
         tasks.task(mergeRes) { MergeResourcesTask(mergeRes, mergeResInputs, layout.mergedRes) }
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
+        // A minify build needs aapt2's manifest/layout keep rules so R8 does not strip XML-referenced classes;
+        // a shrinkResources build additionally links proto resources (R8's resource-shrinker input form).
         tasks.task(aapt2Link, listOf(aapt2Compile)) {
             Aapt2LinkTask(
                 aapt2Link,
@@ -203,8 +217,10 @@ class AndroidBuildSystem(
                 versionCode,
                 versionName,
                 layout.genJava,
-                layout.resourcesAp,
-                aapt2
+                if (shrinkResources) layout.protoAp else layout.resourcesAp,
+                aapt2,
+                proguardRules = if (minify) layout.aaptProguardRules else null,
+                protoFormat = shrinkResources,
             )
         }
         if (appHasKotlin) {
@@ -250,19 +266,51 @@ class AndroidBuildSystem(
         val moduleJarProducers = closure.map { TaskName(":${it.name}:jar") }
         val externalJars = libs.dexJars
 
-        // The merged dex layers the packager assembles (renumbered into one classes*.dex set) + packageApk's deps.
-        val dexDirs: List<Path>
-        val pkgDeps: List<TaskName>
+        // Core-library desugaring: extract the config when enabled and the host ships the artifacts. The R8
+        // (minify) path emits L8 keep rules and shrinks the runtime; the D8 (debug) path keeps the whole runtime.
+        val desugaring = if (facet.coreLibraryDesugaringEnabled) desugarLib else null
+        val desugarJson = desugaring?.extractConfigJson(layout.desugarConfigJson)
 
-        if (facet.buildType(variant.buildTypeName)?.minifyEnabled == true) {
-            // Release: R8 shrinks + dexes app classes + every library jar in one pass into a single dex dir.
-            val minify = TaskName(":${app.name}:minify${v}WithR8")
-            tasks.task(minify, listOf(aapt2Link, compile) + moduleJarProducers) {
-                R8MinifyTask(minify, appProjectClasses + subProjectJars + externalJars, sdk.androidJar, facet.minSdk,
-                    layout.aaptProguardRules, layout.dexArchives.resolve("r8-staging"), layout.dex, shrinker)
+        // The merged dex layers the packager assembles (renumbered into one classes*.dex set) + packageApk's deps.
+        var dexDirs: List<Path>
+        var pkgDeps: List<TaskName>
+
+        if (minify) {
+            // Release: R8 shrinks + optimizes + obfuscates + dexes app classes + every library jar in one pass.
+            // Keep-rule sources, in AGP order: aapt2's manifest/layout rules, then the build type's
+            // proguardFiles (bundled defaults + module files), then dependency-lib + AAR consumer rules.
+            val appProguard = resolveProguardFiles(bt.proguardFiles, layout.moduleDir, layout.proguardDefaults)
+            val depConsumer = depAndroidLibs.flatMap { lib ->
+                val libDir = Paths.get(lib.outputDir.path).parent.parent
+                val libBt = lib.facets.get(AndroidFacet.KEY)?.buildType?.invoke(variant.buildTypeName)
+                resolveProguardFiles(libBt?.consumerProguardFiles ?: emptyList(), libDir, layout.proguardDefaults)
+            }
+            val keepRuleFiles = listOf(layout.aaptProguardRules) + appProguard + depConsumer + libs.consumerProguardFiles
+            val inlineRules = bt.proguardRules
+            val resourceShrink = if (shrinkResources) ResourceShrink(layout.protoAp, layout.shrunkProtoAp) else null
+
+            val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
+            tasks.task(minifyTask, listOf(aapt2Link, compile) + moduleJarProducers) {
+                R8MinifyTask(
+                    minifyTask, appProjectClasses + subProjectJars + externalJars, sdk.androidJar, facet.minSdk,
+                    keepRuleFiles, inlineRules, facet.r8FullMode,
+                    layout.dexArchives.resolve("r8-staging"), layout.dex, shrinker,
+                    mappingOutput = layout.mappingTxt,
+                    resources = resourceShrink,
+                    desugaredLibrary = desugarJson?.let { DesugaredLibrary(it, layout.desugarKeepRules) },
+                )
             }
             dexDirs = listOf(layout.dex)
-            pkgDeps = listOf(aapt2Link, minify)
+            if (shrinkResources) {
+                // R8 emitted shrunk PROTO resources; convert them back to binary for packaging.
+                val shrinkRes = TaskName(":${app.name}:shrinkResources$v")
+                tasks.task(shrinkRes, listOf(minifyTask)) {
+                    ConvertResourcesTask(shrinkRes, layout.shrunkProtoAp, layout.protoAp, layout.resourcesAp, aapt2)
+                }
+                pkgDeps = listOf(shrinkRes, minifyTask)
+            } else {
+                pkgDeps = listOf(aapt2Link, minifyTask)
+            }
         } else {
             // Debug: ONE dexBuilder archives each scope (per-class, content-addressed, internally incremental);
             // the scope merges combine the archives into indexed dex. AGP names: dexBuilder → mergeProjectDex /
@@ -271,7 +319,8 @@ class AndroidBuildSystem(
             tasks.task(dexBuilder, listOf(compile) + moduleJarProducers) {
                 DexArchiveBuilderTask(dexBuilder, appProjectClasses, subProjectJars, externalJars, sdk.androidJar,
                     facet.minSdk, release, layout.dexArchives.resolve("project.jar"),
-                    layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot)
+                    layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot,
+                    desugaredLibConfig = desugarJson)
             }
             if (facet.minSdk >= 21) {
                 // Native multidex: ART loads many dex, so keep the scopes split for the best incrementality.
@@ -307,6 +356,23 @@ class AndroidBuildSystem(
                 }
                 dexDirs = listOf(layout.dex); pkgDeps = listOf(aapt2Link, mergeDex)
             }
+        }
+
+        // Core-library desugaring runtime (L8): dex `desugar_jdk_libs` into its own layer, packaged alongside
+        // the app dex. We keep the WHOLE runtime (L8 keep-all) rather than shrinking it to the app's used APIs:
+        // L8 release-shrinking against R8's emitted keep rules drops internal `j$.util.*Conversions` helpers
+        // that surviving classes still reference ("Missing class"). Keeping all is correct and only slightly
+        // larger. It needs only the (config-time) desugar config + runtime jar, so it has no task dependency.
+        if (desugarJson != null && desugaring != null) {
+            val l8 = step("l8DexDesugarLib")
+            tasks.task(l8) {
+                L8DexTask(
+                    l8, desugaring.runtimeJar, desugarJson, layout.desugarKeepRules, sdk.androidJar,
+                    facet.minSdk, release = false, layout.desugarLibDex, shrinker,
+                )
+            }
+            dexDirs = dexDirs + listOf(layout.desugarLibDex)
+            pkgDeps = pkgDeps + listOf(l8)
         }
 
         tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, libs.jniLibDirs, layout.unsignedApk) }
@@ -432,7 +498,7 @@ class AndroidBuildSystem(
     private inner class Layout(module: Module, variantName: String) {
         private val classesOut: Path = Paths.get(module.outputDir.path)   // <module>/build/classes
         private val buildDir: Path = classesOut.parent                  // <module>/build
-        private val moduleDir: Path = buildDir.parent                   // <module>
+        private val moduleDirField: Path = buildDir.parent              // <module>
         private val inter: Path = buildDir.resolve("intermediates").resolve("android").resolve(variantName)
 
         val mergedRes: Path = inter.resolve("merged-res")
@@ -450,12 +516,21 @@ class AndroidBuildSystem(
         val extDex: Path = inter.resolve("ext-dex")             // mergeExtDex output (external library code)
         val resourcesAp: Path = inter.resolve("resources.ap_")
         val aaptProguardRules: Path = inter.resolve("aapt_rules.txt") // keep rules aapt2 derives from the manifest
+        val proguardDefaults: Path = inter.resolve("proguard-defaults") // bundled default proguard files, extracted
         val dex: Path = inter.resolve("dex")                    // mergeDex / R8 output (mono-/legacy-multidex)
+        val desugarLibDex: Path = inter.resolve("desugar-lib-dex") // L8 output: the core-library desugaring runtime
+        val desugarConfigJson: Path = inter.resolve("desugar.json")  // extracted from the desugar config jar
+        val desugarKeepRules: Path = inter.resolve("l8-keep.pro")    // keep rules R8 emits for the L8 runtime shrink
+        val protoAp: Path = inter.resolve("resources-proto.ap_")  // aapt2 proto link (resource-shrinking input)
+        val shrunkProtoAp: Path = inter.resolve("resources-proto-shrunk.ap_") // R8-shrunk proto resources
         val unsignedApk: Path = inter.resolve("${module.name}-$variantName-unsigned.apk")
         val signedApk: Path = buildDir.resolve("outputs").resolve("apk").resolve(variantName)
             .resolve("${module.name}-$variantName.apk")
+        // mapping.txt for stack-trace de-obfuscation; AGP's outputs/mapping/<variant>/mapping.txt.
+        val mappingTxt: Path = buildDir.resolve("outputs").resolve("mapping").resolve(variantName).resolve("mapping.txt")
 
-        fun manifest(facet: AndroidFacet): Path = moduleDir.resolve(facet.manifest)
+        val moduleDir: Path get() = this@Layout.moduleDirField
+        fun manifest(facet: AndroidFacet): Path = moduleDirField.resolve(facet.manifest)
     }
 
     companion object {
@@ -486,8 +561,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
-            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, dexCacheRoot = dexCacheRoot)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -496,7 +571,7 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 dexer = D8InProcessDexer(),
@@ -504,6 +579,7 @@ class AndroidBuildSystem(
                 signer = ApksigSigner(),
                 kotlin = kotlin,
                 dexCacheRoot = dexCacheRoot,
+                desugarLib = desugarLib,
             )
 
         /** A debug-signed [subprocess] build system, creating the shared debug keystore on demand. */

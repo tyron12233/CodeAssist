@@ -1,48 +1,102 @@
 package dev.ide.android.support.tools
 
 import com.android.tools.r8.CompilationMode
+import com.android.tools.r8.Diagnostic
+import com.android.tools.r8.DiagnosticsHandler
+import com.android.tools.r8.L8
+import com.android.tools.r8.L8Command
 import com.android.tools.r8.OutputMode
 import com.android.tools.r8.R8
 import com.android.tools.r8.R8Command
+import com.android.tools.r8.StringConsumer
 import com.android.tools.r8.origin.Origin
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.concurrent.Executors
 
 /**
- * Shrinks + dexes in-process via the R8 API (`com.android.tools.r8.R8`) — the on-device counterpart to
- * [D8InProcessDexer] (R8 ships in the same pure-Java tool jar). [library] (`android.jar`) is the
- * bootclasspath, kept out of the output; [keepRules] are ProGuard-syntax rules (manifest-derived, etc.).
- * With no keep rules it adds `-dontshrink -dontoptimize -dontobfuscate` so the result is a correct dex
- * (R8 acting as D8) rather than an over-shrunk one.
+ * Shrinks + dexes in-process via the R8 API (`com.android.tools.r8.R8`) and dexes the core-library
+ * desugaring runtime via L8 (`com.android.tools.r8.L8`) - the on-device counterpart to [D8InProcessDexer]
+ * (R8/L8 ship in the same pure-Java tool jar). All keep rules, the mapping output, full/compat mode,
+ * integrated resource shrinking, and core-library desugaring are driven through the public R8 API; with no
+ * keep rules at all it falls back to [R8_PASS_THROUGH] so the result is a correct dex rather than over-shrunk.
  */
 class R8InProcessShrinker : Shrinker {
 
-    override fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult {
-        Files.createDirectories(outDir)
-        val progs = programs.filter { Files.exists(it) }
+    override fun shrink(request: ShrinkRequest): ToolResult {
+        Files.createDirectories(request.outDir)
+        val progs = request.programs.filter { Files.exists(it) }
         if (progs.isEmpty()) return ToolResult.fail("no inputs to shrink")
         return try {
             val builder = R8Command.builder()
                 .addProgramFiles(progs)
-                .setMinApiLevel(minApi)
-                .setMode(if (release) CompilationMode.RELEASE else CompilationMode.DEBUG)
-                .setOutput(outDir, OutputMode.DexIndexed)
-            if (Files.exists(library)) builder.addLibraryFiles(library)
-            val rules = keepRules.ifEmpty { listOf("-dontshrink", "-dontoptimize", "-dontobfuscate", "-ignorewarnings") }
-            builder.addProguardConfiguration(rules, Origin.unknown())
+                .setMinApiLevel(request.minApi)
+                .setMode(if (request.release) CompilationMode.RELEASE else CompilationMode.DEBUG)
+                .setOutput(request.outDir, OutputMode.DexIndexed)
+                // Full mode is R8's default (compatibility = false); compat mode mimics legacy ProGuard.
+                .setProguardCompatibility(!request.fullMode)
+            if (Files.exists(request.library)) builder.addLibraryFiles(request.library)
+            request.classpath.filter { Files.exists(it) }.takeIf { it.isNotEmpty() }
+                ?.let { builder.addClasspathFiles(it) }
+
+            val keepFiles = request.keepRuleFiles.filter { Files.exists(it) }
+            if (keepFiles.isNotEmpty()) builder.addProguardConfigurationFiles(keepFiles)
+            val inline = ArrayList(request.inlineRules)
+            if (keepFiles.isEmpty() && inline.isEmpty()) inline.addAll(R8_PASS_THROUGH)
+            if (inline.isNotEmpty()) builder.addProguardConfiguration(inline, Origin.unknown())
+
+            request.mappingOutput?.let { map ->
+                map.parent?.let(Files::createDirectories)
+                builder.setProguardMapOutputPath(map)
+            }
+            request.desugaredLibrary?.let { dl ->
+                builder.addDesugaredLibraryConfiguration(Files.readAllBytes(dl.configJson).decodeToString())
+                dl.keepRulesOutput.parent?.let(Files::createDirectories)
+                builder.setDesugaredLibraryKeepRuleConsumer(StringConsumer.FileConsumer(dl.keepRulesOutput))
+            }
+            request.resources?.let { rs ->
+                builder.setAndroidResourceProvider(ZipResourceProvider(rs.inputAp))
+                builder.setAndroidResourceConsumer(ZipResourceConsumer(rs.outputAp))
+            }
+
             val command = builder.build()
-            // Bound R8's worker pool to keep peak memory down (R8 has no setThreadCount on this version, so
-            // cap via the executor overload — the same approach as the dexer).
-            if (threads > 0) {
-                val pool = Executors.newFixedThreadPool(threads)
+            // Bound R8's worker pool to keep peak memory down (no setThreadCount on this version; cap via the
+            // executor overload, as the dexer does).
+            if (request.threads > 0) {
+                val pool = Executors.newFixedThreadPool(request.threads)
                 try { R8.run(command, pool) } finally { pool.shutdown() }
             } else {
                 R8.run(command)
             }
-            ToolResult.ok(listOf("R8 (in-process) minified ${progs.size} input(s) -> ${outDir.fileName}"))
+            ToolResult.ok(listOf("R8 (in-process) processed ${progs.size} input(s) -> ${request.outDir.fileName}"))
         } catch (t: Throwable) {
             ToolResult.fail("R8 in-process failed: ${t.message}")
+        }
+    }
+
+    override fun l8(request: L8Request): ToolResult {
+        if (!Files.exists(request.desugarJdkLibs)) return ToolResult.fail("desugar runtime jar missing")
+        Files.createDirectories(request.outDir)
+        val diagnostics = ArrayList<String>()
+        val handler = object : DiagnosticsHandler {
+            override fun warning(d: Diagnostic) { diagnostics.add("warning: ${d.diagnosticMessage}") }
+            override fun error(d: Diagnostic) { diagnostics.add("error: ${d.diagnosticMessage}") }
+        }
+        // Release mode shrinks the runtime to what the app uses, but only with R8's emitted keep rules; without
+        // them (or in a debug build) keep the whole runtime, which is correct and only larger.
+        val shrink = request.release && Files.exists(request.keepRules)
+        return try {
+            val builder = L8Command.builder(handler)
+                .addProgramFiles(request.desugarJdkLibs)
+                .setMinApiLevel(request.minApi)
+                .setMode(if (shrink) CompilationMode.RELEASE else CompilationMode.DEBUG)
+                .setOutput(request.outDir, OutputMode.DexIndexed)
+                .addDesugaredLibraryConfiguration(Files.readAllBytes(request.configJson).decodeToString())
+            if (Files.exists(request.library)) builder.addLibraryFiles(request.library)
+            if (shrink) builder.addProguardConfigurationFiles(listOf(request.keepRules))
+            L8.run(builder.build())
+            ToolResult.ok(listOf("L8 (in-process) dexed the core-library desugaring runtime -> ${request.outDir.fileName}"))
+        } catch (t: Throwable) {
+            ToolResult.fail("L8 in-process failed: ${t.message}", diagnostics)
         }
     }
 }

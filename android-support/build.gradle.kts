@@ -34,3 +34,16 @@ dependencies {
     testImplementation(libs.android.r8)
     testImplementation(libs.android.apksig)
 }
+
+// The core-library-desugaring test needs the desugar runtime + config jars as real files (L8 dexes the
+// runtime; D8/R8 read the config). Resolve them into a dedicated configuration and hand the paths to the
+// test JVM, so it does not depend on a particular Gradle-cache layout.
+val desugarLibTest: Configuration by configurations.creating { isCanBeConsumed = false }
+dependencies {
+    desugarLibTest(libs.desugar.jdk.libs)
+    desugarLibTest(libs.desugar.jdk.libs.configuration)
+}
+tasks.test {
+    val files = desugarLibTest
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Ddesugar.lib.path=${files.asPath}") })
+}

@@ -9,6 +9,7 @@ import dev.ide.model.template.TemplateCategory
 import dev.ide.model.template.TemplateDependency
 import dev.ide.model.template.TemplateId
 import dev.ide.model.template.TemplateParameter
+import dev.ide.platform.log.Log
 
 /**
  * A Jetpack Compose application: one `app` module (android-app) whose UI is built in Compose, with
@@ -25,6 +26,8 @@ object JetpackComposeAppTemplate : ProjectTemplate {
     override val description = "An Android app with a Jetpack Compose UI and @Preview composables you can render in the editor."
     override val category = TemplateCategory.ANDROID
     override val iconId = "module.android"
+
+    private val log = Log.logger("Jetpack Compose Template Generator")
 
     override fun parameters(): List<TemplateParameter> = listOf(
         // Compose requires minSdk 21+; drop the lower options.

@@ -35,7 +35,18 @@ object CustomViewScanner {
      * metadata) seeds that knowledge: a class is a View as soon as an ancestor is a framework widget, and it's
      * a `ViewGroup` if that ancestor is one (e.g. `MaterialButton → AppCompatButton → android.widget.Button`).
      */
-    fun scan(jars: List<Path>, frameworkWidgets: Map<String, Boolean> = emptyMap()): List<Widget> {
+    /**
+     * A scan result: the usable [widgets] plus a simple-name → super-simple-name map of every discovered View
+     * subclass. The map lets attribute completion walk a custom/library view's `app:` attributes up its
+     * ancestry (e.g. a `MaterialCardView` inheriting `CardView`'s `cardCornerRadius`), and resolve the
+     * AppCompat substitutions' own styleables.
+     */
+    data class Scan(val widgets: List<Widget>, val superNames: Map<String, String>)
+
+    fun scan(jars: List<Path>, frameworkWidgets: Map<String, Boolean> = emptyMap()): List<Widget> =
+        scanAll(jars, frameworkWidgets).widgets
+
+    fun scanAll(jars: List<Path>, frameworkWidgets: Map<String, Boolean> = emptyMap()): Scan {
         val superInternal = HashMap<String, String?>() // internal name → super internal name
         val access = HashMap<String, Int>()
         for (jar in jars) {
@@ -73,20 +84,28 @@ object CustomViewScanner {
         }
 
         val out = LinkedHashMap<String, Widget>() // dedup by fqn
+        val superNames = LinkedHashMap<String, String>() // simple name → super simple name (View subclasses)
         for ((internal, _) in superInternal) {
             if ('$' in internal) continue                       // skip inner/anonymous classes
             if (isFrameworkOrRuntime(internal)) continue
+            val classification = classify(internal)
+            // Record ancestry for ANY View subclass — including abstract/non-instantiable bases — so attribute
+            // inheritance resolves through them (e.g. MaterialButton → AppCompatButton); the super's simple
+            // name terminates the chain at the framework base, which carries no `app:` styleable.
+            if (classification?.first == true) {
+                superInternal[internal]?.let { superNames.putIfAbsent(simpleOf(internal), simpleOf(it)) }
+            }
             val acc = access[internal] ?: 0
             val usable = acc and Opcodes.ACC_PUBLIC != 0 &&
                 acc and Opcodes.ACC_ABSTRACT == 0 &&
                 acc and Opcodes.ACC_INTERFACE == 0
             if (!usable) continue
-            val (isView, isViewGroup) = classify(internal) ?: continue
+            val (isView, isViewGroup) = classification ?: continue
             if (!isView) continue
             val fqn = internal.replace('/', '.')
             out.putIfAbsent(fqn, Widget(fqn, isViewGroup))
         }
-        return out.values.sortedBy { it.tag }
+        return Scan(out.values.sortedBy { it.tag }, superNames)
     }
 
     /**
@@ -95,20 +114,24 @@ object CustomViewScanner {
      * the jar set (path + size + mtime) changed. The cache is best-effort — any I/O failure falls back to a
      * live scan.
      */
-    fun cached(jars: List<Path>, cacheFile: Path, frameworkWidgets: Map<String, Boolean> = emptyMap()): List<Widget> {
+    fun cached(jars: List<Path>, cacheFile: Path, frameworkWidgets: Map<String, Boolean> = emptyMap()): List<Widget> =
+        cachedScan(jars, cacheFile, frameworkWidgets).widgets
+
+    /** [scanAll] gated by the same content fingerprint as [cached]; the cache now also persists the ancestry map. */
+    fun cachedScan(jars: List<Path>, cacheFile: Path, frameworkWidgets: Map<String, Boolean> = emptyMap()): Scan {
         val fingerprint = fingerprintOf(jars)
         runCatching {
             if (Files.isRegularFile(cacheFile)) {
                 val lines = String(Files.readAllBytes(cacheFile)).split('\n')
-                if (lines.firstOrNull() == fingerprint) return parse(lines.drop(1))
+                if (lines.firstOrNull() == fingerprint) return parseScan(lines.drop(1))
             }
         }
-        val widgets = scan(jars, frameworkWidgets)
+        val result = scanAll(jars, frameworkWidgets)
         runCatching {
             cacheFile.parent?.let { Files.createDirectories(it) }
-            Files.write(cacheFile, serialize(fingerprint, widgets).toByteArray())
+            Files.write(cacheFile, serialize(fingerprint, result).toByteArray())
         }
-        return widgets
+        return result
     }
 
     /** Framework, JDK, Kotlin and tooling packages that should never appear as a custom layout tag. */
@@ -122,22 +145,38 @@ object CustomViewScanner {
             internal.startsWith("org/jetbrains/annotations/")
 
     private fun fingerprintOf(jars: List<Path>): String =
-        jars.sortedBy { it.toString() }.joinToString(";") { p ->
+        // "v2" tags the cache layout (widgets + ancestry section); an older widgets-only cache won't match,
+        // so it's transparently rescanned and rewritten in the new format.
+        "v2|" + jars.sortedBy { it.toString() }.joinToString(";") { p ->
             val size = runCatching { Files.size(p) }.getOrDefault(0L)
             val mtime = runCatching { Files.getLastModifiedTime(p).toMillis() }.getOrDefault(0L)
             "$p:$size:$mtime"
         }
 
-    private fun serialize(fingerprint: String, widgets: List<Widget>): String =
+    /** Line separating the widget section from the ancestry section in the cache file. */
+    private const val HIER_MARKER = " H"
+
+    private fun serialize(fingerprint: String, scan: Scan): String =
         buildString {
             append(fingerprint).append('\n')
-            widgets.forEach { append(it.tag).append('\t').append(if (it.isViewGroup) 'G' else 'V').append('\n') }
+            scan.widgets.forEach { append(it.tag).append('\t').append(if (it.isViewGroup) 'G' else 'V').append('\n') }
+            append(HIER_MARKER).append('\n')
+            scan.superNames.forEach { (k, v) -> append(k).append('\t').append(v).append('\n') }
         }
 
-    private fun parse(lines: List<String>): List<Widget> =
-        lines.filter { it.isNotBlank() }.mapNotNull { line ->
+    private fun parseScan(lines: List<String>): Scan {
+        val widgets = ArrayList<Widget>()
+        val supers = LinkedHashMap<String, String>()
+        var inHierarchy = false
+        for (line in lines) {
+            if (line == HIER_MARKER) { inHierarchy = true; continue }
+            if (line.isBlank()) continue
             val tab = line.indexOf('\t')
-            if (tab <= 0) return@mapNotNull null
-            Widget(line.substring(0, tab), line.substring(tab + 1).trim() == "G")
+            if (tab <= 0) continue
+            val a = line.substring(0, tab)
+            val b = line.substring(tab + 1).trim()
+            if (inHierarchy) supers[a] = b else widgets += Widget(a, b == "G")
         }
+        return Scan(widgets, supers)
+    }
 }

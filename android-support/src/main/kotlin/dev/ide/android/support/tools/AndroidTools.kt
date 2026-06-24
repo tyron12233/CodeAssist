@@ -69,7 +69,17 @@ interface Aapt2 {
         versionCode: Int? = null,       // injected into the manifest when it declares none (AGP defaultConfig)
         versionName: String? = null,
         nonFinalIds: Boolean = false,   // libraries generate a non-final R (IDs not inlined by the compiler)
+        proguardRules: Path? = null,    // aapt2 `--proguard`: keep rules for manifest/layout-referenced classes (for R8)
+        protoFormat: Boolean = false,   // aapt2 `--proto-format`: emit proto resources (R8 resource shrinking input)
     ): ToolResult
+
+    /**
+     * Convert a linked resources archive between aapt2's binary and proto formats (`aapt2 convert`).
+     * R8's integrated resource shrinking reads/writes proto resources, so a `shrinkResources` build
+     * links to proto, shrinks, then converts the result back to binary for packaging.
+     */
+    fun convert(input: Path, output: Path, toProto: Boolean): ToolResult =
+        ToolResult.fail("aapt2 convert not supported by this implementation")
 }
 
 data class Aapt2CompileResult(val archives: List<Path>, val result: ToolResult)
@@ -91,27 +101,87 @@ interface Dexer {
      * pipeline runs many invocations in parallel and sets this so `workers × threads` doesn't oversubscribe
      * cores or multiply peak memory on a phone; see `DexConcurrency`.
      */
-    fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int = 0): ToolResult
+    fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int = 0, desugaredLibConfig: Path? = null): ToolResult
 
     /**
      * Archive [inputs] per-class. [classpath] supplies types needed to desugar [inputs] without dexing them
      * (D8 `--classpath`) — used when archiving only a *subset* of a scope's classes incrementally, so a
      * changed class can still see its unchanged siblings; pass empty when archiving a whole jar. [threads] as
-     * in [dex].
+     * in [dex]. [desugaredLibConfig] (when set) is the core-library-desugaring config (`desugar.json`): D8
+     * rewrites `java.*` backport call sites per it (the L8 step then dexes the runtime).
      */
-    fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int = 0): ToolResult
+    fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int = 0, desugaredLibConfig: Path? = null): ToolResult
 }
 
+/** Pass-through R8 config: no shrink/optimize/obfuscate, so R8 behaves as a plain dexer. Used as a fallback
+ *  when a minify build supplies no keep rules at all (an over-shrunk APK would crash; a correct dex is safe). */
+internal val R8_PASS_THROUGH = listOf("-dontshrink", "-dontoptimize", "-dontobfuscate", "-ignorewarnings")
+
 /**
- * R8: shrink + optimize + obfuscate and dex every input in one pass (the release path, replacing the
- * dexBuilder→merge pipeline). [keepRules] (e.g. aapt2's manifest-derived rules) decide what survives
- * shrinking; with none, R8 runs pass-through (`-dontshrink`) so the dex is still correct, just not smaller.
+ * Integrated resource shrinking: R8 reads the linked, proto-format resources from [inputAp], drops the
+ * entries unreachable from the shrunken code, and writes the shrunk proto-format resources to [outputAp]
+ * during the same run. The build then converts [outputAp] back to binary for packaging (see [Aapt2.convert]).
  */
-fun interface Shrinker {
-    /** [threads] caps R8's worker pool (0 = default = all cores). R8 is the heaviest, whole-program step, so
-     *  a lower count trades wall-time for a smaller peak working set — the in-process OOM lever on a phone.
-     *  (No default: a `fun interface` SAM method can't have one; the sole caller passes it explicitly.) */
-    fun shrink(programs: List<Path>, library: Path, keepRules: List<String>, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult
+data class ResourceShrink(val inputAp: Path, val outputAp: Path)
+
+/**
+ * Core-library desugaring inputs (AGP's `coreLibraryDesugaringEnabled`). [configJson] is the desugared
+ * library configuration (`desugar.json`); R8 rewrites `java.*` backport call sites per it and writes the
+ * keep rules the runtime library needs to [keepRulesOutput], which the separate L8 step ([Shrinker.l8])
+ * consumes to dex the runtime into the APK.
+ */
+data class DesugaredLibrary(val configJson: Path, val keepRulesOutput: Path)
+
+/**
+ * A whole-program R8 run: shrink + optimize + obfuscate and dex [programs] in one pass (the release path,
+ * replacing the dexBuilder->merge pipeline). [keepRuleFiles] (aapt2 manifest rules + the build type's
+ * proguardFiles + AAR consumer rules) and [inlineRules] (the build type's raw `proguardRules`) decide what
+ * survives shrinking; with neither, R8 runs pass-through ([R8_PASS_THROUGH]) so the dex is still correct.
+ */
+data class ShrinkRequest(
+    val programs: List<Path>,
+    /** android.jar (the bootclasspath); kept out of the output. */
+    val library: Path,
+    /** Types needed to resolve [programs] but not shrunk/emitted (e.g. desugar stubs). */
+    val classpath: List<Path> = emptyList(),
+    val keepRuleFiles: List<Path> = emptyList(),
+    val inlineRules: List<String> = emptyList(),
+    val minApi: Int,
+    val release: Boolean = true,
+    /** Full mode (true) vs ProGuard-compatibility mode (false); see [AndroidFacet.r8FullMode]. */
+    val fullMode: Boolean = true,
+    val outDir: Path,
+    /** When set, R8 writes the obfuscation mapping (`mapping.txt`) here for stack-trace de-obfuscation. */
+    val mappingOutput: Path? = null,
+    /** When set, R8 shrinks resources too (Phase: resource shrinking). */
+    val resources: ResourceShrink? = null,
+    /** When set, R8 applies core-library desugaring and emits the runtime keep rules for L8. */
+    val desugaredLibrary: DesugaredLibrary? = null,
+    /** [threads] caps R8's worker pool (0 = all cores). R8 is the heaviest step, so fewer threads trades
+     *  wall-time for a smaller peak working set: the in-process OOM lever on a phone. */
+    val threads: Int = 0,
+)
+
+/** A request to L8 (the desugared-library compiler): dex the core-library runtime for packaging. */
+data class L8Request(
+    /** The desugar runtime jar (`desugar_jdk_libs.jar`). */
+    val desugarJdkLibs: Path,
+    val configJson: Path,
+    /** The keep rules R8 emitted for the runtime ([DesugaredLibrary.keepRulesOutput]). */
+    val keepRules: Path,
+    val library: Path,            // android.jar
+    val minApi: Int,
+    val release: Boolean,
+    val outDir: Path,
+)
+
+/** R8 (shrink/optimize/obfuscate/dex) plus its L8 sidekick (core-library-desugaring runtime). */
+interface Shrinker {
+    fun shrink(request: ShrinkRequest): ToolResult
+
+    /** Compile the core-library-desugaring runtime to dex (L8), packaged alongside the R8/D8 output. */
+    fun l8(request: L8Request): ToolResult =
+        ToolResult.fail("core-library desugaring (L8) not supported by this implementation")
 }
 
 /** zipalign + apksigner: produce an aligned, signed APK. */

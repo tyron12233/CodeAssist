@@ -25,10 +25,10 @@ class DexArchiveCacheTest {
     /** Counts dexArchive calls and writes a stub per-class `.dex` so `hasDex(outDir)` is satisfied afterwards. */
     private class CountingDexer : Dexer {
         val archiveCalls = AtomicInteger(0)
-        override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult {
+        override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?): ToolResult {
             Files.createDirectories(outDir); Files.write(outDir.resolve("classes.dex"), byteArrayOf(1)); return ToolResult.ok(emptyList())
         }
-        override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult {
+        override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?): ToolResult {
             archiveCalls.incrementAndGet()
             Files.createDirectories(outDir); Files.write(outDir.resolve("c.dex"), byteArrayOf(1)); return ToolResult.ok(emptyList())
         }
@@ -46,10 +46,10 @@ class DexArchiveCacheTest {
      * test failure offline (no real D8 needed).
      */
     private class ClasspathCheckingDexer : Dexer {
-        override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult {
+        override fun dex(inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?): ToolResult {
             Files.createDirectories(outDir); Files.write(outDir.resolve("classes.dex"), byteArrayOf(1)); return ToolResult.ok(emptyList())
         }
-        override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int): ToolResult {
+        override fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int, desugaredLibConfig: Path?): ToolResult {
             val seen = HashSet<String>()
             for (cp in classpath.filter { Files.exists(it) }) {
                 ZipFile(cp.toFile()).use { zf ->
@@ -129,6 +129,34 @@ class DexArchiveCacheTest {
                 .execute(SimpleTaskContext())
             assertEquals(dev.ide.build.TaskResult.Success, result, "class-level dedup must keep duplicate types off the classpath")
             assertTrue(DexArchivesProbe.hasDexUnder(extRoot), "the deduped library set still produces dex output")
+        } finally {
+            tmp.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun classFreeLibraryJarsAreSkippedNotDexedOrCrashed() = runBlocking {
+        val tmp = Files.createTempDirectory("dexempty")
+        try {
+            val libs = tmp.resolve("libs"); Files.createDirectories(libs)
+            val normal = jar(libs, "real.jar", "a/A.class")
+            // A resource-only AAR's classes.jar has no `.class` entries. Two shapes: the manifest-only jar the
+            // resolver now writes, and a legacy zero-entry zip older builds left. Both must be skipped from
+            // dexing (they dex to nothing) and must not crash content hashing (ART's ZipFile throws
+            // "No entries" on the zero-entry one; the hasher falls back to raw bytes).
+            val manifestOnly = libs.resolve("res-only.jar")
+            ZipOutputStream(Files.newOutputStream(manifestOnly)).use { z ->
+                z.putNextEntry(ZipEntry("META-INF/MANIFEST.MF")); z.write("Manifest-Version: 1.0\r\n\r\n".toByteArray()); z.closeEntry()
+            }
+            val zeroEntry = libs.resolve("empty.jar")
+            Files.write(zeroEntry, byteArrayOf(0x50, 0x4B, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+            val dexer = CountingDexer()
+            val extRoot = tmp.resolve("ext")
+            val result = buildTask(":x:dexBuilder", listOf(zeroEntry, manifestOnly, normal), extRoot, dexer, tmp.resolve("cache"), tmp.resolve("x"))
+                .execute(SimpleTaskContext())
+            assertEquals(dev.ide.build.TaskResult.Success, result, "class-free jars must not break the dex build")
+            assertEquals(1, dexer.archiveCalls.get(), "only the class-bearing jar is dexed; class-free jars are skipped")
         } finally {
             tmp.toFile().deleteRecursively()
         }

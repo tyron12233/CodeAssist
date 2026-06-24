@@ -23,12 +23,20 @@ class AndroidFacetCodecTest {
         flavorDimensions = listOf("tier"),
         buildTypes = listOf(
             BuildType("debug", debuggable = true, minifyEnabled = false),
-            BuildType("release", debuggable = false, minifyEnabled = true, versionNameSuffix = "-rel"),
+            BuildType(
+                "release", debuggable = false, minifyEnabled = true, shrinkResources = true,
+                proguardFiles = listOf(DefaultProguardFiles.OPTIMIZE, "proguard-rules.pro"),
+                consumerProguardFiles = listOf("consumer-rules.pro"),
+                proguardRules = listOf("-dontwarn com.example.**", "-keep class com.example.Api { *; }"),
+                versionNameSuffix = "-rel",
+            ),
         ),
         productFlavors = listOf(
             ProductFlavor("free", dimension = "tier", applicationIdSuffix = ".free"),
             ProductFlavor("paid", dimension = "tier", applicationId = "com.example.paid"),
         ),
+        r8FullMode = false,
+        coreLibraryDesugaringEnabled = true,
     )
 
     @Test
@@ -50,6 +58,15 @@ class AndroidFacetCodecTest {
         val bts = values["buildTypes"] as List<Map<String, Any?>>
         assertEquals("debug", bts[0]["name"])
         assertEquals(true, bts[0]["debuggable"])
+        // New R8/ProGuard fields: lists stay lists, the build-wide knobs emit only when non-default.
+        assertEquals(true, bts[1]["shrinkResources"])
+        assertEquals(listOf(DefaultProguardFiles.OPTIMIZE, "proguard-rules.pro"), bts[1]["proguardFiles"])
+        assertEquals(listOf("consumer-rules.pro"), bts[1]["consumerProguardFiles"])
+        assertEquals(false, values["r8FullMode"])
+        assertEquals(true, values["coreLibraryDesugaringEnabled"])
+        // Defaults are omitted (debug shrinks nothing, has no rules): absent keys, not false/empty.
+        assertEquals(null, bts[0]["shrinkResources"])
+        assertEquals(null, bts[0]["proguardFiles"])
     }
 
     /** Build with a facet, save, reload -> identical. */

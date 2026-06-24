@@ -55,9 +55,12 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
         versionCode: Int?,
         versionName: String?,
         nonFinalIds: Boolean,
+        proguardRules: Path?,
+        protoFormat: Boolean,
     ): ToolResult {
         Files.createDirectories(genJavaDir)
         outApk.parent?.let { Files.createDirectories(it) }
+        proguardRules?.parent?.let { Files.createDirectories(it) }
         val cmd = buildList {
             add(aapt2.toString()); add("link")
             add("-o"); add(outApk.toString())
@@ -69,11 +72,28 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
             versionCode?.let { add("--version-code"); add(it.toString()) }
             versionName?.let { add("--version-name"); add(it) }
             if (nonFinalIds) add("--non-final-ids")
+            // `--proguard` emits keep rules for classes referenced from the manifest and layouts (custom
+            // views, onClick handlers), which R8 needs so shrinking does not strip them.
+            proguardRules?.let { add("--proguard"); add(it.toString()) }
+            // `--proto-format` emits proto resources (resources.pb), the input form R8's resource shrinker reads.
+            if (protoFormat) add("--proto-format")
             add("--min-sdk-version"); add(minSdk.toString())
             add("--target-sdk-version"); add(targetSdk.toString())
             add("--auto-add-overlay")
             addAll(compiled.map { it.toString() })
         }
+        val r = Subprocess.run(cmd)
+        return if (r.success) r else ToolResult(false, r.log + selfTest())
+    }
+
+    override fun convert(input: Path, output: Path, toProto: Boolean): ToolResult {
+        output.parent?.let { Files.createDirectories(it) }
+        val cmd = listOf(
+            aapt2.toString(), "convert",
+            "-o", output.toString(),
+            "--output-format", if (toProto) "proto" else "binary",
+            input.toString(),
+        )
         val r = Subprocess.run(cmd)
         return if (r.success) r else ToolResult(false, r.log + selfTest())
     }

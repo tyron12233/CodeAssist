@@ -27,9 +27,10 @@ class D8InProcessDexer : Dexer {
         minApi: Int,
         release: Boolean,
         outDir: Path,
-        threads: Int
+        threads: Int,
+        desugaredLibConfig: Path?
     ): ToolResult = run(
-        inputs, emptyList(), androidJar, minApi, release, outDir, OutputMode.DexIndexed, threads
+        inputs, emptyList(), androidJar, minApi, release, outDir, OutputMode.DexIndexed, threads, desugaredLibConfig
     )
 
     override fun dexArchive(
@@ -39,7 +40,8 @@ class D8InProcessDexer : Dexer {
         minApi: Int,
         release: Boolean,
         outDir: Path,
-        threads: Int
+        threads: Int,
+        desugaredLibConfig: Path?
     ): ToolResult = run(
         inputs,
         classpath,
@@ -48,7 +50,8 @@ class D8InProcessDexer : Dexer {
         release,
         outDir,
         OutputMode.DexFilePerClassFile,
-        threads
+        threads,
+        desugaredLibConfig
     )
 
     private fun run(
@@ -59,7 +62,8 @@ class D8InProcessDexer : Dexer {
         release: Boolean,
         outDir: Path,
         mode: OutputMode,
-        threads: Int
+        threads: Int,
+        desugaredLibConfig: Path?
     ): ToolResult {
         Files.createDirectories(outDir)
         val programs = inputs.filter { Files.exists(it) }
@@ -99,6 +103,11 @@ class D8InProcessDexer : Dexer {
 
             if (Files.exists(androidJar)) {
                 builder.addLibraryFiles(androidJar)
+            }
+            // Core-library desugaring: rewrite java.* backport references per the config (the L8 step dexes
+            // the runtime separately). Applied at the archive step where class->dex conversion happens.
+            if (desugaredLibConfig != null && Files.exists(desugaredLibConfig)) {
+                builder.addDesugaredLibraryConfiguration(Files.readAllBytes(desugaredLibConfig).decodeToString())
             }
 
             val command = builder.build()

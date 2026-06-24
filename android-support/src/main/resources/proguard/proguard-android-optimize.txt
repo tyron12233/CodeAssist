@@ -1,0 +1,67 @@
+# Default ProGuard/R8 keep rules for an Android module (optimizing variant).
+# Bundled rendition of AGP's getDefaultProguardFile('proguard-android-optimize.txt'); referenced by
+# name from a BuildType.proguardFiles list. Identical to proguard-android.txt except optimizations
+# are enabled. (R8 runs its own optimizer; the -optimizations line is honored in ProGuard-compat mode.)
+
+-optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
+-optimizationpasses 5
+-allowaccessmodification
+
+-dontusemixedcaseclassnames
+-dontskipnonpubliclibraryclasses
+-verbose
+
+-keepattributes *Annotation*
+-keep public class com.google.vending.licensing.ILicensingService
+-keep public class com.android.vending.licensing.ILicensingService
+-dontnote com.android.vending.licensing.ILicensingService
+-dontnote com.google.vending.licensing.ILicensingService
+
+# Keep setters in Views so that animations can still work.
+-keepclassmembers public class * extends android.view.View {
+   void set*(***);
+   *** get*();
+}
+
+# Keep methods in Activity that may be used in the XML attribute onClick.
+-keepclassmembers class * extends android.app.Activity {
+   public void *(android.view.View);
+}
+
+# Keep the values()/valueOf() of enums (used by serialization and ProGuard manual examples).
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+-keepclassmembers class * implements android.os.Parcelable {
+  public static final ** CREATOR;
+}
+
+# Preserve annotated JavaScript interface methods.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# Support/AndroidX libraries reference newer platform APIs guarded at runtime; they are safe.
+-dontnote android.support.**
+-dontnote androidx.**
+-dontwarn android.support.**
+-dontwarn androidx.**
+
+# Understand the @Keep support annotation.
+-keep class androidx.annotation.Keep
+
+-keep @androidx.annotation.Keep class * {*;}
+
+-keepclasseswithmembers class * {
+    @androidx.annotation.Keep <methods>;
+}
+
+-keepclasseswithmembers class * {
+    @androidx.annotation.Keep <fields>;
+}
+
+-keepclasseswithmembers class * {
+    @androidx.annotation.Keep <init>(...);
+}

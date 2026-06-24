@@ -28,6 +28,7 @@ class Aapt2LinkVersionTest {
             compiled: List<Path>, manifest: Path, androidJar: Path, customPackage: String,
             extraPackages: List<String>, minSdk: Int, targetSdk: Int, genJavaDir: Path, outApk: Path,
             versionCode: Int?, versionName: String?, nonFinalIds: Boolean,
+            proguardRules: Path?, protoFormat: Boolean,
         ): ToolResult {
             this.versionCode = versionCode
             this.versionName = versionName

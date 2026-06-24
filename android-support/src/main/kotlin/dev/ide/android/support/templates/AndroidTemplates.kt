@@ -63,6 +63,25 @@ internal object AndroidTemplateSupport {
     const val MATERIAL_COORDINATE = "com.google.android.material:material:1.12.0"
 
     fun isKotlin(args: TemplateArgs): Boolean = args.string("language", "java").equals("kotlin", ignoreCase = true)
+
+    /**
+     * The module-relative ProGuard/R8 keep-rules file the `release` build type references by default
+     * ([AndroidFacet.DEFAULT_BUILD_TYPES]). Written for new modules so that, when minification is enabled,
+     * the entry resolves to a real file instead of being silently skipped. Comments only by default
+     * (the bundled `proguard-android-optimize.txt` carries the framework keep rules); add app-specific rules here.
+     */
+    val PROGUARD_RULES_PRO: String = """
+        # Add project-specific ProGuard/R8 keep rules here.
+        # These are applied on top of the bundled defaults (proguard-android-optimize.txt) when the
+        # build type has minifyEnabled = true.
+        #
+        # Keep a class that is referenced only by reflection / from XML, e.g.:
+        # -keep class com.example.SomeClass { *; }
+        #
+        # Preserve line numbers for readable crash stack traces, then hide the original file name:
+        # -keepattributes SourceFile,LineNumberTable
+        # -renamesourcefileattribute SourceFile
+    """.trimIndent() + "\n"
 }
 
 /**
@@ -110,6 +129,7 @@ object AndroidAppTemplate : ProjectTemplate {
         }
 
         val path = AndroidTemplateSupport.pkgPath(pkg)
+        scaffold.writeText("app/proguard-rules.pro", AndroidTemplateSupport.PROGUARD_RULES_PRO)
         scaffold.writeText(
             "app/src/main/AndroidManifest.xml",
             """
@@ -269,6 +289,7 @@ object MaterialYouAppTemplate : ProjectTemplate {
         }
 
         val path = AndroidTemplateSupport.pkgPath(pkg)
+        scaffold.writeText("app/proguard-rules.pro", AndroidTemplateSupport.PROGUARD_RULES_PRO)
         scaffold.writeText(
             "app/src/main/AndroidManifest.xml",
             """
@@ -453,6 +474,7 @@ object AndroidLibraryTemplate : ProjectTemplate {
         }
 
         val path = AndroidTemplateSupport.pkgPath(pkg)
+        scaffold.writeText("lib/proguard-rules.pro", AndroidTemplateSupport.PROGUARD_RULES_PRO)
         scaffold.writeText(
             "lib/src/main/AndroidManifest.xml",
             """

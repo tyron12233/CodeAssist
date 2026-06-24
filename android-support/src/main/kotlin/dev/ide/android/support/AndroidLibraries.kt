@@ -16,6 +16,7 @@ class ResolvedLibraries(
     val assetsDirs: List<Path>,    // AAR `assets/` packaged under `assets/`
     val jniLibDirs: List<Path>,    // AAR `jni/<abi>/` packaged under `lib/`
     val aarPackages: List<String>, // AAR manifest packages → aapt2 `--extra-packages` (their `R` + custom attrs)
+    val consumerProguardFiles: List<Path>, // AAR `proguard.txt` consumer keep rules, applied by the app's R8
 )
 
 /**
@@ -40,24 +41,27 @@ object AndroidLibraries {
         val assetsDirs = ArrayList<Path>()
         val jniLibDirs = ArrayList<Path>()
         val aarPackages = ArrayList<String>()
+        val consumerProguardFiles = ArrayList<Path>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
         fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(dirNameOf(aar))) }
 
-        fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, manifest: Path?) {
+        fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, manifest: Path?, proguard: Path?) {
             compileJars.addAll(classesJars)
             res?.let { resDirs.add(it) }
             assets?.let { assetsDirs.add(it) }
             jni?.let { jniLibDirs.add(it) }
             manifest?.let { manifestPackage(it)?.let(aarPackages::add) }
+            proguard?.let { consumerProguardFiles.add(it) }
         }
 
         for (root in compileRoots) when {
-            isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.manifest) }
-            // A Maven-resolved AAR is stored as its exploded `classes.jar`; its res/assets/jni/manifest are siblings.
+            isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.manifest, it.proguardTxt) }
+            // A Maven-resolved AAR is stored as its exploded `classes.jar`; its res/assets/jni/manifest/proguard are siblings.
             isExplodedAar(root) -> root.parent.let { dir ->
                 addAarParts(listOf(root), dirOrNull(dir, "res"), dirOrNull(dir, "assets"), dirOrNull(dir, "jni"),
-                    dir.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) })
+                    dir.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
+                    dir.resolve("proguard.txt").takeIf { Files.isRegularFile(it) })
             }
             isJar(root) -> compileJars.add(root)
         }
@@ -68,7 +72,7 @@ object AndroidLibraries {
         }
         return ResolvedLibraries(
             compileJars.distinct(), dexJars.distinct(), resDirs.distinct(), assetsDirs.distinct(),
-            jniLibDirs.distinct(), aarPackages.distinct(),
+            jniLibDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
         )
     }
 

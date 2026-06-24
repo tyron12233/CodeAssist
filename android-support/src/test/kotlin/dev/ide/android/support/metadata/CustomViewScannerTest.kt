@@ -99,6 +99,24 @@ class CustomViewScannerTest {
     }
 
     @Test
+    fun scanAllReportsTheViewAncestryBySimpleName() {
+        val tmp = Files.createTempDirectory("cvs")
+        val appcompat = jar(tmp, "appcompat.jar", mapOf(
+            "androidx/appcompat/widget/AppCompatButton" to classBytes(
+                "androidx/appcompat/widget/AppCompatButton", "android/widget/Button", PUBLIC),
+        ))
+        val material = jar(tmp, "material.jar", mapOf(
+            "com/google/android/material/button/MaterialButton" to classBytes(
+                "com/google/android/material/button/MaterialButton", "androidx/appcompat/widget/AppCompatButton", PUBLIC),
+        ))
+        val supers = CustomViewScanner.scanAll(listOf(appcompat, material), mapOf("Button" to false)).superNames
+        // Chain by simple name: MaterialButton → AppCompatButton → (framework) Button. Lets app: attr lookup
+        // walk a view's ancestry across jars; the framework simple name terminates it.
+        assertEquals("AppCompatButton", supers["MaterialButton"])
+        assertEquals("Button", supers["AppCompatButton"])
+    }
+
+    @Test
     fun excludesFrameworkAbstractInnerAndNonViewClasses() {
         val tmp = Files.createTempDirectory("cvs")
         val jar = jar(tmp, "lib.jar", mapOf(
