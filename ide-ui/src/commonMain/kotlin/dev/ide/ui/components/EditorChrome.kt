@@ -212,14 +212,18 @@ private fun OverflowItem(
 }
 
 /**
- * A thin progress strip under the top bar shown while the engine resolves dependencies (a newly-created
- * project's template deps, or an add from the Dependencies screen). Backed by the shared `depsState`, so it
- * shows everywhere in the app while resolution runs in the background — the user needn't stay on the
- * Dependencies screen.
+ * A thin strip under the top bar driven by the shared `depsState`. While resolution runs it shows progress
+ * (a newly-created project's template deps, an add, or a Retry); when resolution is idle but declared
+ * dependencies are still unresolved it shows a persistent error banner with the reason + a Retry action —
+ * the project-level error state (builds of the affected modules are blocked until it's cleared). Shows
+ * everywhere in the app, so the user needn't stay on the Dependencies screen.
  */
 @Composable
-fun DepsProgressBar(state: DepsResolveState) {
-    if (!state.resolving) return
+fun DepsProgressBar(state: DepsResolveState, onRetry: () -> Unit) {
+    if (!state.resolving) {
+        if (state.unresolved.isNotEmpty()) UnresolvedDepsBanner(state, onRetry)
+        return
+    }
     var expanded by remember { mutableStateOf(false) }
     GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -260,6 +264,72 @@ fun DepsProgressBar(state: DepsResolveState) {
                             line, color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth(),
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The persistent "dependencies couldn't be resolved" banner — the project error state. Surfaces the count
+ * and the (heuristic) reason inline, expands to the per-dependency list, and offers Retry (re-resolve once
+ * the network is back). Builds of the affected modules are refused by the engine while this is showing.
+ */
+@Composable
+private fun UnresolvedDepsBanner(state: DepsResolveState, onRetry: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val n = state.unresolved.size
+    GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
+        Column(
+            Modifier.fillMaxWidth()
+                .background(Ca.colors.error.copy(alpha = 0.08f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(CaIcons.error, null, Modifier.size(16.dp), tint = Ca.colors.error)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "$n ${if (n == 1) "dependency" else "dependencies"} couldn't be resolved",
+                        color = Ca.colors.error, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        state.unresolved.first().reason, color = Ca.colors.textSecondary,
+                        style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                // Retry: re-resolve the declared set (cache-first; recovers once the network is back).
+                Row(
+                    Modifier.background(Ca.colors.error.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+                        .clickable(onClick = onRetry).padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(CaIcons.refresh, "Retry", Modifier.size(13.dp), tint = Ca.colors.error)
+                    Text("Retry", color = Ca.colors.error, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                }
+                IconButtonCa(
+                    if (expanded) CaIcons.caretDown else CaIcons.caretRight,
+                    if (expanded) "Hide unresolved dependencies" else "Show unresolved dependencies",
+                    { expanded = !expanded }, boxSize = 24, iconSize = 14,
+                )
+            }
+            AnimatedVisibility(expanded) {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(top = 8.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    for (u in state.unresolved) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(
+                                u.coordinate, color = Ca.colors.textPrimary, style = Ca.type.codeSmall,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                "${u.reason}  ·  ${u.module}", color = Ca.colors.textTertiary,
+                                style = Ca.type.caption2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

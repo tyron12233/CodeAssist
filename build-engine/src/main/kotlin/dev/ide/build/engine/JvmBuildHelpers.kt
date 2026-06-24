@@ -65,6 +65,7 @@ internal fun copyJarTransformed(src: Path, dest: Path, transform: (String, ByteA
                 }
                 e = zis.nextEntry
             }
+            jos.ensureNonEmpty(seen.isEmpty())
         }
     }
 }
@@ -91,5 +92,16 @@ internal fun writeJar(classesDirs: List<Path>, jarPath: Path, transform: (String
                 }
             }
         }
+        jos.ensureNonEmpty(seen.isEmpty())
     }
+}
+
+/** A [JarOutputStream] closed with ZERO entries throws `ZipException: No entries` on ART (the desktop JVM
+ *  writes a valid empty archive). A module/scope with no class files would hit that, so write a benign
+ *  `META-INF/MANIFEST.MF` when [empty] — the jar stays valid everywhere and dexes/loads to nothing. */
+private fun JarOutputStream.ensureNonEmpty(empty: Boolean) {
+    if (!empty) return
+    putNextEntry(JarEntry("META-INF/MANIFEST.MF"))
+    write("Manifest-Version: 1.0\r\n\r\n".toByteArray())
+    closeEntry()
 }

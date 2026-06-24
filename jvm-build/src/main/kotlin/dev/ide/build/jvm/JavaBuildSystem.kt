@@ -12,6 +12,7 @@ import dev.ide.build.engine.DexExecTask
 import dev.ide.build.engine.DexRunner
 import dev.ide.build.engine.JavaDexTask
 import dev.ide.build.engine.JavaExecTask
+import dev.ide.build.engine.ProgramIo
 import dev.ide.build.engine.SimpleBuildConfiguration
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinSiblings
@@ -72,13 +73,14 @@ class JavaBuildSystem(
         mainClass: String,
         programArgs: List<String> = emptyList(),
         javaLauncher: () -> Path = { Paths.get(System.getProperty("java.home"), "bin", "java") },
+        programIo: ProgramIo? = null,
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
         val java = JavaPlugin(bootClasspath, kotlin)
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val runName = TaskName(":${module.name}:run")
-        tasks.register(runName) { JavaExecTask(runName, mainClass, { runtimeClasspath(module) }, programArgs, javaLauncher) }
+        tasks.register(runName) { JavaExecTask(runName, mainClass, { runtimeClasspath(module) }, programArgs, javaLauncher, programIo) }
             .configure { dependsOn(TaskName(":${module.name}:classes")) }
         return tasks.build()
     }
@@ -97,6 +99,7 @@ class JavaBuildSystem(
         dexBackend: DexBackend,
         dexRunner: DexRunner,
         programArgs: List<String> = emptyList(),
+        programIo: ProgramIo? = null,
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
@@ -108,7 +111,7 @@ class JavaBuildSystem(
             JavaDexTask(dexName, { runtimeClasspath(module) }, minApi, base.resolve("staging"), base.resolve("dex"), dexBackend)
         }.configure { dependsOn(TaskName(":${module.name}:classes")) }
         val runName = TaskName(":${module.name}:runDex")
-        tasks.register(runName) { DexExecTask(runName, mainClass, base.resolve("dex"), programArgs, dexRunner) }
+        tasks.register(runName) { DexExecTask(runName, mainClass, base.resolve("dex"), programArgs, dexRunner, programIo) }
             .configure { dependsOn(dexName) }
         return tasks.build()
     }

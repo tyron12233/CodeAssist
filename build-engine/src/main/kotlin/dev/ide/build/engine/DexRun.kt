@@ -8,6 +8,7 @@ import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -29,12 +30,58 @@ fun interface DexBackend {
 data class DexResult(val success: Boolean, val log: List<String> = emptyList())
 
 /**
+ * The running program's standard I/O for an interactive console run, supplied by the host. [stdout]
+ * receives the program's combined stdout/stderr as raw text — chunks may be partial lines, so a prompt
+ * with no trailing newline (`print("Enter name: ")`) shows immediately. [stdin] is the program's standard
+ * input; reads block until the host feeds input or signals end-of-input. [started]/[exited] bracket the
+ * program's execution so the UI can enable input while it runs and record the exit code.
+ */
+interface ProgramIo {
+    fun stdout(text: String)
+    val stdin: InputStream
+    fun started() {}
+    fun exited(code: Int) {}
+}
+
+/**
  * Runs a dexed console program on ART: loads `dexDir`'s `classes*.dex` with a `DexClassLoader`, invokes
- * `mainClass.main(args)`, streams stdout/stderr to `log`, and returns the exit code. Injected by
- * :ide-android — ide-core (which also compiles for the desktop JVM) cannot reference `dalvik.system.*`.
+ * `mainClass.main(args)`, streams stdout/stderr to [io] and reads stdin from it, and returns the exit code.
+ * Injected by :ide-android — ide-core (which also compiles for the desktop JVM) cannot reference
+ * `dalvik.system.*`.
  */
 interface DexRunner {
-    suspend fun run(dexDir: Path, mainClass: String, args: List<String>, log: (String) -> Unit): Int
+    suspend fun run(dexDir: Path, mainClass: String, args: List<String>, io: ProgramIo): Int
+}
+
+/**
+ * Default [ProgramIo] for a non-interactive dex run: re-splits the program's raw output into lines for the
+ * build [log] and offers an empty (immediately end-of-input) stdin. Used when no interactive console is
+ * attached, preserving the original line-oriented build-log behavior.
+ */
+internal class LoggingProgramIo(private val log: (String) -> Unit) : ProgramIo {
+    private val pending = StringBuilder()
+    override val stdin: InputStream = object : InputStream() {
+        override fun read(): Int = -1
+        override fun read(b: ByteArray, off: Int, len: Int): Int = -1
+    }
+
+    @Synchronized
+    override fun stdout(text: String) {
+        pending.append(text)
+        var nl = pending.indexOf("\n")
+        while (nl >= 0) {
+            log(pending.substring(0, nl).trimEnd('\r'))
+            pending.delete(0, nl + 1)
+            nl = pending.indexOf("\n")
+        }
+    }
+
+    @Synchronized
+    override fun exited(code: Int) {
+        if (pending.isNotEmpty()) {
+            log(pending.toString().trimEnd('\r')); pending.setLength(0)
+        }
+    }
 }
 
 /**
@@ -92,13 +139,15 @@ class DexExecTask(
     private val dexDir: Path,
     private val programArgs: List<String>,
     private val runner: DexRunner,
+    private val programIo: ProgramIo? = null,
 ) : Task, AlwaysRun {
     override val inputs: TaskInputs get() = TaskInputsImpl()
     override val outputs: TaskOutputs get() = TaskOutputsImpl()
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.logger()("> Run (dex) $mainClass")
-        val code = runner.run(dexDir, mainClass, programArgs, ctx.logger())
+        val io = programIo ?: LoggingProgramIo(ctx.logger())
+        val code = runner.run(dexDir, mainClass, programArgs, io)
         return if (code == 0) TaskResult.Success else TaskResult.Failed("$mainClass exited with code $code")
     }
 }

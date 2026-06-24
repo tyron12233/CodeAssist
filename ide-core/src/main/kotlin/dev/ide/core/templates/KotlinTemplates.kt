@@ -16,9 +16,9 @@ import dev.ide.model.template.TemplateParameter
  * the editor analyzes with the `lang-kotlin` backend (completion, resolution, go-to-definition, and the
  * inference subset), so a Kotlin project is editable out of the box.
  *
- * The Kotlin backend is editor-only: it does not compile Kotlin to bytecode/dex (that is a separate
- * build track). The module is a `java-lib`, so a Run/Build does not produce output until Kotlin codegen
- * lands. Each template's description notes this.
+ * The native build compiles the Kotlin sources to bytecode (the `compileKotlin` task that jvm-build's
+ * `JavaPlugin` registers for any module with `.kt`), so these `java-lib` modules build, and a console
+ * template's top-level `fun main()` runs.
  */
 private object KotlinTemplateSupport {
     /** A `main` source set rooted at `src/main/kotlin` (the Kotlin source-dir convention). */
@@ -42,13 +42,13 @@ private object KotlinTemplateSupport {
 }
 
 /**
- * A Kotlin console app: one `app` module with a `Main.kt` that has a top-level `fun main()`. Editor-only;
- * see the file header (Kotlin compilation is not wired).
+ * A Kotlin console app: one `app` module with a `Main.kt` that has a top-level `fun main()`. Editable,
+ * buildable, and runnable — Run launches it in the interactive console.
  */
 object KotlinConsoleAppTemplate : ProjectTemplate {
     override val id = TemplateId("kotlin-console")
     override val displayName = "Kotlin Console App"
-    override val description = "A Kotlin app with a top-level main(). Full editor intelligence; Kotlin → bytecode build is not yet wired."
+    override val description = "A Kotlin app with a top-level main(). Full editor intelligence; builds and runs in the interactive console."
     override val category = TemplateCategory.KOTLIN
     override val iconId = "kotlin"
 
@@ -70,11 +70,11 @@ object KotlinConsoleAppTemplate : ProjectTemplate {
     }
 }
 
-/** A plain Kotlin library: one `lib` module with a sample class, no entry point. Editor-only for now. */
+/** A plain Kotlin library: one `lib` module with a sample class, no entry point (nothing to run). */
 object KotlinLibraryTemplate : ProjectTemplate {
     override val id = TemplateId("kotlin-library")
     override val displayName = "Kotlin Library"
-    override val description = "A reusable Kotlin library module. Full editor intelligence; Kotlin → bytecode build is not yet wired."
+    override val description = "A reusable Kotlin library module. Full editor intelligence; compiles in the native build."
     override val category = TemplateCategory.KOTLIN
     override val iconId = "kotlin"
 

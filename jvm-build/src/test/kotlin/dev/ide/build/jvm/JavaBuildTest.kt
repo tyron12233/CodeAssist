@@ -7,6 +7,7 @@ import dev.ide.build.engine.BuildCache
 import dev.ide.build.engine.DexBackend
 import dev.ide.build.engine.DexResult
 import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.ProgramIo
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.jarPath
@@ -25,7 +26,11 @@ import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -146,9 +151,9 @@ class JavaBuildTest {
             var ranMain: String? = null
             var ranDexDir: Path? = null
             val dexRunner = object : DexRunner {
-                override suspend fun run(dexDir: Path, mainClass: String, args: List<String>, log: (String) -> Unit): Int {
+                override suspend fun run(dexDir: Path, mainClass: String, args: List<String>, io: ProgramIo): Int {
                     ranMain = mainClass; ranDexDir = dexDir
-                    log("ran $mainClass from ${dexDir.fileName}")
+                    io.stdout("ran $mainClass from ${dexDir.fileName}\n")
                     return 0
                 }
             }
@@ -173,6 +178,66 @@ class JavaBuildTest {
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun runsAnInteractiveConsoleAppFeedingStdin() {
+        val dir = Files.createTempDirectory("javarunio")
+        val platform = PlatformCore()
+        try {
+            val (_, project) = buildWorkspace(dir, platform)
+            write(dir, "app/src/main/java/com/example/app/Echo.java", ECHO)
+            val app = project.modules.first { it.name == "app" }
+            val io = CapturingIo("World\n")
+            val graph = javaBuildSystem().createRunGraph(project, app, "com.example.app.Echo", programIo = io)
+            val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+            val log = StringBuilder()
+
+            val outcome = runBlocking { exec.execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2) }
+            assertTrue(outcome.succeeded, "interactive run failed:\n$log\nout=${io.out}")
+            assertTrue(io.started, "started() must fire when the program launches")
+            assertTrue(io.exitCode == 0, "program should exit 0, was ${io.exitCode}")
+            // The program printed a prompt (no trailing newline) then echoed the line it read from our stdin.
+            assertTrue("Enter name:" in io.out.toString(), "the prompt should reach stdout:\n${io.out}")
+            assertTrue("Hello, World!" in io.out.toString(), "the program should echo the stdin we fed:\n${io.out}")
+        } finally {
+            platform.dispose(); dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun stopTerminatesANeverEndingProgram() {
+        val dir = Files.createTempDirectory("javarunloop")
+        val platform = PlatformCore()
+        try {
+            val (_, project) = buildWorkspace(dir, platform)
+            write(dir, "app/src/main/java/com/example/app/Loop.java", LOOP)
+            val app = project.modules.first { it.name == "app" }
+            val io = CapturingIo("") // never reads input; loops forever printing nothing
+            val graph = javaBuildSystem().createRunGraph(project, app, "com.example.app.Loop", programIo = io)
+            val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+            runBlocking {
+                val job = launch { exec.execute(graph, SimpleTaskContext(), 2) }
+                // Wait until the program is actually running (it printed before looping).
+                withTimeout(30_000) { while ("looping" !in io.out.toString()) delay(20) }
+                // Stop == cancel: the forked process must die promptly even though its stdout read is a native
+                // blocking call the interrupt can't unblock — the cancellation handler force-destroys it.
+                withTimeout(10_000) { job.cancelAndJoin() }
+            }
+        } finally {
+            platform.dispose(); dir.toFile().deleteRecursively()
+        }
+    }
+
+    /** A [ProgramIo] test double: feeds a fixed [input] string as stdin and captures the program's output. */
+    private class CapturingIo(input: String) : ProgramIo {
+        val out = StringBuilder()
+        override val stdin = input.byteInputStream()
+        @Volatile var started = false
+        @Volatile var exitCode: Int? = null
+        override fun stdout(text: String) { synchronized(out) { out.append(text) } }
+        override fun started() { started = true }
+        override fun exited(code: Int) { exitCode = code }
     }
 
     private fun write(root: Path, rel: String, content: String) {
@@ -209,6 +274,27 @@ class JavaBuildTest {
             public class Main {
                 public static void main(String[] args) {
                     System.out.println(new Formatter().format("World"));
+                }
+            }
+        """
+        val ECHO = """
+            package com.example.app;
+            import java.io.BufferedReader;
+            import java.io.InputStreamReader;
+            public class Echo {
+                public static void main(String[] args) throws Exception {
+                    System.out.print("Enter name: ");
+                    String line = new BufferedReader(new InputStreamReader(System.in)).readLine();
+                    System.out.println("Hello, " + line + "!");
+                }
+            }
+        """
+        val LOOP = """
+            package com.example.app;
+            public class Loop {
+                public static void main(String[] args) throws Exception {
+                    System.out.println("looping");
+                    while (true) Thread.sleep(50);
                 }
             }
         """

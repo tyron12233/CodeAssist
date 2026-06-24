@@ -33,6 +33,7 @@ import dev.ide.ui.screens.EditorScreen
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.ProjectPickerScreen
+import dev.ide.ui.screens.RunScreen
 import dev.ide.ui.screens.SdkManagerScreen
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaAccent
@@ -99,6 +100,13 @@ fun CodeAssistApp(
     // A successful create/open advances the epoch — land in the editor on the new project.
     LaunchedEffect(epoch) { if (epoch > 0) screen = Screen.Editor }
 
+    // Starting a console run (a `run` task) opens a fresh interactive session — keyed on its id, jump to the
+    // full-screen Run terminal. Build/assemble tasks leave runConsole null and stay in the build console.
+    val runConsole by backend.runConsole.collectAsState()
+    LaunchedEffect(runConsole?.id, epoch) {
+        if (runConsole != null && screen == Screen.Editor) screen = Screen.Run
+    }
+
     // External file writes (e.g. an "Open with" import the UI didn't drive) re-read the tree.
     val fsEpoch by backend.fileSystemEpoch.collectAsState()
     LaunchedEffect(state, fsEpoch) { if (fsEpoch > 0) state.refreshTree() }
@@ -124,7 +132,7 @@ fun CodeAssistApp(
                     showAnalytics = false; backend.setAnalyticsConsent(false)
                 }
 
-                screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen =
+                screen == Screen.Run || screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen =
                     Screen.Editor
 
                 screen == Screen.CreateProject -> screen = Screen.Projects
@@ -187,7 +195,16 @@ fun CodeAssistApp(
                             },
                             onOpenSdkManager = { screen = Screen.SdkManager },
                             onCloseProject = { screen = Screen.Projects },
+                            onOpenRun = { screen = Screen.Run },
                             fileActions = fileActions,
+                        )
+
+                        Screen.Run -> RunScreen(
+                            backend = state.backend,
+                            onBack = { screen = Screen.Editor },
+                            onOpenDiagnostic = { d ->
+                                d.file?.let { state.openAtLine(it, d.line, d.column); screen = Screen.Editor }
+                            },
                         )
 
                         Screen.ModuleConfig -> ModuleConfigScreen(

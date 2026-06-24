@@ -335,6 +335,19 @@ interface IdeBackend {
     /** Cancel an in-progress build/run. */
     fun stopBuild()
 
+    // ---- interactive console run (the full-screen Run terminal) ----
+
+    /** Live program I/O + lifecycle for an interactive console run, or null when none has started. A `run`
+     *  task (a Java/Kotlin CLI) drives this; build/assemble tasks leave it null (they use [buildState]). */
+    val runConsole: StateFlow<RunConsoleUi?> get() = kotlinx.coroutines.flow.MutableStateFlow(null)
+
+    /** Feed one line of standard input to the running program (a newline is appended) and echo it into the
+     *  transcript. No-op unless a program is running and able to read input. */
+    fun sendRunInput(text: String) {}
+
+    /** Signal end-of-input (EOF / Ctrl-D) to the running program's stdin. */
+    fun closeRunInput() {}
+
     // ---- runtime permission prompts (the run sandbox/guard) ----
 
     /** The pending permission a running program is asking for (network/file/reflection/exec), or null.
@@ -356,6 +369,13 @@ interface IdeBackend {
      * Progress streams on [depsState], so the user can leave any screen while it resolves.
      */
     fun startPendingDependencyResolution() {}
+
+    /**
+     * Re-attempt resolving every declared dependency (e.g. after the network comes back) — the action behind
+     * the editor's "dependencies unresolved" banner. Re-walks each declared Maven dependency's closure
+     * cache-first, rebuilds `libraries.json`, and refreshes [depsState]'s [DepsResolveState.unresolved].
+     */
+    suspend fun retryDependencyResolution() {}
 
     /** Modules that can declare dependencies, with their build system + whether they accept `.aar`s. */
     fun dependencyModules(): List<UiDepModule> = emptyList()
@@ -465,6 +485,21 @@ interface IdeBackend {
      */
     suspend fun updateModuleConfig(moduleName: String, edit: UiModuleConfigEdit): UiConfigResult =
         UiConfigResult(false, "Module configuration not supported by this backend")
+
+    /**
+     * For an Android module, the keep-rule files its build types reference (`proguardFiles` /
+     * `consumerProguardFiles`) that are module-relative and MISSING on disk. R8 silently skips a missing
+     * file, so a `minifyEnabled` build would shrink without those rules; surfacing them lets the Module
+     * Settings screen warn and offer to create them. Empty for a non-Android module or when all exist.
+     */
+    suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> = emptyList()
+
+    /**
+     * Create the referenced-but-missing module-relative keep-rule file [entry] for [moduleName] with a
+     * starter template body. Returns its absolute path, or null on failure (unknown/non-Android module, an
+     * absolute or bundled-default entry, or an I/O error). Bumps [fileSystemEpoch] so the tree re-reads.
+     */
+    suspend fun createProguardFile(moduleName: String, entry: String): String? = null
 
     // ---- module management (add / remove modules) ----
 
@@ -722,6 +757,20 @@ data class DepsResolveState(
     val message: String = "",
     val fraction: Double = -1.0,
     val log: List<String> = emptyList(),
+    /**
+     * Declared dependencies that currently have no resolved artifact on disk — the project's persistent
+     * dependency-health error state (kept after [resolving] goes false, unlike [message]/[fraction]). When
+     * non-empty the UI surfaces a project-level error banner and builds of the affected modules are blocked
+     * until it's resolved. Each carries a best-effort [UiUnresolvedDependency.reason].
+     */
+    val unresolved: List<UiUnresolvedDependency> = emptyList(),
+)
+
+/** A declared dependency the engine couldn't resolve, with the module that declares it and a why. */
+data class UiUnresolvedDependency(
+    val module: String,
+    val coordinate: String,
+    val reason: String,
 )
 
 /** A dependency-declaring module for the screen's module switcher. */
@@ -816,6 +865,32 @@ data class BuildDiagnosticUi(
     val column: Int = -1,
     val detail: String? = null,
     val task: String? = null,
+)
+
+/** The kind of text in a [ConsoleChunk]: program output, user-typed input (echoed back), or a runner notice. */
+enum class ConsoleChunkKind { OUTPUT, INPUT, SYSTEM }
+
+/** A run of console text of one [kind]. Adjacent same-kind chunks are coalesced by the producer. */
+data class ConsoleChunk(val text: String, val kind: ConsoleChunkKind)
+
+/** Whether an interactive run is compiling, executing, or done. */
+enum class RunPhase { Building, Running, Finished }
+
+/**
+ * Live state of an interactive console run (the full-screen Run terminal) — distinct from [BuildState]
+ * (build steps/diagnostics): this is the program's own stdio + lifecycle. Null until a console run starts.
+ * [id] changes per run (the UI keys navigation on it); [transcript] is the program's output interleaved
+ * with echoed input; [acceptsInput] is true while the program is executing and can read stdin; [exitCode]
+ * is set when it finishes (null if it never started — e.g. a compile failure).
+ */
+data class RunConsoleUi(
+    val id: Int,
+    val moduleName: String,
+    val mainClass: String,
+    val phase: RunPhase = RunPhase.Building,
+    val transcript: List<ConsoleChunk> = emptyList(),
+    val acceptsInput: Boolean = false,
+    val exitCode: Int? = null,
 )
 
 data class BuildState(
@@ -955,6 +1030,13 @@ data class UiModuleConfigEdit(
 )
 
 data class UiConfigResult(val success: Boolean, val message: String)
+
+/**
+ * A keep-rule file an Android build type references that is module-relative and missing on disk (so R8
+ * skips it). [buildType] is the build type that names it, [entry] the path as written in the model, and
+ * [consumer] true when it came from `consumerProguardFiles` (an AAR-export rule) rather than `proguardFiles`.
+ */
+data class UiMissingProguardFile(val buildType: String, val entry: String, val consumer: Boolean)
 
 data class ProjectInfo(
     val name: String,
