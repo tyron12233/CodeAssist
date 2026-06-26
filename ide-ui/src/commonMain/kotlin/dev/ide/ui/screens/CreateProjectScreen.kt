@@ -44,12 +44,20 @@ import dev.ide.ui.backend.UiTemplateParam
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.choose_start_point
+import dev.ide.ui.generated.resources.create_project
+import dev.ide.ui.generated.resources.creating
+import dev.ide.ui.generated.resources.new_project
+import dev.ide.ui.generated.resources.package_name
+import dev.ide.ui.generated.resources.project_name
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.resolveTint
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Create-Project flow: a template gallery (cards grouped by category, from
@@ -91,7 +99,7 @@ fun CreateProjectScreen(
 
 @Composable
 private fun ColumnScope.Gallery(templates: List<UiProjectTemplate>, onBack: () -> Unit, onPick: (UiProjectTemplate) -> Unit) {
-    Header(title = "New Project", subtitle = "Choose a starting point.", onBack = onBack)
+    Header(title = stringResource(Res.string.new_project), subtitle = stringResource(Res.string.choose_start_point), onBack = onBack)
     Spacer(Modifier.height(20.dp))
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (templates.isEmpty()) {
@@ -182,8 +190,8 @@ private fun ColumnScope.Configure(
         Modifier.weight(1f).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        FormField("Project name", name, "MyProject", onChange = { name = it })
-        FormField("Package name", effectivePkg, "com.example.app", onChange = { pkg = it; pkgEdited = true })
+        FormField(stringResource(Res.string.project_name), name, "MyProject", onChange = { name = it })
+        FormField(stringResource(Res.string.package_name), effectivePkg, "com.example.app", onChange = { pkg = it; pkgEdited = true })
         template.parameters.forEach { p ->
             ParamControl(p, value = paramValues[p.key] ?: defaultValue(p), onChange = { paramValues[p.key] = it })
         }
@@ -191,7 +199,7 @@ private fun ColumnScope.Configure(
     }
     Spacer(Modifier.height(16.dp))
     PrimaryButton(
-        text = if (busy) "Creating…" else "Create Project",
+        text = stringResource(if (busy) Res.string.creating else Res.string.create_project),
         onClick = ::create,
         modifier = Modifier.fillMaxWidth(),
     )

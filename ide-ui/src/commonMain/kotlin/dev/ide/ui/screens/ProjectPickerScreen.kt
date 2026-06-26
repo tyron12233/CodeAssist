@@ -39,8 +39,25 @@ import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.StorageAccessCard
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.backup
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.delete
+import dev.ide.ui.generated.resources.delete_project
+import dev.ide.ui.generated.resources.delete_project_content
+import dev.ide.ui.generated.resources.join_the_community
+import dev.ide.ui.generated.resources.join_the_community_content
+import dev.ide.ui.generated.resources.modules
+import dev.ide.ui.generated.resources.new_project
+import dev.ide.ui.generated.resources.new_project_content
+import dev.ide.ui.generated.resources.no_project_yet
+import dev.ide.ui.generated.resources.open_a_project
+import dev.ide.ui.generated.resources.projects
+import dev.ide.ui.generated.resources.your_files
+import dev.ide.ui.generated.resources.your_projects
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /** The "Projects" picker: large title, a New-Project action, and a card per known project. */
 @Composable
@@ -73,7 +90,7 @@ fun ProjectPickerScreen(
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            "Projects",
+                            stringResource(Res.string.projects),
                             color = Ca.colors.textPrimary,
                             style = Ca.type.large,
                             maxLines = 1,
@@ -83,7 +100,7 @@ fun ProjectPickerScreen(
                         BetaBadge()
                     }
                     Text(
-                        "Open a project or start a new one.",
+                        stringResource(Res.string.open_a_project),
                         color = Ca.colors.textSecondary,
                         style = Ca.type.subhead,
                         maxLines = 1,
@@ -110,9 +127,9 @@ fun ProjectPickerScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (projects.isEmpty()) {
-                    Text("No projects yet — create one to get started.", color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                    Text(stringResource(Res.string.no_project_yet), color = Ca.colors.textTertiary, style = Ca.type.footnote)
                 } else {
-                    SectionLabel("Your projects")
+                    SectionLabel(stringResource(Res.string.your_projects))
                 }
                 projects.forEachIndexed { i, project ->
                     ProjectCard(
@@ -152,16 +169,16 @@ private fun DeleteProjectDialog(project: ProjectInfo?, onCancel: () -> Unit, onC
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Delete project?", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.delete_project), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
             Text(
-                "“${project?.name.orEmpty()}” and all of its files will be permanently deleted. This can't be undone.",
+                stringResource(Res.string.delete_project_content, project?.name.orEmpty()),
                 color = Ca.colors.textSecondary,
                 style = Ca.type.footnote,
             )
             Spacer(Modifier.size(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                SecondaryAction("Cancel", Modifier.weight(1f), onClick = onCancel)
-                DestructiveAction("Delete", Modifier.weight(1f), onClick = onConfirm)
+                SecondaryAction(stringResource(Res.string.cancel), Modifier.weight(1f), onClick = onCancel)
+                DestructiveAction(stringResource(Res.string.delete), Modifier.weight(1f), onClick = onConfirm)
             }
         }
     }
@@ -211,7 +228,7 @@ private fun BackupButton(onClick: () -> Unit, compact: Boolean = false) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(CaIcons.box, "Back up", Modifier.size(16.dp), tint = Ca.colors.textSecondary)
-        if (!compact) Text("Back up", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        if (!compact) Text(stringResource(Res.string.backup), color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -236,8 +253,8 @@ private fun NewProjectCard(onClick: () -> Unit) {
             Icon(CaIcons.plus, null, Modifier.size(24.dp), tint = Ca.colors.textOnAccent)
         }
         Column(Modifier.weight(1f)) {
-            Text("New Project", color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text("Android app, Java console app, library…", color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.new_project), color = Ca.colors.textPrimary, style = Ca.type.headline)
+            Text(stringResource(Res.string.new_project_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.accent)
     }
@@ -281,8 +298,8 @@ private fun DiscordCard(onClick: () -> Unit) {
             Icon(CaIcons.discord, null, Modifier.size(22.dp), tint = Color.White)
         }
         Column(Modifier.weight(1f)) {
-            Text("Join the community", color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text("Chat, get help, and share what you build on Discord.", color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.join_the_community), color = Ca.colors.textPrimary, style = Ca.type.headline)
+            Text(stringResource(Res.string.join_the_community_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = DiscordBlurple)
     }
@@ -309,7 +326,7 @@ private fun ProjectCard(project: ProjectInfo, delayMillis: Int, onOpen: () -> Un
             Text(project.rootPath, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "${project.moduleCount} modules",
+                    stringResource(Res.string.modules, project.moduleCount),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.caption,
                     fontWeight = FontWeight.Medium,

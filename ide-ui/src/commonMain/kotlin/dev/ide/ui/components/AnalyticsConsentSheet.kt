@@ -20,13 +20,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.allow
+import dev.ide.ui.generated.resources.help_improve_codeassist
+import dev.ide.ui.generated.resources.help_improve_codeassist_content
+import dev.ide.ui.generated.resources.learn_more
+import dev.ide.ui.generated.resources.no_thanks
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The one-time, **opt-in** analytics consent prompt shown on first launch (after onboarding). Collection
@@ -85,15 +93,10 @@ private fun ConsentBody(
             Icon(CaIcons.info, null, Modifier.size(34.dp), tint = Ca.colors.accent)
         }
         Spacer(Modifier.height(20.dp))
-        Text("Help improve CodeAssist", color = Ca.colors.textPrimary, style = Ca.type.title2, textAlign = TextAlign.Center)
+        Text(stringResource(Res.string.help_improve_codeassist), color = Ca.colors.textPrimary, style = Ca.type.title2, textAlign = TextAlign.Center)
         Spacer(Modifier.height(12.dp))
         Text(
-            "Share anonymous performance data so we can see what's slow and what's failing — and fix the " +
-                "right things.\n\n" +
-                "We collect: your app version and device model, how long builds, indexing, and code completion " +
-                "take, build success/failure, and scrubbed crash reports.\n\n" +
-                "We never collect your code, file or project names, which features you use, or anything that " +
-                "identifies you. You can change this anytime under More while a project is open.",
+            stringResource(Res.string.help_improve_codeassist_content),
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             textAlign = TextAlign.Center,
@@ -101,23 +104,23 @@ private fun ConsentBody(
         if (onLearnMore != null) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "Learn more",
+                stringResource(Res.string.learn_more),
                 color = Ca.colors.accent,
                 style = Ca.type.subhead,
                 modifier = Modifier
-                    .clickable(MutableInteractionSource(), indication = null, onClick = onLearnMore)
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onLearnMore)
                     .padding(6.dp),
             )
         }
         Spacer(Modifier.height(24.dp))
-        PrimaryButton(text = "Allow", onClick = onAllow, modifier = Modifier.fillMaxWidth())
+        PrimaryButton(text = stringResource(Res.string.allow), onClick = onAllow, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         Text(
-            "No thanks",
+            stringResource(Res.string.no_thanks),
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             modifier = Modifier
-                .clickable(MutableInteractionSource(), indication = null, onClick = onDecline)
+                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDecline)
                 .padding(12.dp),
         )
     }
@@ -129,7 +132,7 @@ fun AnalyticsToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit, modifier: 
     Row(
         modifier
             .fillMaxWidth()
-            .clickable(MutableInteractionSource(), indication = null) { onChange(!enabled) }
+            .clickable(remember { MutableInteractionSource() }, indication = null) { onChange(!enabled) }
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -154,7 +157,7 @@ private fun ConsentToggle(on: Boolean, onToggle: (Boolean) -> Unit) {
         Modifier
             .size(width = 44.dp, height = 26.dp)
             .background(if (on) Ca.colors.accent else Ca.colors.surface3, RoundedCornerShape(Ca.radius.pill))
-            .clickable(MutableInteractionSource(), indication = null) { onToggle(!on) }
+            .clickable(remember { MutableInteractionSource() }, indication = null) { onToggle(!on) }
             .padding(3.dp),
         contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
     ) {

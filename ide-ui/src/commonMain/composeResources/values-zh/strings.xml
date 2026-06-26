@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projects">项目</string>
+    <string name="a_new_build_system">一个新的构建系统</string>
+    <string name="a_new_build_system_content"><![CDATA[CodeAssist 已使用全新的设备端构建系统进行了重建。它使用自身的项目配置，因此旧版本的项目不兼容，无法自动打开。
+
+立即将您的项目备份为 .zip 文件——这样您的源文件将安全无虞，并且可以将其重新添加到新项目中。]]></string>
+    <string name="preparing_backup">准备备份…</string>
+    <string name="backup_projects">备份项目</string>
+    <string name="got_it">知道了</string>
+    <string name="help_improve_codeassist">帮助提升 CodeAssist</string>
+    <string name="help_improve_codeassist_content">分享匿名性能数据，以便我们了解哪些环节运行缓慢或出现故障，并进行相应的修复。
+
+我们会收集以下信息：您的应用版本和设备型号、构建、索引和代码补全所需时间、构建成功/失败情况以及已清理的崩溃报告。
+
+我们绝不会收集您的代码、文件或项目名称、您使用的功能，或任何可以识别您身份的信息。您可以在项目打开时随时在 “更多” 选项中更改此设置。</string>
+    <string name="learn_more">了解更多</string>
+    <string name="allow">允许</string>
+    <string name="no_thanks">不需要</string>
+    <string name="on_device">本地设备</string>
+    <string name="on_device_title">一款在手机上的真实 IDE</string>
+    <string name="on_device_content">无需笔记本电脑，即可编写、浏览和构建端到端的 Android 和 Java 项目。</string>
+    <string name="continue">继续</string>
+    <string name="maybe_later">以后再说</string>
+    <string name="skip_for_now">暂时跳过</string>
+    <string name="code_completion">代码补全</string>
+    <string name="code_completion_title">能够识别你代码的自动补全功能。</string>
+    <string name="code_completion_content">Eclipse JDT 可在您输入时提供精确的、排名靠前的建议（带有签名和文档）。</string>
+    <string name="block_editing">块编辑</string>
+    <string name="block_editing_title">可以按代码编辑，也可以按代码块编辑。</string>
+    <string name="block_editing_content">将任何 Java 文件投影到相互连接的块中——逐字节地实时查看同一源代码。</string>
+    <string name="build_and_run">构建 &amp; 运行</string>
+    <string name="build_and_run_title">在设备上构建真正的 APK。</string>
+    <string name="build_and_run_content">解析、编译、dex、打包、签名——然后直接安装到您的手机上。</string>
+    <string name="command_palette">命令面板</string>
+    <string name="command_palette_title">瞬间跳转到任何地方。</string>
+    <string name="command_palette_content">一个输入即可处理命令、文件和符号——一切背后的加速器。</string>
+    <string name="kotlin_beta">Kotlin · 测试</string>
+    <string name="kotlin_beta_title">Kotlin 自动补全功能目前处于测试阶段。</string>
+    <string name="kotlin_beta_content">完整的 Kotlin 代码补全功能，旨在提供与 Java 相同的流畅、排名式体验。</string>
+    <string name="xml">XML</string>
+    <string name="xml_title">布局设计，全程协助。</string>
+    <string name="xml_content">Android XML 标签、属性和资源自动补全——支持实时验证。</string>
+    <string name="your_files">你的文件</string>
+    <string name="your_files_title">你的项目，于一个真实的文件夹中。</string>
+    <string name="your_files_content">项目文件保存在应用存储空间中，您可以使用任何文件管理器打开它们——拖放图标、布局或素材，或者在电脑上进行编辑。无需特殊权限，没有任何隐藏内容。</string>
+    <string name="jetpack_compose">Jetpack Compose</string>
+    <string name="jetpack_compose_title">使用 Jetpack Compose 重构。</string>
+    <string name="jetpack_compose_content">更快、更流畅的 CodeAssist——原生 Compose，支持实时 @Preview。</string>
+    <string name="open_a_sample_project">打开示例项目</string>
+    <string name="open_a_project">打开或创建一个项目。</string>
+    <string name="new_project">新建项目</string>
+    <string name="new_project_content">Android 应用, Java 控制台应用, 库…</string>
+    <string name="join_the_community">加入社区</string>
+    <string name="join_the_community_content">在 Discord 上聊天、获得帮助并分享你的作品。</string>
+    <string name="no_project_yet">目前还没有项目——创建一个项目即可开始。</string>
+    <string name="your_projects">你的项目</string>
+    <string name="modules">%1$d 个模块</string>
+    <string name="beta_notice">软件正处于 %1$s 阶段</string>
+    <string name="beta_notice_content">部分功能可能尚未完善或有所变更。我们非常欢迎您的反馈——请告诉我们哪些功能缺失或存在问题。</string>
+    <string name="submit_suggestion">提交建议</string>
+    <string name="your_codeassist_files">你的 CodeAssist 文件</string>
+    <string name="your_codeassist_files_content">在任何文件管理器中打开此文件夹，即可浏览您的项目（包括“项目”下的任何旧版本项目）、添加图标或资源，或从 PC 进行编辑。</string>
+    <string name="open_in_the_file_manager">在文件管理器中打开</string>
+    <string name="choose_start_point">选择一个起始入口。</string>
+    <string name="backup">备份</string>
+    <string name="delete_project">删除项目?</string>
+    <string name="delete_project_content">“%1$s” 及其所有文件将被永久删除。此操作无法撤销。</string>
+    <string name="cancel">取消</string>
+    <string name="delete">删除</string>
+    <string name="project_name">项目名称</string>
+    <string name="package_name">包名</string>
+    <string name="creating">创建中…</string>
+    <string name="create_project">创建项目</string>
+
+</resources>

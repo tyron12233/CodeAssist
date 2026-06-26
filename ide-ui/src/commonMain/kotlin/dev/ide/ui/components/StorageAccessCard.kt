@@ -27,8 +27,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.open_in_the_file_manager
+import dev.ide.ui.generated.resources.your_codeassist_files
+import dev.ide.ui.generated.resources.your_codeassist_files_content
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A persistent "where your files live" panel for the Projects screen. Shows the on-disk app folder (the
@@ -63,9 +68,9 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
                 Icon(CaIcons.folder, null, Modifier.size(18.dp), tint = Ca.colors.accent)
             }
             Column(Modifier.weight(1f)) {
-                Text("Your CodeAssist files", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.your_codeassist_files), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Open this folder in any file manager to browse your projects (including any from older versions, under \"Projects\"), add icons or assets, or edit from a PC.",
+                    stringResource(Res.string.your_codeassist_files_content),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.caption2,
                 )
@@ -109,7 +114,7 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
             ) {
                 Icon(CaIcons.share, null, Modifier.size(16.dp), tint = Ca.colors.accent)
                 Box(Modifier.size(6.dp))
-                Text("Open in file manager", color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.open_in_the_file_manager), color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             }
         }
     }
