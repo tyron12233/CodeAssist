@@ -2,18 +2,16 @@
 <resources>
     <string name="projects">Projects</string>
     <string name="a_new_build_system">A new build system</string>
-    <string name="a_new_build_system_content">[<![CDATA[CodeAssist has been rebuilt with a new on-device build system. It uses its own project configuration, so projects from a previous version aren't compatible and won't open automatically.
+    <string name="a_new_build_system_content"><![CDATA[CodeAssist has been rebuilt with a new on-device build system. It uses its own project configuration, so projects from a previous version aren't compatible and won't open automatically.
 
-    Back up your projects to a .zip now — your source files stay safe, and you can re-add them to a new project.]]></string>
+Back up your projects to a .zip now — your source files stay safe, and you can re-add them to a new project.]]></string>
     <string name="preparing_backup">Preparing backup…</string>
     <string name="backup_projects">Back up projects</string>
     <string name="got_it">Got it</string>
     <string name="help_improve_codeassist">Help improve CodeAssist</string>
     <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing — and fix the right things.
 
-
 We collect: your app version and device model, how long builds, indexing, and code completion take, build success/failure, and scrubbed crash reports.
-
 
 We never collect your code, file or project names, which features you use, or anything that identifies you. You can change this anytime under More while a project is open.]]></string>
     <string name="learn_more">Learn more</string>
@@ -57,7 +55,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="join_the_community_content">Chat, get help, and share what you build on Discord.</string>
     <string name="no_project_yet">No projects yet — create one to get started.</string>
     <string name="your_projects">Your projects</string>
-    <string name="modules">%1$d modules</string>
+    <plurals name="modules">
+        <item quantity="one">%1$d module</item>
+        <item quantity="other">%1$d modules</item>
+    </plurals>
     <string name="beta_notice">You're on the %1$s</string>
     <string name="beta_notice_content">Some features may be incomplete or change. We'd love your feedback — tell us what's missing or broken.</string>
     <string name="submit_suggestion">Submit suggestions</string>
@@ -74,5 +75,15 @@ We never collect your code, file or project names, which features you use, or an
     <string name="package_name">Package name</string>
     <string name="creating">Creating…</string>
     <string name="create_project">Create Project</string>
+    <string name="no_templates_available">No templates available.</string>
+    <string name="performance_analytics">Performance analytics</string>
+    <string name="sharing_performance_data">Sharing anonymous performance data</string>
+    <string name="not_sharing_performance_data">Not sharing performance data</string>
+    <string name="compatibility">Compatibility</string>
+    <plurals name="recovered_projects">
+        <item quantity="one">Recovered %1$d project from an older version</item>
+        <item quantity="other">Recovered %1$d projects from an older version</item>
+    </plurals>
+    <string name="recovered_projects_content">These use Gradle and open in a limited compatibility mode — some features may not work and they may not build until dependencies are re-added. Your original files are kept safe in your storage folder.</string>
 
 </resources>

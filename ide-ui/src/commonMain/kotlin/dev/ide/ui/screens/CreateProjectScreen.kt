@@ -49,6 +49,7 @@ import dev.ide.ui.generated.resources.choose_start_point
 import dev.ide.ui.generated.resources.create_project
 import dev.ide.ui.generated.resources.creating
 import dev.ide.ui.generated.resources.new_project
+import dev.ide.ui.generated.resources.no_templates_available
 import dev.ide.ui.generated.resources.package_name
 import dev.ide.ui.generated.resources.project_name
 import dev.ide.ui.icons.CaIcons
@@ -103,7 +104,7 @@ private fun ColumnScope.Gallery(templates: List<UiProjectTemplate>, onBack: () -
     Spacer(Modifier.height(20.dp))
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (templates.isEmpty()) {
-            Text("No templates available.", color = Ca.colors.textSecondary, style = Ca.type.subhead)
+            Text(stringResource(Res.string.no_templates_available), color = Ca.colors.textSecondary, style = Ca.type.subhead)
         }
         var index = 0
         templates.groupBy { it.category }.forEach { (category, group) ->

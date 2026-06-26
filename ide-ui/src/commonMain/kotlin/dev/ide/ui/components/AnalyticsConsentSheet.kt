@@ -31,6 +31,9 @@ import dev.ide.ui.generated.resources.help_improve_codeassist
 import dev.ide.ui.generated.resources.help_improve_codeassist_content
 import dev.ide.ui.generated.resources.learn_more
 import dev.ide.ui.generated.resources.no_thanks
+import dev.ide.ui.generated.resources.not_sharing_performance_data
+import dev.ide.ui.generated.resources.performance_analytics
+import dev.ide.ui.generated.resources.sharing_performance_data
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
@@ -139,9 +142,9 @@ fun AnalyticsToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit, modifier: 
     ) {
         Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
         Column(Modifier.weight(1f)) {
-            Text("Performance analytics", color = Ca.colors.textPrimary, style = Ca.type.subhead)
+            Text(stringResource(Res.string.performance_analytics), color = Ca.colors.textPrimary, style = Ca.type.subhead)
             Text(
-                if (enabled) "Sharing anonymous performance data" else "Not sharing performance data",
+                if (enabled) stringResource(Res.string.sharing_performance_data) else stringResource(Res.string.not_sharing_performance_data),
                 color = Ca.colors.textSecondary,
                 style = Ca.type.caption,
             )

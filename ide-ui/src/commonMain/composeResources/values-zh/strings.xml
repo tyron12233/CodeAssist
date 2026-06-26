@@ -55,7 +55,9 @@
     <string name="join_the_community_content">在 Discord 上聊天、获得帮助并分享你的作品。</string>
     <string name="no_project_yet">目前还没有项目——创建一个项目即可开始。</string>
     <string name="your_projects">你的项目</string>
-    <string name="modules">%1$d 个模块</string>
+    <plurals name="modules">
+        <item quantity="other">%1$d 个模块</item>
+    </plurals>
     <string name="beta_notice">软件正处于 %1$s 阶段</string>
     <string name="beta_notice_content">部分功能可能尚未完善或有所变更。我们非常欢迎您的反馈——请告诉我们哪些功能缺失或存在问题。</string>
     <string name="submit_suggestion">提交建议</string>
@@ -72,5 +74,14 @@
     <string name="package_name">包名</string>
     <string name="creating">创建中…</string>
     <string name="create_project">创建项目</string>
+    <string name="no_templates_available">没有可用的模板。</string>
+    <string name="performance_analytics">性能分析</string>
+    <string name="sharing_performance_data">正在分享匿名性能数据</string>
+    <string name="not_sharing_performance_data">未分享性能数据</string>
+    <string name="compatibility">兼容性</string>
+    <plurals name="recovered_projects">
+        <item quantity="other">已从旧版本恢复 %1$d 个项目</item>
+    </plurals>
+    <string name="recovered_projects_content">这些项目使用 Gradle，将以受限的兼容模式打开——部分功能可能无法使用，并且在重新添加依赖项之前可能无法构建。您的原始文件已安全保存在存储文件夹中。</string>
 
 </resources>

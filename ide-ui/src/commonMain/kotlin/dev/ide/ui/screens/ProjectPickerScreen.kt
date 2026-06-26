@@ -42,6 +42,7 @@ import dev.ide.ui.components.pressScale
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.backup
 import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.compatibility
 import dev.ide.ui.generated.resources.delete
 import dev.ide.ui.generated.resources.delete_project
 import dev.ide.ui.generated.resources.delete_project_content
@@ -53,10 +54,13 @@ import dev.ide.ui.generated.resources.new_project_content
 import dev.ide.ui.generated.resources.no_project_yet
 import dev.ide.ui.generated.resources.open_a_project
 import dev.ide.ui.generated.resources.projects
+import dev.ide.ui.generated.resources.recovered_projects
+import dev.ide.ui.generated.resources.recovered_projects_content
 import dev.ide.ui.generated.resources.your_files
 import dev.ide.ui.generated.resources.your_projects
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The "Projects" picker: large title, a New-Project action, and a card per known project. */
@@ -227,7 +231,7 @@ private fun BackupButton(onClick: () -> Unit, compact: Boolean = false) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(CaIcons.box, "Back up", Modifier.size(16.dp), tint = Ca.colors.textSecondary)
+        Icon(CaIcons.box, stringResource(Res.string.backup), Modifier.size(16.dp), tint = Ca.colors.textSecondary)
         if (!compact) Text(stringResource(Res.string.backup), color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
     }
 }
@@ -326,7 +330,7 @@ private fun ProjectCard(project: ProjectInfo, delayMillis: Int, onOpen: () -> Un
             Text(project.rootPath, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    stringResource(Res.string.modules, project.moduleCount),
+                    pluralStringResource(Res.plurals.modules, project.moduleCount, project.moduleCount),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.caption,
                     fontWeight = FontWeight.Medium,
@@ -361,7 +365,7 @@ private fun CompatibilityChip() {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(CaIcons.warning, null, Modifier.size(12.dp), tint = Ca.colors.warning)
-        Text("Compatibility", color = Ca.colors.warning, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.compatibility), color = Ca.colors.warning, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -384,16 +388,13 @@ private fun LegacyRecoveryBanner(count: Int, onDismiss: () -> Unit) {
         Icon(CaIcons.warning, null, Modifier.size(20.dp), tint = Ca.colors.warning)
         Column(Modifier.weight(1f)) {
             Text(
-                if (count == 1) "Recovered 1 project from an older version"
-                else "Recovered $count projects from an older version",
+                pluralStringResource(Res.plurals.recovered_projects, count, count),
                 color = Ca.colors.textPrimary,
                 style = Ca.type.subhead,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "These use Gradle and open in a limited compatibility mode — some features may not work and " +
-                    "they may not build until dependencies are re-added. Your original files are kept safe in " +
-                    "your storage folder.",
+                stringResource(Res.string.recovered_projects_content),
                 color = Ca.colors.textSecondary,
                 style = Ca.type.caption2,
             )

@@ -219,7 +219,6 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
 
-
     // Release signing, never committed. Resolution order per field: keystore.properties (gitignored,
     // alongside this build script) → Gradle property (-PRELEASE_*) → env var (RELEASE_*). With no keystore
     // the release build is left unsigned — fine for Play, which re-signs with the managed app key (you
@@ -416,11 +415,15 @@ tasks.named("preBuild").configure {
     dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset)
 }
 
+// Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
+// values/strings.xml is compiled by the Compose resources plugin into binary `.cvr` files (unlike fonts,
+// which are copied verbatim), so we stage the *processed* output, not the source. The compiled strings are
+// platform-independent, so the desktop target's processedResources is a reliable source; depend on the
+// task that produces them (desktopProcessResources) rather than the whole :ide-ui build. Staged at the
+// exact path the Compose resource runtime reads on device — composeResources/<resClass-package>/values*/.
 val bundleComposeStringAsset = tasks.register<Copy>("bundleComposeStringAsset") {
-    description = "Stage :ide-ui's i18n strings"
-
-    dependsOn(":ide-ui:build")
-
+    description = "Stage :ide-ui's i18n compose-resource strings into the APK assets (Android packaging gap)."
+    dependsOn(":ide-ui:desktopProcessResources")
     from(project(":ide-ui").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.ui.generated.resources")) {
         include("values*/**/*.cvr")
     }

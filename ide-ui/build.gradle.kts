@@ -1,5 +1,3 @@
-import com.android.build.gradle.internal.tasks.factory.dependsOn
-import org.gradle.kotlin.dsl.sourceSets
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The reusable IDE UI, authored once in Compose Multiplatform `commonMain` so the same composables run
@@ -33,7 +31,6 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
-
 
     sourceSets {
         commonMain.dependencies {
