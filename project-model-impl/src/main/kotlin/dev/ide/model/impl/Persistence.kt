@@ -2,6 +2,7 @@ package dev.ide.model.impl
 
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
+import dev.ide.model.Exclusion
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
@@ -147,7 +148,11 @@ object ModelPersistence {
     }
 
     private fun orderEntryToToml(e: OrderEntry): Any = when (e) {
-        is LibraryDependency -> e.library.name
+        // A plain library stays a bare string (unchanged on disk); one carrying exclusions becomes an inline
+        // table `{ library = "g:n:v", exclude = ["g:n", "g:*"] }` so the excludes round-trip.
+        is LibraryDependency ->
+            if (e.exclusions.isEmpty()) e.library.name
+            else linkedMapOf("library" to e.library.name, "exclude" to e.exclusions.map { it.toString() })
         is ModuleDependency -> linkedMapOf("module" to e.target.value)
         is PlatformDependency -> linkedMapOf("platform" to e.bom.toString())
         is SdkDependency -> linkedMapOf("sdk" to e.sdk.name)
@@ -265,6 +270,10 @@ object ModelPersistence {
         return when (item) {
             is String -> LibraryDependency(LibraryRef(item), scope, exported)
             is Map<*, *> -> when {
+                item.containsKey("library") -> LibraryDependency(
+                    LibraryRef(item["library"] as String), scope, exported,
+                    exclusions = (item["exclude"] as? List<*>).orEmpty().mapNotNull { Exclusion.parse(it as String) },
+                )
                 item.containsKey("module") -> ModuleDependency(ModuleId(item["module"] as String), scope, exported)
                 item.containsKey("platform") -> PlatformDependency(parseCoordinate(item["platform"] as String), scope, exported)
                 item.containsKey("sdk") -> SdkDependency(SdkRef(item["sdk"] as String), scope)

@@ -4,6 +4,7 @@ import dev.ide.deps.ArtifactKind
 import dev.ide.deps.ConflictPolicy
 import dev.ide.deps.Repository
 import dev.ide.model.Coordinate
+import dev.ide.model.Exclusion
 import dev.ide.platform.ProgressReporter
 import dev.ide.vfs.local.LocalFileSystem
 import kotlinx.coroutines.runBlocking
@@ -164,6 +165,62 @@ class MavenDependencyResolverTest {
         val result = runBlocking { resolver.resolve(listOf(coord("a", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
         val names = result.resolved.map { it.coordinate.name }.toSet()
         assertEquals(setOf("a", "b"), names) // testonly (test scope) and c (excluded) are gone
+    }
+
+    @Test
+    fun honorsCallerDeclaredExclusions() {
+        // The caller (not a POM) excludes `g:c` on the direct dependency `a` — the Gradle `exclude` semantics.
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "b", "1.0")))
+        files.put("b", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val a = coord("a", "1.0")
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(a), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                exclusions = mapOf(a to listOf(Exclusion("g", "c"))),
+            )
+        }
+        assertEquals(setOf("a", "b"), result.resolved.map { it.coordinate.name }.toSet(), "c is excluded by the caller")
+    }
+
+    @Test
+    fun callerExclusionAppliesPerDeclarationNotGlobally() {
+        // `a` excludes `g:c`, but `d` pulls `c` with no exclusion → c survives via d (per-path, like Gradle).
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("d", "1.0", deps = listOf(Dep("g", "c", "1.0")))
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val a = coord("a", "1.0"); val d = coord("d", "1.0")
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(a, d), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                exclusions = mapOf(a to listOf(Exclusion("g", "c"))),
+            )
+        }
+        assertTrue("c" in result.resolved.map { it.coordinate.name }, "c reachable through d, which doesn't exclude it")
+    }
+
+    @Test
+    fun wildcardCallerExclusionDropsAllTransitives() {
+        val files = FakeRepo()
+        files.put("a", "1.0", deps = listOf(Dep("g", "b", "1.0"), Dep("g", "c", "1.0")))
+        files.put("b", "1.0")
+        files.put("c", "1.0")
+        val (resolver, _) = newResolver(files)
+
+        val a = coord("a", "1.0")
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(a), listOf(repo), ConflictPolicy.NEWEST, noProgress,
+                exclusions = mapOf(a to listOf(Exclusion("*", "*"))),
+            )
+        }
+        assertEquals(setOf("a"), result.resolved.map { it.coordinate.name }.toSet(), "`*:*` drops every transitive")
     }
 
     @Test

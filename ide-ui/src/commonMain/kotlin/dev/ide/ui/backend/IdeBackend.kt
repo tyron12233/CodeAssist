@@ -395,8 +395,13 @@ interface IdeBackend {
      * transitive closure onto the module classpath. [coordinate] is `group:name:version`, or the versionless
      * `group:name` when a platform (BOM) imported via [addPlatform] supplies the version. Blocked (with a
      * reason) when the artifact is incompatible — e.g. an `.aar` on a pure-Java module.
+     *
+     * [exclusions] drop transitive dependencies from this declaration's closure (the Gradle `exclude` /
+     * Maven `<exclusions>` semantics). Each is a `group:name` string; either side may be the `*` wildcard.
      */
-    suspend fun addDependency(moduleName: String, coordinate: String, scope: String): UiAddResult =
+    suspend fun addDependency(
+        moduleName: String, coordinate: String, scope: String, exclusions: List<String> = emptyList()
+    ): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
     /**
@@ -410,6 +415,16 @@ interface IdeBackend {
     /** Remove the declared dependency or platform [coordinate] from [moduleName]. False if it wasn't present.
      *  For a module-on-module dependency, [coordinate] is the target module's name. */
     fun removeDependency(moduleName: String, coordinate: String): Boolean = false
+
+    /**
+     * Replace the transitive exclusions on an already-declared library [coordinate] of [moduleName], then
+     * re-resolve so the closure reflects the change. Each exclusion is a `group:name` string (`*` allowed).
+     * A no-op (success) when unchanged; fails when [coordinate] isn't a declared library dependency.
+     */
+    suspend fun setDependencyExclusions(
+        moduleName: String, coordinate: String, exclusions: List<String>
+    ): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
 
     /**
      * Other modules [moduleName] may depend on: every module in the same project except itself, those it
@@ -815,6 +830,8 @@ data class UiDependencyNode(
     /** A file-based local library (a jar/aar with no Maven coordinate) rather than a resolved artifact. */
     val local: Boolean = false,
     val children: List<String> = emptyList(),
+    /** Declared transitive exclusions (`group:name`, `*` wildcards allowed). Only set on declared roots. */
+    val exclusions: List<String> = emptyList(),
 )
 
 /** A resolved version clash: [artifact] (`group:name`) was requested at [requested]; [chosen] won. */

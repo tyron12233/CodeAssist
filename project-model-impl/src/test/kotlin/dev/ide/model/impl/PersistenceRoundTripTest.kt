@@ -4,6 +4,7 @@ import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
+import dev.ide.model.Exclusion
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
@@ -59,7 +60,10 @@ class PersistenceRoundTripTest {
                 addModule("core", javaLib).apply {
                     addSourceSet(SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE))))
                     addDependency(ModuleDependency(ModuleId("shared"), DependencyScope.API, exported = true))
-                    addDependency(LibraryDependency(LibraryRef("com.squareup.okhttp3:okhttp:4.12.0"), DependencyScope.IMPLEMENTATION))
+                    addDependency(LibraryDependency(
+                        LibraryRef("com.squareup.okhttp3:okhttp:4.12.0"), DependencyScope.IMPLEMENTATION,
+                        exclusions = listOf(Exclusion("com.squareup.okio", "okio"), Exclusion("org.jetbrains.kotlin", "*")),
+                    ))
                     addDependency(PlatformDependency(Coordinate("androidx.compose", "compose-bom", "2024.09.00")))
                     putFacet(JavaFacet(listOf("dagger.internal.codegen.ComponentProcessor"), preview = false))
                 }
@@ -103,6 +107,11 @@ class PersistenceRoundTripTest {
                 assertEquals(
                     Coordinate("androidx.compose", "compose-bom", "2024.09.00"),
                     core.dependencies.filterIsInstance<PlatformDependency>().single().bom,
+                )
+                assertEquals(
+                    listOf(Exclusion("com.squareup.okio", "okio"), Exclusion("org.jetbrains.kotlin", "*")),
+                    core.dependencies.filterIsInstance<LibraryDependency>()
+                        .single { it.library.name == "com.squareup.okhttp3:okhttp:4.12.0" }.exclusions,
                 )
                 assertEquals(LibraryKind.JAR, store2.workspace.libraryTable.byName("com.squareup.okhttp3:okhttp:4.12.0")?.kind)
                 assertEquals("jdk-17", store2.workspace.sdkTable.byName("jdk-17")?.name)

@@ -8,6 +8,7 @@ import dev.ide.deps.ResolutionResult
 import dev.ide.deps.ResolvedArtifact
 import dev.ide.deps.VersionConflict
 import dev.ide.model.Coordinate
+import dev.ide.model.Exclusion
 import dev.ide.platform.ProgressReporter
 import dev.ide.platform.log.Log
 import dev.ide.vfs.VirtualFile
@@ -72,6 +73,7 @@ class MavenDependencyResolver(
         conflict: ConflictPolicy,
         progress: ProgressReporter,
         platforms: List<Coordinate>,
+        exclusions: Map<Coordinate, List<Exclusion>>,
     ): ResolutionResult {
         val repos = repositories.ifEmpty { DEFAULT_REPOSITORIES }
         log.info(
@@ -106,7 +108,11 @@ class MavenDependencyResolver(
                 c0.copy(version = v)
             } else c0
             directVersions[c.ga] = c.version
-            queue.add(Req(c, emptySet(), direct = true))
+            // Seed this direct dependency's subtree with the caller's declared exclusions (keyed by the
+            // as-passed coordinate, so a versionless one matches its blank-version form). They merge with the
+            // POM-declared exclusions accumulated below, exactly like Gradle/Maven per-declaration excludes.
+            val seedExclusions = exclusions[c0].orEmpty().mapTo(HashSet()) { GA(it.group, it.name) }
+            queue.add(Req(c, seedExclusions, direct = true))
         }
 
         fun pick(ga: GA): String {

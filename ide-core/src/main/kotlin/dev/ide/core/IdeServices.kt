@@ -132,6 +132,7 @@ import dev.ide.deps.impl.DEFAULT_REPOSITORIES
 import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
 import dev.ide.model.Coordinate
+import dev.ide.model.Exclusion
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.LibraryDependency
@@ -1593,17 +1594,22 @@ class IdeServices private constructor(
     private suspend fun assembleModuleClasspath(
         module: Module, progress: ProgressReporter, finalize: Boolean
     ): ModuleAssembly {
-        val directs = module.dependencies.filterIsInstance<LibraryDependency>()
-            .mapNotNull { dep -> parseInputCoordinate(dep.library.name)?.let { dep.library.name to it } }
+        val libDeps = module.dependencies.filterIsInstance<LibraryDependency>()
+            .mapNotNull { dep -> parseInputCoordinate(dep.library.name)?.let { Triple(dep.library.name, it, dep.exclusions) } }
             .distinctBy { it.first }
+        val directs = libDeps.map { it.first to it.second }
         if (directs.isEmpty()) return ModuleAssembly(false, emptyList(), 0)
 
+        // Per-declaration exclusions, keyed by the (parsed) coordinate the resolver is seeded with, so each
+        // declaration's excludes prune only its own subtree (Gradle/Maven per-declaration semantics).
+        val exclusions = libDeps.filter { it.third.isNotEmpty() }.associate { it.second to it.third }
         val result = depsResolver.resolve(
             directs.map { it.second },
             currentRepositories(),
             ConflictPolicy.NEWEST,
             progress,
-            platforms = declaredPlatforms(module)
+            platforms = declaredPlatforms(module),
+            exclusions = exclusions,
         )
         val byGa = result.resolved.associateBy { it.coordinate.group to it.coordinate.name }
         val partition = DependencyPartition.partition(directs, result.resolved)
@@ -1940,11 +1946,12 @@ class IdeServices private constructor(
         val declaredRoots = ArrayList<UiDependencyNode>()
         for (entry in module.dependencies) when (entry) {
             is LibraryDependency -> {
+                val excl = entry.exclusions.map { it.toString() }
                 val coord = parseCoordinate(entry.library.name)
                 if (coord != null) {
                     val ga = "${coord.group}:${coord.name}"
                     val resolvedNode = nodes.values.firstOrNull { "${it.group}:${it.name}" == ga }
-                    if (resolvedNode != null) declaredRoots += resolvedNode
+                    if (resolvedNode != null) declaredRoots += resolvedNode.copy(exclusions = excl)
                     else {
                         unresolved += entry.library.name
                         val lib = findLibrary(entry.library.name)
@@ -1961,6 +1968,7 @@ class IdeServices private constructor(
                             scope = scopeLabel(entry.scope),
                             compatible = compatible,
                             incompatibleReason = if (!compatible) aarReason(module) else null,
+                            exclusions = excl,
                         )
                         declaredRoots += node
                         nodes.putIfAbsent(node.coordinate, node)
@@ -2056,7 +2064,9 @@ class IdeServices private constructor(
      * library bundles every resolved jar/aar-classes root. Blocked when incompatible (e.g. an `.aar` on a
      * Java module). Re-indexes so completion/analysis pick up the new classpath.
      */
-    suspend fun addDependency(moduleName: String, coordinate: String, scope: String): UiAddResult {
+    suspend fun addDependency(
+        moduleName: String, coordinate: String, scope: String, exclusions: List<String> = emptyList()
+    ): UiAddResult {
         // The standalone "add" (Dependencies screen): owns the resolve-state flag; the resolution core is
         // shared with the deferred template-dependency loop ([startPendingDependencyResolution]).
         _depsState.value = DepsResolveState(
@@ -2065,7 +2075,7 @@ class IdeServices private constructor(
             log = listOf("Resolving $coordinate…")
         )
         return try {
-            resolveAndAttach(moduleName, coordinate, scope, depsProgress())
+            resolveAndAttach(moduleName, coordinate, scope, depsProgress(), exclusions = exclusions.mapNotNull(Exclusion::parse))
         } finally {
             // resolveAndAttach → assembleModuleClasspath already stamped reasons; refresh the error state.
             _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
@@ -2081,7 +2091,8 @@ class IdeServices private constructor(
         coordinate: String,
         scope: String,
         progress: ProgressReporter,
-        finalize: Boolean = true
+        finalize: Boolean = true,
+        exclusions: List<Exclusion> = emptyList(),
     ): UiAddResult {
         val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "No module '$moduleName'."
@@ -2105,7 +2116,8 @@ class IdeServices private constructor(
                 currentRepositories(),
                 ConflictPolicy.NEWEST,
                 progress,
-                platforms = platforms
+                platforms = platforms,
+                exclusions = if (exclusions.isEmpty()) emptyMap() else mapOf(coord to exclusions),
             )
         } catch (e: Exception) {
             return UiAddResult(false, "Resolution failed: ${e.message}")
@@ -2136,7 +2148,7 @@ class IdeServices private constructor(
         project.beginModification().apply {
             module(module.id).addDependency(
                 LibraryDependency(
-                    LibraryRef(libraryName), parseScope(scope)
+                    LibraryRef(libraryName), parseScope(scope), exclusions = exclusions
                 )
             )
             commit()
@@ -2244,6 +2256,51 @@ class IdeServices private constructor(
             }
         }
         return true
+    }
+
+    /**
+     * Replace the transitive exclusions on an already-declared library dependency [coordinate] of [moduleName],
+     * then re-resolve the module so the closure reflects the change (a newly-excluded transitive is pruned; a
+     * previously-excluded one comes back). A no-op (success) when the parsed set is unchanged.
+     */
+    suspend fun setExclusions(moduleName: String, coordinate: String, exclusions: List<String>): UiAddResult {
+        val module = modules().firstOrNull { it.name == moduleName }
+            ?: return UiAddResult(false, "No module '$moduleName'.")
+        val entry = module.dependencies.filterIsInstance<LibraryDependency>()
+            .firstOrNull { it.library.name == coordinate }
+            ?: return UiAddResult(false, "$coordinate is not a library dependency of '$moduleName'.")
+        val parsed = exclusions.mapNotNull(Exclusion::parse)
+        if (parsed == entry.exclusions) return UiAddResult(true, "No change to exclusions.")
+        val project = projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
+
+        // Replace the declaration (remove + re-add carrying the new exclusions). Order among library deps
+        // doesn't affect the resolved set — the whole graph is conflict-resolved newest-wins regardless.
+        project.beginModification().apply {
+            module(module.id).removeDependency(entry)
+            module(module.id).addDependency(entry.copy(exclusions = parsed))
+            commit()
+        }
+        _depsState.value = DepsResolveState(
+            resolving = true,
+            message = "Updating exclusions for $coordinate…",
+            log = listOf("Updating exclusions for $coordinate…"),
+        )
+        return try {
+            val updated = modules().firstOrNull { it.name == moduleName }
+                ?: return UiAddResult(false, "Module '$moduleName' disappeared.")
+            val asm = assembleModuleClasspath(updated, depsProgress(), finalize = true)
+            // The declared set changed → let the next open re-verify the persisted closure.
+            runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
+            if (asm.unresolved.isNotEmpty()) UiAddResult(
+                true,
+                "Exclusions updated, but ${asm.unresolved.size} artifact(s) failed to download — re-resolve to complete the classpath.",
+                asm.resolvedCount,
+            ) else UiAddResult(true, "Exclusions updated for $coordinate", asm.resolvedCount)
+        } catch (e: Exception) {
+            UiAddResult(false, "Re-resolution failed: ${e.message}")
+        } finally {
+            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
+        }
     }
 
     // ---- local libraries (file-based jar/aar, no Maven coordinate) ----

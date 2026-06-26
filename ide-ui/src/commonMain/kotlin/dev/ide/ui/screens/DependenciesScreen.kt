@@ -128,8 +128,10 @@ fun DependenciesPane(
     var addOpen by remember { mutableStateOf(false) }
     var reposOpen by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<String?>(null) }
+    var pendingEdit by remember { mutableStateOf<UiDependencyNode?>(null) }
     var toast by remember { mutableStateOf<ToastMsg?>(null) }
     val resolveState by backend.depsState.collectAsState()
+    val coroutine = rememberCoroutineScope()
 
     LaunchedEffect(moduleName, reloadKey) {
         loading = true
@@ -144,7 +146,7 @@ fun DependenciesPane(
         Column(Modifier.fillMaxSize()) {
             DepPaneToolbar(tab, { tab = it }, resolvedView, { resolvedView = it }, { addOpen = true }, { reposOpen = true }, resolving, resolveState.message, compact = !expanded)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
-            DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth()) { pendingRemove = it }
+            DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth(), { pendingRemove = it }, { pendingEdit = it })
         }
 
         // ---- Add flow + Repositories: centered dialogs on desktop, bottom sheets on phone ----
@@ -185,6 +187,24 @@ fun DependenciesPane(
                 pendingRemove = null
             },
         )
+
+        // ---- edit exclusions ----
+        pendingEdit?.let { node ->
+            EditExclusionsDialog(
+                node = node,
+                codeFont = codeFont,
+                expanded = expanded,
+                onDismiss = { pendingEdit = null },
+                onSave = { newExclusions ->
+                    coroutine.launch {
+                        val result = backend.setDependencyExclusions(moduleName, node.coordinate, newExclusions)
+                        toast = ToastMsg(result.message, error = !result.success)
+                        if (result.success) reloadKey++
+                    }
+                    pendingEdit = null
+                },
+            )
+        }
 
         // ---- toast ----
         ToastHost(toast, Modifier.align(Alignment.BottomCenter))
@@ -312,13 +332,14 @@ private fun DepBody(
     codeFont: FontFamily,
     modifier: Modifier,
     onRemove: (String) -> Unit,
+    onEditExclusions: (UiDependencyNode) -> Unit,
 ) {
     Crossfade(targetState = loading, animationSpec = tween(Motion.BASE), label = "depBody", modifier = modifier) { isLoading ->
         when {
             isLoading -> ResolvingPanel(resolveState)
             deps == null -> Empty("Couldn't load dependencies.")
             // The persistent error state carries the (heuristic) why per coordinate — surface it here too.
-            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove)
+            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove, onEditExclusions)
         }
     }
 }
@@ -357,7 +378,7 @@ private fun ResolveBar(fraction: Double) {
 }
 
 @Composable
-private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit) {
+private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit, onEditExclusions: (UiDependencyNode) -> Unit) {
     val nodesByCoord = remember(deps) { deps.nodes.associateBy { it.coordinate } }
     val expanded = remember(deps) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     val unresolvedSet = remember(deps) { deps.unresolved.toSet() }
@@ -396,7 +417,10 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                     Column(Modifier.fillMaxWidth().animateItem()) {
                         DependencyRow(node, codeFont, depth = 0, expandable = node.children.isNotEmpty(), expanded = open,
                             onToggle = { expanded["decl:${node.coordinate}"] = !open },
-                            onRemove = { onRemove(node.coordinate) }, unresolved = node.coordinate in unresolvedSet)
+                            onRemove = { onRemove(node.coordinate) }, unresolved = node.coordinate in unresolvedSet,
+                            onEditExclusions = if (node.kind == UiDepKind.Jar || node.kind == UiDepKind.Aar) {
+                                if (!node.local) ({ onEditExclusions(node) }) else null
+                            } else null)
                         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
                             Column {
                                 node.children.forEach { childCoord -> nodesByCoord[childCoord]?.let { TransitiveRow(it, codeFont, depth = 1) } }
@@ -476,6 +500,7 @@ private fun DependencyRow(
     onRemove: (() -> Unit)?,
     cycle: Boolean = false,
     unresolved: Boolean = false,
+    onEditExclusions: (() -> Unit)? = null,
 ) {
     Row(
         Modifier.fillMaxWidth().height(46.dp).clickable(enabled = expandable, onClick = onToggle)
@@ -496,9 +521,14 @@ private fun DependencyRow(
             }
         }
         node.scope?.let { Chip(it, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
+        if (node.exclusions.isNotEmpty()) Chip(
+            if (node.exclusions.size == 1) "excludes ${node.exclusions.first()}" else "excludes ${node.exclusions.size}",
+            fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary,
+        )
         if (unresolved) Chip("unresolved", fill = Ca.colors.error.copy(alpha = 0.16f), textColor = Ca.colors.error)
         if (node.inConflict) Chip("conflict", fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
         if (!node.compatible) Icon(CaIcons.warning, "Incompatible", Modifier.size(16.dp), tint = Ca.colors.error)
+        if (onEditExclusions != null) IconButtonCa(CaIcons.gear, "Edit exclusions for ${node.name}", onClick = onEditExclusions, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) Ca.colors.accent else Ca.colors.textTertiary)
         if (onRemove != null) IconButtonCa(CaIcons.close, "Remove ${node.name}", onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
     }
 }
@@ -534,6 +564,8 @@ private fun AddDependencyContent(
     var results by remember { mutableStateOf<List<UiArtifactHit>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var scope by remember { mutableStateOf("implementation") }
+    // Library mode only: transitive exclusions, typed as `group:name` entries (comma/space/newline separated).
+    var exclusionsText by remember { mutableStateOf("") }
     var moduleTargets by remember { mutableStateOf<List<String>>(emptyList()) }
     var localCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
@@ -566,7 +598,10 @@ private fun AddDependencyContent(
                 AddMode.Platform -> backend.addPlatform(moduleName, coordinate)
                 AddMode.Module -> backend.addModuleDependency(moduleName, coordinate, scope)
                 AddMode.Local -> backend.addLocalLibrary(moduleName, coordinate, scope)
-                AddMode.Library -> backend.addDependency(moduleName, coordinate, scope)
+                AddMode.Library -> backend.addDependency(
+                    moduleName, coordinate, scope,
+                    exclusionsText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() },
+                )
             }
             busy = false; adding = null
             if (result.success) onResult(result) else error = result.message
@@ -620,6 +655,25 @@ private fun AddDependencyContent(
             Text("scope", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
             scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
         } else Spacer(Modifier.height(10.dp))
+
+        // Transitive exclusions (Library mode only) — Gradle `exclude` / Maven `<exclusions>`. Optional;
+        // one or more `group:name` entries (either side may be `*`), separated by commas, spaces, or newlines.
+        if (mode == AddMode.Library) Row(
+            Modifier.fillMaxWidth().padding(bottom = 10.dp).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(CaIcons.close, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+            Box(Modifier.weight(1f)) {
+                if (exclusionsText.isEmpty()) Text(
+                    "exclude (optional) — e.g. com.google.guava:guava, org.json:*",
+                    color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                BasicTextField(exclusionsText, { exclusionsText = it; error = null }, singleLine = true, enabled = !busy,
+                    textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
+                    cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+            }
+        }
 
         error?.let { msg ->
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Ca.colors.error.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm)).padding(10.dp),
@@ -829,6 +883,57 @@ private fun ConfirmRemoveDialog(coordinate: String?, moduleName: String?, onDism
             }
         }
     }
+}
+
+/** Edit the transitive exclusions on an already-declared library. Prefilled with the current set; Save
+ *  re-resolves the module. Either side of a `group:name` entry may be `*`. */
+@Composable
+private fun EditExclusionsDialog(
+    node: UiDependencyNode,
+    codeFont: FontFamily,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (List<String>) -> Unit,
+) {
+    var text by remember(node.coordinate) { mutableStateOf(node.exclusions.joinToString(", ")) }
+    val card: @Composable () -> Unit = {
+        Column(
+            Modifier.padding(horizontal = if (expanded) 12.dp else 0.dp).widthIn(max = 520.dp).fillMaxWidth()
+                .then(if (expanded) Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl)).border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)) else Modifier)
+                .padding(if (expanded) 20.dp else 4.dp),
+        ) {
+            Text("Edit exclusions", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(6.dp))
+            Text(shortCoord(node.coordinate), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
+            Spacer(Modifier.height(4.dp))
+            Text("Transitive dependencies to drop from this library's closure — one or more group:name entries (either side may be *), separated by commas, spaces, or newlines.",
+                color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                    .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(CaIcons.close, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+                Box(Modifier.weight(1f)) {
+                    if (text.isEmpty()) Text("e.g. com.google.guava:guava, org.json:*", color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicTextField(text, { text = it }, singleLine = false,
+                        textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
+                        cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Spacer(Modifier.weight(1f))
+                DialogButton("Cancel", destructive = false, onClick = onDismiss)
+                DialogButton("Save", destructive = false, onClick = {
+                    onSave(text.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() })
+                })
+            }
+        }
+    }
+    if (expanded) DropdownOverlay(visible = true, onDismiss = onDismiss, topPadding = 120.dp) { card() }
+    else BottomSheet(visible = true, onDismiss = onDismiss, heightFraction = 0.5f) { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { card() } }
 }
 
 @Composable

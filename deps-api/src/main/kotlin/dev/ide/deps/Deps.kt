@@ -1,6 +1,7 @@
 package dev.ide.deps
 
 import dev.ide.model.Coordinate
+import dev.ide.model.Exclusion
 import dev.ide.platform.ProgressReporter
 import dev.ide.vfs.VirtualFile
 
@@ -22,6 +23,12 @@ interface DependencyResolver {
      * they supply versions to any [coordinates] (or transitive dependency) declared *without* a version
      * (a blank [Coordinate.version]). Plain-platform semantics: a BOM never overrides a version that was
      * stated explicitly — it only fills the blanks. Earlier platforms win when two manage the same artifact.
+     *
+     * [exclusions] are caller-declared transitive exclusions, keyed by the *direct* [coordinate][coordinates]
+     * they apply to (the Gradle `exclude` / Maven `<exclusions>` semantics). They are applied per declaration
+     * and propagate down only that coordinate's subtree, on top of any exclusions the POMs themselves declare:
+     * a transitive excluded under one direct dependency can still be pulled in by another that doesn't exclude
+     * it. A versionless coordinate is keyed by its as-passed (blank-version) form.
      */
     suspend fun resolve(
         coordinates: List<Coordinate>,
@@ -29,6 +36,7 @@ interface DependencyResolver {
         conflict: ConflictPolicy = ConflictPolicy.NEWEST,
         progress: ProgressReporter,
         platforms: List<Coordinate> = emptyList(),
+        exclusions: Map<Coordinate, List<Exclusion>> = emptyMap(),
     ): ResolutionResult
 }
 

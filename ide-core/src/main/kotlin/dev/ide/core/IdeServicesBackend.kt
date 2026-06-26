@@ -791,14 +791,21 @@ class IdeServicesBackend(
     override suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> =
         withContext(Dispatchers.IO) { services.searchArtifacts(query, moduleName) }
 
-    override suspend fun addDependency(moduleName: String, coordinate: String, scope: String): UiAddResult =
-        withContext(Dispatchers.IO) { services.addDependency(moduleName, coordinate, scope) }
+    override suspend fun addDependency(
+        moduleName: String, coordinate: String, scope: String, exclusions: List<String>
+    ): UiAddResult =
+        withContext(Dispatchers.IO) { services.addDependency(moduleName, coordinate, scope, exclusions) }
 
     override suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
         withContext(Dispatchers.IO) { services.addPlatform(moduleName, coordinate) }
 
     override fun removeDependency(moduleName: String, coordinate: String): Boolean =
         services.removeDependency(moduleName, coordinate)
+
+    override suspend fun setDependencyExclusions(
+        moduleName: String, coordinate: String, exclusions: List<String>
+    ): UiAddResult =
+        withContext(Dispatchers.IO) { services.setExclusions(moduleName, coordinate, exclusions) }
 
     override fun moduleDependencyTargets(moduleName: String): List<String> =
         services.moduleDependencyTargets(moduleName)

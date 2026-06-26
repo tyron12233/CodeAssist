@@ -169,7 +169,29 @@ data class LibraryDependency(
     val library: LibraryRef,
     override val scope: DependencyScope,
     override val exported: Boolean = false,
+    /**
+     * Transitive dependencies to drop from this declaration's closure — the Gradle
+     * `exclude group:…, module:…` / Maven `<exclusions>` semantics. Applied per declaration: a transitive
+     * excluded here can still arrive through another declaration that doesn't exclude it. Empty by default.
+     */
+    val exclusions: List<Exclusion> = emptyList(),
 ) : OrderEntry
+
+/**
+ * A transitive dependency to exclude from a [LibraryDependency]'s closure, matched by `group:name`. Either
+ * field may be the wildcard `"*"` (e.g. `Exclusion("com.google.guava", "*")` drops every guava artifact;
+ * `Exclusion("*", "*")` drops all transitives, leaving only the declared artifact).
+ */
+data class Exclusion(val group: String, val name: String) {
+    override fun toString(): String = "$group:$name"
+
+    companion object {
+        /** Parse a `group:name` exclusion string (either side may be `*`). Null if it isn't two colon parts. */
+        fun parse(s: String): Exclusion? =
+            s.split(":").map { it.trim() }.takeIf { it.size == 2 && it.none(String::isEmpty) }
+                ?.let { Exclusion(it[0], it[1]) }
+    }
+}
 
 data class SdkDependency(
     val sdk: SdkRef,
