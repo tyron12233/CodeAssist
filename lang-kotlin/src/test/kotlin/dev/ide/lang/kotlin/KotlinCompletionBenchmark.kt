@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin
 import dev.ide.bench.Bench
 import dev.ide.bench.RegressionSuite
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.LogSink
@@ -106,12 +107,12 @@ class KotlinCompletionBenchmark {
         report.append("scenario        |        ns/op     alloc/op       items\n")
         for (s in scenarios()) {
             val req = CompletionRequest(SnippetDoc(s.text, DiskFile(srcDir.resolve("app/Service.kt"))), s.offset, CompletionTrigger.TypedChar('.'))
-            val items = runBlocking { analyzer.completion!!.complete(req) }.items.size
+            val items = runBlocking { analyzer.complete(req) }.items.size
             val nsPerOp = Bench.nsPerOp(warmup = 3, runs = 5, ops = 6) {
-                runBlocking { analyzer.completion!!.complete(req) }.items.size.toLong()
+                runBlocking { analyzer.complete(req) }.items.size.toLong()
             }
             val bytesPerOp = Bench.allocPerOp(warmup = 3, ops = 6) {
-                runBlocking { analyzer.completion!!.complete(req) }.items.size.toLong()
+                runBlocking { analyzer.complete(req) }.items.size.toLong()
             }
             report.append("%-15s | %12s %12s %11d\n".format(s.label, Bench.ns(nsPerOp), Bench.bytes(bytesPerOp.toDouble()), items))
             // Loose drift + a 300 ms interactive backstop (Kotlin completion does more inference than JDT).
@@ -132,10 +133,10 @@ class KotlinCompletionBenchmark {
             analyzer.liveOverlayProvider = { mapOf(servicePath to s.text + "\n// e$edit") }
             val req = CompletionRequest(SnippetDoc(s.text, DiskFile(srcDir.resolve("app/Service.kt"))), s.offset, CompletionTrigger.TypedChar('.'))
             val editNs = Bench.nsPerOp(warmup = 3, runs = 5, ops = 6) {
-                edit++; runBlocking { analyzer.completion!!.complete(req) }.items.size.toLong()
+                edit++; runBlocking { analyzer.complete(req) }.items.size.toLong()
             }
             val editBytes = Bench.allocPerOp(warmup = 3, ops = 6) {
-                edit++; runBlocking { analyzer.completion!!.complete(req) }.items.size.toLong()
+                edit++; runBlocking { analyzer.complete(req) }.items.size.toLong()
             }
             analyzer.liveOverlayProvider = { emptyMap() }
             println("\n=== Kotlin completion while editing (model rebuild per keystroke) ===\nmember-access-editing: ${Bench.ns(editNs)}, alloc: ${Bench.bytes(editBytes.toDouble())}\n")
@@ -153,7 +154,7 @@ class KotlinCompletionBenchmark {
             try {
                 val s = scenario("member-access", "sb.|")
                 val req = CompletionRequest(SnippetDoc(s.text, DiskFile(srcDir.resolve("app/Service.kt"))), s.offset, CompletionTrigger.TypedChar('.'))
-                repeat(8) { runBlocking { analyzer.completion!!.complete(req) } } // warm + collect
+                repeat(8) { runBlocking { analyzer.complete(req) } } // warm + collect
             } finally {
                 dev.ide.lang.kotlin.KotlinPerf.enabled = false
                 Log.removeSink(sink)

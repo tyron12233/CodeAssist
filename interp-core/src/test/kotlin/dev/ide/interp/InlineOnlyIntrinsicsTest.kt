@@ -140,15 +140,15 @@ class InlineOnlyIntrinsicsTest {
 
     @Test
     fun unmodeledInlineOnlyFunctionGivesALegibleError() {
-        // `with(receiver) { … }` is @InlineOnly (no JVM method) and isn't in the intrinsic table (its block is a
-        // receiver lambda). The dispatch failure must be rewritten into a clear "inline-only … not modeled"
-        // message, not the cryptic `no static with(2) on kotlin.StandardKt`.
-        val lambda = RNode.Lambda(emptyList(), RNode.Block(listOf(const(1)), true, span), emptyList(), span)
-        val withCallee = ResolvedCallable.Library(
-            displayName = "with", ownerFqn = "kotlin.StandardKt", methodName = "with", paramTypes = emptyList(),
-            isStatic = true, isConstructor = false, isInline = true,
+        // An @InlineOnly function (no JVM method) that ISN'T in the intrinsic table: the dispatch failure must be
+        // rewritten into a clear "inline-only … not modeled" message, not the cryptic `no static … on
+        // kotlin.StandardKt`. (The scope functions `let`/`also`/`run`/`apply`/`with` ARE modeled now, so this
+        // uses a synthetic unmodeled callee to keep exercising the fallback path.)
+        val callee = ResolvedCallable.Library(
+            displayName = "someUnmodeledInlineFn", ownerFqn = "kotlin.StandardKt", methodName = "someUnmodeledInlineFn",
+            paramTypes = emptyList(), isStatic = true, isConstructor = false, isInline = true,
         )
-        val call = RNode.Call(withCallee, DispatchKind.TOP_LEVEL, receiver = null, args = listOf(arg(const(7)), arg(lambda)), callSiteKey = CallSiteKey(0), source = span)
+        val call = RNode.Call(callee, DispatchKind.TOP_LEVEL, receiver = null, args = listOf(arg(const(7))), callSiteKey = CallSiteKey(0), source = span)
         val ex = assertFailsWith<InterpreterException> { run(call) }
         assertTrue("inline-only" in (ex.message ?: ""), "expected an inline-only diagnostic; got: ${ex.message}")
     }

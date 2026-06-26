@@ -4,6 +4,8 @@ import dev.ide.index.Hit
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexId
 import dev.ide.index.IndexInput
+import dev.ide.index.IndexItem
+import dev.ide.index.IndexItemState
 import dev.ide.index.IndexOrigin
 import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
@@ -122,7 +124,7 @@ class IndexServiceImpl(
     // ---- build ----
 
     override suspend fun ensureUpToDate(scope: IndexScope) {
-        setStatus(IndexStatus(building = true, message = "Indexing…", fraction = -1.0))
+        setStatus(IndexStatus(building = true, message = "Indexing…", fraction = -1.0, phase = "Starting…"))
         try {
             // Soft reset: drop the in-memory open segments (but KEEP the on-disk `.seg` files) so this call
             // re-syncs to the current scope — segments for artifacts no longer on the classpath fall out, and
@@ -144,9 +146,22 @@ class IndexServiceImpl(
             val concurrency = minOf(4, maxOf(1, Runtime.getRuntime().availableProcessors() - 1))
             val done = AtomicInteger(0)
             val buildDispatcher = Dispatchers.IO.limitedParallelism(concurrency)
+            // Per-artifact worklist for the index-status dialog (PENDING → ACTIVE → DONE). Mutated from the
+            // parallel builders under [worklistLock]; each status emit publishes an immutable snapshot.
+            val worklist = artifacts.mapTo(ArrayList()) { IndexItem(it.label, IndexItemState.PENDING) }
+            val worklistLock = Any()
+            fun emitArtifacts(message: String) {
+                val items = synchronized(worklistLock) { worklist.toList() }
+                val d = done.get()
+                setStatus(IndexStatus(true, message, d.toDouble() / total, phase = "Libraries & SDK",
+                    items = items, processed = d, total = artifacts.size))
+            }
+            emitArtifacts("Indexing…")
             kotlinx.coroutines.coroutineScope {
-                for (art in artifacts) {
+                for ((i, art) in artifacts.withIndex()) {
                     launch(buildDispatcher) {
+                        synchronized(worklistLock) { worklist[i] = worklist[i].copy(state = IndexItemState.ACTIVE) }
+                        emitArtifacts("Indexing ${art.label}")
                         try {
                             indexArtifact(art)
                         } catch (c: kotlinx.coroutines.CancellationException) {
@@ -159,12 +174,18 @@ class IndexServiceImpl(
                             dev.ide.platform.log.Log.logger("index")
                                 .warn("indexing ${art.label} failed, skipped: ${t.javaClass.simpleName}: ${t.message}")
                         }
-                        setStatus(IndexStatus(true, "Indexing ${art.label}", done.incrementAndGet().toDouble() / total))
+                        synchronized(worklistLock) { worklist[i] = worklist[i].copy(state = IndexItemState.DONE) }
+                        done.incrementAndGet()
+                        emitArtifacts("Indexing ${art.label}")
                     }
                 }
             }
-            setStatus(IndexStatus(true, "Indexing project source", artifacts.size.toDouble() / total))
-            indexSource(scope.sourceRoots, scope.resourceRoots)
+            setStatus(IndexStatus(true, "Indexing project source", artifacts.size.toDouble() / total, phase = "Project source"))
+            indexSource(scope.sourceRoots, scope.resourceRoots) { current, processed, totalFiles ->
+                setStatus(IndexStatus(true, "Indexing project source", artifacts.size.toDouble() / total,
+                    phase = "Project source", items = listOf(IndexItem(current, IndexItemState.ACTIVE)),
+                    processed = processed, total = totalFiles))
+            }
             setStatus(IndexStatus(false, "Indexed", 1.0, ready = true))
         } catch (t: Throwable) {
             setStatus(IndexStatus(false, "Indexing failed: ${t.message}", 1.0))
@@ -251,21 +272,37 @@ class IndexServiceImpl(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private suspend fun indexSource(roots: List<Path>, resourceRoots: List<Path> = emptyList()) {
+    private suspend fun indexSource(
+        roots: List<Path>,
+        resourceRoots: List<Path> = emptyList(),
+        /** Reports the (relative) file currently indexed plus a running count, for the index-status dialog. */
+        progress: (current: String, processed: Int, total: Int) -> Unit = { _, _, _ -> },
+    ) {
         states.values.forEach { it.source.clear(); it.sourceByFile.clear() }
         // Source roots: Java/Kotlin. Resource roots: Android res XML. Inputs are disjoint — each extension's
         // inputFilter selects its own, so the Java indexes ignore .xml and the resource index ignores .java.
         val groups = roots.map { it to setOf(".java", ".kt") } + resourceRoots.map { it to setOf(".xml") }
+        // Collect every file up front so the detail view has a stable total to report progress against.
+        val files = ArrayList<Pair<Path, Path>>()
         for ((root, exts) in groups) {
             if (!Files.isDirectory(root)) continue
-            val files = Files.walk(root).use { s ->
-                s.filter { f -> Files.isRegularFile(f) && exts.any { f.toString().endsWith(it) } }.collect(Collectors.toList())
+            Files.walk(root).use { s ->
+                s.filter { f -> Files.isRegularFile(f) && exts.any { f.toString().endsWith(it) } }
+                    .forEach { files.add(it to root) }
             }
-            for (file in files) {
-                val text = runCatching { file.readText() }.getOrNull() ?: continue
-                indexSourceFile(file, text, root)
-                yield()
+        }
+        val total = files.size
+        var processed = 0
+        for ((file, root) in files) {
+            runCatching { file.readText() }.getOrNull()?.let { indexSourceFile(file, it, root) }
+            processed++
+            // The source phase can be thousands of small files, so throttle status churn: report every 16th
+            // file (and the last) rather than every one.
+            if (processed % 16 == 0 || processed == total) {
+                val rel = runCatching { root.relativize(file).toString() }.getOrNull() ?: file.fileName?.toString() ?: ""
+                progress(rel, processed, total)
             }
+            yield()
         }
         states.values.forEach { st -> st.sourceByFile.values.forEach { it.forEach { e -> st.source.add(e.term, e.value, e.origin) } } }
     }

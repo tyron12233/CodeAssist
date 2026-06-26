@@ -20,7 +20,7 @@ import java.util.Locale
  * broken buffer still yields a resolved tree.
  *
  * The keystroke-invariant environment state (jrt index, jar handles, package set) lives in one shared
- * [JdtEnvironmentCache] for the resolver's whole life — a [JdtCompletionService] (hence one resolver)
+ * [JdtEnvironmentCache] for the resolver's whole life — a [JdtCompletion] (hence one resolver)
  * exists per analyzer/module. Each resolve wraps that cache in a fresh, cheap [JdtNameEnvironment]
  * carrying only the current editor overlay + the excluded focal type. Building the cache once, rather
  * than per resolve, is what keeps completion off the GC: see [JdtEnvironmentCache].

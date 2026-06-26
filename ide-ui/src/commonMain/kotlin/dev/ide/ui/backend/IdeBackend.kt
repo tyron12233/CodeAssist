@@ -927,10 +927,24 @@ data class UiError(
     val timeLabel: String,
 )
 
+/** State of one unit of indexing work, mirrored from the engine for the index-status dialog. */
+enum class IndexWorkState { PENDING, ACTIVE, DONE }
+
+/** One unit of indexing work shown in the index-status dialog: a library/SDK artifact, or the source file
+ *  currently being scanned. */
+data class IndexWorkItem(val label: String, val state: IndexWorkState = IndexWorkState.PENDING)
+
 data class IndexUiStatus(
     val building: Boolean = false,
     val message: String = "",
     val fraction: Double = -1.0,
+    /** The phase currently running ("Libraries & SDK", "Project source"), for the index-status dialog. */
+    val phase: String = "",
+    /** The worklist for the index-status dialog (library/SDK artifacts + the current source file). Empty when idle. */
+    val items: List<IndexWorkItem> = emptyList(),
+    /** Units finished / total in the current phase (0 total ⇒ unknown). */
+    val processed: Int = 0,
+    val total: Int = 0,
 )
 
 /** A search hit. For go-to-symbol [filePath]/[offset] are set (navigable); for members they're null. */

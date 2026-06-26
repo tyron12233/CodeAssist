@@ -84,6 +84,13 @@ data class IndexScope(
     val sourceArchives: List<Path> = emptyList(),
 )
 
+/** State of one unit of indexing work, for the detail view. */
+enum class IndexItemState { PENDING, ACTIVE, DONE }
+
+/** One unit of indexing work: a library/SDK artifact, or (during the source phase) the file being scanned.
+ *  Surfaced in [IndexStatus.items] so the UI can show *what* is being indexed, not just an aggregate percent. */
+data class IndexItem(val label: String, val state: IndexItemState = IndexItemState.PENDING)
+
 /** Observable build state for the UI — the "availability / graceful degrade while building" signal. */
 data class IndexStatus(
     val building: Boolean = false,
@@ -95,6 +102,14 @@ data class IndexStatus(
      *  the "dumb mode" gate: a classpath/library lookup returns nothing (rather than falling back to a live
      *  jar scan / `@Metadata` decode) until the index is `ready`. */
     val ready: Boolean = false,
+    /** Human label of the phase currently running ("Libraries & SDK", "Project source"), for the detail view. */
+    val phase: String = "",
+    /** The worklist behind the progress bar: one entry per library/SDK artifact (with its state), and during
+     *  the source phase the file currently being indexed. Empty when idle. Drives the index-status dialog. */
+    val items: List<IndexItem> = emptyList(),
+    /** Units finished / total in the current phase (0 total ⇒ unknown / indeterminate). */
+    val processed: Int = 0,
+    val total: Int = 0,
 )
 
 interface IndexService {

@@ -227,7 +227,10 @@ class ReflectiveDispatcher(
             }
             DispatchKind.CONSTRUCTOR -> {
                 val owner = libraryOwner(callee) ?: throw InterpreterException("constructor `${callee.displayName}` has no type")
-                construct(owner, args, composableParamFlags(callee, args))
+                // The resolved overload's value-parameter count pins the matching `<init>$default` synthetic when
+                // a named-arg call omits a defaulted parameter (`SpanStyle(fontWeight = …)`).
+                val declaredParams = (callee as? ResolvedCallable.Library)?.let { maxOf(it.paramNames.size, it.paramTypes.size) } ?: args.size
+                construct(owner, args, composableParamFlags(callee, args), declaredParams)
             }
         }
     }
@@ -429,22 +432,135 @@ class ReflectiveDispatcher(
         else -> null
     }
 
-    private fun construct(ownerFqn: String, args: List<Any?>, composable: List<Boolean>): Any? {
-        // Constructors don't yet go through the `<init>$default` synthetic — named args that omit a defaulted
-        // constructor parameter are an honest boundary rather than a misbound call.
-        if (args.any { it === OmittedArg })
-            throw InterpreterException("constructor `$ownerFqn` with an omitted (defaulted) parameter is not yet supported")
+    private fun construct(ownerFqn: String, args: List<Any?>, composable: List<Boolean>, declaredParamCount: Int): Any? {
         // An unqualified type name (a stdlib exception the resolver couldn't fully qualify, e.g.
         // `IllegalArgumentException`) — try the `java.lang` package before giving up.
         val cls = runCatching { Class.forName(ownerFqn, false, loader) }.getOrNull()
             ?: (if ('.' !in ownerFqn) runCatching { Class.forName("java.lang.$ownerFqn", false, loader) }.getOrNull() else null)
             ?: throw InterpreterException("cannot load class `$ownerFqn`")
-        val ctor = cls.declaredConstructors.filter { it.parameterCount == args.size }
-            .firstOrNull { paramsAccept(it.parameterTypes, args) }
-            ?: cls.declaredConstructors.firstOrNull { it.parameterCount == args.size }
-            ?: throw InterpreterException("no constructor(${args.size}) on $ownerFqn")
+        // An interior [OmittedArg] hole means a defaulted param was skipped — there's no exact-arity match, so
+        // go straight to the synthetic (and a hole must never reach `newInstance`).
+        val hasOmitted = args.any { it === OmittedArg }
+        if (!hasOmitted) {
+            cls.declaredConstructors.filter { it.parameterCount == args.size }
+                .firstOrNull { paramsAccept(it.parameterTypes, args) }
+                ?.let { runCatching { it.isAccessible = true }; return it.newInstance(*bindArgs(it.parameterTypes, args, composable)) }
+        }
+        // A call that omits a defaulted parameter (`SpanStyle(fontWeight = …)`, or a trimmed trailing default
+        // that left no hole) has no exact-arity match — Kotlin emits an `<init>$default` synthetic constructor
+        // that fills the defaults. Tried for both shapes, exactly as the static/instance paths try theirs.
+        invokeViaDefaultConstructor(cls, args, composable, declaredParamCount)?.let { return it.value }
+        // Last resort: an arity match whose types the strict [paramsAccept] rejected (preserves prior behavior).
+        if (!hasOmitted) {
+            cls.declaredConstructors.firstOrNull { it.parameterCount == args.size }
+                ?.let { runCatching { it.isAccessible = true }; return it.newInstance(*bindArgs(it.parameterTypes, args, composable)) }
+        }
+        throw InterpreterException("no constructor(${args.count { it !== OmittedArg }}) on $ownerFqn")
+    }
+
+    /**
+     * Construct via Kotlin's default-arguments synthetic constructor — `<init>(realParams…, int mask[, int
+     * mask…], DefaultConstructorMarker)`, the binary form a call uses when it omits a defaulted constructor
+     * parameter. Mirrors [invokeViaDefaultSynthetic] but for a constructor: there is NO receiver (every real
+     * param is a value param, numbered 0-based in the mask), there is one `int` mask per 32 value params, and
+     * the trailing marker is `DefaultConstructorMarker` (always passed null — the synthetic reads the mask, not
+     * the marker). [realArgs] are already in declaration order with [OmittedArg] holes (named-arg reordering
+     * ran first, so no trailing-lambda remap is needed). Returns null when no fitting synthetic exists.
+     */
+    private fun invokeViaDefaultConstructor(cls: Class<*>, realArgs: List<Any?>, composable: List<Boolean>, declaredParamCount: Int): Invoked? {
+        val (ctor, maskCount) = findDefaultConstructor(cls, realArgs, declaredParamCount) ?: return null
+        val params = ctor.parameterTypes
+        val n = params.size - maskCount - 1 // realParams…, int×maskCount, DefaultConstructorMarker
+        val slots = arrayOfNulls<Any?>(params.size)
+        val masks = IntArray(maskCount)
+        for (i in 0 until n) {
+            // A set mask bit i ⇒ use the default for value param i. An explicit null is "provided" (no bit).
+            if (i < realArgs.size && realArgs[i] !== OmittedArg) {
+                val a = realArgs[i]
+                slots[i] = if (a is InterpretedLambda)
+                    (lambdaProxies?.proxyOrNull(a, params[i], composable.getOrElse(i) { false }) ?: regularLambdaProxy(a, params[i]))
+                else boxValueClassIfNeeded(a, params[i])
+            } else {
+                slots[i] = zeroValue(params[i])
+                masks[i / 32] = masks[i / 32] or (1 shl (i % 32))
+            }
+        }
+        for (j in 0 until maskCount) slots[n + j] = masks[j]
+        slots[params.size - 1] = null // the DefaultConstructorMarker is always null
         runCatching { ctor.isAccessible = true }
-        return ctor.newInstance(*bindArgs(ctor.parameterTypes, args, composable))
+        return Invoked(ctor.newInstance(*slots))
+    }
+
+    /** The fitting synthetic default-args constructor for [realArgs], paired with its `int` mask count. Prefers
+     *  the one whose real-param count equals the resolved overload's [declaredParamCount] (with the matching
+     *  mask width `ceil(n/32)`); falls back to the smallest single-mask synthetic that fits when the resolver
+     *  didn't carry an exact count (covers any class with ≤32 value parameters). */
+    private fun findDefaultConstructor(cls: Class<*>, realArgs: List<Any?>, declaredParamCount: Int): Pair<java.lang.reflect.Constructor<*>, Int>? {
+        if (declaredParamCount >= 1) {
+            val masks = (declaredParamCount + 31) / 32
+            cls.declaredConstructors.firstOrNull {
+                defaultConstructorRealParams(it.parameterTypes, masks) == declaredParamCount && fitsRealParams(it.parameterTypes, declaredParamCount, realArgs)
+            }?.let { return it to masks }
+        }
+        return cls.declaredConstructors
+            .filter { val n = defaultConstructorRealParams(it.parameterTypes, 1); n >= 0 && fitsRealParams(it.parameterTypes, n, realArgs) }
+            .minByOrNull { it.parameterCount }
+            ?.let { it to 1 }
+    }
+
+    /** The real (value) parameter count of a Kotlin default-args synthetic constructor whose JVM shape is
+     *  `(realParams…, int×[maskCount], DefaultConstructorMarker)` — i.e. `params.size - maskCount - 1` — or -1
+     *  when [params] isn't that shape for [maskCount] (no trailing marker, or the mask slots aren't `int`). */
+    private fun defaultConstructorRealParams(params: Array<Class<*>>, maskCount: Int): Int {
+        val n = params.size - maskCount - 1
+        if (n < 0 || params.last().name != DEFAULT_CONSTRUCTOR_MARKER) return -1
+        if ((0 until maskCount).any { params[n + it] != Int::class.javaPrimitiveType }) return -1
+        return n
+    }
+
+    /** Whether [realArgs] (already in declaration order, with [OmittedArg] holes) fit the first [n] real params
+     *  of a synthetic — like [paramsAccept] but only over the leading reals, with an omitted slot fitting any
+     *  param (the synthetic supplies that parameter's default). */
+    private fun fitsRealParams(params: Array<Class<*>>, n: Int, realArgs: List<Any?>): Boolean {
+        if (realArgs.size > n) return false
+        for (i in realArgs.indices) {
+            val a = realArgs[i]
+            if (a === OmittedArg) continue
+            val p = params[i]
+            val ok = when (a) {
+                is InterpretedLambda -> p.isInterface
+                null -> !p.isPrimitive
+                // A boxed value-class param (`SpanStyle.fontStyle: FontStyle?`) also accepts the unboxed
+                // underlying value the interpreter produced — [boxValueClassIfNeeded] boxes it at invoke time.
+                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
+            }
+            if (!ok) return false
+        }
+        return true
+    }
+
+    /** Box an unboxed inline-value-class value for a NULLABLE/boxed value-class parameter. An inline value class
+     *  (`Color`, `TextUnit`, `FontStyle`) is represented UNBOXED (its underlying primitive) for a non-null
+     *  parameter, but BOXED for a nullable one (`fontStyle: FontStyle?` → JVM type `FontStyle`); a value-class
+     *  expression evaluates to the unboxed underlying value, so the boxed parameter needs the synthetic static
+     *  `box-impl` applied first. Anything already the right type, a null, or a primitive param passes through. */
+    private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
+        if (value == null || paramType.isPrimitive || paramType.isInstance(value)) return value
+        val box = paramType.methods.firstOrNull {
+            it.name == "box-impl" && Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 1 && wrap(it.parameterTypes[0]).isInstance(value)
+        } ?: return value
+        runCatching { box.isAccessible = true }
+        return box.invoke(null, value)
+    }
+
+    /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
+     *  value-class value fits a boxed value-class parameter (it'll be boxed by [boxValueClassIfNeeded]). */
+    private fun acceptsValueClassUnderlying(paramType: Class<*>, value: Any?): Boolean {
+        val box = paramType.methods.firstOrNull {
+            it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+        } ?: return false
+        return wrap(box.parameterTypes[0]).isInstance(value)
     }
 
     /** Convert an interpreted lambda arg into a JVM functional-interface proxy of the target parameter type
@@ -455,7 +571,7 @@ class ReflectiveDispatcher(
             (args[i] as? InterpretedLambda)?.let { lam ->
                 lambdaProxies?.proxyOrNull(lam, params[i], composable.getOrElse(i) { false })
                     ?: regularLambdaProxy(lam, params[i])
-            } ?: args[i]
+            } ?: boxValueClassIfNeeded(args[i], params[i])
         }
 
     private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any =
@@ -531,7 +647,7 @@ class ReflectiveDispatcher(
             val a = args[fixed + j]
             val v = (a as? InterpretedLambda)?.let { lam ->
                 lambdaProxies?.proxyOrNull(lam, componentType, composable.getOrElse(fixed + j) { false }) ?: regularLambdaProxy(lam, componentType)
-            } ?: a
+            } ?: boxValueClassIfNeeded(a, componentType)
             java.lang.reflect.Array.set(varargArray, j, v)
         }
         val leading = bindArgs(m.parameterTypes.copyOfRange(0, fixed), args.subList(0, fixed), composable)
@@ -548,19 +664,20 @@ class ReflectiveDispatcher(
             when (val a = args[i]) {
                 null -> !p.isPrimitive
                 is InterpretedLambda -> p.isInterface
-                else -> wrap(p).isInstance(a)
+                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
             }
         }
 
-    /** Whether each argument fits the (possibly primitive) parameter type — null fits any reference type, and
-     *  an interpreted lambda fits any functional interface. */
+    /** Whether each argument fits the (possibly primitive) parameter type — null fits any reference type, an
+     *  interpreted lambda fits any functional interface, and an unboxed inline-value-class value fits a boxed
+     *  value-class param (`bindArgs` boxes it via `box-impl` at invoke time). */
     private fun paramsAccept(params: Array<Class<*>>, args: List<Any?>): Boolean =
         params.size == args.size && params.indices.all { i ->
             val p = params[i]
             when (val a = args[i]) {
                 null -> !p.isPrimitive
                 is InterpretedLambda -> p.isInterface
-                else -> wrap(p).isInstance(a)
+                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
             }
         }
 
@@ -585,6 +702,10 @@ class ReflectiveDispatcher(
     private fun jvmName(fqn: String): String = KOTLIN_TO_JVM[fqn] ?: fqn
 
     private companion object {
+        /** The trailing marker parameter of every Kotlin default-args synthetic constructor — distinguishes it
+         *  from the real constructor (which shares the leading parameters) when scanning `declaredConstructors`. */
+        const val DEFAULT_CONSTRUCTOR_MARKER = "kotlin.jvm.internal.DefaultConstructorMarker"
+
         // The common Kotlin↔JVM mapped types (enough for constructors/operators on mapped classes).
         val KOTLIN_TO_JVM = mapOf(
             "kotlin.String" to "java.lang.String",

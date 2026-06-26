@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin
 
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot
@@ -81,5 +82,5 @@ suspend fun KotlinSourceAnalyzer.completeAtCaret(srcDir: Path, fileName: String,
     require(caret >= 0) { "no caret marker '|' in code" }
     val clean = code.removeRange(caret, caret + 1)
     val doc = SnippetDoc(clean, DiskFile(srcDir.resolve(fileName)))
-    return completion!!.complete(CompletionRequest(doc, caret, CompletionTrigger.TypedChar('.')))
+    return complete(CompletionRequest(doc, caret, CompletionTrigger.TypedChar('.')))
 }

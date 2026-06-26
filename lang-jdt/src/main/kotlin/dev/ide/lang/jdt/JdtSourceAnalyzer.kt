@@ -3,7 +3,7 @@ package dev.ide.lang.jdt
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.SourceAnalyzer
-import dev.ide.lang.completion.CompletionService
+import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.incremental.DocumentEdit
@@ -14,7 +14,7 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.hints.InlayHintService
-import dev.ide.lang.jdt.completion.JdtCompletionService
+import dev.ide.lang.jdt.completion.JdtCompletion
 import dev.ide.lang.jdt.dom.JdtDomNode
 import dev.ide.lang.jdt.dom.JdtParsedFile
 import dev.ide.lang.jdt.folding.JdtCodeFolder
@@ -182,8 +182,10 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     override val incrementalParser: IncrementalParser = JdtIncrementalParser(this)
 
-    /** Completion runs on the custom name environment (in-memory), not the DOM/disk path. */
-    override val completion: CompletionService = JdtCompletionService(this)
+    /** Completion runs on the custom name environment (in-memory), not the DOM/disk path. Published to the
+     *  unified completion engine as a contributor (the JDT analyzer holds the ref for dispose + diagnose). */
+    private val completionContributor = JdtCompletion(this)
+    override fun completionContributions(): List<CompletionContribution> = listOf(CompletionContribution(completionContributor))
 
     /** Inlay hints (var/lambda types, parameter names, chaining) over the binding DOM. */
     override val inlayHints: InlayHintService = JdtInlayHintService(this)
@@ -204,7 +206,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
      * process-lived and is not affected.
      */
     override fun dispose() {
-        (completion as? JdtCompletionService)?.dispose()
+        completionContributor.dispose()
     }
 
     /** FQCN of a file from its unit name ("com/example/Main.java" -> "com.example.Main"). */
@@ -309,8 +311,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
         // android.jar alone). The [dom] tree, if supplied, is reused only for the broken-statement noise
         // filtering (statement ranges — structural, so a syntactic or binding tree both work); otherwise a
         // cheap syntactic parse is done here.
-        val service = completion as? JdtCompletionService ?: return (dom as? JdtParsedFile)?.diagnostics ?: emptyList()
-        val problems = service.resolveProblems(fqcnFor(file), text.toString(), overlayProvider(), compilerOptions)
+        val problems = completionContributor.resolveProblems(fqcnFor(file), text.toString(), overlayProvider(), compilerOptions)
         val tree = (dom as? JdtParsedFile) ?: parseSyntactic(file, text)
         return tree.diagnosticsFrom(problems)
     }

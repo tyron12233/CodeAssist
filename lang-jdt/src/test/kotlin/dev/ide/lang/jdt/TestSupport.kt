@@ -3,6 +3,7 @@ package dev.ide.lang.jdt
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot
@@ -74,7 +75,7 @@ fun completeLabels(analyzer: JdtSourceAnalyzer, file: Path, codeWithCaret: Strin
     require(offset >= 0) { "missing |CARET|" }
     val text = codeWithCaret.replace("|CARET|", "")
     val request = CompletionRequest(Snapshot(StubFile(file.toString(), text), 1, text), offset, CompletionTrigger.Explicit)
-    return runSync { analyzer.completion.complete(request) }.items.map { it.insertText.substringBefore('(') }
+    return runSync { analyzer.complete(request) }.items.map { it.insertText.substringBefore('(') }
 }
 
 /** Like [completeLabels] but returns the full [CompletionResult] (to inspect kinds, detail, edits). */
@@ -83,7 +84,7 @@ fun completeResult(analyzer: JdtSourceAnalyzer, file: Path, codeWithCaret: Strin
     require(offset >= 0) { "missing |CARET|" }
     val text = codeWithCaret.replace("|CARET|", "")
     val request = CompletionRequest(Snapshot(StubFile(file.toString(), text), 1, text), offset, CompletionTrigger.Explicit)
-    return runSync { analyzer.completion.complete(request) }
+    return runSync { analyzer.complete(request) }
 }
 
 /** Signature help at the `|CARET|` in [codeWithCaret], as if editing [file]. */

@@ -1,6 +1,7 @@
 package dev.ide.lang.kotlin
 
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.LogSink
@@ -43,7 +44,7 @@ class KotlinCompletionProfileTest {
             fun completeAt(code: String, token: String) {
                 val caret = code.indexOf(token) + token.length
                 val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Big.kt")))
-                runBlocking { analyzer.completion!!.complete(CompletionRequest(doc, caret, CompletionTrigger.TypedChar('.'))) }
+                runBlocking { analyzer.complete(CompletionRequest(doc, caret, CompletionTrigger.TypedChar('.'))) }
             }
             fun analyzeOnce(code: String, a: KotlinSourceAnalyzer = analyzer) {
                 val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Big.kt")))

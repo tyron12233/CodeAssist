@@ -47,7 +47,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">Rebuilt on Jetpack Compose.</string>
     <string name="jetpack_compose_content">A faster, smoother CodeAssist — native Compose throughout, with live @Preview.</string>
-    <string name="open_a_sample_project">Open a sample project</string>
+    <string name="create_your_first_project">Create your first project</string>
     <string name="open_a_project">Open a project or start a new one.</string>
     <string name="new_project">New Project</string>
     <string name="new_project_content">Android app, Java console app, library…</string>

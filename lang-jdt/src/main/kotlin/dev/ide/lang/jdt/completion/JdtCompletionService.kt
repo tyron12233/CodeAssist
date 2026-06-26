@@ -1,9 +1,9 @@
 package dev.ide.lang.jdt.completion
 
+import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionItem
-import dev.ide.lang.completion.CompletionRequest
-import dev.ide.lang.completion.CompletionResult
-import dev.ide.lang.completion.CompletionService
+import dev.ide.lang.completion.CompletionParams
+import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.jdt.JdtSourceAnalyzer
 import org.eclipse.jdt.core.compiler.IProblem
@@ -17,7 +17,9 @@ internal const val COMPLETION_MARKER = "__codeassist_completion__"
  * `;`-terminated for statement position), resolves the focal unit, then
  * [ContextAnalyzer] → [CandidateCollector] → [CompletionRanker].
  */
-class JdtCompletionService(private val analyzer: JdtSourceAnalyzer) : CompletionService {
+class JdtCompletion(private val analyzer: JdtSourceAnalyzer) : CompletionContributor {
+
+    override val id = "jdt.completion"
 
     private val resolver = JdtResolver(
         analyzer.completionSourceRoots, analyzer.classpathJarPaths, analyzer.jdkHome, analyzer.complianceLevel,
@@ -34,14 +36,14 @@ class JdtCompletionService(private val analyzer: JdtSourceAnalyzer) : Completion
     fun resolveProblems(focalFqcn: String, text: String, overlay: Map<String, CharArray>, options: Map<String, String>): Array<out IProblem> =
         resolver.diagnose(focalFqcn, text, overlay, options)
 
-    override suspend fun complete(request: CompletionRequest): CompletionResult {
-        val text = request.document.text.toString()
-        val offset = request.offset.coerceIn(0, text.length)
+    override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
+        val text = params.document.text.toString()
+        val offset = params.offset.coerceIn(0, text.length)
         val prefix = identifierPrefix(text, offset)
         val replaceStart = offset - prefix.length
         val replacementRange = TextRange(replaceStart, offset)
 
-        val focalFqcn = analyzer.fqcnFor(request.document.file)
+        val focalFqcn = analyzer.fqcnFor(params.document.file)
         val overlay = analyzer.overlayProvider()
         val index = analyzer.indexService
         // A method completion appends `()` — unless the caret already sits in front of an argument list,
@@ -82,7 +84,8 @@ class JdtCompletionService(private val analyzer: JdtSourceAnalyzer) : Completion
             if (items.isNotEmpty() && (best.isEmpty() || rank > bestRank)) { best = items; bestRank = rank }
             if (rank == 2 && items.isNotEmpty()) break // a resolved member/package/import context is definitive
         }
-        return CompletionResult(best, isIncomplete = false, replacementRange = replacementRange)
+        result.addAllElements(best)
+        result.setReplacementRange(replacementRange)
     }
 
     private fun kindRank(kind: CompletionKind) = when (kind) {

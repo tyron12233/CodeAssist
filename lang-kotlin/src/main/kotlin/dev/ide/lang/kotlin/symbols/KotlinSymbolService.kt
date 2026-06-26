@@ -584,8 +584,21 @@ class KotlinSymbolService(
         val fromSource = model().extensions
             .filter { matches(it.name) && resolveTypeName(it.receiverText ?: return@filter false, it.ctx) in targets }
             .map { toSymbol(it, null) }
-        // Bind the extension receiver's type params (Iterable<T>.map, T.also) from the actual receiver.
-        return (fromClasspath + fromSource).map { bindExtensionReceiver(it, fqn, typeArgs) }
+        // Drop compiler/runtime-implementation callables (e.g. `kotlin.jvm.internal.PrimitiveSpreadBuilder`'s
+        // `getSize`, mis-keyed as a `kotlin.Any` extension) — never user-visible. Then bind the extension
+        // receiver's type params (Iterable<T>.map, T.also) from the actual receiver.
+        return (fromClasspath + fromSource)
+            .filterNot { isImplementationCallable(it) }
+            .map { bindExtensionReceiver(it, fqn, typeArgs) }
+    }
+
+    /** True for a callable in a Kotlin compiler/runtime *implementation* package (`kotlin.jvm.internal`,
+     *  `kotlin.coroutines.jvm.internal`, `kotlin.internal`, `kotlin.reflect.jvm.internal`). These are public in
+     *  bytecode (so not flagged `internal`) but are never user-facing API, so they must not appear in
+     *  completion / member resolution. */
+    private fun isImplementationCallable(s: KotlinSymbol): Boolean {
+        val pkg = s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.takeIf { it.isNotEmpty() } ?: return false
+        return IMPLEMENTATION_PACKAGES.any { pkg == it || pkg.startsWith("$it.") }
     }
 
     /**
@@ -1118,6 +1131,11 @@ class KotlinSymbolService(
     companion object {
         // Public Object methods don't count toward a functional interface's single abstract method.
         private val OBJECT_METHODS = setOf("equals", "hashCode", "toString")
+        // Kotlin compiler/runtime implementation packages: public in bytecode but never user-facing API, so
+        // their callables (e.g. `kotlin.jvm.internal.PrimitiveSpreadBuilder.getSize`) are hidden from completion.
+        private val IMPLEMENTATION_PACKAGES = listOf(
+            "kotlin.jvm.internal", "kotlin.coroutines.jvm.internal", "kotlin.internal", "kotlin.reflect.jvm.internal",
+        )
         // Per-receiver extension query cap and per-prefix top-level cap (the consumer ranks + takes ~100).
         // Generous so a non-trivial bucket isn't truncated below what ranking needs; a prefix query is bounded
         // by matches anyway. The empty-prefix top-level path is uncapped (see topLevelCallables).

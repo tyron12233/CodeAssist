@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.lang.completion.CompletionItemKind
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -107,6 +108,32 @@ class KotlinInteropCompletionTest {
         assertTrue("size" in withSize, "List built-in member 'size' via the kotlin.builtins index: $withSize")
         val withAdd = labels(s, probe, "package com.example.core\nfun m(xs: List<Int>) { xs.ad }", "xs.ad")
         assertTrue(withAdd.none { it == "add" }, "read-only List must NOT expose java.util.List's add: $withAdd")
+    }
+
+    @Test
+    fun kotlinPostfixTemplatesSurfaceThroughTheEngine() {
+        // End-to-end: live snapshot is parsed fresh → the generic PostfixContributor reconstructs the receiver,
+        // resolves its type via analyzer.resolveType, and emits the Kotlin POSTFIX_TEMPLATE_EP rewrites.
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.kt")
+
+        fun snippetLabels(text: String, anchor: String): List<String> {
+            val offset = text.indexOf(anchor) + anchor.length
+            return s.complete(probe, text, offset).items.filter { it.kind == CompletionItemKind.SNIPPET }.map { it.label }
+        }
+
+        // `.val` applies to any receiver and rewrites to `val name = x`.
+        val valText = "package com.example.core\nfun g() { val x = 5\n x.va }"
+        val valOffset = valText.indexOf("x.va") + "x.va".length
+        val valItems = s.complete(probe, valText, valOffset).items
+        assertTrue(
+            valItems.any { it.kind == CompletionItemKind.SNIPPET && it.label == "val" && it.insertText == "val name = x" },
+            "expected `.val` postfix: ${valItems.filter { it.kind == CompletionItemKind.SNIPPET }.map { it.label to it.insertText }}",
+        )
+
+        // `.if` applies on a Boolean receiver but not on an Int one (type gating through resolveType).
+        assertTrue("if" in snippetLabels("package com.example.core\nfun g() { val b = true\n b.i }", "b.i"), "`.if` on Boolean")
+        assertTrue("if" !in snippetLabels("package com.example.core\nfun g() { val n = 5\n n.i }", "n.i"), "no `.if` on Int")
     }
 
     @Test

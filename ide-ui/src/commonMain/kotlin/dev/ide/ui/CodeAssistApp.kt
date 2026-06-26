@@ -235,15 +235,9 @@ fun CodeAssistApp(
             )
             OnboardingSheet(
                 visible = showOnboarding && !showMigration && screen == Screen.Projects,
-                // Final CTA: open the bundled sample (the first project the host knows about) and land in
-                // the editor — the same use case the picker's "open" runs.
-                onOpenSample = {
-                    backend.projects().firstOrNull()?.let { sample ->
-                        scope.launch {
-                            if (backend.openProject(sample.rootPath)) screen = Screen.Editor
-                        }
-                    }
-                },
+                // Final CTA: send the user straight into the Create-Project flow (the same screen the picker's
+                // "New Project" card opens) so the tour ends on a concrete action.
+                onGetStarted = { screen = Screen.CreateProject },
                 onFinish = {
                     showOnboarding = false
                     backend.setPreference("onboarding.seen", "true")

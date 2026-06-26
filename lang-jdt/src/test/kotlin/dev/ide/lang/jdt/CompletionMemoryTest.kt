@@ -4,6 +4,7 @@ import dev.ide.bench.Bench
 import dev.ide.bench.MemoryProbe
 import dev.ide.bench.RegressionSuite
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.vfs.VirtualFile
@@ -66,7 +67,7 @@ class CompletionMemoryTest {
         Files.writeString(f, unit("sb.append(prefix);"))
         val a = analyzer(listOf(dir))
         a.indexService = fakeIndex()
-        runSync { a.completion.complete(req(f, 0)) } // build the env cache (+ process-global jrt image)
+        runSync { a.complete(req(f, 0)) } // build the env cache (+ process-global jrt image)
         return a to dir
     }
 
@@ -86,9 +87,9 @@ class CompletionMemoryTest {
         // --- B. session growth (leak guard): steady state must hold over a long edit/complete session ---
         val (a4, d4) = newWarmAnalyzer()
         val f4 = d4.resolve("app/Service.java")
-        repeat(50) { i -> Bench.sink += runSync { a4.completion.complete(req(f4, i)) }.items.size.toLong() } // warm
+        repeat(50) { i -> Bench.sink += runSync { a4.complete(req(f4, i)) }.items.size.toLong() } // warm
         val l0 = MemoryProbe.settledUsedHeap()
-        repeat(300) { i -> Bench.sink += runSync { a4.completion.complete(req(f4, 50 + i)) }.items.size.toLong() }
+        repeat(300) { i -> Bench.sink += runSync { a4.complete(req(f4, 50 + i)) }.items.size.toLong() }
         val l1 = MemoryProbe.settledUsedHeap()
         val sessionGrowth = (l1 - l0).coerceAtLeast(0)
         a4.dispose(); d4.toFile().deleteRecursively()

@@ -75,6 +75,7 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
             showPreview = hasPreview,
             previewBusy = active?.viewMode == EditorViewMode.Preview,
             onPreview = { active?.let { it.viewMode = EditorViewMode.Preview } },
+            onIndexClick = { state.indexDetailOpen = true },
             compact = compact,
         )
         DepsProgressBar(depsState) { depsScope.launch { state.backend.retryDependencyResolution() } }

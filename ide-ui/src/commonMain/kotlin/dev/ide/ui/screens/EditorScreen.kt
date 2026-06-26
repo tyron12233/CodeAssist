@@ -24,6 +24,7 @@ import dev.ide.ui.components.FileOpKind
 import dev.ide.ui.components.FileOpRequest
 import dev.ide.ui.components.FileOperationDialog
 import dev.ide.ui.components.fileOpPath
+import dev.ide.ui.components.IndexStatusDialog
 import dev.ide.ui.components.NewEntryDialog
 import dev.ide.ui.components.NewEntryKind
 import dev.ide.ui.components.NewEntryRequest
@@ -86,7 +87,7 @@ fun EditorScreen(
     // there; the mobile-only panes are gated on [isMobilePlatform] since on wide layouts they're docked panes.
     PlatformBackHandler(
         enabled = newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null ||
-            state.paletteOpen || state.sheetDest != null || state.searchOpen ||
+            state.indexDetailOpen || state.paletteOpen || state.sheetDest != null || state.searchOpen ||
             (isMobilePlatform && (state.navOpen || state.consoleOpen)),
     ) {
         when {
@@ -95,6 +96,7 @@ fun EditorScreen(
             newSource != null -> newSource = null
             newEntry != null -> newEntry = null
             newXmlTarget != null -> newXmlTarget = null
+            state.indexDetailOpen -> state.indexDetailOpen = false
             state.paletteOpen -> state.paletteOpen = false
             state.sheetDest != null -> state.sheetDest = null
             state.searchOpen -> state.searchOpen = false
@@ -143,6 +145,13 @@ fun EditorScreen(
             onCopy = { node, dest -> node.fileOpPath()?.let { state.copyPath(it, dest) } },
             onDelete = { node -> node.fileOpPath()?.let { state.deletePath(it) } },
             onDismiss = { fileOp = null },
+        )
+        // The index-status detail dialog, opened by tapping the top-bar index chip.
+        IndexStatusDialog(
+            visible = state.indexDetailOpen,
+            status = indexStatus,
+            onReindex = { state.backend.reindex() },
+            onDismiss = { state.indexDetailOpen = false },
         )
         // While a console run is active but its terminal isn't on screen (the user backed out mid-run), a
         // tappable pill returns to it — the run keeps going in the background until then.

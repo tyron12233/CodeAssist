@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -90,6 +91,7 @@ fun EditorTopBar(
     showPreview: Boolean = false,
     onPreview: () -> Unit = {},
     previewBusy: Boolean = false,
+    onIndexClick: () -> Unit = {},
     compact: Boolean = false,
 ) {
     val dim = Ca.colors.textTertiary.copy(alpha = 0.35f)
@@ -105,7 +107,7 @@ fun EditorTopBar(
                 projectName, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
-            IndexStatusChip(indexStatus, compact = compact)
+            IndexStatusChip(indexStatus, compact = compact, onClick = onIndexClick)
             // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
             IconButtonCa(CaIcons.save, "Save", onSave, active = hasUnsavedChanges)
             if (compact) {
@@ -410,15 +412,20 @@ private fun RunControl(
     }
 }
 
-/** A compact indexing indicator: accent spinner + percent while building, a faint check when ready. */
+/**
+ * A compact indexing indicator: accent spinner + percent while building, a faint check when ready. When
+ * [onClick] is supplied the chip is tappable, opening the index-status dialog (what's being indexed).
+ */
 @Composable
-fun IndexStatusChip(status: IndexUiStatus, compact: Boolean = false) {
+fun IndexStatusChip(status: IndexUiStatus, compact: Boolean = false, onClick: (() -> Unit)? = null) {
     val shape = RoundedCornerShape(Ca.radius.pill)
     // On a phone the idle "Indexed" chip is just clutter that crowds the Run button — show only while building.
     if (compact && !status.building) return
+    val base = Modifier.clip(shape)
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     if (status.building) {
         Row(
-            Modifier.background(Ca.colors.accentSoft, shape).padding(horizontal = 10.dp, vertical = 5.dp),
+            base.background(Ca.colors.accentSoft, shape).padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -428,7 +435,7 @@ fun IndexStatusChip(status: IndexUiStatus, compact: Boolean = false) {
         }
     } else {
         Row(
-            Modifier.background(Ca.colors.surface2, shape).padding(horizontal = 10.dp, vertical = 5.dp),
+            base.background(Ca.colors.surface2, shape).padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {

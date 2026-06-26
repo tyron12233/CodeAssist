@@ -3,6 +3,7 @@ package dev.ide.lang.jdt
 import dev.ide.bench.Bench
 import dev.ide.bench.RegressionSuite
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.vfs.VirtualFile
@@ -17,7 +18,7 @@ import kotlin.test.assertTrue
  * (opt-in: `./gradlew :lang-jdt:regressionTest`). It measures, against the **real** JDK jrt image (the
  * platform classes a real project resolves against):
  *
- *  1. **Code completion** — [JdtCompletionService.complete] at carets that exercise each completion kind:
+ *  1. **Code completion** — [JdtCompletion.fillCompletionVariants] at carets that exercise each completion kind:
  *     member access (`recv.|`, resolved bindings), name reference (in-scope names + the index for
  *     auto-import), type reference (`new Foo|`), and package reference (`import a.b.|`). This is the
  *     full pipeline: splice the marker → resolve the focal unit with ecj over [JdtNameEnvironment] →
@@ -98,12 +99,12 @@ class CompletionBenchmark {
             report.append("scenario        |        ns/op     alloc/op       items\n")
             for (s in scenarios()) {
                 val req = request(file, s.text, s.offset)
-                val items = runSync { analyzer.completion.complete(req) }.items.size
+                val items = runSync { analyzer.complete(req) }.items.size
                 val nsPerOp = Bench.nsPerOp(warmup = 3, runs = 5, ops = 6) {
-                    runSync { analyzer.completion.complete(req) }.items.size.toLong()
+                    runSync { analyzer.complete(req) }.items.size.toLong()
                 }
                 val bytesPerOp = Bench.allocPerOp(warmup = 3, ops = 6) {
-                    runSync { analyzer.completion.complete(req) }.items.size.toLong()
+                    runSync { analyzer.complete(req) }.items.size.toLong()
                 }
                 report.append("%-15s | %12s %12s %11d\n".format(s.label, Bench.ns(nsPerOp), Bench.bytes(bytesPerOp.toDouble()), items))
                 // Loose drift + a 200 ms interactive backstop (warm is single-digit ms); 1 s would be unusable.

@@ -2,7 +2,6 @@ package dev.ide.lang.xml
 
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.SourceAnalyzer
-import dev.ide.lang.completion.CompletionService
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.incremental.DocumentEdit
@@ -15,7 +14,7 @@ import dev.ide.lang.resolve.Symbol
 import dev.ide.lang.resolve.SymbolFilter
 import dev.ide.lang.resolve.TypeRef
 import dev.ide.lang.xml.completion.XmlCompletionContributor
-import dev.ide.lang.xml.completion.XmlCompletionService
+import dev.ide.lang.xml.completion.XmlCompletion
 import dev.ide.vfs.VirtualFile
 import java.util.concurrent.ConcurrentHashMap
 
@@ -44,7 +43,9 @@ class XmlSourceAnalyzer : SourceAnalyzer {
             backing.reparse(previous, newSnapshot, edits).also { lastByFile[newSnapshot.file.path] = it.tree }
     }
 
-    override val completion: CompletionService = XmlCompletionService(contributors = { contributors })
+    private val completionContributor = XmlCompletion(contributors = { contributors })
+    override fun completionContributions(): List<dev.ide.lang.completion.CompletionContribution> =
+        listOf(dev.ide.lang.completion.CompletionContribution(completionContributor))
 
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))

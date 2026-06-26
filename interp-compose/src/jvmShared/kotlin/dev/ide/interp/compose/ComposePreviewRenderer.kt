@@ -51,7 +51,8 @@ class ComposePreviewRenderer(
         onPartialError: (Throwable?) -> Unit = {},
     ) {
         val interpreter = remember(program, classes) {
-            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes)
+            // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview.
+            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = true)
         }
         // We're inside the IDE's composition: thread its composer, then drive the preview through its own
         // restart group so state changes recompose just the preview subtree.

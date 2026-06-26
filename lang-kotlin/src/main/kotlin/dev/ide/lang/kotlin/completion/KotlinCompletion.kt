@@ -1,13 +1,15 @@
 package dev.ide.lang.kotlin.completion
 
 import dev.ide.lang.completion.CaretAction
+import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
-import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionResult
-import dev.ide.lang.completion.CompletionService
+import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.kotlin.KotlinPerf
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.resolve.ComposableContext
@@ -59,20 +61,26 @@ import org.jetbrains.kotlin.psi.KtValueArgumentName
  *   • expected type    — `true`/`false` where a Boolean is wanted and `Enum.CONSTANT` at an enum slot, and the
  *                        ranking floats candidates whose type is assignable to the expected type first.
  */
-class KotlinCompletionService(
+class KotlinCompletion(
     private val service: KotlinSymbolService,
     /** Run before each completion — the host wires this to sync the symbol model to the live editor buffers,
      *  so a declaration just typed in another open file completes here (cross-file freshness). */
     private val onBeforeComplete: () -> Unit = {},
-) : CompletionService {
+) : CompletionContributor {
 
-    override suspend fun complete(request: CompletionRequest): CompletionResult =
-        dev.ide.lang.kotlin.KotlinPerf.trace("kt.complete") { completeInner(request) }
+    override val id = "kotlin.completion"
 
-    private suspend fun completeInner(request: CompletionRequest): CompletionResult {
-        dev.ide.lang.kotlin.KotlinPerf.span("onBefore") { onBeforeComplete() }
-        val original = request.document.text.toString()
-        val offset = request.offset.coerceIn(0, original.length)
+    override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
+        val res = KotlinPerf.trace("kt.complete") { completeInner(params.document, params.offset) }
+        result.addAllElements(res.items)
+        result.setReplacementRange(res.replacementRange)
+        if (res.isIncomplete) result.markIncomplete()
+    }
+
+    private fun completeInner(document: dev.ide.lang.incremental.DocumentSnapshot, requestedOffset: Int): CompletionResult {
+        KotlinPerf.span("onBefore") { onBeforeComplete() }
+        val original = document.text.toString()
+        val offset = requestedOffset.coerceIn(0, original.length)
         val prefix = identifierPrefixBefore(original, offset)
         val replaceRange = TextRange(offset - prefix.length, offset)
         // The first non-whitespace char after the identifier token the editor will replace (it extends the
@@ -87,8 +95,8 @@ class KotlinCompletionService(
 
         // Splice the marker right at the caret so the parser yields a real reference node even after `.`.
         val spliced = original.substring(0, offset) + MARKER + original.substring(offset)
-        val kt = dev.ide.lang.kotlin.KotlinPerf.span("parse") { KotlinParserHost.parse(request.document.file.name, spliced) }
-        val parsed = KotlinParsedFile(kt, request.document.file, request.document.version)
+        val kt = KotlinPerf.span("parse") { KotlinParserHost.parse(document.file.name, spliced) }
+        val parsed = KotlinParsedFile(kt, document.file, document.version)
         val resolver = KotlinResolver(kt, parsed, service)
 
         val markerLeaf = kt.findElementAt(offset)
@@ -137,12 +145,17 @@ class KotlinCompletionService(
         val extra = ArrayList<CompletionItem>()
         var packageCompletion = false
         var expected: KotlinType? = null
+        // Captured for the trailing keyword/template/postfix contributions assembled after ranking: a postfix
+        // keywords/live-templates apply at a name/statement position; they're appended after the real symbol
+        // items, so a symbol always wins within a match tier. (Postfix templates `expr.if`/`expr.val` are now
+        // contributed via `POSTFIX_TEMPLATE_EP` + the engine's generic PostfixContributor — see KotlinPostfixTemplates.)
+        var keywordContext = false
 
-        val raw: List<KotlinSymbol> = dev.ide.lang.kotlin.KotlinPerf.span("candidates") { when {
+        val raw: List<KotlinSymbol> = KotlinPerf.span("candidates") { when {
             nameRef != null && isSelectorOfQualified(nameRef) -> {
                 val qualified = nameRef.parent as KtQualifiedExpression
                 val receiver = qualified.receiverExpression
-                val recvType = dev.ide.lang.kotlin.KotlinPerf.span("infer") { resolver.inferType(receiver) }
+                val recvType = KotlinPerf.span("infer") { resolver.inferType(receiver) }
                 if (recvType != null) {
                     // Instance receiver (`listOf("").`) → instance members + extensions; type receiver
                     // (`Int.`) → companion ("static") members + nested. Built-ins now provide the real Kotlin
@@ -151,7 +164,7 @@ class KotlinCompletionService(
                     val typeReceiver = resolver.isTypeReceiver(receiver)
                     // Prefix-aware: with large classpaths (Compose) a receiver's member+extension set is huge,
                     // so push the typed prefix into the symbol service rather than enumerating then filtering.
-                    val members = dev.ide.lang.kotlin.KotlinPerf.span("members") {
+                    val members = KotlinPerf.span("members") {
                         service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
                     }.filter { memberVisibleOn(it, typeReceiver) }
                     // A bare `Type.` where the type has a companion object resolves to the companion instance,
@@ -174,6 +187,7 @@ class KotlinCompletionService(
             }
             inTypePosition(markerLeaf) -> service.typeNamesByPrefix(prefix)
             else -> {
+                keywordContext = true // a name/statement/expression position — keywords + live templates apply
                 // Member-declaration position in a class body → offer overridable inherited members as stubs.
                 if (isOverridePosition(markerLeaf)) {
                     resolver.overridableMembersAt(offset)
@@ -195,19 +209,19 @@ class KotlinCompletionService(
                 // The type the context wants → offer literals/enum constants and rank assignable candidates first.
                 expected = resolver.expectedTypeAt(offset)
                 expected?.let { extra += expectedExtras(it, prefix) { fqn -> importEditForType(fqn) } }
-                dev.ide.lang.kotlin.KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
-                    dev.ide.lang.kotlin.KotlinPerf.span("typeNames") { service.typeNamesByPrefix(prefix) }
+                KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
+                    KotlinPerf.span("typeNames") { service.typeNamesByPrefix(prefix) }
             }
         } }
 
         // Inside a @Composable context (a `setContent`/`Column` content lambda, a @Composable function body),
         // float @Composable callables to the top — Android Studio's Compose weigher. NOT a filter: non-composable
         // code (`remember`, `println`, locals, control flow) stays available, just ranked below.
-        val composableContext = dev.ide.lang.kotlin.KotlinPerf.span("composeCtx") {
+        val composableContext = KotlinPerf.span("composeCtx") {
             resolver.composableContextAt(offset) == ComposableContext.COMPOSABLE
         }
 
-        val candidates = dev.ide.lang.kotlin.KotlinPerf.span("rank") { raw.asSequence()
+        val candidates = KotlinPerf.span("rank") { raw.asSequence()
             .filter { it.name != "_" && it.name.startsWith(prefix, ignoreCase = true) && MARKER !in it.name }
             .distinctBy { it.name + "#" + it.kind + "#" + (it.signature ?: "") }
             .map { Candidate(it, if (packageCompletion) emptyList() else importEditFor(it)) }
@@ -216,7 +230,28 @@ class KotlinCompletionService(
             .toList() }
 
         val symbolItems = candidates.map { toItem(it.symbol, it.importEdit, followingChar) }
-        val items = (extra.distinctBy { it.kind to it.label } + symbolItems).take(MAX_ITEMS)
+
+        // Keyword / live-template contributions, appended after the symbol candidates so a real symbol always
+        // sorts first within a match tier; the editor's match-tier re-sort still floats an exact keyword/template
+        // match (`if`, `for`) to the top once the user types it whole.
+        val tail = ArrayList<CompletionItem>()
+        if (keywordContext) {
+            tail += KotlinKeywords.itemsFor(
+                leaf = markerLeaf,
+                prefix = prefix,
+                precedingText = original,
+                tokenStart = offset - prefix.length,
+                inFunction = KotlinKeywords.isInFunction(markerLeaf),
+                inLoop = KotlinKeywords.isInLoop(markerLeaf),
+            )
+        }
+
+        // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
+        // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
+        val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
+        val items = ((extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
+            .distinctBy { it.kind to it.label }
+            .take(MAX_ITEMS)
         return CompletionResult(items = items, isIncomplete = raw.size > MAX_ITEMS, replacementRange = replaceRange)
     }
 

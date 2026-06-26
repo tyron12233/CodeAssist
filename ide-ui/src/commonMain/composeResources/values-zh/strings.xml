@@ -47,7 +47,7 @@
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">使用 Jetpack Compose 重构。</string>
     <string name="jetpack_compose_content">更快、更流畅的 CodeAssist——原生 Compose，支持实时 @Preview。</string>
-    <string name="open_a_sample_project">打开示例项目</string>
+    <string name="create_your_first_project">创建你的第一个项目</string>
     <string name="open_a_project">打开或创建一个项目。</string>
     <string name="new_project">新建项目</string>
     <string name="new_project_content">Android 应用, Java 控制台应用, 库…</string>

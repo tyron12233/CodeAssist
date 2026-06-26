@@ -5,6 +5,7 @@ import dev.ide.bench.RegressionSuite
 import dev.ide.index.IndexScope
 import dev.ide.index.impl.IndexServiceImpl
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
@@ -64,12 +65,12 @@ class KotlinComposeCompletionBenchmark {
             val req = CompletionRequest(
                 SnippetDoc(s.text, DiskFile(srcDir.resolve("app/Use.kt"))), s.offset, CompletionTrigger.TypedChar('.'),
             )
-            val items = runBlocking { analyzer.completion!!.complete(req) }.items.size
+            val items = runBlocking { analyzer.complete(req) }.items.size
             val nsPerOp = Bench.nsPerOp(warmup = 3, runs = 5, ops = 6) {
-                runBlocking { analyzer.completion!!.complete(req) }.items.size.toLong()
+                runBlocking { analyzer.complete(req) }.items.size.toLong()
             }
             val bytesPerOp = Bench.allocPerOp(warmup = 3, ops = 6) {
-                runBlocking { analyzer.completion!!.complete(req) }.items.size.toLong()
+                runBlocking { analyzer.complete(req) }.items.size.toLong()
             }
             report.append("%-17s | %12s %12s %11d\n".format(s.label, Bench.ns(nsPerOp), Bench.bytes(bytesPerOp.toDouble()), items))
             // Latency runs under gradle load here, so it's noisy run-to-run; gate it loosely (catch only an
@@ -89,7 +90,7 @@ class KotlinComposeCompletionBenchmark {
             try {
                 val s = scenarios().first { it.label == "member-bare" }
                 val req = CompletionRequest(SnippetDoc(s.text, DiskFile(srcDir.resolve("app/Use.kt"))), s.offset, CompletionTrigger.TypedChar('.'))
-                repeat(8) { runBlocking { analyzer.completion!!.complete(req) } }
+                repeat(8) { runBlocking { analyzer.complete(req) } }
             } finally {
                 KotlinPerf.enabled = false
                 Log.removeSink(sink)

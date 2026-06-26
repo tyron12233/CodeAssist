@@ -12,14 +12,11 @@ import dev.ide.lang.template.SnippetExpansion
  * Postfix completion: typing `expr.key` rewrites the whole expression — `list.for` → a `for` loop,
  * `cond.not` → `!cond`, `value.var` → `Type name = value;`, `x.sout` → `System.out.println(x);`.
  *
- * A [PostfixTemplate] is contributed through [POSTFIX_TEMPLATE_EP]; a [dev.ide.lang.completion.CompletionService]
- * collects the applicable ones at a `MEMBER_ACCESS` position and surfaces each as an ordinary
- * `CompletionItem(kind = SNIPPET)` whose `additionalEdits` are the [PostfixExpansion.edits] (delete the
- * `expr.key` span, insert the rewrite) and whose `caret` is a
- * [dev.ide.lang.completion.CaretAction.ExpandSnippet] when [PostfixExpansion.snippet] is present. So postfix
- * reuses the existing completion + snippet seams end-to-end — no new editor path.
- *
- * Interfaces only this round; reference templates land with the JDT completion impl.
+ * A [PostfixTemplate] is contributed through [POSTFIX_TEMPLATE_EP]; the engine's generic postfix
+ * [dev.ide.lang.completion.CompletionContributor] collects the applicable ones at a `MEMBER_ACCESS` position
+ * and surfaces each as an ordinary `CompletionItem(kind = SNIPPET)` whose `additionalEdits` delete the
+ * `expr.` receiver span and whose `caret` is a [dev.ide.lang.completion.CaretAction.ExpandSnippet] driving
+ * [PostfixExpansion.snippet]. So postfix reuses the completion + snippet seams end-to-end — no new editor path.
  */
 interface PostfixTemplate {
     /** The trigger typed after the dot, e.g. "for", "not", "var", "sout", "null", "nn". */
@@ -29,6 +26,11 @@ interface PostfixTemplate {
     val example: String
 
     val description: String
+
+    /** Languages this template applies to (by [dev.ide.lang.LanguageId]); empty = every language. A template
+     *  emitting language-specific syntax (a Kotlin `?.let { }`, a Java `;`) scopes itself so the driver doesn't
+     *  offer it in the wrong file. */
+    val languages: Set<dev.ide.lang.LanguageId> get() = emptySet()
 
     /** True when this template makes sense for the receiver expression in [ctx] (type/shape check). */
     fun isApplicable(ctx: PostfixContext): Boolean

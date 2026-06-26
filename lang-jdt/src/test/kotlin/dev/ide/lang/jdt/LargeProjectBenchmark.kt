@@ -6,6 +6,7 @@ import dev.ide.bench.RegressionSuite
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.model.ClasspathEntry
@@ -78,7 +79,7 @@ class LargeProjectBenchmark {
             val focalFile = dir.resolve("gen/app/App.java")
 
             // Warm: the first resolve cold-builds the environment over the big sourcepath + jars.
-            runSync { analyzer.completion.complete(request(focalFile, scenarios()[0])) }
+            runSync { analyzer.complete(request(focalFile, scenarios()[0])) }
             val retained = (MemoryProbe.settledUsedHeap() - heapBefore).coerceAtLeast(0)
 
             val suite = RegressionSuite("completion-largeproject")
@@ -89,16 +90,16 @@ class LargeProjectBenchmark {
             var present = 0
             for (s in scenarios()) {
                 val req = request(focalFile, s)
-                val result = runSync { analyzer.completion.complete(req) }
+                val result = runSync { analyzer.complete(req) }
                 val labels = result.items.map { it.insertText.substringBefore('(') }
                 val rank = labels.indexOf(s.expected)
                 if (rank >= 0) present++
 
                 val nsPerOp = Bench.nsPerOp(warmup = 3, runs = 5, ops = 5) {
-                    runSync { analyzer.completion.complete(req) }.items.size.toLong()
+                    runSync { analyzer.complete(req) }.items.size.toLong()
                 }
                 val bytesPerOp = Bench.allocPerOp(warmup = 3, ops = 5) {
-                    runSync { analyzer.completion.complete(req) }.items.size.toLong()
+                    runSync { analyzer.complete(req) }.items.size.toLong()
                 }
                 report.append("%-15s | %-8s | %12s %12s   %s/%d\n".format(
                     s.label, s.category, Bench.ns(nsPerOp), Bench.bytes(bytesPerOp.toDouble()),

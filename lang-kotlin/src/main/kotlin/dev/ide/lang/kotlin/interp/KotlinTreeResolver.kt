@@ -12,7 +12,11 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtBreakExpression
+import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
+import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
@@ -439,9 +443,14 @@ class KotlinTreeResolver(
         is KtIsExpression -> isNode(e)
         is KtTryExpression -> tryNode(e)
         is KtThrowExpression -> RNode.Throw(e.thrownExpression?.let { lower(it) } ?: return unsupported("throw without value", e), span(e))
+        // Unlabeled `break` / `continue` (the common case); a labeled jump stays an honest boundary.
+        is KtBreakExpression -> if (e.getLabelName() == null) RNode.Break(span(e)) else unsupported("labeled break", e)
+        is KtContinueExpression -> if (e.getLabelName() == null) RNode.Continue(span(e)) else unsupported("labeled continue", e)
         is KtDestructuringDeclaration -> destructuringNode(e)
         is KtReturnExpression -> RNode.Return(e.returnedExpression?.let { lower(it) }, span(e))
         is KtBinaryExpression -> binaryNode(e)
+        is KtBinaryExpressionWithTypeRHS -> castNode(e)
+        is KtCallableReferenceExpression -> callableRefNode(e)
         is KtArrayAccessExpression -> arrayAccessNode(e)
         is KtPostfixExpression -> incDecNode(e)
         is KtPrefixExpression -> incDecNode(e)
@@ -548,11 +557,15 @@ class KotlinTreeResolver(
         val subject = e.subjectExpression
         val subjectSlot = if (subject != null) newSlot() else null
         fun subjectRef() = RNode.Name(Binding.Local(subjectSlot!!, "\$subject", mutable = false), span)
+        // `when (x) { is T -> x.member }` smart-casts the subject `x` to `T` in that branch (when `x` is a
+        // simple name; the body references it by name, not the synthetic `$subject` local the condition uses).
+        val subjName = (subject as? KtNameReferenceExpression)?.getReferencedName()
 
         var chain: RNode? = elseBody
         for (entry in branches.asReversed()) {
             val cond = whenCondition(entry, subject != null, ::subjectRef, span)
-            val body = entry.expression?.let { lower(it) } ?: emptyBlock(entry)
+            val narrow = if (subjName != null) whenEntryNarrowing(entry, subjName) else emptyMap()
+            val body = withNarrowing(narrow) { entry.expression?.let { lower(it) } ?: emptyBlock(entry) }
             chain = RNode.If(cond, body, chain, span)
         }
         val result = chain ?: elseBody ?: unsupported("empty when", e)
@@ -561,6 +574,13 @@ class KotlinTreeResolver(
         } else {
             result
         }
+    }
+
+    /** The subject narrowing for a `when` branch: `{subjName → T}` when the branch's SOLE condition is a
+     *  positive `is T` (a mixed `is A, is B` comma branch doesn't smart-cast), else empty. */
+    private fun whenEntryNarrowing(entry: KtWhenEntry, subjName: String): Map<String, KotlinType> {
+        val c = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return emptyMap()
+        return if (c.isNegated) emptyMap() else narrowingTo(subjName, c.typeReference?.text)
     }
 
     /** A branch's condition as a boolean, OR-ing its comma-separated parts (`if (a) true else b`). Each part is
@@ -604,6 +624,22 @@ class KotlinTreeResolver(
                 return RNode.PropertyGet(delegateRef(binding, e), binding.valueProperty, span(e))
             }
             return RNode.Name(binding, span(e))
+        }
+        // A bare member property of an active receiver scope (`with(x) { someProp }`, `apply { prop }`): resolve
+        // it against the innermost lambda-receiver whose type ACTUALLY declares it, reading through that scope's
+        // `this` slot. (A bare member CALL is handled by callNode's implicit-receiver path; this is the property
+        // read.) The member-existence gate is essential: `propertyBinding` has a best-effort fallback that binds
+        // ANY name, which for a BARE name would shadow a top-level object/type (`MaterialTheme`/`Color` used
+        // inside a `Column {}`/`buildAnnotatedString {}` scope) with a bogus property read on the scope.
+        for (i in receiverScopes.indices.reversed()) {
+            val rs = receiverScopes[i]
+            val declaresIt = runCatching {
+                service.membersForCompletion(rs.type.qualifiedName, rs.type.typeArguments, name)
+                    .any { it.name == name && it.kind == SymbolKind.FIELD && (!it.isExtension || extensionInScope(it)) }
+            }.getOrDefault(false)
+            if (declaresIt) propertyBinding(name, rs.type)?.let {
+                return RNode.PropertyGet(RNode.Name(Binding.Local(rs.slot, "this", mutable = false), span(e)), it, span(e))
+            }
         }
         // A bare member property of the enclosing class (`id` inside one of `Project`'s methods) reads through
         // the implicit `this` receiver.
@@ -710,6 +746,61 @@ class KotlinTreeResolver(
         return RNode.TypeCheck(value, fqn, e.isNegated, span(e))
     }
 
+    /** `value as T` / `value as? T` — a runtime cast. The target type's generic args are stripped (the JVM
+     *  check is erased anyway) and a trailing `?` records target-nullability so an unsafe `as T?` accepts null. */
+    private fun castNode(e: KtBinaryExpressionWithTypeRHS): RNode {
+        val value = lower(e.left)
+        if (value is RNode.Unsupported) return value
+        val rawType = e.right?.text?.trim()?.takeIf { it.isNotEmpty() } ?: return unsupported("cast without a type", e)
+        val nullable = rawType.endsWith("?")
+        val typeText = rawType.removeSuffix("?").substringBefore('<').trim()
+        val fqn = runCatching { service.resolveTypeName(typeText, resolver.fileContext) }.getOrNull() ?: typeText
+        val safe = e.operationReference.getReferencedNameElementType() == KtTokens.AS_SAFE
+        return RNode.Cast(value, fqn, safe, nullable, span(e))
+    }
+
+    /**
+     * A callable reference (`::foo`, `obj::method`) — desugared to a synthesized lambda that forwards its
+     * arguments to the target, reusing the normal call machinery. Covers a top-level function reference and a
+     * BOUND member reference on a value receiver (the common `onClick = vm::handle` / `::doThing` callbacks);
+     * an unbound `Type::method` / static / constructor / property reference stays an honest boundary.
+     */
+    private fun callableRefNode(e: KtCallableReferenceExpression): RNode {
+        val span = span(e)
+        val name = e.callableReference.getReferencedName()
+        val receiverExpr = e.receiverExpression
+        if (receiverExpr == null) {
+            val sym = service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.METHOD }
+                ?: return unsupported("callable reference `::$name` (unresolved)", e)
+            return synthRefLambda(toCallable(sym), DispatchKind.TOP_LEVEL, receiverNode = null, arity = sym.paramTypes.size, span = span)
+        }
+        // `expr::method` — a BOUND reference requires the receiver to be a VALUE expression (typeable); a bare
+        // type name (`Foo::method`, an unbound/static reference) doesn't infer a type and stays unsupported.
+        val recvType = runCatching { resolver.inferType(receiverExpr) }.getOrNull()
+            ?: return unsupported("callable reference `${receiverExpr.text}::$name` (unbound or untyped receiver)", e)
+        val sym = service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, name)
+            .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && !it.isExtension }
+            ?: return unsupported("callable reference `${receiverExpr.text}::$name` (no such member)", e)
+        val recvNode = lower(receiverExpr)
+        if (recvNode is RNode.Unsupported) return recvNode
+        // Bind the receiver once into a temp the synthesized lambda captures (so `obj` is evaluated at the point
+        // the reference is taken, not on each call) — the same pattern as a safe-call temp.
+        val tmpSlot = newSlot()
+        val ref = RNode.Name(Binding.Local(tmpSlot, "\$ref", mutable = false), span)
+        val lambda = synthRefLambda(toCallable(sym), DispatchKind.MEMBER, ref, arity = sym.paramTypes.size, span = span)
+        return RNode.Block(listOf(RNode.LocalVar(tmpSlot, "\$ref", mutable = false, recvNode, span), lambda), isExpression = true, span)
+    }
+
+    /** Build `{ p0, … -> callee(p0, …) }` for a callable reference of the given [arity] — a normal lambda the
+     *  interpreter runs as a [Closure], so library/source dispatch and lambda proxying are all reused. */
+    private fun synthRefLambda(callee: ResolvedCallable, dispatch: DispatchKind, receiverNode: RNode?, arity: Int, span: SourceSpan): RNode {
+        val slots = (0 until arity).map { newSlot() }
+        val params = slots.mapIndexed { i, slot -> RParam(slot, "p$i", null) }
+        val argRefs = slots.map { RArg(RNode.Name(Binding.Local(it, "p", mutable = false), span)) }
+        val call = RNode.Call(callee, dispatch, receiverNode, argRefs, CallSiteKey(span.start), span)
+        return RNode.Lambda(params, call, captures = emptyList(), source = span)
+    }
+
     private fun tryNode(e: KtTryExpression): RNode {
         val body = lowerBlock(e.tryBlock)
         val catches = e.catchClauses.map { cc ->
@@ -801,6 +892,17 @@ class KotlinTreeResolver(
     }
 
     private fun callNode(call: KtCallExpression, receiverNode: RNode?, receiverExpr: KtExpression? = null): RNode {
+        // Invoking a function value held by a local/param (`fn(x)`, `callback()`): a bare call whose callee name
+        // is a local in scope is an `invoke` on that value, not a named-function call (a local shadows a
+        // same-named function). The interpreter calls an interpreted lambda directly, or `invoke()`s a JVM one.
+        val bareCalleeName = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+        if (receiverNode == null && bareCalleeName != null) {
+            resolveLocal(bareCalleeName)?.let { binding ->
+                val recv = if (binding is Binding.DelegatedLocal) RNode.PropertyGet(delegateRef(binding, call), binding.valueProperty, span(call))
+                else RNode.Name(binding, span(call))
+                return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, recv, lowerArgs(call), CallSiteKey(call.textRange.startOffset), span(call))
+            }
+        }
         checkNamedArguments(call)
         // A generic call whose type arguments can't be inferred (`mutableStateOf()` with no value argument) is
         // invalid Kotlin — the editor flags `kt.cannotInferType`. The arity fallback in `chooseCallee` would
@@ -929,10 +1031,51 @@ class KotlinTreeResolver(
     }
 
     private fun ifNode(e: KtIfExpression): RNode {
-        val cond = e.condition?.let { lower(it) } ?: return unsupported("if without condition", e)
-        val then = e.then?.let { lower(it) } ?: return unsupported("if without body", e)
-        return RNode.If(cond, then, e.`else`?.let { lower(it) }, span(e))
+        val condExpr = e.condition ?: return unsupported("if without condition", e)
+        val cond = lower(condExpr)
+        // Smart-cast: `if (x is T) { x.member }` resolves `x`'s members against `T` in the then-branch (and the
+        // else-branch of an `if (x !is T)`). The condition is lowered first, unnarrowed.
+        val then = e.then?.let { withNarrowing(conditionNarrowings(condExpr, whenTrue = true)) { lower(it) } }
+            ?: return unsupported("if without body", e)
+        val otherwise = e.`else`?.let { withNarrowing(conditionNarrowings(condExpr, whenTrue = false)) { lower(it) } }
+        return RNode.If(cond, then, otherwise, span(e))
     }
+
+    /** Run [block] with a smart-cast narrowing scope active on the resolver (so member/property resolution
+     *  inside sees the narrowed types), balanced on exit. A no-op for an empty narrowing. */
+    private inline fun <R> withNarrowing(narrowed: Map<String, KotlinType>, block: () -> R): R {
+        if (narrowed.isEmpty()) return block()
+        resolver.pushNarrowing(narrowed)
+        try { return block() } finally { resolver.popNarrowing() }
+    }
+
+    /** The smart-cast narrowings (`name → type`) that hold when [cond] is [whenTrue]: an `x is T` on a simple
+     *  name narrows `x` to `T`; `&&` conjoins both sides' true-narrowings, `||` both sides' false-narrowings; a
+     *  `!is` (or the false branch) flips which side narrows. Only simple-name receivers narrow — sound for code
+     *  that compiles, since the interpreter dispatches on the runtime class regardless. */
+    private fun conditionNarrowings(cond: KtExpression?, whenTrue: Boolean): Map<String, KotlinType> =
+        when (val c = unwrapParens(cond)) {
+            is KtIsExpression -> {
+                val name = (c.leftHandSide as? KtNameReferenceExpression)?.getReferencedName()
+                if (name != null && whenTrue != c.isNegated) narrowingTo(name, c.typeReference?.text) else emptyMap()
+            }
+            is KtBinaryExpression -> when (c.operationToken) {
+                KtTokens.ANDAND -> if (whenTrue) conditionNarrowings(c.left, true) + conditionNarrowings(c.right, true) else emptyMap()
+                KtTokens.OROR -> if (!whenTrue) conditionNarrowings(c.left, false) + conditionNarrowings(c.right, false) else emptyMap()
+                else -> emptyMap()
+            }
+            else -> emptyMap()
+        }
+
+    /** Narrow [name] to the (generic-erased, non-null) classifier named by [typeText]; empty if it won't resolve. */
+    private fun narrowingTo(name: String, typeText: String?): Map<String, KotlinType> {
+        val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyMap()
+        val t = runCatching { service.typeFromText(text, resolver.fileContext) }.getOrNull() ?: return emptyMap()
+        return mapOf(name to t)
+    }
+
+    private fun unwrapParens(e: KtExpression?): KtExpression? =
+        if (e is KtParenthesizedExpression) unwrapParens(e.expression) else e
 
     private fun binaryNode(e: KtBinaryExpression): RNode {
         val left = e.left ?: return unsupported("binary without lhs", e)
@@ -950,6 +1093,17 @@ class KotlinTreeResolver(
                 is RNode.PropertyGet -> RNode.PropertySet(lhs.receiver, lhs.binding, lower(right), span(e))
                 else -> RNode.Assign(lhs, lower(right), span(e))
             }
+        }
+        // `a && b` / `a || b` → a short-circuiting `if` (the RHS isn't evaluated when the LHS already decides
+        // the result). The RHS is lowered under the LHS's smart-cast narrowing, so `x is T && x.member` and
+        // `x !is T || x.member` resolve `x`'s `T`-members in the RHS.
+        if (token == KtTokens.ANDAND || token == KtTokens.OROR) {
+            val span = span(e)
+            val lhs = lower(left)
+            val and = token == KtTokens.ANDAND
+            val rhs = withNarrowing(conditionNarrowings(left, whenTrue = and)) { lower(right) }
+            return if (and) RNode.If(lhs, rhs, RNode.Const(false, boolType, span), span)
+            else RNode.If(lhs, RNode.Const(true, boolType, span), rhs, span)
         }
         val key = CallSiteKey(e.textRange.startOffset)
         // `a ?: b` → `a.let { t -> if (t != null) t else b }`, lowered with a temp local (evaluate `a` once).

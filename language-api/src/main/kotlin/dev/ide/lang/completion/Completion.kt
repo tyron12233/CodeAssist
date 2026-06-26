@@ -9,23 +9,15 @@ import dev.ide.lang.resolve.TypeRef
 import dev.ide.lang.template.SnippetExpansion
 
 /**
- * Code completion.
+ * Code completion is delivered through the [CompletionContributor] API (see `Contributor.kt`): a language
+ * backend publishes its completion as one or more contributors via
+ * [dev.ide.lang.SourceAnalyzer.completionContributions], and the engine merges them with cross-cutting /
+ * plugin contributors over a shared [CompletionResultSet]. There is no per-language completion *service*
+ * interface — the old `CompletionService` was replaced by contributors (see `docs/completion-contributor-api.md`).
  *
- * Flow: capture a [DocumentSnapshot] + caret offset -> ensure the ParsedFile is at that version
- * (incremental reparse if stale) -> splice a completion marker at the caret on a copy and parse it
- * -> derive a [CompletionContext] (kind + qualifier/scope) -> enumerate, filter by prefix and
- * accessibility, rank by expected type -> [CompletionResult].
- *
- * Everything above the SPI talks only to [CompletionService] and the neutral Symbol/Scope/TypeRef
- * types, so which engine produced the items is invisible.
+ * [CompletionRequest] survives as a convenience input for the engine-free `complete(...)` runners in
+ * `CompletionRunner.kt` (used by tests and simple drivers).
  */
-interface CompletionService {
-    suspend fun complete(request: CompletionRequest): CompletionResult
-
-    /** Optional: lazily fill in docs/signature for one item when the user highlights it. */
-    suspend fun resolveItem(item: CompletionItem): CompletionItem = item
-}
-
 data class CompletionRequest(
     val document: DocumentSnapshot,
     val offset: Int,
@@ -100,7 +92,7 @@ data class CompletionItem(
 /**
  * Where the caret — and optionally a selection — ends up after a [CompletionItem] is accepted, expressed
  * relative to the just-inserted [CompletionItem.insertText]. This is the extensible seam for "smart"
- * insertions: a [CompletionService] decides the behavior (e.g. completing a method inserts `()` and lands
+ * insertions: a [CompletionContributor] decides the behavior (e.g. completing a method inserts `()` and lands
  * the caret between the parentheses when it takes arguments) while the editor — which knows nothing about
  * Java, methods, or parentheses — simply applies the action. Offsets are character counts from the start
  * of the inserted text; the editor clamps them into range. Add new variants here, not in the editor.

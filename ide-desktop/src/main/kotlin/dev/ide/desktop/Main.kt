@@ -6,7 +6,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import dev.ide.core.IdeServices
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.platform.log.ConsoleLogSink
@@ -17,8 +16,8 @@ import java.nio.file.Path
 /**
  * Launches the CodeAssist desktop IDE. Projects live under a real projects root (`~/.codeassist/projects`
  * by default, one workspace dir each); a [ProjectManager] creates/opens/lists them and the IDE supports
- * live in-session switching. On first launch (no projects yet) the rich Android multi-module sample
- * (`app → feature → core`) is seeded so the picker isn't empty.
+ * live in-session switching. The IDE starts on the project picker; a first-run user creates a project from
+ * there (or via the onboarding tour's final step).
  */
 fun main(args: Array<String>) {
     System.setProperty("apple.awt.application.appearance", "system")
@@ -32,19 +31,6 @@ fun main(args: Array<String>) {
             ?: "${System.getProperty("user.home")}/.codeassist/projects",
     )
     val manager = ProjectManager.desktop(projectsRoot)
-
-    // First launch: put the Android sample on disk so the picker isn't empty. It is NOT opened here — the
-    // engine for a project is created lazily when the user opens it (or the onboarding sheet opens the sample),
-    // so the IDE starts straight on the picker without paying to bootstrap an engine no one may use.
-    if (manager.isEmpty()) {
-        IdeServices.seedDemo(projectsRoot.resolve("android-sample"))
-    }
-
-    // Headless mode: ensure a project exists and exit (CI/smoke checks, no display needed).
-    if ("--generate-only" in args || System.getProperty("codeassist.generateOnly") == "true") {
-        println("Projects at $projectsRoot: " + manager.list().joinToString { it.name })
-        return
-    }
 
     Log.addSink(ConsoleLogSink())
 

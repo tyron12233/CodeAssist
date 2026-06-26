@@ -133,10 +133,10 @@ class InterpreterTest {
 
     @Test
     fun unsupportedConstructFailsLoudly() {
-        // A cast (`as`) is still outside the subset → the function isn't complete → the interpreter refuses it
-        // rather than producing a wrong result.
-        val code = "package demo\nfun f(x: Any): Int = (x as Int) + 1"
-        val ex = assertFailsWith<InterpreterException> { runProgram(code, "f/1", listOf(0)) }
+        // Indexed assignment (`xs[i] = v`, the `set` operator) is still outside the subset → the function isn't
+        // complete → the interpreter refuses it rather than producing a wrong result.
+        val code = "package demo\nfun f(xs: MutableList<Int>) { xs[0] = 1 }"
+        val ex = assertFailsWith<InterpreterException> { runProgram(code, "f/1", listOf(mutableListOf(0))) }
         assertTrue(ex.message?.contains("unsupported") == true, "message=${ex.message}")
     }
 }

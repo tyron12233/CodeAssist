@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCatchClause
@@ -87,9 +88,31 @@ class KotlinResolver(
     // it's queried per call expression in the analyze pass, so memoize by that boundary element.
     private val composeCtxCache = HashMap<PsiElement, ComposableContext>()
 
+    // Smart-cast narrowings: a stack of `name → narrowed type` scopes the LOWERER pushes while lowering an
+    // `if (x is T) { … }` then-branch (or `when (x) { is T -> … }`), so `x`'s members resolve against `T`.
+    // [typeOfName] consults it first. Empty during the analyze pass (only the lowerer drives push/pop), so it
+    // never affects diagnostics. While a narrowing is active, [inferType]'s cache is bypassed: an expression's
+    // type then depends on the flow context, not the expression alone, so a narrowed result must never be
+    // cached and served to an unnarrowed query.
+    private val narrowings = ArrayDeque<Map<String, KotlinType>>()
+
+    /** Push a smart-cast narrowing scope (`name → type`). The lowerer balances it with [popNarrowing]. */
+    fun pushNarrowing(narrowed: Map<String, KotlinType>) = narrowings.addLast(narrowed)
+
+    /** Pop the innermost narrowing scope pushed by [pushNarrowing]. */
+    fun popNarrowing() = narrowings.removeLast()
+
+    private fun narrowedType(name: String): KotlinType? {
+        for (i in narrowings.indices.reversed()) narrowings[i][name]?.let { return it }
+        return null
+    }
+
     fun inferType(expr: KtExpression?): KotlinType? {
         if (expr == null) return null
-        if (inferCache.containsKey(expr)) return inferCache[expr]
+        // A narrowed type is flow-dependent, not a property of the expression alone — bypass the cache so it
+        // can't leak across narrowing scopes.
+        val cacheable = narrowings.isEmpty()
+        if (cacheable && inferCache.containsKey(expr)) return inferCache[expr]
         val r = when (expr) {
             is KtParenthesizedExpression -> inferType(expr.expression)
             is KtConstantExpression -> constType(expr)
@@ -100,6 +123,7 @@ class KotlinResolver(
             is KtThisExpression -> thisType(expr)
             is KtSuperExpression -> superType(expr)
             is KtBinaryExpression -> inferBinaryType(expr)
+            is KtBinaryExpressionWithTypeRHS -> castType(expr)
             is KtArrayAccessExpression -> inferArrayGet(expr)
             // `if`/`when` used as an expression: the value is one of the branches, so its type is the type of
             // a branch — the `then`/`else` of an `if`, the first typeable entry of a `when`. (A common Compose
@@ -108,7 +132,7 @@ class KotlinResolver(
             is KtWhenExpression -> expr.entries.firstNotNullOfOrNull { inferType(branchExpr(it.expression)) }
             else -> null
         }
-        inferCache[expr] = r
+        if (cacheable) inferCache[expr] = r
         return r
     }
 
@@ -154,6 +178,16 @@ class KotlinResolver(
                     .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
                     ?.type as? KotlinType
         }
+    }
+
+    /** `value as T` / `value as? T` → the target type `T`, nullable for a safe cast (`as?` yields `T?`) or a
+     *  written nullable target (`as T?`). Lets `(x as T).member` resolve members against `T`. */
+    private fun castType(e: KtBinaryExpressionWithTypeRHS): KotlinType? {
+        val raw = e.right?.text?.trim() ?: return null
+        val safe = e.operationReference.getReferencedNameElementType() == KtTokens.AS_SAFE
+        val nullable = safe || raw.endsWith("?")
+        val t = service.typeFromText(raw.removeSuffix("?"), fileContext) ?: return null
+        return if (nullable) t.withNullable(true) else t
     }
 
     /** Kotlin numeric-promotion result type for arithmetic between primitive numbers: the wider operand, with
@@ -728,6 +762,7 @@ class KotlinResolver(
     }
 
     private fun typeOfName(name: String, offset: Int): KotlinType? {
+        narrowedType(name)?.let { return it } // an active smart-cast (`if (x is T)`) overrides the declared type
         localsAt(offset).firstOrNull { it.name == name }?.let { return it.type as? KotlinType }
         // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
         for (recv in implicitReceiversAt(offset)) memberNamed(recv, name)?.let { return it.type as? KotlinType }

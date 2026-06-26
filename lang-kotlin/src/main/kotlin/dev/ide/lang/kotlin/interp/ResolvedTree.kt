@@ -161,6 +161,11 @@ sealed interface RNode {
      *  interpreter matches a [SourceObject] by walking its class hierarchy and a reflectable value by
      *  `Class.isInstance`. */
     data class TypeCheck(val value: RNode, val typeFqn: String, val negated: Boolean, override val source: SourceSpan) : RNode
+    /** `value as T` (or `value as? T` when [safe]) — a runtime cast. The interpreter checks `value`'s runtime
+     *  type against [typeFqn]: a confirmed mismatch throws `ClassCastException` (a [safe] cast yields null
+     *  instead), while an unresolvable [typeFqn] (a type parameter / unmapped type) is trusted and passed
+     *  through. [nullable] is the `?` on the target type (`as T?`) — it lets a null pass an unsafe cast. */
+    data class Cast(val value: RNode, val typeFqn: String, val safe: Boolean, val nullable: Boolean, override val source: SourceSpan) : RNode
 
     // --- statements ---
     /** `try { … } catch (e: T) { … } … finally { … }`. The interpreter runs [body]; if it throws, the first
@@ -171,6 +176,9 @@ sealed interface RNode {
     data class Assign(val target: RNode, val value: RNode, override val source: SourceSpan) : RNode
     data class Return(val value: RNode?, override val source: SourceSpan) : RNode
     data class Throw(val value: RNode, override val source: SourceSpan) : RNode
+    /** Unlabeled `break` / `continue` — control flow handled by the enclosing [While]/[ForEach]. */
+    data class Break(override val source: SourceSpan) : RNode
+    data class Continue(override val source: SourceSpan) : RNode
     data class While(val condition: RNode, val body: RNode, val doWhile: Boolean, override val source: SourceSpan) : RNode
     /** `for (x in xs)` with its convention methods pre-resolved (the interpreter just invokes them). */
     data class ForEach(
@@ -351,6 +359,7 @@ fun reachableSourceClasses(
                 is RNode.PropertyGet -> node.binding.referencedClass()?.let { reachClass(it) }
                 is RNode.PropertySet -> node.binding.referencedClass()?.let { reachClass(it) }
                 is RNode.TypeCheck -> reachClass(node.typeFqn)
+                is RNode.Cast -> reachClass(node.typeFqn)
                 else -> {}
             }
         }
@@ -369,6 +378,7 @@ fun RNode.children(): List<RNode> = when (this) {
     is RNode.StringConcat -> parts
     is RNode.NotNull -> listOf(value)
     is RNode.TypeCheck -> listOf(value)
+    is RNode.Cast -> listOf(value)
     is RNode.Try -> listOf(body) + catches.map { it.body } + listOfNotNull(finallyBlock)
     is RNode.LocalVar -> listOfNotNull(initializer)
     is RNode.Assign -> listOf(target, value)
@@ -376,5 +386,5 @@ fun RNode.children(): List<RNode> = when (this) {
     is RNode.Throw -> listOf(value)
     is RNode.While -> listOf(condition, body)
     is RNode.ForEach -> listOf(iterable, body)
-    is RNode.Const, is RNode.Name, is RNode.This, is RNode.Unsupported -> emptyList()
+    is RNode.Const, is RNode.Name, is RNode.This, is RNode.Break, is RNode.Continue, is RNode.Unsupported -> emptyList()
 }

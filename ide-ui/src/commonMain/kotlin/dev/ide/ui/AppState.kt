@@ -110,6 +110,9 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     /** Whether the Logs viewer sheet (editor & analysis logs, opened from the More menu) is showing. */
     var logsOpen by mutableStateOf(false)
 
+    /** Whether the indexing-status detail dialog (opened by tapping the top-bar index chip) is showing. */
+    var indexDetailOpen by mutableStateOf(false)
+
     /** The module whose Add-Source-Root dialog is open, or null when closed. */
     var addSourceRootModule by mutableStateOf<String?>(null)
 

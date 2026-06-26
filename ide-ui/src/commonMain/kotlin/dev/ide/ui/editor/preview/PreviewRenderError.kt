@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,11 +49,13 @@ fun PreviewRenderError(error: Throwable, modifier: Modifier = Modifier) {
             val msg = error.message?.trim()?.let { if (it.length > 120) it.take(117) + "…" else it }
             if (!msg.isNullOrEmpty()) append(": $msg")
         }
-        Text(
-            detail,
-            color = Ca.colors.textSecondary,
-            style = Ca.type.caption,
-            textAlign = TextAlign.Center,
-        )
+        SelectionContainer {
+            Text(
+                detail,
+                color = Ca.colors.textSecondary,
+                style = Ca.type.caption,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }

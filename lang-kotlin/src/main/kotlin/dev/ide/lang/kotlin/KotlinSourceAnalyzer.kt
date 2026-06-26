@@ -4,7 +4,6 @@ import dev.ide.index.IndexService
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.CompilationContext
 import dev.ide.lang.SourceAnalyzer
-import dev.ide.lang.completion.CompletionService
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.ParsedFile
@@ -14,7 +13,7 @@ import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.incremental.ReparseResult
-import dev.ide.lang.kotlin.completion.KotlinCompletionService
+import dev.ide.lang.kotlin.completion.KotlinCompletion
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
@@ -156,7 +155,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             backing.reparse(previous, newSnapshot, edits).also { lastByFile[newSnapshot.file.path] = it.tree as KotlinParsedFile }
     }
 
-    override val completion: CompletionService by lazy { KotlinCompletionService(service) { refreshOverlay() } }
+    private val completionContributor by lazy { KotlinCompletion(service) { refreshOverlay() } }
+    override fun completionContributions(): List<dev.ide.lang.completion.CompletionContribution> =
+        listOf(dev.ide.lang.completion.CompletionContribution(completionContributor))
 
     override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
         KotlinInlayHintService(

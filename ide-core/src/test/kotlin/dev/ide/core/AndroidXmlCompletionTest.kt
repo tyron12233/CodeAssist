@@ -8,7 +8,8 @@ import dev.ide.android.support.resources.ResourceType
 import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot
-import dev.ide.lang.xml.completion.XmlCompletionService
+import dev.ide.lang.xml.completion.XmlCompletion
+import dev.ide.lang.completion.complete
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
 import dev.ide.lang.completion.CompletionItem
@@ -20,7 +21,7 @@ import kotlin.test.assertTrue
 
 /**
  * Proves the Android XML completion adapter wires the widget catalog + a resource repository into the
- * neutral [XmlCompletionService] contributor seam — the end-to-end path the editor exercises, minus the
+ * neutral [XmlCompletion] contributor seam — the end-to-end path the editor exercises, minus the
  * SDK (the repository is hand-built so the test needs no Android SDK).
  */
 class AndroidXmlCompletionTest {
@@ -32,13 +33,13 @@ class AndroidXmlCompletionTest {
             ResourceItem(ResourceType.DRAWABLE, "ic_launcher"),
         )
     )
-    private val service = XmlCompletionService(contributors = { listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() })) })
+    private val service = XmlCompletion(contributors = { listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() })) })
 
     // runTest returns a TestResult (not the lambda's value), so collect the labels into a local instead.
-    private fun complete(src: String, path: String = "res/layout/a.xml", svc: XmlCompletionService = service): List<String> =
+    private fun complete(src: String, path: String = "res/layout/a.xml", svc: XmlCompletion = service): List<String> =
         completeItems(src, path, svc).map { it.label }
 
-    private fun completeItems(src: String, path: String = "res/layout/a.xml", svc: XmlCompletionService = service): List<CompletionItem> {
+    private fun completeItems(src: String, path: String = "res/layout/a.xml", svc: XmlCompletion = service): List<CompletionItem> {
         var items: List<CompletionItem> = emptyList()
         runTest {
             val offset = src.indexOf('|')
@@ -60,7 +61,7 @@ class AndroidXmlCompletionTest {
         val sdk = AndroidSdkMetadata(34, parsed.attrs, parsed.styleables,
             mapOf("Button" to "TextView", "TextView" to "View"),
             listOf(AndroidSdkMetadata.WidgetInfo("Button", false)))
-        val svc = XmlCompletionService(contributors = {
+        val svc = XmlCompletion(contributors = {
             listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, layout = { sdk }))
         })
         // <Button> inherits TextView.text and View.id from the SDK class hierarchy.
@@ -74,7 +75,7 @@ class AndroidXmlCompletionTest {
             """<resources><declare-styleable name="MyView"><attr name="customColor" format="color"/></declare-styleable></resources>"""
         )
         val customMeta = AndroidSdkMetadata(0, custom.attrs, custom.styleables, emptyMap(), emptyList(), attrPrefix = "app:")
-        val svc = XmlCompletionService(contributors = {
+        val svc = XmlCompletion(contributors = {
             listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, customAttrs = { customMeta }))
         })
         assertTrue("app:customColor" in complete("<com.example.MyView app:|", svc = svc), "custom attr should appear")
@@ -87,7 +88,7 @@ class AndroidXmlCompletionTest {
         )
         val customMeta = AndroidSdkMetadata(0, custom.attrs, custom.styleables, emptyMap(), emptyList(),
             attrPrefix = "app:", viewSubstitutions = AndroidSdkMetadata.APPCOMPAT_SUBSTITUTIONS)
-        val svc = XmlCompletionService(contributors = {
+        val svc = XmlCompletion(contributors = {
             listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, customAttrs = { customMeta }))
         })
         // A plain <ImageView> is inflated as AppCompatImageView, so its app:srcCompat completes on the typed tag.
@@ -106,7 +107,7 @@ class AndroidXmlCompletionTest {
             dev.ide.android.support.metadata.Widget("com.google.android.material.button.MaterialButton", false),
             dev.ide.android.support.metadata.Widget("androidx.constraintlayout.widget.ConstraintLayout", true),
         )
-        val svc = XmlCompletionService(contributors = {
+        val svc = XmlCompletion(contributors = {
             listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, customViews = { views }))
         })
         // Typing the simple name matches the fully-qualified custom view (which is what gets inserted).
@@ -139,7 +140,7 @@ class AndroidXmlCompletionTest {
             """<resources><declare-styleable name="MyView"><attr name="customColor" format="color"/></declare-styleable></resources>"""
         )
         val customMeta = AndroidSdkMetadata(0, custom.attrs, custom.styleables, emptyMap(), emptyList(), attrPrefix = "app:")
-        val svc = XmlCompletionService(contributors = {
+        val svc = XmlCompletion(contributors = {
             listOf(AndroidXmlContributor(resourceNames = { type -> repo.names(type).toList() }, customAttrs = { customMeta }))
         })
         // Missing xmlns:app → the create edit is attached…
@@ -167,7 +168,7 @@ class AndroidXmlCompletionTest {
 
     @Test
     fun resourceReferenceShowsResolvedValueAsHint() {
-        val svc = XmlCompletionService(contributors = {
+        val svc = XmlCompletion(contributors = {
             listOf(AndroidXmlContributor(
                 resourceNames = { type -> repo.names(type).toList() },
                 resourceValue = { type, name -> if (type == ResourceType.STRING && name == "app_name") "CodeAssist" else null },
@@ -183,7 +184,7 @@ class AndroidXmlCompletionTest {
     @Test
     fun completesIdReferencesAndDeclaration() {
         val idRepo = ResourceRepository(listOf(ResourceItem(ResourceType.ID, "header"), ResourceItem(ResourceType.ID, "ok_button")))
-        val svc = XmlCompletionService(contributors = {
+        val svc = XmlCompletion(contributors = {
             listOf(AndroidXmlContributor(resourceNames = { type -> idRepo.names(type).toList() }))
         })
         // layout_below references an id; the bundled SDK metadata maps it (RelativeLayout_Layout, reference→ID).

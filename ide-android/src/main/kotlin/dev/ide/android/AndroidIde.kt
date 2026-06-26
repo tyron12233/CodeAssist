@@ -6,7 +6,6 @@ import dev.ide.analytics.DeviceInfo
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
-import dev.ide.core.IdeServices
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.platform.log.Log.addSink
@@ -25,7 +24,7 @@ import java.util.UUID
  * app-specific external storage, so a [ProjectsDocumentsProvider] can surface that directory in the system
  * Files app / any file manager without the All-Files-Access permission. A [ProjectManager] creates/opens/lists
  * the projects, so the IDE supports live
- * in-session switching. On first launch the Android multi-module sample is seeded. Everything above that
+ * in-session switching. The IDE starts on the project picker (no project is seeded); everything above that
  * (project model, JDT completion/analysis, indexing, the Android build) is the same `IdeServices` the
  * desktop runs, surfaced through the same `IdeServicesBackend`.
  */
@@ -60,8 +59,8 @@ object AndroidIde {
         val nativeLibDir = Paths.get(context.applicationInfo.nativeLibraryDir)
 
         val projectsRoot = File(home, "projects").toPath()
-        // android.jar MUST stay first: bootstrapWithBootClasspath / ProjectManager.onDevice treat
-        // bootClasspath.first() as the SDK android.jar. The desugar stubs ride alongside it as the platform.
+        // android.jar MUST stay first: ProjectManager.onDevice treats bootClasspath.first() as the SDK
+        // android.jar. The desugar stubs ride alongside it as the platform.
         val bootClasspath = listOf(androidJar.absolutePath, coreLambdaStubs.absolutePath)
         // Runs a dexed Java console app in-process (ART has no `java` to fork); the oat cache is transient.
         val dexRunner = DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
@@ -95,17 +94,8 @@ object AndroidIde {
 
         // Recover projects left in internal storage by a build from before the move to external app storage
         // (issues #1003 / #1024 / #1041 / #1042: projects vanishing from the picker after an update). Runs at
-        // most once; non-destructive. Done before the empty-check so a recovered project opens instead of the
-        // first-run demo being seeded over it.
+        // most once; non-destructive.
         runCatching { manager.importLegacyProjects() }
-
-        // First launch: seed the rich Android multi-module sample (app → feature → core) to disk so the
-        // picker isn't empty, but do NOT open it — the engine for a project is created lazily when the user
-        // taps it (via ProjectManager.open), so the app starts straight on the picker, the same as desktop.
-        // Java 8 level: a bundled non-modular android.jar keeps JDT DOM analysis working on ART.
-        if (manager.isEmpty()) {
-            IdeServices.seedDemoWithBootClasspath(projectsRoot.resolve("android-sample"), bootClasspath, sdkName = "android-36")
-        }
 
         // Opt-in usage analytics (no collection until the user grants consent — see docs/analytics.md).
         val analytics = buildAnalytics(manager, home)

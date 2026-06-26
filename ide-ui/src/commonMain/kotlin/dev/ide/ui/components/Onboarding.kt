@@ -60,6 +60,7 @@ import dev.ide.ui.generated.resources.command_palette
 import dev.ide.ui.generated.resources.command_palette_content
 import dev.ide.ui.generated.resources.command_palette_title
 import dev.ide.ui.generated.resources.`continue`
+import dev.ide.ui.generated.resources.create_your_first_project
 import dev.ide.ui.generated.resources.jetpack_compose
 import dev.ide.ui.generated.resources.jetpack_compose_content
 import dev.ide.ui.generated.resources.jetpack_compose_title
@@ -70,7 +71,6 @@ import dev.ide.ui.generated.resources.maybe_later
 import dev.ide.ui.generated.resources.on_device
 import dev.ide.ui.generated.resources.on_device_content
 import dev.ide.ui.generated.resources.on_device_title
-import dev.ide.ui.generated.resources.open_a_sample_project
 import dev.ide.ui.generated.resources.skip_for_now
 import dev.ide.ui.generated.resources.xml
 import dev.ide.ui.generated.resources.xml_content
@@ -169,7 +169,7 @@ private val STEPS: List<OnboardingStep> = listOf(
         icon = CaIcons.eye,
         title = Res.string.jetpack_compose_title,
         body = Res.string.jetpack_compose_content,
-        cta = Res.string.open_a_sample_project,
+        cta = Res.string.create_your_first_project,
         hero = { ComposePreviewMock() },
     ),
 )
@@ -177,17 +177,17 @@ private val STEPS: List<OnboardingStep> = listOf(
 /**
  * The first-launch feature tour: a glass bottom sheet (~74% on mobile, a
  * centered card on desktop) that pages through the full-bleed feature mocks with a segmented progress bar.
- * The final page's CTA opens the bundled sample via [onOpenSample]; [onFinish] fires once on finish/skip
+ * The final page's CTA starts a new project via [onGetStarted]; [onFinish] fires once on finish/skip
  * so the host can persist the "seen" flag and dismiss.
  */
 @Composable
-fun OnboardingSheet(visible: Boolean, onOpenSample: () -> Unit, onFinish: () -> Unit) {
+fun OnboardingSheet(visible: Boolean, onGetStarted: () -> Unit, onFinish: () -> Unit) {
     if (isMobilePlatform) {
         BottomSheet(visible = visible, onDismiss = onFinish, heightFraction = 0.74f) {
             MarqueeBody(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 fillPager = true,
-                onOpenSample = onOpenSample,
+                onGetStarted = onGetStarted,
                 onFinish = onFinish,
             )
         }
@@ -205,7 +205,7 @@ fun OnboardingSheet(visible: Boolean, onOpenSample: () -> Unit, onFinish: () -> 
                 MarqueeBody(
                     modifier = Modifier.fillMaxWidth(),
                     fillPager = false,
-                    onOpenSample = onOpenSample,
+                    onGetStarted = onGetStarted,
                     onFinish = onFinish,
                 )
             }
@@ -224,7 +224,7 @@ fun OnboardingSheet(visible: Boolean, onOpenSample: () -> Unit, onFinish: () -> 
 private fun MarqueeBody(
     modifier: Modifier,
     fillPager: Boolean,
-    onOpenSample: () -> Unit,
+    onGetStarted: () -> Unit,
     onFinish: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -257,7 +257,7 @@ private fun MarqueeBody(
             ctaLabel = stringResource(step.cta),
             showArrow = last,
             onPrimary = {
-                if (last) { onOpenSample(); onFinish() } else scope.launch { pager.animateScrollToPage(page + 1) }
+                if (last) { onGetStarted(); onFinish() } else scope.launch { pager.animateScrollToPage(page + 1) }
             },
             skipLabel = stringResource(if (last) Res.string.maybe_later else Res.string.skip_for_now),
             onSkip = onFinish,

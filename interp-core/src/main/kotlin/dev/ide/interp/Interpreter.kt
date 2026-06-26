@@ -38,6 +38,12 @@ class Interpreter(
      *  preview/run time, so the interpreter materializes them as [SourceObject]s from this model rather than
      *  reflecting bytecode. */
     classes: List<ResolvedClass> = emptyList(),
+    /** Best-effort PARTIAL evaluation (the Compose preview path): instead of refusing a function that contains
+     *  an unsupported construct, run it and SKIP any whole-statement gap (a node the lowerer marked
+     *  [RNode.Unsupported]) — so one unsupported widget/statement doesn't blank the whole preview; the rest
+     *  still renders. Skipping happens BEFORE the node is evaluated, so no Compose group is left open. Off by
+     *  default: the console Run (and tests) still fail loudly so a broken program is reported, not half-run. */
+    private val tolerateGaps: Boolean = false,
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -49,7 +55,9 @@ class Interpreter(
     private val singletons = HashMap<String, SourceObject>()
 
     fun call(fn: ResolvedFunction, args: List<Any?>): Any? {
-        if (!fn.isComplete) {
+        // A function with unsupported nodes is refused outright — UNLESS gap tolerance is on (the preview path),
+        // where it runs and skips the gaps (see [tolerateGaps]).
+        if (!tolerateGaps && !fn.isComplete) {
             throw InterpreterException("function `${fn.name}` has unsupported nodes: ${fn.diagnostics}")
         }
         val env = Env()
@@ -66,7 +74,13 @@ class Interpreter(
         is RNode.Name -> readBinding(node.binding, env)
         is RNode.Block -> {
             var last: Any? = Unit
-            for (st in node.statements) last = eval(st, env)
+            for (st in node.statements) {
+                // Partial rendering: skip a whole-statement gap rather than aborting the block. Skipping BEFORE
+                // evaluating keeps the composition balanced (the node never opens a group). A nested gap inside
+                // an otherwise-supported statement still surfaces — only a statement that IS a gap is skipped.
+                if (tolerateGaps && st is RNode.Unsupported) continue
+                last = eval(st, env)
+            }
             last
         }
         is RNode.LocalVar -> {
@@ -91,26 +105,33 @@ class Interpreter(
         is RNode.Return -> throw ReturnSignal(node.value?.let { eval(it, env) })
         is RNode.While -> {
             // Each iteration runs the body in a fresh child scope, so a local (or lambda capturing one)
-            // declared in the body is distinct per iteration; the condition reads the enclosing scope.
-            if (node.doWhile) {
-                do { eval(node.body, Env(env)) } while (eval(node.condition, env) == true)
-            } else {
-                while (eval(node.condition, env) == true) eval(node.body, Env(env))
-            }
+            // declared in the body is distinct per iteration; the condition reads the enclosing scope. A
+            // `break` exits the loop (caught here); a `continue` ends the iteration (caught in runLoopBody).
+            try {
+                if (node.doWhile) {
+                    do { runLoopBody(node.body, Env(env)) } while (eval(node.condition, env) == true)
+                } else {
+                    while (eval(node.condition, env) == true) runLoopBody(node.body, Env(env))
+                }
+            } catch (b: BreakSignal) { /* break exits the loop */ }
             Unit
         }
         is RNode.ForEach -> {
             val iterable = eval(node.iterable, env) ?: throw InterpreterException("cannot iterate null")
             val iterator = invoke0(iterable, "iterator") ?: throw InterpreterException("no iterator() on ${iterable.javaClass.name}")
-            while (invoke0(iterator, "hasNext") == true) {
-                // Fresh per-iteration scope: the loop variable (and any closure capturing it) is bound anew
-                // each pass, matching Kotlin's per-iteration capture rather than aliasing one shared slot.
-                val iterEnv = Env(env)
-                iterEnv.define(node.loopVar.slot, invoke0(iterator, "next"))
-                eval(node.body, iterEnv)
-            }
+            try {
+                while (invoke0(iterator, "hasNext") == true) {
+                    // Fresh per-iteration scope: the loop variable (and any closure capturing it) is bound anew
+                    // each pass, matching Kotlin's per-iteration capture rather than aliasing one shared slot.
+                    val iterEnv = Env(env)
+                    iterEnv.define(node.loopVar.slot, invoke0(iterator, "next"))
+                    runLoopBody(node.body, iterEnv)
+                }
+            } catch (b: BreakSignal) { /* break exits the loop */ }
             Unit
         }
+        is RNode.Break -> throw BreakSignal
+        is RNode.Continue -> throw ContinueSignal
         is RNode.Call -> evalCall(node, env)
         is RNode.Lambda -> Closure(node, env)
         is RNode.StringConcat -> buildString { node.parts.forEach { append(eval(it, env)?.toString() ?: "null") } }
@@ -158,6 +179,19 @@ class Interpreter(
             val matches = isInstanceOf(eval(node.value, env), node.typeFqn)
             if (node.negated) !matches else matches
         }
+        is RNode.Cast -> {
+            val v = eval(node.value, env)
+            when {
+                v == null -> if (node.safe || node.nullable) null
+                else throw ClassCastException("null cannot be cast to non-null type ${node.typeFqn}")
+                // true → confirmed match; null → the type couldn't be resolved (a type parameter / unmapped
+                // type), so trust the compiler and pass through; false → a confirmed mismatch.
+                castMatches(v, node.typeFqn) == false ->
+                    if (node.safe) null
+                    else throw ClassCastException("${v.javaClass.name} cannot be cast to ${node.typeFqn}")
+                else -> v
+            }
+        }
         is RNode.Throw -> {
             val v = eval(node.value, env)
             if (v is Throwable) throw v else throw KotlinThrow(v)
@@ -167,7 +201,9 @@ class Interpreter(
                 try {
                     eval(node.body, env)
                 } catch (t: Throwable) {
-                    if (t is ReturnSignal) throw t // control flow, not an exception to catch
+                    // Control-flow signals are not exceptions to catch — a `catch (e: Exception)` must NOT
+                    // swallow a `return`/`break`/`continue` (they extend RuntimeException). The `finally` still runs.
+                    if (t is ReturnSignal || t is BreakSignal || t is ContinueSignal) throw t
                     val thrown = (t as? KotlinThrow)?.value ?: t
                     val handler = node.catches.firstOrNull { c -> c.typeFqn.let { it == null || isInstanceOf(thrown, it) } }
                         ?: throw t
@@ -199,6 +235,14 @@ class Interpreter(
                 op in ARITHMETIC && left is Number && right is Number -> return arithmetic(op, left, right)
                 op in ARITHMETIC -> {} // a real operator method on a user/library type → fall through to dispatch
             }
+        }
+        // Invoking a function value (`fn(x)`, `callback()`) where `fn` is a local/param/property holding a
+        // lambda: an interpreted lambda is called directly; a JVM functional object goes through the dispatcher
+        // (its `invoke` method).
+        if (call.dispatch == DispatchKind.INVOKE) {
+            val target = call.receiver?.let { eval(it, env) }
+            val argv = call.args.map { eval(it.value, env) }
+            return if (target is InterpretedLambda) target.invoke(argv) else dispatcher.dispatch(call, target, argv)
         }
         // A source constructor materializes a [SourceObject] (the type isn't compiled at preview/run time).
         if (callee is ResolvedCallable.Source && call.dispatch == DispatchKind.CONSTRUCTOR) {
@@ -334,9 +378,9 @@ class Interpreter(
 
     /**
      * Execute a known `@InlineOnly` stdlib intrinsic ([STDLIB_FACADE] callees), or return null if [call] isn't
-     * one. Only the `it`-lambda / no-receiver-lambda scope functions are handled — the receiver-lambda forms
-     * (`run`/`apply`/`with`, whose body binds an implicit `this`) are deliberately left to the dispatcher's
-     * honest boundary rather than guessed at.
+     * one. Covers the scope functions — both the `it`-lambda forms (`let`/`also`/`takeIf`/`takeUnless`) and the
+     * receiver-lambda forms (`apply`/`with`/`run`), whose body binds an implicit `this`: the lowerer gives a
+     * receiver lambda a leading `<this>` slot, so passing the receiver as the lambda's first argument binds it.
      */
     private fun evalInlineIntrinsic(call: RNode.Call, env: Env): Handled? {
         val name = call.callee.displayName
@@ -371,9 +415,23 @@ class Interpreter(
                 val recv = receiver()
                 Handled(if (lambda(args[0].value).invoke(listOf(recv)) == true) null else recv)
             }
-            // run { … } (the no-receiver top-level form; the `T.run { this -> }` extension is left to dispatch)
+            // run { … } (the no-receiver top-level form)
             name == "run" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 ->
                 Handled(lambda(args[0].value).invoke(emptyList()))
+            // x.apply { this -> … } → runs the receiver-lambda with `x` bound as its `this`, returns x. The lambda
+            // already carries a leading `<this>` slot (the lowerer adds it for a receiver lambda), so passing the
+            // receiver as the sole argument binds it — same shape as `also`, but yielding x.
+            name == "apply" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val recv = receiver()
+                lambda(args[0].value).invoke(listOf(recv))
+                Handled(recv)
+            }
+            // x.run { this -> … } (the extension form) → runs the receiver-lambda with `x` as `this`, returns its result.
+            name == "run" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 ->
+                Handled(lambda(args[0].value).invoke(listOf(receiver())))
+            // with(x) { this -> … } → like `x.run { … }` but `x` is the FIRST argument, not the receiver.
+            name == "with" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 ->
+                Handled(lambda(args[1].value).invoke(listOf(eval(args[0].value, env))))
             // The empty/blank predicate family is `@InlineOnly` (each compiles to a one-liner over a real
             // receiver method like `isBlank()`/`isEmpty()`/`length`), so no JVM method exists to reflect into.
             // They take no lambda — compute them directly on the evaluated receiver, branching by runtime type
@@ -596,6 +654,24 @@ class Interpreter(
             KOTLIN_TYPE_TO_JVM[typeFqn], typeFqn, if ('.' !in typeFqn) "java.lang.$typeFqn" else null,
         )
         return candidates.any { loadClassAcross(it, initialize = false, preferred = classLoader)?.isInstance(value) == true }
+    }
+
+    /** Tri-state cast check: `true` = [value] is a [typeFqn]; `false` = confirmed NOT (the type loaded and
+     *  rejected it); `null` = the type couldn't be resolved at all (a type parameter / unmapped type), so the
+     *  cast can't be verified and the caller trusts the compiler. Distinguishes "not an instance" from "don't
+     *  know the type" — which [isInstanceOf] collapses to `false` (fine for `is`, wrong for `as`). */
+    private fun castMatches(value: Any, typeFqn: String): Boolean? {
+        if (value is SourceObject) return sourceTypeMatches(value.cls, typeFqn)
+        val candidates = listOfNotNull(
+            KOTLIN_TYPE_TO_JVM[typeFqn], typeFqn, if ('.' !in typeFqn) "java.lang.$typeFqn" else null,
+        )
+        var anyLoaded = false
+        for (c in candidates) {
+            val cls = loadClassAcross(c, initialize = false, preferred = classLoader) ?: continue
+            anyLoaded = true
+            if (cls.isInstance(value)) return true
+        }
+        return if (anyLoaded) false else null
     }
 
     private fun sourceTypeMatches(cls: ResolvedClass, typeFqn: String): Boolean {
@@ -870,6 +946,19 @@ class Interpreter(
 
     /** Non-local control transfer for `return`; no stack trace (it's control flow, not an error). */
     private class ReturnSignal(val value: Any?) : RuntimeException(null, null, false, false)
+
+    /** Loop control transfers for `break`/`continue` — stackless singletons (no per-throw allocation in a hot
+     *  loop), caught by the enclosing [RNode.While]/[RNode.ForEach]. */
+    private object BreakSignal : RuntimeException(null, null, false, false)
+    private object ContinueSignal : RuntimeException(null, null, false, false)
+
+    /** Run a loop body in [bodyEnv], swallowing a `continue` (which just ends this iteration). A `break`
+     *  propagates out to the enclosing loop's own catch. */
+    private fun runLoopBody(body: RNode, bodyEnv: Env) {
+        try {
+            eval(body, bodyEnv)
+        } catch (c: ContinueSignal) { /* continue → fall through to the next iteration */ }
+    }
 
     /** Carries a non-`Throwable` value thrown by interpreted `throw` (e.g. a source exception object), so a
      *  `try`/`catch` can still match and bind it. A real `Throwable` is thrown directly. */

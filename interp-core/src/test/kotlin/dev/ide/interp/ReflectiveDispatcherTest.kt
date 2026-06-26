@@ -14,6 +14,7 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -237,8 +238,85 @@ class ReflectiveDispatcherTest {
         assertEquals("w=5 fill=true", Interpreter(emptyMap()).call(fn, listOf(ScopeImpl(), Mod())))
     }
 
+    @Test
+    fun constructorOmittingDefaultedParamsRoutesThroughTheInitDefaultSynthetic() {
+        // `Style(c = true)` — a named-arg construction that omits THREE defaulted parameters (interior + trailing).
+        // There's no exact-arity constructor; Kotlin emits an `<init>$default(real…, int mask,
+        // DefaultConstructorMarker)` synthetic that fills the defaults. This is the `SpanStyle(fontWeight = …)`
+        // execution path. The mask must mark a,b,d (bits 0,1,3) as defaulted while c (bit 2) carries the value.
+        val span = SourceSpan(0, 0)
+        val callee = ResolvedCallable.Library(
+            displayName = "Style", ownerFqn = Style::class.java.name, methodName = "<init>",
+            paramTypes = emptyList(), isStatic = false, isConstructor = true, isInline = false,
+            descriptorPrecise = true, paramNames = listOf("a", "b", "c", "d"),
+        )
+        val call = RNode.Call(
+            callee, DispatchKind.CONSTRUCTOR, receiver = null,
+            args = listOf(RArg(RNode.Const(true, null, span), name = "c")),
+            callSiteKey = CallSiteKey(0), source = span,
+        )
+        val result = dispatcher.dispatch(call, receiver = null, args = listOf(true)) as Style
+        assertEquals("da", result.a, "an omitted leading param keeps its default")
+        assertEquals(1, result.b, "an omitted middle param keeps its default")
+        assertEquals(true, result.c, "the supplied named arg lands in its declared slot")
+        assertEquals("dd", result.d, "an omitted trailing param keeps its default")
+    }
+
+    @Test
+    fun constructorPreservesAnExplicitNullOverItsDefault() {
+        // `Style(d = null)` — an explicitly-passed null must NOT be treated as an omitted (defaulted) slot: its
+        // mask bit stays clear so the synthetic uses the null, not the `"dd"` default. (Only the absent a/b/c
+        // are defaulted.)
+        val span = SourceSpan(0, 0)
+        val callee = ResolvedCallable.Library(
+            displayName = "Style", ownerFqn = Style::class.java.name, methodName = "<init>",
+            paramTypes = emptyList(), isStatic = false, isConstructor = true, isInline = false,
+            descriptorPrecise = true, paramNames = listOf("a", "b", "c", "d"),
+        )
+        val call = RNode.Call(
+            callee, DispatchKind.CONSTRUCTOR, receiver = null,
+            args = listOf(RArg(RNode.Const(null, null, span), name = "d")),
+            callSiteKey = CallSiteKey(0), source = span,
+        )
+        val result = dispatcher.dispatch(call, receiver = null, args = listOf<Any?>(null)) as Style
+        assertEquals("da", result.a)
+        assertEquals(1, result.b)
+        assertEquals(false, result.c)
+        assertNull(result.d, "an explicit null overrides the parameter's default")
+    }
+
+    @Test
+    fun instanceCallBoxesAnUnboxedValueClassArgForANullableValueClassParam() {
+        // A non-composable MEMBER call `tagger.describe(Tag(5))` where `describe(t: Tag?)` — a NULLABLE value
+        // class, so its JVM param is the BOXED `Tag`, while the interpreter produced the UNBOXED underlying
+        // `5`. Overload selection (`paramsAccept`) must accept it and `bindArgs` must box it via `box-impl`
+        // before the reflective invoke — the general reflective path, not just the composable ABI / synthetic.
+        val callee = ResolvedCallable.Library(
+            displayName = "describe", ownerFqn = Tagger::class.java.name, methodName = "describe",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val call = call(DispatchKind.MEMBER, callee)
+        assertEquals("tag5", dispatcher.dispatch(call, receiver = Tagger(), args = listOf<Any?>(5)))
+        // An explicit null still binds to the nullable param (not boxed, not defaulted).
+        assertEquals("none", dispatcher.dispatch(call, receiver = Tagger(), args = listOf<Any?>(null)))
+    }
+
     /** A Kotlin class with a mutable `value` property → `getValue()`/`setValue(x)` (a `MutableState` stand-in). */
     class Holder(var value: String)
+
+    /** An inline value class — its underlying `int` is what the interpreter produces for a `Tag(n)` expression. */
+    @JvmInline
+    value class Tag(val v: Int)
+
+    /** A class with a NULLABLE value-class param (`Tag?` → boxed JVM type): an unboxed underlying arg must be
+     *  boxed by the general reflective path before the invoke. */
+    class Tagger {
+        fun describe(t: Tag?): String = if (t == null) "none" else "tag${t.v}"
+    }
+
+    /** A class with all-defaulted constructor params (and a nullable trailing one) — a `SpanStyle` stand-in for
+     *  the `<init>$default` synthetic path. */
+    class Style(val a: String = "da", val b: Int = 1, val c: Boolean = false, val d: String? = "dd")
 
     /** A scope holding a MEMBER extension on [Mod] (`fun Mod.scoped(...)`), mirroring `RowScope.weight`. */
     class Mod

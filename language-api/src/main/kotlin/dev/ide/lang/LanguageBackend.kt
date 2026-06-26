@@ -1,7 +1,6 @@
 package dev.ide.lang
 
 import dev.ide.platform.ExtensionPoint
-import dev.ide.lang.completion.CompletionService
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.ParsedFile
@@ -49,7 +48,7 @@ enum class BackendCapability {
     ERROR_RECOVERY,     // produces a usable tree from invalid source (required for editor + completion)
     INCREMENTAL,        // supports reparse() rather than full reparse
     BINDINGS,           // resolves symbols/types (even partially) on broken code
-    COMPLETION,         // provides a CompletionService
+    COMPLETION,         // publishes completion contributors (SourceAnalyzer.completionContributions)
     SNIPPETS,           // completion emits snippet items (CaretAction.ExpandSnippet)
     POSTFIX,            // contributes/handles postfix templates (dev.ide.lang.postfix)
     INLAY_HINTS,        // provides an InlayHintService
@@ -93,9 +92,17 @@ interface AnnotationProcessor {
  */
 interface SourceAnalyzer {
     val incrementalParser: IncrementalParser
-    val completion: CompletionService?      // null if !capabilities.contains(COMPLETION)
     val inlayHints: InlayHintService?       // null if !capabilities.contains(INLAY_HINTS)
         get() = null
+
+    /**
+     * Extra completion contributors this analyzer exposes to the unified completion engine, bound to its own
+     * resolver / symbol model (so they share the analyzer's state rather than re-resolving). The engine runs
+     * them alongside the [completion] service (itself wrapped as a contributor) and any plugin contributors.
+     * Empty by default — a backend opts in to publish analyzer-aware contributors (e.g. type-driven postfix
+     * or scope-driven keyword logic) as first-class engine contributors. See `dev.ide.lang.completion`.
+     */
+    fun completionContributions(): List<dev.ide.lang.completion.CompletionContribution> = emptyList()
 
     /** Parameter-info popup; null if !capabilities.contains(SIGNATURE_HELP). See the signature SPI. */
     val signatureHelp: dev.ide.lang.signature.SignatureHelpService?

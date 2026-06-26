@@ -431,6 +431,77 @@ class ComposableAbiDefaultsTest {
             if (m.name == "invoke") lambda.invoke(a?.toList() ?: emptyList()) else null
         }
 
+    @Test
+    fun constructorOmittingDefaultedValueClassParamsRoutesThroughTheInitDefaultSynthetic() {
+        // The reported `SpanStyle(...)` crash, in miniature against REAL compiler-emitted bytecode: [Paint]'s
+        // defaulted params include an inline VALUE CLASS (cf. SpanStyle's `color: Color`/`fontSize: TextUnit`,
+        // unboxed to `long` in the JVM signature). `Paint(name = "custom")` omits `hue` and `size`; there is no
+        // exact-arity constructor, so Kotlin's `<init>$default(long, int, String, int mask,
+        // DefaultConstructorMarker)` synthetic fills the defaults. Driven through the real ComposeDispatcher,
+        // which routes a CONSTRUCTOR to its reflective fallback (no composer needed — it isn't a composable call).
+        val span = dev.ide.lang.kotlin.interp.SourceSpan(0, 0)
+        val callee = dev.ide.lang.kotlin.interp.ResolvedCallable.Library(
+            displayName = "Paint", ownerFqn = Paint::class.java.name, methodName = "<init>",
+            paramTypes = emptyList(), isStatic = false, isConstructor = true, isInline = false,
+            descriptorPrecise = true, paramNames = listOf("hue", "size", "name"),
+        )
+        val call = dev.ide.lang.kotlin.interp.RNode.Call(
+            callee, dev.ide.lang.kotlin.interp.DispatchKind.CONSTRUCTOR, receiver = null,
+            args = listOf(dev.ide.lang.kotlin.interp.RArg(dev.ide.lang.kotlin.interp.RNode.Const("custom", null, span), name = "name")),
+            callSiteKey = dev.ide.lang.kotlin.interp.CallSiteKey(31), source = span,
+        )
+        val result = ComposeDispatcher().dispatch(call, receiver = null, args = listOf<Any?>("custom")) as Paint
+        assertEquals(0xFF0000L, result.hue.v, "an omitted value-class param uses the compiler's default (unboxed long)")
+        assertEquals(12, result.size, "an omitted Int param uses its default")
+        assertEquals("custom", result.name, "the supplied named arg binds to its slot")
+    }
+
+    @Test
+    fun constructorAcceptsAnUnboxedValueClassArgAndDefaultsAnOmittedMiddleParam() {
+        // The `SpanStyle(color = Color.Red)` case: the supplied value-class arg arrives UNBOXED (a
+        // java.lang.Long, as the interpreter represents value classes), which must fit the synthetic's `long`
+        // real-param slot; the middle `size` is omitted and defaults — exercising an interior mask bit.
+        val span = dev.ide.lang.kotlin.interp.SourceSpan(0, 0)
+        fun arg(name: String, v: Any?) =
+            dev.ide.lang.kotlin.interp.RArg(dev.ide.lang.kotlin.interp.RNode.Const(v, null, span), name)
+        val callee = dev.ide.lang.kotlin.interp.ResolvedCallable.Library(
+            displayName = "Paint", ownerFqn = Paint::class.java.name, methodName = "<init>",
+            paramTypes = emptyList(), isStatic = false, isConstructor = true, isInline = false,
+            descriptorPrecise = true, paramNames = listOf("hue", "size", "name"),
+        )
+        val call = dev.ide.lang.kotlin.interp.RNode.Call(
+            callee, dev.ide.lang.kotlin.interp.DispatchKind.CONSTRUCTOR, receiver = null,
+            args = listOf(arg("hue", 0x00FF00L), arg("name", "x")),
+            callSiteKey = dev.ide.lang.kotlin.interp.CallSiteKey(33), source = span,
+        )
+        val result = ComposeDispatcher().dispatch(call, receiver = null, args = listOf<Any?>(0x00FF00L, "x")) as Paint
+        assertEquals(0x00FF00L, result.hue.v, "an unboxed value-class arg fits the synthetic's long slot")
+        assertEquals(12, result.size, "the omitted middle Int param defaults")
+        assertEquals("x", result.name)
+    }
+
+    @Test
+    fun constructorBoxesAnUnboxedValueClassArgForANullableValueClassParam() {
+        // The `SpanStyle(fontStyle = FontStyle.Italic)` case: a NULLABLE value-class param (`tint: Hue?`) is
+        // BOXED in the JVM signature, but the supplied value-class arg arrives UNBOXED (a java.lang.Long). The
+        // synthetic-constructor path must box it (via the value class's static `box-impl`) before the invoke,
+        // exactly as the composable ABI does for `Text(textAlign = …)`. `text` is omitted and defaults.
+        val span = dev.ide.lang.kotlin.interp.SourceSpan(0, 0)
+        val callee = dev.ide.lang.kotlin.interp.ResolvedCallable.Library(
+            displayName = "Banner", ownerFqn = Banner::class.java.name, methodName = "<init>",
+            paramTypes = emptyList(), isStatic = false, isConstructor = true, isInline = false,
+            descriptorPrecise = true, paramNames = listOf("tint", "text"),
+        )
+        val call = dev.ide.lang.kotlin.interp.RNode.Call(
+            callee, dev.ide.lang.kotlin.interp.DispatchKind.CONSTRUCTOR, receiver = null,
+            args = listOf(dev.ide.lang.kotlin.interp.RArg(dev.ide.lang.kotlin.interp.RNode.Const(0x0000FFL, null, span), name = "tint")),
+            callSiteKey = dev.ide.lang.kotlin.interp.CallSiteKey(35), source = span,
+        )
+        val result = ComposeDispatcher().dispatch(call, receiver = null, args = listOf<Any?>(0x0000FFL)) as Banner
+        assertEquals(0x0000FFL, result.tint?.v, "the unboxed value-class arg is boxed into the nullable param")
+        assertEquals("hi", result.text, "the omitted trailing param defaults")
+    }
+
     // --- harness ---
 
     private val recomposers = ArrayList<Recomposer>()
@@ -547,6 +618,20 @@ fun Toggle(checked: Boolean, onChange: (Boolean) -> Unit, source: ToggleSource? 
     Capture.flag = checked
     Capture.label = if (source == null) "nullsource" else "hassource"
 }
+
+/** An inline value class backed by a `long` (cf. `Color`, whose underlying `ULong` is a `long` slot) — its
+ *  constructor parameters appear UNBOXED in JVM signatures, so the `<init>$default` synthetic carries `long`,
+ *  not `Hue`. */
+@JvmInline
+value class Hue(val v: Long)
+
+/** A class whose all-defaulted constructor params include an inline value class — the `SpanStyle` shape for
+ *  the synthetic-constructor path (a value-class `hue` unboxed to `long`, an `Int`, and a `String`). */
+class Paint(val hue: Hue = Hue(0xFF0000L), val size: Int = 12, val name: String = "default")
+
+/** A class with a NULLABLE value-class param (cf. `SpanStyle.fontStyle: FontStyle?`): nullability forces the
+ *  JVM param to the BOXED `Hue`, so an unboxed supplied value must be boxed before the synthetic invoke. */
+class Banner(val tint: Hue? = null, val text: String = "hi")
 
 /** Top-level capture sink (the composable writes here; the test reads it). */
 object Capture {

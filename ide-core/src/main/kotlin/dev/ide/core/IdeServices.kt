@@ -2,11 +2,15 @@ package dev.ide.core
 
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.SourceAnalyzer
+import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
+import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
+import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionTrigger
+import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.LanguageId
@@ -174,6 +178,8 @@ import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.IndexUiStatus
+import dev.ide.ui.backend.IndexWorkItem
+import dev.ide.ui.backend.IndexWorkState
 import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
@@ -341,6 +347,32 @@ class IdeServices private constructor(
         platform.extensions.extensions(LANGUAGE_BACKEND_EP)
     }
 
+    /** The unified completion pipeline (language backend + cross-cutting + plugin contributors, ranked by
+     *  weighers). Built-in contributors are registered on the contributor EP here; plugins add their own. */
+    private val completionEngine: dev.ide.core.completion.CompletionEngine = run {
+        val plugin = PluginId("completion-builtins")
+        platform.extensions.register(
+            COMPLETION_CONTRIBUTOR_EP,
+            CompletionContribution(BufferWordsContributor, order = BufferWordsContributor.ORDER),
+            plugin,
+        )
+        // The generic postfix-template driver: activates `platform.postfixTemplate` for plugins/backends.
+        platform.extensions.register(
+            COMPLETION_CONTRIBUTOR_EP,
+            CompletionContribution(
+                dev.ide.core.completion.PostfixContributor(platform.extensions),
+                order = dev.ide.core.completion.PostfixContributor.ORDER,
+            ),
+            plugin,
+        )
+        // Kotlin's built-in postfix templates (`expr.if`/`expr.val`/`list.for`, language-scoped), now driven
+        // by the generic PostfixContributor instead of being baked into the Kotlin completion service.
+        dev.ide.lang.kotlin.completion.KotlinPostfixTemplates.all().forEach {
+            platform.extensions.register(dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP, it, plugin)
+        }
+        dev.ide.core.completion.CompletionEngine(platform.extensions)
+    }
+
     /** The backend whose `languages` contains [language], or the first (Java/JDT) as a fallback. */
     private fun backendFor(language: LanguageId): LanguageBackend =
         languageBackends.firstOrNull { language in it.languages } ?: languageBackends.first()
@@ -408,7 +440,24 @@ class IdeServices private constructor(
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
         indexService.observeStatus { s ->
-            _indexStatus.value = IndexUiStatus(s.building, s.message, s.fraction)
+            _indexStatus.value = IndexUiStatus(
+                building = s.building,
+                message = s.message,
+                fraction = s.fraction,
+                phase = s.phase,
+                items = s.items.map { item ->
+                    IndexWorkItem(
+                        label = item.label,
+                        state = when (item.state) {
+                            dev.ide.index.IndexItemState.PENDING -> IndexWorkState.PENDING
+                            dev.ide.index.IndexItemState.ACTIVE -> IndexWorkState.ACTIVE
+                            dev.ide.index.IndexItemState.DONE -> IndexWorkState.DONE
+                        },
+                    )
+                },
+                processed = s.processed,
+                total = s.total,
+            )
         }
         indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
         // Pre-warm the Kotlin parser environment (the ~200ms KotlinCoreEnvironment standup) off-thread, so the
@@ -3207,102 +3256,60 @@ class IdeServices private constructor(
         return modules().firstOrNull { manifestPath(it)?.toAbsolutePath()?.normalize() == target }
     }
 
-    /** Completion for [text] (the live editor buffer) at [offset], bound to [file]'s module + language. */
+    /**
+     * Completion for [text] (the live editor buffer) at [offset], bound to [file]'s module + language. Runs
+     * through the unified [CompletionEngine]: the language backend (wrapped as a contributor), every
+     * cross-cutting / plugin [dev.ide.lang.completion.CompletionContributor], and buffer-word completion are
+     * merged and ranked in one pipeline — there is no privileged backend call here anymore.
+     */
     fun complete(file: Path, text: String, offset: Int): CompletionResult {
+        val lang = languageFor(file)
+        val safeOffset = offset.coerceIn(0, text.length)
+        val prefix = identifierPrefixBefore(text, safeOffset)
+        val replaceRange = TextRange(safeOffset - prefix.length, safeOffset)
         val module = moduleForEditableFile(file)
-        if (module == null) return withBufferWords(
-            CompletionResult(
-                emptyList(), false, TextRange(offset, offset)
-            ), text, offset
-        )
-        updateDocument(file, text) // the live buffer becomes part of the overlay the analyzer reads
-        val analyzer = analyzerFor(module, languageFor(file))
-        val service = analyzer.completion
-        if (service == null) return withBufferWords(
-            CompletionResult(
-                emptyList(), false, TextRange(offset, offset)
-            ), text, offset
-        )
+        val analyzer = module?.let { analyzerFor(it, lang) }
+        if (module != null) updateDocument(file, text) // the live buffer joins the overlay the analyzer reads
         val snapshot = EditorDocument(store.vfs.fileFor(file), docVersion.incrementAndGet(), text)
         // A backend that throws mid-completion (e.g. the Kotlin parse host on ART) would otherwise propagate
         // out to the UI and surface as a silent empty popup with no trace. Log the cause (logcat/stderr) and
         // degrade to no suggestions, so one failing file can't disable completion and the failure is diagnosable.
-        val base = runCatching {
+        return runCatching {
             runSync {
-                service.complete(
-                    CompletionRequest(
-                        snapshot, offset, CompletionTrigger.Explicit
-                    )
+                val vfile = store.vfs.fileFor(file)
+                // Parse the LIVE snapshot (not the cached lastByFile tree, which can lag the just-typed buffer)
+                // so `position`/`parsedFile` reflect the completion buffer — the receiver-type-driven postfix
+                // contributor depends on it. parseFull reuses the cached parse when the text is unchanged.
+                val parsed = analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() }
+                val params = CompletionParams(
+                    document = snapshot,
+                    offset = safeOffset,
+                    prefix = prefix,
+                    language = lang,
+                    trigger = CompletionTrigger.Explicit,
+                    replacementRange = replaceRange,
+                    position = parsed?.nodeAt(safeOffset),
+                    parsedFile = parsed,
+                    typeResolver = analyzer?.let { a -> { node -> runCatching { a.resolveType(node) }.getOrNull() } },
                 )
+                // Per-call contributions: the language backend's own completion contributors, merged with the
+                // EP (cross-cutting / plugin) contributors by the engine.
+                val perCall = analyzer?.completionContributions() ?: emptyList()
+                completionEngine.complete(params, perCall)
             }
         }.getOrElse { e ->
-            System.err.println("[IdeServices] completion failed for $file (${languageFor(file).id}): ${e.stackTraceToString()}")
-            CompletionResult(emptyList(), false, TextRange(offset, offset))
+            System.err.println("[IdeServices] completion failed for $file (${lang.id}): ${e.stackTraceToString()}")
+            CompletionResult(emptyList(), false, replaceRange)
         }
-        return withBufferWords(base, text, offset)
     }
 
-    /**
-     * Hippie / word completion: append identifier-like words already present in the live buffer that extend
-     * the prefix under the caret, as low-priority [CompletionItemKind.WORD] items below the semantic ones.
-     * This is the language-agnostic fallback (works in any file, even one with no completion backend) that
-     * lets the popup offer a name the user typed five lines up that the resolver doesn't know about. Words
-     * are deduped against the semantic labels and each other, ordered nearest-the-caret first (classic
-     * hippie-expand), and capped. The word currently being typed is itself skipped. The set is delivered
-     * unfiltered beyond the prefix — the editor's local fuzzy filter narrows it further as the user types.
-     */
-    private fun withBufferWords(
-        base: CompletionResult, text: String, offset: Int
-    ): CompletionResult {
-        val len = text.length
-        val caret = offset.coerceIn(0, len)
-        var start = caret
-        while (start > 0 && isWordChar(text[start - 1])) start--
-        val prefix = text.substring(start, caret)
-        if (prefix.isEmpty()) return base
-
-        val existing = HashSet<String>()
-        base.items.forEach { existing.add(it.label) }
-        existing.add(prefix) // never re-offer the partial word the caret sits in
-
-        // word -> nearest distance from the caret (so the closest occurrence wins the ordering)
-        val nearest = HashMap<String, Int>()
-        var i = 0
-        while (i < len) {
-            if (isWordStart(text[i])) {
-                var j = i + 1
-                while (j < len && isWordChar(text[j])) j++
-                val isCaretToken = caret in i..j // the very token under the caret — skip it
-                if (!isCaretToken && j - i >= prefix.length) {
-                    val word = text.substring(i, j)
-                    if (word !in existing && word.startsWith(prefix, ignoreCase = true)) {
-                        val dist = if (caret < i) i - caret else caret - j
-                        val prev = nearest[word]
-                        if (prev == null || dist < prev) nearest[word] = dist
-                    }
-                }
-                i = j
-            } else i++
-        }
-        if (nearest.isEmpty()) return base
-
-        val baseSort = (base.items.maxOfOrNull { it.sortPriority } ?: 0) + 1000
-        val words = nearest.entries.sortedBy { it.value }.take(20)
-        val hippie = words.mapIndexed { idx, e ->
-            CompletionItem(
-                label = e.key,
-                insertText = e.key,
-                kind = CompletionItemKind.WORD,
-                sortPriority = baseSort + idx
-            )
-        }
-        // When the language backend produced nothing, it also gave no replacement range — anchor the accept
-        // to the prefix the words extend so accepting one replaces the partial word, not just inserts at caret.
-        val range = if (base.items.isEmpty()) TextRange(start, caret) else base.replacementRange
-        return base.copy(items = base.items + hippie, replacementRange = range)
+    /** The identifier-like prefix immediately before [offset] (letters/digits/`_`/`$`). */
+    private fun identifierPrefixBefore(text: String, offset: Int): String {
+        var i = offset.coerceIn(0, text.length)
+        while (i > 0 && isWordChar(text[i - 1])) i--
+        return text.substring(i, offset.coerceIn(0, text.length))
     }
 
-    private fun isWordStart(c: Char): Boolean = c.isLetter() || c == '_' || c == '$'
     private fun isWordChar(c: Char): Boolean = c.isLetterOrDigit() || c == '_' || c == '$'
 
     /** Parameter-info / signature help at [offset] in [text] (the live buffer), bound to [file]'s module +
@@ -4956,10 +4963,10 @@ class IdeServices private constructor(
         )
 
         /**
-         * Create the demo at [root] (replacing any existing one) and open it. The default demo is the
-         * Android multi-module app (`app → feature → core`). On a desktop the framework `android.jar`
-         * is resolved from an installed Android SDK so `android.*` resolves; with no SDK it falls back to a
-         * JDK (Java resolves, `android.*` does not).
+         * Test fixture: create the Android multi-module sample (`app → feature → core`) at [root] (replacing
+         * any existing one) and open it. On a desktop the framework `android.jar` is resolved from an installed
+         * Android SDK so `android.*` resolves; with no SDK it falls back to a JDK (Java resolves, `android.*`
+         * does not). Not used by the launchers — the IDE no longer seeds a demo on first run.
          */
         fun bootstrapDemo(root: Path, sharedCachesRoot: Path? = null): IdeServices {
             if (Files.exists(root)) root.toFile().deleteRecursively()
@@ -4978,10 +4985,10 @@ class IdeServices private constructor(
         }
 
         /**
-         * Seed the Android sample to [root] on disk **without** opening an engine, so a launcher can show it
-         * in the picker on first run and open it lazily (via [ProjectManager.open]) only when the user taps it.
-         * No-op when a project already exists at [root]. The transient platform used to write the model is
-         * disposed before returning, so this leaks nothing.
+         * Test fixture: seed the Android sample to [root] on disk **without** opening an engine, so a test can
+         * exercise the lazy-open path (list it in the picker, then open it via [ProjectManager.open]). No-op when
+         * a project already exists at [root]. The transient platform used to write the model is disposed before
+         * returning, so this leaks nothing.
          */
         fun seedDemo(root: Path) {
             if (ModelPersistence.exists(root)) return
@@ -4995,35 +5002,6 @@ class IdeServices private constructor(
                     types.resolve("android-app"),
                     types.resolve("android-lib"),
                     types.resolve("java-lib"),
-                )
-                store.save()
-            } finally {
-                platform.dispose()
-            }
-        }
-
-        /**
-         * The on-device counterpart to [seedDemo]: seed the Android sample to [root] **without** opening an
-         * engine, using an explicitly supplied platform boot classpath (ART has no JDK/SDK to detect, so the
-         * launcher passes the bundled `android.jar`). No-op when a project already exists at [root]. The
-         * launcher opens it lazily via [ProjectManager.open] when the user taps it. Java 8 level keeps JDT's
-         * DOM analysis working against the non-modular bundled `android.jar` (see [bootstrapWithBootClasspath]).
-         */
-        fun seedDemoWithBootClasspath(
-            root: Path, bootClasspath: List<String>, sdkName: String = "android"
-        ) {
-            if (ModelPersistence.exists(root)) return
-            Files.createDirectories(root)
-            val (platform, store) = openStore(root)
-            try {
-                store.replaceSdks(listOf(SdkData(sdkName, bootClasspath, buildToolsPath = null)))
-                val types = ModuleTypeRegistry(platform.extensions)
-                SampleAndroidProject.generate(
-                    store,
-                    types.resolve("android-app"),
-                    types.resolve("android-lib"),
-                    types.resolve("java-lib"),
-                    languageLevel = dev.ide.model.LanguageLevel.JAVA_8,
                 )
                 store.save()
             } finally {
@@ -5062,78 +5040,6 @@ class IdeServices private constructor(
             val (platform, store) = openStore(root)
             if (store.workspace.sdkTable.sdks.isEmpty()) store.replaceSdks(listOf(JdkSdkProvider.detect()))
             return IdeServices(platform, store)
-        }
-
-        /**
-         * Bootstrap with an explicitly supplied platform boot classpath instead of auto-detecting a JDK.
-         * Hosts with no JDK to discover — notably Android/ART, which feeds a bundled `android.jar` — use
-         * this. [bootClasspath] is a list of absolute jar paths. Regenerates the demo project at [root]
-         * when [generateDemo]; otherwise opens whatever is there (seeding the SDK only if there is none).
-         * Takes plain strings (not the internal `SdkData`) so callers needn't depend on the model API.
-         */
-        fun bootstrapWithBootClasspath(
-            root: Path,
-            bootClasspath: List<String>,
-            sdkName: String = "android",
-            generateDemo: Boolean = true,
-            /** App `nativeLibraryDir` holding the extracted `libaapt2.so`/`libzipalign.so` prebuilts (on-device). */
-            androidToolsDir: Path? = null,
-            /** Debug keystore copied out of app assets (on-device). With [androidToolsDir], enables on-device assembly. */
-            debugKeystore: Path? = null,
-            /** On-device `DexClassLoader` runner (from :ide-android) — enables running a Java console app on ART. */
-            dexRunner: DexRunner? = null,
-            /** The device's `Build.VERSION.SDK_INT` — min-api the Java dex-run targets. */
-            deviceApiLevel: Int = 21,
-            /** On-device APK installer (from :ide-android) — enables the android Run (build + install + launch). */
-            apkInstaller: ApkInstaller? = null,
-            /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
-            customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
-            /** App-level shared download cache (projects-root parent); null → per-project. */
-            sharedCachesRoot: Path? = null,
-        ): IdeServices {
-            if (generateDemo && Files.exists(root)) root.toFile().deleteRecursively()
-            Files.createDirectories(root)
-            val (platform, store) = openStore(root)
-            val sdk = SdkData(sdkName, bootClasspath, buildToolsPath = null)
-            if (generateDemo || store.workspace.sdkTable.sdks.isEmpty()) store.replaceSdks(
-                listOf(
-                    sdk
-                )
-            )
-            if (generateDemo) {
-                // Java 8 level: a bundled android.jar is non-modular, and JDT's DOM ASTParser (the analysis
-                // path) requires a modular system library (java.base) at compliance ≥ 9. Java 8 skips that
-                // check, so completion and analysis work on-device. (Modern levels need the modular-JDK download.)
-                // The on-device demo is an Android app, resolving against the bundled android.jar fed above.
-                val types = ModuleTypeRegistry(platform.extensions)
-                SampleAndroidProject.generate(
-                    store,
-                    types.resolve("android-app"),
-                    types.resolve("android-lib"),
-                    types.resolve("java-lib"),
-                    languageLevel = LanguageLevel.JAVA_8,
-                )
-                store.save()
-            }
-            // On-device the launcher supplies the native build tools + keystore (the android.jar is the first
-            // boot-classpath entry; any later entries are the desugar stubs); the in-process Android build
-            // (AndroidBuildSystem.inProcess) runs off these.
-            val androidTools =
-                if (androidToolsDir != null && debugKeystore != null && bootClasspath.isNotEmpty()) AndroidDeviceTools(
-                    Paths.get(bootClasspath.first()),
-                    androidToolsDir,
-                    debugKeystore,
-                    deviceApiLevel,
-                    desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }) else null
-            return IdeServices(
-                platform,
-                store,
-                androidTools,
-                dexRunner,
-                apkInstaller,
-                customViewRuntime,
-                sharedCachesRoot
-            )
         }
 
         private fun openStore(

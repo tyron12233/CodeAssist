@@ -3,11 +3,12 @@ package dev.ide.lang.xml
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionRequest
+import dev.ide.lang.completion.complete
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.xml.completion.XmlCompletionKind
 import dev.ide.lang.xml.completion.XmlCompletionPosition
 import dev.ide.lang.xml.completion.XmlContextScanner
-import dev.ide.lang.xml.completion.XmlCompletionService
+import dev.ide.lang.xml.completion.XmlCompletion
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -75,7 +76,7 @@ class XmlCompletionTest {
                 CompletionItem(label = it, insertText = "$it=\"\"", kind = CompletionItemKind.FIELD)
             }
         }
-        val service = XmlCompletionService(contributors = { listOf(contributor) })
+        val service = XmlCompletion(contributors = { listOf(contributor) })
         val (text, offset) = at("<TextView layout_w|")
         val result = service.complete(CompletionRequest(TestDoc(text), offset, CompletionTrigger.Explicit))
         val labels = result.items.map { it.label }
@@ -84,10 +85,10 @@ class XmlCompletionTest {
 
     @Test
     fun nameMatchesIsNamespaceAndPathAware() {
-        assertTrue(XmlCompletionService.nameMatches("android:layout_width", "layout_w"))
-        assertTrue(XmlCompletionService.nameMatches("android:layout_width", "android:lay"))
-        assertTrue(XmlCompletionService.nameMatches("@string/home", "home"))
-        assertTrue(!XmlCompletionService.nameMatches("android:layout_width", "height"))
+        assertTrue(XmlCompletion.nameMatches("android:layout_width", "layout_w"))
+        assertTrue(XmlCompletion.nameMatches("android:layout_width", "android:lay"))
+        assertTrue(XmlCompletion.nameMatches("@string/home", "home"))
+        assertTrue(!XmlCompletion.nameMatches("android:layout_width", "height"))
     }
 
     @Test
@@ -98,7 +99,7 @@ class XmlCompletionTest {
                 CompletionItem(label = it, insertText = it, kind = CompletionItemKind.CLASS)
             }
         }
-        val service = XmlCompletionService(contributors = { listOf(contributor) })
+        val service = XmlCompletion(contributors = { listOf(contributor) })
         val (text, offset) = at("<LinearLayout><T|></LinearLayout>")
         val result = service.complete(CompletionRequest(TestDoc(text), offset, CompletionTrigger.Explicit))
         val labels = result.items.map { it.label }

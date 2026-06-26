@@ -170,8 +170,8 @@ class KotlinTreeResolverTest {
 
     @Test
     fun unsupportedConstructIsRejectedNotGuessed() {
-        // A cast (`as`) is still outside the subset → Unsupported, not a guess.
-        val fn = lower("package demo\nfun f(x: Any) { val y = x as Int }")
+        // Indexed assignment (`xs[i] = v`, the `set` operator) is still outside the subset → Unsupported, not a guess.
+        val fn = lower("package demo\nfun f(xs: MutableList<Int>) { xs[0] = 1 }")
         assertFalse(fn.isComplete, "the function should report an incomplete lowering")
         assertTrue(fn.diagnostics.isNotEmpty(), "the gap should be recorded as a diagnostic")
     }

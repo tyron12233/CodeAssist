@@ -1,41 +1,43 @@
 package dev.ide.lang.xml.completion
 
+import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionItem
+import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionRequest
-import dev.ide.lang.completion.CompletionResult
-import dev.ide.lang.completion.CompletionService
+import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.lang.dom.ParsedFile
 
 /**
- * Computes the [XmlCompletionPosition] at the caret, asks every registered [XmlCompletionContributor] for
- * candidates, then prefix-filters and orders them. The engine owns *where* (context); contributors own
- * *what* (Android widgets, attributes, resource references). With no contributors registered the result
- * is empty — `lang-xml` ships no Android knowledge of its own.
+ * The XML language backend's completion [CompletionContributor]: computes the [XmlCompletionPosition] at the
+ * caret, asks every registered [XmlCompletionContributor] for candidates, then prefix-filters and orders them.
+ * The engine owns *where* (context); contributors own *what* (Android widgets, attributes, resource refs).
+ * With no contributors registered the result is empty — `lang-xml` ships no Android knowledge of its own.
  *
  * [parseFor] lets the owning analyzer share its already-built tree instead of re-parsing; it defaults to a
- * fresh full parse (cheap for XML) so the service is usable standalone (and in tests).
+ * fresh full parse (cheap for XML) so it is usable standalone (and in tests).
  */
-class XmlCompletionService(
+class XmlCompletion(
     private val contributors: () -> List<XmlCompletionContributor>,
     private val parseFor: (CompletionRequest) -> ParsedFile = {
         dev.ide.lang.xml.XmlIncrementalParser().parseFull(it.document)
     },
-) : CompletionService {
+) : CompletionContributor {
 
-    override suspend fun complete(request: CompletionRequest): CompletionResult {
+    override val id = "xml.completion"
+
+    override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
+        val request = CompletionRequest(params.document, params.offset, params.trigger)
         val text = request.document.text
         val parsed = parseFor(request)
         val pos = XmlContextScanner.scan(text, request.offset, parsed, request.document.file.path)
-        if (pos.kind == XmlCompletionKind.UNKNOWN) {
-            return CompletionResult(emptyList(), isIncomplete = false, replacementRange = pos.replacementRange)
-        }
+        result.setReplacementRange(pos.replacementRange)
+        if (pos.kind == XmlCompletionKind.UNKNOWN) return
 
         val candidates = contributors().flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
         val items = candidates
             .filter { matchesPrefix(it, pos.prefix) }
             .sortedWith(compareBy({ it.sortPriority }, { it.label.lowercase() }))
-
-        return CompletionResult(items, isIncomplete = false, replacementRange = pos.replacementRange)
+        result.addAllElements(items)
     }
 
     private fun matchesPrefix(item: CompletionItem, prefix: String): Boolean =

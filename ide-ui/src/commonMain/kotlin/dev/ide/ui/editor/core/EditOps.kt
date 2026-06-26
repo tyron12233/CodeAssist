@@ -148,9 +148,32 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int, language: Cod
                 var k = prevLineStart
                 while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
                 val prevIndent = text.subSequence(prevLineStart, k).toString()
-                val deeper = lineOpensBlock(text, prevLineStart, p, language) && !startsWithCloser(text, pos, language)
-                val ins = "\n" + prevIndent + (if (deeper) detectIndentUnit(text) else "")
+                // A line that is itself a closer aligns to its MATCHING OPENER's indent, not the previous line's
+                // (`fun f() {\n    body()\n\n    |}` → `}` under `fun f()`, not under `body()`). Other lines take
+                // the previous line's indent, one level deeper when that line opens a block.
+                val closerIndent = if (startsWithCloser(text, pos, language)) matchingOpenerIndent(text, firstNonBlankFrom(text, pos)) else null
+                val base = closerIndent ?: prevIndent
+                val deeper = closerIndent == null && lineOpensBlock(text, prevLineStart, p, language)
+                val ins = "\n" + base + (if (deeper) detectIndentUnit(text) else "")
                 return RangeEdit(p, pos, ins, p + ins.length)
+            }
+        }
+    }
+    // Smart closing-bracket indent: the caret sits in a line's leading whitespace, immediately before a
+    // closer (`}`/`)`/`]`). Backspace aligns the closer to its MATCHING OPENER's indent and never below it:
+    //   • over-indented → snap to the opener in one press (`fun f() {\n    body()\n        |}` → `    }`);
+    //   • already aligned → no-op, so the brace KEEPS the opener's indent instead of de-indenting past it
+    //     (`fun onCreate() {\n    …\n    |}` stays at 4, aligned with `onCreate`, rather than jumping to col 0).
+    // Brace languages only; a caret mid-indent (not right before the closer) falls through to a plain delete.
+    if ((deleted == ' ' || deleted == '\t') && language != CodeLanguage.Xml) {
+        val closer = text.charOrNull(pos)
+        val lineStart = lineStartOf(text, pos)
+        if (closer != null && closer in CLOSE_TO_OPEN && isBlankBefore(text, lineStart, pos)) {
+            val openerIndent = matchingOpenerIndent(text, pos)
+            if (openerIndent != null) {
+                val curIndent = pos - lineStart
+                if (openerIndent.length < curIndent) return RangeEdit(lineStart, pos, openerIndent, lineStart + openerIndent.length)
+                if (openerIndent.length == curIndent) return null // already at the opener's indent — keep it
             }
         }
     }
@@ -190,6 +213,44 @@ private fun isBlankBefore(text: CharSequence, lineStart: Int, pos: Int): Boolean
  * preceding line — `)`/`]`/`}` in brace languages, `</` in XML. Such a line lines up with its opener rather
  * than indenting one level deeper into the block.
  */
+/** Index of the first non-space/-tab char at or after [pos] (clamped to the text length). */
+private fun firstNonBlankFrom(text: CharSequence, pos: Int): Int {
+    var i = pos
+    while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+    return i
+}
+
+/**
+ * The leading-whitespace STRING of the line containing the opener that matches the closing bracket at
+ * [closerPos] — so a closer can be re-indented to align with its opener (`}` under the `fun`/`{` that opened
+ * it). A bounded backward depth scan (ignores strings/comments, like [matchingBracket]); null when the
+ * closer isn't a bracket or its opener isn't found within the scan window.
+ */
+private fun matchingOpenerIndent(text: CharSequence, closerPos: Int): String? {
+    val closer = text.charOrNull(closerPos) ?: return null
+    val opener = CLOSE_TO_OPEN[closer] ?: return null
+    var depth = 0
+    var i = closerPos
+    val limit = maxOf(0, closerPos - CLOSER_SCAN_LIMIT)
+    while (i >= limit) {
+        val c = text[i]
+        if (c == closer) depth++
+        else if (c == opener) {
+            depth--
+            if (depth == 0) {
+                val ls = lineStartOf(text, i)
+                var k = ls
+                while (k < text.length && (text[k] == ' ' || text[k] == '\t')) k++
+                return text.subSequence(ls, k).toString()
+            }
+        }
+        i--
+    }
+    return null
+}
+
+private const val CLOSER_SCAN_LIMIT = 100_000
+
 private fun startsWithCloser(text: CharSequence, pos: Int, language: CodeLanguage): Boolean {
     var i = pos
     while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++

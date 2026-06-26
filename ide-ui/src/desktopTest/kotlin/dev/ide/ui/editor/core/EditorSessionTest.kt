@@ -144,6 +144,40 @@ class EditorSessionTest {
     }
 
     @Test
+    fun backspaceSnapsOverIndentedCloserToOpenerIndent() {
+        // The `}` closing f() is over-indented at 8 spaces; one Backspace snaps it to the `fun f()` indent (4).
+        val code = "class A {\n    fun f() {\n        body()\n        }\n}"
+        val caret = code.indexOf("        }\n}") + 8 // just before the over-indented `}`
+        val s = session(code, caret, language = CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("class A {\n    fun f() {\n        body()\n    }\n}", s.doc.text)
+        assertEquals(TextRange(code.indexOf("        }\n}") + 4), s.selection)
+    }
+
+    @Test
+    fun backspaceOnAlignedCloserKeepsItAtOpenerIndent() {
+        // The user's exact case: `}` already aligned with its opener (`onCreate`/`f()` at 4). Backspace must
+        // NOT de-indent it below the opener (the reported jump to column 0); the brace stays put.
+        val code = "class A {\n    fun f() {\n        body()\n    }\n}"
+        val caret = code.indexOf("    }\n}") + 4
+        val s = session(code, caret, language = CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals(code, s.doc.text)
+        assertEquals(TextRange(caret), s.selection)
+    }
+
+    @Test
+    fun backspaceSnapsCloserAcrossBlankLineToOpener() {
+        // A blank line above + an over-indented closer: collapse the gap AND align `}` to the `fun f()` indent
+        // (4), not the previous content line `body()` (8).
+        val code = "class A {\n    fun f() {\n        body()\n\n        }\n}"
+        val caret = code.indexOf("        }\n}") + 8
+        val s = session(code, caret, language = CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("class A {\n    fun f() {\n        body()\n    }\n}", s.doc.text)
+    }
+
+    @Test
     fun backspaceRemovesEmptyPair() {
         val s = session("foo()", 4)
         s.backspace()
