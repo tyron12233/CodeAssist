@@ -9,8 +9,14 @@ import dev.ide.index.IndexOrigin
 import dev.ide.index.InputFilter
 import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
+import org.xml.sax.Attributes
+import org.xml.sax.InputSource
+import org.xml.sax.Locator
+import org.xml.sax.helpers.DefaultHandler
 import java.io.DataInput
 import java.io.DataOutput
+import java.io.StringReader
+import javax.xml.parsers.SAXParserFactory
 
 /** A resource declaration found in a `res/` file: its type, name, declaring file, and offset (for go-to). */
 data class ResourceDeclValue(val type: String, val name: String, val filePath: String, val offset: Int)
@@ -38,24 +44,34 @@ private object ResourceKeyDescriptor : KeyDescriptor<String> {
  * The incremental Android resource-declaration index. Indexes `res/` XML files (value resources,
  * file resources, and `@+id/` declarations) keyed by resource name, with the declaring file + offset as the
  * value, so resource references resolve to a precise definition and resource-name completion is fast/fuzzy
- * without rebuilding the whole `ResourceRepository` per keystroke. Registered on `platform.index`; fed the
- * project's `res/` roots via `IndexScope.resourceRoots`, and updated per edit via `IndexService.reindexSource`.
+ * without rebuilding the whole `ResourceRepository` per keystroke. Registered on `platform.index`.
  *
- * Pure text scanning (`ResourceFileScanner`) so it runs identically on desktop and ART.
+ * The project's OWN `res/` roots are fed via [dev.ide.index.IndexScope.resourceRoots] (the in-memory source
+ * side, edit-sensitive); immutable dependency/AAR `res/` is content-addressed onto disk segments via
+ * [dev.ide.index.IndexScope.libraryResourceRoots] - so the bulk of a Material/AndroidX resource set is parsed
+ * ONCE, shared across projects, and read on demand rather than held resident (a Material `values.xml` alone is
+ * ~600 KB / thousands of declarations). The [inputFilter] accepts both SOURCE and LIBRARY res XML inputs.
+ *
+ * Parsed with a streaming SAX parser ([ResourceFileScanner]) - never a backtracking regex - so a huge
+ * dependency `values.xml` is linear and bounded (the regex predecessor wedged the engine on ART).
  */
 object AndroidResourceIndex : IndexExtension<String, ResourceDeclValue> {
     override val id = IndexId("android.resources")
-    override val version = 1
+    // v2: SAX scanner replaced the regex one (offsets are line-anchored; library resources now segment-cached).
+    override val version = 2
     override val keyDescriptor: KeyDescriptor<String> = ResourceKeyDescriptor
     override val valueExternalizer: Externalizer<ResourceDeclValue> = ResourceDeclExternalizer
     override val matching = MatchingMode.PREFIX_AND_FUZZY
 
     /** The index key for a resource: `"<type>/<name>"`. */
     fun key(type: String, name: String): String = "$type/$name"
+
     override val inputFilter = InputFilter { input ->
-        input.origin == IndexOrigin.SOURCE && input.sourcePath?.toString()?.replace('\\', '/')?.let {
-            it.contains("/res/") && it.endsWith(".xml")
-        } == true
+        // SOURCE = project res (in-memory side); LIBRARY = dependency/AAR res (disk segments). Both are res XML.
+        (input.origin == IndexOrigin.SOURCE || input.origin == IndexOrigin.LIBRARY) &&
+            input.sourcePath?.toString()?.replace('\\', '/')?.let {
+                it.contains("/res/") && it.endsWith(".xml")
+            } == true
     }
 
     override fun index(input: IndexInput): Map<String, Collection<ResourceDeclValue>> {
@@ -70,49 +86,128 @@ object AndroidResourceIndex : IndexExtension<String, ResourceDeclValue> {
     }
 }
 
-/** Extracts resource declarations (type + name + offset) from one `res/` file's [text], given its [folder]. */
+/**
+ * Extracts resource declarations (type + name + offset) from one `res/` file's [text], given its [folder].
+ *
+ * Uses a streaming SAX parse (no regex). Offsets are anchored to the declaring element's line - precise enough
+ * for go-to-definition and, unlike a backtracking regex, strictly linear on a multi-hundred-KB merged
+ * `values.xml`. SAX fires its element events as it reads, so a malformed buffer still yields every declaration
+ * parsed up to the error (the late exception is swallowed) - the tolerance the old regex gave, without the
+ * pathological cost.
+ */
 object ResourceFileScanner {
 
-    // <tag ... name="..."> with the tag and the name's position; covers value resources + declare-styleable.
-    private val VALUE_DECL = Regex("""<([\w-]+)\b([^>]*?)\bname\s*=\s*"([^"]+)"""")
-    private val TYPE_ATTR = Regex("""\btype\s*=\s*"([^"]+)"""")
-    private val ID_DECL = Regex("""@\+id/([A-Za-z_][\w.]*)""")
     private val ID_BEARING = setOf(ResourceType.LAYOUT, ResourceType.MENU, ResourceType.NAVIGATION, ResourceType.DRAWABLE, ResourceType.XML, ResourceType.TRANSITION)
+    private const val ID_PREFIX = "@+id/"
 
     fun scan(folder: String, filePath: String, text: String): List<ResourceDeclValue> {
         val base = folder.substringBefore('-')
         val out = ArrayList<ResourceDeclValue>()
         if (base == "values") {
-            for (m in VALUE_DECL.findAll(text)) {
-                val tag = m.groupValues[1]
-                val attrs = m.groupValues[2]
-                val rawName = m.groupValues[3]
-                // A namespaced name (`android:colorPrimary`) is a style/theme *item* referencing an attr, not a
-                // resource declaration — skip it (resource names never contain ':').
-                if (':' in rawName) continue
-                val type = when (tag) {
-                    // Only `<item type="…" name="…">` declares a resource. A bare `<item name="…">` is a `<style>`
-                    // entry or an array element, NOT an id — defaulting it to id produced bogus `@id/…` entries.
-                    "item" -> TYPE_ATTR.find(attrs)?.groupValues?.get(1)?.let { ResourceType.byRClass(it) }
-                    else -> ResourceType.fromValueTag(tag)
-                } ?: continue
-                // A declare-styleable's child `<attr name=>`s are caught by this same loop (tag "attr" → ATTR).
-                out += ResourceDeclValue(type.rClass, sanitize(rawName), filePath, m.range.first)
-            }
+            runCatching { parse(text, ValuesHandler(filePath, text, out)) }
         } else {
-            val type = ResourceType.fromFolder(base)
-            if (type != null) {
-                out += ResourceDeclValue(type.rClass, baseName(filePath), filePath, 0)
-                if (type in ID_BEARING) {
-                    for (m in ID_DECL.findAll(text)) out += ResourceDeclValue(ResourceType.ID.rClass, sanitize(m.groupValues[1]), filePath, m.range.first)
-                }
-            }
+            val type = ResourceType.fromFolder(base) ?: return out
+            out += ResourceDeclValue(type.rClass, baseName(filePath), filePath, 0)
+            // Only file-resource types that can host inline `@+id/…` declarations are scanned for them.
+            if (type in ID_BEARING) runCatching { parse(text, IdHandler(filePath, text, out)) }
         }
         return out
+    }
+
+    private fun parse(text: String, handler: DefaultHandler) {
+        newParser().parse(InputSource(StringReader(text)), handler)
+    }
+
+    /** Value-resource SAX handler: top-level `<resources>` children are declarations; `<declare-styleable>`'s
+     *  child `<attr>`s are `R.attr` entries; `<style>`/array `<item>`s are deliberately ignored (not ids). */
+    private class ValuesHandler(
+        private val filePath: String,
+        text: String,
+        private val out: MutableList<ResourceDeclValue>,
+    ) : DefaultHandler() {
+        private val lines = LineOffsets(text)
+        private var loc: Locator? = null
+        private val stack = ArrayList<String>()
+
+        override fun setDocumentLocator(locator: Locator) { loc = locator }
+
+        override fun startElement(uri: String?, localName: String?, qName: String, attrs: Attributes) {
+            when {
+                // depth 1 = a direct child of <resources>: the resource declaration itself.
+                stack.size == 1 -> emitTopLevel(qName, attrs)
+                // depth 2 under a <declare-styleable>: each child <attr name=…> is an R.attr entry.
+                stack.size == 2 && stack[1] == "declare-styleable" && qName == "attr" ->
+                    sanitize(attrs.getValue("name").orEmpty()).ifEmpty { null }
+                        ?.let { out += ResourceDeclValue(ResourceType.ATTR.rClass, it, filePath, offset()) }
+            }
+            stack.add(qName)
+        }
+
+        override fun endElement(uri: String?, localName: String?, qName: String) {
+            if (stack.isNotEmpty()) stack.removeAt(stack.size - 1)
+        }
+
+        private fun emitTopLevel(tag: String, attrs: Attributes) {
+            val rawName = attrs.getValue("name") ?: return
+            // A namespaced name (`android:colorPrimary`) is a style/theme item referencing an attr, not a
+            // resource declaration - resource names never contain ':'.
+            if (':' in rawName) return
+            val name = sanitize(rawName).ifEmpty { return }
+            val type = when (tag) {
+                // Only `<item type="…" name="…">` declares a resource; a bare `<item name=…>` is a style entry.
+                "item" -> attrs.getValue("type")?.let { ResourceType.byRClass(it) }
+                else -> ResourceType.fromValueTag(tag)
+            } ?: return
+            out += ResourceDeclValue(type.rClass, name, filePath, offset())
+        }
+
+        private fun offset(): Int = lines.offsetOf(loc?.lineNumber ?: 1)
+    }
+
+    /** File-resource SAX handler: records every `@+id/name` found in any attribute value. */
+    private class IdHandler(
+        private val filePath: String,
+        text: String,
+        private val out: MutableList<ResourceDeclValue>,
+    ) : DefaultHandler() {
+        private val lines = LineOffsets(text)
+        private var loc: Locator? = null
+
+        override fun setDocumentLocator(locator: Locator) { loc = locator }
+
+        override fun startElement(uri: String?, localName: String?, qName: String, attrs: Attributes) {
+            for (i in 0 until attrs.length) {
+                val v = attrs.getValue(i)
+                if (!v.startsWith(ID_PREFIX)) continue
+                val name = v.substring(ID_PREFIX.length).takeWhile { it.isLetterOrDigit() || it == '_' || it == '.' }
+                if (name.isNotEmpty()) out += ResourceDeclValue(ResourceType.ID.rClass, sanitize(name), filePath, lines.offsetOf(loc?.lineNumber ?: 1))
+            }
+        }
+    }
+
+    /** Maps a 1-based SAX line number to the character offset of that line's start. */
+    private class LineOffsets(text: String) {
+        private val starts = IntArray(text.count { it == '\n' } + 1).also { arr ->
+            var idx = 1; arr[0] = 0
+            for (i in text.indices) if (text[i] == '\n') arr[idx++] = i + 1
+        }
+        fun offsetOf(line: Int): Int = starts.getOrElse(line - 1) { 0 }
     }
 
     private fun baseName(filePath: String): String =
         sanitize(filePath.substringAfterLast('/').substringAfterLast('\\').substringBefore('.'))
 
     private fun sanitize(name: String): String = name.replace('.', '_').replace('-', '_').trim()
+
+    /** Shared SAX factory (creation does service discovery - do it once); a fresh parser per file is cheap. */
+    private val factory: SAXParserFactory by lazy {
+        SAXParserFactory.newInstance().apply {
+            isNamespaceAware = false
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+        }
+    }
+
+    private fun newParser() = synchronized(factory) { factory.newSAXParser() }
 }
