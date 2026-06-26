@@ -77,8 +77,13 @@ data class IndexScope(
     val sourceRoots: List<Path> = emptyList(),
     val libraryJars: List<Path> = emptyList(),
     val jdkHome: Path? = null,
-    /** Android `res/` roots — walked for `.xml` resource files (e.g. the resource-declaration index). */
+    /** The project's OWN (+ dependency-module) `res/` roots — walked for `.xml` resource files into the resident,
+     *  edit-sensitive source side. Immutable dependency/AAR res goes in [libraryResourceRoots] instead. */
     val resourceRoots: List<Path> = emptyList(),
+    /** Immutable dependency/AAR `res/` dirs — content-addressed onto disk segments (parsed once, shared across
+     *  projects, read on demand) rather than held resident like [resourceRoots]. A Material/AndroidX resource
+     *  set is hundreds of files / a multi-hundred-KB merged `values.xml`, so keeping it off the heap matters. */
+    val libraryResourceRoots: List<Path> = emptyList(),
     /** Attached SOURCE archives/dirs (`-sources.jar`, JDK `src.zip`, Android `sources/`) — walked for `.java`/
      *  `.kt`, fed as [IndexOrigin.LIBRARY_SOURCE] units (the source-doc index: real param names + javadoc/KDoc). */
     val sourceArchives: List<Path> = emptyList(),

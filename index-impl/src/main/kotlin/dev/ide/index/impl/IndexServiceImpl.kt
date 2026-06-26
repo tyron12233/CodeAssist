@@ -63,6 +63,9 @@ class IndexServiceImpl(
 
     private val states: Map<IndexId, State> = extensions.associate { it.id to State(it) }
     private val blockCache = BlockCache(blockCacheBytes, blockSize)
+    /** True on memory-constrained hosts (the caller passes the smaller [CONSTRAINED_BLOCK_CACHE_BYTES] cap on
+     *  device). Drives memory-vs-speed trade-offs during the build (e.g. serial artifact indexing). */
+    private val constrained = blockCacheBytes <= CONSTRAINED_BLOCK_CACHE_BYTES
     private val segIds = AtomicInteger(0)
 
     @Volatile
@@ -137,13 +140,19 @@ class IndexServiceImpl(
                 scope.jdkHome?.let { add(Artifact.Jrt(it)) }
                 scope.libraryJars.forEach { add(Artifact.Jar(it)) }
                 scope.sourceArchives.forEach { if (Files.exists(it)) add(Artifact.SourceArchive(it)) }
+                // Immutable dependency/AAR res dirs index to content-addressed disk segments (parsed once,
+                // reopened thereafter), not into the resident source side.
+                scope.libraryResourceRoots.forEach { if (Files.isDirectory(it)) add(Artifact.ResourceDir(it)) }
             }
             val total = artifacts.size + 1
             // Index artifacts in parallel (bounded). Each artifact is independent — it scans its own jar and
             // writes its own per-(ext,hash) segment file; the only shared state is each State's `segments`
             // (CopyOnWrite) and `openHashes` (concurrent set, distinct key per artifact). Sequential, this was
             // the dominant first-load cost gating the first completion/diagnostics on a `.kt` file.
-            val concurrency = minOf(4, maxOf(1, Runtime.getRuntime().availableProcessors() - 1))
+            // Each parallel builder holds a whole artifact's index entries in RAM until its segment is
+            // written, so N-way parallelism keeps N big-jar accumulators live at once. On a constrained
+            // (tight-heap) host, serialize - one accumulator at a time - to cut the artifact-phase peak.
+            val concurrency = if (constrained) 1 else minOf(4, maxOf(1, Runtime.getRuntime().availableProcessors() - 1))
             val done = AtomicInteger(0)
             val buildDispatcher = Dispatchers.IO.limitedParallelism(concurrency)
             // Per-artifact worklist for the index-status dialog (PENDING → ACTIVE → DONE). Mutated from the
@@ -380,7 +389,7 @@ class IndexServiceImpl(
                 // its own, so the `.class`-only indexes ignore the builtins entries and vice versa.
                 val seq = zip.entries().asSequence()
                     .filter { !it.isDirectory && (it.name.endsWith(".class") || it.name.endsWith(".kotlin_builtins")) }
-                    .map { entry -> LibraryInput(IndexOrigin.LIBRARY, hash, entry.name) { zip.getInputStream(entry).readBytes() } }
+                    .map { entry -> LibraryInput(IndexOrigin.LIBRARY, hash, entry.name, path) { zip.getInputStream(entry).readBytes() } }
                 return seq to Closeable { zip.close() }
             }
         }
@@ -439,15 +448,64 @@ class IndexServiceImpl(
                 return inputs.asSequence() to Closeable { if (ownFs) runCatching { fs.close() } }
             }
         }
+
+        /** An immutable dependency/AAR `res/` dir: yields its `.xml` resource files as [IndexOrigin.LIBRARY]
+         *  units, segment-cached by the dir's content. So a large merged dependency `values.xml` is parsed once
+         *  and reopened from disk thereafter, not re-scanned into the resident source side every launch. */
+        class ResourceDir(val path: Path) : Artifact() {
+            override val label get() = "res: ${path.parent?.fileName?.let { "$it/" } ?: ""}${path.fileName}"
+            override fun contentHash(): ContentHash {
+                // FNV-1a over each `.xml` file's path + size (no read) - re-extraction invalidates it, and
+                // identical dependency res across projects hashes to (and shares) one segment.
+                var h = -3750763034362895579L // FNV offset basis
+                runCatching {
+                    Files.walk(path).use { s ->
+                        s.filter { Files.isRegularFile(it) && it.toString().endsWith(".xml") }.sorted().forEach { f ->
+                            for (c in f.toString()) h = (h xor c.code.toLong()) * 1099511628211L
+                            h = (h xor runCatching { Files.size(f) }.getOrDefault(0L)) * 1099511628211L
+                        }
+                    }
+                }
+                return ContentHash("resdir-${path.fileName}-$h")
+            }
+            override fun open(): Pair<Sequence<IndexInput>, Closeable> {
+                val hash = contentHash()
+                val files = runCatching {
+                    Files.walk(path).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".xml") }.collect(Collectors.toList()) }
+                }.getOrDefault(emptyList())
+                val seq = files.asSequence().map { f ->
+                    val rel = runCatching { path.relativize(f).toString() }.getOrDefault(f.fileName.toString())
+                    ResourceFileInput(hash, rel, f) { runCatching { Files.readAllBytes(f) }.getOrDefault(ByteArray(0)) } as IndexInput
+                }
+                return seq to Closeable {}
+            }
+        }
+    }
+
+    /** A `.xml` entry from a dependency/AAR `res/` dir: a [IndexOrigin.LIBRARY] unit carrying the file's text
+     *  and its real path (so a resource index reads its `res/<type>/` folder and records a go-to source). */
+    private class ResourceFileInput(
+        override val contentHash: ContentHash,
+        override val unitName: String?,
+        override val sourcePath: Path,
+        private val readBytes: () -> ByteArray,
+    ) : IndexInput {
+        override val origin = IndexOrigin.LIBRARY
+        private val bytes by lazy { readBytes() }
+        override fun bytes(): ByteArray = bytes
+        override fun text(): String = bytes.decodeToString()
+        override fun dom(): ParsedFile? = null
     }
 
     private class LibraryInput(
         override val origin: IndexOrigin,
         override val contentHash: ContentHash,
         override val unitName: String?,
+        // The owning artifact (the jar) for a library unit; null for jrt/SDK units (served from the jrt image).
+        // Lets a locator index record fqcn -> jar so a name environment can open exactly the owning jar.
+        override val sourcePath: Path? = null,
         private val readBytes: () -> ByteArray,
     ) : IndexInput {
-        override val sourcePath: Path? = null
         override fun bytes(): ByteArray = readBytes()
         override fun text(): String? = null
         override fun dom(): ParsedFile? = null

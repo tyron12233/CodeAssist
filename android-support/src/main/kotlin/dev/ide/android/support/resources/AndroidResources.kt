@@ -17,13 +17,24 @@ object AndroidResources {
 
     /**
      * The `res/` roots that merge into [root]'s resources, in build-merge order: dependency AAR res
-     * first, then dependency modules' res (transitively), then [root]'s own last — so the module's own
+     * first, then dependency modules' res (transitively), then [root]'s own last, so the module's own
      * resources overlay everything. AAR res is found as a `res/` dir sitting next to a library jar on the
      * compile classpath (the dependency resolver explodes an `.aar`'s `res/` beside its `classes.jar`).
+     *
+     * Split into [libraryResourceDirs] (immutable, suitable for disk-segment indexing) and
+     * [projectResourceDirs] (editable, the resident source side); the repository, which needs the full merged
+     * set in order, uses both via this accessor.
      */
-    fun resourceDirs(root: Module, workspace: Workspace): List<Path> {
-        val ordered = ArrayList<Path>()
-        ordered.addAll(aarResDirs(root, explodeRoot(root, workspace)))
+    fun resourceDirs(root: Module, workspace: Workspace): List<Path> =
+        (libraryResourceDirs(root, workspace) + projectResourceDirs(root, workspace)).distinct()
+
+    /** Immutable dependency/AAR `res/` dirs (content-addressable; the IDE indexes these onto disk segments). */
+    fun libraryResourceDirs(root: Module, workspace: Workspace): List<Path> =
+        aarResDirs(root, explodeRoot(root, workspace)).distinct()
+
+    /** [root]'s own + dependency-module `res/` dirs (transitive) - the editable, in-memory source side. */
+    fun projectResourceDirs(root: Module, workspace: Workspace): List<Path> {
+        val out = ArrayList<Path>()
         val visited = HashSet<String>()
         fun visit(m: Module) {
             if (!visited.add(m.id.value)) return
@@ -33,11 +44,11 @@ object AndroidResources {
             if (m.facets.get(AndroidFacet.KEY) != null) {
                 m.sourceSets.flatMap { it.contentRoots }
                     .filter { ContentRole.ANDROID_RES in it.roles }
-                    .forEach { runCatching { ordered.add(Paths.get(it.dir.path)) } }
+                    .forEach { runCatching { out.add(Paths.get(it.dir.path)) } }
             }
         }
         visit(root)
-        return ordered.distinct()
+        return out.distinct()
     }
 
     /**
