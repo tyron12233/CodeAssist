@@ -28,6 +28,7 @@ interface ExtensionRegistry {
 | `platform.fileIcon` | Project-tree icon providers (`FileIconProvider`) → string icon ids. | `DefaultFileIconProvider`, `AndroidFileIconProvider`. |
 | `platform.projectTemplate` | Create-Project templates (`ProjectTemplate`) with data-driven parameters. | `java-console`, `java-library`, `android-app`, `android-library`. |
 | `platform.blockMapping` | Block mappings (`BlockMapping`) for the projectional editor. | The Java block mapping. |
+| `platform.kotlinCompilerPlugin` | Kotlin compiler plugins (`KotlinCompilerPlugin`) the build's `compileKotlin` tasks apply per module. | Compose (`ComposeCompilerPlugin`). |
 
 ## Language backend SPI
 
@@ -68,6 +69,18 @@ both sides agree on. A `FileIconProvider` (contributed to `platform.fileIcon`) c
 backend-neutral `IconTarget` (file, source root, package, directory, module) into an icon id; the UI's
 icon registry resolves that id to a concrete glyph. A plugin can give its own file types and
 source-set kinds a distinct look with no UI dependency.
+
+## Kotlin compiler plugins
+
+Kotlin compiler plugins (Compose, kotlinx-serialization, Parcelize, all-open/no-arg) plug in through
+`platform.kotlinCompilerPlugin`. A `KotlinCompilerPlugin` decides whether it `appliesTo` a module (Compose
+probes the classpath for `androidx.compose.runtime.Composable`) and supplies its `-Xplugin` `classpath` plus
+`-P` `options`; the build's `compileKotlin` tasks feed the union of the applicable plugins to kotlinc's
+generic `compilerPlugins`/`pluginOptions` seam. Compose is the built-in contributor. Adding another plugin
+is a registration, not a host edit.
+
+A plugin is a bytecode transformer that emits no new source. Source generators (Room, KSP) are a separate
+layer built on top of this seam; see `docs/kotlin-compiler-plugins-and-codegen.md`.
 
 ## Project templates
 
