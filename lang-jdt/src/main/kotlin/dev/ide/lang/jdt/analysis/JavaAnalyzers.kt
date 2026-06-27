@@ -109,12 +109,15 @@ class CompilerDiagnosticProvider(override val id: String = "jdt") : DiagnosticPr
         val diagnostics = if (analyzer != null) analyzer.diagnose(target.file, target.parsed.text(), target.parsed)
         else target.parsed.diagnostics
         return diagnostics.map { d ->
+            val code = compilerCode(d)
             Diagnostic(
                 range = d.range,
                 severity = d.severity,
                 message = d.message,
                 source = DiagnosticSource.Compiler,
-                code = compilerCode(d),
+                code = code,
+                // Unused locals / private members render muted, like the analyzer-driven unused import.
+                tags = if (code in JavaProblemCodes.UNUSED_CODES) setOf(DiagnosticTag.UNUSED) else emptySet(),
             )
         }
     }

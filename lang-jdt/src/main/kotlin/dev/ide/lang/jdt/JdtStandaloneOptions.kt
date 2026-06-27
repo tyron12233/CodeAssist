@@ -23,5 +23,9 @@ internal fun jdtStandaloneCompilerOptions(complianceVersion: String): MutableMap
     options[JavaCore.COMPILER_SOURCE] = complianceVersion
     options[JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM] = complianceVersion
     options[JavaCore.COMPILER_DOC_COMMENT_SUPPORT] = JavaCore.ENABLED
+    // The unused-import warning is produced by the dedicated [UnusedImportAnalyzer] (which also works when
+    // the file has a syntax error, where ecj suppresses its own unused-import). Turn ecj's off so the two
+    // don't both report the same import (the merged diagnostic set is not deduplicated).
+    options[JavaCore.COMPILER_PB_UNUSED_IMPORT] = JavaCore.IGNORE
     return options
 }

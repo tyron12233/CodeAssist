@@ -1,5 +1,8 @@
 package dev.ide.lang.jdt.env
 
+import dev.ide.index.IndexId
+import dev.ide.index.IndexService
+import dev.ide.lang.jdt.index.normalizedJarKey
 import dev.ide.platform.Disposable
 import java.net.URI
 import java.nio.file.FileSystem
@@ -14,27 +17,33 @@ import java.nio.file.Paths
  * The keystroke-invariant environment state for one analyzer, split by what each part actually depends on:
  *
  *  - the **platform** (the JDK jrt class index + the packages it defines) depends only on the SDK home and
- *    is immutable, so it lives in a process-global [JrtImage] keyed by home — shared by every module/project
+ *    is immutable, so it lives in a process-global [JrtImage] keyed by home, shared by every module/project
  *    on the same JDK (one jrt walk, one 40k-entry map for the whole process), not rebuilt per analyzer;
  *  - the **classpath** (library-jar handles + the packages contributed by the module's jars and source
  *    roots) is genuinely per-module, so it lives here, on the per-analyzer cache.
  *
- * This is the fix for the dominant editor-time hotspot. A fresh [JdtNameEnvironment] previously rebuilt all
- * of it on every resolve — walking the whole jrt image into a 40k-entry map and re-enumerating every library
- * jar — and `complete()` resolves up to five marker-splice variants per keystroke. On ART, where
- * `android.jar` *is* a jar, that allocated tens of MB per keystroke and stalled the GC.
+ * **Index-backed library access.** Library `.class` bytes are served by [libraryBytes]. When the workspace
+ * index is `ready` it locates a type's owning jar via the `java.classLocator` index (filtered to THIS
+ * module's classpath) and opens exactly that one jar; an empty result is an authoritative "not on this
+ * classpath" (no probing). When the index is not ready (cold first build, or mid-rebuild after a model
+ * change) it falls back to probing every classpath jar, the always-correct path, so resolution never
+ * depends on the index being up. Because a ready index gives authoritative negatives, library jars no
+ * longer need to be held open: they go through a small **LRU handle pool** ([MAX_OPEN_JARS]) instead of one
+ * permanently-open handle per jar, which on a large (e.g. Compose) classpath is the difference between a few
+ * open descriptors and several hundred. The pool is unbounded until the index is ready (so the probe path
+ * does not thrash), then trims to the cap.
  *
- * Lifetime: one cache per analyzer (held by `JdtResolver`). The library jars are the module's own and change
- * only on a model rebuild (which makes a new analyzer), so the handles are opened once and kept open. The
- * cache is a [Disposable]: the host registers it with the platform disposer so [dispose] releases the jar
- * handles when the workspace closes. The shared [JrtImage] is process-lived and immutable — never closed
- * here (the JVM's own jrt filesystem must not be closed, and a project-supplied JDK's is reused across
- * modules). Only the small overlay-derived package set stays per-[JdtNameEnvironment].
+ * Lifetime: one cache per analyzer (held by `JdtResolver`), recreated on any model change (so the classpath
+ * is fixed for the cache's life). The cache is a [Disposable]; [dispose] closes the pooled handles. The
+ * shared [JrtImage] is process-lived and immutable and is never closed here.
  */
 internal class JdtEnvironmentCache(
     private val sourceRoots: List<Path>,
     private val classpathJars: List<Path>,
     jdkHome: Path?,
+    /** The workspace index, for the `java.classLocator` fast path. Null (the default) ⇒ always probe. Read
+     *  through a supplier because the host sets the analyzer's index AFTER the analyzer is constructed. */
+    private val indexProvider: () -> IndexService? = { null },
 ) : Disposable {
 
     /** The shared platform image for this analyzer's SDK (null if no JDK home is configured). */
@@ -46,54 +55,130 @@ internal class JdtEnvironmentCache(
     /** Packages contributed by this module's library jars + source roots (the platform's live in [jrt]). */
     private val modulePackages: Set<String> by lazy { buildModulePackages() }
 
-    // Library jars opened lazily and kept open for the cache's life (no per-resolve open/close churn, no
-    // central-directory re-parse). cleanup() on a shared env is a no-op; only dispose() releases them.
-    private val openZips: Array<ZipFile?> = arrayOfNulls(classpathJars.size)
+    /** This module's classpath jars by their normalized key, so a locator hit can be confined to them. */
+    private val classpathByKey: Map<String, Path> = classpathJars.associateBy { normalizedJarKey(it) }
 
-    val jarCount: Int get() = classpathJars.size
+    /** LRU pool of open jar handles. Access-order so the eldest entry is the least-recently-used; trimmed
+     *  to the cap explicitly in [trimToCap] (the cap is dynamic, so a self-evicting map can't express it). */
+    private val pool = LinkedHashMap<Path, ZipFile>(16, 0.75f, true)
 
-    @Synchronized
-    fun zipAt(i: Int): ZipFile? {
-        openZips[i]?.let { return it }
-        return runCatching { ZipFile(classpathJars[i].toFile()) }.getOrNull()?.also { openZips[i] = it }
+    /** fqcn → its owning classpath jar (or [NOT_FOUND] for an authoritative miss). Bounded; cleared on a
+     *  ready transition so a negative cached during a stale window self-heals. */
+    private val locateCache = object : LinkedHashMap<String, Path>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Path>) = size > LOCATE_CACHE_MAX
     }
+    private var lastReady = false
 
-    /** One-shot reopen after a read failure on jar [i] (defensive — handles a transiently-bad handle). */
-    @Synchronized
-    fun reopenZip(i: Int): ZipFile? {
-        runCatching { openZips[i]?.close() }
-        openZips[i] = null
-        return zipAt(i)
-    }
-
-    /** Read a platform class's bytecode from the shared jrt image. */
     fun jrtBytes(fqcn: String): ByteArray? = jrt?.bytes(fqcn)
+
+    /** Currently-open pooled jar handles (for tests asserting the LRU cap). */
+    @Synchronized
+    fun openHandleCount(): Int = pool.size
 
     fun isStaticPackage(pkg: String): Boolean = jrt?.isPackage(pkg) == true || pkg in modulePackages
 
-    /** Release the module's jar handles. The shared [JrtImage] is process-lived and is not closed here. */
+    /** The library bytecode for [fqcn], or null if no classpath jar (or the jrt) defines it. */
+    fun libraryBytes(fqcn: String): ByteArray? {
+        val classPath = fqcn.replace('.', '/') + ".class"
+        if (!indexReady()) return readEntryProbing(classPath)
+        // Authoritative: the locator (filtered to this classpath) either names the one owning jar, or the
+        // type is not on this classpath. No probing, that is what lets the pool stay small. The locator keys
+        // TOP-LEVEL types only (classEntryToFqn skips '$'), but ecj's name environment also requests NESTED
+        // types by binary name (e.g. android.view.View$OnClickListener / Window$Callback, interfaces in the
+        // Activity hierarchy). A nested type lives in its enclosing top-level type's jar, so on a '$' name fall
+        // back to locating that enclosing type and read the nested .class from the same jar.
+        val owner = locate(fqcn) ?: fqcn.indexOf('$').takeIf { it > 0 }?.let { locate(fqcn.substring(0, it)) }
+        return owner?.let { readEntry(it, classPath) }
+    }
+
+    private fun indexReady(): Boolean = runCatching { indexProvider()?.status?.ready == true }.getOrDefault(false)
+
+    /** The classpath jar owning [fqcn] per the `java.classLocator` index, or null if none on this classpath. */
+    private fun locate(fqcn: String): Path? {
+        if (indexReady() != lastReady) synchronized(this) { locateCache.clear(); lastReady = indexReady() }
+        synchronized(this) { locateCache[fqcn]?.let { return if (it === NOT_FOUND) null else it } }
+        val index = indexProvider() ?: return null
+        // The index is workspace-wide (a superset of this module's classpath), so keep only a hit that is
+        // actually on this module's classpath, that preserves per-module classpath isolation.
+        val jar = runCatching { index.exact<String>(LOCATOR_ID, fqcn).firstNotNullOfOrNull { classpathByKey[it] } }.getOrNull()
+        synchronized(this) { locateCache[fqcn] = jar ?: NOT_FOUND }
+        return jar
+    }
+
+    /** Read [entryName] from [jar] through the pool, opening it (LRU) if needed. Synchronized so a handle is
+     *  never closed by an eviction on another thread while this read is in flight (reads complete in-lock). */
     @Synchronized
-    override fun dispose() {
-        for (i in openZips.indices) {
-            runCatching { openZips[i]?.close() }
-            openZips[i] = null
+    fun readEntry(jar: Path, entryName: String): ByteArray? {
+        val zip = zipFor(jar) ?: return null
+        val bytes = runCatching { zip.getEntry(entryName)?.let { e -> zip.getInputStream(e).use { it.readBytes() } } }
+            .getOrElse {
+                // Defensive: a transiently-bad handle, reopen the jar once and retry.
+                val z2 = reopen(jar) ?: return null
+                runCatching { z2.getEntry(entryName)?.let { e -> z2.getInputStream(e).use { it.readBytes() } } }.getOrNull()
+            }
+        return bytes
+    }
+
+    /** Fallback when the index can't locate: read [entryName] from the first classpath jar that has it. */
+    @Synchronized
+    fun readEntryProbing(entryName: String): ByteArray? {
+        for (jar in classpathJars) readEntry(jar, entryName)?.let { return it }
+        return null
+    }
+
+    @Synchronized
+    private fun zipFor(jar: Path): ZipFile? {
+        pool[jar]?.let { return it }
+        val z = runCatching { ZipFile(jar.toFile()) }.getOrNull() ?: return null
+        pool[jar] = z
+        trimToCap()
+        return z
+    }
+
+    private fun reopen(jar: Path): ZipFile? {
+        pool.remove(jar)?.let { runCatching { it.close() } }
+        return zipFor(jar)
+    }
+
+    /** Close least-recently-used handles down to the current cap (unbounded until the index is ready). */
+    private fun trimToCap() {
+        val cap = if (indexReady()) MAX_OPEN_JARS else Int.MAX_VALUE
+        if (pool.size <= cap) return
+        val it = pool.entries.iterator()
+        while (pool.size > cap && it.hasNext()) {
+            val e = it.next()
+            runCatching { e.value.close() }
+            it.remove()
         }
     }
 
-    /** Alias for [dispose] — the resolver/tests call this directly. */
+    /** The `.class` entry names in [jar], through the pool (transient open; not held beyond the cap). */
+    @Synchronized
+    private fun enumerateClassEntries(jar: Path, into: (String) -> Unit) {
+        val zip = zipFor(jar) ?: return
+        runCatching {
+            val entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                val name = entries.nextElement().name
+                if (name.endsWith(".class")) into(name)
+            }
+        }
+    }
+
+    /** Release the module's pooled jar handles. The shared [JrtImage] is process-lived and is not closed here. */
+    @Synchronized
+    override fun dispose() {
+        for (z in pool.values) runCatching { z.close() }
+        pool.clear()
+    }
+
+    /** Alias for [dispose], the resolver/tests call this directly. */
     fun close() = dispose()
 
     private fun buildModulePackages(): Set<String> {
         val out = HashSet<String>()
-        for (i in classpathJars.indices) {
-            val zip = zipAt(i) ?: continue
-            runCatching {
-                val entries = zip.entries()
-                while (entries.hasMoreElements()) {
-                    val name = entries.nextElement().name
-                    if (name.endsWith(".class")) addPackagePrefixes(name.removeSuffix(".class").replace('/', '.'), out)
-                }
-            }
+        for (jar in classpathJars) {
+            enumerateClassEntries(jar) { name -> addPackagePrefixes(name.removeSuffix(".class").replace('/', '.'), out) }
         }
         for (root in sourceRoots) {
             if (!Files.isDirectory(root)) continue
@@ -106,9 +191,17 @@ internal class JdtEnvironmentCache(
     }
 
     companion object {
+        /** Cap on concurrently-open library jar handles once the index can serve authoritative locations. */
+        private const val MAX_OPEN_JARS = 24
+        private const val LOCATE_CACHE_MAX = 8192
+        private val LOCATOR_ID = IndexId("java.classLocator")
+
+        /** Sentinel for "checked the locator, not on this classpath" (so a negative is cached, not re-queried). */
+        private val NOT_FOUND: Path = Paths.get("__codeassist_locator_miss__")
+
         /**
          * Add every dotted package prefix of [fqcn] to [out] (so `a.b.C` adds `a` and `a.b`). Walks the dots
-         * directly instead of `split('.')` + per-prefix `joinToString` — the build visits tens of thousands
+         * directly instead of `split('.')` + per-prefix `joinToString`, the build visits tens of thousands
          * of class names, so the per-class List/join allocation the naive form pays is worth avoiding.
          */
         fun addPackagePrefixes(fqcn: String, out: MutableSet<String>) {
@@ -125,7 +218,7 @@ internal class JdtEnvironmentCache(
 }
 
 /**
- * The immutable platform class index for one JDK home — built once and shared process-wide, keyed by the
+ * The immutable platform class index for one JDK home, built once and shared process-wide, keyed by the
  * normalized home path. The jrt image content is a pure function of the SDK on disk, identical for every
  * module and project that targets it, so deduplicating it here turns N modules' N jrt walks (and N copies of
  * the ~40k-entry map) into one. The index and package set build lazily on first use.
@@ -164,7 +257,7 @@ internal class JrtImage private constructor(private val fs: FileSystem?) {
     companion object {
         private val images = ConcurrentHashMap<String, JrtImage>()
 
-        /** The shared image for [home] — opened/built at most once per JDK across the whole process. */
+        /** The shared image for [home], opened/built at most once per JDK across the whole process. */
         fun forHome(home: Path): JrtImage = images.computeIfAbsent(keyOf(home)) { JrtImage(openJrt(home)) }
 
         private fun keyOf(home: Path): String =

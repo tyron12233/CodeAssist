@@ -30,8 +30,10 @@ internal class JdtResolver(
     classpathJars: List<Path>,
     jdkHome: Path?,
     private val complianceLevel: Long,
+    /** The workspace index, for the name environment's `java.classLocator` fast path (see [JdtEnvironmentCache]). */
+    indexProvider: () -> dev.ide.index.IndexService? = { null },
 ) {
-    private val cache = JdtEnvironmentCache(sourceRoots, classpathJars, jdkHome)
+    private val cache = JdtEnvironmentCache(sourceRoots, classpathJars, jdkHome, indexProvider)
 
     /** Release the shared environment's per-module resources (the open library-jar handles). */
     fun dispose() = cache.dispose()

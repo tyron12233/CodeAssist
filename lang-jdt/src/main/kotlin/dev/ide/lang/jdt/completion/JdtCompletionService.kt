@@ -23,6 +23,7 @@ class JdtCompletion(private val analyzer: JdtSourceAnalyzer) : CompletionContrib
 
     private val resolver = JdtResolver(
         analyzer.completionSourceRoots, analyzer.classpathJarPaths, analyzer.jdkHome, analyzer.complianceLevel,
+        indexProvider = { analyzer.indexService },
     )
 
     /** Release the resolver's shared environment cache (open library-jar handles). */

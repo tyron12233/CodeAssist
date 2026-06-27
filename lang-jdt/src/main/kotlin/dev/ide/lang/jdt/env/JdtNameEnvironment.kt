@@ -116,18 +116,7 @@ class JdtNameEnvironment internal constructor(
         return null
     }
 
-    private fun binaryBytes(fqcn: String): ByteArray? {
-        val classPath = fqcn.replace('.', '/') + ".class"
-        for (i in 0 until cache.jarCount) {
-            val z = cache.zipAt(i) ?: continue
-            val bytes = runCatching { z.getEntry(classPath)?.let { e -> z.getInputStream(e).use { it.readBytes() } } }
-                .getOrElse {
-                    // defensive: a transiently-bad handle — reopen the jar once and retry
-                    val z2 = cache.reopenZip(i) ?: return@getOrElse null
-                    runCatching { z2.getEntry(classPath)?.let { e -> z2.getInputStream(e).use { it.readBytes() } } }.getOrNull()
-                }
-            if (bytes != null) return bytes
-        }
-        return cache.jrtBytes(fqcn)
-    }
+    private fun binaryBytes(fqcn: String): ByteArray? =
+        // Library jars first (index-located when ready, probed otherwise), then the jrt platform image.
+        cache.libraryBytes(fqcn) ?: cache.jrtBytes(fqcn)
 }

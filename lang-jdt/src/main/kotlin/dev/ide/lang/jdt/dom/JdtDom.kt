@@ -73,7 +73,12 @@ class JdtParsedFile(
             .map { p ->
                 val start = p.sourceStart.coerceIn(0, source.length)
                 val end = (p.sourceEnd + 1).coerceIn(start, source.length)
-                Diagnostic(TextRange(start, end), if (p.isError) Severity.ERROR else Severity.WARNING, p.message)
+                Diagnostic(
+                    TextRange(start, end),
+                    if (p.isError) Severity.ERROR else Severity.WARNING,
+                    p.message,
+                    code = dev.ide.lang.jdt.analysis.JavaProblemCodes.codeFor(p.id),
+                )
             }
             .toList()
     }

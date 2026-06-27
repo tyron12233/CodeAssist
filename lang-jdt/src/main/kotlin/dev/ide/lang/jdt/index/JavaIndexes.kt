@@ -74,6 +74,35 @@ object JavaClassNamesIndex : IndexExtension<String, ClassNameValue> {
     }
 }
 
+/**
+ * classLocator: every library class FQN -> the absolute path of the owning jar. Unlike [JavaClassNamesIndex]
+ * (curated for completion: simple-name keyed, public-only), this is the authoritative "which jar holds this
+ * exact top-level type" map the JDT name environment uses to open exactly the owning jar instead of probing
+ * every open jar, and to treat an empty result (when the index is ready) as a definitive not-on-classpath.
+ * So it carries EVERY top-level library type, all visibilities (a package-private type is still resolvable
+ * from its own package). LIBRARY only: jrt/SDK platform classes are served from the in-memory jrt image.
+ * The value is the jar path, normalized identically to [normalizedJarKey] so a caller can match it against a
+ * module's classpath entries (and filter out jars from other modules in the workspace-wide index).
+ */
+object JavaClassLocatorIndex : IndexExtension<String, String> {
+    override val id = IndexId("java.classLocator")
+    override val version = 1
+    override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+    override val valueExternalizer = StringExternalizer
+    override val matching = MatchingMode.PREFIX_ONLY
+    override val inputFilter = InputFilter { it.origin == IndexOrigin.LIBRARY && it.unitName?.endsWith(".class") == true }
+
+    override fun index(input: IndexInput): Map<String, Collection<String>> {
+        val fqn = classEntryToFqn(input.unitName ?: return emptyMap())?.first ?: return emptyMap()
+        val jar = input.sourcePath ?: return emptyMap()
+        return mapOf(fqn to listOf(normalizedJarKey(jar)))
+    }
+}
+
+/** Normalize a jar path to the stable string both the locator index and the name environment match on. */
+internal fun normalizedJarKey(p: java.nio.file.Path): String =
+    runCatching { p.toAbsolutePath().normalize().toString() }.getOrDefault(p.toString())
+
 /** packageTypes: package FQN -> the types directly in it. Keyed by exact package, for `java.util.` completion. */
 object JavaPackageTypesIndex : IndexExtension<String, ClassNameValue> {
     override val id = IndexId("java.packageTypes")
@@ -200,11 +229,13 @@ object JavaSourceSymbolsIndex : IndexExtension<String, SymbolValue> {
 
     override fun index(input: IndexInput): Map<String, Collection<SymbolValue>> {
         val text = input.text() ?: return emptyMap()
-        val file = input.sourcePath?.toString() ?: input.unitName ?: return emptyMap()
+        // The file is referenced by its interned id (resolve via IndexService.filePath), not its path string.
+        val fileId = input.fileId
+        if (fileId < 0) return emptyMap()
         val out = HashMap<String, MutableList<SymbolValue>>()
         for (d in JavaSourceIndexer.parse(text).decls) {
             out.getOrPut(d.name) { ArrayList() }
-                .add(SymbolValue(d.name, d.kind.name.lowercase(), file, d.offset, d.container))
+                .add(SymbolValue(d.name, d.kind.name.lowercase(), fileId, d.offset, d.container))
         }
         return out
     }

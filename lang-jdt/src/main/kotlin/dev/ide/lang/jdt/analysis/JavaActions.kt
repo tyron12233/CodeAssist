@@ -225,7 +225,7 @@ private fun expressionToExtract(parsed: ParsedFile, range: TextRange): DomNode? 
 }
 
 /** The statement enclosing [node] — the ancestor that is a direct child of a [NodeKind.BLOCK]. */
-private fun enclosingStatement(node: DomNode): DomNode? {
+internal fun enclosingStatement(node: DomNode): DomNode? {
     var n: DomNode? = node
     while (n != null) {
         if (n.parent?.kind == NodeKind.BLOCK) return n
@@ -235,7 +235,7 @@ private fun enclosingStatement(node: DomNode): DomNode? {
 }
 
 /** The leading whitespace of the line containing [offset]. */
-private fun lineIndent(text: CharSequence, offset: Int): String {
+internal fun lineIndent(text: CharSequence, offset: Int): String {
     var start = offset.coerceIn(0, text.length)
     while (start > 0 && text[start - 1] != '\n') start--
     val sb = StringBuilder()
@@ -245,7 +245,7 @@ private fun lineIndent(text: CharSequence, offset: Int): String {
 }
 
 /** Offset of a fresh line just after the last import (else the package decl, else the file start). */
-private fun importInsertOffset(parsed: ParsedFile): Int {
+internal fun importInsertOffset(parsed: ParsedFile): Int {
     val text = parsed.text()
     var anchor = -1
     for (n in parsed.nodesIn(parsed.range)) if (n.kind == NodeKind.IMPORT_DECL) anchor = maxOf(anchor, n.range.end)
@@ -258,7 +258,7 @@ private fun importInsertOffset(parsed: ParsedFile): Int {
 }
 
 /** The file's package + type imports, used to decide simple-name-vs-qualified when naming a type. */
-private class ImportTable(
+internal class ImportTable(
     val packageName: String,
     /** simple name → its single (non-static) imported fully-qualified name. */
     val singleImports: Map<String, String>,
@@ -267,7 +267,7 @@ private class ImportTable(
 )
 
 /** Scan the DOM once for the package declaration and (non-static) imports. */
-private fun importTable(parsed: ParsedFile): ImportTable {
+internal fun importTable(parsed: ParsedFile): ImportTable {
     var pkg = ""
     val single = HashMap<String, String>()
     val star = HashSet<String>()
@@ -299,7 +299,7 @@ private fun renderType(type: dev.ide.lang.resolve.TypeRef, tbl: ImportTable, imp
 }
 
 /** Decide simple-name (+import) vs fully-qualified for one fully-qualified type name. */
-private fun shortenType(fqn: String, tbl: ImportTable, imports: MutableSet<String>): String {
+internal fun shortenType(fqn: String, tbl: ImportTable, imports: MutableSet<String>): String {
     val simple = fqn.substringAfterLast('.')
     val pkg = fqn.substringBeforeLast('.', "")
     return when {

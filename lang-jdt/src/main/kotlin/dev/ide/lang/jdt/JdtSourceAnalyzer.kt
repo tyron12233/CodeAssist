@@ -33,6 +33,7 @@ import dev.ide.model.LanguageLevel
 import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
 import org.eclipse.jdt.core.JavaCore
+import org.eclipse.jdt.core.compiler.IProblem
 import org.eclipse.jdt.core.dom.AST
 import org.eclipse.jdt.core.dom.ASTNode
 import org.eclipse.jdt.core.dom.ASTParser
@@ -239,10 +240,39 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     @Volatile
     private var bindingCache: BindingParseCacheEntry? = null
 
+    /**
+     * Single-entry, content-keyed cache of the last in-memory compiler problem set (the raw ecj [IProblem]s,
+     * before the neutral mapping/noise filtering). [diagnose] populates it; [ecjProblemsAt] reads it so a
+     * quick-fix can recover a problem's structured arguments (an unhandled exception's FQN, an undefined
+     * method's owner/name/parameter types) without re-running the compiler when the buffer is unchanged.
+     */
+    private class ProblemsCacheEntry(val path: String, val text: String, val problems: Array<out IProblem>)
+
+    @Volatile
+    private var problemsCache: ProblemsCacheEntry? = null
+
     /** Drop the cached binding parse — call when disk changed under us (a save of this or any dependency). */
     fun invalidateBindingCache() {
         bindingCache = null
+        problemsCache = null
     }
+
+    /** The in-memory compiler's raw problems for [text], content-cached so repeat queries are free. */
+    private fun problemsFor(file: VirtualFile, text: CharSequence): Array<out IProblem> {
+        val t = text.toString()
+        problemsCache?.let { if (it.path == file.path && it.text == t) return it.problems }
+        val problems = completionContributor.resolveProblems(fqcnFor(file), t, overlayProvider(), compilerOptions)
+        problemsCache = ProblemsCacheEntry(file.path, t, problems)
+        return problems
+    }
+
+    /**
+     * The raw ecj problems whose source span overlaps [range], for [file]'s buffer [text]. A Java quick-fix
+     * uses this to read a problem's structured arguments (`IProblem.getArguments()`), the same data ecj
+     * splices into the message, but locale-independent. Matched by range + the caller's expected codes.
+     */
+    fun ecjProblemsAt(file: VirtualFile, text: CharSequence, range: TextRange): List<IProblem> =
+        problemsFor(file, text).filter { p -> p.sourceStart <= range.end && range.start <= p.sourceEnd + 1 }
 
     fun parse(file: VirtualFile, text: CharSequence): JdtParsedFile {
         val t = text.toString()
@@ -311,7 +341,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
         // android.jar alone). The [dom] tree, if supplied, is reused only for the broken-statement noise
         // filtering (statement ranges — structural, so a syntactic or binding tree both work); otherwise a
         // cheap syntactic parse is done here.
-        val problems = completionContributor.resolveProblems(fqcnFor(file), text.toString(), overlayProvider(), compilerOptions)
+        val problems = problemsFor(file, text)
         val tree = (dom as? JdtParsedFile) ?: parseSyntactic(file, text)
         return tree.diagnosticsFrom(problems)
     }
