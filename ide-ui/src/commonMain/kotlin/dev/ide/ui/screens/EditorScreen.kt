@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.backend.FileActions
+import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
@@ -54,6 +55,7 @@ internal val COMPACT_BREAKPOINT = 720.dp
 fun EditorScreen(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     onOpenDependencies: (String?) -> Unit = {},
     onOpenModuleConfig: (String?) -> Unit = {},
     onOpenSdkManager: () -> Unit = {},
@@ -76,10 +78,10 @@ fun EditorScreen(
     val rootPath = state.backend.project.rootPath
     fun dirLabel(dir: String): String =
         if (dir.startsWith(rootPath)) dir.removePrefix(rootPath).trim('/', '\\').ifEmpty { "project root" } else dir
-    val onNewFile: (String) -> Unit = { dir -> newEntry = NewEntryRequest(dir, NewEntryKind.File, dirLabel(dir)) }
-    val onNewFolder: (String) -> Unit = { dir -> newEntry = NewEntryRequest(dir, NewEntryKind.Folder, dirLabel(dir)) }
+    val onNewFile: (String, List<PackageSegment>) -> Unit = { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.File, dirLabel(dir), segs) }
+    val onNewFolder: (String, List<PackageSegment>) -> Unit = { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.Folder, dirLabel(dir), segs) }
     val onNewResource: (TreeNode) -> Unit = { node -> xmlTargetOf(node)?.let { newXmlTarget = it } }
-    val onNewSource: (String, NewSourceLang) -> Unit = { dir, lang -> newSource = NewSourceRequest(dir, lang, dirLabel(dir)) }
+    val onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit = { dir, lang, segs -> newSource = NewSourceRequest(dir, lang, dirLabel(dir), segs) }
     val onFileOp: (TreeNode, FileOpKind) -> Unit = { node, kind -> fileOp = FileOpRequest(node, kind) }
 
     // Back closes an open editor overlay (dialog, palette, or — on mobile — a navigator/console/search/more
@@ -106,8 +108,8 @@ fun EditorScreen(
     }
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
-            else ExpandedLayout(state, onToggleTheme, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
+            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, onOpenSettings, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
+            else ExpandedLayout(state, onToggleTheme, onOpenSettings, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
         }
         NewEntryDialog(
             request = newEntry,

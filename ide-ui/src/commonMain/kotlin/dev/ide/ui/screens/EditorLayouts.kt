@@ -1,6 +1,5 @@
 package dev.ide.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +19,7 @@ import dev.ide.ui.IdeUiState
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IndexUiStatus
+import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.components.BottomSheet
@@ -41,12 +41,13 @@ import dev.ide.ui.theme.Ca
 internal fun ExpandedLayout(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
+    onOpenSettings: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
-    onNewFile: (String) -> Unit,
-    onNewFolder: (String) -> Unit,
+    onNewFile: (String, List<PackageSegment>) -> Unit,
+    onNewFolder: (String, List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
-    onNewSource: (String, NewSourceLang) -> Unit,
+    onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
@@ -61,7 +62,7 @@ internal fun ExpandedLayout(
                 selected = state.rail,
                 onSelect = state::selectRail,
                 projectInitial = project.name,
-                onSettings = onToggleTheme,
+                onSettings = onOpenSettings,
                 onOpenSdkManager = onOpenSdkManager,
             )
             if (state.navOpen) {
@@ -124,8 +125,8 @@ internal fun ExpandedLayout(
                 }
             }
         }
-        DestinationSheets(state, compact = false, onOpenModuleConfig, onToggleTheme, onOpenSdkManager, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenDependencies, onOpenSdkManager)
+        DestinationSheets(state, compact = false, onOpenModuleConfig, onToggleTheme, onOpenSettings, onOpenSdkManager, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenSettings, onOpenDependencies, onOpenSdkManager)
     }
 }
 
@@ -137,12 +138,13 @@ internal fun ExpandedLayout(
 internal fun CompactLayout(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
+    onOpenSettings: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
-    onNewFile: (String) -> Unit,
-    onNewFolder: (String) -> Unit,
+    onNewFile: (String, List<PackageSegment>) -> Unit,
+    onNewFolder: (String, List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
-    onNewSource: (String, NewSourceLang) -> Unit,
+    onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit,
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
@@ -158,7 +160,17 @@ internal fun CompactLayout(
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             EditorCenter(state, indexStatus, compact = true, Modifier.weight(1f).fillMaxWidth())
-            AnimatedVisibility(visible = !keyboardOpen) {
+            // While the keyboard is up: a coding-symbol accessory bar sits directly above it (the root's
+            // safeDrawing padding lifts this Column above the IME). It inserts into the active editor; off-
+            // keyboard, the bottom nav takes the slot instead.
+            // No enter/exit animation for now — it read as clunky; the bar just appears with the keyboard.
+            if (keyboardOpen && state.active != null) {
+                EditorSymbolBar(
+                    onTab = { state.active?.session?.indent() },
+                    onSymbol = { sym -> state.active?.session?.commitText(sym) },
+                )
+            }
+            if (!keyboardOpen) {
                 BottomNav(
                     selected = state.rail,
                     onSelect = state::selectRail,
@@ -219,8 +231,8 @@ internal fun CompactLayout(
                 onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column); state.consoleOpen = false } },
             )
         }
-        DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenSdkManager, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenDependencies, onOpenSdkManager)
+        DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenSettings, onOpenSdkManager, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenSettings, onOpenDependencies, onOpenSdkManager)
     }
 }
 

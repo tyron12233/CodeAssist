@@ -3,13 +3,21 @@ package dev.ide.ui.editor.preview
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +39,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
@@ -59,7 +68,7 @@ fun ComposePreviewPane(
     selected: String? = null,
 ) {
     val state = rememberPreviewSurfaceState(path)
-    var previews by remember(path) { mutableStateOf<List<String>>(emptyList()) }
+    var previews by remember(path) { mutableStateOf<List<UiComposePreview>>(emptyList()) }
     var nonce by remember(path) { mutableStateOf(0) }
     var problems by remember(path) { mutableStateOf<List<PreviewIssue>>(emptyList()) }
     // Live preview is debounced + pausable so the interpreter doesn't re-run on every keystroke. `renderText`
@@ -79,37 +88,62 @@ fun ComposePreviewPane(
     var busy by remember(path) { mutableStateOf(false) }
     val loading = host != null && (busy || (live && renderText != text))
 
-    // Detect the @Preview functions from the rendered buffer (so the list/selection track what's on screen,
+    // Detect the @Preview variants from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
     LaunchedEffect(path, renderText) {
-        previews = runCatching { backend.composePreviews(path, renderText).map { it.functionName } }.getOrDefault(emptyList())
+        previews = runCatching { backend.composePreviews(path, renderText) }.getOrDefault(emptyList())
     }
-    // Render the user's selected preview when it still exists in the file; otherwise the first one.
-    val fn = selected?.takeIf { it in previews } ?: previews.firstOrNull()
+    // Variant selection: the editor gutter picks one (via [selected]); the in-pane selector can override it
+    // (cleared whenever the gutter selection changes so a fresh gutter tap wins).
+    var picked by remember(path) { mutableStateOf<String?>(null) }
+    LaunchedEffect(selected) { picked = null }
+    val current = previews.firstOrNull { it.variantId == (picked ?: selected) } ?: previews.firstOrNull()
+    val cfg = current?.config
 
+    // A @Preview(device=...)/widthDp/heightDp sizes the card to that profile instead of the user's selection.
+    val deviceOverride = remember(cfg?.device, cfg?.widthDp, cfg?.heightDp) {
+        cfg?.let { PreviewDevices.resolve(it.device, it.widthDp, it.heightDp) }
+    }
+    // With no device/size and no system UI, a Compose @Preview wraps the composable's own size (not a phone).
+    val wrap = current != null && deviceOverride == null && !(cfg?.showSystemUi ?: false)
+    // A @Preview(uiMode = UI_MODE_NIGHT_*) defaults the surface to that scheme on variant change; the user can
+    // still toggle Night afterward (until they switch variants).
+    LaunchedEffect(current?.variantId) { cfg?.nightMode?.let { state.night = it } }
+    // @Preview(showBackground=true, backgroundColor=...) paints the card; otherwise the surface's light/dark card.
+    val cardBg = cfg?.takeIf { it.showBackground && it.backgroundColor != null }?.let { Color(it.backgroundColor!!) }
+        ?: if (state.night) Color(0xFF161719) else Color.White
 
     PreviewSurface(
         modifier = modifier,
         state = state,
-        cardColor = if (state.night) Color(0xFF161719) else Color.White,
+        deviceOverride = deviceOverride,
+        wrapContent = wrap,
+        cardColor = cardBg,
         cardBorderColor = Ca.colors.separatorStrong,
         overlays = {
             PreviewProblemChip(problems, Modifier.align(Alignment.TopStart).padding(Ca.spacing.s3))
         },
         topBarExtras = { compact ->
-            // The function currently being previewed (the editor gutter picks it; defaults to the first). It's
-            // the flexible item: weighted + ellipsized so it shrinks (instead of squishing the status badge) as
-            // the bar narrows, and capped tighter when compact.
-            if (fn != null) {
+            // The variant being previewed. With several variants it's a dropdown (grouped by @Preview group) so
+            // any can be picked; with one it's a plain label. Weighted + ellipsized so it shrinks (instead of
+            // squishing the status badge) as the bar narrows, and capped tighter when compact.
+            if (current != null) {
                 Divider()
-                Text(
-                    fn, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .widthIn(max = if (compact) 96.dp else 168.dp)
-                        .padding(horizontal = Ca.spacing.s1),
-                )
+                if (previews.size > 1) {
+                    VariantSelector(
+                        previews = previews, current = current, compact = compact,
+                        onSelect = { picked = it.variantId },
+                    )
+                } else {
+                    Text(
+                        current.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .widthIn(max = if (compact) 96.dp else 168.dp)
+                            .padding(horizontal = Ca.spacing.s1),
+                    )
+                }
             }
             if (host != null) {
                 Divider()
@@ -158,27 +192,106 @@ fun ComposePreviewPane(
         },
     ) { _, _, density ->
         val base = LocalDensity.current
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // Wrap mode: the card sizes to the composable, so the content (and this box) must wrap too rather than
+        // fill a fixed viewport. Fixed mode fills the device card.
+        val contentMod = if (wrap) Modifier.wrapContentSize() else Modifier.fillMaxSize()
+        Box(contentMod, contentAlignment = Alignment.Center) {
             when {
-                host != null && fn != null -> key(nonce, fn) {
+                host != null && current != null -> key(nonce, current.variantId) {
                     // Render at DEVICE scale by lowering the DENSITY the content sees: the card is already
                     // sized to the device viewport in px, so telling the content it has the device's density
                     // makes it lay out at the device's dp (a phone UI uses a phone's worth of width), and the
-                    // surface's pan/zoom graphicsLayer scales the result. Night drives the host's uiMode; the
-                    // host reports interpret/render problems back up to the shared chip.
-                    CompositionLocalProvider(LocalDensity provides Density(density, base.fontScale)) {
-                        host.Preview(path, fn, renderText, state.night, { problems = it }, { busy = it }, Modifier.fillMaxSize())
+                    // surface's pan/zoom graphicsLayer scales the result. A @Preview(fontScale=...) multiplies
+                    // the font scale. Night drives the host's uiMode; the host reports problems back to the chip.
+                    val fontScale = base.fontScale * (current.config.fontScale ?: 1f)
+                    CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
+                        val preview = @Composable {
+                            host.Preview(path, current, renderText, state.night, { problems = it }, { busy = it }, contentMod)
+                        }
+                        // @Preview(showSystemUi=true) frames the preview in a mock status + navigation bar (always
+                        // fixed-size, never wrap), so the device chrome has a viewport to fill.
+                        if (current.config.showSystemUi) SystemUiChrome(state.night, Modifier.fillMaxSize(), preview)
+                        else preview()
                     }
                 }
                 else -> {
                     LaunchedEffect(Unit) { problems = emptyList(); busy = false }
                     Text(
-                        if (fn == null) "No @Preview found" else "Compose preview renders on device",
+                        if (current == null) "No @Preview found" else "Compose preview renders on device",
                         color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
                         style = Ca.type.caption, textAlign = TextAlign.Center, modifier = Modifier.padding(20.dp),
                     )
                 }
             }
+        }
+    }
+}
+
+/** The top-bar preview picker shown when a file has several `@Preview` variants: a pill of the current label
+ *  that drops down the full list (each prefixed with its `@Preview(group=...)` when set). */
+@Composable
+private fun RowScope.VariantSelector(
+    previews: List<UiComposePreview>,
+    current: UiComposePreview,
+    compact: Boolean,
+    onSelect: (UiComposePreview) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.weight(1f, fill = false)) {
+        PillButton({ open = true }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    current.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = if (compact) 76.dp else 144.dp).padding(start = Ca.spacing.s1),
+                )
+                Icon(CaIcons.chevronDown, "Choose preview", Modifier.size(13.dp).padding(start = 2.dp), tint = Ca.colors.textTertiary)
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            previews.forEach { p ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (p.group != null) "${p.group} · ${p.label}" else p.label,
+                            style = Ca.type.caption,
+                            color = if (p.variantId == current.variantId) Ca.colors.accent else Ca.colors.textPrimary,
+                            fontWeight = if (p.variantId == current.variantId) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    onClick = { onSelect(p); open = false },
+                )
+            }
+        }
+    }
+}
+
+/** Frames a `@Preview(showSystemUi = true)` preview in a mock status + navigation bar so the composable is
+ *  seen inside a phone shell (matching Android Studio's system-UI chrome), not edge-to-edge. */
+@Composable
+private fun SystemUiChrome(dark: Boolean, modifier: Modifier, content: @Composable () -> Unit) {
+    val bar = if (dark) Color(0xFF0B0B0D) else Color(0xFF35363A)
+    val fg = Color.White.copy(alpha = 0.85f)
+    Column(modifier) {
+        Row(
+            Modifier.fillMaxWidth().height(24.dp).background(bar).padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("12:00", color = fg, style = Ca.type.caption)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                repeat(3) { Box(Modifier.size(8.dp).background(fg, RoundedCornerShape(2.dp))) }
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+        Row(
+            Modifier.fillMaxWidth().height(38.dp).background(bar),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            Box(Modifier.size(11.dp).background(fg.copy(alpha = 0.6f), RoundedCornerShape(2.dp)))
+            Box(Modifier.size(13.dp).background(fg.copy(alpha = 0.6f), CircleShape))
+            Box(Modifier.size(11.dp).background(fg.copy(alpha = 0.6f), RoundedCornerShape(2.dp)))
         }
     }
 }

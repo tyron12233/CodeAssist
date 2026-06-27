@@ -17,12 +17,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
@@ -36,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.components.KindBadge
+import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.components.entrancePop
 import dev.ide.ui.theme.Ca
 
@@ -54,63 +61,115 @@ fun CompletionList(
     onPick: (UiCompletionItem) -> Unit,
     onHover: (Int) -> Unit,
     maxListHeight: Dp = 296.dp,
+    // Wide screens put the doc panel beside the list; narrow screens (no room) flip the popup to docs on demand.
+    docsBeside: Boolean = true,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(selectedIndex) {
         if (selectedIndex in items.indices) listState.animateScrollToItem(selectedIndex)
     }
     val selected = items.getOrNull(selectedIndex)
+    val doc = selected?.documentation?.takeIf { it.isNotBlank() }
 
-    // The list, and — when the selected item carries javadoc — a doc panel to its right (IntelliJ-style).
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-        Column(
-            Modifier
-                .width(width)
-                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
-        ) {
-            // No top signature strip: each row now shows the full info (name + signature + origin), so the
-            // strip was redundant. An empty result still gets a placeholder so the popup isn't a blank box.
-            if (items.isEmpty()) {
-                Text(
-                    "No suggestions",
-                    style = Ca.type.codeSmall,
-                    color = Ca.colors.textTertiary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            } else {
-                LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxListHeight)) {
-                    itemsIndexed(items) { index, item ->
-                        CompletionRow(item, prefix, index == selectedIndex, width, onPick = { onPick(item) }, onHover = { onHover(index) })
-                    }
-                }
-            }
+    if (docsBeside) {
+        // Wide: the list with a doc panel to its right (IntelliJ-style).
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+            CompletionListPanel(items, selectedIndex, prefix, width, maxListHeight, listState, onPick, onHover, onInfo = null)
+            if (doc != null) DocPanel(selected, doc, maxListHeight, Modifier.width(320.dp))
         }
-
-        val doc = selected?.documentation?.takeIf { it.isNotBlank() }
-        if (doc != null) DocPanel(selected, doc, maxListHeight)
+    } else {
+        // Narrow: a side panel would squish, so flip the SAME popup between the list and full-width docs. The
+        // selected row carries an ⓘ; tapping it shows the docs (a ‹ Back returns), and a new selection resets
+        // to the list.
+        var showingDocs by remember { mutableStateOf(false) }
+        LaunchedEffect(selectedIndex) { showingDocs = false }
+        if (showingDocs && doc != null) {
+            DocPanel(selected, doc, maxListHeight, Modifier.width(width), onBack = { showingDocs = false })
+        } else {
+            CompletionListPanel(
+                items, selectedIndex, prefix, width, maxListHeight, listState, onPick, onHover,
+                onInfo = if (doc != null) ({ showingDocs = true }) else null,
+            )
+        }
     }
 }
 
-/** The documentation side panel: the selected item's signature + its javadoc, scrollable. */
+/** The list box (glass): rows in a [LazyColumn], or a placeholder when empty. When [onInfo] is non-null the
+ *  SELECTED row shows an ⓘ that calls it (used on narrow screens to flip to the docs view). */
 @Composable
-private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp) {
+private fun CompletionListPanel(
+    items: List<UiCompletionItem>,
+    selectedIndex: Int,
+    prefix: String,
+    width: Dp,
+    maxListHeight: Dp,
+    listState: LazyListState,
+    onPick: (UiCompletionItem) -> Unit,
+    onHover: (Int) -> Unit,
+    onInfo: (() -> Unit)?,
+) {
     Column(
         Modifier
-            .width(320.dp)
+            .width(width)
+            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+    ) {
+        if (items.isEmpty()) {
+            Text(
+                "No suggestions",
+                style = Ca.type.codeSmall,
+                color = Ca.colors.textTertiary,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        } else {
+            LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxListHeight)) {
+                itemsIndexed(items) { index, item ->
+                    val sel = index == selectedIndex
+                    CompletionRow(
+                        item, prefix, sel, width,
+                        onPick = { onPick(item) }, onHover = { onHover(index) },
+                        onInfo = if (sel) onInfo else null,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The documentation panel: the selected item's signature (with a ‹ Back when [onBack] is set, i.e. the
+ *  narrow flip view) over its scrollable javadoc. */
+@Composable
+private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifier: Modifier = Modifier, onBack: (() -> Unit)? = null) {
+    Column(
+        modifier
             .heightIn(max = maxHeight)
             .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
     ) {
+        // Fixed header: optional Back + the signature, so they stay put while the doc body scrolls.
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (onBack != null) {
+                Icon(CaIcons.chevronLeft, "Back to suggestions", Modifier.size(18.dp).clickable(onClick = onBack), tint = Ca.colors.textSecondary)
+            }
+            Text(
+                item.label + (item.detail?.let { "  $it" } ?: ""),
+                style = Ca.type.codeSmall,
+                color = Ca.colors.accent,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
         Text(
-            item.label + (item.detail?.let { "  $it" } ?: ""),
-            style = Ca.type.codeSmall,
-            color = Ca.colors.accent,
+            doc,
+            style = Ca.type.footnote,
+            color = Ca.colors.textSecondary,
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp).padding(bottom = 10.dp),
         )
-        Spacer(Modifier.height(8.dp))
-        Text(doc, style = Ca.type.footnote, color = Ca.colors.textSecondary)
     }
 }
 
@@ -122,6 +181,8 @@ private fun CompletionRow(
     rowWidth: Dp,
     onPick: () -> Unit,
     onHover: () -> Unit,
+    // Non-null on the selected row when docs are reachable via flip (narrow screens): shows a tappable ⓘ.
+    onInfo: (() -> Unit)? = null,
 ) {
     // Row text styles: a notch smaller than the editor's code style, with tight line height so the two stacked
     // lines stay compact. Kept local so the editor's own Ca.type.code is untouched.
@@ -170,6 +231,12 @@ private fun CompletionRow(
                 textAlign = TextAlign.End,
                 modifier = Modifier.widthIn(max = rowWidth * 0.4f),
             )
+        }
+        // Docs affordance (narrow screens): its own click consumes the tap, so it opens the docs instead of
+        // accepting the item.
+        if (onInfo != null) {
+            Spacer(Modifier.width(4.dp))
+            Icon(CaIcons.info, "Show documentation", Modifier.size(18.dp).clickable(onClick = onInfo), tint = Ca.colors.textSecondary)
         }
     }
 }

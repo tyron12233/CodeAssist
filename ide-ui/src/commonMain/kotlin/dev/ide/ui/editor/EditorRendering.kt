@@ -72,6 +72,20 @@ internal fun mapDiagnosticsToLines(diagnostics: List<UiDiagnostic>, doc: EditorD
     return out
 }
 
+/**
+ * The vertical projection the editor + renderer share: document lines ⇄ visual rows. When not wrapping it is
+ * the [dev.ide.ui.editor.folding.FoldModel]'s one-row-per-visible-line mapping; when wrapping, a line spans
+ * several rows ([rowsOf]) and [topRow] is the cumulative-row offset. [correctRange] shapes the on-screen lines
+ * and records their exact wrapped height so the frame is pixel-aligned (a no-op when not wrapping).
+ */
+internal interface VLayout {
+    val totalRows: Int
+    fun topRow(line: Int): Int
+    fun rowsOf(line: Int): Int
+    fun docLineForRow(row: Int): Int
+    fun correctRange(first: Int, last: Int)
+}
+
 internal fun DrawScope.drawEditor(
     session: EditorSession,
     metrics: EditorMetrics,
@@ -82,6 +96,8 @@ internal fun DrawScope.drawEditor(
     compositeLayoutFor: (Int) -> TextLayoutResult,
     rawToVisual: (Int, Int) -> Int,
     foldModel: dev.ide.ui.editor.folding.FoldModel,
+    vlayout: VLayout,
+    wrap: Boolean,
     foldableStartLines: Set<Int>,
     foldStripWidth: Float,
     hoveredLine: Int,
@@ -99,33 +115,79 @@ internal fun DrawScope.drawEditor(
     val doc = session.doc
     val sel = session.selection
     val lineH = metrics.lineHeight
-    // Viewport bounds are visual ROWS (folds compress them); map back to the doc lines they show. The
-    // firstVisible..lastVisible doc range still covers every visible row in the viewport (hidden lines inside
-    // it are skipped per-loop), so the existing line-keyed loops keep working with one `isHidden` guard each.
+    // Viewport bounds are visual ROWS (folds compress, wrap expands); map back to the doc lines they show.
+    // When wrapping, shape the on-screen lines first so their exact wrapped heights feed the row map before we
+    // position anything this frame (off-screen rows keep their cheap estimate).
+    if (wrap) {
+        val aTop = floor((vOff - metrics.padTop) / lineH).toInt().coerceAtLeast(0)
+        val aBot = ((vOff + size.height - metrics.padTop) / lineH).toInt().coerceAtMost((vlayout.totalRows - 1).coerceAtLeast(0))
+        vlayout.correctRange(vlayout.docLineForRow(aTop), vlayout.docLineForRow(aBot) + 2)
+    }
     val topRow = floor((vOff - metrics.padTop) / lineH).toInt().coerceAtLeast(0)
-    val botRow = ((vOff + size.height - metrics.padTop) / lineH).toInt().coerceAtMost((foldModel.visualLineCount - 1).coerceAtLeast(0))
-    val firstVisible = foldModel.docLineForVisual(topRow)
-    val lastVisible = foldModel.docLineForVisual(botRow)
-    // The document lines actually ON SCREEN (one per visual row) — iterated by the per-line draw loops instead
-    // of `firstVisible..lastVisible`, which would walk every hidden line of a large collapsed region each frame.
-    // `botRow` is clamped to the current line count while `topRow` follows the raw scroll offset, so a
-    // document that shrank under a stale scroll position can leave botRow < topRow for a frame. Guard the
-    // array size (a negative size threw NegativeArraySizeException) and treat it as nothing visible.
+    val botRow = ((vOff + size.height - metrics.padTop) / lineH).toInt().coerceAtMost((vlayout.totalRows - 1).coerceAtLeast(0))
+    val firstVisible = vlayout.docLineForRow(topRow)
+    val lastVisible = vlayout.docLineForRow(botRow)
+    // The DISTINCT document lines actually ON SCREEN — iterated by the per-line draw loops. With wrap (or
+    // folds) several rows map to one line, so dedupe consecutive repeats. `botRow` is clamped to the current
+    // row count while `topRow` follows the raw scroll offset, so a shrunk document under a stale scroll can
+    // leave botRow < topRow for a frame: treat it as nothing visible.
     val visibleLines = when {
         botRow < topRow -> emptyList()
-        !foldModel.hasFolds -> (firstVisible..lastVisible).toList()
-        else -> IntArray(botRow - topRow + 1) { foldModel.docLineForVisual(topRow + it) }.toList()
+        !wrap && !foldModel.hasFolds -> (firstVisible..lastVisible).toList()
+        else -> {
+            val out = ArrayList<Int>(botRow - topRow + 1)
+            var prev = -1
+            var r = topRow
+            while (r <= botRow) { val ln = vlayout.docLineForRow(r); if (ln != prev) { out.add(ln); prev = ln }; r++ }
+            out
+        }
     }
     val textLeft = gutterWidth + metrics.padLeft - hOff
-    fun lineTop(line: Int) = metrics.padTop + foldModel.visualForDocLine(line) * lineH - vOff
+    fun lineTop(line: Int) = metrics.padTop + vlayout.topRow(line) * lineH - vOff
     fun xOf(line: Int, offset: Int): Float =
         textLeft + layoutFor(line).getHorizontalPosition(rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
+    // Viewport-Y of the TOP of the wrapped sub-row holding [offset] on [line] (== lineTop when not wrapping).
+    fun yTopOf(line: Int, offset: Int): Float {
+        if (!wrap) return lineTop(line)
+        val l = layoutFor(line)
+        return lineTop(line) + l.getLineTop(l.getLineForOffset(rawToVisual(line, offset - doc.lineStart(line))))
+    }
+    // Fill the visual columns [vStart, vEnd] on [line] with [color], one rect per wrapped sub-row. vEnd == -1
+    // means "to the end of the line" (interior lines of a multi-line selection/match); [trailingMarker] adds a
+    // sliver past the last row's end to mark a selected line break. Reduces to one rect when not wrapping.
+    fun fillRange(line: Int, vStart: Int, vEnd: Int, color: Color, trailingMarker: Boolean) {
+        val l = layoutFor(line)
+        val top = lineTop(line)
+        val marker = if (trailingMarker) metrics.charWidth * 0.6f else 0f
+        if (!wrap) {
+            val x0 = textLeft + l.getHorizontalPosition(vStart, usePrimaryDirection = true)
+            val x1 = if (vEnd >= 0) textLeft + l.getHorizontalPosition(vEnd, usePrimaryDirection = true)
+            else textLeft + l.size.width + marker
+            if (x1 > x0) drawRect(color, Offset(x0, top), Size(x1 - x0, lineH))
+            return
+        }
+        val firstSub = l.getLineForOffset(vStart)
+        val lastSub = if (vEnd >= 0) l.getLineForOffset(vEnd) else (l.lineCount - 1).coerceAtLeast(0)
+        for (s in firstSub..lastSub) {
+            val x0 = textLeft + (if (s == firstSub) l.getHorizontalPosition(vStart, usePrimaryDirection = true) else l.getLineLeft(s))
+            val x1 = textLeft + when {
+                s == lastSub && vEnd >= 0 -> l.getHorizontalPosition(vEnd, usePrimaryDirection = true)
+                else -> l.getLineRight(s) + if (s == lastSub) marker else 0f
+            }
+            if (x1 > x0) drawRect(color, Offset(x0, top + s * lineH), Size(x1 - x0, lineH))
+        }
+    }
 
     val caretLine = doc.lineForOffset(sel.end)
+    val caretSubRow = if (wrap) {
+        val l = layoutFor(caretLine)
+        l.getLineForOffset(rawToVisual(caretLine, sel.end - doc.lineStart(caretLine)))
+    } else 0
 
-    // current-line band across the full width (incl. gutter; gutter bg repaints its slice below)
+    // current-line band across the full width (incl. gutter; gutter bg repaints its slice below) — on the
+    // caret's wrapped sub-row when wrapping.
     if (sel.collapsed) {
-        drawRect(colors.currentLine, Offset(0f, lineTop(caretLine)), Size(size.width, lineH))
+        drawRect(colors.currentLine, Offset(0f, lineTop(caretLine) + caretSubRow * lineH), Size(size.width, lineH))
     }
 
     clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
@@ -138,9 +200,9 @@ internal fun DrawScope.drawEditor(
                 val color = if (idx == currentMatch) colors.findCurrent else colors.findMatch
                 for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
                     if (foldModel.isHidden(line)) continue
-                    val x0 = if (line == sLine) xOf(line, m.start) else textLeft
-                    val x1 = if (line == eLine) xOf(line, m.end) else textLeft + layoutFor(line).size.width
-                    if (x1 > x0) drawRect(color, Offset(x0, lineTop(line)), Size(x1 - x0, lineH))
+                    val vStart = if (line == sLine) rawToVisual(line, m.start - doc.lineStart(line)) else 0
+                    val vEnd = if (line == eLine) rawToVisual(line, m.end - doc.lineStart(line)) else -1
+                    fillRange(line, vStart, vEnd, color, trailingMarker = false)
                 }
             }
         }
@@ -151,10 +213,9 @@ internal fun DrawScope.drawEditor(
             val eLine = doc.lineForOffset(sel.max)
             for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
                 if (foldModel.isHidden(line)) continue
-                val x0 = if (line == sLine) xOf(line, sel.min) else textLeft
-                val x1 = if (line == eLine) xOf(line, sel.max)
-                else textLeft + layoutFor(line).size.width + metrics.charWidth * 0.6f // mark the line break
-                if (x1 > x0) drawRect(colors.selection, Offset(x0, lineTop(line)), Size(x1 - x0, lineH))
+                val vStart = if (line == sLine) rawToVisual(line, sel.min - doc.lineStart(line)) else 0
+                val vEnd = if (line == eLine) rawToVisual(line, sel.max - doc.lineStart(line)) else -1
+                fillRange(line, vStart, vEnd, colors.selection, trailingMarker = true) // marker = selected line break
             }
         }
 
@@ -187,11 +248,12 @@ internal fun DrawScope.drawEditor(
                     val b = if (dn < doc.lineCount) indentCols(dn) else 0
                     cols = min(a, b)
                 }
+                val spanH = (if (wrap) vlayout.rowsOf(line).coerceAtLeast(1) else 1) * lineH
                 var level = unit
                 while (level < cols) {
                     val x = textLeft + level * metrics.charWidth
                     if (x >= gutterWidth) {
-                        drawLine(colors.indentGuide, Offset(x, lineTop(line)), Offset(x, lineTop(line) + lineH), strokeWidth = 1f)
+                        drawLine(colors.indentGuide, Offset(x, lineTop(line)), Offset(x, lineTop(line) + spanH), strokeWidth = 1f)
                     }
                     level += unit
                 }
@@ -215,11 +277,22 @@ internal fun DrawScope.drawEditor(
             val ce = doc.lineForOffset(comp.max)
             for (line in max(cs, firstVisible)..min(ce, lastVisible)) {
                 if (foldModel.isHidden(line)) continue
-                val x0 = if (line == cs) xOf(line, comp.min) else textLeft
-                val x1 = if (line == ce) xOf(line, comp.max) else textLeft + layoutFor(line).size.width
-                if (x1 > x0) {
-                    val y = lineTop(line) + lineH - 2f
-                    drawLine(colors.composing, Offset(x0, y), Offset(x1, y), strokeWidth = 1.5f)
+                val l = layoutFor(line)
+                val vStart = if (line == cs) rawToVisual(line, comp.min - doc.lineStart(line)) else 0
+                val vEnd = if (line == ce) rawToVisual(line, comp.max - doc.lineStart(line)) else -1
+                val firstSub = if (wrap) l.getLineForOffset(vStart) else 0
+                val lastSub = if (wrap) (if (vEnd >= 0) l.getLineForOffset(vEnd) else (l.lineCount - 1).coerceAtLeast(0)) else 0
+                for (s in firstSub..lastSub) {
+                    val x0 = textLeft + (if (s == firstSub) l.getHorizontalPosition(vStart, usePrimaryDirection = true) else l.getLineLeft(s))
+                    val x1 = textLeft + when {
+                        s == lastSub && vEnd >= 0 -> l.getHorizontalPosition(vEnd, usePrimaryDirection = true)
+                        wrap -> l.getLineRight(s)
+                        else -> l.size.width.toFloat()
+                    }
+                    if (x1 > x0) {
+                        val y = lineTop(line) + s * lineH + lineH - 2f
+                        drawLine(colors.composing, Offset(x0, y), Offset(x1, y), strokeWidth = 1.5f)
+                    }
                 }
             }
         }
@@ -239,9 +312,21 @@ internal fun DrawScope.drawEditor(
                 val c0 = seg.startCol.coerceIn(0, maxCol)
                 val c1 = seg.endCol.coerceIn(c0, maxCol)
                 if (c1 <= c0) continue
-                val x0 = textLeft + layout.getHorizontalPosition(rawToVisual(line, c0), usePrimaryDirection = true)
-                val x1 = textLeft + layout.getHorizontalPosition(rawToVisual(line, c1), usePrimaryDirection = true)
-                wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f)
+                val v0 = rawToVisual(line, c0)
+                val v1 = rawToVisual(line, c1)
+                if (!wrap) {
+                    val x0 = textLeft + layout.getHorizontalPosition(v0, usePrimaryDirection = true)
+                    val x1 = textLeft + layout.getHorizontalPosition(v1, usePrimaryDirection = true)
+                    wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f)
+                } else {
+                    val firstSub = layout.getLineForOffset(v0)
+                    val lastSub = layout.getLineForOffset(v1)
+                    for (s in firstSub..lastSub) {
+                        val x0 = textLeft + (if (s == firstSub) layout.getHorizontalPosition(v0, usePrimaryDirection = true) else layout.getLineLeft(s))
+                        val x1 = textLeft + (if (s == lastSub) layout.getHorizontalPosition(v1, usePrimaryDirection = true) else layout.getLineRight(s))
+                        wavyUnderline(color, x0, x1, lineTop(line) + s * lineH + lineH - 2f)
+                    }
+                }
             }
         }
 
@@ -255,7 +340,7 @@ internal fun DrawScope.drawEditor(
                 val x1 = xOf(line, off + 1)
                 drawRect(
                     color = colors.caret.copy(alpha = 0.45f),
-                    topLeft = Offset(x0, lineTop(line)),
+                    topLeft = Offset(x0, yTopOf(line, off)),
                     size = Size(x1 - x0, lineH),
                     style = Stroke(width = 1f),
                 )
@@ -275,7 +360,7 @@ internal fun DrawScope.drawEditor(
     // gutter: opaque background over anything scrolled beneath it, then the band slice + numbers
     drawRect(colors.background, Offset(0f, 0f), Size(gutterWidth, size.height))
     if (sel.collapsed && caretLine in firstVisible..lastVisible) {
-        drawRect(colors.currentLine, Offset(0f, lineTop(caretLine)), Size(gutterWidth, lineH))
+        drawRect(colors.currentLine, Offset(0f, lineTop(caretLine) + caretSubRow * lineH), Size(gutterWidth, lineH))
     }
     val dotR = 2.5.dp.toPx()
     // The fold strip occupies the inner [gutterWidth - foldStripWidth, gutterWidth) band; numbers right-align
@@ -328,7 +413,7 @@ internal fun DrawScope.drawEditor(
             if (line !in firstVisible..lastVisible) continue
             val x = xOf(line, off)
             if (x < gutterWidth) continue
-            drawCircle(handleColor, r, Offset(x, lineTop(line) + lineH + r * 0.8f))
+            drawCircle(handleColor, r, Offset(x, yTopOf(line, off) + lineH + r * 0.8f))
         }
     }
 }

@@ -19,7 +19,7 @@ import dev.ide.ui.platform.isMobilePlatform
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, Editor, Run, ModuleConfig, SdkManager }
+enum class Screen { Projects, CreateProject, Editor, Run, ModuleConfig, SdkManager, Settings }
 
 /**
  * Top-level editor destinations in the side rail / bottom nav. Per Apple's HIG these are peer
@@ -99,10 +99,56 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     var searchOpen by mutableStateOf(false)
     var consoleOpen by mutableStateOf(!isMobilePlatform)
     var paletteOpen by mutableStateOf(false)
-    /** Editor inlay hints (inferred types, parameter names) — on by default; toggled from the editor top bar. */
+    // ---- live editor preferences (seeded from persisted settings in init; the Settings screen updates them
+    // via [applySettings] so open editors react immediately) ----
+
+    /** Editor inlay hints (inferred types, parameter names); also quick-toggled from the editor top bar. */
     var inlayHintsEnabled by mutableStateOf(true)
     /** Editor text zoom (pinch / Ctrl-+ / Ctrl--), 1.0 = the theme's default code size. Shared across tabs. */
     var editorFontScale by mutableStateOf(1f)
+    /** Render programming ligatures (`->`, `!=`, …) in the code editor when the font provides them (default on). */
+    var fontLigaturesEnabled by mutableStateOf(true)
+    /** Type-aware semantic highlighting layered over the lexer. */
+    var semanticHighlightingEnabled by mutableStateOf(true)
+    /** Code folding (imports, bodies, block comments). */
+    var codeFoldingEnabled by mutableStateOf(true)
+    /** Pop completion up automatically while typing (off = explicit Ctrl-Space only). */
+    var completionAutoPopup by mutableStateOf(true)
+    /** Debounce (ms) after a keystroke before the completion popup requests suggestions. */
+    var completionDelayMs by mutableStateOf(110)
+    /** Run diagnostics as you type (off = the highlighting daemon skips the diagnostics pass). */
+    var analyzeOnTheFly by mutableStateOf(true)
+    /** Quiet period (ms) after the last edit before the highlighting daemon runs. */
+    var reparseDelayMs by mutableStateOf(300)
+    /** Soft-wrap long lines at the viewport edge (off = one row per line + horizontal scroll). */
+    var wordWrapEnabled by mutableStateOf(false)
+    /** Indent wrapped continuation rows to the line's own indent (IntelliJ-style); only when wrapping. */
+    var wrapIndentEnabled by mutableStateOf(true)
+    /** Free (two-axis) touch scrolling: a single drag pans both axes at once (off = orientation-locked). */
+    var twoAxisScrollEnabled by mutableStateOf(true)
+    /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
+    var pinchZoomEnabled by mutableStateOf(true)
+
+    init {
+        applySettings(backend.settings())
+    }
+
+    /** Push persisted IDE settings into the live editor-pref fields (called on creation + on each settings change). */
+    fun applySettings(s: dev.ide.ui.backend.UiSettings) {
+        inlayHintsEnabled = s.inlayHints
+        editorFontScale = s.editorFontScale
+        fontLigaturesEnabled = s.fontLigatures
+        semanticHighlightingEnabled = s.semanticHighlighting
+        codeFoldingEnabled = s.codeFolding
+        completionAutoPopup = s.completionAutoPopup
+        completionDelayMs = s.completionDelayMs
+        analyzeOnTheFly = s.analyzeOnTheFly
+        reparseDelayMs = s.reparseDelayMs
+        wordWrapEnabled = s.wordWrap
+        wrapIndentEnabled = s.wrapIndent
+        twoAxisScrollEnabled = s.twoAxisScroll
+        pinchZoomEnabled = s.pinchZoom
+    }
 
     /** A transient destination shown as a sheet/overlay (Source, More) — null when none is open. */
     var sheetDest by mutableStateOf<RailDestination?>(null)

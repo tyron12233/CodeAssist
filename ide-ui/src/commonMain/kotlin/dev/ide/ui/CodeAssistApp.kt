@@ -1,6 +1,7 @@
 package dev.ide.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.ProjectPickerScreen
 import dev.ide.ui.screens.RunScreen
 import dev.ide.ui.screens.SdkManagerScreen
+import dev.ide.ui.screens.SettingsScreen
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaAccent
 import dev.ide.ui.theme.CodeAssistTheme
@@ -61,7 +63,9 @@ fun CodeAssistApp(
     fileActions: FileActions = FileActions.None,
     composePreviewHost: ComposePreviewHost? = null,
 ) {
-    var dark by remember { mutableStateOf(true) }
+    // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
+    // screen writes; appearance changes then take effect immediately.
+    var settings by remember { mutableStateOf(backend.settings()) }
     var screen by remember { mutableStateOf(Screen.Projects) }
     var configModule by remember { mutableStateOf<String?>(null) }
     var modulesTab by remember { mutableStateOf(ModulesTab.Settings) }
@@ -111,8 +115,18 @@ fun CodeAssistApp(
     val fsEpoch by backend.fileSystemEpoch.collectAsState()
     LaunchedEffect(state, fsEpoch) { if (fsEpoch > 0) state.refreshTree() }
 
-    // Accent is fixed to violet (the brand accent).
-    CodeAssistTheme(dark = dark, accent = CaAccent.Violet, uiFont = uiFont, codeFont = codeFont) {
+    // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
+    // live. "system" follows the OS dark-mode signal.
+    val dark = when (settings.themeMode) {
+        "light" -> false
+        "system" -> isSystemInDarkTheme()
+        else -> true
+    }
+    val accent = if (settings.accent == dev.ide.ui.backend.UiAccent.Teal) CaAccent.Teal else CaAccent.Violet
+    val resolvedCodeFont = if (settings.codeFont == "monospace") FontFamily.Monospace else codeFont
+    // Apply settings to the active project's live editor state whenever they change (or the project swaps).
+    LaunchedEffect(state, settings) { state.applySettings(settings) }
+    CodeAssistTheme(dark = dark, accent = accent, uiFont = uiFont, codeFont = resolvedCodeFont) {
         // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
         // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the
         // deeper handler wins); this one only fires for screen-level back: pop a sub-screen to the editor, the
@@ -132,7 +146,7 @@ fun CodeAssistApp(
                     showAnalytics = false; backend.setAnalyticsConsent(false)
                 }
 
-                screen == Screen.Run || screen == Screen.ModuleConfig || screen == Screen.SdkManager -> screen =
+                screen == Screen.Run || screen == Screen.ModuleConfig || screen == Screen.SdkManager || screen == Screen.Settings -> screen =
                     Screen.Editor
 
                 screen == Screen.CreateProject -> screen = Screen.Projects
@@ -184,7 +198,13 @@ fun CodeAssistApp(
 
                         Screen.Editor -> EditorScreen(
                             state = state,
-                            onToggleTheme = { dark = !dark },
+                            onToggleTheme = {
+                                // Quick toggle flips to the opposite of what's shown (an explicit light/dark,
+                                // stepping out of "system" if that was active).
+                                backend.setSetting("appearance", "themeMode", if (dark) "light" else "dark")
+                                settings = backend.settings()
+                            },
+                            onOpenSettings = { screen = Screen.Settings },
                             onOpenDependencies = { module ->
                                 configModule = module; modulesTab =
                                 ModulesTab.Dependencies; screen = Screen.ModuleConfig
@@ -219,6 +239,15 @@ fun CodeAssistApp(
                         Screen.SdkManager -> SdkManagerScreen(
                             backend = state.backend,
                             onBack = { screen = Screen.Editor },
+                        )
+
+                        Screen.Settings -> SettingsScreen(
+                            backend = state.backend,
+                            onBack = { screen = Screen.Editor },
+                            onSettingsChanged = { settings = backend.settings() },
+                            onOpenLogs = { state.logsOpen = true; screen = Screen.Editor },
+                            codeFont = codeFont,
+                            fileActions = fileActions,
                         )
                     }
                 }

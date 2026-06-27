@@ -200,11 +200,12 @@ private fun ToolbarAction(label: String, onClick: () -> Unit) {
 
 // ---- popup positioning ----
 
-/** Doc-strip + chrome height to subtract from the room-below before capping the scrollable list. */
-internal val DocStripReserve = 44.dp
-
 /** Floor for the list so it stays usable (≈1.5 rows) even when the caret is near the pane's bottom. */
 internal val MinListHeight = 64.dp
+
+/** Generous ceiling for the list: it otherwise fills the room below the caret (re-expanding as the user
+ *  scrolls), so this only keeps it sane on a tall desktop window. */
+internal val MaxListHeight = 560.dp
 
 /**
  * Positions the completion popup just below the caret line and clamps it horizontally so it never

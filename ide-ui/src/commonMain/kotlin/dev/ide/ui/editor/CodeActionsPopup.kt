@@ -43,21 +43,28 @@ import dev.ide.ui.theme.Ca
 
 /**
  * The editor code-action affordances (intentions + quick-fixes), styled like the completion popup:
- *  - [ActionLightbulb] — the gutter glyph shown on the caret line when actions exist; click to open.
+ *  - [FloatingLightbulb] — the chip floated just above the caret when actions exist; tap to open.
  *  - [CodeActionsMenu] — the popup list. Operable by click and by keyboard (the editor drives ↑↓/⏎/Esc).
  *
  * Both are pure UI over the neutral [UiAction] DTO; all state + the `actionsAt`/`applyAction` round-trip
  * lives in [CodeEditor].
  */
+/**
+ * The lightbulb shown FLOATING just above the caret when quick-fixes are available — an elevated chip so it
+ * reads as a tappable affordance hovering over the code. Tap to open the fix list.
+ */
 @Composable
-fun ActionLightbulb(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun FloatingLightbulb(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
-            .size(18.dp)
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(Ca.radius.sm))
+            .background(Ca.colors.surface2)
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.sm))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 7.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CaIcons.lightbulb, contentDescription = "Show context actions", tint = Ca.colors.warning, modifier = Modifier.size(15.dp))
+        Icon(CaIcons.lightbulb, contentDescription = "Show context actions", tint = Ca.colors.warning, modifier = Modifier.size(16.dp))
     }
 }
 

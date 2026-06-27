@@ -1,28 +1,30 @@
 package dev.ide.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -30,35 +32,43 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import dev.ide.ui.backend.BuildDiagnosticUi
+import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.BuildStepUi
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.StepStatus
+import dev.ide.ui.backend.UiLogLevel
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 
 /**
- * Build & run console content: a header with a live status pill + elapsed time and a Run/Stop
- * control; the task-engine step graph with real per-task status; and a solid console-bg log body that
- * streams compiler output and the program's stdout. Surface-agnostic — it draws no background of its
- * own, so it reads correctly both as a persistent right pane (wrapped in a regular-glass
- * [GlassSurface]) and as the content of a glass-thick [BottomSheet] on phone. The caller sizes it via
- * [modifier]; the log body fills the remaining height in either host.
+ * Build & run console: a persistent header (live status pill, error/warning counts, elapsed time, a
+ * Run/Stop control + Copy), a thin running-progress strip, and three tabs over the build's output —
+ *  - **Problems**: the structured diagnostics a build streamed, grouped by file with a severity filter and
+ *    the captured source snippet; each row jumps to its `file:line` in the editor ([onOpenDiagnostic]).
+ *  - **Log**: the raw transcript, grouped by the task that produced each line (collapsible), with a level
+ *    filter and a text search.
+ *  - **Steps**: the task-engine graph with real per-task status.
+ * Surface-agnostic — it draws no background of its own, so it reads correctly both as a persistent right
+ * pane and as a phone bottom-sheet. The caller sizes it via [modifier]; the active tab fills the rest.
  */
 @Composable
 fun BuildConsole(
@@ -70,63 +80,234 @@ fun BuildConsole(
     modifier: Modifier = Modifier,
     onOpenDiagnostic: (BuildDiagnosticUi) -> Unit = {},
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Header(buildState, onRun, onStop, onCollapse)
-        IndexingSection(indexStatus)
+    val running = buildState.status == RunStatus.Running
+    val errors = buildState.diagnostics.count { it.severity == UiSeverity.Error }
+    val warnings = buildState.diagnostics.count { it.severity == UiSeverity.Warning }
+    val done = buildState.steps.count { it.status.isSettled }
+
+    var tab by remember { mutableStateOf(BuildTab.Log) }
+    // Pull the errors front-and-center the moment a build fails (but never override the user otherwise).
+    LaunchedEffect(buildState.status) {
+        if (buildState.status == RunStatus.Failed && (errors > 0 || warnings > 0)) tab = BuildTab.Problems
+    }
+
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Header(buildState, errors, warnings, onRun, onStop, onCollapse)
+        if (indexStatus.building) IndexingSection(indexStatus)
         buildState.banner?.let { FirstBuildBanner(it) }
-        StepGraph(buildState.steps, buildState.status)
-        ProblemsSection(buildState.diagnostics, onOpenDiagnostic)
-        LogBody(buildState.log)
+        if (running) RunningStrip(buildState.steps)
+        ConsoleTabs(tab, errors, warnings, done, buildState.steps.size) { tab = it }
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            when (tab) {
+                BuildTab.Problems -> ProblemsTab(buildState.diagnostics, onOpenDiagnostic)
+                BuildTab.Log -> LogTab(buildState.log, running)
+                BuildTab.Steps -> StepsTab(buildState.steps)
+            }
+        }
     }
 }
 
+private enum class BuildTab { Problems, Log, Steps }
+
+/** True for a step that has settled (won't change again this build) — for the running-progress fraction. */
+private val StepStatus.isSettled: Boolean
+    get() = this == StepStatus.Done || this == StepStatus.UpToDate ||
+        this == StepStatus.NoSource || this == StepStatus.Skipped || this == StepStatus.Failed
+
+// ---------------------------------------------------------------------------
+// Header + running strip
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun Header(state: BuildState, errors: Int, warnings: Int, onRun: () -> Unit, onStop: () -> Unit, onCollapse: () -> Unit) {
+    val running = state.status == RunStatus.Running
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
+        Text("Build", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        if (state.moduleName.isNotEmpty()) {
+            Text(state.moduleName, color = Ca.colors.textTertiary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.weight(1f))
+        if (errors > 0) MiniCount(CaIcons.error, errors, Ca.colors.error)
+        if (warnings > 0) MiniCount(CaIcons.warning, warnings, Ca.colors.warning)
+        if (state.elapsedMs > 0 && !running) {
+            Text("${state.elapsedMs / 1000.0}s", color = Ca.colors.textTertiary, style = Ca.type.codeSmall, maxLines = 1, softWrap = false)
+        }
+        StatusPill(state.status)
+        if (state.log.isNotEmpty()) CopyLogButton(state.log)
+        if (running) IconButtonCa(CaIcons.stop, "Stop", onStop, boxSize = 28, iconSize = 16, tint = Ca.colors.error)
+        else IconButtonCa(CaIcons.play, "Run", onRun, boxSize = 28, iconSize = 16, tint = Ca.colors.run)
+        IconButtonCa(CaIcons.chevronDown, "Collapse", onCollapse, boxSize = 28, iconSize = 16)
+    }
+}
+
+/** A small icon + count pill for the header's error/warning summary. */
+@Composable
+private fun MiniCount(icon: ImageVector, count: Int, color: Color) {
+    Row(
+        Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 7.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(icon, null, Modifier.size(12.dp), tint = color)
+        Text("$count", color = color, style = Ca.type.caption, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun StatusPill(status: RunStatus) {
+    val (text, color) = when (status) {
+        RunStatus.Idle -> "Idle" to Ca.colors.textSecondary
+        RunStatus.Running -> "Running…" to Ca.colors.accent
+        RunStatus.Succeeded -> "Succeeded" to Ca.colors.run
+        RunStatus.Failed -> "Failed" to Ca.colors.error
+    }
+    Chip(text, fill = color.copy(alpha = 0.16f), textColor = color)
+}
+
 /**
- * The structured diagnostics a build streamed (see [BuildDiagnosticUi]), grouped by file with a
- * severity-count summary — the build console's "Problems" view. Each row is click-to-open at its line.
- * Errors sort first; un-located tool messages (a dexer summary) land under a "General" bucket. Like the
- * step graph it's collapsible + height-capped so the raw log below always keeps its space; it
- * auto-expands when the build fails so the errors are foremost. Empty diagnostics → renders nothing.
+ * Copies the whole console log to the clipboard in one tap — the only practical way to capture a build
+ * failure off a device with no `adb`/logcat. Each line carries its time + task so the paste is useful.
+ * Flips to a check for ~1.5s as confirmation.
  */
 @Composable
-private fun ProblemsSection(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiagnosticUi) -> Unit) {
-    if (diagnostics.isEmpty()) return
-    var expanded by rememberSaveable { mutableStateOf(true) }
+private fun CopyLogButton(log: List<BuildLogLine>) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) { if (copied) { delay(1500); copied = false } }
+    IconButtonCa(
+        if (copied) CaIcons.check else CaIcons.copy,
+        if (copied) "Log copied" else "Copy log",
+        onClick = { clipboard.setText(AnnotatedString(log.joinToString("\n") { renderLogForCopy(it) })); copied = true },
+        boxSize = 28,
+        iconSize = 16,
+        tint = if (copied) Ca.colors.run else Ca.colors.textSecondary,
+    )
+}
+
+private fun renderLogForCopy(l: BuildLogLine): String = buildString {
+    if (l.timeLabel.isNotEmpty()) { append(l.timeLabel); append(' ') }
+    if (!l.task.isNullOrEmpty()) { append('['); append(l.task); append("] ") }
+    append(l.message)
+}
+
+/** A live progress bar over the step graph while a build runs: the current step + a done/total fraction. */
+@Composable
+private fun RunningStrip(steps: List<BuildStepUi>) {
+    if (steps.isEmpty()) return
+    val total = steps.size
+    val done = steps.count { it.status.isSettled }
+    val current = steps.firstOrNull { it.status == StepStatus.Running }?.name
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                current?.let(::shortTask) ?: "Working…",
+                color = Ca.colors.textSecondary, style = Ca.type.caption,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Text("$done/$total", color = Ca.colors.textTertiary, style = Ca.type.caption)
+        }
+        LinearProgressIndicator(
+            progress = { if (total == 0) 0f else done / total.toFloat() },
+            modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2,
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tab bar
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ConsoleTabs(tab: BuildTab, errors: Int, warnings: Int, stepsDone: Int, stepsTotal: Int, onSelect: (BuildTab) -> Unit) {
+    Column {
+        // Horizontally scrollable so the tabs never clip on a narrow sheet / pane.
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            TabItem("Problems", tab == BuildTab.Problems, badge = (errors + warnings).takeIf { it > 0 }?.toString(),
+                badgeColor = if (errors > 0) Ca.colors.error else Ca.colors.warning) { onSelect(BuildTab.Problems) }
+            TabItem("Log", tab == BuildTab.Log) { onSelect(BuildTab.Log) }
+            TabItem("Steps", tab == BuildTab.Steps, badge = stepsTotal.takeIf { it > 0 }?.let { "$stepsDone/$it" },
+                badgeColor = Ca.colors.textTertiary) { onSelect(BuildTab.Steps) }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+    }
+}
+
+@Composable
+private fun TabItem(label: String, selected: Boolean, badge: String? = null, badgeColor: Color = Ca.colors.accent, onClick: () -> Unit) {
+    Column(
+        // IntrinsicSize.Max gives the column a concrete content width (it sits in a horizontally-scrollable
+        // row, so the incoming max width is unbounded) — the selected underline then matches the tab's width.
+        Modifier.width(IntrinsicSize.Max).clickable(MutableInteractionSource(), indication = null, onClick = onClick).padding(top = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                label,
+                color = if (selected) Ca.colors.textPrimary else Ca.colors.textTertiary,
+                style = Ca.type.footnote,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            )
+            badge?.let {
+                Box(Modifier.background(badgeColor.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                    Text(it, color = badgeColor, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        Spacer(Modifier.height(5.dp))
+        Box(Modifier.fillMaxWidth().height(2.dp).background(if (selected) Ca.colors.accent else Color.Transparent, RoundedCornerShape(Ca.radius.pill)))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Problems tab
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ProblemsTab(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiagnosticUi) -> Unit) {
+    var filter by remember { mutableStateOf(ProblemFilter.All) }
     val errors = diagnostics.count { it.severity == UiSeverity.Error }
     val warnings = diagnostics.count { it.severity == UiSeverity.Warning }
-    // Stable grouping: located diagnostics by file (errors-first within), then the un-located bucket last.
-    val groups = remember(diagnostics) {
-        diagnostics.withIndex()
-            .sortedWith(compareBy({ it.value.severity != UiSeverity.Error }, { it.index }))
-            .groupBy { it.value.file ?: "" }
-            .map { (file, items) -> file to items.map { it.value } }
-            .sortedBy { it.first.isEmpty() } // "" (General) sinks to the bottom
-    }
+    val shown = remember(diagnostics, filter) { diagnostics.filter { filter.keep(it.severity) } }
 
-    Column {
-        Row(
-            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
-            Text("Problems", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.weight(1f))
-            if (errors > 0) Text("$errors error${if (errors == 1) "" else "s"}", color = Ca.colors.error, style = Ca.type.caption)
-            if (warnings > 0) Text("$warnings warning${if (warnings == 1) "" else "s"}", color = Ca.colors.warning, style = Ca.type.caption)
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ConsoleChip("All ${diagnostics.size}", filter == ProblemFilter.All) { filter = ProblemFilter.All }
+            if (errors > 0) ConsoleChip("Errors $errors", filter == ProblemFilter.Errors) { filter = ProblemFilter.Errors }
+            if (warnings > 0) ConsoleChip("Warnings $warnings", filter == ProblemFilter.Warnings) { filter = ProblemFilter.Warnings }
         }
-        AnimatedVisibility(expanded) {
-            Column(
-                Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
+        if (shown.isEmpty()) {
+            EmptyState(if (diagnostics.isEmpty()) "No problems." else "No problems match this filter.", Modifier.weight(1f).fillMaxWidth())
+        } else {
+            val groups = remember(shown) { groupByFile(shown) }
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 for ((file, items) in groups) {
-                    if (file.isNotEmpty()) ProblemFileHeader(file, items.size)
-                    for (d in items) ProblemRow(d, indented = file.isNotEmpty(), onOpen)
+                    if (file.isNotEmpty()) item { ProblemFileHeader(file, items.size) }
+                    items(items) { d -> ProblemRow(d, indented = file.isNotEmpty(), onOpen) }
                 }
             }
         }
     }
 }
+
+private enum class ProblemFilter { All, Errors, Warnings }
+
+private fun ProblemFilter.keep(s: UiSeverity): Boolean = when (this) {
+    ProblemFilter.All -> true
+    ProblemFilter.Errors -> s == UiSeverity.Error
+    ProblemFilter.Warnings -> s == UiSeverity.Warning
+}
+
+/** Stable grouping: located diagnostics by file (errors-first within), then the un-located bucket last. */
+private fun groupByFile(diagnostics: List<BuildDiagnosticUi>): List<Pair<String, List<BuildDiagnosticUi>>> =
+    diagnostics.withIndex()
+        .sortedWith(compareBy({ it.value.severity != UiSeverity.Error }, { it.index }))
+        .groupBy { it.value.file ?: "" }
+        .map { (file, items) -> file to items.map { it.value } }
+        .sortedBy { it.first.isEmpty() } // "" (General) sinks to the bottom
 
 @Composable
 private fun ProblemFileHeader(file: String, count: Int) {
@@ -144,17 +325,28 @@ private fun ProblemFileHeader(file: String, count: Int) {
 @Composable
 private fun ProblemRow(d: BuildDiagnosticUi, indented: Boolean, onOpen: (BuildDiagnosticUi) -> Unit) {
     val clickable = d.file != null
-    Row(
+    Column(
         Modifier.fillMaxWidth()
             .then(if (clickable) Modifier.clickable { onOpen(d) } else Modifier)
             .padding(start = if (indented) 19.dp else 0.dp, top = 3.dp, bottom = 3.dp),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(severityIcon(d.severity), null, Modifier.size(14.dp).padding(top = 1.dp), tint = severityColor(d.severity))
-        Text(d.message, color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f))
-        if (d.line > 0) Text(":${d.line}", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-        Text(d.source.ifEmpty { d.kind }, color = Ca.colors.textTertiary, style = Ca.type.caption)
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(severityIcon(d.severity), null, Modifier.size(14.dp).padding(top = 1.dp), tint = severityColor(d.severity))
+            Text(d.message, color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f))
+            if (d.line > 0) Text(":${d.line}", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+            Text(d.source.ifEmpty { d.kind }, color = Ca.colors.textTertiary, style = Ca.type.caption)
+        }
+        // The captured source snippet / caret context (the compiler's offending line), if any.
+        d.detail?.takeIf { it.isNotBlank() }?.let { snippet ->
+            Text(
+                snippet.trimEnd(),
+                color = Ca.colors.textTertiary,
+                style = Ca.type.codeSmall,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 22.dp, top = 2.dp),
+            )
+        }
     }
 }
 
@@ -172,110 +364,155 @@ private fun severityColor(s: UiSeverity): Color = when (s) {
     else -> Ca.colors.accent
 }
 
-/**
- * An informational notice above the step graph — currently the first-build warning that dexing has no
- * cache yet, so this build is slower and the next one will be much faster. Quiet accent styling: it's
- * reassurance, not an error.
- */
+// ---------------------------------------------------------------------------
+// Log tab
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun FirstBuildBanner(text: String) {
+private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
+    var level by remember { mutableStateOf(LogLevelFilter.All) }
+    var query by remember { mutableStateOf("") }
+    var grouped by remember { mutableStateOf(true) }
+    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
+
+    val q = query.trim()
+    val filtered = remember(log, level, q) {
+        log.filter { level.keep(it.level) && (q.isEmpty() || it.message.contains(q, true) || (it.task?.contains(q, true) == true)) }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SearchField(query, { query = it }, Modifier.weight(1f))
+            IconButtonCa(
+                CaIcons.layers, if (grouped) "Ungroup" else "Group by task",
+                onClick = { grouped = !grouped }, boxSize = 30, iconSize = 16,
+                tint = if (grouped) Ca.colors.accent else Ca.colors.textSecondary,
+            )
+        }
+        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LogLevelFilter.entries.forEach { f -> ConsoleChip(f.label, f == level) { level = f } }
+        }
+        Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .background(Ca.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
+                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+                .padding(10.dp),
+        ) {
+            if (filtered.isEmpty()) {
+                Text(
+                    if (log.isEmpty()) "Press Run to build & run this module." else "No log lines match.",
+                    color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
+                )
+            } else if (grouped) {
+                val collapsedKey = collapsed.entries.filter { it.value }.map { it.key }.sorted().joinToString(",")
+                val items = remember(filtered, collapsedKey) { buildGroups(filtered, collapsed) }
+                LogList(items, running) { task -> collapsed[task] = !(collapsed[task] ?: false) }
+            } else {
+                val items = remember(filtered) { filtered.map { LogDisplay.Line(it, showTask = true, showTime = true) } }
+                LogList(items, running) {}
+            }
+        }
+    }
+}
+
+private enum class LogLevelFilter(val label: String, val keep: (UiLogLevel) -> Boolean) {
+    All("All", { true }),
+    Warnings("Warnings", { it == UiLogLevel.Warn || it == UiLogLevel.Error }),
+    Errors("Errors", { it == UiLogLevel.Error }),
+}
+
+private sealed interface LogDisplay {
+    data class Header(val task: String, val count: Int, val expanded: Boolean) : LogDisplay
+    data class Line(val line: BuildLogLine, val showTask: Boolean, val showTime: Boolean) : LogDisplay
+}
+
+/** Group lines by the task that produced them (first-appearance order); a collapsed group shows only its header. */
+private fun buildGroups(lines: List<BuildLogLine>, collapsed: Map<String, Boolean>): List<LogDisplay> {
+    val groups = LinkedHashMap<String, MutableList<BuildLogLine>>()
+    for (l in lines) groups.getOrPut(l.task ?: "") { ArrayList() }.add(l)
+    return buildList {
+        for ((task, ls) in groups) {
+            val expanded = collapsed[task] != true
+            add(LogDisplay.Header(task, ls.size, expanded))
+            if (expanded) ls.forEach { add(LogDisplay.Line(it, showTask = false, showTime = false)) }
+        }
+    }
+}
+
+@Composable
+private fun LogList(items: List<LogDisplay>, running: Boolean, onToggle: (String) -> Unit) {
+    val listState = rememberLazyListState()
+    // Tail the output while a build runs; once it settles, leave the scroll where the user put it.
+    LaunchedEffect(items.size, running) {
+        if (running && items.isNotEmpty()) runCatching { listState.animateScrollToItem(items.lastIndex) }
+    }
+    SelectionContainer {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            itemsIndexed(items) { _, item ->
+                when (item) {
+                    is LogDisplay.Header -> LogGroupHeader(item.task, item.count, item.expanded) { onToggle(item.task) }
+                    is LogDisplay.Line -> LogLineRow(item.line, item.showTask, item.showTime)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogGroupHeader(task: String, count: Int, expanded: Boolean, onToggle: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth()
-            .background(Ca.colors.accent.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.md))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
+        Text(
+            task.ifEmpty { "General" },
+            color = Ca.colors.textSecondary, style = Ca.type.codeSmall, fontWeight = FontWeight.Medium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+        Text("$count", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+    }
+}
+
+@Composable
+private fun LogLineRow(line: BuildLogLine, showTask: Boolean, showTime: Boolean) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CaIcons.info, null, Modifier.size(16.dp), tint = Ca.colors.accent)
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+        if (showTime && line.timeLabel.isNotEmpty()) Text(line.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (showTask && !line.task.isNullOrEmpty()) {
+            Text(shortTask(line.task), color = Ca.colors.accent.copy(alpha = 0.85f), style = Ca.type.caption2, maxLines = 1)
+        }
+        Text(line.message, color = logColor(line.level, line.message), style = Ca.type.codeSmall, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun Header(state: BuildState, onRun: () -> Unit, onStop: () -> Unit, onCollapse: () -> Unit) {
-    val running = state.status == RunStatus.Running
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
-        Text("Build", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-        if (state.moduleName.isNotEmpty()) Text(state.moduleName, color = Ca.colors.textTertiary, style = Ca.type.footnote)
-        Spacer(Modifier.weight(1f))
-        if (state.elapsedMs > 0 && !running) {
-            Text("${state.elapsedMs / 1000.0}s", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-        }
-        StatusPill(state.status)
-        if (state.log.isNotEmpty()) CopyLogButton(state.log)
-        if (running) IconButtonCa(CaIcons.stop, "Stop", onStop, boxSize = 28, iconSize = 16, tint = Ca.colors.error)
-        else IconButtonCa(CaIcons.play, "Run", onRun, boxSize = 28, iconSize = 16, tint = Ca.colors.run)
-        IconButtonCa(CaIcons.chevronDown, "Collapse", onCollapse, boxSize = 28, iconSize = 16)
+private fun logColor(level: UiLogLevel, message: String): Color = when (level) {
+    UiLogLevel.Error -> Ca.colors.error
+    UiLogLevel.Warn -> Ca.colors.warning
+    UiLogLevel.Debug -> Ca.colors.textTertiary
+    UiLogLevel.Info -> if (message.startsWith("> ")) Ca.colors.accent else Ca.colors.textSecondary
+}
+
+/** ":app:compileJava" → "compileJava" — the leaf step name, for compact line/strip labels. */
+private fun shortTask(task: String): String = task.substringAfterLast(':').ifEmpty { task }
+
+// ---------------------------------------------------------------------------
+// Steps tab
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun StepsTab(steps: List<BuildStepUi>) {
+    if (steps.isEmpty()) {
+        EmptyState("No build steps yet.", Modifier.fillMaxSize())
+        return
     }
-}
-
-/**
- * Copies the whole console log to the clipboard in one tap — the only practical way to capture a build
- * failure off a device with no `adb`/logcat. Flips to a check for ~1.5s as confirmation.
- */
-@Composable
-private fun CopyLogButton(log: List<String>) {
-    val clipboard = LocalClipboardManager.current
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(copied) { if (copied) { delay(1500); copied = false } }
-    IconButtonCa(
-        if (copied) CaIcons.check else CaIcons.copy,
-        if (copied) "Log copied" else "Copy log",
-        onClick = { clipboard.setText(AnnotatedString(log.joinToString("\n"))); copied = true },
-        boxSize = 28,
-        iconSize = 16,
-        tint = if (copied) Ca.colors.run else Ca.colors.textSecondary,
-    )
-}
-
-@Composable
-private fun StatusPill(status: RunStatus) {
-    val (text, color) = when (status) {
-        RunStatus.Idle -> "Idle" to Ca.colors.textSecondary
-        RunStatus.Running -> "Running…" to Ca.colors.accent
-        RunStatus.Succeeded -> "Succeeded" to Ca.colors.run
-        RunStatus.Failed -> "Failed" to Ca.colors.error
-    }
-    Chip(text, fill = color.copy(alpha = 0.16f), textColor = color)
-}
-
-/**
- * The task-engine step graph, as a collapsible section. A long graph used to render in full above the log
- * and squeeze it off-screen on phones; now it (a) collapses to a one-line summary the user can toggle, and
- * (b) even expanded is height-capped + internally scrollable, so the log below always keeps its space.
- * Auto-collapses once on failure so the error output is foremost.
- */
-@Composable
-private fun StepGraph(steps: List<BuildStepUi>, status: RunStatus) {
-    if (steps.isEmpty()) return
-    var expanded by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(status) { if (status == RunStatus.Failed) expanded = false }
-
-    val done = steps.count { it.status == StepStatus.Done || it.status == StepStatus.UpToDate }
-    val failed = steps.count { it.status == StepStatus.Failed }
-
-    Column {
-        Row(
-            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
-            Text("Build steps", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.weight(1f))
-            if (failed > 0) Text("$failed failed", color = Ca.colors.error, style = Ca.type.caption)
-            Text("$done/${steps.size}", color = Ca.colors.textTertiary, style = Ca.type.caption)
-        }
-        AnimatedVisibility(expanded) {
-            Column(
-                Modifier.heightIn(max = 168.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                for (step in steps) StepRow(step)
-            }
-        }
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        items(steps) { StepRow(it) }
     }
 }
 
@@ -323,57 +560,98 @@ private fun StatusIcon(status: StepStatus) {
     }
 }
 
-@Composable
-private fun ColumnScope.LogBody(log: List<String>) {
-    val listState = rememberLazyListState()
-    LaunchedEffect(log.size) { if (log.isNotEmpty()) listState.animateScrollToItem(log.lastIndex) }
-    Box(
-        Modifier.fillMaxWidth().weight(1f)
-            .background(Ca.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
-            .padding(12.dp),
-    ) {
-        if (log.isEmpty()) {
-            Text("Press Run to build & run this module.", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-        } else {
-            // Selectable so a user can also drag-select part of the output (the header button copies it all).
-            SelectionContainer {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(log) { line -> Text(line, color = logColor(line), style = Ca.type.codeSmall) }
-                }
-            }
-        }
-    }
-}
+// ---------------------------------------------------------------------------
+// Shared bits
+// ---------------------------------------------------------------------------
 
+/**
+ * An informational notice above the tabs — currently the first-build warning that dexing has no cache yet,
+ * so this build is slower and the next one will be much faster. Quiet accent styling: it's reassurance.
+ */
 @Composable
-private fun logColor(line: String): Color = when {
-    line.startsWith("FAILED") || line.contains("error:") || line.contains("Exception") -> Ca.colors.error
-    line.startsWith("> ") -> Ca.colors.accent
-    else -> Ca.colors.textSecondary
+private fun FirstBuildBanner(text: String) {
+    Row(
+        Modifier.fillMaxWidth()
+            .background(Ca.colors.accent.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, Ca.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.md))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(CaIcons.info, null, Modifier.size(16.dp), tint = Ca.colors.accent)
+        Text(text, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+    }
 }
 
 @Composable
 private fun IndexingSection(status: IndexUiStatus) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = if (status.building) Ca.colors.accent else Ca.colors.success)
-            Text(
-                if (status.building) status.message.ifEmpty { "Indexing…" } else "Index ready",
-                color = Ca.colors.textSecondary,
-                style = Ca.type.footnote,
-            )
-            if (status.building && status.fraction in 0.0..1.0) {
+            Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
+            Text(status.message.ifEmpty { "Indexing…" }, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            if (status.fraction in 0.0..1.0) {
                 Spacer(Modifier.weight(1f))
                 Text("${(status.fraction * 100).toInt()}%", color = Ca.colors.textTertiary, style = Ca.type.caption)
             }
         }
-        if (status.building) {
-            if (status.fraction in 0.0..1.0) {
-                LinearProgressIndicator(progress = { status.fraction.toFloat() }, modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
-            } else {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
-            }
+        if (status.fraction in 0.0..1.0) {
+            LinearProgressIndicator(progress = { status.fraction.toFloat() }, modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+        } else {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(text: String, modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Text(text, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+    }
+}
+
+/** A pill toggle for the Problems severity / Log level filters. */
+@Composable
+private fun ConsoleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .background(if (selected) Ca.colors.accent else Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+            .border(1.dp, if (selected) Color.Transparent else Ca.colors.hairline, RoundedCornerShape(Ca.radius.pill))
+            .clickable(MutableInteractionSource(), indication = null, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+    ) {
+        Text(
+            label,
+            color = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary,
+            style = Ca.type.caption,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/** The Log tab's text filter. */
+@Composable
+private fun SearchField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(CaIcons.search, null, Modifier.size(14.dp), tint = Ca.colors.accent)
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) Text("Filter log…", color = Ca.colors.textTertiary, style = Ca.type.footnote)
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
+                cursorBrush = SolidColor(Ca.colors.accent),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (value.isNotEmpty()) {
+            Icon(CaIcons.close, "Clear", Modifier.size(14.dp).clickable(MutableInteractionSource(), indication = null) { onValueChange("") }, tint = Ca.colors.textTertiary)
         }
     }
 }

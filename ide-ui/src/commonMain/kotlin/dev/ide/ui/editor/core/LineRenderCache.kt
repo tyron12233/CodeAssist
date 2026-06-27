@@ -5,6 +5,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.TextUnit
 
 /** Phantom (non-document) text rendered inside a line at column [col] — an inlay hint. */
 data class InlayPiece(val col: Int, val text: String)
@@ -55,6 +58,55 @@ class LineRenderCache(
     /** Widest line laid out so far, px — feeds the horizontal scroll range as lines get measured. */
     var measuredMaxWidth = 0f
         private set
+
+    /**
+     * Soft-wrap width in px (0 = no wrap → the classic one-row-per-line layout). When > 0, lines are shaped
+     * with `softWrap = true` constrained to this width, so a long line lays out as several rows. Changing it
+     * (resize / font-zoom / toggling wrap) invalidates every cached layout — widths no longer hold — but keeps
+     * the per-line inlay/semantic stamps (those are content, width-independent).
+     */
+    private var wrapWidthPx = 0
+    fun setWrapWidth(px: Int) {
+        val w = px.coerceAtLeast(0)
+        if (w == wrapWidthPx) return
+        wrapWidthPx = w
+        cache.clear()
+        measuredMaxWidth = 0f
+    }
+
+    /**
+     * Smart wrap indent (IntelliJ's "use indent for wrapped lines"): when [wrapIndentEnabled], a wrapped
+     * line's continuation rows are indented to its own leading-whitespace column ([TextIndent.restLine]), so
+     * the wrapped part lines up under the code instead of the left margin. [charWidthSp] is the monospace
+     * advance as a [TextUnit] (so the indent scales with zoom) and [maxIndentCols] caps it to leave room.
+     * Because the indent is baked into the laid-out paragraph, every geometry query (caret/tap/selection x+y)
+     * already accounts for it. Changing any of these reshapes lines, so the layout cache is cleared.
+     */
+    private var wrapIndentEnabled = false
+    private var charWidthSp: TextUnit = TextUnit.Unspecified
+    private var maxIndentCols = 0
+    private var extraIndentCols = 0
+    fun setWrapIndent(enabled: Boolean, charWidthSp: TextUnit, maxIndentCols: Int, extraIndentCols: Int) {
+        if (enabled == wrapIndentEnabled && charWidthSp == this.charWidthSp &&
+            maxIndentCols == this.maxIndentCols && extraIndentCols == this.extraIndentCols
+        ) return
+        wrapIndentEnabled = enabled
+        this.charWidthSp = charWidthSp
+        this.maxIndentCols = maxIndentCols.coerceAtLeast(0)
+        this.extraIndentCols = extraIndentCols.coerceAtLeast(0)
+        cache.clear()
+    }
+
+    /** Leading-whitespace width of [text] in display columns (tabs to 4-column stops). */
+    private fun leadingIndentColumns(text: String): Int {
+        var c = 0
+        for (ch in text) when (ch) {
+            ' ' -> c++
+            '\t' -> c += 4 - (c % 4)
+            else -> return c
+        }
+        return c
+    }
 
     /**
      * Set the inlay hints to weave into lines (document-column keyed) and their span style. Delegates to
@@ -117,7 +169,17 @@ class LineRenderCache(
             )
             else -> buildInlayAnnotated(text, spans, pieces, sem)
         }
-        val layout = measurer.measure(annotated, style = baseStyle, softWrap = false, maxLines = 1)
+        val layout = if (wrapWidthPx > 0) {
+            // Indent continuation rows to the line's own indent (capped) when smart wrap indent is on.
+            val style = if (wrapIndentEnabled && charWidthSp != TextUnit.Unspecified) {
+                // Original indent + IntelliJ's additional continuation shift, capped to leave room.
+                val indentCols = (leadingIndentColumns(text) + extraIndentCols).coerceAtMost(maxIndentCols)
+                if (indentCols > 0) baseStyle.copy(textIndent = TextIndent(restLine = charWidthSp * indentCols)) else baseStyle
+            } else baseStyle
+            measurer.measure(annotated, style = style, softWrap = true, constraints = Constraints(maxWidth = wrapWidthPx))
+        } else {
+            measurer.measure(annotated, style = baseStyle, softWrap = false, maxLines = 1)
+        }
         if (layout.size.width > measuredMaxWidth) measuredMaxWidth = layout.size.width.toFloat()
         cache[line] = Entry(rev, irev, srev, layout, ++tick)
         if (cache.size > MAX_ENTRIES) evict()

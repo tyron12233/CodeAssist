@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -105,14 +106,22 @@ fun PreviewSurface(
     cardBorderColor: Color,
     blueprint: Boolean = false,
     onSurfaceTap: (() -> Unit)? = null,
+    /** When set (a `@Preview(device=...)`/`widthDp`/`heightDp`), the card is sized to this profile instead of the
+     *  user-selected one, and the device pill shows it as dictated by the annotation (non-cycling). */
+    deviceOverride: DeviceProfile? = null,
+    /** Size the card to its content (a Compose `@Preview` with no device/size declared wraps the composable),
+     *  bounded by the selected device as a max. Ignored when [deviceOverride] dictates a fixed size. */
+    wrapContent: Boolean = false,
     topBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
     bottomBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
     overlays: @Composable BoxScope.() -> Unit = {},
     card: @Composable BoxScope.(widthPx: Int, heightPx: Int, density: Float) -> Unit,
 ) {
-    val device = state.device
-    val widthPx = state.widthPx
-    val heightPx = state.heightPx
+    val device = deviceOverride ?: state.device
+    val wdp = if (state.landscape) device.hdp else device.wdp
+    val hdp = if (state.landscape) device.wdp else device.hdp
+    val widthPx = (wdp * device.density).toInt()
+    val heightPx = (hdp * device.density).toInt()
     val dotColor = Ca.colors.separator
     val tapHandler = rememberUpdatedState(onSurfaceTap)
 
@@ -123,12 +132,15 @@ fun PreviewSurface(
         val hostDensity = LocalDensity.current.density
         val devWdp = widthPx / hostDensity
         val devHdp = heightPx / hostDensity
+        // Wrap mode (a Compose @Preview with no device/size) sizes the card to the composable, capped at the
+        // device viewport as a max. The fit math needs a known size, so wrap renders at 1:1 (still pan/zoomable).
+        val wrap = wrapContent && deviceOverride == null
         val fit = min((maxWidth.value * 0.9f) / devWdp, (maxHeight.value * 0.86f) / devHdp).coerceIn(0.1f, 4f)
-        val fitState = rememberUpdatedState(fit)
-        val scale = if (state.userScale <= 0f) fit else state.userScale
+        val fitState = rememberUpdatedState(if (wrap) 1f else fit)
+        val scale = if (state.userScale <= 0f) (if (wrap) 1f else fit) else state.userScale
 
         // Re-fit (and recentre) whenever the device viewport changes — rotation or device switch.
-        LaunchedEffect(widthPx, heightPx) { state.userScale = 0f; state.offset = Offset.Zero }
+        LaunchedEffect(widthPx, heightPx, wrap) { state.userScale = 0f; state.offset = Offset.Zero }
 
         // The canvas surface: a dotted neutral ground, or a flat blueprint-blue ground for the wireframe.
         Box(
@@ -165,11 +177,14 @@ fun PreviewSurface(
                     .graphicsLayer {
                         scaleX = scale; scaleY = scale; translationX = state.offset.x; translationY = state.offset.y
                     }
-                    // requiredSize, NOT size: the card must keep the device's true aspect ratio even when the
-                    // pane is smaller than the device's dp. `size` would clamp the card to the pane (squaring a
-                    // 360×800 phone in a narrow pane); requiredSize holds the real size, overflows, and the fit
-                    // scale above shrinks it back into the clipped surface.
-                    .requiredSize(devWdp.dp, devHdp.dp)
+                    // Fixed mode → requiredSize (NOT size): keep the device's true aspect ratio even when the
+                    // pane is smaller than the device's dp (`size` would square a 360×800 phone in a narrow
+                    // pane); requiredSize overflows and the fit scale shrinks it back into the clipped surface.
+                    // Wrap mode → size to the content, bounded by the device viewport as a max.
+                    .then(
+                        if (wrap) Modifier.wrapContentSize().widthIn(max = devWdp.dp).heightIn(max = devHdp.dp)
+                        else Modifier.requiredSize(devWdp.dp, devHdp.dp),
+                    )
                     .shadow(if (blueprint) 0.dp else 16.dp, RoundedCornerShape(Ca.radius.lg))
                     .clip(RoundedCornerShape(Ca.radius.lg))
                     .background(cardColor)
@@ -182,10 +197,12 @@ fun PreviewSurface(
         // Top bar: device / orientation / night + view-specific extras. On a narrow pane it collapses to a
         // compact icon/dimension-only form so the cluster shrinks with the surface instead of squishing.
         GlassBar(Modifier.align(Alignment.TopCenter).padding(Ca.spacing.s3)) {
-            PillButton({ state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
+            // When a @Preview dictates the device the pill is non-cycling (the device is fixed by the annotation).
+            PillButton({ if (deviceOverride == null) state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
                 Text(
-                    if (compact) "${state.wdp}×${state.hdp}" else "${device.label} · ${state.wdp}×${state.hdp}",
-                    color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 1,
+                    if (compact) "$wdp×$hdp" else "${device.label} · $wdp×$hdp",
+                    color = if (deviceOverride != null) Ca.colors.accent else Ca.colors.textSecondary,
+                    style = Ca.type.caption, maxLines = 1,
                     modifier = Modifier.padding(horizontal = if (compact) Ca.spacing.s1 else Ca.spacing.s2),
                 )
             }

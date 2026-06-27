@@ -86,6 +86,7 @@ fun CommandPalette(
     onReindex: () -> Unit,
     onOpenDependencies: () -> Unit,
     onManageSdk: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -108,6 +109,7 @@ fun CommandPalette(
     val allEntries = buildList {
         if (q.isEmpty()) {
             add(PaletteEntry("Run", "Run build", "⌘R") {})
+            add(PaletteEntry("Commands", "Open Settings", null, onOpenSettings))
             add(PaletteEntry("Commands", "Manage dependencies", null, onOpenDependencies))
             add(PaletteEntry("Commands", "Manage SDK (Android & JDK)", null, onManageSdk))
             add(PaletteEntry("Commands", "Toggle theme (light/dark)", null, onToggleTheme))
@@ -122,6 +124,9 @@ fun CommandPalette(
             files.filter { it.name.contains(q, ignoreCase = true) }.take(8)
                 .forEach { f -> add(PaletteEntry("Files", f.name, null) { onOpenFile(f) }) }
             members.forEach { m -> add(PaletteEntry("Members", m.name, m.detail) {}) }
+            if ("settings".contains(q, ignoreCase = true)) {
+                add(PaletteEntry("Commands", "Open Settings", null, onOpenSettings))
+            }
             if ("toggle theme".contains(q, ignoreCase = true)) {
                 add(PaletteEntry("Commands", "Toggle theme (light/dark)", null, onToggleTheme))
             }

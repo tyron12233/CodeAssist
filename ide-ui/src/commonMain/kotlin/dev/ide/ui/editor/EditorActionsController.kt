@@ -38,6 +38,14 @@ internal class EditorActionsController(
 ) {
     var available by mutableStateOf<List<UiAction>>(emptyList())
         private set
+    /** The diagnostic covering the caret line (drives the proactive gutter lightbulb), or null. */
+    var caretDiagnostic by mutableStateOf<UiDiagnostic?>(null)
+        private set
+    // The range [available] was resolved at — the diagnostic's range when on a diagnostic line, else the
+    // caret selection. Actions are positional (id = index into the resolution at THIS range), so applying must
+    // reuse the same range.
+    private var availStart = 0
+    private var availEnd = 0
     var menuOpen by mutableStateOf(false)
         private set
     var menuSelected by mutableIntStateOf(0)
@@ -50,14 +58,38 @@ internal class EditorActionsController(
     /** Re-resolve the actions available at the current selection (debounced); driven from an effect. */
     suspend fun refreshAvailability(focused: Boolean) {
         delay(250.milliseconds)
-        if (!focused) { available = emptyList(); return }
+        if (!focused) { available = emptyList(); caretDiagnostic = null; return }
         val sel = session.selection
-        val result = runCatching { backend.actionsAt(path, session.doc.text, sel.min, sel.max) }.getOrNull().orEmpty()
+        // When the caret sits on a line a diagnostic covers, resolve (and later apply) the actions at the
+        // diagnostic's range — so its quick-fixes are the offered actions and the lightbulb has something to
+        // do. Otherwise resolve caret intentions (reachable via Alt-Enter; no proactive lightbulb).
+        val diag = diagnosticCoveringLine(session.doc.lineForOffset(sel.min))
+        val len = session.doc.length
+        availStart = diag?.startOffset?.coerceIn(0, len) ?: sel.min
+        availEnd = diag?.endOffset?.coerceIn(availStart, len) ?: sel.max
+        val result = runCatching { backend.actionsAt(path, session.doc.text, availStart, availEnd) }.getOrNull().orEmpty()
         available = result
+        caretDiagnostic = diag
         when {
             result.isEmpty() -> menuOpen = false
             menuSelected >= result.size -> menuSelected = 0
         }
+    }
+
+    /** The most-severe diagnostic whose line span includes [line], or null — gates the proactive lightbulb so
+     *  it appears only where the caret has entered a diagnostic's line/range, signalling a fix is available. */
+    fun diagnosticCoveringLine(line: Int): UiDiagnostic? {
+        val doc = session.doc
+        var best: UiDiagnostic? = null
+        for (d in session.diagnostics) {
+            val s = d.startOffset.coerceIn(0, doc.length)
+            val e = d.endOffset.coerceIn(s, doc.length)
+            if (line in doc.lineForOffset(s)..doc.lineForOffset(e)) {
+                val cur = best
+                if (cur == null || d.severity.ordinal < cur.severity.ordinal) best = d
+            }
+        }
+        return best
     }
 
     fun openMenu() {
@@ -75,8 +107,8 @@ internal class EditorActionsController(
     fun applyAt(index: Int) {
         val act = available.getOrNull(index) ?: return
         menuOpen = false
-        val sel = session.selection
-        runAction(act, sel.min, sel.max)
+        // Apply at the same range [available] was resolved at (the action id is an index into that resolution).
+        runAction(act, availStart, availEnd)
     }
 
     /** The most-severe diagnostic whose start sits on [line], or null — drives gutter-glyph and chip taps. */

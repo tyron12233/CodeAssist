@@ -2,6 +2,7 @@ package dev.ide.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.editor.preview.PreviewIssue
 
 /**
@@ -12,14 +13,14 @@ import dev.ide.ui.editor.preview.PreviewIssue
  */
 interface ComposePreviewHost {
     /**
-     * Compose the `@Preview` [functionName] from [path]'s live buffer [text] into the given [modifier] slot.
-     * [dark] forces the night `uiMode` so the same preview can be rendered in either colour scheme via the
-     * surface's Night toggle, mirroring `@Preview(uiMode = UI_MODE_NIGHT_YES)`. The host reports its current
-     * interpret/render problems through [onProblems] (empty when the preview renders cleanly) so the pane can
-     * surface them in the shared problem chip rather than burying them inside the device frame. It also reports
-     * through [onBusy] whether it is currently working (lowering/interpreting the buffer) vs. settled, so the
-     * pane can show a loading badge while the engine catches up to a new buffer.
+     * Compose the [preview] variant from [path]'s live buffer [text] into the given [modifier] slot. The
+     * variant carries the `@Preview` arguments to honor (size already applied to the surface by the pane; the
+     * host applies the composition-level ones: `uiMode`, `locale`, `fontScale`, `@PreviewParameter`). [dark]
+     * is the surface's Night toggle; the host renders night when either [dark] or the variant's `uiMode` asks
+     * for it. Interpret/render problems are reported through [onProblems] (empty when clean) so the pane can
+     * show them in the shared problem chip rather than over the device frame, and [onBusy] reports whether the
+     * host is currently lowering/interpreting vs. settled so the pane can show a loading badge.
      */
     @Composable
-    fun Preview(path: String, functionName: String, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier)
+    fun Preview(path: String, preview: UiComposePreview, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier)
 }

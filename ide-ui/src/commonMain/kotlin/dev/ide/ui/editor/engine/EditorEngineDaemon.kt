@@ -93,8 +93,13 @@ class EditorEngineDaemon(
 
     /** Whether [pass] should run for this file (language gate); a skipped pass clears its sink. */
     var appliesTo: (DaemonPass) -> Boolean = { true }
-    /** Inlay hints are user-toggleable; gate them without touching [appliesTo]. */
+    // User-toggleable passes (Settings → Editor/Analysis), gated without touching the language [appliesTo].
     var inlayEnabled: Boolean = true
+    var analyzeEnabled: Boolean = true
+    var semanticEnabled: Boolean = true
+    var foldingEnabled: Boolean = true
+    /** Reparse debounce in ms (Settings → Analysis → Advanced); defaults to the policy's value. */
+    var autoReparseDelayMs: Int = policy.autoReparseDelay.inWholeMilliseconds.toInt()
 
     @Volatile private var revision = 0
     private var job: Job? = null
@@ -105,7 +110,7 @@ class EditorEngineDaemon(
         job?.cancel()
         observer?.on(DaemonPhase.RESTARTED, null, myRev)
         job = scope.launch {
-            delay(policy.autoReparseDelay)
+            delay(autoReparseDelayMs.milliseconds)
             runPasses(text, myRev)
         }
     }
@@ -180,8 +185,13 @@ class EditorEngineDaemon(
         }
     }
 
-    private fun enabled(pass: DaemonPass): Boolean =
-        appliesTo(pass) && (pass != DaemonPass.INLAY || inlayEnabled)
+    private fun enabled(pass: DaemonPass): Boolean = appliesTo(pass) && when (pass) {
+        DaemonPass.INLAY -> inlayEnabled
+        DaemonPass.DIAGNOSTICS -> analyzeEnabled
+        DaemonPass.SEMANTIC -> semanticEnabled
+        DaemonPass.FOLDS -> foldingEnabled
+        DaemonPass.PREVIEWS -> true
+    }
 
     /** SEMANTIC/FOLDS keep their last result on a transient error (it tracks the text via in-place shifting);
      *  the others clear so a half-typed buffer never shows stale phantom hints/diagnostics/previews. */

@@ -11,6 +11,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -73,7 +78,6 @@ fun EditorTopBar(
     indexStatus: IndexUiStatus,
     onToggleNav: () -> Unit,
     onOpenPalette: () -> Unit,
-    onRun: () -> Unit,
     runTasks: () -> List<RunTaskOption> = { emptyList() },
     onPickTask: (RunTaskOption) -> Unit = {},
     onSave: () -> Unit = {},
@@ -113,7 +117,7 @@ fun EditorTopBar(
             if (compact) {
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
                 // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
-                RunControl(runTasks, onRun, onPickTask, compact = true)
+                RunControl(runTasks, onPickTask, compact = true)
                 EditorOverflowMenu(
                     onOpenPalette = onOpenPalette,
                     hasActiveFile = hasActiveFile,
@@ -141,7 +145,7 @@ fun EditorTopBar(
                 IconButtonCa(CaIcons.terminal, "Build console", onToggleConsole, active = consoleOpen)
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
                 if (showPreview) IconButtonCa(CaIcons.image, "Compose preview", onPreview, active = previewBusy)
-                RunControl(runTasks, onRun, onPickTask, compact = false)
+                RunControl(runTasks, onPickTask, compact = false)
             }
         }
     }
@@ -343,26 +347,51 @@ private fun UnresolvedDepsBanner(state: DepsResolveState, onRetry: () -> Unit) {
 @Composable
 private fun RunControl(
     tasks: () -> List<RunTaskOption>,
-    onRun: () -> Unit,
     onPickTask: (RunTaskOption) -> Unit,
     compact: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf(emptyList<RunTaskOption>()) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        PrimaryButton("Run", onRun, icon = CaIcons.play, iconOnly = compact)
-        Box {
-            // Resolve the task list lazily on open (it scans sources), not on every recomposition.
-            IconButtonCa(CaIcons.chevronDown, "Choose task to run", { query = ""; items = tasks(); open = true })
-            CaDropdownMenu(
-                expanded = open,
-                onDismissRequest = { open = false },
+    val interaction = remember { MutableInteractionSource() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    Box {
+        // The Run button opens the task dropdown directly — no separate chevron, no filled background. The task
+        // list is resolved lazily here (it scans sources), not on every recomposition. `keyboard.hide()` drops
+        // any editor keyboard so the task list isn't covered; the search field stays unfocusable until tapped
+        // (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open.
+        val openMenu = { keyboard?.hide(); query = ""; items = tasks(); open = true }
+        if (compact) {
+            IconButtonCa(CaIcons.play, "Run", onClick = openMenu, tint = Ca.colors.accent)
+        } else {
+            Row(
+                Modifier.height(34.dp)
+                    .clip(RoundedCornerShape(Ca.radius.sm))
+                    .pressScale(interaction)
+                    .clickable(interaction, indication = null, onClick = openMenu)
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                Icon(CaIcons.play, "Run", Modifier.size(16.dp), tint = Ca.colors.accent)
+                Text("Run", color = Ca.colors.accent, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        CaDropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+        ) {
                 if (items.size > 3) {
+                    val searchFocus = remember { FocusRequester() }
+                    // The field is NOT focusable until the user taps it (`canFocus = searchTapped`), so the
+                    // menu's focusable popup can't auto-focus it on open and raise the keyboard. Reset each time
+                    // the menu opens. Tapping the box activates it and requests focus → the keyboard shows then.
+                    var searchTapped by remember(open) { mutableStateOf(false) }
+                    LaunchedEffect(searchTapped) { if (searchTapped) runCatching { searchFocus.requestFocus() } }
                     Box(
                         Modifier.padding(horizontal = 10.dp, vertical = 6.dp).width(240.dp)
                             .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.sm))
+                            .clickable { searchTapped = true }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                     ) {
                         if (query.isEmpty()) Text("Search tasks…", color = Ca.colors.textTertiary, style = Ca.type.footnote)
@@ -372,7 +401,9 @@ private fun RunControl(
                             singleLine = true,
                             textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
                             cursorBrush = SolidColor(Ca.colors.accent),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth()
+                                .focusRequester(searchFocus)
+                                .focusProperties { canFocus = searchTapped },
                         )
                     }
                 }
@@ -408,7 +439,6 @@ private fun RunControl(
                     }
                 }
             }
-        }
     }
 }
 

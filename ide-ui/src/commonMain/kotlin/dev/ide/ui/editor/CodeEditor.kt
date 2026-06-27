@@ -18,8 +18,10 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.rememberScrollable2DState
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.gestures.scrollable2D
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -49,6 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -88,8 +92,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -108,6 +114,7 @@ import dev.ide.ui.editor.core.InlayPiece
 import dev.ide.ui.editor.core.LineRenderCache
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.editor.core.RangeEdit
+import dev.ide.ui.editor.core.WrapModel
 import dev.ide.ui.editor.core.smartEnter
 import dev.ide.ui.editor.core.editorTextInput
 import dev.ide.ui.editor.core.textInputCodePoint
@@ -150,8 +157,25 @@ fun CodeEditor(
     /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
-    /** Tapped a `@Preview` gutter icon — the host switches to the Preview surface rendering this function. */
-    onPreview: (functionName: String) -> Unit = {},
+    /** Tapped a `@Preview` gutter icon — the host switches to the Preview surface rendering this variant. */
+    onPreview: (variantId: String) -> Unit = {},
+    /** Whether typing auto-opens the completion popup (Settings → Completion); Ctrl-Space always works. */
+    completionAutoPopup: Boolean = true,
+    /** Debounce (ms) before an auto-popup completion request (Settings → Completion → Advanced). */
+    completionDelayMs: Int = 110,
+    /**
+     * Scroll both axes at once with a single touch drag (Settings → Editor). Off = the classic
+     * orientation-locked drag (one axis per gesture). Touch-only: desktop trackpad/wheel already pans 2D.
+     */
+    twoAxisScroll: Boolean = true,
+    /** Whether a two-finger pinch zooms the code font (Settings → Editor); Ctrl-+/-/0 always works. */
+    pinchZoom: Boolean = true,
+    /** Soft-wrap long lines at the viewport edge (Settings → Editor). Off = one row per line + h-scroll. */
+    wordWrap: Boolean = false,
+    /** Indent wrapped continuation rows to the line's own indent (Settings → Editor); only when [wordWrap]. */
+    wrapIndent: Boolean = true,
+    /** Render programming ligatures (`->`, `!=`, …) when the code font provides them (Settings → Editor; on). */
+    fontLigatures: Boolean = true,
 ) {
     // Source code is intrinsically left-to-right: the gutter sits at the left edge and lines flow right.
     // On an RTL system locale (e.g. Arabic) Compose flips `LocalLayoutDirection`, which would make
@@ -161,7 +185,8 @@ fun CodeEditor(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         CodeEditorContent(
             path, session, backend, modifier, onSave, onNavigate, onRenamed,
-            findEpoch, fontScale, onFontScaleChange, onPreview,
+            findEpoch, fontScale, onFontScaleChange, onPreview, completionAutoPopup, completionDelayMs,
+            twoAxisScroll, pinchZoom, wordWrap, wrapIndent, fontLigatures,
         )
     }
 }
@@ -178,7 +203,14 @@ private fun CodeEditorContent(
     findEpoch: Int = 0,
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
-    onPreview: (functionName: String) -> Unit = {},
+    onPreview: (variantId: String) -> Unit = {},
+    completionAutoPopup: Boolean = true,
+    completionDelayMs: Int = 110,
+    twoAxisScroll: Boolean = true,
+    pinchZoom: Boolean = true,
+    wordWrap: Boolean = false,
+    wrapIndent: Boolean = true,
+    fontLigatures: Boolean = true,
 ) {
     val colors = Ca.colors
     val syntax = colors.syntax
@@ -201,15 +233,38 @@ private fun CodeEditorContent(
     // recomputes line metrics and re-shapes lines at the new size (the cache is rebuilt — expected on zoom).
     val zoom = clampFontScale(fontScale)
     val liveScale = rememberUpdatedState(zoom) // read inside the pinch gesture (pointerInput captures once)
-    val codeStyle = remember(syntax, typography, zoom) {
-        typography.code.copy(color = syntax.default, fontSize = typography.code.fontSize * zoom)
+    val codeStyle = remember(syntax, typography, zoom, fontLigatures) {
+        // Drop the theme's explicit lineHeight: the editor stacks visual rows itself at `metrics.lineHeight`,
+        // and an explicit lineHeight makes a soft-wrapped paragraph space its MIDDLE rows differently from its
+        // (trimmed) first/last rows — non-uniform spacing that the row model can't track. Unspecified ⇒ the
+        // font's uniform natural advance, so a wrapped line's rows are evenly spaced and match the model.
+        // Ligatures: programming ligatures (-> != >= …) come from the font's calt/liga OpenType features, which
+        // the shaper enables by default — so OFF must disable them explicitly; ON leaves the defaults. They
+        // keep the monospace advance, so column geometry (charWidth, caret, tap) is unaffected.
+        typography.code.copy(
+            color = syntax.default,
+            fontSize = typography.code.fontSize * zoom,
+            lineHeight = TextUnit.Unspecified,
+            fontFeatureSettings = if (fontLigatures) null else "liga off, calt off, clig off, dlig off",
+        )
     }
     val gutterStyle = remember(typography, zoom) { typography.codeSmall.copy(fontSize = typography.codeSmall.fontSize * zoom) }
     val metrics = remember(measurer, codeStyle, density) {
         val probe = measurer.measure(AnnotatedString("MMMMMMMMMM"), style = codeStyle, softWrap = false, maxLines = 1)
+        // Row height = the SOFT-WRAP inter-row advance, measured from a probe that actually wraps — not the
+        // single-line box height nor a hard-newline advance (both differ by ~1px from how wrapped rows lay out).
+        // The editor positions every visual row by `lineHeight`, so it MUST equal the advance `drawText` uses
+        // for a wrapped paragraph's rows, or stacked lines drift (overlap / gap) under word wrap.
+        val cw = probe.size.width / 10
+        val wrapProbe = measurer.measure(
+            AnnotatedString("M".repeat(240)), style = codeStyle, softWrap = true,
+            constraints = Constraints(maxWidth = (cw * 40).coerceAtLeast(cw + 1)),
+        )
+        val rowAdvance = if (wrapProbe.lineCount > 1) wrapProbe.getLineTop(1) - wrapProbe.getLineTop(0)
+        else probe.size.height.toFloat()
         with(density) {
             EditorMetrics(
-                lineHeight = probe.size.height.toFloat(),
+                lineHeight = rowAdvance,
                 charWidth = probe.size.width / 10f,
                 padTop = 6.dp.toPx(),
                 padLeft = 8.dp.toPx(),
@@ -327,11 +382,110 @@ private fun CodeEditorContent(
     val contentInWindow = remember { mutableStateOf(Offset.Zero) }
     val vOffset = remember(path) { mutableFloatStateOf(0f) }
     val hOffset = remember(path) { mutableFloatStateOf(0f) }
-    fun contentHeight() = metrics.padTop + editorSession.foldModel.visualLineCount * metrics.lineHeight + metrics.padBottom
-    fun contentWidth() = metrics.padLeft +
-        max(renderCache.measuredMaxWidth, editorSession.maxLineChars * metrics.charWidth) + metrics.padRight
+    fun layoutFor(line: Int) = renderCache.layoutFor(line, editorSession.doc, editorSession.styles)
+
+    // ---- soft wrap: a variable-height vertical projection, engaged only when [wordWrap] is on ----
+    // Off, the editor keeps its O(1) one-row-per-line geometry (the [FoldModel] path), so the default is
+    // byte-for-byte unchanged. On, [WrapModel] turns per-line wrap-row counts into a fold-aware row prefix sum.
+    val wrapModel = remember(editorSession) { WrapModel() }
+    val wrapWidthPx = if (wordWrap && viewport.width > 0)
+        (viewport.width - gutterWidthPx - metrics.padLeft - metrics.padRight).toInt()
+            .coerceAtLeast(maxOf(1, (metrics.charWidth * 8f).toInt()))
+    else 0
+    renderCache.setWrapWidth(wrapWidthPx)
+    val wrapCols = if (wrapWidthPx > 0) (wrapWidthPx / metrics.charWidth).toInt().coerceAtLeast(1) else 0
+    // Smart wrap indent (IntelliJ-style): continuation rows align under the line's own indent. Capped at half
+    // the wrap width so wrapped text always keeps room. The indent is applied during measurement in the line
+    // cache (TextIndent.restLine), so all caret/tap/selection geometry tracks it automatically.
+    val wrapIndentActive = wordWrap && wrapIndent && wrapWidthPx > 0
+    val wrapMaxIndentCols = if (wrapCols > 0) wrapCols / 2 else 0
+    // IntelliJ indents wrapped parts to the original indent PLUS a small continuation shift (one indent level),
+    // so the wrap reads as a continuation rather than aligning flush under the code.
+    val wrapExtraIndentCols = 4
+    renderCache.setWrapIndent(wrapIndentActive, with(density) { metrics.charWidth.toSp() }, wrapMaxIndentCols, wrapExtraIndentCols)
+    // Cheap monospace estimate of a line's wrap-row count — count display columns (tabs to 4-col stops); the
+    // first row holds `wrapCols`, continuation rows hold `wrapCols - indent`. No text shaping; on-screen lines
+    // are corrected to the exact lineCount in [VLayout.correctRange], so this only sizes the OFF-screen extent.
+    fun estimateWrapRows(line: Int): Int {
+        if (wrapCols <= 0) return 1
+        val d = editorSession.doc
+        val end = d.lineEnd(line)
+        var cols = 0
+        var leading = -1
+        var i = d.lineStart(line)
+        while (i < end) {
+            val ch = d.charAt(i)
+            if (leading < 0 && ch != ' ' && ch != '\t') leading = cols
+            cols += if (ch == '\t') 4 - (cols % 4) else 1
+            i++
+        }
+        if (cols <= wrapCols) return 1
+        val indent = if (wrapIndentActive) ((if (leading < 0) cols else leading) + wrapExtraIndentCols).coerceAtMost(wrapMaxIndentCols) else 0
+        val contCols = (wrapCols - indent).coerceAtLeast(1)
+        return 1 + (cols - wrapCols + contCols - 1) / contCols
+    }
+    // (Re-)seed estimates on width / indent change and on STRUCTURAL edits (line add/remove → indices shift,
+    // so a fresh estimate realigns them). Deliberately NOT keyed on textRevision: a same-line edit must NOT
+    // re-estimate, because that would overwrite the exact wrap heights `correctRange` recorded for the visible
+    // lines — and then `caretTarget` (composition) would place the caret using estimates while the draw renders
+    // text at corrected positions, drifting the caret off the text on every keystroke. The edited line's own
+    // height is re-corrected by the next draw (it's visible); lines above the caret are untouched, so the
+    // caret's row stays exact. Off-screen lines keep their last estimate/correction (only scroll extent ages).
+    val wrapEstimateSig = remember(editorSession) { mutableStateOf<Any?>(null) }
+    if (wordWrap && wrapWidthPx > 0) {
+        wrapModel.resize(editorSession.doc.lineCount)
+        val sig = Triple(wrapWidthPx, editorSession.doc.lineCount, wrapIndentActive)
+        if (wrapEstimateSig.value != sig) {
+            wrapEstimateSig.value = sig
+            for (ln in 0 until editorSession.doc.lineCount) wrapModel.setRows(ln, estimateWrapRows(ln))
+        }
+    }
+    // Wrap geometry is "active" only once the viewport has been measured (wrapWidthPx > 0). Until then —
+    // the first frame after open/rotate — fall back to the fold model's one-row-per-line mapping so nothing
+    // collapses onto row 0 for a frame. (wrapWidthPx is 0 whenever !wordWrap or the viewport isn't sized.)
+    val wrapActive = wrapWidthPx > 0
+    // The vertical projection the renderer + geometry share. `correctRange` shapes the on-screen lines and
+    // records their exact wrapped height (the draw calls it before positioning), so what's visible is
+    // pixel-aligned while off-screen rows ride the estimate.
+    // IMPORTANT: read the fold model LIVE (`editorSession.foldModel`), not a captured snapshot. The gesture
+    // detectors hold this object's geometry across recompositions (their pointerInput keys don't change on a
+    // plain edit), so a captured fold model would map taps through a stale line count after an edit. The
+    // session + wrapModel are stable instances; their mutable state is read fresh on each call.
+    val vlayout: VLayout = object : VLayout {
+        private val fold get() = editorSession.foldModel
+        override val totalRows: Int
+            get() = if (wrapActive) { wrapModel.ensure(fold); wrapModel.totalRows } else fold.visualLineCount
+        override fun topRow(line: Int): Int =
+            if (wrapActive) { wrapModel.ensure(fold); wrapModel.topRow(line) } else fold.visualForDocLine(line)
+        override fun rowsOf(line: Int): Int {
+            val f = fold
+            return when {
+                wrapActive -> { wrapModel.ensure(f); wrapModel.rowsOf(line) }
+                f.isHidden(line) -> 0
+                else -> 1
+            }
+        }
+        override fun docLineForRow(row: Int): Int =
+            if (wrapActive) { wrapModel.ensure(fold); wrapModel.docLineForRow(row) } else fold.docLineForVisual(row)
+        override fun correctRange(first: Int, last: Int) {
+            if (!wrapActive) return
+            val f = fold
+            var ln = first.coerceAtLeast(0)
+            val end = last.coerceAtMost(editorSession.doc.lineCount - 1)
+            while (ln <= end) {
+                if (!f.isHidden(ln) && f.foldStartingAt(ln) == null)
+                    wrapModel.setRows(ln, layoutFor(ln).lineCount)
+                ln++
+            }
+            wrapModel.ensure(f)
+        }
+    }
+
+    fun contentHeight() = metrics.padTop + vlayout.totalRows * metrics.lineHeight + metrics.padBottom
+    fun contentWidth() = if (wrapActive) viewport.width.toFloat()
+        else metrics.padLeft + max(renderCache.measuredMaxWidth, editorSession.maxLineChars * metrics.charWidth) + metrics.padRight
     fun maxV() = (contentHeight() - viewport.height).coerceAtLeast(0f)
-    fun maxH() = (contentWidth() - (viewport.width - gutterWidthPx)).coerceAtLeast(0f)
+    fun maxH() = if (wrapActive) 0f else (contentWidth() - (viewport.width - gutterWidthPx)).coerceAtLeast(0f)
     val vScroll = rememberScrollableState { delta ->
         val old = vOffset.floatValue
         val new = (old + delta).coerceIn(0f, maxV())
@@ -344,26 +498,47 @@ private fun CodeEditorContent(
         hOffset.floatValue = new
         new - old
     }
+    // Two-axis (free) scrolling: one state pans both offsets from a single drag, so a diagonal swipe moves
+    // vertically and horizontally at once instead of orientation-locking. `scrollable2D` has no
+    // `reverseDirection`, so the natural-scroll sign is applied here (drag down → reveal earlier lines →
+    // vOffset shrinks); the consumed Offset is reported back in the input frame for fling/nested-scroll.
+    val scroll2D = rememberScrollable2DState { delta ->
+        val oldV = vOffset.floatValue
+        val newV = (oldV - delta.y).coerceIn(0f, maxV())
+        vOffset.floatValue = newV
+        val oldH = hOffset.floatValue
+        val newH = (oldH - delta.x).coerceIn(0f, maxH())
+        hOffset.floatValue = newH
+        Offset(oldH - newH, oldV - newV)
+    }
+    // 2D drag is a touch concern; desktop trackpad/wheel already pans both axes through the 1D scrollables
+    // below (wheel events never orientation-lock), and `scrollable2D` carries no mouse-wheel handling — so
+    // restrict it to touch platforms and leave the desktop path untouched.
+    val useTwoAxisScroll = twoAxisScroll && isMobilePlatform
     // A zoom rescales the line metrics (hence the content size), and the viewport changes on resize/rotate;
     // re-clamp the scroll so a zoom-out can't strand the viewport past the document end — where taps would
     // map to a coerced position that no longer matches what's rendered.
     // Re-clamp on fold changes too: collapsing a region shrinks the content height without changing the line
     // count, so a stale vOffset could otherwise strand the viewport past the (now shorter) document end.
-    LaunchedEffect(zoom, editorSession.doc.lineCount, editorSession.foldRegions, viewport) {
+    LaunchedEffect(zoom, editorSession.doc.lineCount, editorSession.foldRegions, viewport, wordWrap, wrapWidthPx, wrapIndentActive) {
+        if (wordWrap) hOffset.floatValue = 0f // wrapped: there is no horizontal scroll
         vOffset.floatValue = vOffset.floatValue.coerceIn(0f, maxV())
         hOffset.floatValue = hOffset.floatValue.coerceIn(0f, maxH())
     }
 
-    // ---- geometry helpers (viewport coordinates ↔ document offsets) — all routed through the fold model so a
-    // collapsed region occupies a single visual row and the hidden lines below it contribute no height ----
-    fun lineTop(line: Int) = metrics.padTop + editorSession.foldModel.visualForDocLine(line) * metrics.lineHeight - vOffset.floatValue
+    // ---- geometry helpers (viewport coordinates ↔ document offsets) — routed through [vlayout] so a collapsed
+    // region occupies one visual row and a wrapped line occupies several; within a line, the line's own
+    // TextLayoutResult resolves the wrapped sub-row (getLineForOffset/getLineTop) and the x position ----
+    fun lineTop(line: Int) = metrics.padTop + vlayout.topRow(line) * metrics.lineHeight - vOffset.floatValue
     fun textLeft() = gutterWidthPx + metrics.padLeft - hOffset.floatValue
-    fun layoutFor(line: Int) = renderCache.layoutFor(line, editorSession.doc, editorSession.styles)
-    fun caretGeometry(offset: Int): Triple<Int, Float, Float> { // line, xInViewport, topInViewport
+    fun caretGeometry(offset: Int): Triple<Int, Float, Float> { // line, xInViewport, topInViewport (of the sub-row)
         val doc = editorSession.doc
         val line = doc.lineForOffset(offset)
-        val x = layoutFor(line).getHorizontalPosition(renderCache.rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
-        return Triple(line, textLeft() + x, lineTop(line))
+        val vcol = renderCache.rawToVisual(line, offset - doc.lineStart(line))
+        val layout = layoutFor(line)
+        val x = layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
+        val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
+        return Triple(line, textLeft() + x, lineTop(line) + subTop)
     }
     // Feed the platform IME bridge the caret's pixel geometry for CursorAnchorInfo (the keyboard positions its
     // floating UI / handwriting box from it). Viewport coordinates are offset by the content's window position so
@@ -385,10 +560,9 @@ private fun CodeEditorContent(
     }
     /** The document line shown at viewport [y] (the fold-start line when [y] is on a collapsed row). */
     fun lineAtY(y: Float): Int {
-        val fm = editorSession.foldModel
         val row = floor((y + vOffset.floatValue - metrics.padTop) / metrics.lineHeight)
-            .toInt().coerceIn(0, (fm.visualLineCount - 1).coerceAtLeast(0))
-        return fm.docLineForVisual(row)
+            .toInt().coerceIn(0, (vlayout.totalRows - 1).coerceAtLeast(0))
+        return vlayout.docLineForRow(row)
     }
     /** Handle a tap that targets folding: the gutter fold strip toggles the line's fold; tapping a collapsed
      *  line's placeholder (the dimmed `...` past the visible prefix) expands it. Returns true when handled. */
@@ -411,7 +585,13 @@ private fun CodeEditorContent(
         val doc = editorSession.doc
         val line = lineAtY(pos.y)
         val xInLine = pos.x - textLeft()
-        val visualCol = layoutFor(line).getOffsetForPosition(Offset(xInLine.coerceAtLeast(0f), metrics.lineHeight / 2f))
+        val layout = layoutFor(line)
+        // y within the line's paragraph picks the wrapped sub-row; mid-row when not wrapping (single row).
+        val yInLine = if (wrapActive)
+            ((pos.y + vOffset.floatValue - metrics.padTop) - vlayout.topRow(line) * metrics.lineHeight)
+                .coerceIn(0f, (layout.size.height - 1f).coerceAtLeast(0f))
+        else metrics.lineHeight / 2f
+        val visualCol = layout.getOffsetForPosition(Offset(xInLine.coerceAtLeast(0f), yInLine))
         val col = renderCache.visualToRaw(line, visualCol)
         // On a collapsed fold-start line only the prefix (text before the fold) is real; clamp the caret there.
         val maxCol = editorSession.foldModel.foldStartingAt(line)?.let { it.prefixEnd - doc.lineStart(line) } ?: doc.lineLength(line)
@@ -441,10 +621,12 @@ private fun CodeEditorContent(
         val off = editorSession.selection.end
         val d = editorSession.doc
         val ln = d.lineForOffset(off)
-        val x = gutterWidthPx + metrics.padLeft +
-            layoutFor(ln).getHorizontalPosition(renderCache.rawToVisual(ln, off - d.lineStart(ln)), usePrimaryDirection = true)
-        // Content-space Y uses the VISUAL row so the caret tracks the collapsed layout (folds above it shrink Y).
-        Offset(x, metrics.padTop + editorSession.foldModel.visualForDocLine(ln) * metrics.lineHeight)
+        val vcol = renderCache.rawToVisual(ln, off - d.lineStart(ln))
+        val layout = layoutFor(ln)
+        val x = gutterWidthPx + metrics.padLeft + layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
+        // Content-space Y uses the VISUAL row (folds above it shrink Y) plus the wrapped sub-row within the line.
+        val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
+        Offset(x, metrics.padTop + vlayout.topRow(ln) * metrics.lineHeight + subTop)
     }
     LaunchedEffect(caretTarget) {
         // Snap on the first placement (file open) and across off-screen jumps (go-to-symbol, PageUp/Down) —
@@ -455,7 +637,11 @@ private fun CodeEditorContent(
         // and reserve the glide for pure caret moves (arrows, taps, go-to) where it reads as intentional motion.
         val edited = editorSession.textRevision != caretAnimRev
         caretAnimRev = editorSession.textRevision
-        if (!caretAnimReady || far || edited) {
+        // Word wrap: snap, don't glide. A single caret move can cross several wrapped sub-rows of one line, so
+        // the content-space glide would sweep diagonally across rows at every sub-row boundary (it used to just
+        // step cleanly), and a still-settling wrap-row prefix can shift the target mid-glide — both read as a
+        // janky/teleporting caret. IntelliJ snaps the caret too; snapping keeps it pinned to the right spot.
+        if (!caretAnimReady || far || edited || wordWrap) {
             caretAnimReady = true
             caretAnim.snapTo(caretTarget)
         } else {
@@ -485,6 +671,9 @@ private fun CodeEditorContent(
     // ---- completion — popup state + async request/keep-alive in [CompletionController]; accept() (below)
     // stays in this surface because it's wired into the canvas geometry + snippet session ----
     val completion = rememberCompletionController(path, editorSession, backend)
+    // Apply the user's completion prefs to the controller (idempotent per recompose).
+    completion.autoPopupEnabled = completionAutoPopup
+    completion.delayMs = completionDelayMs
     // Active snippet/template expansion (tab-stop stepping), or null. Reset when the file changes.
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
     var paneTopInWindow by remember(path) { mutableFloatStateOf(0f) }
@@ -702,7 +891,9 @@ private fun CodeEditorContent(
         }
 
         when {
-            before == '.' || (before != null && isIdentifierChar(before, extraWordChars(path))) -> completion.reopen()
+            // Auto-open only when enabled in Settings; Ctrl-Space (an explicit reopen) always works.
+            before == '.' || (before != null && isIdentifierChar(before, extraWordChars(path))) ->
+                if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
             else -> completion.dismiss()
         }
     }
@@ -736,21 +927,26 @@ private fun CodeEditorContent(
     // ---- bring the caret into view after every edit/caret move ----
     LaunchedEffect(editorSession.editCount, viewport) {
         if (viewport == IntSize.Zero) return@LaunchedEffect
-        val (line, _, _) = caretGeometry(editorSession.selection.end)
-        val top = metrics.padTop + editorSession.foldModel.visualForDocLine(line) * metrics.lineHeight
+        val doc = editorSession.doc
+        val line = doc.lineForOffset(editorSession.selection.end)
+        val vcol = renderCache.rawToVisual(line, editorSession.selection.end - doc.lineStart(line))
+        val layout = layoutFor(line)
+        // Content-space top of the caret's (wrapped) sub-row.
+        val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
+        val top = metrics.padTop + vlayout.topRow(line) * metrics.lineHeight + subTop
         val bottom = top + metrics.lineHeight
         val vh = viewport.height.toFloat()
         if (top < vOffset.floatValue) vOffset.floatValue = (top - metrics.lineHeight).coerceIn(0f, maxV())
         else if (bottom > vOffset.floatValue + vh) vOffset.floatValue = (bottom - vh + metrics.lineHeight).coerceIn(0f, maxV())
-        val doc = editorSession.doc
-        val caretX = layoutFor(line).getHorizontalPosition(
-            renderCache.rawToVisual(line, editorSession.selection.end - doc.lineStart(line)), usePrimaryDirection = true,
-        )
-        val textViewW = viewport.width - gutterWidthPx - metrics.padLeft
-        val margin = metrics.charWidth * 3
-        if (caretX < hOffset.floatValue + margin) hOffset.floatValue = (caretX - margin).coerceIn(0f, maxH())
-        else if (caretX > hOffset.floatValue + textViewW - margin) {
-            hOffset.floatValue = (caretX - textViewW + margin).coerceIn(0f, maxH())
+        // Horizontal follow only when not wrapping — a wrapped buffer never scrolls sideways.
+        if (!wordWrap) {
+            val caretX = layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
+            val textViewW = viewport.width - gutterWidthPx - metrics.padLeft
+            val margin = metrics.charWidth * 3
+            if (caretX < hOffset.floatValue + margin) hOffset.floatValue = (caretX - margin).coerceIn(0f, maxH())
+            else if (caretX > hOffset.floatValue + textViewW - margin) {
+                hOffset.floatValue = (caretX - textViewW + margin).coerceIn(0f, maxH())
+            }
         }
     }
 
@@ -945,28 +1141,39 @@ private fun CodeEditorContent(
                 // (outer→inner) so a pinch is claimed for zoom BEFORE the scroll containers below treat the
                 // two-finger movement as a pan — otherwise the editor scrolled/jittered (and a stray tap could
                 // land) while zooming. Acts ONLY when ≥2 fingers are down, so single-finger scroll/selection
-                // still flow unconsumed to the detectors below.
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        do {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            if (event.changes.count { it.pressed } >= 2) {
-                                val z = event.calculateZoom()
-                                if (z != 1f) onFontScaleChange(clampFontScale(liveScale.value * z))
-                                // Consume the whole 2-finger gesture (even on a no-zoom frame) so it stays a
-                                // pure pinch — the scrollable/tap detectors below see consumed changes and
-                                // skip it, instead of stealing the pan as a scroll.
-                                event.changes.forEach { if (it.pressed) it.consume() }
-                            }
-                        } while (event.changes.any { it.pressed })
-                    }
-                }
-                .scrollable(vScroll, Orientation.Vertical, reverseDirection = true)
-                .scrollable(hScroll, Orientation.Horizontal, reverseDirection = true)
+                // still flow unconsumed to the detectors below. Disabled via Settings → Editor → Pinch to zoom
+                // (then a 2-finger gesture falls through to the scroll containers as a pan).
+                .then(
+                    if (!pinchZoom) Modifier else Modifier.pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.changes.count { it.pressed } >= 2) {
+                                    val z = event.calculateZoom()
+                                    if (z != 1f) onFontScaleChange(clampFontScale(liveScale.value * z))
+                                    // Consume the whole 2-finger gesture (even on a no-zoom frame) so it stays a
+                                    // pure pinch — the scrollable/tap detectors below see consumed changes and
+                                    // skip it, instead of stealing the pan as a scroll.
+                                    event.changes.forEach { if (it.pressed) it.consume() }
+                                }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    },
+                )
+                // Scroll: either one 2D state (free diagonal pan, touch) or the orientation-locked pair (the
+                // classic one-axis-per-gesture drag + desktop wheel/trackpad). `scrollable2D` is the
+                // orientation-unlocked sibling of `scrollable` — same drag-gesture node and tap/selection
+                // coexistence — so it drops into the exact same slot.
+                .then(
+                    if (useTwoAxisScroll) Modifier.scrollable2D(scroll2D)
+                    else Modifier
+                        .scrollable(vScroll, Orientation.Vertical, reverseDirection = true)
+                        .scrollable(hScroll, Orientation.Horizontal, reverseDirection = true),
+                )
                 // Mouse hover (desktop): track the hovered line so an expandable fold shows its chevron on hover
                 // (IntelliJ-style). Observation only — never consumes, so it doesn't disturb taps/scroll/drag.
-                .pointerInput(editorSession, metrics, gutterWidthPx) {
+                .pointerInput(editorSession, metrics, gutterWidthPx, wrapActive) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Main)
@@ -985,7 +1192,7 @@ private fun CodeEditorContent(
                 // Keyed on metrics/gutterWidth too: a gesture block captures the geometry helpers
                 // (offsetAt/lineAtY) once when it launches, so it must re-launch when a zoom rescales the
                 // line metrics — otherwise a post-zoom tap maps through stale lineHeight to the wrong line.
-                .pointerInput(editorSession, metrics, gutterWidthPx) {
+                .pointerInput(editorSession, metrics, gutterWidthPx, wrapActive) {
                     // longPress flag, shared across this detector's callbacks within one gesture.
                     var longPressed = false
                     detectTapGestures(
@@ -1058,7 +1265,7 @@ private fun CodeEditorContent(
                 // swallow the movement. Mouse gestures are owned end-to-end here (click-count → caret/
                 // word/line + drag-to-select) and the down is consumed, so detectTapGestures stays
                 // touch-only. Touch taps fall through unconsumed to detectTapGestures.
-                .pointerInput(editorSession, metrics, gutterWidthPx) {
+                .pointerInput(editorSession, metrics, gutterWidthPx, wrapActive) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = true)
                         if (down.type == PointerType.Mouse) {
@@ -1137,6 +1344,8 @@ private fun CodeEditorContent(
                         compositeLayoutFor = ::compositeLayoutFor,
                         rawToVisual = renderCache::rawToVisual,
                         foldModel = editorSession.foldModel,
+                        vlayout = vlayout,
+                        wrap = wrapActive,
                         foldableStartLines = foldableStartLines,
                         foldStripWidth = foldStripPx,
                         hoveredLine = hoveredLine,
@@ -1190,22 +1399,34 @@ private fun CodeEditorContent(
                 m
             }
             val fm = editorSession.foldModel
-            for ((ln, d) in chipPerLine) {
-                if (fm.isHidden(ln)) continue // diagnostic inside a collapsed region → no chip
-                // Place after the composite text on a fold-start line, else after the real line.
-                val lineWidth = if (fm.foldStartingAt(ln) != null) compositeLayoutFor(ln).size.width else layoutFor(ln).size.width
-                DiagnosticChip(
-                    d.severity,
-                    d.unused,
-                    d.message,
-                    onClick = { acts.openSheet(d) },
-                    modifier = Modifier.offset {
-                        IntOffset(
-                            (gutterWidthPx + metrics.padLeft + lineWidth + 24f - hOffset.floatValue).roundToInt(),
-                            (metrics.padTop + fm.visualForDocLine(ln) * metrics.lineHeight - vOffset.floatValue).roundToInt(),
-                        )
-                    },
-                )
+            // Clip the chips to the code area (right of the gutter): a chip that scrolls left then slides UNDER
+            // the gutter — which is painted behind and shows through the clipped-out strip — instead of
+            // overlapping it. Draw-only clip; the chips keep their absolute positions.
+            Box(
+                Modifier.matchParentSize().drawWithContent {
+                    clipRect(left = gutterWidthPx) { this@drawWithContent.drawContent() }
+                },
+            ) {
+                for ((ln, d) in chipPerLine) {
+                    if (fm.isHidden(ln)) continue // diagnostic inside a collapsed region → no chip
+                    // Place after the composite text on a fold-start line, else after the real line. When wrapping,
+                    // sit after the end of the line's LAST wrapped row (its right edge + that row's vertical offset).
+                    val chipLayout = if (fm.foldStartingAt(ln) != null) compositeLayoutFor(ln) else layoutFor(ln)
+                    val lastSub = if (wordWrap) (chipLayout.lineCount - 1).coerceAtLeast(0) else 0
+                    val lineWidth = if (wordWrap) chipLayout.getLineRight(lastSub) else chipLayout.size.width.toFloat()
+                    DiagnosticChip(
+                        d.severity,
+                        d.unused,
+                        d.message,
+                        onClick = { acts.openSheet(d) },
+                        modifier = Modifier.offset {
+                            IntOffset(
+                                (gutterWidthPx + metrics.padLeft + lineWidth + 24f - hOffset.floatValue).roundToInt(),
+                                (metrics.padTop + (vlayout.topRow(ln) + lastSub) * metrics.lineHeight - vOffset.floatValue).roundToInt(),
+                            )
+                        },
+                    )
+                }
             }
         }
 
@@ -1221,9 +1442,10 @@ private fun CodeEditorContent(
             ) {
                 SelectionToolbar(
                     hasSelection = !editorSession.selection.collapsed,
-                    // The lightbulb appears in the toolbar whenever the caret/selection has actions available —
-                    // the easy, discoverable way to reach quick-fixes & intentions on a phone (tap → lightbulb).
-                    hasActions = acts.available.isNotEmpty(),
+                    // Keep quick-FIXES out of this clipboard toolbar: on a diagnostic the gutter lightbulb owns
+                    // them (tap → fix list), so the toolbar stays Copy/Cut/Paste only. Off a diagnostic there's
+                    // no gutter bulb, so the toolbar still surfaces caret INTENTIONS here (the only touch path).
+                    hasActions = acts.available.isNotEmpty() && acts.caretDiagnostic == null,
                     onActions = { handlesVisible = false; acts.openMenu() },
                     onCopy = {
                         editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
@@ -1277,8 +1499,13 @@ private fun CodeEditorContent(
                 BoxWithConstraints {
                     val compact = maxWidth < 600.dp
                     val popupWidth = if (compact) (maxWidth * 0.85f).coerceIn(240.dp, 340.dp) else 440.dp
-                    val listCap = if (compact) 240.dp else 296.dp
-                    val listMax = (roomBelowDp - DocStripReserve).coerceIn(MinListHeight, listCap)
+                    // Fill the room below the caret (the popup always opens below it) so the list auto-expands —
+                    // and re-expands as the user scrolls, since `roomBelowDp` derives from caretGeometry/vOffset
+                    // and recomputes on each scroll. `roomBelowDp` already runs to the editor pane's bottom (above
+                    // the keyboard / symbol bar; the hidden bottom nav is NOT reserved), minus the gap+margin —
+                    // no extra strip reserve (docs are beside/flip now, never a strip under the list). Bounded
+                    // only by a generous ceiling for tall desktop windows.
+                    val listMax = roomBelowDp.coerceIn(MinListHeight, MaxListHeight)
                     val items = shown.items
                     CompletionList(
                         items = items,
@@ -1286,6 +1513,8 @@ private fun CodeEditorContent(
                         prefix = shown.prefix,
                         width = popupWidth,
                         maxListHeight = listMax,
+                        // Narrow screens flip to docs on demand (the side panel would squish); wide shows it beside.
+                        docsBeside = !compact,
                         onPick = { item ->
                             completion.selected = items.indexOf(item).coerceAtLeast(0)
                             accept(item) // accept the tapped row, not the (stale) currently-selected index
@@ -1318,33 +1547,40 @@ private fun CodeEditorContent(
             }
         }
 
-        // lightbulb on the caret line whenever actions are available and no completion popup is showing
-        if (acts.available.isNotEmpty() && !showPopup && isFocused) {
-            val caretLn = doc.lineForOffset(caretOffset)
-            val lineTopPx = metrics.padTop + editorSession.foldModel.visualForDocLine(caretLn) * metrics.lineHeight - vOffset.floatValue
-            ActionLightbulb(
-                onClick = { acts.openMenu() },
-                modifier = Modifier.offset {
-                    IntOffset(
-                        (gutterWidthPx - 19.dp.toPx()).roundToInt(),
-                        (lineTopPx + (metrics.lineHeight - 18.dp.toPx()) / 2f).roundToInt(),
-                    )
-                },
-            )
+        // lightbulb floating just ABOVE the caret — ONLY when the caret has entered a line/range a diagnostic
+        // covers (so it clearly signals "there's a fix to apply here"), there are actions, the completion popup
+        // isn't showing, and the fix menu isn't already open. Tap it → the fix list (opens below the caret).
+        // Caret intentions elsewhere stay reachable via Alt-Enter / the selection toolbar, just without a bulb.
+        if (acts.available.isNotEmpty() && acts.caretDiagnostic != null && !showPopup && !acts.menuOpen && isFocused) {
+            val (_, bulbX, bulbTop) = caretGeometry(caretOffset)
+            val gapPx = with(density) { 6.dp.roundToPx() }
+            val positionProvider = remember(bulbX, bulbTop, gapPx) {
+                AboveAnchorPositionProvider(
+                    bulbX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
+                    bulbTop.roundToInt(),
+                    gapPx,
+                )
+            }
+            Popup(popupPositionProvider = positionProvider) {
+                FloatingLightbulb(onClick = { acts.openMenu() })
+            }
         }
 
-        // @Preview gutter icons — a tappable glyph in the gutter beside each Compose @Preview function.
-        // Tapping switches this tab to the Preview surface rendering that specific composable. Positioned
-        // per line and read in the layout phase, so they scroll with the document like the diagnostic chips.
+        // @Preview gutter icons — a tappable glyph in the gutter beside each Compose @Preview annotation.
+        // Tapping switches this tab to the Preview surface rendering that specific variant. Positioned per line
+        // and read in the layout phase, so they scroll with the document like the diagnostic chips. Variants of
+        // one annotation (a MultiPreview / @PreviewParameter expansion) share an offset → one icon per line.
+        val seenPreviewLines = HashSet<Int>()
         for (p in editorSession.previewMarkers) {
             val ln = doc.lineForOffset(p.offset.coerceIn(0, docLength))
             if (editorSession.foldModel.isHidden(ln)) continue // @Preview folded away → no gutter icon
+            if (!seenPreviewLines.add(ln)) continue // one icon per annotation line
             PreviewGutterIcon(
-                onClick = { onPreview(p.functionName) },
+                onClick = { onPreview(p.variantId) },
                 modifier = Modifier.offset {
                     IntOffset(
                         1.dp.roundToPx(),
-                        (metrics.padTop + editorSession.foldModel.visualForDocLine(ln) * metrics.lineHeight - vOffset.floatValue + (metrics.lineHeight - 20.dp.toPx()) / 2f).roundToInt(),
+                        (metrics.padTop + vlayout.topRow(ln) * metrics.lineHeight - vOffset.floatValue + (metrics.lineHeight - 20.dp.toPx()) / 2f).roundToInt(),
                     )
                 },
             )

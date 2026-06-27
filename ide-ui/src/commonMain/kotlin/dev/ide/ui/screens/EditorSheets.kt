@@ -37,7 +37,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 
 @Composable
-internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenDependencies: (String?) -> Unit, onOpenSdkManager: () -> Unit) {
+internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenSettings: () -> Unit, onOpenDependencies: (String?) -> Unit, onOpenSdkManager: () -> Unit) {
     DropdownOverlay(
         visible = state.paletteOpen,
         onDismiss = { state.paletteOpen = false },
@@ -51,6 +51,7 @@ internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpen
             onReindex = { state.backend.reindex(); state.paletteOpen = false },
             onOpenDependencies = { state.paletteOpen = false; onOpenDependencies(null) },
             onManageSdk = { state.paletteOpen = false; onOpenSdkManager() },
+            onOpenSettings = { state.paletteOpen = false; onOpenSettings() },
             onClose = { state.paletteOpen = false },
         )
     }
@@ -66,6 +67,7 @@ internal fun DestinationSheets(
     compact: Boolean,
     onOpenModuleConfig: (String?) -> Unit,
     onToggleTheme: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenSdkManager: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
@@ -92,6 +94,7 @@ internal fun DestinationSheets(
     BottomSheet(visible = state.sheetDest == RailDestination.More, onDismiss = { state.sheetDest = null }, heightFraction = 0.62f) {
         MoreSheetContent(
             backend = state.backend,
+            onSettings = { state.sheetDest = null; onOpenSettings() },
             onModuleSettings = { state.sheetDest = null; onOpenModuleConfig(null) },
             onReindex = { state.sheetDest = null; state.backend.reindex() },
             onToggleTheme = { state.sheetDest = null; onToggleTheme() },
@@ -115,6 +118,7 @@ internal fun DestinationSheets(
 @Composable
 private fun MoreSheetContent(
     backend: IdeBackend,
+    onSettings: () -> Unit,
     onModuleSettings: () -> Unit,
     onReindex: () -> Unit,
     onToggleTheme: () -> Unit,
@@ -128,6 +132,7 @@ private fun MoreSheetContent(
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
         Text("More", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
+        MoreRow(CaIcons.gear, "Settings", "Appearance · editor · completion · analysis · build", onSettings)
         MoreRow(CaIcons.layers, "Modules", "Add/remove modules · Java version · dependencies · repositories", onModuleSettings)
         MoreRow(CaIcons.pkg, "SDK Manager", "Download Android SDK packages & JDK sources", onManageSdk)
         MoreRow(CaIcons.refresh, "Re-index project", "Rebuild symbol & completion indexes", onReindex)

@@ -30,11 +30,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.NodeKind
+import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.icons.CaIcons
@@ -67,14 +69,16 @@ fun FileNavigator(
     activePath: String?,
     onOpen: (TreeNode) -> Unit,
     modifier: Modifier = Modifier,
-    /** Create a new file in the given directory (smart-scaffolded by extension; the name may be a nested path). */
-    onNewFile: (dirPath: String) -> Unit = {},
-    /** Create a new folder in the given directory (the name may be a nested path). */
-    onNewFolder: (dirPath: String) -> Unit = {},
+    /** Create a new file in [dirPath] (smart-scaffolded by extension; the name may be a nested path).
+     *  [segments] is the package chain [dirPath] belongs to (empty outside a compacted package) so the
+     *  dialog can offer a middle-level chip. */
+    onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit = { _, _ -> },
+    /** Create a new folder in [dirPath] (the name may be a nested path); [segments] as in [onNewFile]. */
+    onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit = { _, _ -> },
     /** Create a new Android XML resource for a `res/` node (the templated dialog). */
     onNewResource: (TreeNode) -> Unit = {},
-    /** Create a new typed source file (Java class / Kotlin file) in the given directory. */
-    onNewSource: (dirPath: String, lang: NewSourceLang) -> Unit = { _, _ -> },
+    /** Create a new typed source file (Java class / Kotlin file) in [dirPath]; [segments] as in [onNewFile]. */
+    onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit = { _, _, _ -> },
     onViewDependencies: (TreeNode) -> Unit = {},
     onConfigureModule: (TreeNode) -> Unit = {},
     /** Open the Add-Source-Root dialog for a module node. */
@@ -117,8 +121,8 @@ fun FileNavigator(
             if (canImport) IconButtonCa(CaIcons.download, "Import files", onClick = onImport, boxSize = 34, iconSize = 18)
             val rootDir = root.dirPath
             HeaderOverflowMenu(
-                onNewFile = { rootDir?.let(onNewFile) },
-                onNewFolder = { rootDir?.let(onNewFolder) },
+                onNewFile = { rootDir?.let { onNewFile(it, emptyList()) } },
+                onNewFolder = { rootDir?.let { onNewFolder(it, emptyList()) } },
                 onExpandAll = { expandAll(root, expanded) },
                 onCollapseAll = { expanded.clear() },
                 sort = sort,
@@ -274,10 +278,10 @@ private fun TreeRow(
     sort: TreeSort,
     activePath: String?,
     onOpen: (TreeNode) -> Unit,
-    onNewFile: (dirPath: String) -> Unit,
-    onNewFolder: (dirPath: String) -> Unit,
+    onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
+    onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
-    onNewSource: (dirPath: String, lang: NewSourceLang) -> Unit,
+    onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
     onViewDependencies: (TreeNode) -> Unit,
     onConfigureModule: (TreeNode) -> Unit,
     onAddSourceRoot: (TreeNode) -> Unit,
@@ -347,15 +351,34 @@ private fun TreeRow(
         }
         NodeIcon(node, isOpen)
         Spacer(Modifier.width(8.dp))
-        Text(
-            node.name,
-            color = if (isActive) Ca.colors.accent else Ca.colors.textPrimary,
-            style = Ca.type.footnote,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        // A multi-segment row (a compacted package `com.example.compose`, or a source-root label
+        // `app/src/main/java`) renders as tappable segments so each middle level is its own New-target;
+        // otherwise only the deepest level is reachable. Package levels are real packages (typed-source ok);
+        // source-root ancestors are plain dirs (File/Directory only, since a class there is on no compile path).
+        val labelSegments = node.segmentsForLabel()
+        if (labelSegments.size > 1) {
+            SegmentedPathLabel(
+                node = node,
+                segments = labelSegments,
+                separator = if (node.kind == NodeKind.Package) "." else "/",
+                allowSource = node.kind == NodeKind.Package,
+                onNewFile = onNewFile,
+                onNewFolder = onNewFolder,
+                onNewResource = onNewResource,
+                onNewSource = onNewSource,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Text(
+                node.name,
+                color = if (isActive) Ca.colors.accent else Ca.colors.textPrimary,
+                style = Ca.type.footnote,
+                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
         when {
             node.kind == NodeKind.Module && hovered ->
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -437,20 +460,23 @@ private fun NewActionItems(
     targetDir: String?,
     isSourceContext: Boolean,
     canNewResource: Boolean,
-    onNewFile: (dirPath: String) -> Unit,
-    onNewFolder: (dirPath: String) -> Unit,
+    onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
+    onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
-    onNewSource: (dirPath: String, lang: NewSourceLang) -> Unit,
+    onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
     close: () -> Unit,
 ) {
+    // The package chain is forwarded so the dialog can switch levels (`com` vs `com.example`); empty for a
+    // plain folder / res context.
+    val segs = node.packageSegments
     if (isSourceContext && targetDir != null) {
-        FileActionItem(CaIcons.code, "Java Class") { close(); onNewSource(targetDir, NewSourceLang.Java) }
-        FileActionItem(CaIcons.code, "Kotlin File") { close(); onNewSource(targetDir, NewSourceLang.Kotlin) }
+        FileActionItem(CaIcons.code, "Java Class") { close(); onNewSource(targetDir, NewSourceLang.Java, segs) }
+        FileActionItem(CaIcons.code, "Kotlin File") { close(); onNewSource(targetDir, NewSourceLang.Kotlin, segs) }
     }
     if (canNewResource) FileActionItem(CaIcons.image, "Resource File") { close(); onNewResource(node) }
     if (targetDir != null) {
-        FileActionItem(CaIcons.plus, "File") { close(); onNewFile(targetDir) }
-        FileActionItem(CaIcons.folder, "Directory") { close(); onNewFolder(targetDir) }
+        FileActionItem(CaIcons.plus, "File") { close(); onNewFile(targetDir, segs) }
+        FileActionItem(CaIcons.folder, "Directory") { close(); onNewFolder(targetDir, segs) }
     }
 }
 
@@ -462,10 +488,10 @@ private fun NewHoverButton(
     targetDir: String?,
     isSourceContext: Boolean,
     canNewResource: Boolean,
-    onNewFile: (dirPath: String) -> Unit,
-    onNewFolder: (dirPath: String) -> Unit,
+    onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
+    onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
-    onNewSource: (dirPath: String, lang: NewSourceLang) -> Unit,
+    onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -473,6 +499,85 @@ private fun NewHoverButton(
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             NewActionItems(node, targetDir, isSourceContext, canNewResource, onNewFile, onNewFolder, onNewResource, onNewSource) { open = false }
         }
+    }
+}
+
+/**
+ * A multi-segment row name drawn as individual segments: a compacted package (`com.example.compose`) or a
+ * source-root label (`app/src/main/java`). Each **prefix** segment is tappable and opens a "New ▸" menu
+ * scoped to *that* directory, so a file can be created at a middle level the single row would otherwise hide.
+ * The final segment is plain text, so tapping it (like tapping the row elsewhere) falls through to the row's
+ * expand/collapse. [allowSource] gates whether the per-segment menu offers typed Java/Kotlin classes (true
+ * for package levels; false for source-root ancestors, which aren't on any compile path).
+ */
+@Composable
+private fun SegmentedPathLabel(
+    node: TreeNode,
+    segments: List<PackageSegment>,
+    separator: String,
+    allowSource: Boolean,
+    onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
+    onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
+    onNewResource: (TreeNode) -> Unit,
+    onNewSource: (dirPath: String, lang: NewSourceLang, segments: List<PackageSegment>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val lastIndex = segments.lastIndex
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        segments.forEachIndexed { i, seg ->
+            if (i > 0) Text(separator, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+            // packageName carries the cumulative level (`com.example` / `app/src`); show just this leaf.
+            val leaf = seg.packageName.substringAfterLast('.').substringAfterLast('/')
+            if (i == lastIndex) {
+                Text(leaf, color = Ca.colors.textPrimary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else {
+                var open by remember { mutableStateOf(false) }
+                Box {
+                    Text(
+                        leaf,
+                        color = Ca.colors.textSecondary,
+                        style = Ca.type.footnote,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Ca.radius.xs))
+                            .clickable { open = true }
+                            .padding(horizontal = 2.dp),
+                    )
+                    CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                        MenuSectionLabel("New in ${seg.packageName}")
+                        NewActionItems(node, seg.dirPath, isSourceContext = allowSource, canNewResource = false, onNewFile, onNewFolder, onNewResource, onNewSource) { open = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The segments to render this row's name as (tappable middle levels), or empty for a plain single-level row:
+ *  a compacted package's chain, or a source-root label's directory ancestors derived from [TreeNode.dirPath]. */
+private fun TreeNode.segmentsForLabel(): List<PackageSegment> = when (kind) {
+    NodeKind.Package -> packageSegments
+    NodeKind.SourceRoot -> deriveDirSegments()
+    else -> emptyList()
+}
+
+/**
+ * Split a source-root label like `app/src/main/java` into one [PackageSegment] per level, recovering each
+ * level's absolute directory by peeling trailing segments off [TreeNode.dirPath]. Returns empty (so the row
+ * stays a plain label) unless the name is a relative multi-segment path whose tail matches [dirPath].
+ */
+private fun TreeNode.deriveDirSegments(): List<PackageSegment> {
+    val dir = dirPath ?: return emptyList()
+    val rawName = name.replace('\\', '/')
+    if (rawName.startsWith('/')) return emptyList()                 // an absolute fallback label, don't segment
+    val labels = rawName.split('/').filter { it.isNotEmpty() }
+    if (labels.size <= 1) return emptyList()
+    val dirParts = dir.replace('\\', '/').trimEnd('/').split('/')
+    if (dirParts.size < labels.size || dirParts.takeLast(labels.size) != labels) return emptyList()
+    return labels.indices.map { k ->
+        val cumulative = labels.subList(0, k + 1).joinToString("/")
+        val abs = dirParts.subList(0, dirParts.size - (labels.size - 1 - k)).joinToString("/")
+        PackageSegment(cumulative, abs)
     }
 }
 

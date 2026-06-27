@@ -37,14 +37,25 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.theme.Ca
 
-/** What a unified "New…" action creates, and where. [dirLabel] is a short path shown to the user. */
+/**
+ * What a unified "New…" action creates, and where. [dirLabel] is a short path shown to the user.
+ * [packages] is the (possibly compacted) package chain that [dirPath] belongs to; when it has more than
+ * one level the dialog shows it as selectable chips so a file can be dropped at a *middle* package
+ * (`com`, `com.example`) instead of only the deepest one. [dirPath] is the level preselected.
+ */
 enum class NewEntryKind { File, Folder }
-data class NewEntryRequest(val dirPath: String, val kind: NewEntryKind, val dirLabel: String)
+data class NewEntryRequest(
+    val dirPath: String,
+    val kind: NewEntryKind,
+    val dirLabel: String,
+    val packages: List<PackageSegment> = emptyList(),
+)
 
 /**
  * The unified New-File / New-Folder dialog — create *anything, anywhere*. Drops from the top (reusing
@@ -75,6 +86,8 @@ private fun NewEntryPanel(
 ) {
     val isFolder = req.kind == NewEntryKind.Folder
     var name by remember(req) { mutableStateOf("") }
+    // The package level to create in; defaults to the level the action was launched from.
+    var targetDir by remember(req) { mutableStateOf(req.dirPath) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(req) { runCatching { focus.requestFocus() } }
 
@@ -85,7 +98,7 @@ private fun NewEntryPanel(
 
     fun submit() {
         if (!valid) return
-        onCreate(req.dirPath, trimmed, req.kind)
+        onCreate(targetDir, trimmed, req.kind)
         onDismiss()
     }
 
@@ -100,8 +113,11 @@ private fun NewEntryPanel(
     ) {
         Text(if (isFolder) "New folder" else "New file", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
-        Text("in ${req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        val selPkg = req.packages.firstOrNull { it.dirPath == targetDir }?.packageName
+        Text("in ${selPkg ?: req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
         Spacer12()
+
+        PackageChips(req.packages, targetDir, onSelect = { targetDir = it })
 
         FieldLabel(if (isFolder) "Folder name" else "File name")
         DialogField(
@@ -133,9 +149,33 @@ private fun NewEntryPanel(
 // New typed source file (Java class / Kotlin file, with a kind selector)
 // ---------------------------------------------------------------------------
 
-/** Which language a typed "New …" action scaffolds, and where. [dirLabel] is a short path shown to the user. */
+/** Which language a typed "New …" action scaffolds, and where. [dirLabel] is a short path shown to the user.
+ *  [packages] mirrors [NewEntryRequest.packages]: the package chain so the dialog can target a middle level. */
 enum class NewSourceLang { Java, Kotlin }
-data class NewSourceRequest(val dirPath: String, val lang: NewSourceLang, val dirLabel: String)
+data class NewSourceRequest(
+    val dirPath: String,
+    val lang: NewSourceLang,
+    val dirLabel: String,
+    val packages: List<PackageSegment> = emptyList(),
+)
+
+/**
+ * The package-level chooser shown when a "New …" action is launched from a compacted package node: one chip
+ * per level of the chain (`com` · `com.example` · `com.example.compose`), so the file can be created at a
+ * middle package, not only the deepest. [selectedDir] is the chip currently active; [onSelect] hands back the
+ * chosen level's directory. Renders nothing for a non-package context (a single level or none).
+ */
+@Composable
+private fun PackageChips(packages: List<PackageSegment>, selectedDir: String, onSelect: (String) -> Unit) {
+    if (packages.size <= 1) return
+    FieldLabel("Package")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        packages.forEach { seg ->
+            SelectChip(seg.packageName, selected = seg.dirPath == selectedDir, onClick = { onSelect(seg.dirPath) })
+        }
+    }
+    Spacer12()
+}
 
 /** A kind offered in the typed-source dialog → the backend template it scaffolds. */
 private enum class SourceKind(val label: String, val template: UiNewFileTemplate) {
@@ -185,6 +225,8 @@ private fun NewSourcePanel(
     val kinds = remember(req) { kindsFor(req.lang) }
     var kind by remember(req) { mutableStateOf(kinds.first()) }
     var name by remember(req) { mutableStateOf("") }
+    // The package level to create in; defaults to the level the action was launched from.
+    var targetDir by remember(req) { mutableStateOf(req.dirPath) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(req) { runCatching { focus.requestFocus() } }
 
@@ -194,7 +236,7 @@ private fun NewSourcePanel(
 
     fun submit() {
         if (!valid) return
-        onCreate(req.dirPath, trimmed, kind.template)
+        onCreate(targetDir, trimmed, kind.template)
         onDismiss()
     }
 
@@ -212,8 +254,11 @@ private fun NewSourcePanel(
             color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
-        Text("in ${req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        val selPkg = req.packages.firstOrNull { it.dirPath == targetDir }?.packageName
+        Text("in ${selPkg ?: req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
         Spacer12()
+
+        PackageChips(req.packages, targetDir, onSelect = { targetDir = it })
 
         FieldLabel("Kind")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

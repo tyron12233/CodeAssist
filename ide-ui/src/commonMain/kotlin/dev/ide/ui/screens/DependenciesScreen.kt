@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,6 +38,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -69,6 +71,7 @@ import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.DropdownOverlay
+import dev.ide.ui.components.CaDropdownMenu
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.components.entranceSlideUp
@@ -140,13 +143,32 @@ fun DependenciesPane(
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
 
+    // Exclude a transitive dependency: append its group:name to the exclusions of the direct dependency it
+    // came from, then re-resolve. Reuses the same exclusion mechanism as the per-dependency editor.
+    val onExcludeTransitive: (UiDependencyNode, UiDependencyNode) -> Unit = { root, transitive ->
+        coroutine.launch {
+            val gn = "${transitive.group}:${transitive.name}"
+            val result = backend.setDependencyExclusions(moduleName, root.coordinate, (root.exclusions + gn).distinct())
+            toast = ToastMsg(if (result.success) "Excluded $gn from ${root.name}" else result.message, error = !result.success)
+            if (result.success) reloadKey++
+        }
+    }
+    // Re-include a previously-excluded entry: drop it from the direct dependency's exclusions and re-resolve.
+    val onRemoveExclusion: (UiDependencyNode, String) -> Unit = { root, excl ->
+        coroutine.launch {
+            val result = backend.setDependencyExclusions(moduleName, root.coordinate, root.exclusions - excl)
+            toast = ToastMsg(if (result.success) "Re-included $excl" else result.message, error = !result.success)
+            if (result.success) reloadKey++
+        }
+    }
+
     val resolving = loading || resolveState.resolving
     BoxWithConstraints(modifier.fillMaxSize().background(Ca.colors.bg)) {
         val expanded = maxWidth >= DEPS_EXPANDED_BREAKPOINT
         Column(Modifier.fillMaxSize()) {
             DepPaneToolbar(tab, { tab = it }, resolvedView, { resolvedView = it }, { addOpen = true }, { reposOpen = true }, resolving, resolveState.message, compact = !expanded)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
-            DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth(), { pendingRemove = it }, { pendingEdit = it })
+            DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth(), { pendingRemove = it }, { pendingEdit = it }, onExcludeTransitive, onRemoveExclusion)
         }
 
         // ---- Add flow + Repositories: centered dialogs on desktop, bottom sheets on phone ----
@@ -165,8 +187,10 @@ fun DependenciesPane(
                 }
             }
         } else {
-            BottomSheet(visible = addOpen, onDismiss = { addOpen = false }, heightFraction = 0.82f) {
-                AddDependencyContent(backend, moduleName, codeFont, fileActions, onResult, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+            // Opens near-full (the content is dense) and the sheet still drags up to true full screen; the
+            // content fills the sheet (weight + fillHeight) so the results list uses the room, not empty space.
+            BottomSheet(visible = addOpen, onDismiss = { addOpen = false }, heightFraction = 0.94f) {
+                AddDependencyContent(backend, moduleName, codeFont, fileActions, onResult, Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 4.dp), fillHeight = true)
             }
             BottomSheet(visible = reposOpen, onDismiss = { reposOpen = false }, heightFraction = 0.7f) {
                 RepositoriesContent(backend, codeFont, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
@@ -333,13 +357,15 @@ private fun DepBody(
     modifier: Modifier,
     onRemove: (String) -> Unit,
     onEditExclusions: (UiDependencyNode) -> Unit,
+    onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit,
+    onRemoveExclusion: (root: UiDependencyNode, exclusion: String) -> Unit,
 ) {
     Crossfade(targetState = loading, animationSpec = tween(Motion.BASE), label = "depBody", modifier = modifier) { isLoading ->
         when {
             isLoading -> ResolvingPanel(resolveState)
             deps == null -> Empty("Couldn't load dependencies.")
             // The persistent error state carries the (heuristic) why per coordinate — surface it here too.
-            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove, onEditExclusions)
+            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove, onEditExclusions, onExcludeTransitive, onRemoveExclusion)
         }
     }
 }
@@ -378,20 +404,14 @@ private fun ResolveBar(fraction: Double) {
 }
 
 @Composable
-private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit, onEditExclusions: (UiDependencyNode) -> Unit) {
+private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit, onEditExclusions: (UiDependencyNode) -> Unit, onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit, onRemoveExclusion: (root: UiDependencyNode, exclusion: String) -> Unit) {
     val nodesByCoord = remember(deps) { deps.nodes.associateBy { it.coordinate } }
     val expanded = remember(deps) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     val unresolvedSet = remember(deps) { deps.unresolved.toSet() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
-        if (deps.conflicts.isNotEmpty()) item("conflicts") {
-            BannerCard(CaIcons.warning, Ca.colors.warning, "${deps.conflicts.size} version conflict${plural(deps.conflicts.size)} resolved", Modifier.animateItem()) {
-                deps.conflicts.forEach { c ->
-                    Text("${c.artifact}: ${c.requested.joinToString(", ")} → ${c.chosen}",
-                        color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
-                }
-            }
-        }
+        // Version conflicts resolved newest-wins are normal/expected, so no summary banner (it floods the
+        // list on large graphs). The per-node "conflict" chip still flags individual clashes in the tree.
         if (deps.cycles.isNotEmpty()) item("cycles") {
             BannerCard(CaIcons.refresh, Ca.colors.error, "${deps.cycles.size} dependency cycle${plural(deps.cycles.size)}", Modifier.animateItem()) {
                 deps.cycles.forEach { cycle -> Text(cycle.joinToString(" → ") { it.substringBeforeLast(':') }, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont)) }
@@ -423,7 +443,12 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                             } else null)
                         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
                             Column {
-                                node.children.forEach { childCoord -> nodesByCoord[childCoord]?.let { TransitiveRow(it, codeFont, depth = 1) } }
+                                // The transitive's overflow menu excludes it from this (declared) root.
+                                val onExclude: ((UiDependencyNode) -> Unit)? = if (node.excludable()) ({ t -> onExcludeTransitive(node, t) }) else null
+                                node.children.forEach { childCoord -> nodesByCoord[childCoord]?.let { TransitiveRow(it, codeFont, depth = 1, onExclude = onExclude) } }
+                                // Excluded entries (group:name) shown as their own rows with an "excluded" pill,
+                                // each re-includable via its overflow menu.
+                                node.exclusions.forEach { excl -> ExcludedRow(excl, codeFont) { onRemoveExclusion(node, excl) } }
                             }
                         }
                     }
@@ -434,7 +459,9 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
             DepTab.Resolved -> when (resolvedView) {
                 DepView.Tree -> {
                     if (deps.declared.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
-                    deps.declared.forEach { root -> treeRows(root, nodesByCoord, 0, emptyList(), expanded, codeFont) { onRemove(root.coordinate) } }
+                    deps.declared.forEach { root ->
+                        treeRows(root, root, nodesByCoord, 0, emptyList(), expanded, codeFont, { onRemove(root.coordinate) }, onExcludeTransitive)
+                    }
                 }
                 DepView.Graph -> {
                     if (deps.nodes.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
@@ -447,6 +474,7 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
 }
 
 private fun LazyListScope.treeRows(
+    root: UiDependencyNode,
     node: UiDependencyNode,
     nodesByCoord: Map<String, UiDependencyNode>,
     depth: Int,
@@ -454,18 +482,21 @@ private fun LazyListScope.treeRows(
     expanded: SnapshotStateMap<String, Boolean>,
     codeFont: FontFamily,
     onRemove: (() -> Unit)?,
+    onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit,
 ) {
     val key = (ancestors + node.coordinate).joinToString(">")
     val cycle = node.coordinate in ancestors
     val children = if (cycle) emptyList() else node.children.mapNotNull { nodesByCoord[it] }
     val isOpen = expanded[key] == true
+    // A transitive (depth > 0) row can be excluded from its declared root; the root itself uses remove instead.
+    val onExclude: (() -> Unit)? = if (depth > 0 && root.excludable()) ({ onExcludeTransitive(root, node) }) else null
     item(key) {
         Box(Modifier.animateItem()) {
             DependencyRow(node, codeFont, depth = depth, expandable = children.isNotEmpty(), expanded = isOpen,
-                onToggle = { expanded[key] = !isOpen }, onRemove = onRemove, cycle = cycle)
+                onToggle = { expanded[key] = !isOpen }, onRemove = onRemove, cycle = cycle, onExclude = onExclude)
         }
     }
-    if (isOpen) children.forEach { child -> treeRows(child, nodesByCoord, depth + 1, ancestors + node.coordinate, expanded, codeFont, null) }
+    if (isOpen) children.forEach { child -> treeRows(root, child, nodesByCoord, depth + 1, ancestors + node.coordinate, expanded, codeFont, null, onExcludeTransitive) }
 }
 
 @Composable
@@ -501,6 +532,7 @@ private fun DependencyRow(
     cycle: Boolean = false,
     unresolved: Boolean = false,
     onEditExclusions: (() -> Unit)? = null,
+    onExclude: (() -> Unit)? = null,
 ) {
     Row(
         Modifier.fillMaxWidth().height(46.dp).clickable(enabled = expandable, onClick = onToggle)
@@ -521,20 +553,19 @@ private fun DependencyRow(
             }
         }
         node.scope?.let { Chip(it, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
-        if (node.exclusions.isNotEmpty()) Chip(
-            if (node.exclusions.size == 1) "excludes ${node.exclusions.first()}" else "excludes ${node.exclusions.size}",
-            fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary,
-        )
+        // No "excludes N" summary chip here — excluded entries show as their own rows (with an "excluded"
+        // pill) when the dependency is expanded.
         if (unresolved) Chip("unresolved", fill = Ca.colors.error.copy(alpha = 0.16f), textColor = Ca.colors.error)
         if (node.inConflict) Chip("conflict", fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
         if (!node.compatible) Icon(CaIcons.warning, "Incompatible", Modifier.size(16.dp), tint = Ca.colors.error)
         if (onEditExclusions != null) IconButtonCa(CaIcons.gear, "Edit exclusions for ${node.name}", onClick = onEditExclusions, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) Ca.colors.accent else Ca.colors.textTertiary)
+        if (onExclude != null) RowActionMenu("More actions for ${node.name}", "Exclude ${node.name}", CaIcons.close, onExclude)
         if (onRemove != null) IconButtonCa(CaIcons.close, "Remove ${node.name}", onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
     }
 }
 
 @Composable
-private fun TransitiveRow(node: UiDependencyNode, codeFont: FontFamily, depth: Int) {
+private fun TransitiveRow(node: UiDependencyNode, codeFont: FontFamily, depth: Int, onExclude: ((UiDependencyNode) -> Unit)? = null) {
     Row(
         Modifier.fillMaxWidth().height(38.dp).padding(start = (16 + depth * 18 + 14).dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -545,6 +576,41 @@ private fun TransitiveRow(node: UiDependencyNode, codeFont: FontFamily, depth: I
             DepSubtitle(node)
         }
         Text("transitive", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (onExclude != null) RowActionMenu("More actions for ${node.name}", "Exclude ${node.name}", CaIcons.close) { onExclude(node) }
+    }
+}
+
+/** A directly-declared Maven library (jar/aar) whose transitives can carry exclusions. */
+private fun UiDependencyNode.excludable(): Boolean = (kind == UiDepKind.Jar || kind == UiDepKind.Aar) && !local
+
+/** An excluded entry (group:name) under a declared dependency: dimmed, tagged "excluded", re-includable. */
+@Composable
+private fun ExcludedRow(exclusion: String, codeFont: FontFamily, onRemoveExclusion: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().height(38.dp).padding(start = (16 + 18 + 14).dp, end = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(CaIcons.close, null, Modifier.size(13.dp), tint = Ca.colors.textTertiary)
+        Text(exclusion, color = Ca.colors.textTertiary, style = Ca.type.subhead.copy(fontFamily = codeFont),
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Chip("excluded", fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
+        RowActionMenu("Options for excluded $exclusion", "Remove exclusion", CaIcons.plus, onRemoveExclusion)
+    }
+}
+
+/** A row's overflow (⋮) menu with a single action item (e.g. "Exclude" / "Remove exclusion"). */
+@Composable
+private fun RowActionMenu(contentDesc: String, itemLabel: String, itemIcon: ImageVector, onClick: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButtonCa(CaIcons.ellipsis, contentDesc, onClick = { open = true }, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(itemLabel, color = Ca.colors.textPrimary, style = Ca.type.subhead) },
+                leadingIcon = { Icon(itemIcon, null, Modifier.size(16.dp), tint = Ca.colors.textSecondary) },
+                onClick = { open = false; onClick() },
+            )
+        }
     }
 }
 
@@ -558,14 +624,15 @@ private fun AddDependencyContent(
     fileActions: FileActions,
     onResult: (UiAddResult) -> Unit,
     modifier: Modifier = Modifier,
+    // True in the (mobile) bottom sheet: the results area fills the sheet height instead of capping at 360dp,
+    // so a near-/full-screen sheet shows more results rather than empty space. False in the desktop dialog.
+    fillHeight: Boolean = false,
 ) {
     var mode by remember { mutableStateOf(AddMode.Library) }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<UiArtifactHit>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var scope by remember { mutableStateOf("implementation") }
-    // Library mode only: transitive exclusions, typed as `group:name` entries (comma/space/newline separated).
-    var exclusionsText by remember { mutableStateOf("") }
     var moduleTargets by remember { mutableStateOf<List<String>>(emptyList()) }
     var localCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
@@ -598,10 +665,7 @@ private fun AddDependencyContent(
                 AddMode.Platform -> backend.addPlatform(moduleName, coordinate)
                 AddMode.Module -> backend.addModuleDependency(moduleName, coordinate, scope)
                 AddMode.Local -> backend.addLocalLibrary(moduleName, coordinate, scope)
-                AddMode.Library -> backend.addDependency(
-                    moduleName, coordinate, scope,
-                    exclusionsText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() },
-                )
+                AddMode.Library -> backend.addDependency(moduleName, coordinate, scope)
             }
             busy = false; adding = null
             if (result.success) onResult(result) else error = result.message
@@ -627,8 +691,8 @@ private fun AddDependencyContent(
     Column(modifier) {
         Text("Add dependency", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
 
-        // Library / Platform (BOM) / Module toggle
-        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Library / Platform (BOM) / Module / Local toggle — scrolls horizontally so chips never squish.
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AddMode.entries.forEach { m -> ModeChip(m.label, m == mode) { if (!busy) { mode = m; error = null } } }
         }
 
@@ -656,23 +720,30 @@ private fun AddDependencyContent(
             scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
         } else Spacer(Modifier.height(10.dp))
 
-        // Transitive exclusions (Library mode only) — Gradle `exclude` / Maven `<exclusions>`. Optional;
-        // one or more `group:name` entries (either side may be `*`), separated by commas, spaces, or newlines.
+        // Transitive exclusions aren't set here anymore — add the dependency, then exclude any transitive
+        // from the dependency tree (its ⋮ menu) or the per-dependency "Edit exclusions" editor.
+
+        // One-click quick-add for common Google libraries (Library mode). Firebase imports the BoM +
+        // firebase-analytics (and reminds about google-services.json); Play Services adds the named artifact.
+        // Each reuses the busy/error/result flow; the backend rejects them on a non-Android module.
         if (mode == AddMode.Library) Row(
-            Modifier.fillMaxWidth().padding(bottom = 10.dp).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(CaIcons.close, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
-            Box(Modifier.weight(1f)) {
-                if (exclusionsText.isEmpty()) Text(
-                    "exclude (optional) — e.g. com.google.guava:guava, org.json:*",
-                    color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                BasicTextField(exclusionsText, { exclusionsText = it; error = null }, singleLine = true, enabled = !busy,
-                    textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                    cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+            Text("suggested", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            val quickAdd: (String, suspend () -> UiAddResult) -> Unit = { label, action ->
+                if (!busy) {
+                    busy = true; error = null; adding = label
+                    coroutine.launch {
+                        val r = action(); busy = false; adding = null
+                        if (r.success) onResult(r) else error = r.message
+                    }
+                }
             }
+            ModeChip("Firebase", false) { quickAdd("Firebase") { backend.addFirebase(moduleName) } }
+            ModeChip("Play Services Auth", false) { quickAdd("Play Services Auth") { backend.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-auth:21.2.0")) } }
+            ModeChip("Maps", false) { quickAdd("Maps") { backend.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-maps:19.0.0")) } }
+            ModeChip("Location", false) { quickAdd("Location") { backend.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-location:21.3.0")) } }
         }
 
         error?.let { msg ->
@@ -683,8 +754,12 @@ private fun AddDependencyContent(
             }
         }
 
+        // The results area: fills the sheet height on mobile (fillHeight), or caps at 360dp in the dialog.
+        val listModifier = if (fillHeight) Modifier.fillMaxWidth().fillMaxHeight() else Modifier.fillMaxWidth().heightIn(max = 360.dp)
+
         // While adding: a live download panel. Otherwise: the results / module list.
-        Crossfade(targetState = busy, animationSpec = tween(Motion.BASE), label = "addBody") { isBusy ->
+        Crossfade(targetState = busy, animationSpec = tween(Motion.BASE), label = "addBody",
+            modifier = if (fillHeight) Modifier.weight(1f) else Modifier) { isBusy ->
             if (isBusy) {
                 Column(Modifier.fillMaxWidth().heightIn(min = 160.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Spacer(Modifier.height(20.dp))
@@ -694,7 +769,7 @@ private fun AddDependencyContent(
                     ResolveBar(resolveState.fraction)
                 }
             } else if (mode == AddMode.Module) {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                LazyColumn(listModifier) {
                     if (moduleTargets.isEmpty()) item { EmptyRow("No other modules available to depend on.") }
                     items(moduleTargets, key = { it }) { target ->
                         ModuleTargetRow(target, Modifier.animateItem()) { performAdd(target) }
@@ -710,7 +785,7 @@ private fun AddDependencyContent(
                 )
             } else {
                 val typed = query.trim()
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                LazyColumn(listModifier) {
                     // Direct add of a typed coordinate — the only way to add a versionless `group:name`
                     // (resolved against the module's imported platforms) or a coordinate not in the index.
                     if (looksLikeCoordinate(typed)) item("direct:$typed") {

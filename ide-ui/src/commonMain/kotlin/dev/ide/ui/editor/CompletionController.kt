@@ -52,11 +52,16 @@ internal class CompletionController(
     // completion — leaves the popup closed. Consumed by the text-revision trigger.
     private var suppressNextTrigger = false
 
+    /** Whether typing auto-opens the popup (Settings → Completion). When off, only explicit triggers open it. */
+    var autoPopupEnabled: Boolean = true
+    /** Debounce (ms) before an auto-popup request fires (Settings → Completion → Advanced). */
+    var delayMs: Int = 110
+
     /** Request completion at the caret (debounced unless [immediate]); cancels any prior in-flight request. */
     fun refresh(immediate: Boolean = false) {
         job?.cancel()
         job = scope.launch {
-            if (!immediate) delay(110.milliseconds)
+            if (!immediate) delay(delayMs.milliseconds)
             val text = session.doc.text
             val caret = session.selection.start
             val res = runCatching { backend.complete(path, text, caret) }.getOrNull() ?: return@launch

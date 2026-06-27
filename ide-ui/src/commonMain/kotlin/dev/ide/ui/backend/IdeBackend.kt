@@ -412,6 +412,19 @@ interface IdeBackend {
     suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
+    /**
+     * One-click Firebase setup for [moduleName]: import the Firebase BoM and add [artifacts] (short names
+     * like `firebase-analytics`, or full coordinates), resolved against the BoM. The result message reminds
+     * the user to add `google-services.json` if it is missing — the native build processes it (no Gradle
+     * plugin) and merges the libraries' manifests.
+     */
+    suspend fun addFirebase(moduleName: String, artifacts: List<String> = listOf("firebase-analytics")): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
+    /** One-click Google Play Services: add each fully-qualified [coordinates] entry to [moduleName]. */
+    suspend fun addGooglePlayServices(moduleName: String, coordinates: List<String>): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
     /** Remove the declared dependency or platform [coordinate] from [moduleName]. False if it wasn't present.
      *  For a module-on-module dependency, [coordinate] is the target module's name. */
     fun removeDependency(moduleName: String, coordinate: String): Boolean = false
@@ -613,6 +626,36 @@ interface IdeBackend {
     /** Persist an app-global preference. */
     fun setPreference(key: String, value: String) {}
 
+    // ---- IDE settings (the Settings screen) ----
+
+    /** The app-global settings the editor applies *live* (theme, accent, font scale, inlay) — a typed view
+     *  over the known built-in keys. The full, plugin-extensible catalogue the screen renders is
+     *  [settingsPages]; both read the same store. */
+    fun settings(): UiSettings = UiSettings()
+
+    /**
+     * Every page to render in the Settings screen — the built-in categories plus any contributed by plugins
+     * (each is one sidebar entry of generically-rendered controls). Empty for a backend without a settings
+     * registry. Built-in and plugin pages are uniform here, so a plugin's preferences appear with no UI change.
+     */
+    fun settingsPages(): List<UiSettingsPage> = emptyList()
+
+    /** Write control [key] on page [pageId] (string-encoded value) and apply it. Re-read [settings] /
+     *  [settingsPages] afterwards for the new state. */
+    fun setSetting(pageId: String, key: String, value: String) {}
+
+    /** Press an [UiSettingControl.Action] (e.g. "Clear caches") on page [pageId]; returns a status message. */
+    suspend fun invokeSettingAction(pageId: String, key: String): String? = null
+
+    /**
+     * The per-project inspection catalogue — every registered analyzer with its enabled state + effective
+     * severity. Shown as a list on the page that sets [UiSettingsPage.inspectionsSection] (the Analysis page).
+     */
+    fun inspections(): List<UiInspection> = emptyList()
+
+    /** Enable/disable inspection [id] and set its severity (persisted per project; re-analyzes open files). */
+    fun setInspection(id: String, enabled: Boolean, severity: UiSeverity) {}
+
     // ---- usage analytics (opt-in) ----
 
     /**
@@ -753,8 +796,39 @@ sealed interface UiTemplateParam {
 /** Outcome of a create: [success] + a human message (the reason on failure) + the new project's root path. */
 data class UiProjectResult(val success: Boolean, val message: String, val rootPath: String? = null)
 
-/** A `@Preview @Composable` target in the open editor file. */
-data class UiComposePreview(val functionName: String, val offset: Int)
+/**
+ * A `@Preview @Composable` target (one variant) in the open editor file. A function with several `@Preview`
+ * annotations, a MultiPreview annotation, or `@PreviewParameter` expands to several of these. [variantId]
+ * uniquely identifies the variant for selection; [functionName] + [arity] key the render.
+ */
+data class UiComposePreview(
+    val functionName: String,
+    val offset: Int,
+    val variantId: String = functionName,
+    val label: String = functionName,
+    val group: String? = null,
+    val arity: Int = 0,
+    val config: UiPreviewConfig = UiPreviewConfig(),
+    /** This preview's parameter is fed by a `@PreviewParameter` provider (rendered for each sample value). */
+    val hasParameter: Boolean = false,
+)
+
+/**
+ * The render-affecting `@Preview` arguments the preview surface honors (a UI-facing projection of the parsed
+ * annotation). Null/absent means "keep the surface default". [nightMode] is the derived night bit of `uiMode`.
+ */
+data class UiPreviewConfig(
+    val widthDp: Int? = null,
+    val heightDp: Int? = null,
+    val showBackground: Boolean = false,
+    val backgroundColor: Long? = null,
+    val fontScale: Float? = null,
+    val nightMode: Boolean? = null,
+    val locale: String? = null,
+    val apiLevel: Int? = null,
+    val showSystemUi: Boolean = false,
+    val device: String? = null,
+)
 
 /** The outcome of running a Compose preview: [ok] = interpretable/rendered; [message] explains the status. */
 data class UiPreviewResult(val ok: Boolean, val message: String)
@@ -910,11 +984,30 @@ data class RunConsoleUi(
     val exitCode: Int? = null,
 )
 
+/** Severity of a [BuildLogLine] — drives the per-line color and the Log tab's level filter. */
+enum class UiLogLevel { Debug, Info, Warn, Error }
+
+/**
+ * One line of the build's raw transcript (see [BuildState.log]) — the build console's structured log row.
+ * [level] colors it and feeds the level filter; [task] is the build task that produced it (null for
+ * engine/general lines) so the console can group output by task; [timeLabel] is the host-formatted local
+ * time of day (e.g. `14:03:21.482`), empty when untimed.
+ */
+data class BuildLogLine(
+    val message: String,
+    val level: UiLogLevel = UiLogLevel.Info,
+    val task: String? = null,
+    val timeLabel: String = "",
+    val timestampMs: Long = 0,
+)
+
 data class BuildState(
     val status: RunStatus = RunStatus.Idle,
     val moduleName: String = "",
     val steps: List<BuildStepUi> = emptyList(),
-    val log: List<String> = emptyList(),
+    /** The raw transcript, oldest first — leveled, time-stamped, and task-attributed (see [BuildLogLine]).
+     *  The console groups it by task and filters by level/text; [diagnostics] is the structured layer over it. */
+    val log: List<BuildLogLine> = emptyList(),
     /** Structured diagnostics, appended live as tools report them (see [BuildDiagnosticUi]). The raw text
      *  transcript still lives in [log]; this is the typed layer a UI groups, counts, and links from. */
     val diagnostics: List<BuildDiagnosticUi> = emptyList(),
@@ -1134,7 +1227,10 @@ data class TreeNode(
     val dirPath: String? = null,
 )
 
-/** One level of a (possibly compacted) package: its dotted [packageName] and the [dirPath] backing it. */
+/**
+ * One level of a multi-segment tree row: its cumulative label ([packageName] — a dotted package like
+ * `com.example`, or a path level like `app/src` for a source-root row) and the [dirPath] backing it.
+ */
 data class PackageSegment(val packageName: String, val dirPath: String)
 
 /**
@@ -1345,6 +1441,129 @@ data class UiSdkPackage(
 data class UiJdkInfo(val home: String, val version: String, val srcZip: String?)
 
 enum class UiSeverity { Error, Warning, Info, Hint }
+
+// ---- settings DTOs (the Settings screen) ----
+
+/**
+ * App-global IDE settings, mirrored to/from the engine's `IdeSettings` — appearance, editor, completion, and
+ * analysis *behaviour* (the same for every project). Per-project settings (inspections, conflict policy,
+ * repositories) have their own methods. Neutral primitives only; the bounds match what the sliders enforce.
+ */
+data class UiSettings(
+    /** "light" | "dark" | "system". */
+    val themeMode: String = "dark",
+    val accent: UiAccent = UiAccent.Violet,
+    val editorFontScale: Float = 1f,
+    /** "jetbrains" (bundled JetBrains Mono) | "monospace" (system monospace). */
+    val codeFont: String = "jetbrains",
+    /** Render programming ligatures (`->`, `!=`, `>=`, …) when the code font provides them (on by default). */
+    val fontLigatures: Boolean = true,
+    val inlayHints: Boolean = true,
+    val semanticHighlighting: Boolean = true,
+    val codeFolding: Boolean = true,
+    val completionAutoPopup: Boolean = true,
+    val completionDelayMs: Int = 110,
+    val completionMaxItems: Int = 200,
+    val postfixTemplates: Boolean = true,
+    val wordCompletion: Boolean = true,
+    val analyzeOnTheFly: Boolean = true,
+    val reparseDelayMs: Int = 300,
+    /** Soft-wrap long lines at the viewport edge (off = one row per line + horizontal scroll). */
+    val wordWrap: Boolean = false,
+    /** Indent wrapped continuation rows to the line's own indent (IntelliJ-style); only when [wordWrap]. */
+    val wrapIndent: Boolean = true,
+    /** Free (two-axis) touch scrolling: a single drag pans both axes (off = orientation-locked). */
+    val twoAxisScroll: Boolean = true,
+    /** Two-finger pinch zooms the code font. */
+    val pinchZoom: Boolean = true,
+) {
+    companion object {
+        const val MIN_FONT_SCALE = 0.7f
+        const val MAX_FONT_SCALE = 2.0f
+        const val MIN_COMPLETION_DELAY_MS = 0
+        const val MAX_COMPLETION_DELAY_MS = 1000
+        const val MIN_COMPLETION_MAX_ITEMS = 10
+        const val MAX_COMPLETION_MAX_ITEMS = 500
+        const val MIN_REPARSE_DELAY_MS = 0
+        const val MAX_REPARSE_DELAY_MS = 2000
+    }
+}
+
+/** The theme accent swaps the design system ships. */
+enum class UiAccent { Violet, Teal }
+
+/**
+ * One inspection (analyzer) in the Analysis settings list. [enabled] off = the check never runs; [severity]
+ * is its effective level (overridable from [defaultSeverity]). [language] is a display tag
+ * ("Java"/"Kotlin"/"XML"/"All"); [tier] is "Syntax"/"Semantic"/"Project" for grouping.
+ */
+data class UiInspection(
+    val id: String,
+    val displayName: String,
+    val language: String,
+    val tier: String,
+    val enabled: Boolean,
+    val severity: UiSeverity,
+    val defaultSeverity: UiSeverity,
+)
+
+/**
+ * One category in the Settings screen, rendered generically from [controls] — built-in and plugin pages are
+ * identical here. [scope] is "app" (IDE-wide) or "project". [inspectionsSection] true appends the per-
+ * inspection enable/severity list (the Analysis page). [iconId] resolves through the UI icon registry.
+ */
+data class UiSettingsPage(
+    val id: String,
+    val title: String,
+    val iconId: String,
+    val scope: String,
+    val controls: List<UiSettingControl>,
+    val inspectionsSection: Boolean = false,
+)
+
+/**
+ * One control on a settings page, carrying its current value. [key] is page-local; the UI writes back via
+ * [IdeBackend.setSetting] (`pageId`, `key`). [advanced] tucks it into the page's collapsible Advanced group;
+ * [group] is an optional shared sub-heading.
+ */
+sealed interface UiSettingControl {
+    val key: String
+    val title: String
+    val description: String?
+    val advanced: Boolean
+    val group: String?
+
+    data class Toggle(
+        override val key: String, override val title: String, override val description: String? = null,
+        val value: Boolean = false, override val advanced: Boolean = false, override val group: String? = null,
+    ) : UiSettingControl
+
+    data class Slider(
+        override val key: String, override val title: String, override val description: String? = null,
+        val value: Int = 0, val min: Int = 0, val max: Int = 100, val step: Int = 1, val unit: String? = null,
+        override val advanced: Boolean = false, override val group: String? = null,
+    ) : UiSettingControl
+
+    data class Choice(
+        override val key: String, override val title: String, override val description: String? = null,
+        val value: String = "", val options: List<Option> = emptyList(),
+        override val advanced: Boolean = false, override val group: String? = null,
+    ) : UiSettingControl {
+        data class Option(val value: String, val label: String)
+    }
+
+    data class Text(
+        override val key: String, override val title: String, override val description: String? = null,
+        val value: String = "", val placeholder: String = "",
+        override val advanced: Boolean = false, override val group: String? = null,
+    ) : UiSettingControl
+
+    data class Action(
+        override val key: String, override val title: String, override val description: String? = null,
+        val buttonLabel: String = "Run", val destructive: Boolean = false,
+        override val advanced: Boolean = false, override val group: String? = null,
+    ) : UiSettingControl
+}
 
 data class UiDiagnostic(
     val severity: UiSeverity,

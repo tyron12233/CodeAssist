@@ -22,13 +22,17 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -116,16 +120,23 @@ fun BottomSheet(
                     modifier
                         .fillMaxWidth()
                         .fillMaxHeight(fraction.value)
-                        // Keep the sheet above the soft keyboard. The app root already insets `safeDrawing`
-                        // (which includes the IME) and consumes it, so this is a no-op there — but it makes
-                        // the sheet self-sufficient if ever hosted outside that box. Scrollable content
-                        // (e.g. the More sheet) handles whatever vertical space remains (issue #994).
-                        .imePadding()
                         .shadow(24.dp, shape, clip = false)
                         .background(Ca.colors.glassThick, shape)
                         .border(1.dp, Ca.colors.glassEdgeTop, shape)
-                        // A tap on the sheet body shouldn't dismiss it — only a tap on the scrim above does.
-                        .swallowTaps(),
+                        // A tap on the sheet body shouldn't dismiss it; only a tap on the scrim above does.
+                        // Kept outside the content inset below so the full glass surface (incl. the strip
+                        // behind the nav bar) swallows taps, not just the inset content area.
+                        .swallowTaps()
+                        // Keep the sheet's content (drag handle + body) above the system navigation bar and
+                        // the soft keyboard, while the glass surface itself still runs edge-to-edge to the
+                        // bottom of the screen. Applied INSIDE the background so only the content is inset,
+                        // not the fill. `union` takes the larger of the two per side, so an open keyboard and
+                        // the nav bar never double-count. When the sheet is hosted inside the app root's
+                        // consumed `safeDrawing` inset (the docked navigator/console) both insets read zero
+                        // here, so this is a no-op there; it does the work for the sheets overlaid OUTSIDE
+                        // that box (onboarding/consent/migration), whose bottom buttons used to slip under
+                        // the nav bar. Scrollable content (e.g. the More sheet) handles the rest (issue #994).
+                        .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
                 ) {
                     DragHandle(
                         Modifier.draggable(

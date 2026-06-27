@@ -57,7 +57,6 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
             indexStatus = indexStatus,
             onToggleNav = { state.navOpen = !state.navOpen },
             onOpenPalette = { state.paletteOpen = true },
-            onRun = { state.consoleOpen = true; state.backend.runBuild() },
             runTasks = { state.backend.runTasks() },
             onPickTask = { state.consoleOpen = true; state.backend.runTask(it.id) },
             onSave = { state.saveActive() },
@@ -103,6 +102,13 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
                     findEpoch = findEpoch,
                     fontScale = state.editorFontScale,
                     onFontScaleChange = { state.editorFontScale = it },
+                    completionAutoPopup = state.completionAutoPopup,
+                    completionDelayMs = state.completionDelayMs,
+                    twoAxisScroll = state.twoAxisScrollEnabled,
+                    pinchZoom = state.pinchZoomEnabled,
+                    wordWrap = state.wordWrapEnabled,
+                    wrapIndent = state.wrapIndentEnabled,
+                    fontLigatures = state.fontLigaturesEnabled,
                     // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that
                     // specific composable. The editor tools (incl. the Code/Blocks/Preview switch) are pinned
                     // to the breadcrumb row, so they're already visible — making the view change easy to undo.
@@ -186,8 +192,17 @@ private fun EditorDaemonEffect(state: IdeUiState, active: OpenFile, onHasPreview
         }
     }
     DisposableEffect(daemon) { onDispose { daemon.close() } }
-    LaunchedEffect(active.path, active.session.textRevision, state.inlayHintsEnabled) {
+    LaunchedEffect(
+        active.path, active.session.textRevision,
+        state.inlayHintsEnabled, state.semanticHighlightingEnabled, state.codeFoldingEnabled,
+        state.analyzeOnTheFly, state.reparseDelayMs,
+    ) {
+        // Apply the user's editor/analysis prefs (Settings) to the daemon before each run.
         daemon.inlayEnabled = state.inlayHintsEnabled
+        daemon.semanticEnabled = state.semanticHighlightingEnabled
+        daemon.foldingEnabled = state.codeFoldingEnabled
+        daemon.analyzeEnabled = state.analyzeOnTheFly
+        daemon.autoReparseDelayMs = state.reparseDelayMs
         daemon.restart(active.session.doc.text) // one lazy rope materialization per settled edit
     }
 }
