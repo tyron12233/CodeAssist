@@ -74,8 +74,22 @@ data class BuildDiagnostic(
   dropped; pure chatter is ignored (it still rides the text log). The native compile tasks, and the
   Android `aapt2`/`d8`/`r8`/`apksigner` tasks, all report through this path.
 - **To the UI.** The host wires `SimpleTaskContext(onDiagnostic = …)` to append each diagnostic (mapped
-  to `BuildDiagnosticUi`) to `BuildState.diagnostics` live; the build console groups them by file into a
-  "Problems" view with severity counts, click-to-open at the line — separate from the raw log pane.
+  to `BuildDiagnosticUi`) to `BuildState.diagnostics` live. The build console is tabbed — **Problems**,
+  **Log**, **Steps** — over a persistent header (live status pill, error/warning counts, elapsed, Run/
+  Stop/Copy) and a running-progress strip. The Problems tab groups diagnostics by file with a severity
+  filter, shows the captured `detail` snippet inline, and jumps to the `file:line` in the editor on click;
+  it auto-opens when a build fails.
+
+### Structured transcript (the log)
+
+The raw transcript is itself structured. `ctx.logger()` routes through `ctx.buildLog: BuildLogSink`,
+which carries a `BuildLogEntry(message, level: BuildLogLevel, task: TaskName?, timestampMs)` — the engine
+stamps each entry with the running task (same per-task wrapping as diagnostics), so a plain
+`ctx.logger()("…")` call still produces a task-attributed `INFO` line while a task can log `WARN`/`ERROR`
+directly. The host wires `SimpleTaskContext(onLog = …)` to map them to `BuildLogLine`s (level mapped, a
+host-formatted local time, untyped tool lines best-effort level-inferred from the usual `e:`/`w:`/
+`error:`/`warning:` prefixes) on `BuildState.log`. The console's **Log** tab groups lines by the task that
+produced them (collapsible), colors them by level, and offers a level filter + text search.
 
 ## The native Java pipeline
 

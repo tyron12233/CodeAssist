@@ -13,12 +13,15 @@ import dev.ide.build.engine.DexRunner
 import dev.ide.build.engine.JavaDexTask
 import dev.ide.build.engine.JavaExecTask
 import dev.ide.build.engine.ProgramIo
+import dev.ide.build.SourceGenerator
 import dev.ide.build.engine.SimpleBuildConfiguration
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.moduleClosure
 import dev.ide.build.engine.outputDir
+import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
+import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
 import dev.ide.model.BuildSystemId
 import dev.ide.model.DependencyScope
 import dev.ide.model.Module
@@ -43,6 +46,12 @@ import java.nio.file.Paths
 class JavaBuildSystem(
     private val bootClasspath: List<Path> = emptyList(),
     private val kotlin: IncrementalKotlinCompiler? = null,
+    /** Kotlin compiler plugins applied per module (the `platform.kotlinCompilerPlugin` EP contents;
+     *  defaults to the built-ins). */
+    private val plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS,
+    /** Build-time source generators (the `platform.sourceGenerator` EP contents), run into a module's
+     *  `ContentRole.GENERATED` root ahead of compilation. Empty by default. */
+    private val generators: List<SourceGenerator> = emptyList(),
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -58,7 +67,7 @@ class JavaBuildSystem(
 
     override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph {
         val tasks = DefaultTaskContainer()
-        JavaPlugin(bootClasspath, kotlin).apply(SimpleBuildConfiguration(project, request, tasks))
+        JavaPlugin(bootClasspath, kotlin, plugins, generators).apply(SimpleBuildConfiguration(project, request, tasks))
         return tasks.build()
     }
 
@@ -77,7 +86,7 @@ class JavaBuildSystem(
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
-        val java = JavaPlugin(bootClasspath, kotlin)
+        val java = JavaPlugin(bootClasspath, kotlin, plugins, generators)
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val runName = TaskName(":${module.name}:run")
         tasks.register(runName) { JavaExecTask(runName, mainClass, { runtimeClasspath(module) }, programArgs, javaLauncher, programIo) }
@@ -103,7 +112,7 @@ class JavaBuildSystem(
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
-        val java = JavaPlugin(bootClasspath, kotlin)
+        val java = JavaPlugin(bootClasspath, kotlin, plugins, generators)
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val base = outputDir(module).resolveSibling("dex-run")
         val dexName = TaskName(":${module.name}:dexRun")

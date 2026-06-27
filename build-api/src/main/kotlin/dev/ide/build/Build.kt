@@ -44,7 +44,7 @@ data class BuildRequest(
     val goal: BuildGoal,
 )
 
-enum class BuildGoal { COMPILE_ONLY, ASSEMBLE, TEST, LINT, PACKAGE, INSTALL, CLEAN }
+enum class BuildGoal { COMPILE_ONLY, ASSEMBLE, TEST, LINT, PACKAGE, INSTALL, BUNDLE, CLEAN }
 
 @JvmInline value class VariantSelector(val name: String)
 
@@ -114,7 +114,13 @@ interface TaskOutputs {
 interface TaskContext {
     val progress: ProgressReporter
     fun checkCanceled()
-    fun logger(): (String) -> Unit
+
+    /**
+     * The raw text transcript channel (a program's stdout, step banners, untyped tool chatter). Routes each
+     * line to [buildLog] as a [BuildLogLevel.INFO] [BuildLogEntry] by default, so the plain and structured
+     * views never diverge and an existing task that only calls `logger()` still feeds the structured log.
+     */
+    fun logger(): (String) -> Unit = { buildLog.log(BuildLogEntry(it)) }
 
     /**
      * Structured diagnostics streamed as the task runs (see [BuildDiagnostic]). Defaults to a no-op so
@@ -122,6 +128,14 @@ interface TaskContext {
      * diagnostic with the running task and forwards it to the host.
      */
     val diagnostics: DiagnosticSink get() = DiagnosticSink.NOOP
+
+    /**
+     * The structured transcript channel — the same lines as [logger] but each carrying a [BuildLogLevel]
+     * and (once the engine tags it) the producing [TaskName], so a console can color, filter, and group
+     * output by task. Defaults to a no-op; the engine wires a real sink and stamps each entry with the
+     * running task. A task can call this directly to log at a non-INFO level.
+     */
+    val buildLog: BuildLogSink get() = BuildLogSink.NOOP
 }
 
 sealed interface TaskResult {

@@ -1,6 +1,9 @@
 package dev.ide.build.engine
 
 import dev.ide.build.BuildDiagnostic
+import dev.ide.build.BuildLogEntry
+import dev.ide.build.BuildLogLevel
+import dev.ide.build.BuildLogSink
 import dev.ide.build.BuildOutcome
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.DiagnosticSink
@@ -289,14 +292,16 @@ class TaskExecutorImpl(
             throw c
         } catch (e: Throwable) {
             failed.add(t.name)
-            ctx.logger()("FAILED ${t.name.value}: ${e.message ?: e.toString()}")
-            e.stackTrace.take(20).forEach { ctx.logger()("\tat $it") }
+            ctx.buildLog.log(BuildLogEntry("FAILED ${t.name.value}: ${e.message ?: e.toString()}", BuildLogLevel.ERROR, t.name))
+            e.stackTrace.take(20).forEach { ctx.buildLog.log(BuildLogEntry("\tat $it", BuildLogLevel.ERROR, t.name)) }
             onEvent(t.name, TaskStatus.Failed)
             return
         }
         when (r) {
             is TaskResult.Failed -> {
-                failed.add(t.name); ctx.logger()("FAILED ${t.name.value}: ${r.message}"); onEvent(t.name, TaskStatus.Failed)
+                failed.add(t.name)
+                ctx.buildLog.log(BuildLogEntry("FAILED ${t.name.value}: ${r.message}", BuildLogLevel.ERROR, t.name))
+                onEvent(t.name, TaskStatus.Failed)
             }
             TaskResult.UpToDate -> {
                 skipped.add(t.name); if (t !is AlwaysRun) cache.put(t.name, inFp, t.outputs.fingerprint().value)
@@ -317,9 +322,12 @@ class TaskExecutorImpl(
     private fun perTask(ctx: TaskContext, t: Task): TaskContext = object : TaskContext {
         override val progress get() = ctx.progress
         override fun checkCanceled() = ctx.checkCanceled()
-        override fun logger() = ctx.logger()
+        // logger() inherits the interface default → routes to this buildLog, which stamps the task below.
         override val diagnostics = DiagnosticSink { d ->
             ctx.diagnostics.report(if (d.task == null) d.copy(task = t.name) else d)
+        }
+        override val buildLog = BuildLogSink { e ->
+            ctx.buildLog.log(if (e.task == null) e.copy(task = t.name) else e)
         }
     }
 }
@@ -328,18 +336,24 @@ class TaskExecutorImpl(
  * A no-frills [TaskContext]: a sink logger, a structured-diagnostic sink, and a progress reporter,
  * optionally cancellable via [canceled]. [onDiagnostic] receives every diagnostic a task streams (already
  * task-tagged by the engine); it defaults to a no-op so a text-only caller can ignore the channel.
+ *
+ * Both the plain [log] string callback and the structured [onLog] callback see every transcript line: a
+ * line logged through `ctx.logger()` arrives as a [BuildLogLevel.INFO] [BuildLogEntry] (task-tagged by the
+ * engine), so a caller can take whichever shape it wants. [onLog] is how a host gets the level/task/time.
  */
 class SimpleTaskContext(
     private val log: (String) -> Unit = {},
     private val onDiagnostic: (BuildDiagnostic) -> Unit = {},
     @Volatile var canceled: Boolean = false,
+    private val onLog: (BuildLogEntry) -> Unit = {},
 ) : TaskContext {
     override val progress: ProgressReporter = object : ProgressReporter {
-        override fun report(fraction: Double, message: String?) { if (message != null) log(message) }
+        override fun report(fraction: Double, message: String?) { if (message != null) buildLog.log(BuildLogEntry(message)) }
         override fun checkCanceled() { if (canceled) throw kotlinx.coroutines.CancellationException("canceled") }
         override val isCanceled: Boolean get() = canceled
     }
     override fun checkCanceled() { if (canceled) throw kotlinx.coroutines.CancellationException("canceled") }
-    override fun logger(): (String) -> Unit = log
+    // logger() inherits the interface default → BuildLogEntry(INFO) → buildLog → both callbacks below.
+    override val buildLog = BuildLogSink { e -> log(e.message); onLog(e) }
     override val diagnostics = DiagnosticSink { onDiagnostic(it) }
 }

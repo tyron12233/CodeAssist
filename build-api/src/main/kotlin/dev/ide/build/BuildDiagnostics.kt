@@ -78,3 +78,39 @@ fun interface DiagnosticSink {
         val NOOP = DiagnosticSink { }
     }
 }
+
+/**
+ * The level of a raw transcript line ([BuildLogEntry]) — distinct from a structured [BuildDiagnostic].
+ * Most task chatter is [INFO]; the engine marks a task failure [ERROR]. Drives the build console's
+ * per-line color and its level filter. (The structured, navigable problems still live in [BuildDiagnostic].)
+ */
+enum class BuildLogLevel { DEBUG, INFO, WARN, ERROR }
+
+/**
+ * One line of the build's raw transcript — the structured form of a `ctx.logger()` line (see
+ * [TaskContext.buildLog]). [message] is the same text `logger()` always carried; [level], [task], and
+ * [timestampMs] are the added structure so a console can color, group-by-task, and time-stamp output.
+ * [task] is left null by the producer and filled in by the engine (the running [TaskName]); [timestampMs]
+ * is wall-clock epoch millis, 0 until a host stamps it.
+ */
+data class BuildLogEntry(
+    val message: String,
+    val level: BuildLogLevel = BuildLogLevel.INFO,
+    val task: TaskName? = null,
+    val timestampMs: Long = 0L,
+)
+
+/**
+ * The streaming target for the build's raw transcript (see [TaskContext.buildLog]). The engine supplies
+ * one per run, tags each entry with the running task, and forwards it to the host. The legacy
+ * `ctx.logger()` string channel routes here as [BuildLogLevel.INFO] entries, so every existing task keeps
+ * logging unchanged while a host that wants structure reads [BuildLogEntry]s.
+ */
+fun interface BuildLogSink {
+    fun log(entry: BuildLogEntry)
+
+    companion object {
+        /** Discards everything — the default for contexts that don't care about the structured transcript. */
+        val NOOP = BuildLogSink { }
+    }
+}
