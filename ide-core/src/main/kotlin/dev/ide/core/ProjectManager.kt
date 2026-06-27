@@ -58,6 +58,9 @@ class ProjectManager private constructor(
     /** On-device live custom-view runtime (from :ide-android) so the layout preview renders live custom
      *  views in every opened project, not just the first-run demo. */
     private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+    /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader, so runtime
+     *  (non-bundled) Kotlin compiler plugins can be applied on ART. Null on desktop (URLClassLoader default). */
+    private val kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
 ) {
     init {
         Files.createDirectories(projectsRoot)
@@ -119,12 +122,12 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir, appContainer = applicationContainer)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, appContainer = applicationContainer)
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. */
     fun open(rootPath: String): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, sharedCachesRoot = homeDir, appContainer = applicationContainer)
+        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, appContainer = applicationContainer)
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
@@ -326,6 +329,9 @@ class ProjectManager private constructor(
             apkInstaller: ApkInstaller? = null,
             /** The host's live custom-view runtime, so the layout preview renders custom views in every project. */
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+            /** The host's ART Kotlin compiler-plugin loader (D8-dex + DexClassLoader), so runtime Kotlin
+             *  compiler plugins can be applied on device. */
+            kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
         ): ProjectManager {
             val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
@@ -342,6 +348,7 @@ class ProjectManager private constructor(
                 dexRunner = dexRunner,
                 apkInstaller = apkInstaller,
                 customViewRuntime = customViewRuntime,
+                kotlinPluginLoader = kotlinPluginLoader,
             )
         }
     }

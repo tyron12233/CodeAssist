@@ -32,12 +32,17 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
      * backend exposes ([dev.ide.lang.SourceAnalyzer.completionContributions]). They are merged into the same run
      * list as the EP contributors and treated uniformly (no privileged backend).
      */
-    suspend fun complete(params: CompletionParams, perCall: List<CompletionContribution> = emptyList()): CompletionResult {
+    suspend fun complete(
+        params: CompletionParams,
+        perCall: List<CompletionContribution> = emptyList(),
+        options: CompletionOptions = CompletionOptions(),
+    ): CompletionResult {
         val sink = BasicCompletionResultSet(params)
 
         val runList = (extensions.extensions(COMPLETION_CONTRIBUTOR_EP) + perCall)
             .filter { it.appliesTo(params.language) }
             .filter { params.position == null || it.pattern.accepts(params.position) }
+            .filter { options.allows(it.contributor.id) }
             .sortedBy { it.order }
 
         for (c in runList) {
@@ -47,7 +52,7 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
 
         val ranked = rank(sink.elements, params)
             .distinctBy { Triple(it.kind, it.label, it.insertText) }
-            .take(MAX_ITEMS)
+            .take(options.maxItems)
         return CompletionResult(
             ranked,
             isIncomplete = sink.isIncomplete,
@@ -78,6 +83,24 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
         // The only built-in: honour the legacy `sortPriority` (lower number = earlier) so existing backend
         // ranking is preserved. Plugins layer extra weighers on top via the EP.
         val BUILT_IN_WEIGHERS = listOf(SortPriorityWeigher)
+    }
+}
+
+/**
+ * User-tunable completion knobs (from the Settings screen), passed per call so a change takes effect on the
+ * next keystroke without rebuilding the engine. [maxItems] caps the ranked list; [postfixTemplates] /
+ * [wordCompletion] drop the corresponding built-in contributors from the run when off.
+ */
+data class CompletionOptions(
+    val maxItems: Int = CompletionEngine.MAX_ITEMS,
+    val postfixTemplates: Boolean = true,
+    val wordCompletion: Boolean = true,
+) {
+    /** Whether the contributor [id] runs under these options (filters the optional built-ins). */
+    fun allows(id: String): Boolean = when (id) {
+        "platform.postfix" -> postfixTemplates
+        "platform.bufferWords" -> wordCompletion
+        else -> true
     }
 }
 

@@ -86,7 +86,20 @@ import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiRenameTarget
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.backend.UiSettings
+import dev.ide.ui.backend.UiAccent
+import dev.ide.ui.backend.UiSettingsPage
+import dev.ide.ui.backend.UiSettingControl
+import dev.ide.ui.backend.UiInspection
 import dev.ide.ui.backend.UiTextEdit
+import dev.ide.core.settings.BuiltInSettingsPages
+import dev.ide.core.settings.IdeSettings
+import dev.ide.core.settings.SettingsStore
+import dev.ide.core.completion.CompletionOptions
+import dev.ide.platform.settings.PreferenceReader
+import dev.ide.platform.settings.SettingControl
+import dev.ide.platform.settings.SettingsPage
+import dev.ide.platform.settings.SettingsScope
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.analytics.AnalyticsService
 import dev.ide.lang.dom.Severity
@@ -770,13 +783,13 @@ class IdeServicesBackend(
 
     /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
      *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
-    suspend fun lowerComposePreview(path: String, functionName: String, text: String): LoweredComposePreview? =
-        preview { services.lowerComposePreview(Paths.get(path), text, functionName) }
+    suspend fun lowerComposePreview(path: String, functionName: String, arity: Int, text: String): LoweredComposePreview? =
+        preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
 
     /** Why [functionName] isn't interpretable yet (lowering diagnostics + offending source), for the preview
      *  panel's not-interpretable state. Lowest-priority engine work; preempted by analysis and completion. */
-    suspend fun composePreviewDiagnostics(path: String, functionName: String, text: String): List<String> =
-        preview { services.composePreviewDiagnostics(Paths.get(path), text, functionName) }
+    suspend fun composePreviewDiagnostics(path: String, functionName: String, arity: Int, text: String): List<String> =
+        preview { services.composePreviewDiagnostics(Paths.get(path), text, functionName, arity) }
 
     /** The project library inputs for the on-device Compose preview's `DexClassLoader` (see
      *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
@@ -798,6 +811,12 @@ class IdeServicesBackend(
 
     override suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
         withContext(Dispatchers.IO) { services.addPlatform(moduleName, coordinate) }
+
+    override suspend fun addFirebase(moduleName: String, artifacts: List<String>): UiAddResult =
+        withContext(Dispatchers.IO) { services.addFirebase(moduleName, artifacts) }
+
+    override suspend fun addGooglePlayServices(moduleName: String, coordinates: List<String>): UiAddResult =
+        withContext(Dispatchers.IO) { services.addGooglePlayServices(moduleName, coordinates) }
 
     override fun removeDependency(moduleName: String, coordinate: String): Boolean =
         services.removeDependency(moduleName, coordinate)
@@ -917,6 +936,192 @@ class IdeServicesBackend(
 
     override fun setPreference(key: String, value: String) {
         manager?.setPreference(key, value)
+    }
+
+    // --- IDE settings (the Settings screen) ---
+    // Two realms: app-global typed settings (theme/editor/completion/analysis behaviour) live in the prefs
+    // file via [settingsStore]; per-project settings (e.g. the dependency conflict policy) live with the
+    // engine. The screen renders a generic page model assembled from the built-in pages plus any a plugin
+    // contributes ([IdeServices.settingsPages]); writes route by page scope and re-apply the effect.
+
+    private val settingsStore = SettingsStore(
+        get = { k -> manager?.preference(k) },
+        set = { k, v -> manager?.setPreference(k, v) },
+    )
+
+    override fun settings(): UiSettings = settingsStore.load().toUi()
+
+    override fun settingsPages(): List<UiSettingsPage> {
+        val svc = activeServices ?: return emptyList()
+        val pages = (BuiltInSettingsPages.all(analyticsAvailable()) + svc.settingsPages()).sortedBy { it.order }
+        return pages.map { toUiPage(it) }
+    }
+
+    override fun setSetting(pageId: String, key: String, value: String) {
+        // The analytics toggle isn't a generic-store value — it routes to the persisted consent decision.
+        if (pageId == BuiltInSettingsPages.PRIVACY && key == BuiltInSettingsPages.ANALYTICS) {
+            setAnalyticsConsent(value.toBooleanStrictOrNull() ?: false)
+            return
+        }
+        val page = findPage(pageId) ?: return
+        val fullKey = settingKey(pageId, key)
+        if (page.scope == SettingsScope.PROJECT) activeServices?.setProjectPref(fullKey, value)
+        else manager?.setPreference(fullKey, value)
+        applyAfterChange(page, key)
+    }
+
+    override suspend fun invokeSettingAction(pageId: String, key: String): String? {
+        if (pageId == BuiltInSettingsPages.PRIVACY && key == BuiltInSettingsPages.CLEAR_CACHES) {
+            return withContext(Dispatchers.IO) { activeServices?.clearProjectCaches() }
+        }
+        // viewLogs / backup are wired to UI flows by the screen, not here.
+        val page = findPage(pageId) ?: return null
+        return if (isBuiltIn(pageId)) null else page.onAction(key, scopedReader(page))
+    }
+
+    override fun inspections(): List<UiInspection> {
+        val svc = activeServices ?: return emptyList()
+        val profile = svc.inspectionProfile()
+        return svc.registeredAnalyzers().map { a ->
+            UiInspection(
+                id = a.id.value,
+                displayName = a.displayName,
+                language = a.languages.firstOrNull()?.id?.let(::prettyLang) ?: "All",
+                tier = a.tier.name.lowercase().replaceFirstChar { it.uppercase() },
+                enabled = profile.isEnabled(a.id),
+                severity = (profile.severityOverrides[a.id] ?: a.defaultSeverity).toUiSeverity(),
+                defaultSeverity = a.defaultSeverity.toUiSeverity(),
+            )
+        }.sortedWith(compareBy({ it.language }, { it.displayName }))
+    }
+
+    override fun setInspection(id: String, enabled: Boolean, severity: UiSeverity) {
+        activeServices?.setInspection(dev.ide.analysis.AnalyzerId(id), enabled, severity.toDomSeverity())
+    }
+
+    // --- settings helpers ---
+
+    private fun settingKey(pageId: String, key: String) = "settings.$pageId.$key"
+
+    private fun findPage(pageId: String): SettingsPage? =
+        BuiltInSettingsPages.all(analyticsAvailable()).firstOrNull { it.id == pageId }
+            ?: activeServices?.settingsPages()?.firstOrNull { it.id == pageId }
+
+    private fun isBuiltIn(pageId: String): Boolean =
+        BuiltInSettingsPages.all(analyticsAvailable()).any { it.id == pageId }
+
+    /** Read a control's raw stored value (scoped store), or null to fall back to the control default. */
+    private fun readSetting(pageId: String, key: String, project: Boolean): String? {
+        val fullKey = settingKey(pageId, key)
+        return if (project) activeServices?.projectPref(fullKey) else manager?.preference(fullKey)
+    }
+
+    /** A page-local reader handed to a plugin page's hooks (it reads its own control keys). */
+    private fun scopedReader(page: SettingsPage): PreferenceReader = object : PreferenceReader {
+        override fun raw(key: String) = readSetting(page.id, key, page.scope == SettingsScope.PROJECT)
+    }
+
+    private fun applyAfterChange(page: SettingsPage, key: String) {
+        when (page.id) {
+            // Completion knobs feed the engine; everything else built-in is applied UI-side (the UI re-reads
+            // settings()), so there's nothing to push here.
+            BuiltInSettingsPages.COMPLETION -> activeServices?.let { it.completionOptions = currentCompletionOptions() }
+            BuiltInSettingsPages.BUILD -> if (key == BuiltInSettingsPages.CONFLICT_POLICY) {
+                activeServices?.setConflictPolicy(parseConflictPolicy(readSetting(page.id, key, project = true)))
+            }
+            else -> if (!isBuiltIn(page.id)) page.onChanged(key, scopedReader(page)) // plugin pages react themselves
+        }
+    }
+
+    private fun currentCompletionOptions(): CompletionOptions {
+        val s = settingsStore.load()
+        return CompletionOptions(
+            maxItems = s.completionMaxItems,
+            postfixTemplates = s.postfixTemplates,
+            wordCompletion = s.wordCompletion,
+        )
+    }
+
+    private fun parseConflictPolicy(value: String?): dev.ide.deps.ConflictPolicy = when (value) {
+        BuiltInSettingsPages.CONFLICT_PINNED -> dev.ide.deps.ConflictPolicy.PINNED
+        BuiltInSettingsPages.CONFLICT_FAIL -> dev.ide.deps.ConflictPolicy.FAIL_ON_CONFLICT
+        else -> dev.ide.deps.ConflictPolicy.NEWEST
+    }
+
+    private fun toUiPage(page: SettingsPage): UiSettingsPage {
+        val project = page.scope == SettingsScope.PROJECT
+        return UiSettingsPage(
+            id = page.id,
+            title = page.title,
+            iconId = page.iconId,
+            scope = if (project) "project" else "app",
+            controls = page.controls().map { toUiControl(page.id, it, project) },
+            inspectionsSection = BuiltInSettingsPages.isInspectionsPage(page),
+        )
+    }
+
+    private fun toUiControl(pageId: String, c: SettingControl, project: Boolean): UiSettingControl {
+        val raw = readSetting(pageId, c.key, project)
+        return when (c) {
+            is SettingControl.Toggle -> {
+                val v = if (pageId == BuiltInSettingsPages.PRIVACY && c.key == BuiltInSettingsPages.ANALYTICS) analyticsConsent() == true
+                else raw?.toBooleanStrictOrNull() ?: c.default
+                UiSettingControl.Toggle(c.key, c.title, c.description, v, c.advanced, c.group)
+            }
+            is SettingControl.IntSlider -> UiSettingControl.Slider(
+                c.key, c.title, c.description, (raw?.trim()?.toIntOrNull() ?: c.default).coerceIn(c.min, c.max),
+                c.min, c.max, c.step, c.unit, c.advanced, c.group,
+            )
+            is SettingControl.Choice -> UiSettingControl.Choice(
+                c.key, c.title, c.description, raw ?: c.default,
+                c.options.map { UiSettingControl.Choice.Option(it.value, it.label) }, c.advanced, c.group,
+            )
+            is SettingControl.Text -> UiSettingControl.Text(c.key, c.title, c.description, raw ?: c.default, c.placeholder, c.advanced, c.group)
+            is SettingControl.Action -> UiSettingControl.Action(c.key, c.title, c.description, c.buttonLabel, c.destructive, c.advanced, c.group)
+        }
+    }
+
+    private fun IdeSettings.toUi(): UiSettings = UiSettings(
+        themeMode = themeMode,
+        accent = if (accent == IdeSettings.ACCENT_TEAL) UiAccent.Teal else UiAccent.Violet,
+        editorFontScale = editorFontScale,
+        codeFont = codeFont,
+        fontLigatures = fontLigatures,
+        inlayHints = inlayHints,
+        semanticHighlighting = semanticHighlighting,
+        codeFolding = codeFolding,
+        completionAutoPopup = completionAutoPopup,
+        completionDelayMs = completionDelayMs,
+        completionMaxItems = completionMaxItems,
+        postfixTemplates = postfixTemplates,
+        wordCompletion = wordCompletion,
+        analyzeOnTheFly = analyzeOnTheFly,
+        reparseDelayMs = reparseDelayMs,
+        wordWrap = wordWrap,
+        wrapIndent = wrapIndent,
+        twoAxisScroll = twoAxisScroll,
+        pinchZoom = pinchZoom,
+    )
+
+    private fun Severity.toUiSeverity(): UiSeverity = when (this) {
+        Severity.ERROR -> UiSeverity.Error
+        Severity.WARNING -> UiSeverity.Warning
+        Severity.INFO -> UiSeverity.Info
+        Severity.HINT -> UiSeverity.Hint
+    }
+
+    private fun UiSeverity.toDomSeverity(): Severity = when (this) {
+        UiSeverity.Error -> Severity.ERROR
+        UiSeverity.Warning -> Severity.WARNING
+        UiSeverity.Info -> Severity.INFO
+        UiSeverity.Hint -> Severity.HINT
+    }
+
+    private fun prettyLang(id: String): String = when (id.lowercase()) {
+        "java" -> "Java"
+        "kotlin" -> "Kotlin"
+        "xml" -> "XML"
+        else -> id.replaceFirstChar { it.uppercase() }
     }
 
     // --- usage analytics (opt-in) ---
@@ -1116,7 +1321,7 @@ class IdeServicesBackend(
 
     override suspend fun searchSymbols(query: String, limit: Int): List<SymbolHit> =
         services.searchSymbols(query, limit).map {
-            SymbolHit(it.name, it.container ?: it.kind, it.kind, it.filePath, it.offset)
+            SymbolHit(it.name, it.container ?: it.kind, it.kind, services.symbolFilePath(it.fileId), it.offset)
         }
 
     override suspend fun searchMembers(query: String, limit: Int): List<SymbolHit> =
@@ -1162,11 +1367,35 @@ class IdeServicesBackend(
         // Purely syntactic (scans for @Preview @Composable) — the interpreter only runs on the Preview button,
         // never per keystroke. Preemptible so it can't block completion; re-runs on the next edit if skipped.
         try {
-            background { services.composePreviews(Paths.get(path), text) }
-                .map { UiComposePreview(it.functionName, it.offset) }
+            background { services.composePreviews(Paths.get(path), text) }.map(::toUiPreview)
         } catch (e: EngineCanceledException) {
             emptyList()
         }
+
+    private fun toUiPreview(p: dev.ide.lang.kotlin.interp.PreviewInfo): UiComposePreview {
+        val c = p.config
+        return UiComposePreview(
+            functionName = p.functionName,
+            offset = p.offset,
+            variantId = p.variantId,
+            label = p.label,
+            group = c.group,
+            arity = p.arity,
+            hasParameter = p.parameter != null,
+            config = dev.ide.ui.backend.UiPreviewConfig(
+                widthDp = c.widthDp,
+                heightDp = c.heightDp,
+                showBackground = c.showBackground,
+                backgroundColor = c.backgroundColor,
+                fontScale = c.fontScale,
+                nightMode = if (c.uiMode != null) c.isNight else null,
+                locale = c.locale,
+                apiLevel = c.apiLevel,
+                showSystemUi = c.showSystemUi,
+                device = c.device,
+            ),
+        )
+    }
 
     override suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
         preview { services.runComposePreview(Paths.get(path), text, functionName) }
