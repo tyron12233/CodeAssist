@@ -11,8 +11,12 @@ import java.io.DataOutput
 /** classNames hit: the FQN, where it came from, and its kind (drives the completion badge + auto-import). */
 data class ClassNameValue(val fqn: String, val origin: IndexOrigin, val kind: String)
 
-/** go-to-symbol hit: declaration name, kind, the source file, and the offset to jump to. */
-data class SymbolValue(val name: String, val kind: String, val filePath: String, val offset: Int, val container: String?)
+/**
+ * go-to-symbol hit: declaration name, kind, the source file, and the offset to jump to. The file is stored
+ * as the interned [fileId] (resolve with `IndexService.filePath`), NOT a path string — a file declaring many
+ * symbols would otherwise repeat its full path once per symbol, both in RAM and on disk.
+ */
+data class SymbolValue(val name: String, val kind: String, val fileId: Int, val offset: Int, val container: String?)
 
 /** member hit: member name, owner type FQN, kind (method/field), and a short signature hint. */
 data class MemberValue(val name: String, val owner: String, val kind: String, val signature: String)
@@ -39,14 +43,14 @@ object StringExternalizer : Externalizer<String> {
 
 object SymbolExternalizer : Externalizer<SymbolValue> {
     override fun write(out: DataOutput, value: SymbolValue) {
-        out.writeUTF(value.name); out.writeUTF(value.kind); out.writeUTF(value.filePath)
+        out.writeUTF(value.name); out.writeUTF(value.kind); out.writeInt(value.fileId)
         out.writeInt(value.offset); out.writeBoolean(value.container != null)
         if (value.container != null) out.writeUTF(value.container)
     }
     override fun read(inp: DataInput): SymbolValue {
-        val name = inp.readUTF(); val kind = inp.readUTF(); val file = inp.readUTF(); val off = inp.readInt()
+        val name = inp.readUTF(); val kind = inp.readUTF(); val fileId = inp.readInt(); val off = inp.readInt()
         val container = if (inp.readBoolean()) inp.readUTF() else null
-        return SymbolValue(name, kind, file, off, container)
+        return SymbolValue(name, kind, fileId, off, container)
     }
 }
 

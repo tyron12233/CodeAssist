@@ -53,6 +53,10 @@ interface IndexInput {
     val unitName: String?
     /** Source file path for project-source inputs (null for library/SDK units). */
     val sourcePath: Path?
+    /** The interned, per-project-stable file id of a project-SOURCE unit (see the index's file-id table), or
+     *  -1 for library/SDK units that have no project file. Lets a source value store the id instead of
+     *  repeating the full path string; resolve it back with [IndexService.filePath]. */
+    val fileId: Int get() = -1
     fun bytes(): ByteArray
     fun text(): String?
     fun dom(): ParsedFile?
@@ -127,6 +131,9 @@ interface IndexService {
 
     /** Cheap incremental re-index of a single changed source file. */
     suspend fun reindexSource(path: Path, text: String)
+
+    /** Resolve a source value's interned [IndexInput.fileId] back to its file path, or null if unknown. */
+    fun filePath(id: Int): String? = null
 
     /** Drop all built data — in-memory and the on-disk cache — so the next [ensureUpToDate] rebuilds from scratch. */
     suspend fun invalidate() {}

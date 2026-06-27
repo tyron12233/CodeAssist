@@ -16,10 +16,14 @@ import dev.ide.index.classEntryToFqn
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 private val CLASS = IndexId("test.classNames")
+private val SRC = IndexId("test.sourceSymbols")
 
 /** Exercises the generic engine: JDK enumeration + JPMS visibility filter, fuzzy, and cache reuse. */
 class IndexEngineTest {
@@ -154,6 +158,159 @@ class IndexEngineTest {
             assertTrue(svc.prefix<ClassNameValue>(CLASS, "List", 50).any { it.value.fqn == "java.util.List" }, "rebuild after invalidate")
         } finally {
             cache.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Two AAR `classes.jar`s live at different paths but share the file NAME (every exploded AAR is a
+     * `classes.jar`). When they also share size + mtime, the old `filename+size+mtime` content key collided,
+     * so the second artifact reused the first's content-addressed segment and was NEVER indexed — its classes
+     * then resolved nowhere (the JDT name env's authoritative "not found", which broke e.g. the
+     * AppCompatActivity supertype chain across appcompat/fragment/activity/core AARs). The content key is now
+     * path-aware, so two same-named jars index independently. Constrained ⇒ serial build, so a regression
+     * collides deterministically rather than racing.
+     */
+    @Test
+    fun sameNamedJarsAtDifferentPathsDoNotCollide() {
+        val cache = Files.createTempDirectory("idx")
+        val a = Files.createTempDirectory("aarA")
+        val b = Files.createTempDirectory("aarB")
+        try {
+            // Equal entry-name length (15) + equal data length ⇒ STORED zips of identical byte size.
+            val jarA = a.resolve("classes.jar").also { storedJar(it, "com/a/Foo.class", byteArrayOf(1, 2)) }
+            val jarB = b.resolve("classes.jar").also { storedJar(it, "com/b/Bar.class", byteArrayOf(3, 4)) }
+            assertEquals(Files.size(jarA), Files.size(jarB), "precondition: jars must be the same size to force the old collision")
+            // ...and the same mtime: the final discriminator in the old key.
+            val t = java.nio.file.attribute.FileTime.fromMillis(1_600_000_000_000L)
+            Files.setLastModifiedTime(jarA, t); Files.setLastModifiedTime(jarB, t)
+
+            // 1 MB cap ⇒ constrained ⇒ serial indexing, so a collision (if present) is deterministic.
+            val svc = IndexServiceImpl(listOf(TestClassIndex), cache, blockCacheBytes = 1L * 1024 * 1024)
+            runBlocking { svc.ensureUpToDate(IndexScope(libraryJars = listOf(jarA, jarB))) }
+
+            val foo = svc.prefix<ClassNameValue>(CLASS, "Foo", 50).map { it.value.fqn }.toList()
+            val bar = svc.prefix<ClassNameValue>(CLASS, "Bar", 50).map { it.value.fqn }.toList()
+            assertTrue("com.a.Foo" in foo, "first classes.jar must index; got $foo")
+            assertTrue("com.b.Bar" in bar, "second same-named classes.jar must ALSO index (no content-hash collision); got $bar")
+        } finally {
+            cache.toFile().deleteRecursively(); a.toFile().deleteRecursively(); b.toFile().deleteRecursively()
+        }
+    }
+
+    /** A source-symbol index over `.java` files that counts how many files it actually (re)parses, so a test
+     *  can assert the engine re-indexes ONLY changed files across "launches" (fresh service instances). */
+    private class CountingSourceIndex(val indexed: AtomicInteger) : IndexExtension<String, ClassNameValue> {
+        override val id = SRC
+        override val version = 1
+        override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+        override val valueExternalizer: Externalizer<ClassNameValue> = ClassNameExternalizer
+        override val matching = MatchingMode.PREFIX_AND_FUZZY
+        override val inputFilter = InputFilter { it.unitName?.endsWith(".java") == true }
+        override fun index(input: IndexInput): Map<String, Collection<ClassNameValue>> {
+            indexed.incrementAndGet()
+            val name = input.unitName!!.substringAfterLast('/').removeSuffix(".java")
+            // Stash the interned file id in `kind` so a test can read it back and resolve it via filePath().
+            return mapOf(name to listOf(ClassNameValue(name, input.origin, input.fileId.toString())))
+        }
+    }
+
+    /**
+     * The source side is rebuilt into RAM each launch, but with a persisted per-file cache (keyed by interned
+     * file id) only files whose (size, mtime) changed are re-read + re-parsed; unchanged files reuse their
+     * stored entries, and deleted files drop out. This is what stops a re-open from re-indexing the whole
+     * project's source.
+     */
+    @Test
+    fun reindexesOnlyChangedSourceFilesAcrossLaunches() {
+        val cache = Files.createTempDirectory("idx")
+        val srcCache = Files.createTempDirectory("idxsrc")
+        val src = Files.createTempDirectory("src")
+        try {
+            val a = src.resolve("A.java"); Files.writeString(a, "class A {}")
+            val b = src.resolve("B.java"); Files.writeString(b, "class B {}")
+            val counter = AtomicInteger(0)
+            val ext = CountingSourceIndex(counter)
+            fun svc() = IndexServiceImpl(listOf(ext), cache, sourceCacheRoot = srcCache)
+            val scope = IndexScope(sourceRoots = listOf(src))
+
+            // Cold start: both files indexed.
+            runBlocking { svc().ensureUpToDate(scope) }
+            assertEquals(2, counter.get(), "cold start indexes both source files")
+
+            // Relaunch, nothing changed: zero re-parses, both still queryable.
+            counter.set(0)
+            val s2 = svc()
+            runBlocking { s2.ensureUpToDate(scope) }
+            assertEquals(0, counter.get(), "unchanged relaunch must re-parse no source files")
+            assertTrue(s2.prefix<ClassNameValue>(SRC, "A", 10).any { it.value.fqn == "A" }, "A reused from cache")
+            assertTrue(s2.prefix<ClassNameValue>(SRC, "B", 10).any { it.value.fqn == "B" }, "B reused from cache")
+
+            // Edit A (new content + bumped mtime): only A is re-parsed on the next launch.
+            Files.writeString(a, "class A { int x; }")
+            Files.setLastModifiedTime(a, FileTime.fromMillis(Files.getLastModifiedTime(a).toMillis() + 5000))
+            counter.set(0)
+            val s3 = svc()
+            runBlocking { s3.ensureUpToDate(scope) }
+            assertEquals(1, counter.get(), "only the edited file is re-parsed on relaunch")
+
+            // Delete B: zero re-parses, and B drops out of the index.
+            Files.delete(b)
+            counter.set(0)
+            val s4 = svc()
+            runBlocking { s4.ensureUpToDate(scope) }
+            assertEquals(0, counter.get(), "a deletion triggers no re-parse")
+            assertTrue(s4.prefix<ClassNameValue>(SRC, "B", 10).none(), "deleted file's symbols must be dropped")
+            assertTrue(s4.prefix<ClassNameValue>(SRC, "A", 10).any { it.value.fqn == "A" }, "surviving file stays indexed")
+        } finally {
+            cache.toFile().deleteRecursively(); srcCache.toFile().deleteRecursively(); src.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Source values reference a file by its interned id (paths held once in the table), so the id must (a)
+     * resolve back to the right path and (b) stay STABLE across launches — otherwise a persisted value's
+     * fileId would point at the wrong file after a restart.
+     */
+    @Test
+    fun fileIdsAreStableAcrossLaunchesAndResolveToPaths() {
+        val cache = Files.createTempDirectory("idx")
+        val srcCache = Files.createTempDirectory("idxsrc")
+        val src = Files.createTempDirectory("src")
+        try {
+            val a = src.resolve("A.java"); Files.writeString(a, "class A {}")
+            val b = src.resolve("B.java"); Files.writeString(b, "class B {}")
+            val ext = CountingSourceIndex(AtomicInteger(0))
+            fun svc() = IndexServiceImpl(listOf(ext), cache, sourceCacheRoot = srcCache)
+            val scope = IndexScope(sourceRoots = listOf(src))
+
+            val s1 = svc(); runBlocking { s1.ensureUpToDate(scope) }
+            val idA = s1.prefix<ClassNameValue>(SRC, "A", 10).first().value.kind.toInt()
+            val idB = s1.prefix<ClassNameValue>(SRC, "B", 10).first().value.kind.toInt()
+            assertEquals(a.toString(), s1.filePath(idA), "fileId must resolve to A's path")
+            assertEquals(b.toString(), s1.filePath(idB), "fileId must resolve to B's path")
+
+            // Relaunch (fresh service over the same persisted cache): ids must be identical and still resolve,
+            // and the value loaded straight off disk must carry the same id.
+            val s2 = svc(); runBlocking { s2.ensureUpToDate(scope) }
+            assertEquals(idA, s2.prefix<ClassNameValue>(SRC, "A", 10).first().value.kind.toInt(), "A keeps its id across launches")
+            assertEquals(idB, s2.prefix<ClassNameValue>(SRC, "B", 10).first().value.kind.toInt(), "B keeps its id across launches")
+            assertEquals(a.toString(), s2.filePath(idA), "persisted fileId still resolves after relaunch")
+        } finally {
+            cache.toFile().deleteRecursively(); srcCache.toFile().deleteRecursively(); src.toFile().deleteRecursively()
+        }
+    }
+
+    /** A single-entry STORED (uncompressed) jar: file size is a deterministic function of the entry-name
+     *  length + data length, so two such jars can be forced to an identical size (and mtime) on disk. */
+    private fun storedJar(path: Path, entryName: String, data: ByteArray) {
+        java.util.zip.ZipOutputStream(Files.newOutputStream(path)).use { z ->
+            val e = java.util.zip.ZipEntry(entryName).apply {
+                method = java.util.zip.ZipEntry.STORED
+                size = data.size.toLong(); compressedSize = data.size.toLong()
+                crc = java.util.zip.CRC32().apply { update(data) }.value
+                time = 1_600_000_000_000L // fixed, so both jars differ only in name/data bytes, not size
+            }
+            z.putNextEntry(e); z.write(data); z.closeEntry()
         }
     }
 }
