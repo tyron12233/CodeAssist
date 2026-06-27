@@ -71,6 +71,10 @@ object AndroidIde {
             context.applicationContext, androidJar.toPath(),
             File(context.cacheDir, "preview"), Build.VERSION.SDK_INT,
         )
+        // Loads runtime (non-bundled) Kotlin compiler plugins on ART: D8-dex the plugin classpath + DexClassLoader.
+        val kotlinPluginLoader = ArtKotlinPluginLoader(
+            androidJar.toPath(), File(context.cacheDir, "kotlinc-plugins").toPath(), Build.VERSION.SDK_INT,
+        )
         // Project data left by previous app versions (same `com.tyron.code` package, so the same external
         // files dir survives a Play update). Swept into backups, and recovered into the picker by
         // `importLegacyProjects` when in a loadable format. Two known locations:
@@ -90,6 +94,7 @@ object AndroidIde {
             deviceApiLevel = Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
             customViewRuntime = previewRuntime,
+            kotlinPluginLoader = kotlinPluginLoader,
         )
 
         // Recover projects left in internal storage by a build from before the move to external app storage
