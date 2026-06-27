@@ -1,6 +1,5 @@
 package dev.ide.lang.kotlin.completion
 
-import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
@@ -12,23 +11,22 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.KotlinPerf
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
+import dev.ide.lang.kotlin.parse.climbTo
+import dev.ide.lang.kotlin.parse.identifierPrefixBefore
+import dev.ide.lang.kotlin.interp.PreviewConstants
 import dev.ide.lang.kotlin.resolve.ComposableContext
 import dev.ide.lang.kotlin.resolve.KotlinResolver
-import dev.ide.lang.kotlin.symbols.DefaultImports
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
-import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.Modifier
-import dev.ide.lang.resolve.Symbol
 import dev.ide.lang.resolve.SymbolKind
-import dev.ide.lang.resolve.TypeRef
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClassBody
-import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -42,17 +40,19 @@ import org.jetbrains.kotlin.psi.KtStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeList
 import org.jetbrains.kotlin.psi.KtTypeReference
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.KtValueArgumentName
 
 /**
- * Kotlin code completion, using the completion-token technique: splice a dummy identifier at
- * the caret on a copy of the buffer, parse it, find the marker's element, and classify the position:
- *   • selector of a (safe-)qualified expression -> MEMBER_ACCESS -> receiver members ∪ extensions
- *   • bare name in expression position        -> NAME_REFERENCE -> scope symbols + visible types
- *   • inside a type reference                  -> TYPE_REFERENCE -> visible classifiers
- * Candidates are prefix-filtered, ranked (prefix/proximity), and mapped to neutral [CompletionItem]s.
+ * Kotlin code completion, using the completion-token technique: splice a dummy identifier at the caret on a
+ * copy of the buffer, parse it, find the marker's element, and classify the position ([CompletionPosition]):
+ *   • selector of a (safe-)qualified expression -> MemberAccess  -> receiver members ∪ extensions (or a package's members)
+ *   • inside a type reference                    -> TypeReference -> visible classifiers
+ *   • a bare name in expression position         -> NameReference -> scope symbols + visible types
+ * Candidates are prefix-filtered, ranked (prefix/proximity), and mapped to neutral [CompletionItem]s by
+ * [KotlinCompletionItems]; auto-import edits come from [KotlinAutoImport].
  *
  * In expression position three extra contributions are merged ahead of the plain candidates:
  *   • named arguments  — inside a call's argument list, the callee's not-yet-supplied parameter names (`name = `)
@@ -105,114 +105,18 @@ class KotlinCompletion(
             return CompletionResult(emptyList(), isIncomplete = false, replacementRange = replaceRange)
         }
         val nameRef = climbTo<KtNameReferenceExpression>(markerLeaf)
+        // A type/callable completed by simple name needs an `import` unless already visible; the auto-import
+        // context answers that and in-scope candidates rank first, so accepting an unimported symbol imports it.
+        val autoImport = KotlinAutoImport(kt, resolver.fileContext)
 
-        // A type used by simple name needs an `import` unless it's already visible (same package, a default
-        // import, or already imported). That import is attached as an additionalEdit and in-scope candidates
-        // rank first, so the popup reflects what is visible and accepting an unimported type auto-imports it.
-        val visiblePackages = (DefaultImports.STAR_PACKAGES +
-            resolver.fileContext.packageName +
-            resolver.fileContext.imports.filter { it.isStar }.map { it.packageName }).toHashSet()
-        val explicitImports = resolver.fileContext.imports.filter { !it.isStar }.map { it.fqn }.toHashSet()
-        val anchor = importAnchorOf(kt)
-
-        fun importEditForType(fqn: String): List<TextEdit> {
-            if ('.' !in fqn) return emptyList()
-            val pkg = fqn.substringBeforeLast('.')
-            if (pkg in visiblePackages || fqn in explicitImports) return emptyList()
-            return listOf(TextEdit(TextRange(anchor.offset, anchor.offset), anchor.prefix + "import " + fqn + anchor.suffix))
-        }
-
-        fun importEditFor(s: KotlinSymbol): List<TextEdit> {
-            val fqn = when {
-                s.kind in TYPE_KINDS -> (s.type as? KotlinType)?.qualifiedName
-                // A top-level callable (println, listOf, ln, …) or top-level extension (`Int.dp`, `String.trim`)
-                // is imported by its own FQN `package.name` — Kotlin imports the callable, not a facade class.
-                // `ln`/`PI` from kotlin.math and `dp`/`sp` from compose.ui.unit aren't default-imported, so they
-                // need an import on accept. A *member* extension (declared inside a class/scope, like Compose's
-                // `RowScope.weight`) is NOT importable that way — its dispatch receiver must already be in scope
-                // — so it gets no import; [isTopLevelCallable] keeps it out.
-                s.packageName != null && (s.kind == SymbolKind.METHOD || s.kind == SymbolKind.FIELD) &&
-                    (!s.isExtension || isTopLevelCallable(s)) ->
-                    "${s.packageName}.${s.name}"
-                else -> null
-            } ?: return emptyList()
-            return importEditForType(fqn)
-        }
-
-        // Extra items contributed ahead of plain symbol candidates: override stubs, named-argument labels,
-        // and expected-type literals/enum constants. They carry their own insert text, so they bypass the
-        // symbol→item pipeline below.
-        val extra = ArrayList<CompletionItem>()
-        var packageCompletion = false
-        var expected: KotlinType? = null
-        // Captured for the trailing keyword/template/postfix contributions assembled after ranking: a postfix
-        // keywords/live-templates apply at a name/statement position; they're appended after the real symbol
-        // items, so a symbol always wins within a match tier. (Postfix templates `expr.if`/`expr.val` are now
-        // contributed via `POSTFIX_TEMPLATE_EP` + the engine's generic PostfixContributor — see KotlinPostfixTemplates.)
-        var keywordContext = false
-
-        val raw: List<KotlinSymbol> = KotlinPerf.span("candidates") { when {
-            nameRef != null && isSelectorOfQualified(nameRef) -> {
-                val qualified = nameRef.parent as KtQualifiedExpression
-                val receiver = qualified.receiverExpression
-                val recvType = KotlinPerf.span("infer") { resolver.inferType(receiver) }
-                if (recvType != null) {
-                    // Instance receiver (`listOf("").`) → instance members + extensions; type receiver
-                    // (`Int.`) → companion ("static") members + nested. Built-ins now provide the real Kotlin
-                    // members + companion (from .kotlin_builtins), so `List.` is naturally empty and `Int.`
-                    // shows MAX_VALUE. Constructors are never reached via `.`.
-                    val typeReceiver = resolver.isTypeReceiver(receiver)
-                    // Prefix-aware: with large classpaths (Compose) a receiver's member+extension set is huge,
-                    // so push the typed prefix into the symbol service rather than enumerating then filtering.
-                    val members = KotlinPerf.span("members") {
-                        service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
-                    }.filter { memberVisibleOn(it, typeReceiver) }
-                    // A bare `Type.` where the type has a companion object resolves to the companion instance,
-                    // so the companion's own members (Compose's `Color.Black`/`White`) and the extensions
-                    // applicable to it (`Modifier.Companion : Modifier` → `Modifier.padding`/`background`) are
-                    // in scope too — instance-filtered, not static-filtered.
-                    if (typeReceiver) {
-                        members + service.companionMembersFor(recvType.qualifiedName, prefix)
-                            .filter { memberVisibleOn(it, typeReceiver = false) }
-                    } else {
-                        members
-                    }
-                } else {
-                    // Receiver is a package/FQN prefix (`java.util.`, `android.`) — complete its sub-packages
-                    // + the types in it. (A type-or-instance receiver was handled above; this is the package
-                    // path, inserted fully-qualified, so it needs no auto-import.)
-                    val pkg = packagePathOf(receiver)
-                    if (pkg != null) { packageCompletion = true; service.packageMembers(pkg, prefix) } else emptyList()
-                }
+        val pos = KotlinPerf.span("candidates") {
+            when (val where = classifyPosition(markerLeaf, nameRef)) {
+                is CompletionPosition.MemberAccess -> memberAccessCandidates(where.receiver, resolver, prefix)
+                CompletionPosition.TypeReference -> PositionResult(service.typeNamesByPrefix(prefix))
+                CompletionPosition.NameReference -> nameReferenceCandidates(markerLeaf, offset, prefix, resolver, autoImport)
             }
-            inTypePosition(markerLeaf) -> service.typeNamesByPrefix(prefix)
-            else -> {
-                keywordContext = true // a name/statement/expression position — keywords + live templates apply
-                // Member-declaration position in a class body → offer overridable inherited members as stubs.
-                if (isOverridePosition(markerLeaf)) {
-                    resolver.overridableMembersAt(offset)
-                        .filter { it.name.startsWith(prefix, ignoreCase = true) }
-                        .forEach { extra += overrideItem(it) }
-                }
-                // Inside a call's argument list → offer the callee's not-yet-supplied parameter names. When the
-                // caret is on the NAME of an argument that is ALREADY named (`foo(contai|nerColor = x)`), the
-                // ` = ` is already present, so insert the bare name (the editor replaces the whole name token) —
-                // no duplicated `=`. The arg being edited carries the marker, so its (now-garbled) name never
-                // matches a real parameter and so doesn't suppress its own re-completion.
-                namedArgCallOf(markerLeaf)?.let { call ->
-                    val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
-                    val supplied = suppliedArgNames(call)
-                    resolver.callParameters(call)
-                        .filter { it.name !in supplied && it.name.startsWith(prefix, ignoreCase = true) }
-                        .forEach { extra += namedArgItem(it, bareName = editingName) }
-                }
-                // The type the context wants → offer literals/enum constants and rank assignable candidates first.
-                expected = resolver.expectedTypeAt(offset)
-                expected?.let { extra += expectedExtras(it, prefix) { fqn -> importEditForType(fqn) } }
-                KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
-                    KotlinPerf.span("typeNames") { service.typeNamesByPrefix(prefix) }
-            }
-        } }
+        }
+        val raw = pos.raw
 
         // Inside a @Composable context (a `setContent`/`Column` content lambda, a @Composable function body),
         // float @Composable callables to the top — Android Studio's Compose weigher. NOT a filter: non-composable
@@ -224,18 +128,18 @@ class KotlinCompletion(
         val candidates = KotlinPerf.span("rank") { raw.asSequence()
             .filter { it.name != "_" && it.name.startsWith(prefix, ignoreCase = true) && MARKER !in it.name }
             .distinctBy { it.name + "#" + it.kind + "#" + (it.signature ?: "") }
-            .map { Candidate(it, if (packageCompletion) emptyList() else importEditFor(it)) }
-            .sortedWith(rank(prefix, expected, composableContext))
+            .map { Candidate(it, if (pos.packageCompletion) emptyList() else importEditFor(it, autoImport)) }
+            .sortedWith(rank(prefix, pos.expected, composableContext))
             .take(MAX_ITEMS)
             .toList() }
 
-        val symbolItems = candidates.map { toItem(it.symbol, it.importEdit, followingChar) }
+        val symbolItems = candidates.map { KotlinCompletionItems.toItem(it.symbol, it.importEdit, followingChar) }
 
         // Keyword / live-template contributions, appended after the symbol candidates so a real symbol always
         // sorts first within a match tier; the editor's match-tier re-sort still floats an exact keyword/template
         // match (`if`, `for`) to the top once the user types it whole.
         val tail = ArrayList<CompletionItem>()
-        if (keywordContext) {
+        if (pos.keywordContext) {
             tail += KotlinKeywords.itemsFor(
                 leaf = markerLeaf,
                 prefix = prefix,
@@ -249,10 +153,106 @@ class KotlinCompletion(
         // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
         // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
         val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
-        val items = ((extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
+        val items = ((pos.extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
             .distinctBy { it.kind to it.label }
             .take(MAX_ITEMS)
         return CompletionResult(items = items, isIncomplete = raw.size > MAX_ITEMS, replacementRange = replaceRange)
+    }
+
+    // --- position classification + per-position candidate sourcing ---
+
+    /** Where the caret sits, deciding which candidate set applies (see [KotlinCompletion]'s class doc). */
+    private sealed interface CompletionPosition {
+        /** `receiver.<caret>` — the selector of a qualified expression. */
+        class MemberAccess(val receiver: KtExpression) : CompletionPosition
+        /** Inside a type reference — only classifiers belong. */
+        object TypeReference : CompletionPosition
+        /** A bare name in expression/statement position. */
+        object NameReference : CompletionPosition
+    }
+
+    /** The raw candidates for a position plus the side outputs the assembly stage needs (extra non-symbol
+     *  items, an expected type to rank by, and the package-completion / keyword-context flags). */
+    private class PositionResult(
+        val raw: List<KotlinSymbol>,
+        val extra: List<CompletionItem> = emptyList(),
+        val expected: KotlinType? = null,
+        val packageCompletion: Boolean = false,
+        val keywordContext: Boolean = false,
+    )
+
+    private fun classifyPosition(markerLeaf: PsiElement?, nameRef: KtNameReferenceExpression?): CompletionPosition = when {
+        nameRef != null && isSelectorOfQualified(nameRef) ->
+            CompletionPosition.MemberAccess((nameRef.parent as KtQualifiedExpression).receiverExpression)
+        inTypePosition(markerLeaf) -> CompletionPosition.TypeReference
+        else -> CompletionPosition.NameReference
+    }
+
+    /** `receiver.<caret>` — instance members + extensions, type-receiver statics + companion members, or, when
+     *  the receiver is a pure package/FQN path, that package's sub-packages + types (inserted fully-qualified). */
+    private fun memberAccessCandidates(receiver: KtExpression, resolver: KotlinResolver, prefix: String): PositionResult {
+        val recvType = KotlinPerf.span("infer") { resolver.inferType(receiver) }
+        if (recvType != null) {
+            // Instance receiver (`listOf("").`) → instance members + extensions; type receiver (`Int.`) →
+            // companion ("static") members + nested. Built-ins provide the real Kotlin members + companion (from
+            // .kotlin_builtins), so `List.` is naturally empty and `Int.` shows MAX_VALUE. Constructors are never
+            // reached via `.`. Prefix-aware: with large classpaths (Compose) a receiver's member+extension set is
+            // huge, so push the typed prefix into the symbol service rather than enumerating then filtering.
+            val typeReceiver = resolver.isTypeReceiver(receiver)
+            val members = KotlinPerf.span("members") {
+                service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
+            }.filter { memberVisibleOn(it, typeReceiver) }
+            // A bare `Type.` where the type has a companion object resolves to the companion instance, so the
+            // companion's own members (Compose's `Color.Black`/`White`) and the extensions applicable to it
+            // (`Modifier.Companion : Modifier` → `Modifier.padding`/`background`) are in scope too — instance-filtered.
+            val raw = if (typeReceiver) {
+                members + service.companionMembersFor(recvType.qualifiedName, prefix)
+                    .filter { memberVisibleOn(it, typeReceiver = false) }
+            } else {
+                members
+            }
+            return PositionResult(raw)
+        }
+        // Receiver is a package/FQN prefix (`java.util.`, `android.`) — complete its sub-packages + the types in
+        // it (inserted fully-qualified, so it needs no auto-import).
+        val pkg = packagePathOf(receiver)
+        return if (pkg != null) PositionResult(service.packageMembers(pkg, prefix), packageCompletion = true)
+        else PositionResult(emptyList())
+    }
+
+    /** A bare name in expression/statement position: scope symbols + visible types, plus the override-stub,
+     *  named-argument, and expected-type extras, and the keyword/live-template context. */
+    private fun nameReferenceCandidates(
+        markerLeaf: PsiElement?, offset: Int, prefix: String, resolver: KotlinResolver, autoImport: KotlinAutoImport,
+    ): PositionResult {
+        val extra = ArrayList<CompletionItem>()
+        // Member-declaration position in a class body → offer overridable inherited members as stubs.
+        if (isOverridePosition(markerLeaf)) {
+            resolver.overridableMembersAt(offset)
+                .filter { it.name.startsWith(prefix, ignoreCase = true) }
+                .forEach { extra += KotlinCompletionItems.overrideItem(it) }
+        }
+        // Inside a call's argument list → offer the callee's not-yet-supplied parameter names. When the caret is
+        // on the NAME of an argument that is ALREADY named (`foo(contai|nerColor = x)`), the ` = ` is already
+        // present, so insert the bare name (the editor replaces the whole name token) — no duplicated `=`. The
+        // arg being edited carries the marker, so its (now-garbled) name never matches a real parameter and so
+        // doesn't suppress its own re-completion.
+        namedArgCallOf(markerLeaf)?.let { call ->
+            val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
+            val supplied = suppliedArgNames(call)
+            resolver.callParameters(call)
+                .filter { it.name !in supplied && it.name.startsWith(prefix, ignoreCase = true) }
+                .forEach { extra += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
+        }
+        // Inside an annotation's argument list → its parameter names (ranked first), plus the enum-ish constants
+        // for @Preview's uiMode/device which aren't recoverable from the parameter type alone.
+        extra += annotationArgExtras(markerLeaf, prefix, resolver)
+        // The type the context wants → offer literals/enum constants and rank assignable candidates first.
+        val expected = resolver.expectedTypeAt(offset)
+        expected?.let { extra += expectedExtras(it, prefix, autoImport) }
+        val raw = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
+            KotlinPerf.span("typeNames") { service.typeNamesByPrefix(prefix) }
+        return PositionResult(raw, extra = extra, expected = expected, keywordContext = true)
     }
 
     // --- override / named-argument / expected-type extras ---
@@ -277,26 +277,6 @@ class KotlinCompletion(
         return false
     }
 
-    private fun overrideItem(m: KotlinSymbol): CompletionItem {
-        val isFun = m.kind == SymbolKind.METHOD
-        val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
-        val header =
-            if (isFun) "override fun ${m.name}${paramListOf(m.signature)}" + (ret?.let { ": $it" } ?: "")
-            else "override val ${m.name}" + (ret?.let { ": $it" } ?: "")
-        val todo = "TODO(\"Not yet implemented\")"
-        val insert = if (isFun) "$header {\n    $todo\n}" else "$header\n    get() = $todo"
-        val sel = insert.indexOf(todo)
-        return CompletionItem(
-            label = header,
-            insertText = insert,
-            kind = if (isFun) CompletionItemKind.METHOD else CompletionItemKind.FIELD,
-            detail = "override",
-            sortPriority = -2,
-            symbol = m,
-            caret = if (sel >= 0) CaretAction.Select(sel, todo.length) else CaretAction.AtEnd,
-        )
-    }
-
     /** The call whose argument list contains [leaf] (for named-argument completion), or null. */
     private fun namedArgCallOf(leaf: PsiElement?): KtCallExpression? {
         val arg = climbTo<KtValueArgument>(leaf) ?: return null
@@ -307,31 +287,67 @@ class KotlinCompletion(
     private fun suppliedArgNames(call: KtCallExpression): Set<String> =
         call.valueArguments.mapNotNull { it.getArgumentName()?.asName?.identifier }.toHashSet()
 
-    /** A named-argument label. [bareName] inserts only the parameter name (the caret is on an already-named
-     *  argument, so ` = ` is present and must not be duplicated); otherwise it inserts `name = `. */
-    private fun namedArgItem(p: dev.ide.lang.kotlin.resolve.KotlinResolver.ParamInfo, bareName: Boolean = false): CompletionItem = CompletionItem(
-        label = "${p.name} =",
-        insertText = if (bareName) p.name else "${p.name} = ",
-        kind = CompletionItemKind.PARAMETER,
-        detail = p.type?.let { typeLabel(it) },
-        sortPriority = -1,
-    )
+    private val previewAnnotationNames = setOf("Preview") + PreviewConstants.builtinMultiPreviews.keys
+
+    /**
+     * Completion inside ANY annotation's argument list. At a name position, the annotation's not-yet-supplied
+     * parameter names (resolved from its type, ranked first as named-argument items); for `@Preview` (or a
+     * MultiPreview) they fall back to the bundled argument list when the androidx type isn't on the resolved
+     * classpath. At the value of `@Preview`'s `uiMode`/`device`, the `Configuration.UI_MODE_*` / `Devices.*`
+     * constants the argument accepts (not recoverable from the `Int`/`String` parameter type alone). Empty
+     * outside an annotation.
+     */
+    private fun annotationArgExtras(leaf: PsiElement?, prefix: String, resolver: KotlinResolver): List<CompletionItem> {
+        val arg = climbTo<KtValueArgument>(leaf) ?: return emptyList()
+        val list = arg.parent as? KtValueArgumentList ?: return emptyList()
+        val ann = list.parent as? KtAnnotationEntry ?: return emptyList()
+        val short = ann.shortName?.asString()
+        val out = ArrayList<CompletionItem>()
+        val argName = arg.getArgumentName()?.asName?.identifier
+        val editingName = climbTo<KtValueArgumentName>(leaf) != null
+        // Value position of a known @Preview constant-typed argument (the marker sits in the value, not the name).
+        if (argName != null && !editingName && short in previewAnnotationNames) {
+            fun constItem(qualifier: String, name: String, detail: String) {
+                val insert = "$qualifier.$name"
+                out += CompletionItem(insert, insert, CompletionItemKind.FIELD, detail = detail, sortPriority = -1)
+            }
+            when (argName) {
+                "uiMode" -> PreviewConstants.uiModeConstants.keys
+                    .filter { it.startsWith(prefix, ignoreCase = true) }.forEach { constItem("Configuration", it, "uiMode") }
+                "device" -> PreviewConstants.deviceConstants.keys
+                    .filter { it.startsWith(prefix, ignoreCase = true) }.forEach { constItem("Devices", it, "device") }
+            }
+        }
+        // Name position (a bare argument, or editing an argument's name) → the annotation's parameter names.
+        if (argName == null || editingName) {
+            val supplied = list.arguments.mapNotNull { it.getArgumentName()?.asName?.identifier }.toHashSet()
+            val params = resolver.annotationParameters(ann)
+                .filter { it.name !in supplied && it.name.startsWith(prefix, ignoreCase = true) }
+            if (params.isNotEmpty()) {
+                params.forEach { out += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
+            } else if (short in previewAnnotationNames) {
+                // The androidx @Preview type isn't on the resolved classpath (or the index is still building) —
+                // fall back to the bundled argument list so @Preview completion works regardless. Same item shape
+                // as a resolved named argument (label `name =`, inserts `name = `).
+                PreviewConstants.previewArgNames
+                    .filter { it !in supplied && it.startsWith(prefix, ignoreCase = true) }
+                    .forEach { out += CompletionItem("$it =", "$it = ", CompletionItemKind.PARAMETER, detail = "@Preview", sortPriority = -1) }
+            }
+        }
+        return out
+    }
 
     /** Literals/constants the expected type admits: `true`/`false` for Boolean, `Enum.CONSTANT` for an enum,
      *  and the type's own companion constants (`Color.Transparent`, `Alignment.Center`) — each with an
      *  auto-import of the type when it isn't already visible. Powers value completion after `param = `. */
-    private fun expectedExtras(
-        expected: KotlinType,
-        prefix: String,
-        importEditForType: (String) -> List<TextEdit>,
-    ): List<CompletionItem> {
+    private fun expectedExtras(expected: KotlinType, prefix: String, autoImport: KotlinAutoImport): List<CompletionItem> {
         val out = ArrayList<CompletionItem>()
         val simple = expected.qualifiedName.substringAfterLast('.')
         fun constItem(c: KotlinSymbol, kind: CompletionItemKind) {
             val insert = "$simple.${c.name}"
             out += CompletionItem(
                 label = insert, insertText = insert, kind = kind, detail = simple,
-                sortPriority = -1, symbol = c, additionalEdits = importEditForType(expected.qualifiedName),
+                sortPriority = -1, symbol = c, additionalEdits = autoImport.editForType(expected.qualifiedName),
             )
         }
         if (expected.qualifiedName == "kotlin.Boolean") {
@@ -356,6 +372,8 @@ class KotlinCompletion(
         return out
     }
 
+    // --- ranking ---
+
     private class Candidate(val symbol: KotlinSymbol, val importEdit: List<TextEdit>)
 
     private fun rank(prefix: String, expected: KotlinType?, composableContext: Boolean): Comparator<Candidate> = compareBy(
@@ -363,7 +381,7 @@ class KotlinCompletion(
         { if (it.symbol.name.startsWith(prefix)) 0 else 1 },       // case-sensitive prefix first
         { if (composableContext && it.symbol.isComposable) 0 else 1 }, // @Composable callables first in a @Composable context
         { if (it.importEdit.isEmpty()) 0 else 1 },                 // in-scope (no import) before needs-import
-        { proximity(it.symbol.kind) },                            // locals/members before library
+        { KotlinCompletionItems.proximity(it.symbol.kind) },       // locals/members before library
         { it.symbol.name.length },
         { it.symbol.name },
     )
@@ -375,110 +393,23 @@ class KotlinCompletion(
         return runCatching { expected.isAssignableFrom(t) }.getOrDefault(false)
     }
 
-    private fun proximity(kind: SymbolKind): Int = when (kind) {
-        SymbolKind.LOCAL_VARIABLE, SymbolKind.PARAMETER -> 0
-        SymbolKind.FIELD, SymbolKind.METHOD -> 1
-        SymbolKind.CLASS, SymbolKind.INTERFACE, SymbolKind.ENUM -> 3
-        else -> 2
-    }
+    // --- auto-import (symbol -> FQN; the visibility/anchor work lives in KotlinAutoImport) ---
 
-    private fun toItem(s: KotlinSymbol, importEdit: List<TextEdit>, followingChar: Char? = null): CompletionItem {
-        val isFunction = s.kind == SymbolKind.METHOD || s.kind == SymbolKind.CONSTRUCTOR
-        val hasParams = isFunction && s.signature?.startsWith("()") == false && s.signature.startsWith("(")
-        // The call syntax may already be present after the caret (`foo|(x)`, `Column| { }`) — don't add a second
-        // `(`/`{`; just insert the name and let the existing arguments/lambda stand.
-        val callSyntaxFollows = followingChar == '(' || followingChar == '{'
-        val trailingLambda = if (isFunction && !callSyntaxFollows) trailingLambdaParam(s) else null
-        val (insert, caret) = when {
-            // A function whose LAST parameter is a function type → insert a trailing lambda. Only a SOLE
-            // parameter (`remember { }`, `forEach { }`, or a Composable whose only slot is the content lambda)
-            // drops the parens and lands the caret in the braces. Any other parameters — even on a @Composable
-            // like `Column(modifier, ...) { }` — keep `()` and put the caret inside them so those args are fillable.
-            trailingLambda != null -> {
-                val lambdaOnly = s.paramTypes.size == 1
-                if (lambdaOnly) "${s.name} { }" to CaretAction.At(s.name.length + 2)      // `name { | }`
-                else "${s.name}() { }" to CaretAction.At(s.name.length + 1)               // `name(|) { }`
-            }
-            isFunction && callSyntaxFollows -> s.name to CaretAction.AtEnd                 // parens/braces already there
-            isFunction && hasParams -> "${s.name}()" to CaretAction.At(s.name.length + 1)  // between the parens
-            isFunction -> "${s.name}()" to CaretAction.AtEnd                               // no-arg call
-            else -> s.name to CaretAction.AtEnd
-        }
-        // Read like Kotlin source: the label is `println(message: String)` (name + params adjacent), and the
-        // return/value type is the grayed detail on the right (`Unit`).
-        val label = if (isFunction) s.name + paramListOf(s.signature) else s.name
-        val detail = buildString {
-            s.type?.let { append(typeLabel(it)) } // return type (funcs) / declared type (vals, props)
-            if (s.isExtension) append(if (isEmpty()) "(extension)" else "  (extension)")
-        }.ifBlank { null }
-        // Right-aligned origin: a top-level callable's package, else its declaring class (skip the synthetic
-        // `…Kt` file facade — that's an implementation detail, not a place the user thinks of the symbol living).
-        val container = s.packageName ?: s.declaringClassFqn?.takeUnless { it.endsWith("Kt") }
-        return CompletionItem(
-            label = label,
-            insertText = insert,
-            kind = itemKind(s.kind),
-            detail = detail,
-            container = container,
-            documentation = s.documentation(), // javadoc/KDoc from attached sources → the popup's doc panel
-            sortPriority = proximity(s.kind),
-            symbol = s,
-            additionalEdits = importEdit,
-            caret = caret,
-        )
-    }
-
-    /** The callee's LAST value parameter when it is a (non-vararg) function type — the slot a trailing lambda
-     *  fills (`Column`'s `@Composable () -> Unit` content, `forEach`'s `(T) -> Unit`). Null otherwise, so only
-     *  genuinely lambda-taking calls get the `{ }` insert. */
-    private fun trailingLambdaParam(s: KotlinSymbol): KotlinType? {
-        if (s.paramTypes.isEmpty()) return null
-        if (s.varargParamIndex >= 0 && s.varargParamIndex == s.paramTypes.lastIndex) return null // last is vararg, not a lambda
-        val last = s.paramTypes.last() as? KotlinType ?: return null
-        return last.takeIf { TypeRendering.isFunctionType(it.qualifiedName) }
-    }
-
-    /** Extract the parameter list `(message: String)` from a `(message: String): Unit` signature. */
-    private fun paramListOf(sig: String?): String {
-        if (sig.isNullOrEmpty()) return "()"
-        val i = sig.lastIndexOf("): ")
-        return when {
-            i >= 0 -> sig.substring(0, i + 1)
-            sig.startsWith("(") -> sig // a constructor's "(params)" with no return
-            else -> "()"
-        }
-    }
-
-    /** Where to splice a new `import`: after the last import, else after the package, else at the top. */
-    private data class ImportAnchor(val offset: Int, val prefix: String, val suffix: String)
-
-    private fun importAnchorOf(kt: KtFile): ImportAnchor {
-        kt.importDirectives.lastOrNull()?.let { return ImportAnchor(it.textRange.endOffset, "\n", "") }
-        val pkg = kt.packageDirective
-        if (pkg != null && pkg.textLength > 0 && pkg.text.isNotBlank()) {
-            return ImportAnchor(pkg.textRange.endOffset, "\n\n", "")
-        }
-        return ImportAnchor(0, "", "\n\n")
-    }
-
-    /** A short type label for the popup: `List<String>?`, `Greeter`, … (simple name + args + nullability). */
-    private fun typeLabel(type: TypeRef): String =
-        (type as? KotlinType)?.toString() ?: type.qualifiedName.substringAfterLast('.')
-
-    private fun itemKind(kind: SymbolKind): CompletionItemKind = when (kind) {
-        SymbolKind.METHOD -> CompletionItemKind.METHOD
-        SymbolKind.CONSTRUCTOR -> CompletionItemKind.CONSTRUCTOR
-        SymbolKind.FIELD -> CompletionItemKind.FIELD
-        SymbolKind.LOCAL_VARIABLE -> CompletionItemKind.VARIABLE
-        SymbolKind.PARAMETER -> CompletionItemKind.PARAMETER
-        SymbolKind.CLASS -> CompletionItemKind.CLASS
-        SymbolKind.INTERFACE -> CompletionItemKind.INTERFACE
-        SymbolKind.ENUM -> CompletionItemKind.ENUM
-        SymbolKind.ENUM_CONSTANT -> CompletionItemKind.ENUM_CONSTANT
-        SymbolKind.ANNOTATION_TYPE -> CompletionItemKind.ANNOTATION_TYPE
-        SymbolKind.RECORD -> CompletionItemKind.RECORD
-        SymbolKind.PACKAGE -> CompletionItemKind.PACKAGE
-        SymbolKind.TYPE_PARAMETER -> CompletionItemKind.TYPE_PARAMETER
+    private fun importEditFor(s: KotlinSymbol, autoImport: KotlinAutoImport): List<TextEdit> {
+        val fqn = when {
+            s.kind in TYPE_KINDS -> (s.type as? KotlinType)?.qualifiedName
+            // A top-level callable (println, listOf, ln, …) or top-level extension (`Int.dp`, `String.trim`) is
+            // imported by its own FQN `package.name` — Kotlin imports the callable, not a facade class. `ln`/`PI`
+            // from kotlin.math and `dp`/`sp` from compose.ui.unit aren't default-imported, so they need an import
+            // on accept. A *member* extension (declared inside a class/scope, like Compose's `RowScope.weight`) is
+            // NOT importable that way — its dispatch receiver must already be in scope — so it gets no import;
+            // [isTopLevelCallable] keeps it out.
+            s.packageName != null && (s.kind == SymbolKind.METHOD || s.kind == SymbolKind.FIELD) &&
+                (!s.isExtension || isTopLevelCallable(s)) ->
+                "${s.packageName}.${s.name}"
+            else -> null
+        } ?: return emptyList()
+        return autoImport.editForType(fqn)
     }
 
     /**
@@ -492,6 +423,8 @@ class KotlinCompletion(
         val declaring = s.declaringClassFqn ?: return true
         return declaring.substringAfterLast('.').endsWith("Kt")
     }
+
+    // --- position predicates / leaf utilities ---
 
     /** Instance receiver → non-static members (+ extensions); type receiver → statics + nested types. */
     private fun memberVisibleOn(s: KotlinSymbol, typeReceiver: Boolean): Boolean {
@@ -511,7 +444,7 @@ class KotlinCompletion(
 
     /** The dotted path of a receiver that is a pure name/qualified-name chain (`java`, `java.util`), for
      *  package completion. Null for anything else (a call, literal, indexing — not a package prefix). */
-    private fun packagePathOf(expr: org.jetbrains.kotlin.psi.KtExpression): String? = when (expr) {
+    private fun packagePathOf(expr: KtExpression): String? = when (expr) {
         is KtNameReferenceExpression -> expr.getReferencedName()
         is KtQualifiedExpression -> {
             val r = packagePathOf(expr.receiverExpression)
@@ -527,21 +460,6 @@ class KotlinCompletion(
     }
 
     private fun inTypePosition(leaf: PsiElement?): Boolean = climbTo<KtTypeReference>(leaf) != null
-
-    private inline fun <reified T> climbTo(start: PsiElement?): T? {
-        var n = start
-        while (n != null) {
-            if (n is T) return n
-            n = n.parent
-        }
-        return null
-    }
-
-    private fun identifierPrefixBefore(text: String, offset: Int): String {
-        var i = offset
-        while (i > 0 && (text[i - 1].isLetterOrDigit() || text[i - 1] == '_')) i--
-        return text.substring(i, offset)
-    }
 
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.

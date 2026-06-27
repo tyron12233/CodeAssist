@@ -71,6 +71,10 @@ class KotlinSymbolService(
 
     @Volatile private var overlay: Map<String, String> = emptyMap()
     @Volatile private var cachedModel: ModuleSourceModel? = null
+    // Path -> VirtualFile for every source `.kt` walked into the model, so a cross-file consumer (the Compose
+    // preview's reachable-declaration lowering) can re-open the file declaring a reached type/function. Rebuilt
+    // alongside the model, so it tracks files added/removed since the last build.
+    @Volatile private var sourceVfByPath: Map<String, VirtualFile> = emptyMap()
 
     // Per-file parse cache so a model rebuild reparses ONLY the files whose effective text changed (the one
     // being edited) and reuses every other file's prior parse. Parsing is the dominant cost, so this keeps a
@@ -165,12 +169,48 @@ class KotlinSymbolService(
     private fun buildModel(): ModuleSourceModel {
         val ov = overlay
         val files = ArrayList<SourceFile>()
+        val vfByPath = HashMap<String, VirtualFile>()
         val seen = HashSet<String>()
         for (root in sourceRoots) walkKt(root) { vf ->
-            if (seen.add(vf.path)) sourceFileFor(vf, ov)?.let(files::add)
+            if (seen.add(vf.path)) {
+                vfByPath[vf.path] = vf
+                sourceFileFor(vf, ov)?.let(files::add)
+            }
         }
+        sourceVfByPath = vfByPath
         return ModuleSourceModel(files)
     }
+
+    /** A project-source `.kt` file plus the text the preview should lower (the live overlay buffer when the file
+     *  is open and edited, else its disk content) — what cross-file Compose-preview lowering re-opens. */
+    class PreviewSourceFile(val file: VirtualFile, val text: String)
+
+    private fun previewSourceFile(path: String?): PreviewSourceFile? {
+        if (path == null) return null
+        model() // ensure sourceVfByPath is populated for this overlay generation
+        val vf = sourceVfByPath[path] ?: return null
+        val text = overlay[path] ?: runCatching { vf.readText().toString() }.getOrNull() ?: return null
+        return PreviewSourceFile(vf, text)
+    }
+
+    /** The source file declaring top-level type [fqn] (or, failing an exact FQN match, one whose SIMPLE name
+     *  matches — a constructor callee carries only the simple name), or null when no project source declares it
+     *  (a library/synthetic type). For cross-file Compose-preview lowering. */
+    fun sourceFileDeclaringType(fqn: String): PreviewSourceFile? {
+        val m = model()
+        val raw = m.classByFqn[fqn]
+            ?: m.classByFqn.values.firstOrNull { it.simpleName == fqn.substringAfterLast('.') }
+        return previewSourceFile(raw?.ctx?.path)
+    }
+
+    /** The source files declaring a top-level function named [name] — for cross-file preview lowering of a call
+     *  to a function defined in another file. Distinct by path. */
+    fun sourceFilesDeclaringFunction(name: String): List<PreviewSourceFile> =
+        model().topLevel.asSequence()
+            .filter { it.isFunction && it.receiverText == null && it.name == name }
+            .mapNotNull { previewSourceFile(it.ctx.path) }
+            .distinctBy { it.file.path }
+            .toList()
 
     private fun sourceFileFor(vf: VirtualFile, ov: Map<String, String>): SourceFile? {
         val path = vf.path

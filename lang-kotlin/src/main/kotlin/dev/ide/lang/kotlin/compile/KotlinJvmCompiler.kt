@@ -2,11 +2,25 @@ package dev.ide.lang.kotlin.compile
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
+import org.jetbrains.kotlin.cli.common.config.addKotlinSourceRoots
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
+import org.jetbrains.kotlin.cli.create
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
+import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
+import org.jetbrains.kotlin.cli.jvm.config.addJavaSourceRoots
+import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
+import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
+import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
+import org.jetbrains.kotlin.config.CommonConfigurationKeys
+import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.JVMConfigurationKeys
+import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.config.Services
 import java.io.File
 import java.nio.file.Path
@@ -29,7 +43,10 @@ import java.nio.file.Path
  * compile still has a stdlib even when no such dependency is declared. Never the host runtime's jar (absent
  * on ART).
  */
-class KotlinJvmCompiler {
+class KotlinJvmCompiler(
+    /** Loads runtime (non-bundled) plugins' registrars. Desktop default; `:ide-android` injects a D8/dex one. */
+    private val pluginLoader: KotlinPluginLoader = DefaultKotlinPluginLoader,
+) {
 
     /**
      * [outputs] maps each compiled source file to the `.class` files it produced (populated via
@@ -75,6 +92,15 @@ class KotlinJvmCompiler {
         friendPaths: List<Path> = emptyList(),
         compilerPlugins: List<Path> = emptyList(),
         pluginOptions: List<String> = emptyList(),
+        /**
+         * Classpaths of plugins to load + register **programmatically** (one per plugin), as opposed to the
+         * `-Xplugin` jars in [compilerPlugins]. When non-empty the compile drops to a manual bootstrap that
+         * loads each plugin's `CompilerPluginRegistrar` through [pluginLoader] (a `URLClassLoader` on the
+         * desktop, a D8-dexed `DexClassLoader` on ART) and registers it. The default empty list keeps the
+         * fast, unchanged CLI path. Any [compilerPlugins] jars are folded into this path too (loaded as
+         * registrars) so a mixed compile still applies them.
+         */
+        runtimePluginClasspaths: List<List<Path>> = emptyList(),
     ): Result {
         if (kotlinSources.isEmpty()) return Result(true, emptyList())
         // Keep the compiler's application environment (and its warm jar FS) alive across builds. Must be set
@@ -90,6 +116,16 @@ class KotlinJvmCompiler {
         // kotlinc resolves Java sources for interop but only emits Kotlin classes; both are free args.
         val sourcePaths = (kotlinSources + javaSources).map { it.toString() }
         val fullClasspath = (classpath + boot + listOfNotNull(stdlibJar())).distinct()
+
+        // Runtime-loaded plugins can't ride the CLI `-Xplugin` path (it can't define a jar's classes on ART),
+        // so a compile that uses one drops to the programmatic-registration bootstrap below.
+        if (runtimePluginClasspaths.isNotEmpty()) {
+            return compileViaRegistrars(
+                kotlinSources, javaSources, fullClasspath, outputDir, jvmTarget, onArt, friendPaths,
+                pluginRegistrarClasspaths = (if (compilerPlugins.isNotEmpty()) listOf(compilerPlugins) else emptyList()) + runtimePluginClasspaths,
+                pluginOptions = pluginOptions,
+            )
+        }
 
         val args = K2JVMCompilerArguments().apply {
             freeArgs = sourcePaths
@@ -119,6 +155,59 @@ class KotlinJvmCompiler {
                 return Result(false, collector.messages + "kotlinc threw: ${it.javaClass.name}: ${it.message}")
             }
         return Result(exit == ExitCode.OK && !collector.hasErrors(), collector.messages, collector.outputs())
+    }
+
+    /**
+     * The programmatic-registration compile path (used when [compile] is given runtime plugins). It builds
+     * the configuration the CLI way ([CompilerConfiguration.create] registers the plugin extension storage),
+     * loads each plugin's `CompilerPluginRegistrar` through [pluginLoader] and registers it, then runs codegen
+     * directly via `compileBunchOfSources`. The configuration mirrors the CLI path's (boot/`-no-jdk`, friend
+     * paths, output-file reporting) so the emitted classes and the source->`.class` mapping match.
+     *
+     * This is what makes a non-bundled plugin work on ART: the registrar is defined by a dexed `DexClassLoader`
+     * the [pluginLoader] returns, not the CLI's `URLClassLoader` (which can't define a jar's classes there).
+     */
+    @OptIn(ExperimentalCompilerApi::class, CompilerConfiguration.Internals::class, org.jetbrains.kotlin.K1Deprecation::class)
+    private fun compileViaRegistrars(
+        kotlinSources: List<Path>,
+        javaSources: List<Path>,
+        fullClasspath: List<Path>,
+        outputDir: Path,
+        jvmTarget: String,
+        onArt: Boolean,
+        friendPaths: List<Path>,
+        pluginRegistrarClasspaths: List<List<Path>>,
+        pluginOptions: List<String>,
+    ): Result {
+        val registrars = pluginRegistrarClasspaths.flatMap { loadCompilerPluginRegistrars(it, pluginLoader) }
+        val collector = RecordingMessageCollector()
+        if (pluginOptions.isNotEmpty()) {
+            // `-P` options are parsed by each plugin's CommandLineProcessor, which this path doesn't run yet.
+            // No registered plugin uses options today, so surface it rather than silently drop it.
+            collector.report(CompilerMessageSeverity.WARNING, "plugin options ignored on the registrar path: $pluginOptions", null)
+        }
+        val configuration = CompilerConfiguration.create(messageCollector = collector).apply {
+            put(CommonConfigurationKeys.MODULE_NAME, outputDir.fileName?.toString() ?: "main")
+            put(JVMConfigurationKeys.OUTPUT_DIRECTORY, outputDir.toFile())
+            JvmTarget.fromString(jvmTargetOf(jvmTarget))?.let { put(JVMConfigurationKeys.JVM_TARGET, it) }
+            put(CommonConfigurationKeys.REPORT_OUTPUT_FILES, true)
+            addJvmClasspathRoots(fullClasspath.map { it.toFile() })
+            addKotlinSourceRoots(kotlinSources.map { it.toString() })
+            addJavaSourceRoots(javaSources.map { it.toFile() })
+            if (friendPaths.isNotEmpty()) put(JVMConfigurationKeys.FRIEND_PATHS, friendPaths.map { it.toString() })
+            if (onArt) put(JVMConfigurationKeys.NO_JDK, true)
+            else put(JVMConfigurationKeys.JDK_HOME, File(System.getProperty("java.home")))
+            registrars.forEach { add(CompilerPluginRegistrar.COMPILER_PLUGIN_REGISTRARS, it) }
+        }
+        val disposable = Disposer.newDisposable("kotlin-registrar-compile")
+        val ok = try {
+            val env = KotlinCoreEnvironment.createForProduction(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES)
+            runCatching { KotlinToJVMBytecodeCompiler.compileBunchOfSources(env) }
+                .getOrElse { return Result(false, collector.messages + "kotlinc threw: ${it.javaClass.name}: ${it.message}", collector.outputs()) }
+        } finally {
+            Disposer.dispose(disposable)
+        }
+        return Result(ok && !collector.hasErrors(), collector.messages, collector.outputs())
     }
 
     /**

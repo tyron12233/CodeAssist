@@ -546,6 +546,30 @@ class KotlinTreeResolverTest {
     }
 
     @Test
+    fun singleElementListOfResolves() {
+        // `listOf("a")` — the SINGLE-arg form: both `listOf(element: T)` and `listOf(vararg elements: T)` match
+        // the arity, so it must narrow to the fixed-arity element overload rather than tying out.
+        val fn = lower("package demo\nfun f() { listOf(\"a\") }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "single-element listOf should resolve")
+        assertEquals("listOf", call.callee.displayName)
+        assertTrue(fn.isComplete, "single-element listOf should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun listOfSourceDataClassResolves() {
+        // `listOf(User(...))` — the argument is a source type. Its inferred type must not disqualify the generic
+        // `listOf` overloads (a type-parameter parameter accepts any argument). The multi-file preview case.
+        val fn = lower(
+            "package demo\n" +
+                "data class User(val name: String)\n" +
+                "fun f() { listOf(User(name = \"\")) }",
+        )
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "listOf(User(...)) should resolve")
+        assertEquals("listOf", call.callee.displayName)
+        assertTrue(fn.isComplete, "listOf of a source type should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
     fun unknownNamedArgumentBlocksLoweringWithReason() {
         // A typo'd / wrong-version named argument must surface as a lowering diagnostic (so the preview reports
         // it) instead of the dispatcher silently falling back to positional binding and rendering wrong colors.

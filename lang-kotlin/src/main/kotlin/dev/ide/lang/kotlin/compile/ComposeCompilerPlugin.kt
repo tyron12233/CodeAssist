@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -24,12 +25,20 @@ import java.util.zip.ZipFile
  * resolves the registrar through parent delegation to the app classloader — a jar's `.class` bytes can't be
  * defined at runtime on ART. The jar here only serves the service descriptor and the desktop class-load.
  */
-object ComposeCompilerPlugin {
+object ComposeCompilerPlugin : KotlinCompilerPlugin {
     /** The Compose plugin version. Kept in lockstep with `libs.versions.toml` `kotlin` (the plugin ships with it). */
     const val VERSION: String = "2.4.0"
 
     /** The plugin's kotlinc CLI id (the prefix of every `-P plugin:<id>:<k>=<v>` option). */
     const val PLUGIN_ID: String = "androidx.compose.compiler.plugins.kotlin"
+
+    override val pluginId: String get() = PLUGIN_ID
+
+    /** Applies when [classpath] carries the Compose runtime; the module then needs the plugin. Ignores [module]. */
+    override fun appliesTo(module: Module, classpath: List<Path>): Boolean = isComposeModule(classpath)
+
+    /** The bundled plugin jar, or empty when it is not on the classpath (a stripped-down test setup). */
+    override fun classpath(module: Module): List<Path> = listOfNotNull(jar())
 
     /** The class that marks a Compose dependency on a compile classpath — its presence means "apply the plugin". */
     private const val COMPOSABLE_CLASS_ENTRY = "androidx/compose/runtime/Composable.class"

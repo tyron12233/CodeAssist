@@ -13,6 +13,7 @@ import dev.ide.analysis.FixContext
 import dev.ide.analysis.QuickFix
 import dev.ide.analysis.WorkspaceEdit
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.kotlin.KotlinDiagnosticCodes
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.platform.ExtensionRegistry
@@ -36,7 +37,7 @@ class KotlinDiagnosticProvider(override val id: String = "kotlin") : DiagnosticP
         val analyzer = target.resolver as? KotlinSourceAnalyzer ?: return emptyList()
         return analyzer.analyze(target.file).diagnostics.map { d ->
             // The tolerant parser tags syntax errors `kt.syntax`; everything else is a semantic finding.
-            val sid = if (d.code == "kt.syntax") "kotlin.syntax" else "kotlin.semantic"
+            val sid = if (d.code == KotlinDiagnosticCodes.SYNTAX) "kotlin.syntax" else "kotlin.semantic"
             Diagnostic(d.range, d.severity, d.message, DiagnosticSource.Analyzer(AnalyzerId(sid)), d.code)
         }
     }

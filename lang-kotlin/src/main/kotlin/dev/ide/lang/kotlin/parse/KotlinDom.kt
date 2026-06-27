@@ -8,6 +8,7 @@ import dev.ide.lang.dom.NodeKind
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.kotlin.KotlinDiagnosticCodes
 import dev.ide.lang.kotlin.KotlinNodeKinds
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.kotlin.psi.KtBinaryExpression
@@ -137,7 +138,7 @@ class KotlinParsedFile(
                     range = TextRange(r.startOffset, r.endOffset),
                     severity = Severity.ERROR,
                     message = psi.errorDescription ?: "Syntax error",
-                    code = "kt.syntax",
+                    code = KotlinDiagnosticCodes.SYNTAX,
                 )
             }
             var c = psi.firstChild

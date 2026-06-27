@@ -16,8 +16,10 @@ import dev.ide.build.engine.levelOf
 import dev.ide.build.engine.libJars
 import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.sourceFiles
-import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
+import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
+import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
+import dev.ide.lang.kotlin.compile.resolveFor
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
@@ -39,6 +41,9 @@ class KotlinCompileTask(
     override val name: TaskName,
     private val bootClasspath: List<Path>,
     private val compiler: IncrementalKotlinCompiler,
+    /** Kotlin compiler plugins to apply (those whose `appliesTo` matches the module). Defaults to the
+     *  built-ins (Compose); the host passes the `platform.kotlinCompilerPlugin` EP contents. */
+    private val plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS,
 ) : Task {
     private fun upstreamKotlin(): List<Path> = kotlinSiblings(depOutputDirs(module)).filter { Files.isDirectory(it) }
     private fun classpath(): List<Path> = depOutputDirs(module) + upstreamKotlin() + libJars(module)
@@ -61,11 +66,12 @@ class KotlinCompileTask(
         val kt = kotlinSourceFiles(module)
         if (kt.isEmpty()) return TaskResult.Success
         val classpath = classpath()
-        val composePlugin = if (ComposeCompilerPlugin.isComposeModule(classpath + bootClasspath))
-            listOfNotNull(ComposeCompilerPlugin.jar()) else emptyList()
+        val resolved = plugins.resolveFor(module, classpath + bootClasspath)
         val r = compiler.compile(
             kt, sourceFiles(module), classpath, out, levelOf(module.languageLevel),
-            bootClasspath = bootClasspath, compilerPlugins = composePlugin,
+            bootClasspath = bootClasspath,
+            compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
+            runtimePluginClasspaths = resolved.runtimeClasspaths,
         )
         ctx.reportToolDiagnostics("kotlin", r.messages)
         ctx.logger()(":${module.name}:compileKotlin ${if (r.success) "OK" else "FAILED"}")

@@ -388,3 +388,106 @@ fun RNode.children(): List<RNode> = when (this) {
     is RNode.ForEach -> listOf(iterable, body)
     is RNode.Const, is RNode.Name, is RNode.This, is RNode.Break, is RNode.Continue, is RNode.Unsupported -> emptyList()
 }
+
+/** The lowered preview program (`"name/arity"` → function) + source classes — the inputs the interpreter runs
+ *  a preview against. */
+class PreviewModel(
+    val program: Map<String, ResolvedFunction>,
+    val classes: List<ResolvedClass>,
+)
+
+/** One source file's lowered preview model, tagged by [path] so the expander lowers/merges each file once. */
+class PreviewFileModel(
+    val path: String,
+    val program: Map<String, ResolvedFunction>,
+    val classes: List<ResolvedClass>,
+)
+
+/** Resolves a reached cross-file/module declaration to the lowered file(s) that declare it. Implementations:
+ *  a same-module provider (over one [dev.ide.lang.kotlin.symbols.KotlinSymbolService]) and a cross-module
+ *  dispatcher (fanning out across an entry module + its dependency modules' providers). */
+interface PreviewDeclProvider {
+    /** The lowered file declaring top-level type [fqn] (or, failing an exact match, one whose SIMPLE name
+     *  matches — a constructor callee carries only the simple name), or null when none does. */
+    fun fileDeclaringType(fqn: String): PreviewFileModel?
+
+    /** The lowered files declaring a top-level function named [name] — a call may resolve to one defined in
+     *  another file/module. */
+    fun filesDeclaringFunction(name: String): List<PreviewFileModel>
+}
+
+/**
+ * Expand a preview's [seed] (the entry file's lowered program + classes) across files AND modules: follow every
+ * reachable Source declaration the preview touches (a type it constructs/references, a top-level function it
+ * calls, a member's owner, a property/object/enum/`is`/cast reference) to the file that declares it, lower +
+ * merge that file via [provider], and repeat over the newly merged bodies until nothing new is reached. So a
+ * `data class` or helper declared in a sibling file — or in a dependency module — becomes constructible/callable
+ * by the interpreter instead of crashing the render with a missing class.
+ *
+ * The [seed]'s declarations win on a `name/arity` / FQN collision; at most [maxFiles] OTHER files are followed
+ * (a runaway guard — a real preview reaches a handful). [provider] must be idempotent per path; the expander
+ * also de-dups by [PreviewFileModel.path].
+ */
+fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewDeclProvider): PreviewModel {
+    val program = LinkedHashMap<String, ResolvedFunction>(seed.program)
+    val classesByFqn = LinkedHashMap<String, ResolvedClass>()
+    seed.classes.forEach { classesByFqn.putIfAbsent(it.fqn, it) }
+
+    val mergedPaths = hashSetOf(seed.path)
+    val requestedTypes = HashSet<String>()
+    val requestedFns = HashSet<String>()
+    val work = ArrayDeque<RNode>()
+
+    fun enqueueClass(c: ResolvedClass) {
+        c.superCall?.args?.forEach { work.add(it.value) }
+        c.primaryParams.forEach { p -> p.default?.let(work::add) }
+        c.initSteps.forEach(work::add)
+        c.methods.values.forEach { work.add(it.body) }
+        c.enumEntries.forEach { e -> e.args.forEach { work.add(it.value) } }
+    }
+    program.values.forEach { work.add(it.body) }
+    classesByFqn.values.toList().forEach(::enqueueClass)
+
+    fun merge(m: PreviewFileModel) {
+        if (m.path in mergedPaths || mergedPaths.size >= maxFiles) return
+        mergedPaths += m.path
+        m.program.forEach { (k, v) -> if (program.putIfAbsent(k, v) == null) work.add(v.body) }
+        m.classes.forEach { c -> if (classesByFqn.putIfAbsent(c.fqn, c) == null) enqueueClass(c) }
+    }
+    fun requestType(rawName: String?) {
+        val name = rawName?.trimStart('.')?.takeIf { it.isNotBlank() } ?: return
+        if (!requestedTypes.add(name)) return
+        val simple = name.substringAfterLast('.')
+        if (name in classesByFqn || classesByFqn.values.any { it.simpleName == simple }) return
+        provider.fileDeclaringType(name)?.let(::merge)
+    }
+    fun requestFn(name: String, arity: Int) {
+        if ("$name/$arity" in program || !requestedFns.add("$name/$arity")) return
+        provider.filesDeclaringFunction(name).forEach(::merge)
+    }
+
+    while (work.isNotEmpty()) {
+        work.removeFirst().walk { node ->
+            when (node) {
+                is RNode.Call -> {
+                    val callee = node.callee
+                    if (callee is ResolvedCallable.Source) {
+                        val owner = callee.declId.substringBeforeLast('/')
+                        when {
+                            callee.isConstructor -> requestType(callee.displayName) // carries the simple name
+                            node.dispatch == DispatchKind.TOP_LEVEL -> requestFn(callee.displayName, node.args.size)
+                            '.' in owner -> requestType(owner.substringBeforeLast('.')) // a member's owner FQN
+                        }
+                    }
+                }
+                is RNode.Name -> node.binding.referencedClass()?.let(::requestType)
+                is RNode.PropertyGet -> node.binding.referencedClass()?.let(::requestType)
+                is RNode.PropertySet -> node.binding.referencedClass()?.let(::requestType)
+                is RNode.TypeCheck -> requestType(node.typeFqn)
+                is RNode.Cast -> requestType(node.typeFqn)
+                else -> {}
+            }
+        }
+    }
+    return PreviewModel(program, classesByFqn.values.toList())
+}

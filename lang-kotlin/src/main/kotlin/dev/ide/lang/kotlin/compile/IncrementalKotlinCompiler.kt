@@ -48,6 +48,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
         bootClasspath: List<Path> = emptyList(),
         compilerPlugins: List<Path> = emptyList(),
         pluginOptions: List<String> = emptyList(),
+        runtimePluginClasspaths: List<List<Path>> = emptyList(),
     ): Result {
         val kt = kotlinSources.map { it.toAbsolutePath().normalize() }.filter { Files.isRegularFile(it) }
         if (kt.isEmpty()) {                              // no Kotlin left → nothing to emit; clear stale state
@@ -55,14 +56,14 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
             return Result(true, emptyList(), Mode.NOOP)
         }
 
-        val context = contextHash(javaSources, classpath, bootClasspath, jvmTarget, compilerPlugins, pluginOptions)
+        val context = contextHash(javaSources, classpath, bootClasspath, jvmTarget, compilerPlugins, pluginOptions, runtimePluginClasspaths)
         val srcHash = kt.associateWith { fileHash(it) }
         val prev = state(outputDir).read()
 
         // No usable baseline, the interop/classpath context moved, or a source was deleted → full rebuild.
         val removed = prev != null && (prev.srcHash.keys - srcHash.keys).isNotEmpty()
         if (prev == null || prev.context != context || removed) {
-            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions)
+            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths)
         }
 
         val dirty = kt.filter { prev.srcHash[it] != srcHash[it] }
@@ -70,23 +71,23 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
             // No source changed, so the task re-ran for an unrelated reason. Skip only if the output dir still
             // holds exactly what was last produced; if a `.class` was deleted/tampered, rebuild to restore it.
             if (currentClasses(outputDir).toSet() == prev.abi.keys) return Result(true, emptyList(), Mode.NOOP)
-            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions)
+            return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths)
         }
 
-        return incremental(kt, dirty, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, prev, compilerPlugins, pluginOptions)
-            ?: full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions)
+        return incremental(kt, dirty, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, prev, compilerPlugins, pluginOptions, runtimePluginClasspaths)
+            ?: full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths)
     }
 
     /** Whole-module compile into a clean output dir; records a fresh manifest. */
     private fun full(
         kt: List<Path>, javaSources: List<Path>, classpath: List<Path>, outputDir: Path,
         jvmTarget: String, bootClasspath: List<Path>, context: String, srcHash: Map<Path, String>,
-        compilerPlugins: List<Path>, pluginOptions: List<String>,
+        compilerPlugins: List<Path>, pluginOptions: List<String>, runtimePluginClasspaths: List<List<Path>>,
     ): Result {
         clearDir(outputDir)
         Files.createDirectories(outputDir)
         val r = compiler.compile(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath,
-            compilerPlugins = compilerPlugins, pluginOptions = pluginOptions)
+            compilerPlugins = compilerPlugins, pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths)
         if (!r.success) return Result(false, r.messages, Mode.FULL, kt)
         val srcToOut = relativizeMapping(r.outputs, outputDir, srcHash.keys)
         val abi = snapshotAll(outputDir)
@@ -106,7 +107,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
     private fun incremental(
         kt: List<Path>, dirty: List<Path>, javaSources: List<Path>, classpath: List<Path>, outputDir: Path,
         jvmTarget: String, bootClasspath: List<Path>, context: String, srcHash: Map<Path, String>, prev: State,
-        compilerPlugins: List<Path>, pluginOptions: List<String>,
+        compilerPlugins: List<Path>, pluginOptions: List<String>, runtimePluginClasspaths: List<List<Path>>,
     ): Result? {
         val dirtyOwned = dirty.flatMap { prev.srcToOut[it].orEmpty() }.toSet()           // their prior outputs
         val cleanOwned = (kt - dirty.toSet()).flatMap { prev.srcToOut[it].orEmpty() }.toSet()
@@ -138,7 +139,7 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
         val r = compiler.compile(
             dirty, javaSources, listOf(cleanDir) + classpath, stagingDir, jvmTarget, bootClasspath,
             friendPaths = listOf(cleanDir),
-            compilerPlugins = compilerPlugins, pluginOptions = pluginOptions,
+            compilerPlugins = compilerPlugins, pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths,
         )
         if (!r.success) { clearDir(cleanDir); clearDir(stagingDir); return Result(false, r.messages, Mode.INCREMENTAL, dirty) }
 
@@ -205,13 +206,15 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
     /** A digest of everything-but-the-Kotlin-sources that changes what the Kotlin sources compile to. */
     private fun contextHash(
         javaSources: List<Path>, classpath: List<Path>, boot: List<Path>, jvmTarget: String,
-        compilerPlugins: List<Path>, pluginOptions: List<String>,
+        compilerPlugins: List<Path>, pluginOptions: List<String>, runtimePluginClasspaths: List<List<Path>>,
     ): String {
         val md = MessageDigest.getInstance("SHA-256")
         md.update(jvmTarget.toByteArray(Charsets.UTF_8))
         // Compiler plugins change the emitted bytecode (e.g. Compose's synthetic params), so applying/
-        // changing one must invalidate a baseline produced without it.
+        // changing one must invalidate a baseline produced without it. Runtime (programmatically-registered)
+        // plugins count too.
         compilerPlugins.map { it.toAbsolutePath().normalize().toString() }.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
+        runtimePluginClasspaths.flatten().map { it.toAbsolutePath().normalize().toString() }.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
         pluginOptions.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
         boot.map { it.toAbsolutePath().normalize().toString() }.sorted().forEach { md.update(it.toByteArray(Charsets.UTF_8)) }
         // Java interop sources AND classpath entries (dep outputs, libs) both get a cheap path+size+mtime

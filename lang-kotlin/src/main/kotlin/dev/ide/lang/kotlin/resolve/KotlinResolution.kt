@@ -43,6 +43,7 @@ import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.KtWhenExpression
@@ -1165,6 +1166,37 @@ class KotlinResolver(
     /** ASM surfaces stripped Java parameters as `p0`, `p1`, … — useless as named arguments, so they're hidden. */
     private fun isSyntheticParamName(n: String): Boolean =
         n.length >= 2 && n[0] == 'p' && n.drop(1).all { it.isDigit() }
+
+    /** Members an annotation interface carries that are NOT user-declared elements (so they're not parameters). */
+    private val ANNOTATION_OBJECT_METHODS = setOf("equals", "hashCode", "toString", "annotationType")
+
+    /** The named parameters of the annotation [entry]'s type, for argument completion inside `@Foo(…)`. A
+     *  Kotlin annotation (source or `@Metadata` binary) exposes them as its constructor params; a Java
+     *  annotation (`@interface`) exposes each element as a 0-arg member method, whose NAME is the parameter.
+     *  Distinct by name, synthetic (`p0`) and the inherited Object/annotation methods dropped. */
+    fun annotationParameters(entry: KtAnnotationEntry): List<ParamInfo> {
+        val short = entry.shortName?.asString() ?: return emptyList()
+        val fqn = service.resolveTypeName(short, fileContext) ?: return emptyList()
+        val out = LinkedHashMap<String, ParamInfo>()
+        fun addParams(symbols: List<KotlinSymbol>) {
+            for (s in symbols) s.paramNames.forEachIndexed { i, n ->
+                if (n.isNotEmpty() && !isSyntheticParamName(n)) {
+                    out.getOrPut(n) { ParamInfo(n, s.paramTypes.getOrNull(i) as? KotlinType) }
+                }
+            }
+        }
+        addParams(service.constructorsOf(fqn))
+        service.sourceClass(fqn)?.constructors?.let { ctors -> addParams(ctors.map { sourceCtorSymbol(it, fqn) }) }
+        if (out.isEmpty()) {
+            // Java annotation: its elements are 0-arg methods (`name()`, `widthDp()`), the method name = the param.
+            for (m in service.membersForCompletion(fqn, emptyList(), "")) {
+                if (m.kind == SymbolKind.METHOD && m.paramNames.isEmpty() && m.name !in ANNOTATION_OBJECT_METHODS) {
+                    out.getOrPut(m.name) { ParamInfo(m.name, m.type as? KotlinType) }
+                }
+            }
+        }
+        return out.values.toList()
+    }
 
     /**
      * The type the context at [offset] expects an expression to have, or null when unconstrained: a typed

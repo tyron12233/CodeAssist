@@ -1536,7 +1536,13 @@ class KotlinTreeResolver(
             val pt = callee.paramTypes.getOrNull(indices[i]) as? KotlinType
             at == null || pt == null ||
                 if (exact) pt.qualifiedName == at.qualifiedName
-                else runCatching { pt.isAssignableFrom(at) }.getOrDefault(true)
+                // A type-parameter parameter (`listOf(element: T)`) accepts ANY argument — but `isAssignableFrom`
+                // on a bare `T` classifier always says no (no supertype chain reaches "T"), which would
+                // disqualify every generic overload the moment the argument type IS inferred. So a single-element
+                // `listOf(x)` (where both `listOf(element: T)` and `listOf(vararg: T)` match arity) ties out to
+                // Unsupported as soon as `x` has a known type (e.g. a project data class). Treat `T` as a wildcard
+                // here; the fixed-arity-vs-vararg preference below still picks the element overload.
+                else pt.isTypeParameter || runCatching { pt.isAssignableFrom(at) }.getOrDefault(true)
         }
     }
 
