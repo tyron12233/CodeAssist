@@ -30,7 +30,15 @@ class D8InProcessDexer : Dexer {
         threads: Int,
         desugaredLibConfig: Path?
     ): ToolResult = run(
-        inputs, emptyList(), androidJar, minApi, release, outDir, OutputMode.DexIndexed, threads, desugaredLibConfig
+        inputs,
+        emptyList(),
+        androidJar,
+        minApi,
+        release,
+        outDir,
+        OutputMode.DexIndexed,
+        threads,
+        desugaredLibConfig
     )
 
     override fun dexArchive(

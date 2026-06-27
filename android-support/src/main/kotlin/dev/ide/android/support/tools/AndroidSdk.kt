@@ -43,6 +43,9 @@ class AndroidSdk(
     val javaLauncher: Path get() = javaHome.resolve("bin").resolve(exe("java"))
     val keytool: Path get() = javaHome.resolve("bin").resolve(exe("keytool"))
 
+    /** `jarsigner` (JDK tool, sibling of `keytool`) — the canonical signer for an `.aab` (JAR/V1 only). */
+    val jarsigner: Path get() = javaHome.resolve("bin").resolve(exe("jarsigner"))
+
     /** True when every tool the subprocess (desktop) pipeline needs is present on disk (else report, don't crash). */
     fun isComplete(): Boolean = listOf(androidJar, aapt2, d8Jar, apksignerJar, javaLauncher)
         .all { Files.exists(it) }

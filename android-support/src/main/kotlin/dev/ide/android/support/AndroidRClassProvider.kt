@@ -3,7 +3,10 @@ package dev.ide.android.support
 import dev.ide.android.support.resources.AndroidResources
 import dev.ide.android.support.resources.RIdAssignment
 import dev.ide.android.support.resources.ResourceModel
+import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
+import dev.ide.model.Module
+import dev.ide.model.Workspace
 import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticClassContext
 import dev.ide.lang.synthetic.SyntheticClassProvider
@@ -22,13 +25,22 @@ import dev.ide.lang.synthetic.SyntheticModifier
  * view's `obtainStyledAttributes(attrs, R.styleable.MyChart, …)` compiles to the same ints the layout
  * preview's bridge maps back from at runtime.
  */
-class AndroidRClassProvider(private val model: ResourceModel = ResourceModel.DEFAULT) : SyntheticClassProvider {
+class AndroidRClassProvider(
+    /** Supplies the module's merged [ResourceRepository] (or null). The IDE injects a cache-backed supplier so
+     *  the repository is parsed ONCE and shared across the R class, layout preview, and reference resolution -
+     *  parsing it per call (per completion/analysis pass) re-read every dependency `res/` file and OOM'd. */
+    private val repository: (Module, Workspace) -> ResourceRepository?,
+) : SyntheticClassProvider {
+
+    /** Standalone/default: parse the module's resources directly through [model] (tests and hosts without a
+     *  shared cache). */
+    constructor(model: ResourceModel = ResourceModel.DEFAULT) : this({ m, w -> AndroidResources.repository(m, w, model) })
 
     override fun classesFor(context: SyntheticClassContext): List<SyntheticClass> {
         val facet = context.module.facets.get(AndroidFacet.KEY) ?: return emptyList()
         if (facet.namespace.isBlank()) return emptyList()
 
-        val repo = AndroidResources.repository(context.module, context.workspace, model)
+        val repo = repository(context.module, context.workspace) ?: return emptyList()
         if (repo.isEmpty()) return emptyList()
         val ids = RIdAssignment(repo)
 

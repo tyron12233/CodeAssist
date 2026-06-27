@@ -531,6 +531,11 @@ dependencies {
     // here — they ship as jniLibs prebuilts (see fetchAndroidBuildTools below).
     implementation(libs.android.r8)
     implementation(libs.android.apksig)
+    // bundletool builds the .aab in-process on device (BundletoolInProcess). Pure Java, so it dexes into the
+    // app like d8/apksig; its closure (guava/protobuf/dagger) comes transitively. android-support keeps it
+    // compileOnly+test. NOTE: dexing bundletool's closure into the app is new ground — if assembleDebug hits
+    // a duplicate-class / mergeJavaResource clash, add the offending entry to the packaging{} block above.
+    implementation(libs.android.bundletool)
 
     // Core-library desugaring runtime (temporarily enabled — see isCoreLibraryDesugaringEnabled above).
     coreLibraryDesugaring(libs.desugar.jdk.libs)

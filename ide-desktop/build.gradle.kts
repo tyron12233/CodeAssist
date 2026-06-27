@@ -25,6 +25,10 @@ dependencies {
     // :ide-ui keeps material3 as a non-transitive `implementation`).
     implementation(compose.material3)
     implementation(libs.kotlinx.coroutines.swing) // Dispatchers.Main for the Compose/AWT thread
+
+    // bundletool builds the .aab in-process (android-support keeps it compileOnly). The desktop launcher
+    // bundles it so the `bundle<Variant>` task works; pure Java, so it just runs on the JVM.
+    implementation(libs.android.bundletool)
 }
 
 compose.desktop {

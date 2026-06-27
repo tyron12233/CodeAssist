@@ -8,18 +8,28 @@ import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
 import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
+import dev.ide.android.support.gms.GoogleServices
+import dev.ide.android.support.tasks.BundleTask
 import dev.ide.android.support.tasks.L8DexTask
+import dev.ide.android.support.tasks.ManifestMergeTask
 import dev.ide.android.support.tasks.MergeResourcesTask
 import dev.ide.android.support.tasks.PackageApkTask
+import dev.ide.android.support.tasks.ProcessGoogleServicesTask
 import dev.ide.android.support.tasks.R8MinifyTask
 import dev.ide.android.support.tasks.SignApkTask
+import dev.ide.android.support.tasks.SignBundleTask
 import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.Aapt2Subprocess
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.ApkSigner
 import dev.ide.android.support.tools.ApkSignerTool
+import dev.ide.android.support.tools.ApksigBundleSigner
 import dev.ide.android.support.tools.ApksigSigner
+import dev.ide.android.support.tools.BundleSigner
+import dev.ide.android.support.tools.Bundler
+import dev.ide.android.support.tools.BundletoolInProcess
 import dev.ide.android.support.tools.D8Dexer
+import dev.ide.android.support.tools.JarsignerBundleSigner
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.DesugarLib
@@ -45,7 +55,9 @@ import dev.ide.build.engine.LifecycleTask
 import dev.ide.build.engine.ProcessResourcesTask
 import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaPlugin
+import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
+import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
@@ -86,7 +98,14 @@ class AndroidBuildSystem(
     private val dexer: Dexer = D8Dexer(sdk.d8Jar, sdk.javaLauncher),
     private val shrinker: Shrinker = R8Subprocess(sdk.d8Jar, sdk.javaLauncher),
     private val signer: ApkSigner = ApkSignerTool(sdk.apksignerJar, sdk.zipalign, sdk.javaLauncher),
+    /** Builds the `.aab` from a base module zip; in-process bundletool by default (it is not an SDK tool). */
+    private val bundler: Bundler = BundletoolInProcess(),
+    /** Signs the `.aab` (JAR/v1 only); the desktop default is `jarsigner`, the device wiring uses apksig. */
+    private val bundleSigner: BundleSigner = JarsignerBundleSigner(sdk.jarsigner),
     private val kotlin: IncrementalKotlinCompiler? = null,
+    /** Kotlin compiler plugins applied per module (the `platform.kotlinCompilerPlugin` EP contents; defaults
+     *  to the built-ins). Shared with the [JavaPlugin] used for plain library modules in this project. */
+    private val plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS,
     /** Global content-addressed library-dex cache (e.g. the host's shared caches dir); null = per-project only. */
     private val dexCacheRoot: Path? = null,
     /** Core-library-desugaring artifacts (desugar runtime + config jar); null = host ships none, so a module's
@@ -111,8 +130,13 @@ class AndroidBuildSystem(
 
     override fun tasks(project: Project): List<TaskDescriptor> =
         project.modules.filter { supports(it.type) }.flatMap { m ->
-            AndroidVariants.compute(m).map {
-                TaskDescriptor("assemble${it.name.cap()}", "build", "Assemble the ${it.name} APK of :${m.name}")
+            AndroidVariants.compute(m).flatMap {
+                listOf(
+                    TaskDescriptor("assemble${it.name.cap()}", "build", "Assemble the ${it.name} APK of :${m.name}"),
+                    // Only app modules produce an .aab (a library has no application bundle).
+                    TaskDescriptor("bundle${it.name.cap()}", "build", "Bundle the ${it.name} AAB of :${m.name}")
+                        .takeIf { _ -> m.type.id == "android-app" },
+                ).filterNotNull()
             }
         }.distinctBy { it.name }
 
@@ -126,7 +150,7 @@ class AndroidBuildSystem(
         // (compileJava/processResources/classes/jar); the android tasks are added here and wired to the
         // Java tasks by name (e.g. dexBuilderLib dependsOn `:lib:jar`). The container realizes it at build().
         val tasks = DefaultTaskContainer()
-        val javaPlugin = JavaPlugin(bootClasspath, kotlin)
+        val javaPlugin = JavaPlugin(bootClasspath, kotlin, plugins)
         val withJar = request.goal != BuildGoal.COMPILE_ONLY
         val registered = HashSet<ModuleId>()
         for (app in targets) {
@@ -164,8 +188,13 @@ class AndroidBuildSystem(
         val extraPackages = (depAndroidLibs.mapNotNull { it.facets.get(AndroidFacet.KEY)?.namespace } +
             libs.aarPackages).distinct()
 
+        // Firebase/Play Services: a google-services.json in the module generates string resources merged
+        // into the app's res (below the app's own res, so the app can still override). Located AGP-style.
+        val gmsJson = GoogleServices.findJson(layout.moduleDir, variant)
+        val gmsRes = if (gmsJson != null) listOf(layout.generatedGmsRes) else emptyList()
+
         val mergeResInputs = depAndroidLibs.flatMap { moduleRoots(it, ContentRole.ANDROID_RES) } +
-            libs.resDirs + roots(variant, ContentRole.ANDROID_RES)
+            libs.resDirs + gmsRes + roots(variant, ContentRole.ANDROID_RES)
         val sourceRoots = roots(variant, ContentRole.SOURCE)
         val assetsDirs = depAndroidLibs.flatMap { moduleRoots(it, ContentRole.ASSETS) } +
             libs.assetsDirs + roots(variant, ContentRole.ASSETS)
@@ -175,6 +204,9 @@ class AndroidBuildSystem(
         val minify = bt?.minifyEnabled == true
         // shrinkResources requires minify (R8's reachable-code analysis drives it); ignored otherwise (AGP errors).
         val shrinkResources = minify && bt.shrinkResources
+        // An app bundle (.aab) is built from PROTO resources, so force proto linking for the bundle goal too.
+        val bundle = goal == BuildGoal.BUNDLE
+        val protoResources = shrinkResources || bundle
 
         // versionName composed as AGP does: flavor override (else defaultConfig) + build-type suffix.
         val flavorVersionName = variant.flavorNames.firstNotNullOfOrNull { fn ->
@@ -183,6 +215,24 @@ class AndroidBuildSystem(
         val versionName = (flavorVersionName ?: facet.versionName) +
             (facet.buildType(variant.buildTypeName)?.versionNameSuffix ?: "")
         val versionCode = facet.versionCode
+
+        // applicationId (AGP: flavor override else namespace, + flavor & build-type suffixes) — the value of
+        // the ${applicationId} manifest placeholder Firebase/Play Services authorities depend on.
+        val flavorAppId = variant.flavorNames.firstNotNullOfOrNull { fn ->
+            facet.productFlavors.firstOrNull { it.name == fn }?.applicationId
+        }
+        val flavorIdSuffix = variant.flavorNames.mapNotNull { fn ->
+            facet.productFlavors.firstOrNull { it.name == fn }?.applicationIdSuffix
+        }.joinToString("")
+        val applicationId = (flavorAppId ?: facet.namespace) + flavorIdSuffix + (bt?.applicationIdSuffix ?: "")
+        val manifestPlaceholders = mapOf("applicationId" to applicationId, "packageName" to facet.namespace)
+        // Library manifests to merge, in decreasing priority: local android-lib modules, then external AARs.
+        val depLibManifests = depAndroidLibs.mapNotNull { lib ->
+            val libFacet = lib.facets.get(AndroidFacet.KEY) ?: return@mapNotNull null
+            Paths.get(lib.outputDir.path).parent.parent.resolve(libFacet.manifest).takeIf { Files.exists(it) }
+        }
+        val libraryManifests = depLibManifests + libs.aarManifests
+
         val directDepCompiles = directModuleDeps(app, byId).map { TaskName(":${it.name}:compileJava") }
 
         // Kotlin: upstream modules' `kotlin-classes` (sibling of their Java output) join the compile classpath;
@@ -195,20 +245,34 @@ class AndroidBuildSystem(
         val compileClasspath = kotlinClasspath + if (appHasKotlin) listOf(layout.kotlinClasses) else emptyList()
 
         val mergeRes = step("mergeResources")
+        val processManifest = step("processManifest")
         val aapt2Compile = step("aapt2Compile")
         val aapt2Link = step("aapt2Link")
         val compileKotlin = step("compileKotlin")
         val compile = step("compileJava")
 
-        tasks.task(mergeRes) { MergeResourcesTask(mergeRes, mergeResInputs, layout.mergedRes) }
+        // google-services.json (when present) generates res that the merge consumes, so it runs first.
+        val mergeResDeps = if (gmsJson != null) {
+            val processGms = step("processGoogleServices")
+            tasks.task(processGms) {
+                ProcessGoogleServicesTask(processGms, gmsJson, applicationId, facet.namespace, layout.generatedGmsRes)
+            }
+            listOf(processGms)
+        } else emptyList()
+        tasks.task(mergeRes, mergeResDeps) { MergeResourcesTask(mergeRes, mergeResInputs, layout.mergedRes) }
+        // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
+        // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.
+        tasks.task(processManifest) {
+            ManifestMergeTask(processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders, layout.mergedManifest)
+        }
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
         // A minify build needs aapt2's manifest/layout keep rules so R8 does not strip XML-referenced classes;
         // a shrinkResources build additionally links proto resources (R8's resource-shrinker input form).
-        tasks.task(aapt2Link, listOf(aapt2Compile)) {
+        tasks.task(aapt2Link, listOf(aapt2Compile, processManifest)) {
             Aapt2LinkTask(
                 aapt2Link,
                 layout.compiledRes,
-                layout.manifest(facet),
+                layout.mergedManifest,
                 sdk.androidJar,
                 facet.namespace,
                 extraPackages,
@@ -217,15 +281,16 @@ class AndroidBuildSystem(
                 versionCode,
                 versionName,
                 layout.genJava,
-                if (shrinkResources) layout.protoAp else layout.resourcesAp,
+                if (protoResources) layout.protoAp else layout.resourcesAp,
                 aapt2,
                 proguardRules = if (minify) layout.aaptProguardRules else null,
-                protoFormat = shrinkResources,
+                protoFormat = protoResources,
             )
         }
         if (appHasKotlin) {
             tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin) {
                 AndroidKotlinCompileTask(
+                    app,
                     compileKotlin,
                     sourceRoots,
                     layout.genJava,
@@ -234,6 +299,7 @@ class AndroidBuildSystem(
                     level,
                     bootClasspath,
                     kotlin,
+                    plugins,
                 )
             }
         }
@@ -301,8 +367,9 @@ class AndroidBuildSystem(
                 )
             }
             dexDirs = listOf(layout.dex)
-            if (shrinkResources) {
-                // R8 emitted shrunk PROTO resources; convert them back to binary for packaging.
+            if (shrinkResources && !bundle) {
+                // R8 emitted shrunk PROTO resources; convert them back to binary for APK packaging. A bundle
+                // keeps the proto form (it consumes shrunkProtoAp directly), so skip the conversion there.
                 val shrinkRes = TaskName(":${app.name}:shrinkResources$v")
                 tasks.task(shrinkRes, listOf(minifyTask)) {
                     ConvertResourcesTask(shrinkRes, layout.shrunkProtoAp, layout.protoAp, layout.resourcesAp, aapt2)
@@ -375,6 +442,23 @@ class AndroidBuildSystem(
             pkgDeps = pkgDeps + listOf(l8)
         }
 
+        if (bundle) {
+            // Bundle terminal (AGP's `bundle<Variant>`): build the base module zip from the PROTO resources +
+            // dex + assets + jni, run bundletool, then JAR-sign the .aab. Reuses the same dex layers as the APK.
+            val bundleResAp = if (shrinkResources) layout.shrunkProtoAp else layout.protoAp
+            val packageBundle = step("packageBundle")
+            tasks.task(packageBundle, pkgDeps) {
+                BundleTask(packageBundle, bundleResAp, dexDirs, assetsDirs, libs.jniLibDirs, layout.unsignedAab, layout.baseModuleZip, bundler)
+            }
+            val signBundle = step("signBundle")
+            tasks.task(signBundle, listOf(packageBundle)) {
+                SignBundleTask(signBundle, layout.unsignedAab, layout.signedAab, signing, facet.minSdk, bundleSigner)
+            }
+            val bundleLifecycle = step("bundle")
+            tasks.task(bundleLifecycle, listOf(signBundle)) { LifecycleTask(bundleLifecycle, trackedFiles = listOf(layout.signedAab)) }
+            return
+        }
+
         tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, libs.jniLibDirs, layout.unsignedApk) }
         tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, signing, signer) }
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.
@@ -434,7 +518,7 @@ class AndroidBuildSystem(
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
             val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + rClasses
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
-                AndroidKotlinCompileTask(compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin)
+                AndroidKotlinCompileTask(m, compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins)
             }
             classpath.add(libKotlin); compileDeps.add(compileKotlin)
         }
@@ -504,6 +588,8 @@ class AndroidBuildSystem(
         val mergedRes: Path = inter.resolve("merged-res")
         val compiledRes: Path = inter.resolve("res")
         val explodedAar: Path = inter.resolve("exploded-aar")
+        val mergedManifest: Path = inter.resolve("merged-manifest").resolve("AndroidManifest.xml")
+        val generatedGmsRes: Path = buildDir.resolve("generated").resolve("res").resolve("google-services").resolve(variantName)
         val genJava: Path = inter.resolve("gen")
         val classes: Path = inter.resolve("classes")
         val kotlinClasses: Path = inter.resolve("kotlin-classes")   // K2 output (dexed as project scope)
@@ -526,6 +612,11 @@ class AndroidBuildSystem(
         val unsignedApk: Path = inter.resolve("${module.name}-$variantName-unsigned.apk")
         val signedApk: Path = buildDir.resolve("outputs").resolve("apk").resolve(variantName)
             .resolve("${module.name}-$variantName.apk")
+        val baseModuleZip: Path = inter.resolve("bundle").resolve("base.zip")  // bundletool module input
+        val unsignedAab: Path = inter.resolve("${module.name}-$variantName-unsigned.aab")
+        // AGP's outputs/bundle/<variant>/<module>-<variant>.aab — the signed, uploadable app bundle.
+        val signedAab: Path = buildDir.resolve("outputs").resolve("bundle").resolve(variantName)
+            .resolve("${module.name}-$variantName.aab")
         // mapping.txt for stack-trace de-obfuscation; AGP's outputs/mapping/<variant>/mapping.txt.
         val mappingTxt: Path = buildDir.resolve("outputs").resolve("mapping").resolve(variantName).resolve("mapping.txt")
 
@@ -541,6 +632,12 @@ class AndroidBuildSystem(
         fun signedApkPath(module: Module, variantName: String): Path {
             val buildDir = Paths.get(module.outputDir.path).parent
             return buildDir.resolve("outputs").resolve("apk").resolve(variantName).resolve("${module.name}-$variantName.apk")
+        }
+
+        /** The signed-AAB output path for [module] + [variantName] (matches [Layout.signedAab]). */
+        fun signedAabPath(module: Module, variantName: String): Path {
+            val buildDir = Paths.get(module.outputDir.path).parent
+            return buildDir.resolve("outputs").resolve("bundle").resolve(variantName).resolve("${module.name}-$variantName.aab")
         }
 
         /**
@@ -561,8 +658,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
-            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -571,13 +668,15 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 dexer = D8InProcessDexer(),
                 shrinker = R8InProcessShrinker(),
                 signer = ApksigSigner(),
+                bundleSigner = ApksigBundleSigner(),   // ART: v1-sign the .aab in-process (no jarsigner)
                 kotlin = kotlin,
+                plugins = plugins,
                 dexCacheRoot = dexCacheRoot,
                 desugarLib = desugarLib,
             )

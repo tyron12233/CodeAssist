@@ -17,6 +17,7 @@ class ResolvedLibraries(
     val jniLibDirs: List<Path>,    // AAR `jni/<abi>/` packaged under `lib/`
     val aarPackages: List<String>, // AAR manifest packages → aapt2 `--extra-packages` (their `R` + custom attrs)
     val consumerProguardFiles: List<Path>, // AAR `proguard.txt` consumer keep rules, applied by the app's R8
+    val aarManifests: List<Path>,  // AAR `AndroidManifest.xml` files → merged into the app manifest
 )
 
 /**
@@ -42,6 +43,7 @@ object AndroidLibraries {
         val jniLibDirs = ArrayList<Path>()
         val aarPackages = ArrayList<String>()
         val consumerProguardFiles = ArrayList<Path>()
+        val aarManifests = ArrayList<Path>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
         fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(dirNameOf(aar))) }
@@ -51,7 +53,7 @@ object AndroidLibraries {
             res?.let { resDirs.add(it) }
             assets?.let { assetsDirs.add(it) }
             jni?.let { jniLibDirs.add(it) }
-            manifest?.let { manifestPackage(it)?.let(aarPackages::add) }
+            manifest?.let { manifestPackage(it)?.let(aarPackages::add); aarManifests.add(it) }
             proguard?.let { consumerProguardFiles.add(it) }
         }
 
@@ -73,6 +75,7 @@ object AndroidLibraries {
         return ResolvedLibraries(
             compileJars.distinct(), dexJars.distinct(), resDirs.distinct(), assetsDirs.distinct(),
             jniLibDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
+            aarManifests.distinct(),
         )
     }
 

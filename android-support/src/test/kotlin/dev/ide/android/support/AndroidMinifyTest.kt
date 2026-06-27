@@ -74,6 +74,57 @@ class AndroidMinifyTest {
         }
     }
 
+    /**
+     * R8's own diagnostics reach the build log. The in-process shrinker now installs a `DiagnosticsHandler`
+     * (without one R8 routes them to stderr and a failed shrink surfaces only a generic message). A
+     * syntactically invalid keep rule makes R8's proguard parser report an error; we assert the build fails
+     * *and* that error line (not just "R8 in-process failed") made it into the log the `r8` task streams.
+     */
+    @Test
+    fun r8DiagnosticsReachTheLog() {
+        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
+        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
+        sdk!!
+
+        val dir = Files.createTempDirectory("android-r8-diag")
+        val platform = PlatformCore()
+        try {
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    putFacet(
+                        AndroidFacet(
+                            namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34,
+                            // A bogus directive R8's proguard parser rejects with an error diagnostic.
+                            buildTypes = listOf(BuildType("release", debuggable = false, minifyEnabled = true, proguardRules = listOf("-invalidoptionname"))),
+                        ),
+                    )
+                }
+                commit()
+            }
+            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
+            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
+            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
+            val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("release"), BuildGoal.PACKAGE)
+            val log = StringBuilder()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+                    .execute(buildSystem.createBuildGraph(store.workspace.projects.single(), request), SimpleTaskContext(log = { log.appendLine(it) }), 2)
+            }
+            assertTrue(!outcome.succeeded, "build should fail on the invalid R8 keep rule")
+            assertTrue(log.contains("error:"), "R8's error diagnostic must reach the log (handler wired):\n$log")
+        } finally {
+            platform.dispose(); dir.toFile().deleteRecursively()
+        }
+    }
+
     private fun write(root: Path, rel: String, content: String) {
         val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }

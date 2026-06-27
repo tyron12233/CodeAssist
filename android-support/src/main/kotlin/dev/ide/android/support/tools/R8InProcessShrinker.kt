@@ -24,25 +24,44 @@ class R8InProcessShrinker : Shrinker {
 
     override fun shrink(request: ShrinkRequest): ToolResult {
         Files.createDirectories(request.outDir)
-        val progs = request.programs.filter { Files.exists(it) }
-        if (progs.isEmpty()) return ToolResult.fail("no inputs to shrink")
+        val programs = request.programs.filter { Files.exists(it) }
+        if (programs.isEmpty()) {
+            return ToolResult.fail("no inputs to shrink")
+        }
+        // Without a handler R8 routes its diagnostics to a default sink (stderr) and they're lost — a failed
+        // shrink would surface only a generic CompilationFailedException message. Capture them as "level:
+        // message" lines (mirrors D8InProcessDexer and l8 below) so the r8 task's reportToolDiagnostics turns
+        // them into structured Problems entries (a missing-class warning, a proguard-rule parse error, …).
+        val diagnostics = ArrayList<String>()
+        val handler = object : DiagnosticsHandler {
+            override fun info(d: Diagnostic) { diagnostics.add("info: ${d.diagnosticMessage}") }
+            override fun warning(d: Diagnostic) { diagnostics.add("warning: ${d.diagnosticMessage}") }
+            override fun error(d: Diagnostic) { diagnostics.add("error: ${d.diagnosticMessage}") }
+        }
         return try {
-            val builder = R8Command.builder()
-                .addProgramFiles(progs)
+            val builder = R8Command.builder(handler)
+                .addProgramFiles(programs)
                 .setMinApiLevel(request.minApi)
                 .setMode(if (request.release) CompilationMode.RELEASE else CompilationMode.DEBUG)
                 .setOutput(request.outDir, OutputMode.DexIndexed)
-                // Full mode is R8's default (compatibility = false); compat mode mimics legacy ProGuard.
-                .setProguardCompatibility(!request.fullMode)
-            if (Files.exists(request.library)) builder.addLibraryFiles(request.library)
+                .setProguardCompatibility(!request.fullMode) // Full mode is R8's default (compatibility = false); compat mode mimics legacy ProGuard.
+            if (Files.exists(request.library)) {
+                builder.addLibraryFiles(request.library)
+            }
             request.classpath.filter { Files.exists(it) }.takeIf { it.isNotEmpty() }
                 ?.let { builder.addClasspathFiles(it) }
 
             val keepFiles = request.keepRuleFiles.filter { Files.exists(it) }
-            if (keepFiles.isNotEmpty()) builder.addProguardConfigurationFiles(keepFiles)
+            if (keepFiles.isNotEmpty()) {
+                builder.addProguardConfigurationFiles(keepFiles)
+            }
             val inline = ArrayList(request.inlineRules)
-            if (keepFiles.isEmpty() && inline.isEmpty()) inline.addAll(R8_PASS_THROUGH)
-            if (inline.isNotEmpty()) builder.addProguardConfiguration(inline, Origin.unknown())
+            if (keepFiles.isEmpty() && inline.isEmpty()) {
+                inline.addAll(R8_PASS_THROUGH)
+            }
+            if (inline.isNotEmpty()) {
+                builder.addProguardConfiguration(inline, Origin.unknown())
+            }
 
             request.mappingOutput?.let { map ->
                 map.parent?.let(Files::createDirectories)
@@ -67,14 +86,19 @@ class R8InProcessShrinker : Shrinker {
             } else {
                 R8.run(command)
             }
-            ToolResult.ok(listOf("R8 (in-process) processed ${progs.size} input(s) -> ${request.outDir.fileName}"))
+            ToolResult.ok(buildList {
+                add("R8 (in-process) processed ${programs.size} input(s) -> ${request.outDir.fileName}")
+                addAll(diagnostics) // R8 can emit warnings (unused rules, missing classes) on a successful run
+            })
         } catch (t: Throwable) {
-            ToolResult.fail("R8 in-process failed: ${t.message}")
+            ToolResult.fail("R8 in-process failed: ${t.message}", diagnostics)
         }
     }
 
     override fun l8(request: L8Request): ToolResult {
-        if (!Files.exists(request.desugarJdkLibs)) return ToolResult.fail("desugar runtime jar missing")
+        if (!Files.exists(request.desugarJdkLibs)) {
+            return ToolResult.fail("desugar runtime jar missing")
+        }
         Files.createDirectories(request.outDir)
         val diagnostics = ArrayList<String>()
         val handler = object : DiagnosticsHandler {
@@ -91,8 +115,12 @@ class R8InProcessShrinker : Shrinker {
                 .setMode(if (shrink) CompilationMode.RELEASE else CompilationMode.DEBUG)
                 .setOutput(request.outDir, OutputMode.DexIndexed)
                 .addDesugaredLibraryConfiguration(Files.readAllBytes(request.configJson).decodeToString())
-            if (Files.exists(request.library)) builder.addLibraryFiles(request.library)
-            if (shrink) builder.addProguardConfigurationFiles(listOf(request.keepRules))
+            if (Files.exists(request.library)) {
+                builder.addLibraryFiles(request.library)
+            }
+            if (shrink) {
+                builder.addProguardConfigurationFiles(listOf(request.keepRules))
+            }
             L8.run(builder.build())
             ToolResult.ok(listOf("L8 (in-process) dexed the core-library desugaring runtime -> ${request.outDir.fileName}"))
         } catch (t: Throwable) {

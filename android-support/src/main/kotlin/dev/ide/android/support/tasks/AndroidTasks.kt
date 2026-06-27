@@ -20,8 +20,11 @@ import dev.ide.build.engine.reportToolDiagnostics
 import dev.ide.build.engine.TaskInputsImpl
 import dev.ide.build.engine.TaskOutputsImpl
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
-import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
+import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
+import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
+import dev.ide.lang.kotlin.compile.resolveFor
+import dev.ide.model.Module
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -406,6 +409,7 @@ internal class AndroidCompileTask(
  * compile then puts this output on its classpath, and the dexer dexes it alongside the Java classes.
  */
 internal class AndroidKotlinCompileTask(
+    private val module: Module,
     override val name: TaskName,
     private val sourceRoots: List<Path>,
     private val genJavaDir: Path,        // R.java etc. — interop resolution input, not emitted
@@ -415,6 +419,8 @@ internal class AndroidKotlinCompileTask(
     /** K2 bootclasspath: empty on the desktop (host JDK), `android.jar` + desugar stubs on ART. */
     private val bootClasspath: List<Path>,
     private val compiler: IncrementalKotlinCompiler,
+    /** Kotlin compiler plugins to apply (those whose `appliesTo` matches the module). */
+    private val plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS,
 ) : Task {
     private fun walk(roots: List<Path>, ext: String): List<Path> =
         roots.filter { Files.isDirectory(it) }.flatMap { root ->
@@ -446,12 +452,13 @@ internal class AndroidKotlinCompileTask(
         Files.createDirectories(outClasses)
         val kt = kotlinSources()
         if (kt.isEmpty()) return TaskResult.Success
-        // A module that depends on the Compose runtime must be compiled with the Compose compiler plugin.
-        val composePlugin = if (ComposeCompilerPlugin.isComposeModule(classpath + bootClasspath))
-            listOfNotNull(ComposeCompilerPlugin.jar()) else emptyList()
+        // Apply the compiler plugins that match the module (e.g. Compose when the runtime is on the classpath).
+        val resolved = plugins.resolveFor(module, classpath + bootClasspath)
         val r = compiler.compile(
             kt, javaSources(), classpath, outClasses, level,
-            bootClasspath = bootClasspath, compilerPlugins = composePlugin,
+            bootClasspath = bootClasspath,
+            compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
+            runtimePluginClasspaths = resolved.runtimeClasspaths,
         )
         r.messages.forEach(ctx.logger())
         ctx.reportToolDiagnostics("kotlin", r.messages)
@@ -1243,8 +1250,11 @@ internal class R8MinifyTask(
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
-        Files.createDirectories(stagingDir)
-        Files.createDirectories(outDexDir)
+        withContext(Dispatchers.IO) {
+            Files.createDirectories(stagingDir)
+            Files.createDirectories(outDexDir)
+        }
+
         val inputs = programs.filter { Files.exists(it) }.mapIndexed { i, p ->
             if (Files.isDirectory(p)) stagingDir.resolve("in$i.jar")
                 .also { ApkPackaging.jarClasses(p, it) } else p

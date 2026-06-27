@@ -13,6 +13,8 @@ androidxTestExtJunit = "1.2.1"    # androidx.test.ext:junit — JUnit4 + Android
 # linked into the app. On desktop they're test-only; :ide-android bundles them (see android-support).
 r8 = "8.13.19"        # com.android.tools.r8.D8 — the dexer
 apksig = "8.7.3"      # com.android.apksig.ApkSigner — APK v1/v2/v3 signing
+bundletool = "1.18.3" # com.android.tools.build.bundletool — builds the .aab (aligns with AGP 9.x's bundletool)
+guava = "32.0.1-jre"  # com.google.common.* — bundletool's collections (ImmutableList) at compile time
 asm = "9.7"           # org.ow2.asm — bytecode rewrite of System.exit for the in-process Java dex-run
 trove4j = "1.0.20200330"  # gnu.trove.* — IntelliJ-core dependency the Kotlin compiler needs but doesn't bundle
 desugarJdkLibs = "2.1.5"  # com.android.tools:desugar_jdk_libs — core-library desugaring (temporarily enabled)
@@ -69,6 +71,8 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 android-r8 = { module = "com.android.tools:r8", version.ref = "r8" }
 android-apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
+android-bundletool = { module = "com.android.tools.build:bundletool", version.ref = "bundletool" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 desugar-jdk-libs-configuration = { module = "com.android.tools:desugar_jdk_libs_configuration", version.ref = "desugarJdkLibs" }
 ow2-asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
