@@ -332,6 +332,34 @@ and shows the not-interpretable note. The engine-side `IdeServices.composePrevie
 fallback (status only). (Compile-verified across ide-ui / interp-compose / ide-core / ide-desktop / ide-android;
 the renderer itself is device-proven.)
 
+**`@Preview` argument support.** The annotation is parsed into a `PreviewConfig` and honored across the
+pipeline (`PreviewAnnotationParser`/`PreviewConstants` in `lang-kotlin`). One `@Composable` expands to one
+preview **variant** per `@Preview` (stacked annotations are separate variants), per built-in/source-declared
+**MultiPreview** annotation (`@PreviewLightDark`, `@PreviewFontScale`, `@PreviewScreenSizes`,
+`@PreviewDynamicColors`, plus same-module/cross-file custom ones resolved through the symbol service), each
+carrying a stable `variantId` + `label`/`group`. A constant-folding evaluator reads literals, hex/bin numbers,
+unary minus, and named platform constants (`Configuration.UI_MODE_NIGHT_YES`, `Devices.PIXEL_4`, `a or b`).
+- **Default size = wrap content**: with no `device`/`widthDp`/`heightDp`/`showSystemUi`, the preview card sizes
+  to the composable itself (`PreviewSurface(wrapContent=…)`, bounded by the selected device as a max), matching
+  Android Studio — not a full phone frame.
+- **Honored render-side**: `widthDp`/`heightDp`/`device` (the preview surface sizes its card to the resolved
+  `DeviceProfile` — named ids + `spec:` strings via `PreviewDevices`), `showBackground`/`backgroundColor`,
+  `fontScale` (folded into the surface `Density`), `uiMode` night bit + `locale` (applied to the Android host's
+  `Configuration`), `showSystemUi` (a mock status/nav-bar chrome), `name`/`group` (the in-pane variant selector).
+  `apiLevel` is parsed + shown but cannot truly change `Build.VERSION.SDK_INT` in-process (best-effort).
+- **`@PreviewParameter`**: the provider is instantiated through the interpreter
+  (`Interpreter.previewParameterValues`; a source provider materialized as a `SourceObject`, a library one
+  loaded reflectively by FQN) and the preview renders once per sample value (up to `limit`), stacked in the
+  host (`PreviewVariants`).
+- **Editor**: argument-name completion inside ANY annotation (`KotlinResolver.annotationParameters` resolves the
+  annotation type's params — Kotlin constructor params, source ctor params, or a Java `@interface`'s element
+  methods — offered as named-argument items **ranked first**; `KotlinCompletion.annotationArgExtras`, with a
+  bundled fallback for `@Preview` when the androidx type isn't resolved), plus `@Preview` `uiMode`/`device`
+  constant completion; `kt.previewNotComposable` / `kt.previewParameters` validation diagnostics; one gutter
+  affordance per `@Preview` line (`variantId`-keyed). Verified across `KotlinPreviewArgsTest` /
+  `KotlinPreviewEditorTest` / `KotlinAnnotationCompletionTest` (lang-kotlin) + `PreviewParameterValuesTest`
+  (interp-core).
+
 **Resolver subset (widened).** ✅ String-template interpolation (`"a${x}b"` → `RNode.StringConcat`,
 stringified at runtime) and `when` (desugared to a nested `if`/`==` chain; a subject is evaluated once into a
 temp local; `is`/`in` conditions still `Unsupported`). CI-tested (`InterpreterTest`: interpolation, subject

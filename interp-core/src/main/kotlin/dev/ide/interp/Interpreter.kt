@@ -69,6 +69,34 @@ class Interpreter(
         }
     }
 
+    /**
+     * Materialize a `@PreviewParameter` provider and read its sample values (capped at [limit]). [sourceClass]
+     * is the lowered provider when it is project source (instantiated as a [SourceObject]); otherwise
+     * [providerFqn] names a library `PreviewParameterProvider` loaded + instantiated reflectively. Reads the
+     * provider's `values` (a `Sequence`/`Iterable`/array) and returns up to [limit] elements. Empty when the
+     * provider can't be built or has no readable `values` — the caller then renders the preview without args.
+     */
+    fun previewParameterValues(sourceClass: ResolvedClass?, providerFqn: String?, limit: Int): List<Any?> {
+        val provider: Any = when {
+            sourceClass != null -> instantiate(sourceClass, emptyList())
+            providerFqn != null -> {
+                val cls = loadClassAcross(providerFqn, initialize = true, preferred = classLoader) ?: return emptyList()
+                runCatching {
+                    cls.getDeclaredConstructor().also { c -> runCatching { c.isAccessible = true } }.newInstance()
+                }.getOrNull() ?: return emptyList()
+            }
+            else -> return emptyList()
+        }
+        val values = runCatching { readProperty(provider, "values") }.getOrNull() ?: return emptyList()
+        val all: List<Any?> = when (values) {
+            is Sequence<*> -> values.toList()
+            is Iterable<*> -> values.toList()
+            is Array<*> -> values.toList()
+            else -> return emptyList()
+        }
+        return if (limit > 0) all.take(limit) else all
+    }
+
     private fun eval(node: RNode, env: Env): Any? = when (node) {
         is RNode.Const -> node.value
         is RNode.Name -> readBinding(node.binding, env)

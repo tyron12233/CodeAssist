@@ -10,6 +10,16 @@ import dev.ide.lang.kotlin.interp.ResolvedFunction
 import java.util.logging.Logger
 
 /**
+ * A `@PreviewParameter` provider resolved for rendering: the provider to instantiate ([providerClass] when it
+ * is project source, else [providerFqn] for a library class) and how many of its sample values to render.
+ */
+data class PreviewParameterBinding(
+    val providerClass: ResolvedClass?,
+    val providerFqn: String?,
+    val limit: Int,
+)
+
+/**
  * Renders a lowered `@Preview` composable as real Compose UI — the device render surface for the editor's
  * Compose preview (see `docs/compose-interpreter.md`). It hosts the interpreter + [ComposeDispatcher] +
  * [ComposeRuntime] inside the IDE's own composition (so it gets a real `Composer`, window, and Recomposer):
@@ -42,11 +52,32 @@ class ComposePreviewRenderer(
      * resets it, and calls [onPartialError] (null = no error this pass, non-null = partial render failure) so
      * the host can surface a chip-level warning without replacing the (partial) preview content.
      */
+    /**
+     * The sample values a `@PreviewParameter` [binding] yields (instantiating its provider against [program]/
+     * [classes]). Non-composable: the host calls this once (in a `remember`) to learn how many entries to lay
+     * out, then renders one [Render] per value. Empty when the provider can't be built (the host falls back to
+     * a single argument-less render).
+     */
+    fun parameterValues(
+        program: Map<String, ResolvedFunction>,
+        classes: List<ResolvedClass>,
+        binding: PreviewParameterBinding,
+    ): List<Any?> = runCatching {
+        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = true)
+            .previewParameterValues(binding.providerClass, binding.providerFqn, binding.limit)
+    }.getOrElse {
+        log.warning("Compose preview @PreviewParameter resolution failed: ${it::class.simpleName}: ${it.message}")
+        emptyList()
+    }
+
     @Composable
     fun Render(
         entry: ResolvedFunction,
         program: Map<String, ResolvedFunction>,
         classes: List<ResolvedClass> = emptyList(),
+        /** Arguments to invoke [entry] with — a single `@PreviewParameter` sample value, or empty for a plain
+         *  preview. The host wraps each value's Render in a distinct `key(...)` so their slots don't collide. */
+        args: List<Any?> = emptyList(),
         onError: @Composable (Throwable) -> Unit = {},
         onPartialError: (Throwable?) -> Unit = {},
     ) {
@@ -62,7 +93,7 @@ class ComposePreviewRenderer(
             // state IT read changed, in which case it must run. Skipping is a win for the CHILD composables it
             // invokes (each routed through the interpreter's restartable=returnsUnit path), not the root itself.
             runtime.invokeComposable(entry.name.hashCode(), restartable = false, args = emptyList()) {
-                interpreter.call(entry, emptyList())
+                interpreter.call(entry, args)
             }
             null
         } catch (t: Throwable) {
