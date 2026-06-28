@@ -13,11 +13,14 @@ import kotlin.test.assertTrue
 /** The provider-neutral completion matcher: prefix + fuzzy matching, match positions, and the re-tiering. */
 class CompletionMatchTest {
 
-    private fun item(label: String, sort: Int = 0) =
-        UiCompletionItem(label = label, insertText = label, detail = null, kind = UiCompletionKind.Method, sortPriority = sort)
+    private fun item(label: String, sort: Int = 0, kind: UiCompletionKind = UiCompletionKind.Method) =
+        UiCompletionItem(label = label, insertText = label, detail = null, kind = kind, sortPriority = sort)
 
     private fun session(vararg labels: String) =
         CompletionSession.from(UiCompletionResult(labels.map { item(it) }, replaceStart = 0, replaceEnd = 0))
+
+    private fun sessionOf(vararg items: UiCompletionItem) =
+        CompletionSession.from(UiCompletionResult(items.toList(), replaceStart = 0, replaceEnd = 0))
 
     @Test
     fun emptyQueryMatchesEverythingWithNoHighlight() {
@@ -90,5 +93,54 @@ class CompletionMatchTest {
         val out = s.filtered("Text")
         assertEquals("Text", out.first().label)
         assertEquals(listOf("Text", "TextField", "TextView"), out.map { it.label })
+    }
+
+    @Test
+    fun bufferWordNeverOutranksRealSymbols() {
+        // The reported bug: typing `Text`, a buffer word `text` (case-insensitive-exact, tier 1) floated above
+        // the real, prefix-matching symbols (`TextField`, tier 2). A word must rank below every real completion
+        // regardless of how closely it matches.
+        val out = sessionOf(
+            item("TextField(value: String)", kind = UiCompletionKind.Method),
+            item("TextButton(onClick: () -> Unit)", kind = UiCompletionKind.Method),
+            item("text", sort = 1000, kind = UiCompletionKind.Word),
+        ).filtered("Text")
+        assertEquals(UiCompletionKind.Word, out.last().kind, "the buffer word must sort last; got ${out.map { it.label to it.kind }}")
+        assertTrue(out.indexOfFirst { it.kind == UiCompletionKind.Word } == out.lastIndex, "all real symbols precede the word")
+    }
+
+    @Test
+    fun exactSymbolBeatsWordAndOtherSymbols() {
+        // An exact (case-sensitive) symbol match goes to the very top; a buffer word with the same text sinks
+        // below the real symbols. Satisfies "exact matches first" + "rank words low" together.
+        val out = sessionOf(
+            item("TextField(value: String)", kind = UiCompletionKind.Method),
+            item("Text(text: String)", kind = UiCompletionKind.Method),
+            item("Text", sort = 1000, kind = UiCompletionKind.Word),
+        ).filtered("Text")
+        assertEquals("Text(text: String)", out.first().label, "exact-name symbol first; got ${out.map { it.label }}")
+        assertEquals(UiCompletionKind.Word, out.last().kind, "the word ranks last even though its text is an exact match")
+    }
+
+    @Test
+    fun matchTierTreatsLeadingIdentifierOfASignatureLabelAsExact() {
+        // Real function labels carry a signature, so the exact tier must key off the leading name, not the
+        // whole label, else `Text(...)` would never reach the exact tier.
+        assertEquals(0, matchTier("Text(text: String)", "Text"))
+        assertEquals(2, matchTier("TextField(value: String, onValueChange: (String) -> Unit)", "Text"))
+        assertEquals(1, matchTier("text(s: String)", "Text")) // exact, case-only
+    }
+
+    @Test
+    fun exactMatchFloatsAboveInScopeLongerMatchEvenWithSignatureLabels() {
+        // The reported case: the backend returned the already-imported `TextField` first (in-scope ranks above
+        // needs-import), but typing `Text` whole must still float the exact `Text` to the top. With labels that
+        // carry signatures, this only works once the exact tier keys off the leading identifier.
+        val s = session(
+            "TextField(value: String, onValueChange: (String) -> Unit)",
+            "Text(text: String)",
+        )
+        val out = s.filtered("Text")
+        assertEquals("Text(text: String)", out.first().label)
     }
 }

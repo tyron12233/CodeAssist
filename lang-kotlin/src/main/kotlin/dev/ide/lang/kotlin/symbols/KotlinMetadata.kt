@@ -258,7 +258,35 @@ object KotlinMetadata {
             runCatching { t.annotations.map { it.className } }.getOrDefault(emptyList()) else emptyList()
         val isExtFn = "kotlin/ExtensionFunctionType" in annos
         val isComposable = "androidx/compose/runtime/Composable" in annos
+        // A `suspend (…) -> R` parameter is flagged `isSuspend` but stored in its JVM-lowered shape: classifier
+        // `FunctionN` with a trailing `Continuation<R>` value parameter and an erased `Any` return. Rewrite it to
+        // the source shape `kotlin.SuspendFunction{N-1}` (drop the continuation, recover R from `Continuation<R>`)
+        // so binary suspend types match the source representation: the suspend calling-convention check, type
+        // rendering, and the FQN flow through the persistent caches all then treat them uniformly.
+        if (t.isSuspend && TypeRendering.isFunctionType(fqn) && args.size >= 2) {
+            return desugarSuspendFunctionType(args, t.isNullable, ctx, isExtFn)
+        }
         return KotlinType(fqn, args, nullable = t.isNullable, context = ctx, isExtensionFunctionType = isExtFn, isComposable = isComposable)
+    }
+
+    /** Convert a JVM-lowered suspend function type's [loweredArgs] (`[p0, …, p{k-1}, Continuation<R>, Any]`) into
+     *  the source-level `kotlin.SuspendFunction{k}` with arguments `[p0, …, p{k-1}, R]`. The continuation is the
+     *  last value parameter (index `size - 2`; the final entry is the erased `Any` return), and the real return
+     *  `R` is its sole type argument. A receiver function type keeps `p0` as the receiver via [isExtFn]. */
+    private fun desugarSuspendFunctionType(
+        loweredArgs: List<TypeRef>,
+        nullable: Boolean,
+        ctx: KotlinTypeContext?,
+        isExtFn: Boolean,
+    ): KotlinType {
+        val continuation = loweredArgs[loweredArgs.size - 2]
+        val realReturn = (continuation as? KotlinType)?.typeArguments?.firstOrNull() ?: KotlinType("kotlin.Unit", context = ctx)
+        val realParams = loweredArgs.subList(0, loweredArgs.size - 2)
+        val newArgs = realParams + realReturn
+        return KotlinType(
+            "kotlin.SuspendFunction${realParams.size}", newArgs, nullable = nullable, context = ctx,
+            isExtensionFunctionType = isExtFn,
+        )
     }
 
     private fun typeText(t: KmType, tp: Map<Int, String>): String {

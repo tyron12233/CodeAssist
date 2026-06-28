@@ -18,6 +18,12 @@ import dev.ide.lang.resolve.TypeRef
  */
 internal object KotlinCompletionItems {
 
+    /** Classifier kinds — a candidate completed as a TYPE (its `type` is its own FQN, so the package/origin
+     *  and the redundant self-`detail` are handled specially). */
+    private val TYPE_KINDS = setOf(
+        SymbolKind.CLASS, SymbolKind.INTERFACE, SymbolKind.ENUM, SymbolKind.ANNOTATION_TYPE, SymbolKind.RECORD,
+    )
+
     /**
      * A resolved symbol as a popup item: a source-like label (`println(message: String)`), the grayed
      * return/value type as detail, the declaring package/class as origin, doc, the auto-import [importEdit],
@@ -49,14 +55,26 @@ internal object KotlinCompletionItems {
         }
         // Read like Kotlin source: the label is `println(message: String)` (name + params adjacent), and the
         // return/value type is the grayed detail on the right (`Unit`).
+        val isType = s.kind in TYPE_KINDS
         val label = if (isFunction) s.name + paramListOf(s.signature) else s.name
         val detail = buildString {
-            s.type?.let { append(typeLabel(it)) } // return type (funcs) / declared type (vals, props)
+            // A type's `type` is itself, so rendering it as the second line just repeats the label (`Text`
+            // over `Text`) — skip it; the package is shown as the right-aligned origin instead.
+            if (!isType) s.type?.let { append(typeLabel(it)) } // return type (funcs) / declared type (vals, props)
             if (s.isExtension) append(if (isEmpty()) "(extension)" else "  (extension)")
         }.ifBlank { null }
-        // Right-aligned origin: a top-level callable's package, else its declaring class (skip the synthetic
-        // `…Kt` file facade — that's an implementation detail, not a place the user thinks of the symbol living).
-        val container = s.packageName ?: s.declaringClassFqn?.takeUnless { it.endsWith("Kt") }
+        // Right-aligned origin: a top-level callable's package, a type's package, else its declaring class. The
+        // synthetic Kotlin file facade (`StringsKt`, `Foo__BarKt`) is an implementation detail, not a place the
+        // user thinks of the symbol living — so fall back to its PACKAGE instead of dropping the origin entirely.
+        // A type carries no `packageName`/`declaringClassFqn` (its `type` IS its own FQN), so derive the package
+        // from that — this is what disambiguates two same-named, unimported types (`org.w3c.dom.Text` vs
+        // `androidx.compose.material3.Text`) in the popup.
+        val container = s.packageName
+            ?: s.declaringClassFqn?.let { fqn ->
+                val simple = fqn.substringAfterLast('.')
+                if (simple.endsWith("Kt") || "__" in simple) fqn.substringBeforeLast('.', "").ifEmpty { null } else fqn
+            }
+            ?: if (isType) (s.type as? KotlinType)?.qualifiedName?.substringBeforeLast('.', "")?.ifEmpty { null } else null
         return CompletionItem(
             label = label,
             insertText = insert,

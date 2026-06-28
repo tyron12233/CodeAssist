@@ -53,6 +53,9 @@ import org.jetbrains.kotlin.psi.ValueArgument
 /** The Compose calling-convention status of a code position (see [KotlinResolver.composableContextAt]). */
 enum class ComposableContext { COMPOSABLE, NON_COMPOSABLE, UNKNOWN }
 
+/** The suspend calling-convention status of a code position (see [KotlinResolver.suspendContextAt]). */
+enum class SuspendContext { SUSPEND, NON_SUSPEND, UNKNOWN }
+
 /**
  * Resolution and the inference subset, computed over the LIVE [KtFile] (the buffer being edited).
  * No `BindingContext`: scopes are assembled from PSI parents, names resolved against the scope chain, and
@@ -88,6 +91,7 @@ class KotlinResolver(
     // Composable context is identical for every position inside one boundary (a function/accessor/lambda), and
     // it's queried per call expression in the analyze pass, so memoize by that boundary element.
     private val composeCtxCache = HashMap<PsiElement, ComposableContext>()
+    private val suspendCtxCache = HashMap<PsiElement, SuspendContext>()
 
     // Smart-cast narrowings: a stack of `name → narrowed type` scopes the LOWERER pushes while lowering an
     // `if (x is T) { … }` then-branch (or `when (x) { is T -> … }`), so `x`'s members resolve against `T`.
@@ -370,30 +374,71 @@ class KotlinResolver(
         }
         // Prefer exact arity; then functions with MORE params than supplied args (defaulted params the caller
         // omits — `Box(modifier){…}` with 4-param Box, `items(list,key){…}` vs all-4-param overloads); then
-        // functions with fewer (vararg / extra trailing lambdas). Within each tier, break ties by scoring the
-        // first positional non-lambda arg's type against the first parameter — picks `items(List<T>…)` over
-        // `items(Int…)` when the arg is a `List<Project>`, and the 4-param Box over a no-content overload.
+        // functions with fewer (vararg / extra trailing lambdas). Within each tier, break ties by scoring how
+        // well every non-lambda argument (positional AND named) fits each candidate. That picks `items(List<T>…)`
+        // over `items(Int…)` when the arg is a `List<Project>`, and the String `TextField(value=…)` overload
+        // over the `TextFieldValue` one when `value` is a String.
         val exact = candidates.filter { it.paramTypes.size == argCount }
-        if (exact.isNotEmpty()) return disambiguateByFirstArg(exact, call) ?: exact.first()
+        if (exact.isNotEmpty()) return bestOverload(exact, call)
         val moreParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
-        if (moreParams.isNotEmpty()) return disambiguateByFirstArg(moreParams, call) ?: moreParams.first()
+        if (moreParams.isNotEmpty()) return bestOverload(moreParams, call)
         val fewerParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
-        if (fewerParams.isNotEmpty()) return disambiguateByFirstArg(fewerParams, call) ?: fewerParams.first()
+        if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call)
         return candidates.firstOrNull()
     }
 
-    /** Break ties among overload [candidates] by scoring the first positional non-lambda arg's inferred type
-     *  against each candidate's first parameter type. A generic (type-param) first param accepts any type;
-     *  a concrete first param must match by qualified name. Returns null when scoring isn't possible. */
-    private fun disambiguateByFirstArg(candidates: List<KotlinSymbol>, call: KtCallExpression): KotlinSymbol? {
+    /** Pick the best-fitting overload from same-arity-tier [candidates] by [overloadFitScore], breaking ties in
+     *  favour of the first (the declaration/lookup order) so a confident resolution is unchanged. Generalises the
+     *  old first-positional-argument heuristic to ALL arguments, positional and NAMED. This matters for the
+     *  idiomatic Compose call style `TextField(value = s, onValueChange = { … })`, whose only disambiguating
+     *  argument (`value`) is named: a first-positional-only scorer gave up and picked an arbitrary overload,
+     *  then mistyped the lambda's `it` from the wrong one. */
+    private fun bestOverload(candidates: List<KotlinSymbol>, call: KtCallExpression): KotlinSymbol {
         if (candidates.size == 1) return candidates.first()
-        val firstExpr = call.valueArguments.firstOrNull { !it.isNamed() && it !is KtLambdaArgument }
-            ?.getArgumentExpression() ?: return null
-        val argType = inferType(firstExpr)?.takeIf { !it.isTypeParameter } ?: return null
-        return candidates.firstOrNull { sym ->
-            val pt = sym.paramTypes.firstOrNull() as? KotlinType ?: return@firstOrNull false
-            pt.isTypeParameter || pt.qualifiedName == argType.qualifiedName
+        var best = candidates.first()
+        var bestScore = overloadFitScore(best, call)
+        for (c in candidates.drop(1)) {
+            val s = overloadFitScore(c, call)
+            if (s > bestScore) { best = c; bestScore = s }
         }
+        return best
+    }
+
+    /** Score how well [sym] fits [call]'s arguments: +1 for each concrete-typed argument whose inferred type fits
+     *  its mapped parameter (exact FQN or a subtype), -1 for each known-type mismatch. Neutral (0), so the scorer
+     *  only ever moves a clear winner and never a guess: a type-parameter parameter, a functional parameter slot
+     *  (lambda / callable reference / `(…) -> R` / SAM, too imprecise to score), a numeric-to-numeric adaptation,
+     *  or an unknown type on either side. Higher means a better fit. */
+    private fun overloadFitScore(sym: KotlinSymbol, call: KtCallExpression): Int {
+        var score = 0
+        call.valueArguments.forEachIndexed { i, arg ->
+            if (arg is KtLambdaArgument) return@forEachIndexed
+            val expr = arg.getArgumentExpression() ?: return@forEachIndexed
+            if (expr is KtLambdaExpression) return@forEachIndexed // functional arg: shape too imprecise to score
+            val pt = sym.paramTypes.getOrNull(argParamIndex(arg, i, sym)) as? KotlinType ?: return@forEachIndexed
+            if (pt.isTypeParameter || isFunctionalParam(pt)) return@forEachIndexed // generic / callback slot: skip
+            val at = inferType(expr)?.takeIf { !it.isTypeParameter } ?: return@forEachIndexed
+            when {
+                pt.qualifiedName == at.qualifiedName || pt.isAssignableFrom(at) -> score += 1
+                pt.qualifiedName in NUMERIC_RANK && at.qualifiedName in NUMERIC_RANK -> {} // literal numeric coercion
+                service.isKnownType(pt.qualifiedName) && service.isKnownType(at.qualifiedName) -> score -= 1
+            }
+        }
+        return score
+    }
+
+    /** A function-typed / SAM parameter slot (`onValueChange: (T) -> Unit`, a `@Composable` content lambda, a
+     *  callback). Excluded from [overloadFitScore]: the inferred shape of a functional argument vs. the expected
+     *  type is too imprecise to disambiguate on, and these slots are never the distinguishing argument anyway. */
+    private fun isFunctionalParam(pt: KotlinType): Boolean =
+        pt.qualifiedName.startsWith("kotlin.Function") || pt.isExtensionFunctionType || pt.isComposable ||
+            service.functionalShape(pt) != null
+
+    /** The declared parameter index a non-lambda value argument fills: a NAMED argument by its name (else its
+     *  positional index). The trailing-lambda variant is [lambdaParamIndex]. */
+    private fun argParamIndex(arg: ValueArgument, argIndex: Int, sym: KotlinSymbol): Int {
+        arg.getArgumentName()?.asName?.identifier?.let { n -> sym.paramNames.indexOf(n).takeIf { it >= 0 }?.let { return it } }
+        return argIndex
     }
 
     private fun inferTypeArguments(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
@@ -747,6 +792,66 @@ class KotlinResolver(
 
     private fun org.jetbrains.kotlin.psi.KtAnnotated.hasComposableAnnotation(): Boolean =
         annotationEntries.any { it.shortName?.asString() == "Composable" }
+
+    /**
+     * Whether the calling context at [offset] is a `suspend` context, per Kotlin's coroutine calling convention
+     * (the rule the compiler's coroutine checker enforces: a suspend function may be called only from another
+     * suspend function or a suspend lambda):
+     *  - a `suspend` function body → [SuspendContext.SUSPEND]; a plain function / property accessor body → NON_SUSPEND;
+     *  - a lambda whose expected type is a `suspend (…) -> R` (`kotlin.SuspendFunctionN`) → SUSPEND;
+     *  - an `inline` lambda (`repeat`/`with`/`forEach`/`let`/`coroutineScope`…) is transparent: suspend-ness
+     *    flows through it from the enclosing scope, so the walk continues outward;
+     *  - a non-inline lambda filling a SOURCE callee's plainly-non-suspend functional parameter → NON_SUSPEND;
+     *  - the file/top level → NON_SUSPEND.
+     * [SuspendContext.UNKNOWN] (callers back off) when a lambda's suspend-ness can't be trusted. Binary suspend
+     * parameters ARE normally recovered: the metadata decoder rewrites a `suspend (…) -> R` (stored JVM-lowered as
+     * a continuation-expanded `FunctionN` with the `isSuspend` flag) back to `kotlin.SuspendFunctionN`, so a freshly
+     * decoded `launch`/`withContext`/`flow { }` lambda is detected as SUSPEND above. But a STALE persistent-cache
+     * entry written before that rewrite still carries the lowered `FunctionN`, so a non-inline lambda filling a
+     * BINARY callee's functional parameter that is NOT a `SuspendFunctionN` could still secretly be a suspend
+     * lambda; reporting NON_SUSPEND there would false-positive on the most common coroutine pattern. Hence only a
+     * SOURCE callee's function-type FQN is trusted for NON_SUSPEND; an unconfirmed binary one stays UNKNOWN.
+     */
+    fun suspendContextAt(offset: Int): SuspendContext {
+        // The nearest enclosing function/accessor/lambda fully decides the context (every position within it
+        // resolves the same), so it is a sound cache key (mirrors [composableContextAt]).
+        val boundary = run {
+            var n: PsiElement? = elementAt(offset)
+            while (n != null && n !is KtNamedFunction && n !is org.jetbrains.kotlin.psi.KtPropertyAccessor && n !is KtLambdaExpression) n = n.parent
+            n
+        }
+        boundary?.let { suspendCtxCache[it]?.let { hit -> return hit } }
+        return suspendContextWalk(offset).also { if (boundary != null) suspendCtxCache[boundary] = it }
+    }
+
+    private fun suspendContextWalk(offset: Int): SuspendContext {
+        var node: PsiElement? = elementAt(offset)
+        while (node != null) {
+            when (node) {
+                is KtNamedFunction ->
+                    return if (node.hasModifier(KtTokens.SUSPEND_KEYWORD)) SuspendContext.SUSPEND else SuspendContext.NON_SUSPEND
+                // Property accessors (and field initializers) are never suspend; they're a non-suspend boundary.
+                is org.jetbrains.kotlin.psi.KtPropertyAccessor -> return SuspendContext.NON_SUSPEND
+                is KtLambdaExpression -> {
+                    val expected = expectedFunctionTypeFor(node)
+                    if (expected != null && TypeRendering.isSuspendFunctionType(expected.qualifiedName)) return SuspendContext.SUSPEND
+                    val callee = enclosingCallAndParamIndex(node)?.let { resolveCalleeFunction(it.first) }
+                    when {
+                        // An inline lambda is transparent: keep walking out to the real enclosing boundary.
+                        callee?.isInline == true -> {}
+                        // A SOURCE callee's functional-parameter FQN is faithful: a non-`SuspendFunctionN` type is
+                        // genuinely a plain lambda, so this lambda is its own non-suspend boundary.
+                        callee != null && callee.origin.fromSource && expected != null -> return SuspendContext.NON_SUSPEND
+                        // Binary callee (suspend marker may be lost) or unresolved → can't tell; back off.
+                        else -> return SuspendContext.UNKNOWN
+                    }
+                }
+                else -> {}
+            }
+            node = node.parent
+        }
+        return SuspendContext.NON_SUSPEND
+    }
 
     private fun unify(param: KotlinType, arg: KotlinType, bindings: MutableMap<String, TypeRef>) {
         if (param.isTypeParameter) { bindings.putIfAbsent(param.qualifiedName, arg); return }

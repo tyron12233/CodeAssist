@@ -152,7 +152,7 @@ class KotlinJvmCompiler(
         val collector = RecordingMessageCollector()
         val exit = runCatching { K2JVMCompiler().exec(collector, Services.EMPTY, args) }
             .getOrElse {
-                return Result(false, collector.messages + "kotlinc threw: ${it.javaClass.name}: ${it.message}")
+                return Result(false, collector.messages + "error: kotlinc threw: ${it.javaClass.name}: ${it.message}")
             }
         return Result(exit == ExitCode.OK && !collector.hasErrors(), collector.messages, collector.outputs())
     }
@@ -203,7 +203,7 @@ class KotlinJvmCompiler(
         val ok = try {
             val env = KotlinCoreEnvironment.createForProduction(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES)
             runCatching { KotlinToJVMBytecodeCompiler.compileBunchOfSources(env) }
-                .getOrElse { return Result(false, collector.messages + "kotlinc threw: ${it.javaClass.name}: ${it.message}", collector.outputs()) }
+                .getOrElse { return Result(false, collector.messages + "error: kotlinc threw: ${it.javaClass.name}: ${it.message}", collector.outputs()) }
         } finally {
             Disposer.dispose(disposable)
         }
@@ -273,8 +273,19 @@ class KotlinJvmCompiler(
             // (we ship no scripting jars), "Using Kotlin home directory", "Configuring the compilation
             // environment", etc. They are diagnostics, not build output; warnings and errors are kept.
             if (severity == CompilerMessageSeverity.LOGGING || severity == CompilerMessageSeverity.INFO) return
-            val where = location?.let { " (${it.path}:${it.line}:${it.column})" } ?: ""
-            messages += "[$severity] $message$where"
+            // Emit the GNU/javac shape `path:line:col: severity: message` so `CompilerOutputParser`
+            // (build-engine) lifts each one into a located, navigable BuildDiagnostic — the same rich
+            // treatment ecj output already gets. A message can span lines (overload-ambiguity candidate
+            // lists, type mismatches); flatten it so the whole diagnostic stays one parseable line.
+            val sev = if (severity.isError) "error" else "warning"
+            val loc = location
+            val prefix = when {
+                loc != null && loc.line >= 0 && loc.column >= 0 -> "${loc.path}:${loc.line}:${loc.column}: "
+                loc != null && loc.line >= 0 -> "${loc.path}:${loc.line}: "
+                else -> ""
+            }
+            val flat = message.lineSequence().joinToString(" ") { it.trim() }.trim()
+            messages += "$prefix$sev: $flat"
         }
 
         /** Source file → the `.class` files it produced (normalized), from the OUTPUT messages. */

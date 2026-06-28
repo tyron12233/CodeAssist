@@ -56,6 +56,16 @@ class RawCallable(
     /** Whether each value parameter declares a default (positional with [paramTexts]) — so a required-argument
      *  check can tell which the call may omit. Empty ⇒ not a function / unknown. */
     val paramHasDefault: List<Boolean> = emptyList(),
+    /** A mutable (`var`) property — gets a `set<Name>` accessor in the Java facade as well as `get<Name>`. */
+    val isVar: Boolean = false,
+    /** `@JvmStatic` — in an `object`/companion, also exposed to Java as a `static` member of the (enclosing) class. */
+    val jvmStatic: Boolean = false,
+    /** `@JvmField` — a property exposed to Java as a public field instead of `get`/`set` accessors. */
+    val jvmField: Boolean = false,
+    /** `@JvmOverloads` — generate Java overloads dropping trailing defaulted parameters (uses [paramHasDefault]). */
+    val jvmOverloads: Boolean = false,
+    /** `@JvmName("x")` value — the Java-visible name override for a function (null ⇒ use [name]). */
+    val jvmName: String? = null,
 )
 
 class RawClass(
@@ -76,6 +86,11 @@ class RawClass(
     /** True when this RawClass IS a companion object — kept out of type-name completion (a `Companion`
      *  suggestion is noise) while still resolvable as `Outer.Companion` for member lookup. */
     val isCompanion: Boolean = false,
+    /** Declaration kind, so the Java facade renders the right form (`interface`/`enum`/`@interface`). An
+     *  `object` is signalled by [isObject]; a plain class has all three false. */
+    val isInterface: Boolean = false,
+    val isEnum: Boolean = false,
+    val isAnnotation: Boolean = false,
 )
 
 class SourceFile(
@@ -151,13 +166,23 @@ object SourceIndexBuilder {
         val ctors = ArrayList<RawCallable>()
         // Primary-constructor `val/var` params are member properties.
         c.primaryConstructorParameters.filter { it.hasValOrVar() }.forEach { p ->
-            members += RawCallable(p.name ?: "_", false, null, p.typeReference?.text, null, emptyList(), ctx, node(parsed, p), visOf(p))
+            members += RawCallable(p.name ?: "_", false, null, p.typeReference?.text, null, emptyList(), ctx, node(parsed, p), visOf(p),
+                isVar = p.valOrVarKeyword?.text == "var", jvmField = hasAnno(p, "JvmField"))
         }
         if (c.primaryConstructorParameters.isNotEmpty() || c.hasExplicitPrimaryConstructor()) {
             ctors += RawCallable(c.name ?: "", true, null, fqn, null,
                 c.primaryConstructorParameters.map { (it.name ?: "_") to it.typeReference?.text }, ctx, node(parsed, c),
                 varargParamIndex = c.primaryConstructorParameters.indexOfFirst { it.isVarArg },
-                paramHasDefault = c.primaryConstructorParameters.map { it.hasDefaultValue() })
+                paramHasDefault = c.primaryConstructorParameters.map { it.hasDefaultValue() },
+                jvmOverloads = c.primaryConstructor?.let { hasAnno(it, "JvmOverloads") } == true)
+        }
+        // Secondary constructors (`constructor(...)`) — so Java sees those overloads too.
+        for (sc in c.secondaryConstructors) {
+            ctors += RawCallable(c.name ?: "", true, null, fqn, null,
+                sc.valueParameters.map { (it.name ?: "_") to it.typeReference?.text }, ctx, node(parsed, sc), visOf(sc),
+                varargParamIndex = sc.valueParameters.indexOfFirst { it.isVarArg },
+                paramHasDefault = sc.valueParameters.map { it.hasDefaultValue() },
+                jvmOverloads = hasAnno(sc, "JvmOverloads"))
         }
         val enumEntries = ArrayList<String>()
         for (d in c.declarations) {
@@ -182,10 +207,14 @@ object SourceIndexBuilder {
             )
         }
         val companion = c.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtObjectDeclaration>().firstOrNull { it.isCompanion() }
+        val asClass = c as? org.jetbrains.kotlin.psi.KtClass
         return RawClass(fqn, c.name ?: fqn.substringAfterLast('.'), c is org.jetbrains.kotlin.psi.KtObjectDeclaration,
             supers, members, ctors, ctx, node(parsed, c), enumEntries,
             companionObjectName = companion?.let { it.name ?: "Companion" },
-            isCompanion = (c as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.isCompanion() == true)
+            isCompanion = (c as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.isCompanion() == true,
+            isInterface = asClass?.isInterface() == true,
+            isEnum = asClass?.isEnum() == true,
+            isAnnotation = asClass?.isAnnotation() == true)
     }
 
     /** [c] plus its companion object(s) and every (transitively) nested class/object, each as its own
@@ -228,6 +257,9 @@ object SourceIndexBuilder {
         varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
         paramHasDefault = f.valueParameters.map { it.hasDefaultValue() },
         typeParameterNames = f.typeParameters.mapNotNull { it.name },
+        jvmStatic = hasAnno(f, "JvmStatic"),
+        jvmOverloads = hasAnno(f, "JvmOverloads"),
+        jvmName = annoArg(f, "JvmName"),
     )
 
     private fun property(p: KtProperty, ctx: FileContext, parsed: KotlinParsedFile) = RawCallable(
@@ -240,7 +272,19 @@ object SourceIndexBuilder {
         ctx = ctx,
         node = node(parsed, p),
         visibility = visOf(p),
+        isVar = p.isVar,
+        jvmStatic = hasAnno(p, "JvmStatic"),
+        jvmField = hasAnno(p, "JvmField"),
     )
+
+    /** True if [decl] carries an annotation whose simple name is [simpleName] (matches `@X` and `@pkg.X`). */
+    private fun hasAnno(decl: org.jetbrains.kotlin.psi.KtAnnotated, simpleName: String): Boolean =
+        decl.annotationEntries.any { it.shortName?.asString() == simpleName }
+
+    /** The first string-literal argument of `@[simpleName]("…")` on [decl] (for `@JvmName`), or null. */
+    private fun annoArg(decl: org.jetbrains.kotlin.psi.KtAnnotated, simpleName: String): String? =
+        decl.annotationEntries.firstOrNull { it.shortName?.asString() == simpleName }
+            ?.valueArguments?.firstOrNull()?.getArgumentExpression()?.text?.trim('"')?.takeIf { it.isNotEmpty() }
 
     private fun visOf(decl: KtModifierListOwner): String? = when {
         decl.hasModifier(KtTokens.PRIVATE_KEYWORD) -> "private"

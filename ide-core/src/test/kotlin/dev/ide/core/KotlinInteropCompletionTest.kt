@@ -36,6 +36,14 @@ class KotlinInteropCompletionTest {
             fun helloWorld() { println("Hello World") }
             val greeting: String = "hi"
             class KtGreeter { fun hello(): String = "hi" }
+            class Box { var value: Int = 0 }
+            class Repo { fun all(): List<String> = emptyList() }
+            class Person(val id: Int, var label: String) { fun other(p: Person): Person = p }
+            class Factory { companion object { @JvmStatic fun create(): Factory = Factory() } }
+            object Consts { @JvmField val MAX: Int = 10 }
+            class Greeter2 @JvmOverloads constructor(val tag: String = "world") { @JvmName("greetJava") fun greet(): String = "hi" }
+            class Overloaded { @JvmOverloads fun box(a: Int, b: Int = 1): Int = a + b }
+            class Multi { fun describe(): String = "x"; constructor(a: Int) {}; constructor(a: Int, b: Int) {} }
             """.trimIndent(),
         )
         s.invalidateSyntheticClasses() // the .kt was written after bootstrap; rebuild the facade overlay
@@ -77,6 +85,90 @@ class KotlinInteropCompletionTest {
         val text = "package com.example.core;\nclass Probe { void m() { new KtGreeter().; } }"
         val items = labels(s, probe, text, "new KtGreeter().")
         assertTrue("hello" in items, "Kotlin class instance method 'hello' should complete: $items")
+    }
+
+    /** A Kotlin `var` property is visible to Java as BOTH `get<Name>()` and `set<Name>(…)` (the crude facade
+     *  only emitted the getter). */
+    @Test
+    fun varPropertyExposesGetterAndSetterToJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { new Box().; } }", "new Box().")
+        assertTrue("getValue" in items, "var → getter: $items")
+        assertTrue("setValue" in items, "var → setter (was missing before faithful mapping): $items")
+    }
+
+    /** A Kotlin method's return type maps to a real Java type, so chaining through it resolves: `Repo.all()`
+     *  returns `List<String>` → `java.util.List`, whose `size`/`isEmpty` complete (the crude facade returned
+     *  `Object`, so nothing chained). */
+    @Test
+    fun mappedReturnTypeChainsFromJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { new Repo().all().; } }", "new Repo().all().")
+        assertTrue("size" in items, "List<String> return must map to java.util.List (size completes): $items")
+    }
+
+    /** A Kotlin primary constructor is visible to Java (`new Person(int, String)`), and its mapped parameter
+     *  types resolve — so members complete off a constructed instance. */
+    @Test
+    fun primaryConstructorResolvesFromJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val text = "package com.example.core;\nclass Probe { void m() { new Person(1, \"x\").; } }"
+        val items = labels(s, probe, text, "new Person(1, \"x\").")
+        assertTrue("getId" in items, "constructed Person should expose getId(): $items")
+        assertTrue("setLabel" in items, "Person.label is a var → setLabel: $items")
+        assertTrue("other" in items, "Person.other(Person) should complete (param type resolved): $items")
+    }
+
+    /** `@JvmStatic` on a companion member surfaces it as a `static` on the OWNER class (`Factory.create()`). */
+    @Test
+    fun jvmStaticCompanionMemberIsStaticOnOwner() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { Factory.; } }", "Factory.")
+        assertTrue("create" in items, "@JvmStatic companion fun should be static on Factory: $items")
+    }
+
+    /** `@JvmField` exposes a property as a public field, NOT a getter. */
+    @Test
+    fun jvmFieldIsAFieldNotAGetter() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { Consts.; } }", "Consts.")
+        assertTrue("MAX" in items, "@JvmField MAX should be a field: $items")
+        assertTrue("getMAX" !in items, "@JvmField must not also expose a getter: $items")
+    }
+
+    /** `@JvmName` renames the Java-visible method, and the original Kotlin name is not exposed. */
+    @Test
+    fun jvmNameRenamesTheMethod() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { new Greeter2().; } }", "new Greeter2().")
+        assertTrue("greetJava" in items, "@JvmName(\"greetJava\") should rename greet: $items")
+        assertTrue("greet" !in items, "the original Kotlin name must not be exposed: $items")
+    }
+
+    /** `@JvmOverloads` generates the shorter-arity overloads, so a defaulted argument can be omitted from Java. */
+    @Test
+    fun jvmOverloadsGeneratesShorterArity() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        // box(a, b=1) → box(int) overload exists; the 1-arg call must NOT be flagged unresolved/inapplicable.
+        val text = "package com.example.core;\nclass Probe { int m() { return new Overloaded().box(5); } }"
+        val msgs = s.analyzeDiagnostics(probe, text).map { it.message }
+        assertTrue(msgs.none { it.contains("box", ignoreCase = true) }, "1-arg box(5) must resolve via @JvmOverloads: $msgs")
+    }
+
+    /** Secondary constructors are visible to Java (`new Multi(int, int)`). */
+    @Test
+    fun secondaryConstructorResolvesFromJava() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
+        val items = labels(s, probe, "package com.example.core;\nclass Probe { void m() { new Multi(1, 2).; } }", "new Multi(1, 2).")
+        assertTrue("describe" in items, "2-arg secondary constructor should resolve: $items")
     }
 
     @Test

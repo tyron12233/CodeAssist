@@ -196,6 +196,55 @@ class KotlinCallApplicabilityTest {
         assertTrue(d.none { it.code == "kt.typeMismatch" }, "n = 5 for a `var n: Int` must NOT be flagged; got $d")
     }
 
+    @Test
+    fun namedArgumentSelectsOverloadForLambdaParameter() {
+        // The Compose `TextField(value = …, onValueChange = { … })` shape: two overloads differing in the type of
+        // the leading `value` parameter AND its paired `onValueChange` function type. The disambiguating argument
+        // (`value`) is NAMED, so the old first-positional-only scorer couldn't choose and picked an arbitrary
+        // overload, mistyping the lambda's `it`. Here `value = s` is a String, so the String overload must win,
+        // making `it` a String and `s = it` valid. (The wrong overload is declared first so the regression
+        // reproduces regardless of lookup order.)
+        val d = diagnose(
+            """
+            package p
+            class TextFieldValue
+            fun TextField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit) {}
+            fun TextField(value: String, onValueChange: (String) -> Unit) {}
+            fun f() {
+                var s: String = ""
+                TextField(value = s, onValueChange = { s = it })
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            d.none { it.code == "kt.typeMismatch" },
+            "value = s is a String, so the String overload's `it` is a String and `s = it` is valid; got $d",
+        )
+    }
+
+    @Test
+    fun namedArgumentPicksTheOtherOverloadToo() {
+        // The mirror case: when `value` is a `TextFieldValue`, the TextFieldValue overload must win and a
+        // String assignment from `it` IS a real mismatch (the scorer disambiguates both directions, not just one).
+        val d = diagnose(
+            """
+            package p
+            class TextFieldValue
+            fun TextField(value: String, onValueChange: (String) -> Unit) {}
+            fun TextField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit) {}
+            fun f() {
+                val v = TextFieldValue()
+                var s: String = ""
+                TextField(value = v, onValueChange = { s = it })
+            }
+            """.trimIndent(),
+        )
+        assertTrue(
+            d.any { it.code == "kt.typeMismatch" && it.message.contains("TextFieldValue") && it.message.contains("String") },
+            "value = v is a TextFieldValue, so `it` is a TextFieldValue and `s = it` (s: String) IS a mismatch; got $d",
+        )
+    }
+
     // ---- when exhaustiveness ----
 
     @Test

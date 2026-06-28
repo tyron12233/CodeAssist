@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,10 +46,10 @@ import dev.ide.ui.components.entrancePop
 import dev.ide.ui.theme.Ca
 
 /**
- * The completion list (glass-thick): rows of [KindBadge] + a two-line left column (the label, typed prefix
- * bolded in accent, over the detail/signature) + the right-aligned origin (package or declaring class). When
- * the selected item carries javadoc, a doc panel sits to the right. Operable by click and by keyboard (the
- * host handles ↑↓/Tab/Enter/Esc).
+ * The completion list (glass-thick): rows of [KindBadge] + a two-line column — the label (typed prefix bolded
+ * in accent) on top, then a muted secondary line with the origin (package / declaring class) on the left and
+ * the return/value type on the right. When the selected item carries javadoc, a doc panel sits to the right.
+ * Operable by click and by keyboard (the host handles ↑↓/Tab/Enter/Esc).
  */
 @Composable
 fun CompletionList(
@@ -126,7 +125,7 @@ private fun CompletionListPanel(
                 itemsIndexed(items) { index, item ->
                     val sel = index == selectedIndex
                     CompletionRow(
-                        item, prefix, sel, width,
+                        item, prefix, sel,
                         onPick = { onPick(item) }, onHover = { onHover(index) },
                         onInfo = if (sel) onInfo else null,
                     )
@@ -178,7 +177,6 @@ private fun CompletionRow(
     item: UiCompletionItem,
     prefix: String,
     selected: Boolean,
-    rowWidth: Dp,
     onPick: () -> Unit,
     onHover: () -> Unit,
     // Non-null on the selected row when docs are reachable via flip (narrow screens): shows a tappable ⓘ.
@@ -199,9 +197,10 @@ private fun CompletionRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         KindBadge(item.kind)
-        // Left: two stacked lines — the name on top, its signature/type below. Right: the origin (a type's
-        // package or a member's declaring class), dimmed and end-aligned. The name/detail column takes the
-        // weight so a long origin can't squeeze it; the origin caps at ~40% of the row and ellipsizes.
+        // Two stacked lines: the name on top, then a muted secondary line carrying the ORIGIN (a top-level
+        // callable's / type's package, or a member's declaring class) on the LEFT and the return/value TYPE on
+        // the RIGHT. IntelliJ keeps both on one line, but a narrow popup can't fit that, so they stack under the
+        // name. The second line is dropped when neither is present (e.g. a bare local with no inferred type).
         Column(Modifier.weight(1f)) {
             Text(
                 highlightMatch(item.label, prefix),
@@ -210,27 +209,35 @@ private fun CompletionRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (item.detail != null) {
-                Text(
-                    item.detail,
-                    style = detailStyle,
-                    color = Ca.colors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            if (item.container != null || item.detail != null) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Origin (package / declaring class) — flexes + ellipsizes so a long package can't shove
+                    // the type off the row. Empty (but still weighted) when there's no origin, so the type
+                    // stays right-aligned.
+                    Text(
+                        item.container ?: "",
+                        style = detailStyle,
+                        color = Ca.colors.textTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (item.detail != null) {
+                        Text(
+                            item.detail,
+                            style = detailStyle,
+                            color = Ca.colors.textTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.End,
+                        )
+                    }
+                }
             }
-        }
-        if (item.container != null) {
-            Spacer(Modifier.width(8.dp))
-            Text(
-                item.container,
-                style = detailStyle,
-                color = Ca.colors.textTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.End,
-                modifier = Modifier.widthIn(max = rowWidth * 0.4f),
-            )
         }
         // Docs affordance (narrow screens): its own click consumes the tap, so it opens the docs instead of
         // accepting the item.

@@ -80,6 +80,22 @@ class KotlinComposeBinaryShapeTest {
     }
 
     @Test
+    fun binarySuspendFunctionTypeIsRecoveredFromTheMetadataFlag() {
+        // `fakeCoroutineBuilder(block: suspend () -> Unit)` stores `block` JVM-lowered as `Function1<Continuation,
+        // Any>` with the `@Metadata` `isSuspend` flag set. The decoder must recover the source shape so the suspend
+        // calling-convention check (and rendering) treat it like the source `SuspendFunctionN`.
+        val sym = service.topLevelByName("fakeCoroutineBuilder").firstOrNull { it.paramTypes.size == 1 }
+        assertNotNull(sym, "fakeCoroutineBuilder must resolve from the binary index")
+        val block = sym.paramTypes.first() as dev.ide.lang.kotlin.symbols.KotlinType
+        assertEquals("kotlin.SuspendFunction0", block.qualifiedName,
+            "a binary `suspend () -> Unit` param must decode to kotlin.SuspendFunction0 (not the lowered Function1); got ${block.qualifiedName}")
+        assertTrue(block.toString().startsWith("suspend "),
+            "it must render as a `suspend (…) -> R` type; got ${block}")
+        assertTrue(dev.ide.lang.kotlin.symbols.TypeRendering.isSuspendFunctionType(block.qualifiedName),
+            "isSuspendFunctionType must recognise it")
+    }
+
+    @Test
     fun classMemberExtensionsAreKeptInTheBinaryTypeShape() {
         // The shape of a scope INTERFACE must retain its member extensions (with their extension receiver),
         // so an implicit-receiver-driven lookup can apply them — they were previously dropped on the binary path.

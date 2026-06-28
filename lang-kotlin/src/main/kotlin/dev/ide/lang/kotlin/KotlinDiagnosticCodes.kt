@@ -19,6 +19,7 @@ object KotlinDiagnosticCodes {
     const val NOT_CALLABLE = "kt.notCallable"
     const val CANNOT_INFER_TYPE = "kt.cannotInferType"
     const val COMPOSABLE_INVOCATION = "kt.composableInvocation"
+    const val SUSPEND_CONTEXT = "kt.suspendContext"
     const val DELEGATE_OPERATOR = "kt.delegateOperator"
 
     // --- declaration / modifier validity ---

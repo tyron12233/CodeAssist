@@ -1,6 +1,7 @@
 package dev.ide.ui.editor
 
 import dev.ide.ui.backend.UiCompletionItem
+import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 
 /**
@@ -32,12 +33,17 @@ data class CompletionSession(
      */
     fun filtered(prefix: String): List<UiCompletionItem> {
         if (prefix.isEmpty() || !canFilterLocally) return base
-        // Keep every candidate the user is still narrowing toward (prefix OR camel/subsequence), but float
-        // true prefix matches above scattered fuzzy hits. The sort is stable, so the backend's semantic
-        // ranking (expected type, proximity) survives *within* each tier — we only re-tier by match quality.
+        // Keep every candidate the user is still narrowing toward (prefix OR camel/subsequence), then re-rank:
+        //   1. Buffer words (hippie completion) always sort BELOW real, semantic completions — a guessed word
+        //      must never outrank a resolved symbol, even when it is the closer textual match (the reported bug:
+        //      a case-insensitive-exact word `text` jumping above the prefix-matching symbol `TextField`).
+        //   2. Within each group, float exact matches over prefix over fuzzy (case-sensitive winning each pair).
+        // The sort is stable, so the backend's semantic ranking (expected type, proximity) survives within a tier.
         return base.asSequence()
             .filter { matchPositions(it.label, prefix) != null }
-            .sortedBy { matchTier(it.label, prefix) }
+            .sortedWith(
+                compareBy({ if (it.kind == UiCompletionKind.Word) 1 else 0 }, { matchTier(it.label, prefix) }),
+            )
             .toList()
     }
 
@@ -105,12 +111,21 @@ internal fun matchPositions(candidate: String, query: String): IntArray? {
  * match floats above a prefix match floats above a fuzzy hit, with the case-sensitive variant winning each
  * pair. So typing `Text` ranks the exact `Text` above `TextField`/`TextView`. Stable-sorting by this keeps
  * the backend's ranking intact inside each tier while re-tiering by match quality.
+ *
+ * The exact tiers compare against the candidate's leading IDENTIFIER, not the whole label: a function label
+ * carries its signature (`Text(text: String)`), so a whole-label equality check would never fire, letting a
+ * longer but already-imported prefix match (`TextField(...)`) outrank the exactly-typed `Text`. The full label
+ * is still accepted as exact too, so a signature-less label (a plain name, an XML `android:layout_width`) is
+ * unchanged.
  */
-internal fun matchTier(candidate: String, query: String): Int = when {
-    query.isEmpty() -> 0
-    candidate == query -> 0                             // exact match (case-sensitive) — the user typed it whole
-    candidate.equals(query, ignoreCase = true) -> 1     // exact match, differing only in case
-    candidate.startsWith(query) -> 2                    // case-sensitive prefix
-    candidate.startsWith(query, ignoreCase = true) -> 3 // case-insensitive prefix
-    else -> 4                                           // fuzzy (camel-hump / subsequence)
+internal fun matchTier(candidate: String, query: String): Int {
+    if (query.isEmpty()) return 0
+    val name = candidate.takeWhile { isIdentifierChar(it) } // "Text(text: String)" -> "Text"
+    return when {
+        candidate == query || name == query -> 0                 // exact (case-sensitive): the user typed it whole
+        candidate.equals(query, ignoreCase = true) || name.equals(query, ignoreCase = true) -> 1 // exact, case only
+        candidate.startsWith(query) -> 2                          // case-sensitive prefix
+        candidate.startsWith(query, ignoreCase = true) -> 3       // case-insensitive prefix
+        else -> 4                                                 // fuzzy (camel-hump / subsequence)
+    }
 }

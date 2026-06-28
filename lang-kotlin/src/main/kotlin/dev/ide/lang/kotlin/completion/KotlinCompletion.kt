@@ -380,11 +380,29 @@ class KotlinCompletion(
         { if (expected != null && matchesExpected(it.symbol, expected)) 0 else 1 }, // expected-type matches first
         { if (it.symbol.name.startsWith(prefix)) 0 else 1 },       // case-sensitive prefix first
         { if (composableContext && it.symbol.isComposable) 0 else 1 }, // @Composable callables first in a @Composable context
+        { memberGroup(it.symbol) },                                // own members > source ext > library ext > universal scope fns > Object methods
         { if (it.importEdit.isEmpty()) 0 else 1 },                 // in-scope (no import) before needs-import
         { KotlinCompletionItems.proximity(it.symbol.kind) },       // locals/members before library
         { it.symbol.name.length },
         { it.symbol.name },
     )
+
+    /**
+     * IntelliJ-style grouping for member-access ranking (lower sorts earlier): the receiver's own members
+     * first, then project-source extensions, then other (library) extensions on a specific receiver, then the
+     * ubiquitous universal scope functions (`let`/`run`/`also`/`apply`/`takeIf`/`to`, … — declared on an
+     * unbounded type parameter / `kotlin.Any`, so they apply to every receiver), with the `Object` methods
+     * (`equals`/`hashCode`/`toString`) last. In name-reference position every candidate is a non-extension,
+     * so all share group 0 and this key is inert there — it only re-orders the `receiver.` member list, where
+     * extensions used to interleave with (and routinely precede) real members purely on the shorter name.
+     */
+    private fun memberGroup(s: KotlinSymbol): Int = when {
+        s.name in OBJECT_METHODS -> 4
+        !s.isExtension -> 0
+        s.receiverTypeParam != null || s.receiverTypeFqn == "kotlin.Any" -> 3 // universal scope function (T./Any.)
+        s.origin.fromSource -> 1                                              // project-source extension
+        else -> 2                                                             // library extension on a specific receiver
+    }
 
     /** Whether a candidate's (return/declared) type is assignable to the [expected] type — boosts it in [rank]. */
     private fun matchesExpected(s: KotlinSymbol, expected: KotlinType): Boolean {
@@ -471,5 +489,8 @@ class KotlinCompletion(
         val TYPE_KINDS = setOf(
             SymbolKind.CLASS, SymbolKind.INTERFACE, SymbolKind.ENUM, SymbolKind.ANNOTATION_TYPE, SymbolKind.RECORD,
         )
+        // The universal `Object`/`Any` methods — always present on every receiver, so they sort to the bottom
+        // of a member-access list (IntelliJ does the same) rather than competing with the type's real members.
+        val OBJECT_METHODS = setOf("equals", "hashCode", "toString")
     }
 }

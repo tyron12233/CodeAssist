@@ -8,6 +8,7 @@ import dev.ide.lang.kotlin.parse.inTypeReference
 import dev.ide.lang.kotlin.parse.unwrapParen
 import dev.ide.lang.kotlin.resolve.ComposableContext
 import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.SuspendContext
 import dev.ide.lang.kotlin.symbols.DefaultImports
 import dev.ide.lang.kotlin.symbols.FileContext
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
@@ -165,6 +166,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 KotlinPerf.span("call.ctor") { (constructorCallMismatch(psi, resolver) ?: sameFileConstructorMismatch(psi, resolver))?.let { out += it } }
                 KotlinPerf.span("call.namedArgs") { out += unknownNamedArguments(psi, resolver) }
                 KotlinPerf.span("call.composable") { composableInvocation(psi, resolver)?.let { out += it } }
+                KotlinPerf.span("call.suspend") { suspendInvocation(psi, resolver)?.let { out += it } }
                 KotlinPerf.span("call.inferType") { cannotInferType(psi, resolver)?.let { out += it } }
             }
             is KtDotQualifiedExpression -> unsafeNullableAccess(psi, resolver)?.let { out += it }
@@ -1503,6 +1505,29 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "@Composable invocation can only happen from the context of a @Composable function",
             KotlinDiagnosticCodes.COMPOSABLE_INVOCATION,
+        )
+    }
+
+    /**
+     * A call to a `suspend` function from a non-suspend context, Kotlin's coroutine calling-convention error
+     * ("Suspend function … should be called only from a coroutine or another suspend function"). Mirrors
+     * [composableInvocation]: it fires only when the surrounding context is CONFIDENTLY non-suspend AND the
+     * callee is confidently `suspend`. A [SuspendContext.UNKNOWN] context backs off, so this never false-positives
+     * over the parse-only model, crucially on coroutine builders (`launch`/`withContext` are binary, and the
+     * metadata path can't prove their lambda is a suspend slot, so [KotlinResolver.suspendContextAt] returns
+     * UNKNOWN there rather than NON_SUSPEND). Inline lambdas (`repeat`/`coroutineScope`/`with`) are transparent.
+     */
+    private fun suspendInvocation(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        // Context first (a cheap ancestor walk), like composableInvocation, before the costlier callee resolution.
+        if (resolver.suspendContextAt(call.textRange.startOffset) != SuspendContext.NON_SUSPEND) return null
+        val callee = resolver.calleeFunctionOf(call) ?: return null
+        if (!callee.isSuspend) return null
+        val anchor = call.calleeExpression ?: call
+        val r = anchor.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Suspend function '${callee.name}' can only be called from a coroutine or another suspend function",
+            KotlinDiagnosticCodes.SUSPEND_CONTEXT,
         )
     }
 

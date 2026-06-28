@@ -84,6 +84,28 @@ class KotlinComposeContextTest {
         assertTrue(!hasComposableError(diags), "a non-composable call must never be flagged; got $diags")
     }
 
+    @Test
+    fun namedValueArgumentSelectsTheStringTextFieldOverload() {
+        // The reported false positive over a BINARY library overload (param names come from `@kotlin.Metadata`):
+        // `fakeTextField` has a String overload and a FakeTextFieldValue overload. The call disambiguates only on
+        // the NAMED `value` argument, which is a String, so the String overload must be picked, making the
+        // lambda's `it` a String and `s = it` valid. (The pre-fix scorer ignored named args, mistyped `it` as
+        // FakeTextFieldValue, and falsely flagged `s = it`.)
+        val diags = diagnose(
+            "TextField.kt",
+            "package demo\n" +
+                "import dev.ide.fakecompose.fakeTextField\n" +
+                "@Composable fun F() {\n" +
+                "    var s: String = \"\"\n" +
+                "    fakeTextField(value = s, onValueChange = { s = it })\n" +
+                "}",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.typeMismatch" },
+            "value = s is a String, so the String overload's `it` is a String and `s = it` is valid; got $diags",
+        )
+    }
+
     // --- completion boost (boost, not filter) ---
 
     @Test
@@ -131,6 +153,7 @@ class KotlinComposeContextTest {
                 add("META-INF/fakecompose.kotlin_module", ByteArray(0))
                 add("androidx/compose/runtime/Composable.class", bytes("androidx/compose/runtime/Composable.class"))
                 add("dev/ide/fakecompose/FakeComposablesKt.class", bytes("dev/ide/fakecompose/FakeComposablesKt.class"))
+                add("dev/ide/fakecompose/FakeTextFieldValue.class", bytes("dev/ide/fakecompose/FakeTextFieldValue.class"))
             }
             return jar
         }

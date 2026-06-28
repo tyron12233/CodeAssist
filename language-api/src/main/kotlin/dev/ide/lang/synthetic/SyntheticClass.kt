@@ -52,6 +52,9 @@ data class SyntheticMethod(
     val parameters: List<SyntheticParam> = emptyList(),
     val modifiers: Set<SyntheticModifier> = setOf(SyntheticModifier.PUBLIC),
     val doc: String? = null,
+    /** A constructor: rendered with the enclosing type's name and no return type ([name]/[returnType] are
+     *  ignored). Lets a provider express how a type is instantiated — e.g. a Kotlin class's primary constructor. */
+    val isConstructor: Boolean = false,
 )
 
 data class SyntheticParam(val name: String, val type: String)

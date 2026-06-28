@@ -56,6 +56,32 @@ fun fakeChip(onClick: () -> Unit, label: @Composable () -> Unit, enabled: Boolea
 @Composable
 fun fakeChip(onClick: () -> Unit, label: @Composable () -> Unit, tag: String = "") {}
 
+/** Mirrors `androidx.compose.ui.text.input.TextFieldValue`: the alternative value type a text field's
+ *  `value`/`onValueChange` pair can be typed over. */
+class FakeTextFieldValue
+
+/** Two overloads of the SAME composable that differ in the type of the leading `value` parameter AND its
+ *  paired `onValueChange` callback (the `androidx.compose.material3.TextField` shape: a `String` overload and
+ *  a `TextFieldValue` overload). A `fakeTextField(value = …, onValueChange = { … })` call disambiguates ONLY
+ *  on the NAMED `value` argument's type, so the resolver must score named arguments to pick the right overload
+ *  (and thereby type the lambda's `it`). The `TextFieldValue` overload is declared FIRST so a scorer that
+ *  ignores named arguments and falls back to the first candidate picks the WRONG one (the regression). */
+@Composable
+fun fakeTextField(value: FakeTextFieldValue, onValueChange: (FakeTextFieldValue) -> Unit) {}
+
+@Composable
+fun fakeTextField(value: String, onValueChange: (String) -> Unit) {}
+
+/** A top-level `suspend` function compiled into the test classpath (facade `FakeComposablesKt`), so the
+ *  suspend calling-convention check can be exercised against a real BINARY `suspend` symbol. */
+suspend fun fakeSuspendWork() {}
+
+/** A NON-inline builder whose lambda is a `suspend () -> Unit` slot, the coroutine-builder shape
+ *  (`launch`/`withContext`). The binary/`@Metadata` path decodes a suspend function type as a continuation-
+ *  expanded plain `FunctionN` (the suspend marker is lost), so the resolver cannot prove this lambda is a
+ *  suspend slot and must back off (no diagnostic) rather than false-flag a suspend call inside it. */
+fun fakeCoroutineBuilder(block: suspend () -> Unit) {}
+
 /** A per-item scope, like `LazyItemScope`. */
 class FakeItemScope
 

@@ -36,7 +36,7 @@ object SyntheticJavaSource {
         sb.append(" {\n")
         val inner = "  ".repeat(indent + 1)
         for (f in c.fields) emitField(sb, f, inner)
-        for (m in c.methods) emitMethod(sb, m, inner, c.kind)
+        for (m in c.methods) emitMethod(sb, m, inner, c.kind, simpleName(c.fqName))
         for (n in c.nestedClasses) emitType(sb, n, indent + 1)
         sb.append(pad).append("}\n")
     }
@@ -47,17 +47,19 @@ object SyntheticJavaSource {
             .append(" = ").append(f.constant ?: defaultValue(f.type)).append(";\n")
     }
 
-    private fun emitMethod(sb: StringBuilder, m: SyntheticMethod, pad: String, owner: SyntheticTypeKind) {
+    private fun emitMethod(sb: StringBuilder, m: SyntheticMethod, pad: String, owner: SyntheticTypeKind, ownerName: String) {
         m.doc?.let { sb.append(pad).append("/** ").append(escapeDoc(it)).append(" */\n") }
-        sb.append(pad).append(modifiers(m.modifiers)).append(m.returnType).append(' ').append(m.name).append('(')
-            .append(m.parameters.joinToString(", ") { "${it.type} ${it.name}" }).append(')')
-        val abstract = owner == SyntheticTypeKind.INTERFACE || owner == SyntheticTypeKind.ANNOTATION ||
-            SyntheticModifier.ABSTRACT in m.modifiers
+        sb.append(pad).append(modifiers(m.modifiers))
+        // A constructor has the enclosing type's name and no return type; a method has its return type + name.
+        if (m.isConstructor) sb.append(ownerName) else sb.append(m.returnType).append(' ').append(m.name)
+        sb.append('(').append(m.parameters.joinToString(", ") { "${it.type} ${it.name}" }).append(')')
+        val abstract = !m.isConstructor && (owner == SyntheticTypeKind.INTERFACE || owner == SyntheticTypeKind.ANNOTATION ||
+            SyntheticModifier.ABSTRACT in m.modifiers)
         if (abstract) {
             sb.append(";\n")
         } else {
             sb.append(" {")
-            if (m.returnType != "void") sb.append(" return ").append(defaultValue(m.returnType)).append(';')
+            if (!m.isConstructor && m.returnType != "void") sb.append(" return ").append(defaultValue(m.returnType)).append(';')
             sb.append(" }\n")
         }
     }

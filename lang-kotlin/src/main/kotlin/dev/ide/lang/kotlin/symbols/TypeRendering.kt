@@ -11,7 +11,16 @@ object TypeRendering {
     fun isFunctionType(fqn: String): Boolean {
         val tail = fqn.substringAfterLast('.')
         return (tail.startsWith("Function") && tail.removePrefix("Function").toIntOrNull() != null) ||
-            (tail.startsWith("SuspendFunction") && tail.removePrefix("SuspendFunction").toIntOrNull() != null)
+            isSuspendFunctionType(fqn)
+    }
+
+    /** A `suspend (…) -> R` function type, spelled `kotlin.SuspendFunctionN` (the source path produces this
+     *  FQN; the binary/metadata path decodes a suspend type as a continuation-expanded plain `FunctionN`, so a
+     *  non-match here is NOT proof of non-suspend for a binary callee). Used by the suspend calling-convention
+     *  check to recognise a suspend lambda slot. */
+    fun isSuspendFunctionType(fqn: String): Boolean {
+        val tail = fqn.substringAfterLast('.')
+        return tail.startsWith("SuspendFunction") && tail.removePrefix("SuspendFunction").toIntOrNull() != null
     }
 
     fun render(
