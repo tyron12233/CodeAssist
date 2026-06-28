@@ -1,6 +1,7 @@
 package dev.ide.android.support.templates
 
 import dev.ide.android.support.AndroidFacet
+import dev.ide.android.support.BuildFeatures
 import dev.ide.model.BuildSystemId
 import dev.ide.model.template.ProjectScaffold
 import dev.ide.model.template.ProjectTemplate
@@ -38,13 +39,8 @@ object JetpackComposeAppTemplate : ProjectTemplate {
         AndroidTemplateSupport.targetSdkParam,
     )
 
-    override fun dependencies(args: TemplateArgs): List<TemplateDependency> = listOf(
-        TemplateDependency("app", "androidx.activity:activity-compose:$ACTIVITY_COMPOSE"),
-        TemplateDependency("app", "androidx.compose.ui:ui:$COMPOSE"),
-        TemplateDependency("app", "androidx.compose.foundation:foundation:$COMPOSE"),
-        TemplateDependency("app", "androidx.compose.material3:material3:$MATERIAL3"),
-        TemplateDependency("app", "androidx.compose.ui:ui-tooling-preview:$COMPOSE"),
-    )
+    override fun dependencies(args: TemplateArgs): List<TemplateDependency> =
+        dev.ide.android.support.AndroidFeatureDependencies.COMPOSE.map { TemplateDependency("app", it) }
 
     override fun generate(scaffold: ProjectScaffold, args: TemplateArgs) {
         val pkg = args.packageName
@@ -63,6 +59,7 @@ object JetpackComposeAppTemplate : ProjectTemplate {
                         compileSdk = AndroidTemplateSupport.COMPILE_SDK,
                         minSdk = minSdk,
                         targetSdk = targetSdk,
+                        buildFeatures = BuildFeatures(compose = true),
                     ),
                 )
             }
@@ -167,7 +164,4 @@ object JetpackComposeAppTemplate : ProjectTemplate {
         )
     }
 
-    private const val COMPOSE = "1.7.5"
-    private const val MATERIAL3 = "1.3.1"
-    private const val ACTIVITY_COMPOSE = "1.9.3"
 }

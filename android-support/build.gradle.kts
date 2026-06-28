@@ -32,6 +32,9 @@ dependencies {
     // are runtime-scoped in its POM, so guava (ImmutableList) must be added explicitly for compilation.
     compileOnly(libs.android.bundletool)
     compileOnly(libs.guava)
+    // Bouncy Castle generates a keypair + self-signed cert for in-process keystore creation (no keytool on
+    // ART). compileOnly here (only KeystoreCrypto.create touches it); the launchers bundle it at runtime.
+    compileOnly(libs.bouncycastle.pkix)
 
     // The end-to-end APK test compiles real Java (R.java + an Activity) through the JDT batch compiler
     // (lang-jdt, now a main dependency) and exercises the in-process tools.
@@ -39,6 +42,7 @@ dependencies {
     testImplementation(libs.android.r8)
     testImplementation(libs.android.apksig)
     testImplementation(libs.android.bundletool)
+    testImplementation(libs.bouncycastle.pkix) // KeystoreCrypto.create round-trip test runs on the desktop JVM
 }
 
 // The core-library-desugaring test needs the desugar runtime + config jars as real files (L8 dexes the

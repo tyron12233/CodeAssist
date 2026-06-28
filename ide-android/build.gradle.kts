@@ -531,6 +531,8 @@ dependencies {
     // here — they ship as jniLibs prebuilts (see fetchAndroidBuildTools below).
     implementation(libs.android.r8)
     implementation(libs.android.apksig)
+    // Bouncy Castle: in-process keystore creation on device (keypair + self-signed cert → PKCS12; no keytool).
+    implementation(libs.bouncycastle.pkix)
     // bundletool builds the .aab in-process on device (BundletoolInProcess). Pure Java, so it dexes into the
     // app like d8/apksig; its closure (guava/protobuf/dagger) comes transitively. android-support keeps it
     // compileOnly+test. NOTE: dexing bundletool's closure into the app is new ground — if assembleDebug hits

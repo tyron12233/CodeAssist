@@ -18,6 +18,7 @@ guava = "32.0.1-jre"  # com.google.common.* — bundletool's collections (Immuta
 asm = "9.7"           # org.ow2.asm — bytecode rewrite of System.exit for the in-process Java dex-run
 trove4j = "1.0.20200330"  # gnu.trove.* — IntelliJ-core dependency the Kotlin compiler needs but doesn't bundle
 desugarJdkLibs = "2.1.5"  # com.android.tools:desugar_jdk_libs — core-library desugaring (temporarily enabled)
+bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (keypair + self-signed X.509) on ART (no keytool)
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -78,6 +79,11 @@ desugar-jdk-libs-configuration = { module = "com.android.tools:desugar_jdk_libs_
 ow2-asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 ow2-asm-tree = { module = "org.ow2.asm:asm-tree", version.ref = "asm" }
 ow2-asm-commons = { module = "org.ow2.asm:asm-commons", version.ref = "asm" } # ClassRemapper/Remapper — bridge reparent + type remap
+# Bouncy Castle: generate an RSA keypair + self-signed X.509 cert and write a PKCS12 keystore IN-PROCESS, so
+# users can create signing keystores on-device (ART has no `keytool`). compileOnly+test in :android-support,
+# bundled into the launchers (:ide-android, :ide-desktop). bcpkix pulls bcprov transitively.
+bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

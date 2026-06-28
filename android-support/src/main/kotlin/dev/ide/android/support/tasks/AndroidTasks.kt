@@ -9,6 +9,8 @@ import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.ShrinkRequest
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.android.support.viewbinding.LayoutBindingModel
+import dev.ide.android.support.viewbinding.ViewBindingJavaSource
 import dev.ide.build.Task
 import dev.ide.build.TaskContext
 import dev.ide.build.TaskInputs
@@ -350,6 +352,60 @@ internal class Aapt2LinkTask(
     }
 }
 
+/**
+ * `generateViewBinding<Variant>`: when `buildFeatures { viewBinding }` is on, generate the real
+ * `<namespace>.databinding.<Layout>Binding` Java per layout (the build counterpart of the editor's synthetic
+ * binding classes — same shape, via [LayoutBindingModel]/[ViewBindingJavaSource]). Runs after the layouts
+ * exist and before `compileKotlin`/`compileJava`, emitting into [outDir] which joins their source roots.
+ */
+internal class GenerateViewBindingTask(
+    override val name: TaskName,
+    private val resDirs: List<Path>,   // the module's OWN res roots — ViewBinding generates from own layouts
+    private val namespace: String,
+    private val outDir: Path,
+) : Task {
+    /** Only layout XML drives ViewBinding; fingerprint those files, not whole res dirs (a values edit is inert). */
+    private fun layoutFiles(): List<Path> = resDirs.filter { Files.isDirectory(it) }.flatMap { res ->
+        Files.list(res).use { dirs ->
+            dirs.filter { Files.isDirectory(it) && it.fileName.toString().substringBefore('-') == "layout" }
+                .collect(Collectors.toList())
+        }.flatMap { dir ->
+            Files.list(dir).use { s ->
+                s.filter { Files.isRegularFile(it) && it.toString().endsWith(".xml") }.collect(Collectors.toList())
+            }
+        }
+    }
+
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            filePaths("layouts", layoutFiles())
+            property("namespace", namespace)
+        }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("viewbinding", outDir) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        withContext(Dispatchers.IO) {
+            // Regenerate cleanly so a deleted/renamed layout's stale binding doesn't linger on the source path.
+            if (Files.isDirectory(outDir)) Files.walk(outDir).use { s ->
+                s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+            Files.createDirectories(outDir)
+        }
+        val bindings = LayoutBindingModel.bindingsFor(resDirs, namespace)
+        val pkgDir = LayoutBindingModel.packageName(namespace).replace('.', '/')
+        withContext(Dispatchers.IO) {
+            val dir = outDir.resolve(pkgDir)
+            Files.createDirectories(dir)
+            for (b in bindings) {
+                dir.resolve("${b.simpleName}.java").writeText(ViewBindingJavaSource.emit(b, namespace))
+            }
+        }
+        ctx.logger()("Generated ${bindings.size} ViewBinding class(es)")
+        return TaskResult.Success
+    }
+}
+
 /** `compileJava`: compile the variant's Java sources + generated `R.java` against the Android classpath. */
 internal class AndroidCompileTask(
     override val name: TaskName,
@@ -360,11 +416,13 @@ internal class AndroidCompileTask(
     private val level: String,
     /** ecj `-bootclasspath`: empty on the desktop (host JRE), `android.jar` + desugar stubs on ART. */
     private val bootClasspath: List<Path>,
+    /** Additional generated source roots (e.g. ViewBinding) to compile alongside [sourceRoots] + [genJavaDir]. */
+    private val extraGenDirs: List<Path> = emptyList(),
 ) : Task {
     // NB: `sourceRoots + genJavaDir` would bind Collection.plus(Iterable) — a Path is an Iterable<Path>
     // of its name components — and silently scatter the gen dir into segments. Append as a single element.
     private fun sources(): List<Path> =
-        (sourceRoots + listOf(genJavaDir)).filter { Files.isDirectory(it) }.flatMap { root ->
+        (sourceRoots + listOf(genJavaDir) + extraGenDirs).filter { Files.isDirectory(it) }.flatMap { root ->
             Files.walk(root).use { s ->
                 s.filter { Files.isRegularFile(it) && it.toString().endsWith(".java") }
                     .collect(Collectors.toList())
@@ -421,6 +479,8 @@ internal class AndroidKotlinCompileTask(
     private val compiler: IncrementalKotlinCompiler,
     /** Kotlin compiler plugins to apply (those whose `appliesTo` matches the module). */
     private val plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS,
+    /** Additional generated source roots (e.g. ViewBinding) fed to kotlinc for resolution, like [genJavaDir]. */
+    private val extraGenDirs: List<Path> = emptyList(),
 ) : Task {
     private fun walk(roots: List<Path>, ext: String): List<Path> =
         roots.filter { Files.isDirectory(it) }.flatMap { root ->
@@ -431,7 +491,7 @@ internal class AndroidKotlinCompileTask(
         }
 
     private fun kotlinSources(): List<Path> = walk(sourceRoots, ".kt")
-    private fun javaSources(): List<Path> = walk(sourceRoots + listOf(genJavaDir), ".java")
+    private fun javaSources(): List<Path> = walk(sourceRoots + listOf(genJavaDir) + extraGenDirs, ".java")
 
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -460,7 +520,10 @@ internal class AndroidKotlinCompileTask(
             compilerPlugins = resolved.classpaths, pluginOptions = resolved.options,
             runtimePluginClasspaths = resolved.runtimeClasspaths,
         )
-        r.messages.forEach(ctx.logger())
+        // Stream the compiler output as structured (located, navigable) diagnostics only — NOT also as raw
+        // logger() lines. Logging both made every Kotlin error appear twice: once as an INFO transcript line
+        // here and again as the ERROR summary the engine logs for the failed task. (Mirrors JdtCompileTask
+        // and the desktop KotlinCompileTask, which report diagnostics without echoing them to the log.)
         ctx.reportToolDiagnostics("kotlin", r.messages)
         return if (r.success) TaskResult.Success
         else TaskResult.Failed(

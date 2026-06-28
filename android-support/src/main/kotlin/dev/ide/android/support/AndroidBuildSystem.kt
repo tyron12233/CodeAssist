@@ -8,6 +8,7 @@ import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
 import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
+import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tasks.BundleTask
 import dev.ide.android.support.tasks.L8DexTask
@@ -111,6 +112,13 @@ class AndroidBuildSystem(
     /** Core-library-desugaring artifacts (desugar runtime + config jar); null = host ships none, so a module's
      *  `coreLibraryDesugaringEnabled` is a no-op. See [DesugarLib]. */
     private val desugarLib: DesugarLib? = null,
+    /**
+     * Resolves a build type's signing config from its `BuildType.signingConfig` reference (e.g. a keystore
+     * registry id), given the app [Module] and the build-type name. Returns null to fall back to the default
+     * [signing] (the debug keystore) — so an unassigned build type, or a missing/dangling reference, still
+     * signs (debug) rather than failing. Null resolver ⇒ everything uses [signing] (the prior behavior).
+     */
+    private val signingResolver: ((Module, String) -> SigningConfig?)? = null,
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -250,6 +258,17 @@ class AndroidBuildSystem(
         val aapt2Link = step("aapt2Link")
         val compileKotlin = step("compileKotlin")
         val compile = step("compileJava")
+        // buildFeatures { viewBinding }: generate <Layout>Binding.java from this module's own layouts, fed to
+        // both compile tasks as an extra source root. Independent of R generation (it only references R), but
+        // the compile tasks already depend on aapt2Link so R exists when this generated code is compiled.
+        val viewBinding = if (facet.buildFeatures.viewBinding) step("generateViewBinding") else null
+        if (viewBinding != null) {
+            tasks.task(viewBinding) {
+                GenerateViewBindingTask(viewBinding, roots(variant, ContentRole.ANDROID_RES), facet.namespace, layout.viewBindingGen)
+            }
+        }
+        val vbGenDirs = listOfNotNull(viewBinding).map { layout.viewBindingGen }
+        val vbDep = listOfNotNull(viewBinding)
 
         // google-services.json (when present) generates res that the merge consumes, so it runs first.
         val mergeResDeps = if (gmsJson != null) {
@@ -263,7 +282,7 @@ class AndroidBuildSystem(
         // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
         // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.
         tasks.task(processManifest) {
-            ManifestMergeTask(processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders, layout.mergedManifest)
+            ManifestMergeTask(processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders, facet.targetSdk, layout.mergedManifest)
         }
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
         // A minify build needs aapt2's manifest/layout keep rules so R8 does not strip XML-referenced classes;
@@ -288,7 +307,7 @@ class AndroidBuildSystem(
             )
         }
         if (appHasKotlin) {
-            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin) {
+            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep) {
                 AndroidKotlinCompileTask(
                     app,
                     compileKotlin,
@@ -300,6 +319,7 @@ class AndroidBuildSystem(
                     bootClasspath,
                     kotlin,
                     plugins,
+                    extraGenDirs = vbGenDirs,
                 )
             }
         }
@@ -307,7 +327,7 @@ class AndroidBuildSystem(
         // The app compiles the WHOLE gen tree — its own R plus the final R for every dependency-lib package.
         tasks.task(
             compile,
-            listOf(aapt2Link) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList())
+            listOf(aapt2Link) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep
         ) {
             AndroidCompileTask(
                 compile,
@@ -317,6 +337,7 @@ class AndroidBuildSystem(
                 layout.classes,
                 level,
                 bootClasspath,
+                extraGenDirs = vbGenDirs,
             )
         }
         // The app's project-scope dex covers both the Java and (when present) the Kotlin output.
@@ -442,6 +463,10 @@ class AndroidBuildSystem(
             pkgDeps = pkgDeps + listOf(l8)
         }
 
+        // The keystore that signs this variant: the build type's assigned signing config (release keystore),
+        // or the default debug keystore when unassigned / dangling. Resolved once for both APK and bundle.
+        val variantSigning = signingFor(app, variant.buildTypeName)
+
         if (bundle) {
             // Bundle terminal (AGP's `bundle<Variant>`): build the base module zip from the PROTO resources +
             // dex + assets + jni, run bundletool, then JAR-sign the .aab. Reuses the same dex layers as the APK.
@@ -452,7 +477,7 @@ class AndroidBuildSystem(
             }
             val signBundle = step("signBundle")
             tasks.task(signBundle, listOf(packageBundle)) {
-                SignBundleTask(signBundle, layout.unsignedAab, layout.signedAab, signing, facet.minSdk, bundleSigner)
+                SignBundleTask(signBundle, layout.unsignedAab, layout.signedAab, variantSigning, facet.minSdk, bundleSigner)
             }
             val bundleLifecycle = step("bundle")
             tasks.task(bundleLifecycle, listOf(signBundle)) { LifecycleTask(bundleLifecycle, trackedFiles = listOf(layout.signedAab)) }
@@ -460,7 +485,7 @@ class AndroidBuildSystem(
         }
 
         tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, libs.jniLibDirs, layout.unsignedApk) }
-        tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, signing, signer) }
+        tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, variantSigning, signer) }
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.
         val assemble = step("assemble")
         tasks.task(assemble, listOf(sign)) { LifecycleTask(assemble, trackedFiles = listOf(layout.signedApk)) }
@@ -508,6 +533,18 @@ class AndroidBuildSystem(
         tasks.task(compileR, listOf(generateR)) { AndroidCompileTask(compileR, emptyList(), rRoot.resolve("gen"), compileBootclasspath, rClasses, level, bootClasspath) }
         classpath.add(rClasses); compileDeps.add(compileR)
 
+        // buildFeatures { viewBinding }: a lib generates bindings from its OWN layouts (against its own R) and,
+        // unlike R, they are real code — compiled into the lib's output, so they dex into the AAR/jar.
+        val vbDir = rRoot.resolve("gen-view-binding")
+        val libViewBinding = if (facet.buildFeatures.viewBinding) TaskName(":${m.name}:generateViewBinding") else null
+        if (libViewBinding != null) {
+            tasks.task(libViewBinding) {
+                GenerateViewBindingTask(libViewBinding, moduleRoots(m, ContentRole.ANDROID_RES), facet.namespace, vbDir)
+            }
+            compileDeps.add(libViewBinding)
+        }
+        val libVbGenDirs = listOfNotNull(libViewBinding).map { vbDir }
+
         // compileKotlin (when the lib has `.kt`): runs against android.jar + the lib's own non-final R, ahead
         // of compileJava, which then sees its output. The Kotlin output IS dexed (it's the lib's code) — only
         // the R classes are kept out. Emits to the `kotlin-classes` sibling so dependers' classpaths find it.
@@ -518,7 +555,7 @@ class AndroidBuildSystem(
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
             val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + rClasses
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
-                AndroidKotlinCompileTask(m, compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins)
+                AndroidKotlinCompileTask(m, compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs)
             }
             classpath.add(libKotlin); compileDeps.add(compileKotlin)
         }
@@ -533,6 +570,7 @@ class AndroidBuildSystem(
                 classesOut,
                 level,
                 bootClasspath,
+                extraGenDirs = libVbGenDirs,
             )
         }
         val procRes = TaskName(":${m.name}:processResources")
@@ -548,6 +586,10 @@ class AndroidBuildSystem(
 
     private fun directModuleDeps(m: Module, byId: Map<ModuleId, Module>): List<Module> =
         m.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
+
+    /** The signing config for [module]'s [buildType] variant — the resolver's answer, else the default debug [signing]. */
+    private fun signingFor(module: Module, buildType: String): SigningConfig =
+        signingResolver?.invoke(module, buildType) ?: signing
 
     /** True if any of [roots] holds a `.kt` file (so a `compileKotlin` step is needed). */
     private fun containsKotlin(roots: List<Path>): Boolean = roots.filter { Files.isDirectory(it) }
@@ -591,6 +633,7 @@ class AndroidBuildSystem(
         val mergedManifest: Path = inter.resolve("merged-manifest").resolve("AndroidManifest.xml")
         val generatedGmsRes: Path = buildDir.resolve("generated").resolve("res").resolve("google-services").resolve(variantName)
         val genJava: Path = inter.resolve("gen")
+        val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
         val classes: Path = inter.resolve("classes")
         val kotlinClasses: Path = inter.resolve("kotlin-classes")   // K2 output (dexed as project scope)
         val dexArchives: Path = inter.resolve("dex-archives")   // dexBuilder scope roots + the project staging jar
@@ -658,8 +701,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
-            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -668,7 +711,7 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 dexer = D8InProcessDexer(),
@@ -679,6 +722,7 @@ class AndroidBuildSystem(
                 plugins = plugins,
                 dexCacheRoot = dexCacheRoot,
                 desugarLib = desugarLib,
+                signingResolver = signingResolver,
             )
 
         /** A debug-signed [subprocess] build system, creating the shared debug keystore on demand. */

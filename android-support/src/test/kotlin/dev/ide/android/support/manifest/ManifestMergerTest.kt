@@ -168,6 +168,103 @@ class ManifestMergerTest {
     }
 
     @Test
+    fun libraryPackageAndLowerSdkAreAbsorbedWithoutWarnings() {
+        // An AndroidX-shaped library: its own package + a lower minSdk + a different targetSdk. None of these
+        // are conflicts (AGP/ManifestMerger2 keeps the app values silently); the merge must not warn on them.
+        val lib = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="androidx.core">
+                <uses-sdk android:minSdkVersion="14" android:targetSdkVersion="31"/>
+                <application/>
+            </manifest>
+        """.trimIndent()
+        val r = ManifestMerger.mergeXml(APP, listOf(lib), libraryNames = listOf("androidx.core"))
+        assertFalse(r.hasErrors, "errors: ${r.messages}")
+        assertTrue(r.messages.none { "@package" in it.text }, "spurious package warning: ${r.messages}")
+        assertTrue(r.messages.none { "minSdkVersion" in it.text }, "spurious minSdk warning: ${r.messages}")
+        assertTrue(r.messages.none { "targetSdkVersion" in it.text }, "spurious targetSdk warning: ${r.messages}")
+        // The app's own package + uses-sdk values survive unchanged.
+        val root = parse(r.xml)
+        assertEquals("com.example.app", root.getAttribute("package"))
+        val usesSdk = descendants(root, "uses-sdk").single()
+        assertEquals("24", android(usesSdk, "minSdkVersion"))
+        assertEquals("34", android(usesSdk, "targetSdkVersion"))
+    }
+
+    @Test
+    fun libraryDemandingHigherMinSdkIsStillFlagged() {
+        // The silence above must not hide a genuine problem: a library needing a HIGHER minSdk than the app.
+        val lib = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.lib">
+                <uses-sdk android:minSdkVersion="33"/>
+            </manifest>
+        """.trimIndent()
+        val r = ManifestMerger.mergeXml(APP, listOf(lib), libraryNames = listOf("com.lib"))
+        assertTrue(r.messages.any { it.severity == ManifestMerger.Severity.WARNING && "minSdkVersion 33" in it.text })
+    }
+
+    @Test
+    fun expandsLibraryRelativeComponentNamesAgainstItsPackage() {
+        val lib = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.lib">
+                <uses-permission android:name="android.permission.VIBRATE"/>
+                <application android:name=".LibApp" android:backupAgent=".LibBackup">
+                    <service android:name=".MyService"/>
+                    <receiver android:name="BareReceiver"/>
+                    <activity android:name="com.other.AlreadyQualified"/>
+                    <activity-alias android:name=".Alias" android:targetActivity=".MyService"/>
+                    <provider android:name=".MyProvider" android:authorities="com.lib.provider"/>
+                    <meta-data android:name="barekey" android:value="x"/>
+                </application>
+            </manifest>
+        """.trimIndent()
+        val r = ManifestMerger.mergeXml(APP, listOf(lib))
+        assertFalse(r.hasErrors, "errors: ${r.messages}")
+        val root = parse(r.xml)
+
+        // Relative component names resolve against the LIBRARY package.
+        assertEquals("com.lib.MyService", android(descendants(root, "service").single(), "name"))
+        assertEquals("com.lib.BareReceiver", android(descendants(root, "receiver").single(), "name"))   // bare → pkg.Bare
+        assertEquals("com.lib.MyProvider", android(descendants(root, "provider").single(), "name"))
+        val alias = descendants(root, "activity-alias").single()
+        assertEquals("com.lib.Alias", android(alias, "name"))
+        assertEquals("com.lib.MyService", android(alias, "targetActivity"))
+        val app = descendants(root, "application").single()
+        assertEquals("com.lib.LibApp", android(app, "name"))
+        assertEquals("com.lib.LibBackup", android(app, "backupAgent"))
+
+        // Already-qualified names are left alone.
+        assertEquals("com.other.AlreadyQualified", android(descendants(root, "activity").single { android(it, "name") != ".MainActivity" }, "name"))
+        // The provider's authorities (not a class name) and identifier android:names are NOT rewritten.
+        assertEquals("com.lib.provider", android(descendants(root, "provider").single(), "authorities"))
+        assertTrue(descendants(root, "uses-permission").any { android(it, "name") == "android.permission.VIBRATE" })
+        assertEquals("barekey", android(descendants(root, "meta-data").single(), "name"))   // not a class attr → bare name kept
+        // The app's own relative name stays relative (it resolves against the merged manifest's app package).
+        assertTrue(descendants(root, "activity").any { android(it, "name") == ".MainActivity" })
+    }
+
+    @Test
+    fun doesNotImportALibraryUsesSdkWhenTheAppDeclaresNone() {
+        // The default app template declares no <uses-sdk> (min/target come from the build config, injected by
+        // aapt2's --min/--target-sdk-version). A library's <uses-sdk> must NOT leak in, or its targetSdkVersion
+        // would silently become the app's effective target (forcing edge-to-edge / breaking insets).
+        val appNoSdk = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                <application android:label="App"><activity android:name=".MainActivity"/></application>
+            </manifest>
+        """.trimIndent()
+        val lib = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="androidx.core">
+                <uses-sdk android:minSdkVersion="14" android:targetSdkVersion="33"/>
+                <application/>
+            </manifest>
+        """.trimIndent()
+        val r = ManifestMerger.mergeXml(appNoSdk, listOf(lib), libraryNames = listOf("androidx.core"))
+        assertFalse(r.hasErrors, "errors: ${r.messages}")
+        // No <uses-sdk> leaked in, so aapt2's --target-sdk-version (the facet value) stays authoritative.
+        assertTrue(descendants(parse(r.xml), "uses-sdk").isEmpty(), "library uses-sdk leaked into the app manifest")
+    }
+
+    @Test
     fun noLibrariesRoundTripsTheAppManifest() {
         val r = ManifestMerger.mergeXml(APP, emptyList(), mapOf("applicationId" to "com.example.app"))
         assertFalse(r.hasErrors)

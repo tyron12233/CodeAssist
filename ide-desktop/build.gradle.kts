@@ -29,6 +29,9 @@ dependencies {
     // bundletool builds the .aab in-process (android-support keeps it compileOnly). The desktop launcher
     // bundles it so the `bundle<Variant>` task works; pure Java, so it just runs on the JVM.
     implementation(libs.android.bundletool)
+    // Bouncy Castle: in-process keystore creation (android-support keeps it compileOnly) — same code path on
+    // desktop and device, so the desktop launcher bundles it too.
+    implementation(libs.bouncycastle.pkix)
 }
 
 compose.desktop {

@@ -23,7 +23,8 @@ import javax.xml.parsers.DocumentBuilderFactory
  *  - **Attribute merge** with namespace awareness: a lower node's attribute is added when absent; an equal
  *    value is a no-op; a conflicting value keeps the higher-priority one (ManifestMerger2 errors here and
  *    asks for `tools:replace`; an IDE merge stays lenient and records a warning instead, except under
- *    `tools:strict`).
+ *    `tools:strict`). The root `<manifest package>` and the `<uses-sdk>` min/target/maxSdkVersion are
+ *    exempt: every library differs there by design, so the app values win silently (see [isPrimaryAuthoritative]).
  *  - **All `tools:` markers**: `tools:node` = `merge` (default) / `replace` / `remove` / `removeAll` /
  *    `strict` / `mergeOnlyAttributes`; `tools:replace="a,b"`; `tools:remove="a,b"`; `tools:strict`;
  *    `tools:selector` (narrows remove/removeAll to one library package). The `tools:` namespace and all
@@ -31,8 +32,15 @@ import javax.xml.parsers.DocumentBuilderFactory
  *  - **Placeholders**: `${name}` in any attribute value is replaced from the supplied map (`${applicationId}`
  *    being the one Firebase/Play Services rely on, e.g. a `FirebaseInitProvider` authority). An unresolved
  *    placeholder is left verbatim and reported (ManifestMerger2 fails the build; the IDE keeps going).
- *  - **`uses-sdk`**: the primary's `minSdkVersion`/`targetSdkVersion` win; a library declaring a higher
- *    `minSdkVersion` is reported (overridable via `tools:overrideLibrary`).
+ *  - **`uses-sdk`**: the app owns its SDK levels (the build config feeds `aapt2 --min/--target-sdk-version`),
+ *    so a library's `<uses-sdk>` never reaches the output: its min/target/maxSdkVersion are dropped if the app
+ *    declares its own, and the whole element is skipped if the app declares none (importing it would make the
+ *    library's `targetSdkVersion` the app's effective target). A library declaring a higher `minSdkVersion`
+ *    than the app's is still reported (overridable via `tools:overrideLibrary`).
+ *  - **Class-name resolution**: a library's relative component name (`.Foo` or a bare `Foo` on an
+ *    `<activity>`/`<activity-alias>`/`<service>`/`<receiver>`/`<provider>`/`<application>`/`<instrumentation>`)
+ *    is expanded to the library's fully-qualified package before merge (`PackageParser.buildClassName`), so it
+ *    still resolves once it sits under the app's package. Identifier `android:name`s and authorities are left alone.
  *
  * Deliberately out of scope (rare; not needed by the libraries this targets): implicit system-permission
  * injection for legacy SDK combinations, and merge-blame/provenance records.
@@ -82,6 +90,9 @@ object ManifestMerger {
             }
             substitutePlaceholders(libDoc.documentElement, placeholders, name, messages)
             val libPkg = libDoc.documentElement.getAttribute("package").ifEmpty { null }
+            // Resolve the library's relative component class names against ITS package before merging: a
+            // ".Foo" (or bare "Foo") would otherwise resolve against the app package once merged under it.
+            if (libPkg != null) expandClassNames(libDoc.documentElement, libPkg)
             mergeElement(mergedDoc.documentElement, libDoc.documentElement, mergedDoc, name, libPkg, messages)
         }
 
@@ -116,6 +127,10 @@ object ManifestMerger {
             if (isXmlnsDecl(a)) continue
             val ns = a.namespaceURI
             val local = a.localName ?: a.name
+            // ManifestMerger2 never merges a library's package or its uses-sdk version attributes up into the
+            // app: the app values are authoritative, so a difference is expected, not a conflict to report.
+            // (A library demanding a *higher* minSdk is still flagged separately by checkUsesSdk.)
+            if (isPrimaryAuthoritative(into, ns, local)) continue
             val higher = getAttr(into, ns, local)
             when {
                 higher == null -> setAttr(into, doc, a)              // absent above → take the library's
@@ -146,6 +161,12 @@ object ManifestMerger {
             val key = nodeKey(child)
             val match = existing[key]
             if (match == null) {
+                // A library's <uses-sdk> only carries min/target/maxSdkVersion, which the app's build config
+                // owns (aapt2 injects them from its flags). Never import a library's into an app that declares
+                // none, or the library's targetSdkVersion silently becomes the app's effective target (which
+                // breaks insets / forces edge-to-edge). The match case is already neutralised by
+                // isPrimaryAuthoritative; this closes the wholesale-append path.
+                if (type == "uses-sdk") continue
                 into.appendChild(doc.importNode(child, true))
             } else when (toolsNode(match)) {
                 "remove" -> {}                                       // marker: drop the lower node, keep marker for cleanup
@@ -164,6 +185,18 @@ object ManifestMerger {
         if (libMin > appMin && !override) msgs += Message(Severity.WARNING,
             "$lib requires minSdkVersion $libMin but the app declares $appMin; raise it or add tools:overrideLibrary")
         // The app's uses-sdk values are authoritative — do not let the library lower/raise them.
+    }
+
+    /**
+     * Attributes the app manifest owns outright, so a library's differing value is absorbed silently rather
+     * than reported as a conflict (matching ManifestMerger2): the root `<manifest package>` (every library
+     * declares its own package, which namespaces the library and never overrides the app's) and the
+     * `<uses-sdk>` min/target/maxSdkVersion (the app's build config is authoritative).
+     */
+    private fun isPrimaryAuthoritative(into: Element, ns: String?, local: String): Boolean = when (into.tagName) {
+        "manifest" -> ns == null && local == "package"
+        "uses-sdk" -> ns == ANDROID_NS && (local == "minSdkVersion" || local == "targetSdkVersion" || local == "maxSdkVersion")
+        else -> false
     }
 
     // ---- removals + tools cleanup --------------------------------------------------------------
@@ -265,6 +298,44 @@ object ManifestMerger {
             }
         }
         childElements(root).forEach { substitutePlaceholders(it, values, where, msgs) }
+    }
+
+    // ---- class-name resolution -----------------------------------------------------------------
+
+    /**
+     * Component element attributes whose value is a class name. Only these resolve relative names against the
+     * package; identifier-valued `android:name`s (`<uses-permission>`, `<meta-data>`, `<action>`, …) and
+     * `<provider android:authorities>` are deliberately absent so they are never rewritten.
+     */
+    private val CLASS_NAME_ATTRS: Map<String, Set<String>> = mapOf(
+        "application" to setOf("name", "backupAgent"),
+        "activity" to setOf("name", "parentActivityName"),
+        "activity-alias" to setOf("name", "targetActivity"),
+        "service" to setOf("name"),
+        "receiver" to setOf("name"),
+        "provider" to setOf("name"),
+        "instrumentation" to setOf("name"),
+    )
+
+    /**
+     * Rewrite a library subtree's relative component class names to absolute against the library [pkg], so a
+     * `<service android:name=".Foo">` becomes `pkg.Foo` and still resolves once it is merged under the app's
+     * package. Mirrors `PackageParser.buildClassName`: a leading `.` or a bare (dot-less) name is relative.
+     */
+    private fun expandClassNames(el: Element, pkg: String) {
+        CLASS_NAME_ATTRS[el.tagName]?.forEach { local ->
+            val attr = el.getAttributeNodeNS(ANDROID_NS, local) ?: return@forEach
+            val resolved = resolveClassName(attr.value, pkg)
+            if (resolved != attr.value) attr.value = resolved
+        }
+        childElements(el).forEach { expandClassNames(it, pkg) }
+    }
+
+    private fun resolveClassName(name: String, pkg: String): String = when {
+        name.isEmpty() -> name
+        name[0] == '.' -> pkg + name           // ".Foo" -> "pkg.Foo"
+        '.' !in name -> "$pkg.$name"           // bare "Foo" -> "pkg.Foo"
+        else -> name                           // already fully qualified
     }
 
     // ---- tools/attribute helpers ---------------------------------------------------------------

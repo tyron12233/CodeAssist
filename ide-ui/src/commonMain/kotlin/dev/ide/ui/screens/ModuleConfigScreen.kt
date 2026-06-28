@@ -61,7 +61,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiBuildFeature
+import dev.ide.ui.backend.UiBuildFeatures
 import dev.ide.ui.backend.UiConfigField
+import dev.ide.ui.backend.UiKeystore
+import dev.ide.ui.backend.UiSigningAssignment
+import dev.ide.ui.backend.UiSigningAssignments
 import dev.ide.ui.backend.UiFacetConfig
 import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiModuleConfig
@@ -70,6 +75,7 @@ import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
+import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.components.GlassMaterial
@@ -84,8 +90,13 @@ import kotlinx.coroutines.launch
 
 private data class ConfigToast(val text: String, val error: Boolean)
 
-/** The two tabs of a module's detail view. */
-enum class ModulesTab { Settings, Dependencies }
+/** The tabs of a module's detail view. */
+enum class ModulesTab(val label: String) {
+    Settings("Settings"),
+    BuildFeatures("Build Features"),
+    Signing("Signing"),
+    Dependencies("Dependencies"),
+}
 
 /**
  * The **Modules** screen. Lists the project's modules first (add / remove); selecting one opens its detail
@@ -100,6 +111,7 @@ fun ModuleConfigScreen(
     initialModule: String?,
     initialTab: ModulesTab = ModulesTab.Settings,
     onBack: () -> Unit,
+    onOpenKeystoreManager: () -> Unit = {},
     codeFont: FontFamily = FontFamily.Monospace,
     fileActions: FileActions = FileActions.None,
 ) {
@@ -108,7 +120,7 @@ fun ModuleConfigScreen(
     if (module == null) {
         ModulesList(backend, codeFont, onOpen = { selected = it }, onBack = onBack)
     } else {
-        ModuleDetail(backend, module, initialTab, codeFont, fileActions, onBack = { selected = null })
+        ModuleDetail(backend, module, initialTab, codeFont, fileActions, onOpenKeystoreManager, onBack = { selected = null })
     }
 }
 
@@ -134,7 +146,7 @@ private fun ModulesHeader(title: String, icon: ImageVector, onBack: () -> Unit, 
 
 @Composable
 private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (String) -> Unit, onBack: () -> Unit) {
-    var modules by remember { mutableStateOf(backend.configurableModules()) }
+    var modules by remember { mutableStateOf(backend.modules.configurableModules()) }
     var newOpen by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<String?>(null) }
     var toast by remember { mutableStateOf<ConfigToast?>(null) }
@@ -166,9 +178,9 @@ private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (Stri
             onDismiss = { newOpen = false },
             onCreate = { name, typeId, level, facetValues ->
                 scope.launch {
-                    val r = backend.createModule(name, typeId, level, facetValues)
+                    val r = backend.modules.createModule(name, typeId, level, facetValues)
                     toast = ConfigToast(r.message, error = !r.success)
-                    if (r.success) { newOpen = false; modules = backend.configurableModules() }
+                    if (r.success) { newOpen = false; modules = backend.modules.configurableModules() }
                 }
             },
         )
@@ -177,8 +189,8 @@ private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (Stri
             onDismiss = { pendingRemove = null },
             onConfirm = {
                 val name = pendingRemove
-                if (name != null && backend.removeModule(name)) {
-                    toast = ConfigToast("Removed $name", error = false); modules = backend.configurableModules()
+                if (name != null && backend.modules.removeModule(name)) {
+                    toast = ConfigToast("Removed $name", error = false); modules = backend.modules.configurableModules()
                 }
                 pendingRemove = null
             },
@@ -209,7 +221,7 @@ private fun ModuleListItem(module: UiModuleRef, onOpen: () -> Unit, onRemove: ()
 // ---- module detail (Settings | Dependencies) ---------------------------------------------------
 
 @Composable
-private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: ModulesTab, codeFont: FontFamily, fileActions: FileActions, onBack: () -> Unit) {
+private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: ModulesTab, codeFont: FontFamily, fileActions: FileActions, onOpenKeystoreManager: () -> Unit, onBack: () -> Unit) {
     var tab by remember(moduleName) { mutableStateOf(initialTab) }
     Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -218,6 +230,8 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
             when (tab) {
                 ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
+                ModulesTab.BuildFeatures -> BuildFeaturesPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
+                ModulesTab.Signing -> SigningPane(backend, moduleName, onOpenKeystoreManager, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, fileActions, Modifier.weight(1f).fillMaxWidth())
             }
         }
@@ -226,7 +240,8 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
 
 @Composable
 private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Scrolls horizontally so the tab strip never clips on a narrow phone (Settings · Build Features · Signing · Dependencies).
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ModulesTab.entries.forEach { t ->
             val sel = t == tab
             val bg by animateColorAsState(if (sel) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "tabBg")
@@ -234,9 +249,195 @@ private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
                 Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null) { onSelect(t) }
                     .padding(horizontal = 16.dp, vertical = 7.dp),
             ) {
-                Text(t.name, color = if (sel) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(t.label, color = if (sel) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             }
         }
+    }
+}
+
+// ---- Build Features (AGP buildFeatures: viewBinding / compose) -----------------------------------
+
+@Composable
+private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier: Modifier) {
+    var features by remember(moduleName) { mutableStateOf<UiBuildFeatures?>(null) }
+    var loading by remember(moduleName) { mutableStateOf(true) }
+    var busy by remember(moduleName) { mutableStateOf<String?>(null) } // the feature id currently toggling
+    var reloadKey by remember(moduleName) { mutableStateOf(0) }
+    var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(moduleName, reloadKey) {
+        loading = true
+        features = runCatching { backend.modules.getBuildFeatures(moduleName) }.getOrNull()
+        loading = false
+    }
+    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+
+    Box(modifier) {
+        val f = features
+        when {
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            f == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+                Text(
+                    "Build features apply to Android modules only.",
+                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                )
+            }
+            else -> LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item("intro") {
+                    Text(
+                        "Turn build features on per module. Enabling one adds the dependencies it needs.",
+                        color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                    )
+                }
+                items(f.features, key = { it.id }) { feature ->
+                    BuildFeatureRow(
+                        feature = feature,
+                        working = busy == feature.id,
+                        switchEnabled = busy == null,
+                    ) { enabled ->
+                        if (busy == null) {
+                            busy = feature.id
+                            scope.launch {
+                                val r = backend.modules.setBuildFeature(moduleName, feature.id, enabled)
+                                toast = ConfigToast(r.message, error = !r.success)
+                                busy = null
+                                if (r.success) reloadKey++
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(feature.title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(feature.description, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            }
+            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            else CaSwitch(feature.enabled) { if (switchEnabled) onToggle(it) }
+        }
+        feature.note?.let {
+            Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        }
+    }
+}
+
+// ---- Signing (assign a keystore to each build type) ----------------------------------------------
+
+@Composable
+private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreManager: () -> Unit, modifier: Modifier) {
+    var data by remember(moduleName) { mutableStateOf<UiSigningAssignments?>(null) }
+    var loading by remember(moduleName) { mutableStateOf(true) }
+    var reloadKey by remember(moduleName) { mutableStateOf(0) }
+    var busy by remember(moduleName) { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(moduleName, reloadKey) {
+        loading = true
+        data = runCatching { backend.signing.signingAssignments(moduleName) }.getOrNull()
+        loading = false
+    }
+    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+
+    Box(modifier) {
+        val d = data
+        when {
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            d == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+                Text("Signing applies to Android modules only.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+            }
+            else -> LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item("intro") {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Choose the keystore that signs each build type. An unassigned type signs with the debug keystore.",
+                            color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                        )
+                        Row(
+                            Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
+                                .clickable(remember { MutableInteractionSource() }, null, onClick = onOpenKeystoreManager)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(CaIcons.key, null, Modifier.size(15.dp), tint = Ca.colors.accent)
+                            Text("Manage keystores", style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
+                        }
+                    }
+                }
+                items(d.assignments, key = { it.buildType }) { a ->
+                    BuildTypeSigningRow(a, d.keystores, busy) { keystoreId ->
+                        if (!busy) {
+                            busy = true
+                            scope.launch {
+                                val r = backend.signing.assignSigning(moduleName, a.buildType, keystoreId)
+                                toast = ConfigToast(r.message, error = !r.success)
+                                busy = false
+                                if (r.success) reloadKey++
+                            }
+                        }
+                    }
+                }
+                if (d.keystores.isEmpty()) item("empty") {
+                    Text("No keystores yet — create one in the Keystore Manager to sign release builds.",
+                        color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                }
+            }
+        }
+        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun BuildTypeSigningRow(assignment: UiSigningAssignment, keystores: List<UiKeystore>, busy: Boolean, onAssign: (String?) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(assignment.buildType, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
+        // The choices: the default debug keystore (null) plus every registered keystore.
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SigningPill("debug (default)", selected = assignment.keystoreId == null, enabled = !busy) { onAssign(null) }
+            keystores.forEach { ks ->
+                SigningPill(ks.name, selected = assignment.keystoreId == ks.id, enabled = !busy) { onAssign(ks.id) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SigningPill(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (selected) Ca.colors.accent else Ca.colors.surface3, tween(Motion.FAST), label = "pillBg")
+    val fg = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary
+    Row(
+        Modifier.background(bg, RoundedCornerShape(Ca.radius.pill))
+            .clickable(remember { MutableInteractionSource() }, null, enabled = enabled) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        if (selected) Icon(CaIcons.check, null, Modifier.size(13.dp), tint = fg)
+        Text(label, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = fg)
     }
 }
 
@@ -252,8 +453,8 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
 
     LaunchedEffect(moduleName, reloadKey) {
         loading = true
-        config = runCatching { backend.getModuleConfig(moduleName) }.getOrNull()
-        missingProguard = runCatching { backend.missingProguardFiles(moduleName) }.getOrDefault(emptyList())
+        config = runCatching { backend.modules.getModuleConfig(moduleName) }.getOrNull()
+        missingProguard = runCatching { backend.modules.missingProguardFiles(moduleName) }.getOrDefault(emptyList())
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
@@ -262,10 +463,10 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
         ConfigBody(
             config, loading, codeFont, backend.project.rootPath, missingProguard, Modifier.fillMaxSize(),
             onAddSourceRoot = { addRootOpen = true },
-            onRemoveSourceRoot = { set, root -> if (backend.removeSourceRoot(moduleName, set, root)) reloadKey++ },
+            onRemoveSourceRoot = { set, root -> if (backend.modules.removeSourceRoot(moduleName, set, root)) reloadKey++ },
             onCreateProguard = { entry ->
                 scope.launch {
-                    val created = backend.createProguardFile(moduleName, entry)
+                    val created = backend.modules.createProguardFile(moduleName, entry)
                     toast = ConfigToast(
                         if (created != null) "Created $entry" else "Couldn't create $entry",
                         error = created == null,
@@ -275,15 +476,15 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
             },
         ) { edit ->
             scope.launch {
-                val r = backend.updateModuleConfig(moduleName, edit)
+                val r = backend.modules.updateModuleConfig(moduleName, edit)
                 toast = ConfigToast(r.message, error = !r.success)
                 if (r.success) reloadKey++
             }
         }
         AddSourceRootDialog(
-            request = if (addRootOpen) AddSourceRootRequest(moduleName, backend.moduleSourceSets(moduleName)) else null,
+            request = if (addRootOpen) AddSourceRootRequest(moduleName, backend.modules.moduleSourceSets(moduleName)) else null,
             onDismiss = { addRootOpen = false },
-            onAdd = { module, set, dirName, role -> if (backend.addSourceRoot(module, set, dirName, role) != null) reloadKey++ },
+            onAdd = { module, set, dirName, role -> if (backend.modules.addSourceRoot(module, set, dirName, role) != null) reloadKey++ },
         )
         ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
     }
@@ -334,7 +535,7 @@ private fun NewModuleDialog(
     onCreate: (name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>) -> Unit,
 ) {
     DropdownOverlay(visible = visible, onDismiss = onDismiss, topPadding = 56.dp) {
-        val types = remember { backend.availableModuleTypes() }
+        val types = remember { backend.modules.availableModuleTypes() }
         Column(
             Modifier.padding(horizontal = 12.dp).widthIn(max = 560.dp).fillMaxWidth()
                 .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))

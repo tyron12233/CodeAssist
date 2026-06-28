@@ -29,6 +29,7 @@ class AndroidFacetCodecTest {
                 consumerProguardFiles = listOf("consumer-rules.pro"),
                 proguardRules = listOf("-dontwarn com.example.**", "-keep class com.example.Api { *; }"),
                 versionNameSuffix = "-rel",
+                signingConfig = "release",
             ),
         ),
         productFlavors = listOf(
@@ -37,6 +38,7 @@ class AndroidFacetCodecTest {
         ),
         r8FullMode = false,
         coreLibraryDesugaringEnabled = true,
+        buildFeatures = BuildFeatures(viewBinding = true, compose = true),
     )
 
     @Test
@@ -62,11 +64,26 @@ class AndroidFacetCodecTest {
         assertEquals(true, bts[1]["shrinkResources"])
         assertEquals(listOf(DefaultProguardFiles.OPTIMIZE, "proguard-rules.pro"), bts[1]["proguardFiles"])
         assertEquals(listOf("consumer-rules.pro"), bts[1]["consumerProguardFiles"])
+        // The signing-config reference (a registry id) persists on the build type; debug has none.
+        assertEquals("release", bts[1]["signingConfig"])
+        assertEquals(null, bts[0]["signingConfig"])
         assertEquals(false, values["r8FullMode"])
         assertEquals(true, values["coreLibraryDesugaringEnabled"])
+        // buildFeatures flatten into on-only flags on the [android] table.
+        assertEquals(true, values["viewBinding"])
+        assertEquals(true, values["compose"])
         // Defaults are omitted (debug shrinks nothing, has no rules): absent keys, not false/empty.
         assertEquals(null, bts[0]["shrinkResources"])
         assertEquals(null, bts[0]["proguardFiles"])
+    }
+
+    @Test
+    fun buildFeaturesOmittedWhenOff() {
+        val values = AndroidFacetCodec.encode(AndroidFacet(namespace = "com.example.app", compileSdk = 34))
+        // An off feature is an absent key, not `false`, so a default facet equals its reloaded form.
+        assertEquals(null, values["viewBinding"])
+        assertEquals(null, values["compose"])
+        assertEquals(BuildFeatures(), AndroidFacetCodec.decode(values).buildFeatures)
     }
 
     /** Build with a facet, save, reload -> identical. */

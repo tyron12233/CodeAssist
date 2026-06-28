@@ -48,6 +48,8 @@ data class AndroidFacet(
      * native API level, and the desugared runtime is L8-compiled into the APK. Build-wide.
      */
     val coreLibraryDesugaringEnabled: Boolean = false,
+    /** AGP's `android { buildFeatures { … } }`: per-module toggles for generated-code/compiler features. */
+    val buildFeatures: BuildFeatures = BuildFeatures(),
 ) : Facet {
     override val key: FacetKey<AndroidFacet> get() = KEY
 
@@ -67,6 +69,29 @@ data class AndroidFacet(
             ),
         )
     }
+}
+
+/**
+ * AGP's `buildFeatures { }` block: per-module flags that switch on generated code or a compiler plugin.
+ * Each defaults to off so a fresh module behaves like a plain Android module; the codec persists only the
+ * flags that are on. Build-wide (not per-variant), matching AGP.
+ */
+data class BuildFeatures(
+    /**
+     * `viewBinding`: generate a type-safe `<Layout>Binding` class per layout (a field per `@+id`, plus
+     * `inflate`/`bind`/`getRoot`). The IDE both surfaces these for completion (a synthetic class) and emits
+     * the real `.java` into the build's generated sources.
+     */
+    val viewBinding: Boolean = false,
+    /**
+     * `compose`: enable Jetpack Compose for the module — the build compiles its Kotlin with the Compose
+     * compiler plugin (applied once the Compose runtime is on the classpath) and the IDE adds the Compose
+     * runtime/tooling dependencies. Compose previews then render from `@Preview` composables.
+     */
+    val compose: Boolean = false,
+) {
+    /** True when at least one build feature is enabled (drives "emit only when set" persistence). */
+    val anyEnabled: Boolean get() = viewBinding || compose
 }
 
 /** A build type (`debug`/`release`/…): how a variant is assembled regardless of flavor. */
@@ -95,6 +120,12 @@ data class BuildType(
     val proguardRules: List<String> = emptyList(),
     val applicationIdSuffix: String? = null,
     val versionNameSuffix: String? = null,
+    /**
+     * The id of the signing keystore this build type is signed with, referencing an entry in the global
+     * keystore registry (app-home), e.g. `"release"`. Null ⇒ the build's default debug keystore. Only the id
+     * is stored in `module.toml` — the keystore file and its passwords live in the registry, never the project.
+     */
+    val signingConfig: String? = null,
 )
 
 /** A product flavor (`free`/`paid`/`demo`/…), grouped by a [dimension]. */
