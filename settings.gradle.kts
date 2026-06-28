@@ -56,6 +56,8 @@ include(
     ":analytics-impl", // the engine: durable batch buffer + Supabase PostgREST sink + scrubbed crash reporter
     ":block-api",
     ":block-impl",
+    ":plugin-api",  // UI extensibility SPI: the lean action model (IdeAction/ActionGroup + places) + EPs
+    ":plugin-impl", // ActionManager: resolves UI_ACTION_EP/ACTION_GROUP_EP into places/menus, dispatches
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)

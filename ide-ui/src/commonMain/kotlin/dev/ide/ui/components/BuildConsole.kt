@@ -35,12 +35,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -51,13 +55,21 @@ import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.BuildStepUi
+import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.StepStatus
 import dev.ide.ui.backend.UiLogLevel
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowContext
+import dev.ide.ui.ext.ToolWindowContribution
+import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Build & run console: a persistent header (live status pill, error/warning counts, elapsed time, a
@@ -79,16 +91,27 @@ fun BuildConsole(
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenDiagnostic: (BuildDiagnosticUi) -> Unit = {},
+    /** Backend for plugin BOTTOM tool-window tabs; null hides them (e.g. backends/tests without one). */
+    backend: IdeBackend? = null,
+    activeFilePath: String? = null,
 ) {
     val running = buildState.status == RunStatus.Running
     val errors = buildState.diagnostics.count { it.severity == UiSeverity.Error }
     val warnings = buildState.diagnostics.count { it.severity == UiSeverity.Warning }
     val done = buildState.steps.count { it.status.isSettled }
 
+    // Plugin-contributed BOTTOM tool windows appear as extra tabs after the built-in three. Additive: the
+    // built-in tabs are unchanged. Needs a backend for the tool-window context, so gated on it.
+    val pluginTabs = if (backend != null) ToolWindowRegistry.forAnchor(ToolWindowAnchor.BOTTOM) else emptyList()
+
     var tab by remember { mutableStateOf(BuildTab.Log) }
+    var activePluginTab by remember { mutableStateOf<String?>(null) }
     // Pull the errors front-and-center the moment a build fails (but never override the user otherwise).
     LaunchedEffect(buildState.status) {
-        if (buildState.status == RunStatus.Failed && (errors > 0 || warnings > 0)) tab = BuildTab.Problems
+        if (buildState.status == RunStatus.Failed && (errors > 0 || warnings > 0)) {
+            tab = BuildTab.Problems
+            activePluginTab = null
+        }
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -96,9 +119,23 @@ fun BuildConsole(
         if (indexStatus.building) IndexingSection(indexStatus)
         buildState.banner?.let { FirstBuildBanner(it) }
         if (running) RunningStrip(buildState.steps)
-        ConsoleTabs(tab, errors, warnings, done, buildState.steps.size) { tab = it }
+        ConsoleTabs(
+            tab, errors, warnings, done, buildState.steps.size, pluginTabs, activePluginTab,
+            onSelect = { tab = it; activePluginTab = null },
+            onSelectPlugin = { activePluginTab = it },
+        )
         Box(Modifier.fillMaxWidth().weight(1f)) {
-            when (tab) {
+            val plugin = pluginTabs.firstOrNull { it.id == activePluginTab }
+            if (plugin != null && backend != null) {
+                val ctxBackend: IdeBackend = backend
+                val ctx = remember(ctxBackend, activeFilePath) {
+                    object : ToolWindowContext {
+                        override val backend = ctxBackend
+                        override val activeFilePath = activeFilePath
+                    }
+                }
+                plugin.content(ctx)
+            } else when (tab) {
                 BuildTab.Problems -> ProblemsTab(buildState.diagnostics, onOpenDiagnostic)
                 BuildTab.Log -> LogTab(buildState.log, running)
                 BuildTab.Steps -> StepsTab(buildState.steps)
@@ -112,31 +149,72 @@ private enum class BuildTab { Problems, Log, Steps }
 /** True for a step that has settled (won't change again this build) — for the running-progress fraction. */
 private val StepStatus.isSettled: Boolean
     get() = this == StepStatus.Done || this == StepStatus.UpToDate ||
-        this == StepStatus.NoSource || this == StepStatus.Skipped || this == StepStatus.Failed
+            this == StepStatus.NoSource || this == StepStatus.Skipped || this == StepStatus.Failed
 
 // ---------------------------------------------------------------------------
 // Header + running strip
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun Header(state: BuildState, errors: Int, warnings: Int, onRun: () -> Unit, onStop: () -> Unit, onCollapse: () -> Unit) {
+private fun Header(
+    state: BuildState,
+    errors: Int,
+    warnings: Int,
+    onRun: () -> Unit,
+    onStop: () -> Unit,
+    onCollapse: () -> Unit
+) {
     val running = state.status == RunStatus.Running
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
-        Text("Build", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Build",
+            color = Ca.colors.textPrimary,
+            style = Ca.type.subhead,
+            fontWeight = FontWeight.SemiBold
+        )
         if (state.moduleName.isNotEmpty()) {
-            Text(state.moduleName, color = Ca.colors.textTertiary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                state.moduleName,
+                color = Ca.colors.textTertiary,
+                style = Ca.type.footnote,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         Spacer(Modifier.weight(1f))
         if (errors > 0) MiniCount(CaIcons.error, errors, Ca.colors.error)
         if (warnings > 0) MiniCount(CaIcons.warning, warnings, Ca.colors.warning)
         if (state.elapsedMs > 0 && !running) {
-            Text("${state.elapsedMs / 1000.0}s", color = Ca.colors.textTertiary, style = Ca.type.codeSmall, maxLines = 1, softWrap = false)
+            Text(
+                "${state.elapsedMs / 1000.0}s",
+                color = Ca.colors.textTertiary,
+                style = Ca.type.codeSmall,
+                maxLines = 1,
+                softWrap = false
+            )
         }
         StatusPill(state.status)
         if (state.log.isNotEmpty()) CopyLogButton(state.log)
-        if (running) IconButtonCa(CaIcons.stop, "Stop", onStop, boxSize = 28, iconSize = 16, tint = Ca.colors.error)
-        else IconButtonCa(CaIcons.play, "Run", onRun, boxSize = 28, iconSize = 16, tint = Ca.colors.run)
+        if (running) IconButtonCa(
+            CaIcons.stop,
+            "Stop",
+            onStop,
+            boxSize = 28,
+            iconSize = 16,
+            tint = Ca.colors.error
+        )
+        else IconButtonCa(
+            CaIcons.play,
+            "Run",
+            onRun,
+            boxSize = 28,
+            iconSize = 16,
+            tint = Ca.colors.run
+        )
         IconButtonCa(CaIcons.chevronDown, "Collapse", onCollapse, boxSize = 28, iconSize = 16)
     }
 }
@@ -145,7 +223,8 @@ private fun Header(state: BuildState, errors: Int, warnings: Int, onRun: () -> U
 @Composable
 private fun MiniCount(icon: ImageVector, count: Int, color: Color) {
     Row(
-        Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 7.dp, vertical = 2.dp),
+        Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -170,15 +249,30 @@ private fun StatusPill(status: RunStatus) {
  * failure off a device with no `adb`/logcat. Each line carries its time + task so the paste is useful.
  * Flips to a check for ~1.5s as confirmation.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun CopyLogButton(log: List<BuildLogLine>) {
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
     var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(copied) { if (copied) { delay(1500); copied = false } }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1500.milliseconds); copied = false
+        }
+    }
     IconButtonCa(
         if (copied) CaIcons.check else CaIcons.copy,
         if (copied) "Log copied" else "Copy log",
-        onClick = { clipboard.setText(AnnotatedString(log.joinToString("\n") { renderLogForCopy(it) })); copied = true },
+        onClick = {
+            scope.launch {
+                val text = log.joinToString(separator = "\n") {
+                    renderLogForCopy(it)
+                }
+
+                clipboard.setText(AnnotatedString(text))
+            }
+            copied = true
+        },
         boxSize = 28,
         iconSize = 16,
         tint = if (copied) Ca.colors.run else Ca.colors.textSecondary,
@@ -186,8 +280,12 @@ private fun CopyLogButton(log: List<BuildLogLine>) {
 }
 
 private fun renderLogForCopy(l: BuildLogLine): String = buildString {
-    if (l.timeLabel.isNotEmpty()) { append(l.timeLabel); append(' ') }
-    if (!l.task.isNullOrEmpty()) { append('['); append(l.task); append("] ") }
+    if (l.timeLabel.isNotEmpty()) {
+        append(l.timeLabel); append(' ')
+    }
+    if (!l.task.isNullOrEmpty()) {
+        append('['); append(l.task); append("] ")
+    }
     append(l.message)
 }
 
@@ -199,7 +297,10 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
     val done = steps.count { it.status.isSettled }
     val current = steps.firstOrNull { it.status == StepStatus.Running }?.name
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(
                 current?.let(::shortTask) ?: "Working…",
                 color = Ca.colors.textSecondary, style = Ca.type.caption,
@@ -209,7 +310,9 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
         }
         LinearProgressIndicator(
             progress = { if (total == 0) 0f else done / total.toFloat() },
-            modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2,
+            modifier = Modifier.fillMaxWidth().height(3.dp),
+            color = Ca.colors.accent,
+            trackColor = Ca.colors.surface2,
         )
     }
 }
@@ -219,32 +322,68 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ConsoleTabs(tab: BuildTab, errors: Int, warnings: Int, stepsDone: Int, stepsTotal: Int, onSelect: (BuildTab) -> Unit) {
+private fun ConsoleTabs(
+    tab: BuildTab,
+    errors: Int,
+    warnings: Int,
+    stepsDone: Int,
+    stepsTotal: Int,
+    pluginTabs: List<ToolWindowContribution>,
+    activePluginTab: String?,
+    onSelect: (BuildTab) -> Unit,
+    onSelectPlugin: (String) -> Unit,
+) {
+    // A built-in tab reads as selected only while no plugin tab is active.
+    val builtInActive = activePluginTab == null
     Column {
         // Horizontally scrollable so the tabs never clip on a narrow sheet / pane.
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            TabItem("Problems", tab == BuildTab.Problems, badge = (errors + warnings).takeIf { it > 0 }?.toString(),
-                badgeColor = if (errors > 0) Ca.colors.error else Ca.colors.warning) { onSelect(BuildTab.Problems) }
-            TabItem("Log", tab == BuildTab.Log) { onSelect(BuildTab.Log) }
-            TabItem("Steps", tab == BuildTab.Steps, badge = stepsTotal.takeIf { it > 0 }?.let { "$stepsDone/$it" },
-                badgeColor = Ca.colors.textTertiary) { onSelect(BuildTab.Steps) }
+            TabItem(
+                "Problems",
+                builtInActive && tab == BuildTab.Problems,
+                badge = (errors + warnings).takeIf { it > 0 }?.toString(),
+                badgeColor = if (errors > 0) Ca.colors.error else Ca.colors.warning
+            ) { onSelect(BuildTab.Problems) }
+            TabItem("Log", builtInActive && tab == BuildTab.Log) { onSelect(BuildTab.Log) }
+            TabItem(
+                "Steps",
+                builtInActive && tab == BuildTab.Steps,
+                badge = stepsTotal.takeIf { it > 0 }?.let { "$stepsDone/$it" },
+                badgeColor = Ca.colors.textTertiary
+            ) { onSelect(BuildTab.Steps) }
+            // Plugin-contributed BOTTOM tool windows.
+            pluginTabs.forEach { tw ->
+                TabItem(tw.title, activePluginTab == tw.id) { onSelectPlugin(tw.id) }
+            }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
     }
 }
 
 @Composable
-private fun TabItem(label: String, selected: Boolean, badge: String? = null, badgeColor: Color = Ca.colors.accent, onClick: () -> Unit) {
+private fun TabItem(
+    label: String,
+    selected: Boolean,
+    badge: String? = null,
+    badgeColor: Color = Ca.colors.accent,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
     Column(
         // IntrinsicSize.Max gives the column a concrete content width (it sits in a horizontally-scrollable
         // row, so the incoming max width is unbounded) — the selected underline then matches the tab's width.
-        Modifier.width(IntrinsicSize.Max).clickable(MutableInteractionSource(), indication = null, onClick = onClick).padding(top = 2.dp),
+        Modifier.width(IntrinsicSize.Max)
+            .clickable(interactionSource, indication = null, onClick = onClick)
+            .padding(top = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Text(
                 label,
                 color = if (selected) Ca.colors.textPrimary else Ca.colors.textTertiary,
@@ -252,13 +391,28 @@ private fun TabItem(label: String, selected: Boolean, badge: String? = null, bad
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             )
             badge?.let {
-                Box(Modifier.background(badgeColor.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-                    Text(it, color = badgeColor, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+                Box(
+                    Modifier.background(
+                        badgeColor.copy(alpha = 0.18f),
+                        RoundedCornerShape(Ca.radius.pill)
+                    ).padding(horizontal = 6.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        it,
+                        color = badgeColor,
+                        style = Ca.type.caption2,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
         Spacer(Modifier.height(5.dp))
-        Box(Modifier.fillMaxWidth().height(2.dp).background(if (selected) Ca.colors.accent else Color.Transparent, RoundedCornerShape(Ca.radius.pill)))
+        Box(
+            Modifier.fillMaxWidth().height(2.dp).background(
+                if (selected) Ca.colors.accent else Color.Transparent,
+                RoundedCornerShape(Ca.radius.pill)
+            )
+        )
     }
 }
 
@@ -274,16 +428,32 @@ private fun ProblemsTab(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiag
     val shown = remember(diagnostics, filter) { diagnostics.filter { filter.keep(it.severity) } }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ConsoleChip("All ${diagnostics.size}", filter == ProblemFilter.All) { filter = ProblemFilter.All }
-            if (errors > 0) ConsoleChip("Errors $errors", filter == ProblemFilter.Errors) { filter = ProblemFilter.Errors }
-            if (warnings > 0) ConsoleChip("Warnings $warnings", filter == ProblemFilter.Warnings) { filter = ProblemFilter.Warnings }
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            ConsoleChip("All ${diagnostics.size}", filter == ProblemFilter.All) {
+                filter = ProblemFilter.All
+            }
+            if (errors > 0) ConsoleChip("Errors $errors", filter == ProblemFilter.Errors) {
+                filter = ProblemFilter.Errors
+            }
+            if (warnings > 0) ConsoleChip(
+                "Warnings $warnings",
+                filter == ProblemFilter.Warnings
+            ) { filter = ProblemFilter.Warnings }
         }
         if (shown.isEmpty()) {
-            EmptyState(if (diagnostics.isEmpty()) "No problems." else "No problems match this filter.", Modifier.weight(1f).fillMaxWidth())
+            EmptyState(
+                if (diagnostics.isEmpty()) "No problems." else "No problems match this filter.",
+                Modifier.weight(1f).fillMaxWidth()
+            )
         } else {
             val groups = remember(shown) { groupByFile(shown) }
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 for ((file, items) in groups) {
                     if (file.isNotEmpty()) item { ProblemFileHeader(file, items.size) }
                     items(items) { d -> ProblemRow(d, indented = file.isNotEmpty(), onOpen) }
@@ -317,13 +487,22 @@ private fun ProblemFileHeader(file: String, count: Int) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(CaIcons.file, null, Modifier.size(13.dp), tint = Ca.colors.textTertiary)
-        Text(file.substringAfterLast('/').substringAfterLast('\\'), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text(
+            file.substringAfterLast('/').substringAfterLast('\\'),
+            color = Ca.colors.textSecondary,
+            style = Ca.type.caption,
+            fontWeight = FontWeight.Medium
+        )
         Text("$count", color = Ca.colors.textTertiary, style = Ca.type.caption)
     }
 }
 
 @Composable
-private fun ProblemRow(d: BuildDiagnosticUi, indented: Boolean, onOpen: (BuildDiagnosticUi) -> Unit) {
+private fun ProblemRow(
+    d: BuildDiagnosticUi,
+    indented: Boolean,
+    onOpen: (BuildDiagnosticUi) -> Unit
+) {
     val clickable = d.file != null
     Column(
         Modifier.fillMaxWidth()
@@ -331,10 +510,28 @@ private fun ProblemRow(d: BuildDiagnosticUi, indented: Boolean, onOpen: (BuildDi
             .padding(start = if (indented) 19.dp else 0.dp, top = 3.dp, bottom = 3.dp),
     ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(severityIcon(d.severity), null, Modifier.size(14.dp).padding(top = 1.dp), tint = severityColor(d.severity))
-            Text(d.message, color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f))
-            if (d.line > 0) Text(":${d.line}", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-            Text(d.source.ifEmpty { d.kind }, color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Icon(
+                severityIcon(d.severity),
+                null,
+                Modifier.size(14.dp).padding(top = 1.dp),
+                tint = severityColor(d.severity)
+            )
+            Text(
+                d.message,
+                color = Ca.colors.textSecondary,
+                style = Ca.type.footnote,
+                modifier = Modifier.weight(1f)
+            )
+            if (d.line > 0) Text(
+                ":${d.line}",
+                color = Ca.colors.textTertiary,
+                style = Ca.type.codeSmall
+            )
+            Text(
+                d.source.ifEmpty { d.kind },
+                color = Ca.colors.textTertiary,
+                style = Ca.type.caption
+            )
         }
         // The captured source snippet / caret context (the compiler's offending line), if any.
         d.detail?.takeIf { it.isNotBlank() }?.let { snippet ->
@@ -377,11 +574,20 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
 
     val q = query.trim()
     val filtered = remember(log, level, q) {
-        log.filter { level.keep(it.level) && (q.isEmpty() || it.message.contains(q, true) || (it.task?.contains(q, true) == true)) }
+        log.filter {
+            level.keep(it.level) && (q.isEmpty() || it.message.contains(
+                q,
+                true
+            ) || (it.task?.contains(q, true) == true))
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             SearchField(query, { query = it }, Modifier.weight(1f))
             IconButtonCa(
                 CaIcons.layers, if (grouped) "Ungroup" else "Group by task",
@@ -389,7 +595,10 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
                 tint = if (grouped) Ca.colors.accent else Ca.colors.textSecondary,
             )
         }
-        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             LogLevelFilter.entries.forEach { f -> ConsoleChip(f.label, f == level) { level = f } }
         }
         Box(
@@ -404,11 +613,20 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
                     color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
                 )
             } else if (grouped) {
-                val collapsedKey = collapsed.entries.filter { it.value }.map { it.key }.sorted().joinToString(",")
+                val collapsedKey =
+                    collapsed.entries.filter { it.value }.map { it.key }.sorted().joinToString(",")
                 val items = remember(filtered, collapsedKey) { buildGroups(filtered, collapsed) }
                 LogList(items, running) { task -> collapsed[task] = !(collapsed[task] ?: false) }
             } else {
-                val items = remember(filtered) { filtered.map { LogDisplay.Line(it, showTask = true, showTime = true) } }
+                val items = remember(filtered) {
+                    filtered.map {
+                        LogDisplay.Line(
+                            it,
+                            showTask = true,
+                            showTime = true
+                        )
+                    }
+                }
                 LogList(items, running) {}
             }
         }
@@ -423,18 +641,30 @@ private enum class LogLevelFilter(val label: String, val keep: (UiLogLevel) -> B
 
 private sealed interface LogDisplay {
     data class Header(val task: String, val count: Int, val expanded: Boolean) : LogDisplay
-    data class Line(val line: BuildLogLine, val showTask: Boolean, val showTime: Boolean) : LogDisplay
+    data class Line(val line: BuildLogLine, val showTask: Boolean, val showTime: Boolean) :
+        LogDisplay
 }
 
 /** Group lines by the task that produced them (first-appearance order); a collapsed group shows only its header. */
-private fun buildGroups(lines: List<BuildLogLine>, collapsed: Map<String, Boolean>): List<LogDisplay> {
+private fun buildGroups(
+    lines: List<BuildLogLine>,
+    collapsed: Map<String, Boolean>
+): List<LogDisplay> {
     val groups = LinkedHashMap<String, MutableList<BuildLogLine>>()
     for (l in lines) groups.getOrPut(l.task ?: "") { ArrayList() }.add(l)
     return buildList {
         for ((task, ls) in groups) {
             val expanded = collapsed[task] != true
             add(LogDisplay.Header(task, ls.size, expanded))
-            if (expanded) ls.forEach { add(LogDisplay.Line(it, showTask = false, showTime = false)) }
+            if (expanded) ls.forEach {
+                add(
+                    LogDisplay.Line(
+                        it,
+                        showTask = false,
+                        showTime = false
+                    )
+                )
+            }
         }
     }
 }
@@ -450,7 +680,12 @@ private fun LogList(items: List<LogDisplay>, running: Boolean, onToggle: (String
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(items) { _, item ->
                 when (item) {
-                    is LogDisplay.Header -> LogGroupHeader(item.task, item.count, item.expanded) { onToggle(item.task) }
+                    is LogDisplay.Header -> LogGroupHeader(
+                        item.task,
+                        item.count,
+                        item.expanded
+                    ) { onToggle(item.task) }
+
                     is LogDisplay.Line -> LogLineRow(item.line, item.showTask, item.showTime)
                 }
             }
@@ -465,11 +700,20 @@ private fun LogGroupHeader(task: String, count: Int, expanded: Boolean, onToggle
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
+        Icon(
+            if (expanded) CaIcons.caretDown else CaIcons.caretRight,
+            null,
+            Modifier.size(12.dp),
+            tint = Ca.colors.textTertiary
+        )
         Text(
             task.ifEmpty { "General" },
-            color = Ca.colors.textSecondary, style = Ca.type.codeSmall, fontWeight = FontWeight.Medium,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            color = Ca.colors.textSecondary,
+            style = Ca.type.codeSmall,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
         Text("$count", color = Ca.colors.textTertiary, style = Ca.type.caption2)
     }
@@ -482,11 +726,25 @@ private fun LogLineRow(line: BuildLogLine, showTask: Boolean, showTime: Boolean)
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (showTime && line.timeLabel.isNotEmpty()) Text(line.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (showTime && line.timeLabel.isNotEmpty()) Text(
+            line.timeLabel,
+            color = Ca.colors.textTertiary,
+            style = Ca.type.caption2
+        )
         if (showTask && !line.task.isNullOrEmpty()) {
-            Text(shortTask(line.task), color = Ca.colors.accent.copy(alpha = 0.85f), style = Ca.type.caption2, maxLines = 1)
+            Text(
+                shortTask(line.task),
+                color = Ca.colors.accent.copy(alpha = 0.85f),
+                style = Ca.type.caption2,
+                maxLines = 1
+            )
         }
-        Text(line.message, color = logColor(line.level, line.message), style = Ca.type.codeSmall, modifier = Modifier.weight(1f))
+        Text(
+            line.message,
+            color = logColor(line.level, line.message),
+            style = Ca.type.codeSmall,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -548,14 +806,30 @@ private fun statusTag(status: StepStatus): String? = when (status) {
 private fun StatusIcon(status: StepStatus) {
     when (status) {
         StepStatus.Pending ->
-            Box(Modifier.size(15.dp).border(1.5.dp, Ca.colors.separatorStrong, RoundedCornerShape(Ca.radius.pill)))
+            Box(
+                Modifier.size(15.dp)
+                    .border(1.5.dp, Ca.colors.separatorStrong, RoundedCornerShape(Ca.radius.pill))
+            )
+
         StepStatus.Running ->
-            CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            CircularProgressIndicator(
+                Modifier.size(14.dp),
+                color = Ca.colors.accent,
+                strokeWidth = 2.dp
+            )
+
         StepStatus.Done -> Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ca.colors.run)
         // up-to-date = real (cached) result, a muted check; no-source/skipped = no work, a faint dot.
-        StepStatus.UpToDate -> Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+        StepStatus.UpToDate -> Icon(
+            CaIcons.check,
+            null,
+            Modifier.size(15.dp),
+            tint = Ca.colors.textTertiary
+        )
+
         StepStatus.NoSource, StepStatus.Skipped ->
             Icon(CaIcons.dot, null, Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+
         StepStatus.Failed -> Icon(CaIcons.error, null, Modifier.size(15.dp), tint = Ca.colors.error)
     }
 }
@@ -586,18 +860,38 @@ private fun FirstBuildBanner(text: String) {
 @Composable
 private fun IndexingSection(status: IndexUiStatus) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
-            Text(status.message.ifEmpty { "Indexing…" }, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(
+                status.message.ifEmpty { "Indexing…" },
+                color = Ca.colors.textSecondary,
+                style = Ca.type.footnote
+            )
             if (status.fraction in 0.0..1.0) {
                 Spacer(Modifier.weight(1f))
-                Text("${(status.fraction * 100).toInt()}%", color = Ca.colors.textTertiary, style = Ca.type.caption)
+                Text(
+                    "${(status.fraction * 100).toInt()}%",
+                    color = Ca.colors.textTertiary,
+                    style = Ca.type.caption
+                )
             }
         }
         if (status.fraction in 0.0..1.0) {
-            LinearProgressIndicator(progress = { status.fraction.toFloat() }, modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+            LinearProgressIndicator(
+                progress = { status.fraction.toFloat() },
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = Ca.colors.accent,
+                trackColor = Ca.colors.surface2
+            )
         } else {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = Ca.colors.accent,
+                trackColor = Ca.colors.surface2
+            )
         }
     }
 }
@@ -612,11 +906,19 @@ private fun EmptyState(text: String, modifier: Modifier = Modifier) {
 /** A pill toggle for the Problems severity / Log level filters. */
 @Composable
 private fun ConsoleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         Modifier
-            .background(if (selected) Ca.colors.accent else Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
-            .border(1.dp, if (selected) Color.Transparent else Ca.colors.hairline, RoundedCornerShape(Ca.radius.pill))
-            .clickable(MutableInteractionSource(), indication = null, onClick = onClick)
+            .background(
+                if (selected) Ca.colors.accent else Ca.colors.surface2,
+                RoundedCornerShape(Ca.radius.pill)
+            )
+            .border(
+                1.dp,
+                if (selected) Color.Transparent else Ca.colors.hairline,
+                RoundedCornerShape(Ca.radius.pill)
+            )
+            .clickable(interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
         Text(
@@ -630,7 +932,12 @@ private fun ConsoleChip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 /** The Log tab's text filter. */
 @Composable
-private fun SearchField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun SearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
     Row(
         modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
             .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
@@ -640,7 +947,11 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit, modifier
     ) {
         Icon(CaIcons.search, null, Modifier.size(14.dp), tint = Ca.colors.accent)
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text("Filter log…", color = Ca.colors.textTertiary, style = Ca.type.footnote)
+            if (value.isEmpty()) Text(
+                "Filter log…",
+                color = Ca.colors.textTertiary,
+                style = Ca.type.footnote
+            )
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -651,7 +962,13 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit, modifier
             )
         }
         if (value.isNotEmpty()) {
-            Icon(CaIcons.close, "Clear", Modifier.size(14.dp).clickable(MutableInteractionSource(), indication = null) { onValueChange("") }, tint = Ca.colors.textTertiary)
+            Icon(
+                CaIcons.close,
+                "Clear",
+                Modifier.size(14.dp)
+                    .clickable(interactionSource, indication = null) { onValueChange("") },
+                tint = Ca.colors.textTertiary
+            )
         }
     }
 }

@@ -62,46 +62,14 @@ interface MessageBusConnection : Disposable {
 }
 
 // ---------------------------------------------------------------------------
-// Background work: activities, progress, cancellation
+// Progress / cancellation
 // ---------------------------------------------------------------------------
 
 /**
- * The general background-work scheduler (sync, indexing, "run build", search). Distinct from the
- * build task engine (build-api): a build is *one* activity that internally drives a task graph.
- * This is also where the read/write-lock discipline is enforced (see [ActivityScope]).
+ * Reports progress + cancellation for a long-running operation (dependency resolution, a build, indexing).
+ * Producers (build-api/deps-api) take one and call [report]/[checkCanceled]; the host supplies an impl that
+ * forwards to the UI (or a no-op).
  */
-interface ActivityManager {
-    fun <T> launch(spec: ActivitySpec, block: suspend ActivityScope.() -> T): Activity<T>
-}
-
-data class ActivitySpec(
-    val title: String,
-    val cancellable: Boolean = true,
-    val showInUi: Boolean = true,
-)
-
-interface Activity<T> {
-    val spec: ActivitySpec
-    suspend fun await(): T
-    fun cancel()
-    val isActive: Boolean
-}
-
-/**
- * The receiver inside an activity. Long work must take read/write actions to touch the model or any
- * DOM safely, and must poll [checkCanceled] so a model change can cancel and restart stale work.
- */
-interface ActivityScope {
-    val progress: ProgressReporter
-    fun checkCanceled()
-
-    /** Many readers may run concurrently; excluded only while a write action holds the lock. */
-    suspend fun <T> readAction(block: () -> T): T
-
-    /** Exactly one writer at a time; excludes all readers. Keep the body short. */
-    suspend fun <T> writeAction(block: () -> T): T
-}
-
 interface ProgressReporter {
     /** [fraction] in 0.0..1.0, or negative for indeterminate. */
     fun report(fraction: Double, message: String? = null)

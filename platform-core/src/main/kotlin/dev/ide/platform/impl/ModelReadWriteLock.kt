@@ -13,8 +13,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
  * it. A write action cannot be started inside a read action.
  *
  * The action blocks are synchronous by contract, so a single action never hands the lock to another
- * thread mid-body; the surrounding [dev.ide.platform.ActivityScope] coroutine is what makes lock
- * acquisition cancellable at action boundaries.
+ * thread mid-body. Used directly by the project model store (a commit wraps its mutation in [write]).
  */
 class ModelReadWriteLock {
     private val lock = ReentrantReadWriteLock()

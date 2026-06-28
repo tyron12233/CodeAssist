@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,8 +48,15 @@ import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.UiActionContext
+import dev.ide.ui.backend.UiActionEffect
+import dev.ide.ui.backend.UiActionPlaces
+import dev.ide.ui.ext.BuiltInUiActions
+import dev.ide.ui.ext.UiActionHost
+import dev.ide.ui.ext.UiActionRegistry
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.launch
 
 class PaletteEntry(val section: String, val label: String, val sub: String?, val run: () -> Unit)
 
@@ -80,13 +88,9 @@ enum class PaletteFilter(val label: String, val sections: Set<String>) {
 fun CommandPalette(
     files: List<TreeNode>,
     backend: IdeBackend,
+    uiHost: UiActionHost,
     onOpenFile: (TreeNode) -> Unit,
     onOpenAt: (String, Int) -> Unit,
-    onToggleTheme: () -> Unit,
-    onReindex: () -> Unit,
-    onOpenDependencies: () -> Unit,
-    onManageSdk: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -94,26 +98,42 @@ fun CommandPalette(
     var symbols by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
     var members by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
     val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+
+    // The palette merges two command sources, both from the action registries:
+    //  - engine commands (Run/Stop/Re-index + any dex plugin) via IdeBackend.actionsFor (data-driven), and
+    //  - UI-navigation commands (Settings/Dependencies/SDK/Toggle theme + in-UI plugins) via UiActionRegistry.
+    BuiltInUiActions.ensureRegistered()
+    val pluginCommands = remember { backend.actions.actionsFor(UiActionContext(place = UiActionPlaces.COMMAND_PALETTE)) }
+    val uiCommands = UiActionRegistry.forPlace(UiActionPlaces.COMMAND_PALETTE, uiHost)
+    fun runCommand(id: String) {
+        scope.launch {
+            val result = runCatching {
+                backend.actions.invokeAction(id, UiActionContext(place = UiActionPlaces.COMMAND_PALETTE))
+            }.getOrNull() ?: return@launch
+            for (effect in result.effects) when (effect) {
+                is UiActionEffect.OpenFile -> onOpenAt(effect.path, effect.offset ?: 0)
+                else -> {} // Navigate/RefreshTree/ReloadFile need a richer host; the palette ignores them.
+            }
+        }
+    }
     // Only hit the index for the kinds the active scope actually shows — picking "Files" shouldn't pay for a
     // member scan. Re-runs when the scope changes so switching tabs fills in results that were skipped.
     LaunchedEffect(query, filter) {
         val q = query.trim()
         if (q.length >= 2) {
-            symbols = if (filter.wantsSymbols) runCatching { backend.searchSymbols(q, 20) }.getOrDefault(emptyList()) else emptyList()
-            members = if (filter.wantsMembers) runCatching { backend.searchMembers(q, 20) }.getOrDefault(emptyList()) else emptyList()
+            symbols = if (filter.wantsSymbols) runCatching { backend.search.searchSymbols(q, 20) }.getOrDefault(emptyList()) else emptyList()
+            members = if (filter.wantsMembers) runCatching { backend.search.searchMembers(q, 20) }.getOrDefault(emptyList()) else emptyList()
         } else { symbols = emptyList(); members = emptyList() }
     }
 
     val q = query.trim()
     val allEntries = buildList {
         if (q.isEmpty()) {
-            add(PaletteEntry("Run", "Run build", "⌘R") {})
-            add(PaletteEntry("Commands", "Open Settings", null, onOpenSettings))
-            add(PaletteEntry("Commands", "Manage dependencies", null, onOpenDependencies))
-            add(PaletteEntry("Commands", "Manage SDK (Android & JDK)", null, onManageSdk))
-            add(PaletteEntry("Commands", "Toggle theme (light/dark)", null, onToggleTheme))
-            add(PaletteEntry("Commands", "Re-index project", null, onReindex))
+            // Engine commands (Run/Stop/Re-index + dex plugins) and UI commands (nav/theme + in-UI plugins).
+            pluginCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { runCommand(cmd.id) }) }
+            uiCommands.forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { cmd.perform(uiHost) }) }
             files.take(12).forEach { f -> add(PaletteEntry("Go to", f.name, null) { onOpenFile(f) }) }
         } else {
             symbols.forEach { s ->
@@ -124,21 +144,10 @@ fun CommandPalette(
             files.filter { it.name.contains(q, ignoreCase = true) }.take(8)
                 .forEach { f -> add(PaletteEntry("Files", f.name, null) { onOpenFile(f) }) }
             members.forEach { m -> add(PaletteEntry("Members", m.name, m.detail) {}) }
-            if ("settings".contains(q, ignoreCase = true)) {
-                add(PaletteEntry("Commands", "Open Settings", null, onOpenSettings))
-            }
-            if ("toggle theme".contains(q, ignoreCase = true)) {
-                add(PaletteEntry("Commands", "Toggle theme (light/dark)", null, onToggleTheme))
-            }
-            if ("manage dependencies".contains(q, ignoreCase = true)) {
-                add(PaletteEntry("Commands", "Manage dependencies", null, onOpenDependencies))
-            }
-            if ("manage sdk".contains(q, ignoreCase = true) || "android sdk".contains(q, ignoreCase = true) || "jdk".contains(q, ignoreCase = true)) {
-                add(PaletteEntry("Commands", "Manage SDK (Android & JDK)", null, onManageSdk))
-            }
-            if ("re-index project".contains(q, ignoreCase = true)) {
-                add(PaletteEntry("Commands", "Re-index project", null, onReindex))
-            }
+            pluginCommands.filter { it.text.contains(q, ignoreCase = true) }
+                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { runCommand(cmd.id) }) }
+            uiCommands.filter { it.text.contains(q, ignoreCase = true) }
+                .forEach { cmd -> add(PaletteEntry("Commands", cmd.text, null) { cmd.perform(uiHost) }) }
         }
     }
     val entries = allEntries.filter { filter.keeps(it.section) }
