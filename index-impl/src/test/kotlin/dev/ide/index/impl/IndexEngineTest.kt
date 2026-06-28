@@ -3,6 +3,7 @@ package dev.ide.index.impl
 import dev.ide.index.ClassNameExternalizer
 import dev.ide.index.ClassNameValue
 import dev.ide.index.Externalizer
+import dev.ide.index.Hit
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexId
 import dev.ide.index.IndexInput
@@ -197,6 +198,32 @@ class IndexEngineTest {
         }
     }
 
+    /**
+     * The index-status worklist labels an exploded-AAR `classes.jar` by its library directory (e.g.
+     * `foo-1.2.3`), not the meaningless `classes.jar` file name every AAR shares. A plain jar keeps its name.
+     */
+    @Test
+    fun explodedAarLabeledByLibraryNotClassesJar() {
+        val cache = Files.createTempDirectory("idx")
+        val aar = Files.createTempDirectory("aar")
+        try {
+            val exploded = Files.createDirectories(aar.resolve("foo-1.2.3-exploded"))
+            val classesJar = exploded.resolve("classes.jar").also { storedJar(it, "com/foo/Foo.class", byteArrayOf(1, 2)) }
+            val plainJar = aar.resolve("bar-2.0.jar").also { storedJar(it, "com/bar/Bar.class", byteArrayOf(3, 4)) }
+
+            val svc = service(cache)
+            val labels = LinkedHashSet<String>()
+            svc.observeStatus { s -> s.items.forEach { labels.add(it.label) } }
+            runBlocking { svc.ensureUpToDate(IndexScope(libraryJars = listOf(classesJar, plainJar))) }
+
+            assertTrue("foo-1.2.3" in labels, "exploded AAR must show its library dir name; got $labels")
+            assertTrue("classes.jar" !in labels, "the generic classes.jar name must not be shown; got $labels")
+            assertTrue("bar-2.0.jar" in labels, "a plain jar keeps its file name; got $labels")
+        } finally {
+            cache.toFile().deleteRecursively(); aar.toFile().deleteRecursively()
+        }
+    }
+
     /** A source-symbol index over `.java` files that counts how many files it actually (re)parses, so a test
      *  can assert the engine re-indexes ONLY changed files across "launches" (fresh service instances). */
     private class CountingSourceIndex(val indexed: AtomicInteger) : IndexExtension<String, ClassNameValue> {
@@ -298,6 +325,73 @@ class IndexEngineTest {
         } finally {
             cache.toFile().deleteRecursively(); srcCache.toFile().deleteRecursively(); src.toFile().deleteRecursively()
         }
+    }
+
+    /**
+     * The source side is updated INCREMENTALLY per file: a save replaces only the edited file's entries, so
+     * the in-memory work is O(edited file), not O(whole project). The old design cleared and re-added every
+     * entry of every file on each save, so its cost grew with project size. [debugSourceAddOps] counts entries
+     * appended to the source index; editing one file (which yields one entry under [CountingSourceIndex]) must
+     * bump it by exactly 1 — for a 4-file project and a 400-file project alike.
+     */
+    @Test
+    fun reindexSourceCostIsIndependentOfProjectSize() {
+        fun addOpsForOneEdit(n: Int): Long {
+            val cache = Files.createTempDirectory("idx")
+            val srcCache = Files.createTempDirectory("idxsrc")
+            val src = Files.createTempDirectory("src")
+            try {
+                for (i in 0 until n) Files.writeString(src.resolve("F$i.java"), "class F$i {}")
+                val svc = IndexServiceImpl(listOf(CountingSourceIndex(AtomicInteger(0))), cache, sourceCacheRoot = srcCache)
+                runBlocking { svc.ensureUpToDate(IndexScope(sourceRoots = listOf(src))) }
+                // All N files must be queryable after the cold build.
+                assertTrue(svc.prefix<ClassNameValue>(SRC, "F0", 10).any { it.value.fqn == "F0" }, "cold build indexes F0")
+
+                val before = svc.debugSourceAddOps()
+                val f0 = src.resolve("F0.java")
+                runBlocking { svc.reindexSource(f0, "class F0 { int x; }") }
+                val delta = svc.debugSourceAddOps() - before
+
+                // The edited file stays queryable and the rest are untouched.
+                assertTrue(svc.prefix<ClassNameValue>(SRC, "F0", 10).any { it.value.fqn == "F0" }, "edited file still indexed")
+                if (n > 1) assertTrue(svc.prefix<ClassNameValue>(SRC, "F${n - 1}", 10).any { it.value.fqn == "F${n - 1}" }, "untouched file still indexed")
+                return delta
+            } finally {
+                cache.toFile().deleteRecursively(); srcCache.toFile().deleteRecursively(); src.toFile().deleteRecursively()
+            }
+        }
+
+        assertEquals(1L, addOpsForOneEdit(4), "a one-file edit re-adds only that file's entry (small project)")
+        assertEquals(1L, addOpsForOneEdit(400), "reindex cost must NOT scale with project size (large project)")
+    }
+
+    /**
+     * The bounded top-K merge ([rankMerged]) that [IndexServiceImpl.query] uses to fold the per-source hits
+     * must produce EXACTLY what the straightforward `sortedByDescending { score }.distinctBy { value }
+     * .take(limit)` would — same survivors, same representative per value, same order, including ties — just
+     * without sorting the whole over-fetched union. The quality baseline exercises that reference expression
+     * directly (not `query`), so this is what guards the optimized path. Unique keys per occurrence catch a
+     * wrong-representative pick; a small score range forces many ties.
+     */
+    @Test
+    fun rankMergedMatchesSortDistinctTakeSemantics() {
+        val rnd = kotlin.random.Random(1234)
+        repeat(500) { iter ->
+            val n = rnd.nextInt(0, 80)
+            val hits = ArrayList<Hit<Any>>(n)
+            for (j in 0 until n) {
+                val value: Any = "v${rnd.nextInt(0, 15)}"   // duplicate values exercise the dedup
+                val score = rnd.nextInt(0, 6)               // small range → many score ties
+                hits.add(Hit("k$j", value, score))          // unique key per occurrence reveals a wrong pick
+            }
+            val limit = rnd.nextInt(1, 20)
+            val expected = hits.sortedByDescending { it.score }.distinctBy { it.value }.take(limit)
+                .map { Triple(it.key, it.value, it.score) }
+            val actual = rankMerged(hits, limit).map { Triple(it.key, it.value, it.score) }
+            assertEquals(expected, actual, "rankMerged diverged (iter=$iter, limit=$limit) for $hits")
+        }
+        assertTrue(rankMerged(listOf(Hit("k", "v" as Any, 5)), 0).isEmpty(), "limit 0 → empty")
+        assertTrue(rankMerged(emptyList(), 10).isEmpty(), "empty input → empty")
     }
 
     /** A single-entry STORED (uncompressed) jar: file size is a deterministic function of the entry-name

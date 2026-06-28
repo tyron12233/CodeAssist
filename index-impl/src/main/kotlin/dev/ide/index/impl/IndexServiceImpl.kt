@@ -68,11 +68,10 @@ class IndexServiceImpl(
         /** Content hashes whose segment is already open, so a repeated build doesn't open it twice. Concurrent
          *  because artifacts are indexed in parallel (each adds its OWN distinct key, so no key races). */
         val openHashes: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
-        /** Project source: in-memory + incremental. Per-file partitions are keyed by the interned integer file
-         *  id (see [FileIdTable]), not the path string, so a path is held once (in the table) rather than
-         *  duplicated as a map key in every extension's partition. */
+        /** Project source: in-memory + incremental, the SINGLE store (no separate per-file value map). It is
+         *  file-partitioned internally by the interned integer file id (see [FileIdTable]), so an edit updates
+         *  exactly one file's entries ([IndexData.setFile]) and a path is held once (in the table). */
         val source = IndexData(ext.matching)
-        val sourceById = LinkedHashMap<Int, List<IndexEntry>>()
     }
 
     private val states: Map<IndexId, State> = extensions.associate { it.id to State(it) }
@@ -90,7 +89,7 @@ class IndexServiceImpl(
 
     /**
      * Interns source/resource file paths to compact, per-project integer ids — the IntelliJ `fileId` approach.
-     * The per-file index partitions ([State.sourceById]) and the on-disk entry files reference an id (one int)
+     * The in-memory file partitions ([IndexData]) and the on-disk entry files reference an id (one int)
      * instead of repeating the full absolute path in every extension's partition; the path string is held
      * exactly ONCE here, alongside its [SourceSig]. Freed ids (deleted files) are recycled so the id space
      * stays dense across delete/add churn. This is the master file list the diff walks.
@@ -208,15 +207,17 @@ class IndexServiceImpl(
         val src = ArrayList<Hit<Any>>()
         if (fuzzy) st.source.fuzzy(q, src, cap) else st.source.prefix(q, src, cap)
         out.addAll(src)
-        return out.asSequence()
-            .sortedByDescending { it.score }
-            .distinctBy { it.value }
-            .take(limit)
-            .map { Hit(it.key, it.value as V, it.score) }
+        @Suppress("UNCHECKED_CAST")
+        return rankMerged(out, limit).asSequence().map { Hit(it.key, it.value as V, it.score) }
     }
 
     /** Resolve a source value's interned [IndexInput.fileId] back to its path (go-to-symbol navigation). */
     override fun filePath(id: Int): String? = fileIds.pathOf(id)
+
+    /** Test instrumentation: total (term, value) entries appended to the source side across all extensions.
+     *  A per-file reindex bumps this by only the edited file's entry count, so a test can prove the in-memory
+     *  update is O(edited file), not O(whole project). */
+    internal fun debugSourceAddOps(): Long = states.values.sumOf { it.source.addOps }
 
     // ---- build ----
 
@@ -319,7 +320,7 @@ class IndexServiceImpl(
         // clears openHashes; close channels first so the files aren't held open when we delete them.
         val openFiles = states.values.flatMap { st -> st.openHashes.map { key -> segmentFileForKey(st.ext, key) } }
         closeSegments()
-        states.values.forEach { it.source.clear(); it.sourceById.clear() }
+        states.values.forEach { it.source.clear() }
         fileIds.clear()
         blockCache.clear()
         runCatching { openFiles.forEach { Files.deleteIfExists(it); pruneEmptyParents(it) } }
@@ -424,12 +425,12 @@ class IndexServiceImpl(
             }
         }
 
-        // Drop files that no longer exist under any root (deleted/moved) from the partitions + the id table.
+        // Drop files that no longer exist under any root (deleted/moved) from the source index + the id table.
         val gone = fileIds.ids - currentIds
-        for (id in gone) { states.values.forEach { it.sourceById.remove(id) }; fileIds.removeId(id) }
+        for (id in gone) { states.values.forEach { it.source.removeFile(id) }; fileIds.removeId(id) }
 
-        // Only the dirty files need a read + parse + index. Everything else reuses the partition already in
-        // [State.sourceById] (loaded from disk or from a prior pass).
+        // Only the dirty files need a read + parse + index. Everything else is already in [IndexData] (loaded
+        // from disk in [loadSourceCache] or indexed on a prior pass), updated incrementally per file below.
         val total = dirty.size
         var processed = 0
         for (d in dirty) {
@@ -445,8 +446,8 @@ class IndexServiceImpl(
             yield()
         }
 
-        // Rebuild each source IndexData from the (reused + freshly indexed) per-file partitions.
-        states.values.forEach { st -> st.source.clear(); st.sourceById.values.forEach { it.forEach { e -> st.source.add(e.term, e.value, e.origin) } } }
+        // No full rebuild: [indexSourceFile] already applied each dirty file to [IndexData] incrementally, and
+        // unchanged files were never removed. The in-memory index is up to date here.
 
         // Persist only when something actually changed, so a truly unchanged restart writes nothing.
         if (dirty.isNotEmpty() || gone.isNotEmpty()) saveSourceCache()
@@ -461,7 +462,7 @@ class IndexServiceImpl(
         val input = SourceInput(file, root, text, parse, id)
         for (st in states.values) {
             val e = st.ext as IndexExtension<Any, Any>
-            if (!e.inputFilter.accepts(input)) { st.sourceById.remove(id); continue }
+            if (!e.inputFilter.accepts(input)) { st.source.removeFile(id); continue }
             val entries = ArrayList<IndexEntry>()
             runCatching {
                 for ((k, vs) in e.index(input)) {
@@ -469,7 +470,7 @@ class IndexServiceImpl(
                     for (v in vs) entries.add(IndexEntry(term, v, IndexOrigin.SOURCE))
                 }
             }
-            st.sourceById[id] = entries
+            st.source.setFile(id, entries)
         }
     }
 
@@ -480,11 +481,8 @@ class IndexServiceImpl(
         // re-parse it. This is the SAVE path (the host re-indexes from the just-written file), so the on-disk
         // (size, mtime) matches the indexed [text]; the persisted cache is refreshed by the next ensureUpToDate.
         runCatching { fileIds.setSig(id, SourceSig(Files.size(path), Files.getLastModifiedTime(path).toMillis())) }
-        // rebuild each affected source IndexData from the per-file partitions
-        states.values.forEach { st ->
-            st.source.clear()
-            st.sourceById.values.forEach { it.forEach { e -> st.source.add(e.term, e.value, e.origin) } }
-        }
+        // [indexSourceFile] already replaced just this file's entries in each [IndexData] (O(this file), not a
+        // whole-project rebuild) — nothing else to do.
     }
 
     // ---- source cache (per-project, persisted across launches) ----
@@ -516,7 +514,7 @@ class IndexServiceImpl(
             }
         }.isSuccess
         if (!tableOk) {
-            fileIds.clear(); states.values.forEach { it.sourceById.clear() }
+            fileIds.clear(); states.values.forEach { it.source.clear() }
             dev.ide.platform.log.Log.logger("index").warn("source index id table unreadable, rebuilding from scratch")
             return
         }
@@ -547,10 +545,13 @@ class IndexServiceImpl(
         }.isSuccess
 
         if (partitionsOk) {
-            states.values.forEach { st -> st.sourceById.clear(); loaded[st.ext.id]?.let { st.sourceById.putAll(it) } }
+            states.values.forEach { st ->
+                st.source.clear()
+                loaded[st.ext.id]?.forEach { (id, entries) -> st.source.setFile(id, entries) }
+            }
         } else {
             // Keep the id table (ids stable) but force a full re-index that reuses those ids.
-            states.values.forEach { it.sourceById.clear() }
+            states.values.forEach { it.source.clear() }
             fileIds.dropFingerprintsKeepIds()
             dev.ide.platform.log.Log.logger("index").warn("source index partitions unreadable, rebuilding entries (ids preserved)")
         }
@@ -564,10 +565,12 @@ class IndexServiceImpl(
             for (st in states.values) {
                 val f = sourceEntriesFile(st.ext) ?: continue
                 val ser = st.ext.valueExternalizer as Externalizer<Any>
+                val files = st.source.fileIds()
                 writeAtomically(f) { out ->
                     out.writeInt(SOURCE_CACHE_MAGIC)
-                    out.writeInt(st.sourceById.size)
-                    for ((id, entries) in st.sourceById) {
+                    out.writeInt(files.size)
+                    for (id in files) {
+                        val entries = st.source.entriesOf(id)
                         out.writeInt(id)
                         out.writeInt(entries.size)
                         for (e in entries) { out.writeUTF(e.term); ser.write(out, e.value) }
@@ -618,7 +621,7 @@ class IndexServiceImpl(
         abstract fun open(): Pair<Sequence<IndexInput>, Closeable>
 
         class Jar(val path: Path) : Artifact() {
-            override val label get() = path.fileName?.toString() ?: "jar"
+            override val label get() = jarDisplayLabel(path)
             override fun contentHash(): ContentHash {
                 val attrs = runCatching { Files.size(path) to Files.getLastModifiedTime(path).toMillis() }.getOrDefault(0L to 0L)
                 // Key by the artifact's absolute PATH (digested), not just its file name. Every exploded AAR
@@ -858,4 +861,55 @@ class IndexServiceImpl(
             }
         }.getOrElse { runCatching { FileSystems.getFileSystem(URI.create("jrt:/")) to false }.getOrDefault(null to false) }
     }
+}
+
+/** A library jar's display label for the index-status worklist. An AAR is stored exploded as a generic
+ *  `classes.jar` (its file name says nothing), so fall back to the exploded directory that holds it, which
+ *  carries the artifact name + version: the Maven layout `<name>/<version>/<name>-<version>-exploded/` and the
+ *  local layout `<aar-name>/` both name the library there. A plain jar keeps its own file name. */
+private fun jarDisplayLabel(path: Path): String {
+    val file = path.fileName?.toString() ?: return "jar"
+    if (file != "classes.jar") return file
+    val dir = path.parent?.fileName?.toString()?.removeSuffix("-exploded")?.takeIf { it.isNotBlank() }
+    return dir ?: file
+}
+
+/** One value's representative hit in the merged set, plus its insertion index (the tie-break key). */
+private class RankedHit(val hit: Hit<Any>, val index: Int)
+
+/**
+ * Merge the per-source hits into the final ranked result. Exactly equivalent to
+ * `hits.sortedByDescending { it.score }.distinctBy { it.value }.take(limit)`, but BOUNDED: rather than fully
+ * sorting the whole over-fetched union (each source contributes up to `limit * 8` hits, most of which lose),
+ * it dedups by value in one pass — keeping each value's best hit (highest score; ties → earliest inserted) —
+ * then selects the top [limit] survivors through a size-[limit] min-heap. So the expensive sort is over the
+ * `limit` winners, not the union. Tie-breaking matches the stable sort + distinct: equal scores order by the
+ * representative's insertion index ascending.
+ */
+internal fun rankMerged(hits: List<Hit<Any>>, limit: Int): List<Hit<Any>> {
+    if (limit <= 0 || hits.isEmpty()) return emptyList()
+
+    // Dedup pass: per value, the earliest-inserted maximum-score hit (and its insertion index for tie-breaks).
+    val bestByValue = HashMap<Any, RankedHit>(hits.size * 2)
+    var i = 0
+    for (h in hits) {
+        val cur = bestByValue[h.value]
+        if (cur == null || h.score > cur.hit.score) bestByValue[h.value] = RankedHit(h, i)
+        i++
+    }
+
+    // Bounded selection via a min-heap whose head is the WORST survivor (lower score, or equal score but later
+    // insertion), capped at `limit`: each overflow drops the worst, leaving the top `limit`.
+    val worstFirst = compareBy<RankedHit> { it.hit.score }.thenByDescending { it.index }
+    val heap = java.util.PriorityQueue(minOf(limit, bestByValue.size) + 1, worstFirst)
+    for (r in bestByValue.values) {
+        heap.add(r)
+        if (heap.size > limit) heap.poll()
+    }
+
+    // The heap pops worst-first; fill back-to-front so the result is best-first (score desc, insertion asc).
+    val ordered = arrayOfNulls<RankedHit>(heap.size)
+    var k = heap.size
+    while (heap.isNotEmpty()) ordered[--k] = heap.poll()
+    return ordered.map { it!!.hit }
 }

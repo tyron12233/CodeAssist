@@ -55,11 +55,10 @@ internal class Segment private constructor(
     private val tgNamesBase: Long,
     private val tgNamesLen: Long,
     private val tgPostingsBase: Long,
-    // resident — the only heap the segment holds at rest:
-    private val sparseTerms: Array<String>,
-    private val sparseTermOff: LongArray,
-    private val sparseGrams: Array<String>,
-    private val sparseGramOff: LongArray,
+    // resident — the only heap the segment holds at rest (each a single packed string + primitive arrays,
+    // not ~numTerms/SPARSE_INTERVAL separate String objects):
+    private val sparseTerms: SparseIndex,
+    private val sparseGrams: SparseIndex,
 ) : Closeable {
 
     // ---- queries (mirror IndexData's semantics so ranking is identical) ----
@@ -67,7 +66,7 @@ internal class Segment private constructor(
     /** Append every value stored under [key] exactly. */
     fun exact(key: String, out: MutableList<Any>) {
         if (numTerms == 0) return
-        val cur = Cursor(namesBase + sparseTermOff[floor(sparseTerms, key)])
+        val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(key)))
         val end = namesBase + namesLen
         while (cur.pos < end) {
             val term = cur.readString()
@@ -81,7 +80,7 @@ internal class Segment private constructor(
     /** Append up to [cap] prefix hits, scored as [Scoring.scorePrefix]. */
     fun prefix(p: String, out: MutableList<Hit<Any>>, cap: Int) {
         if (numTerms == 0) return
-        val cur = Cursor(namesBase + sparseTermOff[floor(sparseTerms, p)])
+        val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(p)))
         val end = namesBase + namesLen
         while (cur.pos < end) {
             val term = cur.readString()
@@ -138,7 +137,8 @@ internal class Segment private constructor(
 
     /** The ascending name offsets whose term contains trigram [g], or null if [g] is absent. */
     private fun trigramPostings(g: String): LongArray? {
-        val cur = Cursor(tgNamesBase + sparseGramOff[floor(sparseGrams, g)])
+        if (sparseGrams.size == 0) return null // no trigram region (e.g. all terms shorter than a trigram)
+        val cur = Cursor(tgNamesBase + sparseGrams.offAt(sparseGrams.floor(g)))
         val end = tgNamesBase + tgNamesLen
         while (cur.pos < end) {
             val gram = cur.readString()
@@ -208,6 +208,47 @@ internal class Segment private constructor(
         fun readString(): String = String(readBytes(readVarLong().toInt()), Charsets.UTF_8)
     }
 
+    /**
+     * The resident sparse term/gram index: every [SPARSE_INTERVAL]-th key → its file offset. Keys are packed
+     * into ONE compact [String] (all keys concatenated) plus an int start table, NOT an `Array<String>` of
+     * ~`numTerms / SPARSE_INTERVAL` separate String objects — so a segment's at-rest heap is one string + two
+     * primitive arrays, regardless of how many sparse keys it has. Comparison is char-by-char against the
+     * concatenated buffer, identical to [String.compareTo] (the order the on-disk names are sorted in), so the
+     * binary search lands exactly where the per-String version did.
+     */
+    private class SparseIndex(private val concat: String, private val starts: IntArray, private val off: LongArray) {
+        val size: Int get() = off.size
+
+        fun offAt(i: Int): Long = off[i]
+
+        /** Largest index `i` whose key is `<= key`, clamped to 0 (callers only invoke this on a non-empty index). */
+        fun floor(key: String): Int {
+            var lo = 0; var hi = off.size - 1; var ans = 0
+            while (lo <= hi) {
+                val mid = (lo + hi) ushr 1
+                if (compareKey(mid, key) <= 0) { ans = mid; lo = mid + 1 } else hi = mid - 1
+            }
+            return ans
+        }
+
+        /** `concat[starts[i], starts[i+1])` compared to [key] char-by-char (no substring) — == [String.compareTo]. */
+        private fun compareKey(i: Int, key: String): Int {
+            val s = starts[i]; val e = starts[i + 1]
+            val n = minOf(e - s, key.length)
+            var k = 0
+            while (k < n) {
+                val c = concat[s + k].compareTo(key[k])
+                if (c != 0) return c
+                k++
+            }
+            return (e - s) - key.length
+        }
+
+        companion object {
+            val EMPTY = SparseIndex("", intArrayOf(0), LongArray(0))
+        }
+    }
+
     companion object {
         private const val MAGIC = 0x49445831 // "IDX1"
         const val SPARSE_INTERVAL = 64
@@ -222,20 +263,10 @@ internal class Segment private constructor(
                 val footer = readFully(channel, footerStart, (size - 8 - footerStart).toInt())
                 val r = ByteReader(footer)
 
-                val nSparse = r.readVarLong().toInt()
-                val sparseTerms = Array(nSparse) { "" }
-                val sparseTermOff = LongArray(nSparse)
-                for (i in 0 until nSparse) { sparseTerms[i] = r.readString(); sparseTermOff[i] = r.readVarLong() }
+                val sparseTerms = readSparseIndex(r)
 
                 val fuzzy = r.readByte() != 0
-                var sparseGrams = emptyArray<String>()
-                var sparseGramOff = LongArray(0)
-                if (fuzzy) {
-                    val ng = r.readVarLong().toInt()
-                    sparseGrams = Array(ng) { "" }
-                    sparseGramOff = LongArray(ng)
-                    for (i in 0 until ng) { sparseGrams[i] = r.readString(); sparseGramOff[i] = r.readVarLong() }
-                }
+                val sparseGrams = if (fuzzy) readSparseIndex(r) else SparseIndex.EMPTY
 
                 r.readInt() // ext.version — informational; the cache path already keys on it
                 val numTerms = r.readVarLong().toInt()
@@ -252,7 +283,7 @@ internal class Segment private constructor(
                     cache, segId, ext.valueExternalizer as Externalizer<Any>,
                     fuzzy, numTerms, postingsBase, namesBase, namesLen,
                     tgNamesBase, tgNamesLen, tgPostingsBase,
-                    sparseTerms, sparseTermOff, sparseGrams, sparseGramOff,
+                    sparseTerms, sparseGrams,
                 )
             }
 
@@ -365,14 +396,15 @@ internal class Segment private constructor(
             }
         }
 
-        /** Largest index `i` with `keys[i] <= key`, clamped to 0 (the array is sorted and non-empty here). */
-        private fun floor(keys: Array<String>, key: String): Int {
-            var lo = 0; var hi = keys.size - 1; var ans = 0
-            while (lo <= hi) {
-                val mid = (lo + hi) ushr 1
-                if (keys[mid] <= key) { ans = mid; lo = mid + 1 } else hi = mid - 1
-            }
-            return ans
+        /** Read a footer sparse block (the count, then each `key` + its file offset) into a packed [SparseIndex]. */
+        private fun readSparseIndex(r: ByteReader): SparseIndex {
+            val n = r.readVarLong().toInt()
+            val sb = StringBuilder()
+            val starts = IntArray(n + 1)
+            val off = LongArray(n)
+            for (i in 0 until n) { starts[i] = sb.length; sb.append(r.readString()); off[i] = r.readVarLong() }
+            starts[n] = sb.length
+            return SparseIndex(sb.toString(), starts, off)
         }
 
         /** Two-pointer intersection of two ascending arrays (no boxing). */
