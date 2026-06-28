@@ -243,6 +243,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -378,7 +380,28 @@ class IdeServices private constructor(
      * downloaded jars/AARs — a second project pulling the same Compose graph hits disk, not the network.
      */
     private val sharedCachesRoot: Path? = null,
+    /** Headless BUILD-ONLY engine (the `:build` daemon): skip the editor cold-start (symbol index + the two
+     *  Kotlin warm-ups) on open. A build needs only the model/classpath/compilers, so dropping that baseline
+     *  frees heap for the dexer/R8 (the build's real memory ceiling). See docs/build-process-isolation.md. */
+    private val buildOnly: Boolean = false,
 ) : AutoCloseable {
+
+    // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): the most recent
+    // build/run and project-open heap peaks. [lastBuildPeak] is read by the analytics bridge to attach to
+    // build_result; both are logged on the `ide.mem` tag for on-device inspection via the Logs viewer.
+    // Declared FIRST so the cold-start coroutine (which logs via memLog) can never read it before init.
+    @Volatile
+    internal var lastBuildPeak: MemSample? = null
+    @Volatile
+    internal var lastOpenPeak: MemSample? = null
+    private val memLog = Log.logger("ide.mem")
+
+    /** The build/run seam ([BuildRunner]): today an in-process runner; a future remote runner swaps in for
+     *  the separate-process build (docs/build-process-isolation.md). [dev.ide.core.backend.BuildBackend]
+     *  routes all build/run calls through this rather than calling the build methods directly. `by lazy`
+     *  defers creation past construction so it never participates in field init-order. Public so the
+     *  on-device build daemon (:ide-android BuildDaemonService) can drive a headless build through it. */
+    val buildRunner: BuildRunner by lazy { InProcessBuildRunner(this) }
 
     // Language backends are contributed through the `platform.languageBackend` EP and selected per file by
     // matching the file's LanguageId against each backend's `languages`, so adding a language is one more
@@ -531,18 +554,41 @@ class IdeServices private constructor(
         // and skip a warm-up when the heap lacks room for its transient cost; a skipped warm-up just pays its
         // cold start lazily on first use, which beats an OOM kill. Desktop has ample heap, so it keeps
         // overlapping the warm-ups with the index to hide cold start.
-        if (androidTools != null) {
+        if (buildOnly) {
+            // Headless build engine (the :build daemon): skip the editor cold-start (symbol index + Kotlin
+            // warm-ups). A build uses only the model/classpath/compilers, never the editor index, and the
+            // warm-ups are editor-latency optimizations — dropping them frees that baseline for the dexer/R8.
+            memLog.info("build-only engine: skipping editor index + Kotlin warm-ups")
+        } else if (androidTools != null) {
             indexScope.launch {
-                runCatching { indexService.ensureUpToDate(buildIndexScope()) }
-                if (projectHasKotlin()) {
-                    if (freeHeapBytes() >= PARSER_WARMUP_MIN_FREE_BYTES)
-                        runCatching { dev.ide.lang.kotlin.parse.KotlinParserHost.warmUp() }
-                    if (freeHeapBytes() >= COMPILER_WARMUP_MIN_FREE_BYTES)
-                        runCatching { kotlinJvmCompiler.warmUp(compileBootClasspath) }
+                // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): track the
+                // project-open memory storm (index + the two retained Kotlin warm-ups) so its peak can be
+                // compared against a build's peak — that comparison decides whether a separate build process
+                // targets the dominant OOM. A periodic sampler catches the storm's true intra-phase peak.
+                val openPeak = PeakHeap().also { it.record() }
+                val sampler = launch { while (isActive) { openPeak.record(); delay(MEM_SAMPLE_INTERVAL_MS) } }
+                try {
+                    memLog.info("project open (before index): ${MemSample.now().fmt()}")
+                    runCatching { indexService.ensureUpToDate(buildIndexScope()) }
+                    memLog.info("after index build: ${MemSample.now().fmt()}")
+                    if (projectHasKotlin()) {
+                        if (freeHeapBytes() >= PARSER_WARMUP_MIN_FREE_BYTES) {
+                            runCatching { dev.ide.lang.kotlin.parse.KotlinParserHost.warmUp() }
+                            memLog.info("after Kotlin parser warm-up: ${MemSample.now().fmt()}")
+                        } else memLog.warn("skipped Kotlin parser warm-up (headroom ${MemSample.now().headroomMb}MB < ${PARSER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
+                        if (freeHeapBytes() >= COMPILER_WARMUP_MIN_FREE_BYTES) {
+                            runCatching { kotlinJvmCompiler.warmUp(compileBootClasspath) }
+                            memLog.info("after Kotlin compiler warm-up: ${MemSample.now().fmt()}")
+                        } else memLog.warn("skipped Kotlin compiler warm-up (headroom ${MemSample.now().headroomMb}MB < ${COMPILER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
+                    }
+                } finally {
+                    sampler.cancel()
+                    lastOpenPeak = openPeak.peak()
+                    memLog.info("project-open peak: ${openPeak.peak().fmt()}")
                 }
             }
         } else {
-            indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
+            indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) }; memLog.info("after index build: ${MemSample.now().fmt()}") }
             // Pre-warm the Kotlin parser environment (the ~200ms KotlinCoreEnvironment standup) off-thread, so
             // the first Kotlin completion/diagnostics/preview doesn't pay it on the interaction path. Gated on
             // the project actually containing Kotlin so a pure-Java project never stands up the Kotlin frontend.
@@ -1409,6 +1455,11 @@ class IdeServices private constructor(
             RunStatus.Running, moduleName, order, listOf(logLine(header)), elapsedMs = 0, banner = banner
         )
         val start = System.currentTimeMillis()
+        // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): track this
+        // build/run's heap peak so we can see how close a build comes to the OOM ceiling and compare it
+        // against the project-open peak — the comparison that justifies (or not) a separate build process.
+        val peak = PeakHeap().also { it.record() }
+        memLog.info("build '$header' start: ${MemSample.now().fmt()}")
         val ctx = SimpleTaskContext(
             onLog = { e -> _buildState.update { it.copy(log = it.log + e.toUi()) } },
             onDiagnostic = { d -> _buildState.update { it.copy(diagnostics = it.diagnostics + d.toUi()) } },
@@ -1419,6 +1470,11 @@ class IdeServices private constructor(
         permissionPolicy.resetRun(); _permissionRequest.value = null
         Guards.broker = permissionBroker
         val exec = TaskExecutorImpl(buildCache, onEvent = { name, status ->
+            peak.record() // sample at each task-status change, in addition to the periodic sampler below
+            // Log heap as each task STARTS so a clean build's timeline names the task that pegs the ceiling
+            // (cold kotlinc vs D8 vs R8) — tells us whether process isolation alone suffices or the task's
+            // own peak must also be cut. Phase-0 instrumentation; see docs/build-process-isolation.md.
+            if (status == TaskStatus.Running) memLog.info("task ${name.value}: ${MemSample.now().fmt()} (peak-so-far ${peak.peak().usedMb}MB)")
             _buildState.update { st ->
                 st.copy(steps = st.steps.map {
                     if (it.name == name.value) it.copy(
@@ -1430,6 +1486,7 @@ class IdeServices private constructor(
             }
         })
         buildJob = indexScope.launch {
+            val memSampler = launch { while (isActive) { peak.record(); delay(MEM_SAMPLE_INTERVAL_MS) } }
             val outcome = try {
                 exec.execute(graph, ctx, maxParallel = 2)
             } catch (c: kotlinx.coroutines.CancellationException) {
@@ -1439,6 +1496,12 @@ class IdeServices private constructor(
                 // so the build never ends as a silent failure with an empty log.
                 ctx.buildLog.log(BuildLogEntry("Build failed: ${e.message ?: e.toString()}", BuildLogLevel.ERROR))
                 null
+            } finally {
+                // Record the peak on every exit path (success / failure / cancel) so the build_result analytics
+                // and the log reflect the build that just ran, never a stale prior peak.
+                memSampler.cancel()
+                lastBuildPeak = peak.peak()
+                memLog.info("build '$header' peak: ${peak.peak().fmt()}")
             }
             Guards.broker = null
             _permissionRequest.value = null
@@ -5905,6 +5968,8 @@ class IdeServices private constructor(
             sharedCachesRoot: Path? = null,
             /** The host's application container, so app-scoped services are shared across projects. */
             appContainer: ServiceContainer? = null,
+            /** Headless build-only engine (the :build daemon): skip the editor cold-start. See [buildOnly]. */
+            buildOnly: Boolean = false,
         ): IdeServices {
             val (platform, store) = openStore(root, appContainer)
             if (store.workspace.sdkTable.sdks.isEmpty()) {
@@ -5918,7 +5983,8 @@ class IdeServices private constructor(
                 apkInstaller,
                 customViewRuntime,
                 kotlinPluginLoader,
-                sharedCachesRoot
+                sharedCachesRoot,
+                buildOnly = buildOnly,
             )
         }
 

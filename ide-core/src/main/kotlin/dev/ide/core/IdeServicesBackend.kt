@@ -78,7 +78,34 @@ class IdeServicesBackend(
      * backend gates it on the persisted consent preference — see [analyticsConsent]/[setAnalyticsConsent].
      */
     private val analytics: AnalyticsService = dev.ide.analytics.NoopAnalyticsService,
+    /**
+     * Host-injected factory for an out-of-process build runner (the `:build` daemon, supplied by
+     * :ide-android). Null → in-process builds (desktop, or when the separate-process build is off), i.e.
+     * each engine's own [IdeServices.buildRunner]. See docs/build-process-isolation.md.
+     */
+    private val buildRunnerFactory: ((IdeServices) -> BuildRunner)? = null,
 ) : IdeBackend, LayoutPreviewBackend, BackendContext {
+
+    /** Per-engine build-runner cache: the chosen runner (remote daemon OR in-process) is decided once per
+     *  engine and memoized, so [engineFlow]'s selector and the imperative methods always agree on the same
+     *  instance, and the decision is stable for the project session. Weak-keyed so a closed project's runner
+     *  (and any daemon binding) becomes collectible. */
+    private val runnerCache = java.util.WeakHashMap<IdeServices, BuildRunner>()
+
+    override fun buildRunnerFor(services: IdeServices): BuildRunner =
+        synchronized(runnerCache) {
+            runnerCache.getOrPut(services) {
+                val factory = buildRunnerFactory
+                if (factory != null && separateBuildProcessEnabled()) factory(services) else services.buildRunner
+            }
+        }
+
+    /** The app-global "Build in a separate process" setting (default ON; see [BuiltInSettingsPages]). Read once
+     *  per engine (the cache above freezes the choice), so toggling it applies on the next project open —
+     *  which keeps the build-state flow and the build methods bound to one consistent runner. */
+    private fun separateBuildProcessEnabled(): Boolean =
+        manager?.preference("settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}.${dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS}")
+            ?.toBooleanStrictOrNull() ?: true
 
     @Volatile
     private var activeServices: IdeServices? = initial
@@ -222,7 +249,12 @@ class IdeServicesBackend(
                     if (st.building && !building) { building = true; startNs = System.nanoTime() }
                     else if (!st.building && building) {
                         building = false
-                        track(dev.ide.analytics.Events.INDEX_PERF, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
+                        // Heap at index completion (Phase-0 build-isolation instrumentation) so the index
+                        // phase's memory footprint is comparable to a build's peak across the fleet.
+                        track(
+                            dev.ide.analytics.Events.INDEX_PERF,
+                            mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()) + MemSample.now().props(),
+                        )
                     }
                 }
             }
@@ -238,13 +270,22 @@ class IdeServicesBackend(
                 svc.buildState.collectLatest { bs ->
                     val terminal = bs.status == dev.ide.ui.backend.RunStatus.Succeeded || bs.status == dev.ide.ui.backend.RunStatus.Failed
                     if (terminal && prev == dev.ide.ui.backend.RunStatus.Running) {
+                        // Attach this build's heap peak (Phase-0 build-isolation instrumentation): the signal
+                        // for whether a build/run is the dominant OOM driver vs. the project-open warm-up storm.
+                        val peak = svc.lastBuildPeak
                         track(
                             dev.ide.analytics.Events.BUILD_RESULT,
                             mapOf(
                                 "ok" to (bs.status == dev.ide.ui.backend.RunStatus.Succeeded).toString(),
                                 "duration_ms" to bs.elapsedMs.toString(),
                                 "steps" to bs.steps.size.toString(),
-                            ),
+                            ) + (peak?.let {
+                                mapOf(
+                                    "peak_heap_mb" to it.usedMb.toString(),
+                                    "min_headroom_mb" to it.headroomMb.toString(),
+                                    "heap_max_mb" to it.maxMb.toString(),
+                                )
+                            } ?: emptyMap()),
                         )
                     }
                     prev = bs.status

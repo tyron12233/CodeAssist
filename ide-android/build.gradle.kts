@@ -208,6 +208,9 @@ android {
     buildFeatures {
         // VERSION_NAME / VERSION_CODE + the ANALYTICS_* fields above are read from BuildConfig at runtime.
         buildConfig = true
+        // Phase-2 build-process-isolation IPC skeleton: the BuildDaemonService AIDL (IBuildDaemon /
+        // IBuildCallback under src/main/aidl). See docs/build-process-isolation.md.
+        aidl = true
     }
 
     // Stage the generated assets (kotlin-stdlib.jar, kotlinc-resources.zip) into the merged assets so the

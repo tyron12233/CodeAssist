@@ -19,6 +19,11 @@ internal interface BackendContext {
     /** The active engine, or null when no project is open (picker-safe services use this). */
     val servicesOrNull: IdeServices?
 
+    /** The build/run engine for [services]: the in-process [IdeServices.buildRunner] by default, or a
+     *  host-injected out-of-process runner (the `:build` daemon). The single seam the build service routes
+     *  every build/run call through. See docs/build-process-isolation.md. */
+    fun buildRunnerFor(services: IdeServices): BuildRunner
+
     /** The single serialized worker the editor's language calls run on. */
     val engineDispatcher: CoroutineDispatcher
 

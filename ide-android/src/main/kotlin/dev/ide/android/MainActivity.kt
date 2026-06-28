@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import dev.ide.android.daemon.BuildDaemonProof
 import dev.ide.core.IdeServicesBackend
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.backend.FileActions
@@ -69,6 +70,14 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
                         session = s; backend = s.backend
+                        // Phase-3a build-process-isolation proof (docs/build-process-isolation.md): bind the
+                        // :build daemon, open the first on-device project there, and run its default build in
+                        // that process — streaming state back over IPC. Verify via `adb logcat -s ide.daemon
+                        // ide.mem`. Started only AFTER bootstrap finishes so the main process provisions the
+                        // shared kotlinc-home/assets first and the daemon takes the no-delete fast path (a
+                        // concurrent first-run provision would race and corrupt the kotlinc-home). Debug-only +
+                        // flag-gated; replaced in Phase 3b by RemoteBuildRunner wired into the UI Run button.
+                        if (BuildConfig.DEBUG && BuildDaemonProof.ENABLED) BuildDaemonProof.run(applicationContext)
                     }.onFailure { e -> error = e.message ?: e.toString() }
             }
 

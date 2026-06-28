@@ -125,9 +125,10 @@ class ProjectManager private constructor(
         return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, appContainer = applicationContainer)
     }
 
-    /** Open the existing project at [rootPath]; returns the opened engine. */
-    fun open(rootPath: String): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, appContainer = applicationContainer)
+    /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
+     *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
+    fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
+        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, appContainer = applicationContainer, buildOnly = buildOnly)
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of

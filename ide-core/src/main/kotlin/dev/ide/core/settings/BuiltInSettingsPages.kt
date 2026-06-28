@@ -19,7 +19,13 @@ object BuiltInSettingsPages {
     const val COMPLETION = "completion"
     const val ANALYSIS = "analysis"
     const val BUILD = "build"
+    /** App-scoped build-runtime page (distinct from the project-scoped [BUILD] page) — holds the
+     *  separate-process toggle, which is app-global. See docs/build-process-isolation.md. */
+    const val BUILD_RUNTIME = "buildRuntime"
     const val PRIVACY = "privacy"
+
+    /** Toggle key on the [BUILD_RUNTIME] page: route builds/runs through the isolated `:build` process. */
+    const val SEPARATE_PROCESS = "separateProcess"
 
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
@@ -37,7 +43,7 @@ object BuiltInSettingsPages {
 
     /** All built-in pages in display order. [analyticsAvailable] gates the analytics toggle on the Privacy page. */
     fun all(analyticsAvailable: Boolean): List<SettingsPage> = listOf(
-        appearance, editor, completion, analysis, build, privacy(analyticsAvailable),
+        appearance, editor, completion, analysis, build, buildRuntime, privacy(analyticsAvailable),
     )
 
     private val appearance = page(APPEARANCE, "Appearance", "eye", 0) {
@@ -111,6 +117,19 @@ object BuiltInSettingsPages {
                     SettingControl.Choice.Option(CONFLICT_PINNED, "Direct wins"),
                     SettingControl.Choice.Option(CONFLICT_FAIL, "Fail on conflict"),
                 ),
+            ),
+        )
+    }
+
+    // App-global (not per-project): running the build in its own process is about this device's memory
+    // headroom + your robustness preference, the same for every project. Default ON. The effect is applied
+    // by the backend (it reads `settings.buildRuntime.separateProcess`); see docs/build-process-isolation.md.
+    private val buildRuntime = page(BUILD_RUNTIME, "Build Runtime", "hammer", 45) {
+        listOf(
+            SettingControl.Toggle(
+                SEPARATE_PROCESS, "Build in a separate process",
+                "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
+                default = true,
             ),
         )
     }

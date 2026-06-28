@@ -9,6 +9,15 @@
          to that Settings screen when it isn't granted yet). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- The build/run daemon (:build process) promotes to a foreground service while a build or program is
+         running, so the OS won't kill it if the user switches away mid-build (docs/build-process-isolation.md).
+         "specialUse": a code build/run is a long-running, user-initiated task that fits no other FGS category
+         (not data sync / media / location / …); the justification is declared on the <service> below for Play.
+         POST_NOTIFICATIONS (API 33+) lets the ongoing "Building…" notification show; the FGS still runs without it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- The bundled aapt2/zipalign (lib*.so) must be EXTRACTED into nativeLibraryDir at install so they can
          be exec'd (ART forbids executing binaries from anywhere else). That extraction is driven by
          packaging.jniLibs.useLegacyPackaging=true in build.gradle.kts (which sets extractNativeLibs on the
@@ -54,6 +63,21 @@
                 <data android:mimeType="application/xml" />
             </intent-filter>
         </activity>
+
+        <!-- Phase-2 build-process-isolation skeleton (docs/build-process-isolation.md): the build/run daemon
+             runs in its own ":build" OS process so a build OOM or a user-program crash kills only it, not
+             the IDE. A plain bound service for now; the foreground service + notification is Phase 5. -->
+        <service
+                android:name=".daemon.BuildDaemonService"
+                android:process=":build"
+                android:exported="false"
+                android:foregroundServiceType="specialUse">
+            <!-- Play requires a justification for specialUse FGS. Declare the use case here; you also enter
+                 it in the Play Console at submission (Google reviews specialUse case-by-case). -->
+            <property
+                    android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                    android:value="Compiling and running the user's on-device software project — a long-running, user-initiated build that must continue if the user navigates away from the IDE." />
+        </service>
 
         <!-- Exposes a single project file to other apps as a content:// URI for Share / "Open with",
              without FileUriExposedException. Folder-level browsing is handled by the DocumentsProvider below. -->

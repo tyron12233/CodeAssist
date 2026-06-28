@@ -37,6 +37,49 @@ object AndroidIde {
         // reachable by other file managers via [ProjectsDocumentsProvider]. Fall back to internal storage
         // only if external isn't mounted (rare). The location is resolved identically by the provider.
         val home = appHomeDir(context).apply { mkdirs() }
+        val manager = createProjectManager(context)
+
+        // Recover projects left in internal storage by a build from before the move to external app storage
+        // (issues #1003 / #1024 / #1041 / #1042: projects vanishing from the picker after an update). Runs at
+        // most once; non-destructive.
+        runCatching { manager.importLegacyProjects() }
+
+        // Opt-in usage analytics (no collection until the user grants consent — see docs/analytics.md).
+        val analytics = buildAnalytics(manager, home)
+        // Start with no project open (the picker is shown); opening one from it creates that project's engine
+        // on demand. The download cache is shared across projects via the ProjectManager (sharedCachesRoot).
+        // Build-process isolation (docs/build-process-isolation.md): always provide the factory that routes a
+        // project's build/run to the separate `:build` daemon (RemoteBuildRunner); whether it's actually used
+        // is the app-global "Build in a separate process" setting (default ON), checked in
+        // IdeServicesBackend.buildRunnerFor. A build OOM then kills only that process, not the IDE.
+        val appContext = context.applicationContext
+        val backend = IdeServicesBackend(
+            initial = null, manager = manager, analytics = analytics,
+            buildRunnerFactory = { svc -> dev.ide.android.daemon.RemoteBuildRunner(appContext, svc) },
+        )
+        // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
+        // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
+        backend.installCrashReporting()
+        // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
+        // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
+        if (backend.diagnostics.analyticsConsent() == true) {
+            backend.diagnostics.track(dev.ide.analytics.Events.COLD_START, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
+        }
+
+        return Session(backend)
+    }
+
+    /**
+     * Build the on-device [ProjectManager] — asset provisioning (android.jar / desugar stubs / kotlinc
+     * home / debug keystore) plus the ART tool ports (dex runner, APK installer, custom-view runtime,
+     * Kotlin-plugin loader) wired through [ProjectManager.onDevice]. Extracted from [bootstrap] so the
+     * separate `:build` process (BuildDaemonService, docs/build-process-isolation.md) can stand up the SAME
+     * headless engine to run builds, without the UI backend / analytics / crash reporting. Idempotent — the
+     * asset copies and the `kotlinc.art.home` system property are per-process, so calling it in the daemon
+     * provisions that process correctly even though the main process already did so for its own.
+     */
+    fun createProjectManager(context: Context): ProjectManager {
+        val home = appHomeDir(context).apply { mkdirs() }
         val androidJar = copyAsset(context, "android.jar", File(home, "android.jar"))
         // The Java 9+ desugar stubs (`java.lang.invoke.StringConcatFactory`/`LambdaMetafactory`): `android.jar`
         // omits them, but the compiler emits an `invokedynamic` against `StringConcatFactory` for every string
@@ -86,7 +129,7 @@ object AndroidIde {
         val legacyInternalHome = File(context.filesDir, "codeassist").toPath()
         val legacyDataDirs = listOf(legacyProjectsDir, legacyInternalHome)
             .filter { java.nio.file.Files.exists(it) }
-        val manager = ProjectManager.onDevice(
+        return ProjectManager.onDevice(
             projectsRoot, bootClasspath, nativeLibDir, debugKeystore.toPath(),
             storageRoot = externalHome(context).toPath(),
             legacyDataDirs = legacyDataDirs,
@@ -96,27 +139,6 @@ object AndroidIde {
             customViewRuntime = previewRuntime,
             kotlinPluginLoader = kotlinPluginLoader,
         )
-
-        // Recover projects left in internal storage by a build from before the move to external app storage
-        // (issues #1003 / #1024 / #1041 / #1042: projects vanishing from the picker after an update). Runs at
-        // most once; non-destructive.
-        runCatching { manager.importLegacyProjects() }
-
-        // Opt-in usage analytics (no collection until the user grants consent — see docs/analytics.md).
-        val analytics = buildAnalytics(manager, home)
-        // Start with no project open (the picker is shown); opening one from it creates that project's engine
-        // on demand. The download cache is shared across projects via the ProjectManager (sharedCachesRoot).
-        val backend = IdeServicesBackend(initial = null, manager = manager, analytics = analytics)
-        // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
-        // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
-        backend.installCrashReporting()
-        // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
-        // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
-        if (backend.diagnostics.analyticsConsent() == true) {
-            backend.diagnostics.track(dev.ide.analytics.Events.COLD_START, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
-        }
-
-        return Session(backend)
     }
 
     /**
