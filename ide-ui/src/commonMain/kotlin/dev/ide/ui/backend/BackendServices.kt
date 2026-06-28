@@ -75,6 +75,10 @@ interface EditorService {
     /** Enclosing declarations at [offset] in [text] (type/method names, outer→inner) for the breadcrumb. */
     suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = emptyList()
 
+    /** The file's declarations in document order (with nesting depth) for the structure/outline view and
+     *  sticky scroll headers. Empty when the backend can't enumerate declarations for [path]. */
+    suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = emptyList()
+
     /** Code completion for the live buffer [text] at [offset]. */
     suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult
 
@@ -101,6 +105,9 @@ interface EditorService {
 
     /** Go-to-definition for the symbol/reference at [offset], or null. */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
+
+    /** Quick documentation (signature + doc comment) for the symbol at [offset], or null. */
+    suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = null
 
     /** The renameable symbol under the caret at [offset], or null. */
     suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? = null

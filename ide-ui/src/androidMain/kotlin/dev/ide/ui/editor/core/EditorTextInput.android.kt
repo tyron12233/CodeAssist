@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Matrix
+import android.os.Build
 import android.text.InputType
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
@@ -32,8 +33,11 @@ import kotlinx.coroutines.launch
  * line-indexed buffer synchronously (O(edited line)), and the session pushes selection updates back
  * through [InputMethodManager.updateSelection] so the keyboard's composing state stays coherent.
  */
-actual fun Modifier.editorTextInput(session: EditorSession, ime: EditorImeHandle): Modifier =
-    this then EditorTextInputElement(session, ime)
+actual fun Modifier.editorTextInput(
+    session: EditorSession,
+    ime: EditorImeHandle,
+    options: EditorImeOptions,
+): Modifier = this then EditorTextInputElement(session, ime, options)
 
 actual fun textInputCodePoint(event: KeyEvent): Int {
     val native = event.nativeKeyEvent
@@ -52,14 +56,16 @@ actual fun textInputCodePoint(event: KeyEvent): Int {
 private data class EditorTextInputElement(
     val session: EditorSession,
     val ime: EditorImeHandle,
+    val options: EditorImeOptions,
 ) : ModifierNodeElement<EditorTextInputNode>() {
-    override fun create() = EditorTextInputNode(session, ime)
-    override fun update(node: EditorTextInputNode) = node.setSession(session, ime)
+    override fun create() = EditorTextInputNode(session, ime, options)
+    override fun update(node: EditorTextInputNode) = node.setSession(session, ime, options)
 }
 
 private class EditorTextInputNode(
     private var session: EditorSession,
     private var ime: EditorImeHandle,
+    private var options: EditorImeOptions,
 ) : Modifier.Node(), PlatformTextInputModifierNode, FocusEventModifierNode {
 
     private var job: Job? = null
@@ -69,13 +75,21 @@ private class EditorTextInputNode(
     // raises the keyboard; losing focus clears the request so a later passive refocus stays silent.
     private var wantsKeyboard = false
 
-    fun setSession(s: EditorSession, h: EditorImeHandle) {
+    fun setSession(s: EditorSession, h: EditorImeHandle, opts: EditorImeOptions) {
         if (h !== ime) { ime.onShow = null; ime.onHide = null; ime = h; registerHandle() }
-        if (s === session) return
-        session = s
-        // A new buffer means a tab switch — never carry the keyboard over; require a fresh tap.
-        wantsKeyboard = false
-        stopSession()
+        val optionsChanged = opts != options
+        options = opts
+        if (s !== session) {
+            session = s
+            // A new buffer means a tab switch — never carry the keyboard over; require a fresh tap.
+            wantsKeyboard = false
+            stopSession()
+            return
+        }
+        // Same buffer, but the IME tunables (e.g. the keyboard-suggestions toggle) changed while a connection
+        // is live: ask the IME to re-read createInputConnection so the new inputType takes effect now. The
+        // request reads `options` lazily, so it already sees the updated value.
+        if (optionsChanged && job != null && isAttached) restartInput()
     }
 
     override fun onAttach() {
@@ -128,7 +142,7 @@ private class EditorTextInputNode(
                 val bridge = EditorImeBridge(s, view, imm, h)
                 s.imeListener = bridge
                 try {
-                    startInputMethod(EditorImeRequest(s, view, bridge))
+                    startInputMethod(EditorImeRequest(s, view, bridge) { options })
                 } finally {
                     if (s.imeListener === bridge) s.imeListener = null
                 }
@@ -150,20 +164,41 @@ private class EditorTextInputNode(
         val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(view, 0)
     }
+
+    // Tell the IME to drop and re-create the input connection so it re-reads the EditorInfo (inputType etc.).
+    // Used when the editor's IME options change mid-edit; keeps the session/keyboard up (no focus churn).
+    private fun restartInput() {
+        val view = requireView()
+        val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.restartInput(view)
+    }
 }
 
 private class EditorImeRequest(
     private val session: EditorSession,
     private val view: View,
     private val bridge: EditorImeBridge,
+    private val options: () -> EditorImeOptions,
 ) : PlatformTextInputMethodRequest {
     override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
-        outAttributes.inputType = InputType.TYPE_CLASS_TEXT or
-            InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS // code, not prose — keep autocorrect out of identifiers
+        var inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        if (!options().softKeyboardSuggestions) {
+            // Code, not prose. NO_SUGGESTIONS alone is widely ignored for auto-space/autocorrect (Gboard
+            // still inserts a space after a typed `.`), so we also use the VISIBLE_PASSWORD variation, which
+            // keyboards honor as "raw text": no autocorrect, no auto-space, no predictive suggestions, no
+            // glide typing. (We still draw + measure the text ourselves, so nothing is actually obscured.)
+            inputType = inputType or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        }
+        outAttributes.inputType = inputType
         outAttributes.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or
             EditorInfo.IME_FLAG_NO_EXTRACT_UI or
             EditorInfo.IME_ACTION_NONE
+        // Never fold code into the keyboard's personal dictionary, even when suggestions are on (API 26+).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            outAttributes.imeOptions = outAttributes.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+        }
         outAttributes.initialSelStart = session.selection.min
         outAttributes.initialSelEnd = session.selection.max
         return EditorInputConnection(session, view, bridge)

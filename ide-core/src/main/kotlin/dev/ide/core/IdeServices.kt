@@ -4083,6 +4083,25 @@ class IdeServices private constructor(
         }.getOrDefault(emptyList())
     }
 
+    /** The file's declarations (for the structure/outline view + sticky scroll headers), via the language
+     *  analyzer's structure walk. Empty if the file is outside the project or the backend doesn't support it. */
+    fun fileStructure(file: Path, text: String): List<dev.ide.lang.resolve.StructureItem> {
+        val module = moduleForEditableFile(file) ?: return emptyList()
+        val analyzer = analyzerFor(module, languageFor(file))
+        val vf = store.vfs.fileFor(file)
+        return runCatching { analyzer.fileStructure(vf, text) }.getOrDefault(emptyList())
+    }
+
+    /** Quick documentation (signature + doc comment) for the symbol at [offset] in [file]'s buffer, or null.
+     *  Resolves through the live overlay so cross-file references reach their declaration. */
+    fun quickDocAt(file: Path, text: String, offset: Int): dev.ide.lang.resolve.QuickDocInfo? {
+        val module = moduleForEditableFile(file) ?: return null
+        updateDocument(file, text)
+        val analyzer = analyzerFor(module, languageFor(file))
+        val vf = store.vfs.fileFor(file)
+        return runCatching { runSync { analyzer.quickDoc(vf, text, offset) } }.getOrNull()
+    }
+
     /** Diagnostics for [text], bound to [file]'s module (empty if outside the project). */
     fun analyze(file: Path, text: String): AnalysisResult? {
         val module = moduleForFile(file) ?: return null

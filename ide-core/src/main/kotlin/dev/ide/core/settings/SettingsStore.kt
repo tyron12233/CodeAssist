@@ -25,7 +25,7 @@ class SettingsStore(
         val d = IdeSettings()
         return IdeSettings(
             themeMode = oneOf("appearance.themeMode", d.themeMode, IdeSettings.THEME_LIGHT, IdeSettings.THEME_DARK, IdeSettings.THEME_SYSTEM),
-            accent = if (str("appearance.accent", d.accent) == IdeSettings.ACCENT_TEAL) IdeSettings.ACCENT_TEAL else IdeSettings.ACCENT_VIOLET,
+            accent = oneOf("appearance.accent", d.accent, IdeSettings.ACCENT_VIOLET, IdeSettings.ACCENT_TEAL, IdeSettings.ACCENT_ORANGE),
             // Stored as an integer percent (100 = 1.0×) so the generic IntSlider and this typed view agree.
             editorFontScale = (int("editor.fontScale", (d.editorFontScale * 100).toInt()) / 100f).coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE),
             codeFont = oneOf("editor.codeFont", d.codeFont, IdeSettings.CODE_FONT_JETBRAINS, IdeSettings.CODE_FONT_MONOSPACE),
@@ -37,6 +37,7 @@ class SettingsStore(
             wrapIndent = bool("editor.wrapIndent", d.wrapIndent),
             twoAxisScroll = bool("editor.twoAxisScroll", d.twoAxisScroll),
             pinchZoom = bool("editor.pinchZoom", d.pinchZoom),
+            softKeyboardSuggestions = bool("editor.softKeyboardSuggestions", d.softKeyboardSuggestions),
             completionAutoPopup = bool("completion.autoPopup", d.completionAutoPopup),
             completionDelayMs = int("completion.delayMs", d.completionDelayMs).coerceIn(MIN_COMPLETION_DELAY_MS, MAX_COMPLETION_DELAY_MS),
             completionMaxItems = int("completion.maxItems", d.completionMaxItems).coerceIn(MIN_COMPLETION_MAX_ITEMS, MAX_COMPLETION_MAX_ITEMS),
@@ -61,6 +62,7 @@ class SettingsStore(
         put("editor.wrapIndent", s.wrapIndent.toString())
         put("editor.twoAxisScroll", s.twoAxisScroll.toString())
         put("editor.pinchZoom", s.pinchZoom.toString())
+        put("editor.softKeyboardSuggestions", s.softKeyboardSuggestions.toString())
         put("completion.autoPopup", s.completionAutoPopup.toString())
         put("completion.delayMs", s.completionDelayMs.toString())
         put("completion.maxItems", s.completionMaxItems.toString())
@@ -72,7 +74,6 @@ class SettingsStore(
 
     private fun key(k: String) = "$KEY_PREFIX$k"
     private fun put(k: String, v: String) = set(key(k), v)
-    private fun str(k: String, def: String) = get(key(k)) ?: def
     /** A string value constrained to [allowed]; an unknown/absent value falls back to [def]. */
     private fun oneOf(k: String, def: String, vararg allowed: String): String =
         get(key(k))?.takeIf { it in allowed } ?: def

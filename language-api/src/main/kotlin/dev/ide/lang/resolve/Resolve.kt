@@ -31,6 +31,40 @@ enum class SymbolKind {
 
 enum class Modifier { PUBLIC, PROTECTED, PRIVATE, STATIC, FINAL, ABSTRACT, DEFAULT, SYNCHRONIZED }
 
+/**
+ * One declaration in a file's structure view / outline (also drives sticky scroll headers). [name] is the
+ * display name; [detail] an optional suffix (a method's parameter list, a field's type); [kind] its symbol
+ * kind; [nameOffset] where to put the caret on navigation (and the line pinned as a sticky header);
+ * [endOffset] the declaration's end (so a scroll position can be tested for containment); [depth] the
+ * nesting level (0 = top-level).
+ */
+data class StructureItem(
+    val name: String,
+    val detail: String?,
+    val kind: SymbolKind,
+    val nameOffset: Int,
+    val endOffset: Int,
+    val depth: Int,
+)
+
+/** The markup dialect of a [QuickDocInfo.doc] body, so the renderer knows how to parse it. */
+enum class DocFormat { JAVADOC, KDOC, PLAIN }
+
+/**
+ * Quick documentation for the symbol under the caret: its [signature] (a display string), [name] + [kind],
+ * the [container] it's declared in (owning type / package, for a subheader), and its [doc] comment tagged with
+ * its [docFormat]. [doc] is RAW markup for a source-backed symbol (rendered rich) or cleaned/plain text
+ * otherwise (or null when the symbol has no doc).
+ */
+data class QuickDocInfo(
+    val signature: String,
+    val name: String,
+    val kind: SymbolKind,
+    val container: String?,
+    val doc: String?,
+    val docFormat: DocFormat,
+)
+
 data class SymbolOrigin(val fromSource: Boolean, val file: VirtualFile?)
 
 /**

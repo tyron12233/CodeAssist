@@ -129,7 +129,11 @@ fun CodeAssistApp(
 
 
 
-    val accent = if (settings.accent == dev.ide.ui.backend.UiAccent.Teal) CaAccent.Teal else CaAccent.Violet
+    val accent = when (settings.accent) {
+        dev.ide.ui.backend.UiAccent.Teal -> CaAccent.Teal
+        dev.ide.ui.backend.UiAccent.Orange -> CaAccent.Orange
+        else -> CaAccent.Violet
+    }
     val resolvedCodeFont = if (settings.codeFont == "monospace") FontFamily.Monospace else codeFont
     // Apply settings to the active project's live editor state whenever they change (or the project swaps).
     LaunchedEffect(state, settings) { state.applySettings(settings) }

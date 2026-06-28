@@ -15,7 +15,11 @@ import androidx.compose.ui.input.key.utf16CodePoint
  * known gap — implementing it means providing the skiko `PlatformTextInputMethodRequest`
  * (value/state/onEditCommand) from an `establishTextInputSession` here, mirroring the Android actual.
  */
-actual fun Modifier.editorTextInput(session: EditorSession, ime: EditorImeHandle): Modifier = this
+actual fun Modifier.editorTextInput(
+    session: EditorSession,
+    ime: EditorImeHandle,
+    options: EditorImeOptions,
+): Modifier = this
 
 actual fun textInputCodePoint(event: KeyEvent): Int {
     // Ctrl/⌘ chords are shortcuts. Ctrl+Alt is AltGr on some layouts and DOES produce text, so don't

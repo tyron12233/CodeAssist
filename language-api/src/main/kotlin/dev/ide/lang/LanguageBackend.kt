@@ -127,6 +127,19 @@ interface SourceAnalyzer {
     /** Resolve a reference node to a symbol. */
     fun resolve(node: DomNode): ResolveResult
 
+    /**
+     * The file's declarations for the structure view / outline + sticky scroll headers, in document order,
+     * each with its nesting depth. Empty by default; a backend that can cheaply enumerate declarations
+     * (walking its own parse tree) overrides it. [text] is the live buffer so the result matches the editor.
+     */
+    fun fileStructure(file: VirtualFile, text: CharSequence): List<dev.ide.lang.resolve.StructureItem> = emptyList()
+
+    /**
+     * Quick documentation (signature + doc comment) for the symbol at [offset] in [file]'s live buffer [text],
+     * or null when nothing resolves there. Default null; a backend that resolves symbols overrides it.
+     */
+    fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): dev.ide.lang.resolve.QuickDocInfo? = null
+
     /** Visible names at a position — the candidate set for name-reference completion. */
     fun scopeAt(file: VirtualFile, offset: Int): Scope
 

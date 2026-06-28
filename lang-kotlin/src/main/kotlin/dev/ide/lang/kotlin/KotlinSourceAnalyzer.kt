@@ -24,12 +24,22 @@ import dev.ide.lang.resolve.SymbolFilter
 import dev.ide.lang.resolve.TypeRef
 import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
+import dev.ide.lang.kotlin.parse.KotlinParserHost
+import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtDeclaration
+import org.jetbrains.kotlin.psi.KtElement
+import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
+import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
+import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -260,6 +270,93 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }
 
     // --- resolution / inference ---
+
+    /** The file's classes/objects/functions/properties in document order with nesting depth — for the
+     *  structure view and sticky scroll headers. Purely syntactic (PSI), so it's safe before the index is ready. */
+    override fun fileStructure(file: VirtualFile, text: CharSequence): List<dev.ide.lang.resolve.StructureItem> {
+        val ktFile = KotlinParserHost.parse(file.name, text)
+        val out = ArrayList<dev.ide.lang.resolve.StructureItem>()
+        for (d in ktFile.declarations) collectStructure(d, 0, out)
+        return out
+    }
+
+    private fun collectStructure(decl: KtDeclaration, depth: Int, out: MutableList<dev.ide.lang.resolve.StructureItem>) {
+        when (decl) {
+            is KtEnumEntry -> addStructure(decl.name, null, dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT, decl, depth, out)
+            is KtClassOrObject -> {
+                val kind = when {
+                    decl is KtClass && decl.isInterface() -> dev.ide.lang.resolve.SymbolKind.INTERFACE
+                    decl is KtClass && decl.isEnum() -> dev.ide.lang.resolve.SymbolKind.ENUM
+                    decl is KtClass && decl.isAnnotation() -> dev.ide.lang.resolve.SymbolKind.ANNOTATION_TYPE
+                    else -> dev.ide.lang.resolve.SymbolKind.CLASS
+                }
+                addStructure(decl.name, null, kind, decl, depth, out)
+                for (m in decl.declarations) collectStructure(m, depth + 1, out)
+            }
+            is KtNamedFunction -> addStructure(decl.name, "(${paramTypes(decl.valueParameters)})", dev.ide.lang.resolve.SymbolKind.METHOD, decl, depth, out)
+            is KtSecondaryConstructor -> addStructure("constructor", "(${paramTypes(decl.valueParameters)})", dev.ide.lang.resolve.SymbolKind.CONSTRUCTOR, decl, depth, out)
+            is KtProperty -> addStructure(decl.name, decl.typeReference?.text, dev.ide.lang.resolve.SymbolKind.FIELD, decl, depth, out)
+            else -> {}
+        }
+    }
+
+    private fun paramTypes(params: List<org.jetbrains.kotlin.psi.KtParameter>): String =
+        params.joinToString(", ") { it.typeReference?.text ?: it.name ?: "" }
+
+    private fun addStructure(name: String?, detail: String?, kind: dev.ide.lang.resolve.SymbolKind, element: KtElement, depth: Int, out: MutableList<dev.ide.lang.resolve.StructureItem>) {
+        val n = name ?: return
+        val nameOffset = (element as? KtNamedDeclaration)?.nameIdentifier?.textRange?.startOffset ?: element.textRange.startOffset
+        out.add(dev.ide.lang.resolve.StructureItem(n, detail, kind, nameOffset, element.textRange.endOffset, depth))
+    }
+
+    /** Quick documentation for the symbol at [offset]: a declaration the caret sits ON is documented directly
+     *  (raw KDoc from its PSI); otherwise the reference under the caret is resolved to a symbol. */
+    override fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): dev.ide.lang.resolve.QuickDocInfo? {
+        val ktFile = KotlinParserHost.parse(file.name, text)
+        val off = offset.coerceIn(0, ktFile.textLength)
+        val leaf = ktFile.findElementAt(off.coerceAtMost((ktFile.textLength - 1).coerceAtLeast(0)))
+        val ownDecl = leaf?.parent as? KtNamedDeclaration
+        if (ownDecl != null && ownDecl.nameIdentifier === leaf) return declarationDoc(ownDecl)
+        val node = KotlinParsedFile(ktFile, file, 0L).nodeAt(off)
+        val sym = (resolve(node) as? ResolveResult.Resolved)?.symbol as? KotlinSymbol ?: return null
+        return symbolDoc(sym)
+    }
+
+    private fun symbolDoc(sym: KotlinSymbol): dev.ide.lang.resolve.QuickDocInfo {
+        val sig = sym.signature?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("(")) "${sym.name}$it" else it } ?: sym.name
+        val container = sym.owner?.name ?: sym.packageName ?: sym.declaringClassFqn?.substringAfterLast('.')?.takeIf { it.isNotEmpty() }
+        val declPsi = (sym.declaration() as? KotlinDomNode)?.psi
+        val rawKdoc = (declPsi as? KtDeclaration)?.docComment?.text?.takeIf { it.isNotBlank() }
+        val (doc, fmt) = if (rawKdoc != null) rawKdoc to dev.ide.lang.resolve.DocFormat.KDOC
+        else sym.documentation() to dev.ide.lang.resolve.DocFormat.PLAIN
+        return dev.ide.lang.resolve.QuickDocInfo(sig, sym.name, sym.kind, container, doc, fmt)
+    }
+
+    private fun declarationDoc(decl: KtNamedDeclaration): dev.ide.lang.resolve.QuickDocInfo {
+        val sig: String
+        val kind: dev.ide.lang.resolve.SymbolKind
+        when (decl) {
+            is KtNamedFunction -> {
+                sig = "fun ${decl.name}(${paramTypes(decl.valueParameters)})" + (decl.typeReference?.text?.let { ": $it" } ?: "")
+                kind = dev.ide.lang.resolve.SymbolKind.METHOD
+            }
+            is KtProperty -> {
+                sig = "${if (decl.isVar) "var" else "val"} ${decl.name}" + (decl.typeReference?.text?.let { ": $it" } ?: "")
+                kind = dev.ide.lang.resolve.SymbolKind.FIELD
+            }
+            is KtClass -> {
+                sig = "${if (decl.isInterface()) "interface" else "class"} ${decl.name}"
+                kind = if (decl.isInterface()) dev.ide.lang.resolve.SymbolKind.INTERFACE else dev.ide.lang.resolve.SymbolKind.CLASS
+            }
+            else -> { sig = decl.name ?: ""; kind = dev.ide.lang.resolve.SymbolKind.CLASS }
+        }
+        val container = generateSequence(decl.parent) { it.parent }.filterIsInstance<KtClassOrObject>().firstOrNull()?.name
+        val raw = decl.docComment?.text?.takeIf { it.isNotBlank() }
+        return dev.ide.lang.resolve.QuickDocInfo(
+            sig, decl.name ?: "", kind, container, raw,
+            if (raw != null) dev.ide.lang.resolve.DocFormat.KDOC else dev.ide.lang.resolve.DocFormat.PLAIN,
+        )
+    }
 
     override fun resolve(node: DomNode): ResolveResult {
         val kdn = node as? KotlinDomNode ?: return ResolveResult.Unresolved

@@ -27,8 +27,9 @@ class SourceMethodResolver(
     private val sourceDirs: List<Path>,
     private val sourceJars: List<Path> = emptyList(),
 ) : SourceDocProvider {
-    /** A declared method's editor-facing facts. */
-    data class MethodInfo(val params: List<String>, val javadoc: String?)
+    /** A declared method's editor-facing facts. [javadocRaw] is the unstripped `/** … */` block (markup
+     *  preserved); callers clean it for the inline panels or render it raw for quick-doc. */
+    data class MethodInfo(val params: List<String>, val javadocRaw: String?)
 
     /** One parsed Java file: method facts keyed `Type#method`, plus each type's own javadoc by simple name. */
     private class Parsed(val byKey: Map<String, List<MethodInfo>>, val typeDocs: Map<String, String>)
@@ -42,9 +43,17 @@ class SourceMethodResolver(
     // --- SourceDocProvider (neutral SPI consumed by the Kotlin backend) ---
 
     override fun method(declaringFqn: String, methodName: String, arity: Int): SourceDocProvider.MethodDoc? =
-        lookup(declaringFqn, methodName, arity)?.let { SourceDocProvider.MethodDoc(it.params, it.javadoc) }
+        lookup(declaringFqn, methodName, arity)?.let {
+            SourceDocProvider.MethodDoc(it.params, it.javadocRaw?.let { raw -> JavadocText.clean(raw) }?.takeIf { s -> s.isNotEmpty() })
+        }
 
-    override fun classDoc(fqn: String): String? {
+    override fun methodRaw(declaringFqn: String, methodName: String, arity: Int): String? =
+        lookup(declaringFqn, methodName, arity)?.javadocRaw
+
+    override fun classDoc(fqn: String): String? =
+        classDocRaw(fqn)?.let { JavadocText.clean(it) }?.takeIf { it.isNotEmpty() }
+
+    override fun classDocRaw(fqn: String): String? {
         val rel = topLevelFqn(fqn).replace('.', '/') + ".java"
         for (dir in sourceDirs) {
             val p = dir.resolve(rel)
@@ -129,7 +138,7 @@ class SourceMethodResolver(
                 val type = enclosingTypeName(md) ?: return true
                 @Suppress("UNCHECKED_CAST")
                 val params = (md.parameters() as List<SingleVariableDeclaration>).map { it.name.identifier }
-                val doc = md.javadoc?.let { JavadocText.clean(it.toString()) }?.takeIf { it.isNotEmpty() }
+                val doc = md.javadoc?.toString()?.takeIf { it.isNotBlank() } // raw; cleaned on demand
                 out.getOrPut(type + "#" + md.name.identifier) { ArrayList() }.add(MethodInfo(params, doc))
                 return true
             }
@@ -138,9 +147,9 @@ class SourceMethodResolver(
         return Parsed(out, typeDocs)
     }
 
-    /** A type's own javadoc, keyed by simple name (recursing into nested types). */
+    /** A type's own RAW javadoc, keyed by simple name (recursing into nested types). Cleaned on demand. */
     private fun collectTypeDocs(td: AbstractTypeDeclaration, out: MutableMap<String, String>) {
-        td.javadoc?.let { JavadocText.clean(it.toString()) }?.takeIf { it.isNotEmpty() }?.let { out.putIfAbsent(td.name.identifier, it) }
+        td.javadoc?.toString()?.takeIf { it.isNotBlank() }?.let { out.putIfAbsent(td.name.identifier, it) }
         td.bodyDeclarations().filterIsInstance<AbstractTypeDeclaration>().forEach { collectTypeDocs(it, out) }
     }
 

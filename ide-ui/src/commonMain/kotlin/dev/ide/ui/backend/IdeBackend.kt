@@ -886,6 +886,36 @@ data class UiSignatureHelp(
     val activeParameter: Int = 0,
 )
 
+/**
+ * A declaration in the file structure / outline (and the source of sticky scroll headers). [kind] is a
+ * lowercase string ("class", "interface", "method", "field", "constructor", "enum", "enum_constant", …);
+ * [nameOffset] is the navigation target (and the line pinned as a sticky header); [endOffset] the
+ * declaration's end (for scroll-containment); [depth] the nesting level (0 = top-level).
+ */
+data class UiFileSymbol(
+    val name: String,
+    val detail: String?,
+    val kind: String,
+    val nameOffset: Int,
+    val endOffset: Int,
+    val depth: Int,
+)
+
+/**
+ * Quick documentation for the symbol under the caret. [signature] is a display string (e.g.
+ * `String format(String fmt, Object... args)`); [kind] is a lowercase symbol kind; [container] is the owning
+ * type/package; [doc] is the doc comment in [docFormat] ("javadoc" | "kdoc" | "plain") — raw markup for a
+ * source-backed symbol (rendered rich) or cleaned/plain text otherwise.
+ */
+data class UiQuickDoc(
+    val signature: String,
+    val name: String,
+    val kind: String,
+    val container: String?,
+    val doc: String?,
+    val docFormat: String,
+)
+
 /** Android platform-sources status: the [platform] (e.g. "android-36"), whether sources are [installed],
  *  and whether they're [downloadable] (an sdkmanager is present). */
 data class UiAndroidSourcesInfo(val platform: String, val installed: Boolean, val downloadable: Boolean)
@@ -960,6 +990,8 @@ data class UiSettings(
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font. */
     val pinchZoom: Boolean = true,
+    /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
+    val softKeyboardSuggestions: Boolean = false,
 ) {
     companion object {
         const val MIN_FONT_SCALE = 0.7f
@@ -974,7 +1006,7 @@ data class UiSettings(
 }
 
 /** The theme accent swaps the design system ships. */
-enum class UiAccent { Violet, Teal }
+enum class UiAccent { Violet, Teal, Orange }
 
 /**
  * One inspection (analyzer) in the Analysis settings list. [enabled] off = the check never runs; [severity]

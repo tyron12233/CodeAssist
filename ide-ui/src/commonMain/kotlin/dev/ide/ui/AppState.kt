@@ -99,6 +99,8 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     var searchOpen by mutableStateOf(false)
     var consoleOpen by mutableStateOf(!isMobilePlatform)
     var paletteOpen by mutableStateOf(false)
+    /** The in-file structure / outline bottom sheet (opened from the breadcrumb tap or Ctrl-F12). */
+    var structureOpen by mutableStateOf(false)
     // ---- live editor preferences (seeded from persisted settings in init; the Settings screen updates them
     // via [applySettings] so open editors react immediately) ----
 
@@ -128,6 +130,8 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     var twoAxisScrollEnabled by mutableStateOf(true)
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
     var pinchZoomEnabled by mutableStateOf(true)
+    /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
+    var softKeyboardSuggestions by mutableStateOf(false)
 
     init {
         applySettings(backend.settings.settings())
@@ -148,6 +152,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
         wrapIndentEnabled = s.wrapIndent
         twoAxisScrollEnabled = s.twoAxisScroll
         pinchZoomEnabled = s.pinchZoom
+        softKeyboardSuggestions = s.softKeyboardSuggestions
     }
 
     /** A transient destination shown as a sheet/overlay (Source, More) — null when none is open. */

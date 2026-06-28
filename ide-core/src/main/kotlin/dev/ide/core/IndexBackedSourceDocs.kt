@@ -47,4 +47,12 @@ class IndexBackedSourceDocs(
 
     override fun classDoc(fqn: String): String? =
         fromIndex(fqn)?.classDoc ?: fallback.classDoc(fqn)
+
+    // The index stores only CLEANED doc, so raw markup (for quick-doc's rich rendering) always comes from the
+    // live fallback — it re-parses the source on demand (project dir or -sources.jar), which is fine for a
+    // user-triggered popup.
+    override fun methodRaw(declaringFqn: String, methodName: String, arity: Int): String? =
+        fallback.methodRaw(declaringFqn, methodName, arity)
+
+    override fun classDocRaw(fqn: String): String? = fallback.classDocRaw(fqn)
 }

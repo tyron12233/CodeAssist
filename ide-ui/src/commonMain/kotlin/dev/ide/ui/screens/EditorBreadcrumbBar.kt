@@ -66,7 +66,8 @@ internal fun BreadcrumbBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(Modifier.weight(1f)) { Breadcrumb(crumbs) }
+        // Tapping the location line opens the file structure / outline sheet (IntelliJ-style).
+        Box(Modifier.weight(1f).clickable { state.structureOpen = true }) { Breadcrumb(crumbs) }
         ViewModeToggle(active.viewMode, canPreview) { active.viewMode = it }
     }
 }

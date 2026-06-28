@@ -3,6 +3,7 @@ package dev.ide.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -58,7 +59,8 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
     val toolbarActions = remember(active?.path) {
         state.backend.actions.actionsFor(UiActionContext(place = UiActionPlaces.MAIN_TOOLBAR, activeFilePath = active?.path))
     }
-    Column(modifier) {
+    Box(modifier) {
+      Column(Modifier.fillMaxSize()) {
         EditorTopBar(
             projectName = project.name,
             indexStatus = indexStatus,
@@ -126,6 +128,7 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
                     completionDelayMs = state.completionDelayMs,
                     twoAxisScroll = state.twoAxisScrollEnabled,
                     pinchZoom = state.pinchZoomEnabled,
+                    softKeyboardSuggestions = state.softKeyboardSuggestions,
                     wordWrap = state.wordWrapEnabled,
                     wrapIndent = state.wrapIndentEnabled,
                     fontLigatures = state.fontLigaturesEnabled,
@@ -174,6 +177,9 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
                 Text("Open a file from the navigator", color = Ca.colors.textTertiary, style = Ca.type.subhead)
             }
         }
+      }
+      // In-file structure / outline overlay (opened from the breadcrumb tap or Ctrl-F12).
+      active?.let { StructureSheet(state, it) }
     }
 }
 

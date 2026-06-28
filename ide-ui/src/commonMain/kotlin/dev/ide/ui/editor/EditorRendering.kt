@@ -47,6 +47,7 @@ internal class EditorDrawColors(
     val indentGuide: Color,
     val findMatch: Color,
     val findCurrent: Color,
+    val occurrence: Color,
 )
 
 internal class DiagSeg(val startCol: Int, val endCol: Int, val severity: UiSeverity, val unused: Boolean)
@@ -106,6 +107,8 @@ internal fun DrawScope.drawEditor(
     bracketPair: Pair<Int, Int>?,
     findMatches: List<Match>,
     currentMatch: Int,
+    occurrences: List<Match>,
+    structure: List<dev.ide.ui.backend.UiFileSymbol>,
     colors: EditorDrawColors,
     caretVisible: Boolean,
     caretContent: Offset,
@@ -191,6 +194,22 @@ internal fun DrawScope.drawEditor(
     }
 
     clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
+        // occurrence highlights (lowest layer): every textual use of the identifier under the caret, tinted
+        // subtly. The selection / find layers paint over the current one.
+        if (occurrences.isNotEmpty()) {
+            for (m in occurrences) {
+                val sLine = doc.lineForOffset(m.start)
+                val eLine = doc.lineForOffset(m.end)
+                if (eLine < firstVisible || sLine > lastVisible) continue
+                for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
+                    if (foldModel.isHidden(line)) continue
+                    val vStart = if (line == sLine) rawToVisual(line, m.start - doc.lineStart(line)) else 0
+                    val vEnd = if (line == eLine) rawToVisual(line, m.end - doc.lineStart(line)) else -1
+                    fillRange(line, vStart, vEnd, colors.occurrence, trailingMarker = false)
+                }
+            }
+        }
+
         // find-match highlights (under the selection/text): every match tinted, the current one stronger.
         if (findMatches.isNotEmpty()) {
             for ((idx, m) in findMatches.withIndex()) {
@@ -416,6 +435,51 @@ internal fun DrawScope.drawEditor(
             drawCircle(handleColor, r, Offset(x, yTopOf(line, off) + lineH + r * 0.8f))
         }
     }
+
+    // sticky scroll headers — the declarations enclosing the top visible line, pinned at the top. Drawn LAST
+    // (over the scrolling code) and reads the live scroll offset in the draw phase, so it tracks a fling with
+    // no recomposition. Pinned horizontally (ignores hOff) so a header stays anchored when scrolled sideways.
+    if (structure.isNotEmpty() && firstVisible > 0) {
+        val sticky = stickyHeaderItems(structure, firstVisible, doc, STICKY_MAX)
+        if (sticky.isNotEmpty()) {
+            val pinnedLeft = gutterWidth + metrics.padLeft
+            for ((i, item) in sticky.withIndex()) {
+                val line = doc.lineForOffset(item.nameOffset.coerceIn(0, doc.length))
+                val y = i * lineH
+                drawRect(colors.background, Offset(0f, y), Size(size.width, lineH)) // mask scrolling code beneath
+                val num = numberLayout(line + 1)
+                drawText(num, color = colors.gutterText, topLeft = Offset(numberRight - num.size.width, y + (lineH - num.size.height) / 2f))
+                clipRect(left = gutterWidth, top = y, right = size.width, bottom = y + lineH) {
+                    drawText(layoutFor(line), topLeft = Offset(pinnedLeft, y))
+                }
+            }
+            val bottom = sticky.size * lineH
+            drawLine(colors.gutterBorder, Offset(0f, bottom), Offset(size.width, bottom), strokeWidth = 1f)
+        }
+    }
+}
+
+/** Cap on pinned sticky-header rows (deeper nesting drops the outermost), so they never eat the viewport. */
+internal const val STICKY_MAX = 3
+
+/**
+ * The declarations enclosing [firstVisibleLine] — i.e. whose name line has scrolled above the viewport top but
+ * whose body still spans it — outermost→innermost, capped to [max] (keeping the innermost). Pure, so the canvas
+ * draw and the tap hit-test compute identical rows. Empty when nothing encloses the top line.
+ */
+internal fun stickyHeaderItems(
+    structure: List<dev.ide.ui.backend.UiFileSymbol>,
+    firstVisibleLine: Int,
+    doc: dev.ide.ui.editor.core.EditorDocument,
+    max: Int,
+): List<dev.ide.ui.backend.UiFileSymbol> {
+    if (structure.isEmpty()) return emptyList()
+    val enclosing = structure.filter {
+        val nameLine = doc.lineForOffset(it.nameOffset.coerceIn(0, doc.length))
+        val endLine = doc.lineForOffset(it.endOffset.coerceIn(0, doc.length))
+        nameLine < firstVisibleLine && firstVisibleLine <= endLine
+    }.sortedBy { doc.lineForOffset(it.nameOffset.coerceIn(0, doc.length)) }
+    return if (enclosing.size <= max) enclosing else enclosing.subList(enclosing.size - max, enclosing.size)
 }
 
 /** A small fold chevron centered at ([cx], [cy]): ▾ when [expanded] (an open foldable line), ▸ when collapsed. */

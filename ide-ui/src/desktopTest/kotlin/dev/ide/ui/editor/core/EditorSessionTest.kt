@@ -1331,4 +1331,126 @@ class EditorSessionTest {
         val (text, _) = enter(s)
         assertEquals("$src\n     * ", text)
     }
+
+    // ---- line operations (duplicate / move / delete / join / comment) ----
+
+    @Test
+    fun duplicateLineCollapsed() {
+        val s = session("abc\ndef", 5) // caret on line 1, col 1
+        s.duplicateSelection()
+        assertEquals("abc\ndef\ndef", s.doc.text)
+        assertEquals(TextRange(9), s.selection) // same column on the new line
+    }
+
+    @Test
+    fun duplicateSelectionRange() {
+        val s = session("abcdef", 0)
+        s.setSelectionRange(1, 4) // "bcd"
+        s.duplicateSelection()
+        assertEquals("abcdbcdef", s.doc.text)
+        assertEquals(TextRange(4, 7), s.selection) // the copy is selected
+    }
+
+    @Test
+    fun moveLineDownThenUp() {
+        val s = session("L0\nL1\nL2", 0) // caret on line 0
+        s.moveLines(1)
+        assertEquals("L1\nL0\nL2", s.doc.text)
+        assertEquals(TextRange(3), s.selection)
+
+        val s2 = session("L0\nL1\nL2", 6) // caret on line 2
+        s2.moveLines(-1)
+        assertEquals("L0\nL2\nL1", s2.doc.text)
+        assertEquals(TextRange(3), s2.selection)
+    }
+
+    @Test
+    fun moveLineNoOpAtEdges() {
+        val top = session("L0\nL1", 0)
+        top.moveLines(-1)
+        assertEquals("L0\nL1", top.doc.text) // already first line
+
+        val bottom = session("L0\nL1", 4)
+        bottom.moveLines(1)
+        assertEquals("L0\nL1", bottom.doc.text) // already last line
+    }
+
+    @Test
+    fun deleteLineMiddleAndLast() {
+        val mid = session("L0\nL1\nL2", 3) // line 1
+        mid.deleteLines()
+        assertEquals("L0\nL2", mid.doc.text)
+        assertEquals(TextRange(3), mid.selection)
+
+        val last = session("L0\nL1", 5) // last line: also drops the preceding newline
+        last.deleteLines()
+        assertEquals("L0", last.doc.text)
+        assertEquals(TextRange(2), last.selection)
+    }
+
+    @Test
+    fun joinLinesCollapsesIndentToSpace() {
+        val s = session("foo\n  bar", 0)
+        s.joinLines()
+        assertEquals("foo bar", s.doc.text)
+        assertEquals(TextRange(3), s.selection)
+    }
+
+    @Test
+    fun joinLinesFusesMultiLineSelection() {
+        val s = session("a\nb\nc", 0)
+        s.setSelectionRange(0, 5) // whole buffer
+        s.joinLines()
+        assertEquals("a b c", s.doc.text)
+    }
+
+    @Test
+    fun toggleLineCommentRoundTrip() {
+        val s = session("  foo", 5)
+        s.toggleComment()
+        assertEquals("  // foo", s.doc.text) // inserted at the indent column
+        assertEquals(TextRange(2), s.selection)
+        s.toggleComment()
+        assertEquals("  foo", s.doc.text) // uncomment removes the marker + one space
+    }
+
+    @Test
+    fun toggleLineCommentAlignsBlock() {
+        val s = session("a\nb", 0)
+        s.setSelectionRange(0, 3)
+        s.toggleComment()
+        assertEquals("// a\n// b", s.doc.text)
+        assertEquals(TextRange(0, 9), s.selection)
+    }
+
+    @Test
+    fun toggleBlockCommentXmlRoundTrip() {
+        val s = session("<A/>", 0, CodeLanguage.Xml) // XML has no line comment → block
+        s.toggleComment()
+        assertEquals("<!-- <A/> -->", s.doc.text)
+        s.toggleComment()
+        assertEquals("<A/>", s.doc.text)
+    }
+
+    @Test
+    fun goToDiagnosticCyclesForwardAndWraps() {
+        val s = session("line0\nline1\nline2", 0)
+        s.applyAnalysis(
+            listOf(
+                UiDiagnostic(UiSeverity.Error, 1, 0, "a", startOffset = 6, endOffset = 7),
+                UiDiagnostic(UiSeverity.Warning, 2, 0, "b", startOffset = 12, endOffset = 13),
+            ),
+        )
+        assertTrue(s.goToDiagnostic(forward = true)); assertEquals(6, s.selection.start)
+        s.goToDiagnostic(forward = true); assertEquals(12, s.selection.start)
+        s.goToDiagnostic(forward = true); assertEquals(6, s.selection.start) // wraps to first
+        s.goToDiagnostic(forward = false); assertEquals(12, s.selection.start) // back wraps to last
+    }
+
+    @Test
+    fun goToDiagnosticNoOpWhenNone() {
+        val s = session("abc", 1)
+        assertEquals(false, s.goToDiagnostic(true))
+        assertEquals(TextRange(1), s.selection)
+    }
 }

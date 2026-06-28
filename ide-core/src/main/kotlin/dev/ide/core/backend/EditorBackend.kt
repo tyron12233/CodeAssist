@@ -18,6 +18,8 @@ import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiFileSymbol
+import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiHighlightModifier
@@ -50,9 +52,27 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         try { ctx.background { ctx.services.breadcrumbAt(Paths.get(path), text, offset) } }
         catch (e: EngineCanceledException) { emptyList() } // re-runs on the next caret move
 
+    override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> =
+        try {
+            ctx.background {
+                ctx.services.fileStructure(Paths.get(path), text).map {
+                    UiFileSymbol(it.name, it.detail, it.kind.name.lowercase(), it.nameOffset, it.endOffset, it.depth)
+                }
+            }
+        } catch (e: EngineCanceledException) { emptyList() }
+
     override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
         withContext(ctx.engineDispatcher) { ctx.services.definitionAt(Paths.get(path), text, offset) }
             ?.let { (p, o) -> UiDefinition(p.toString(), o) }
+
+    override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? =
+        try {
+            ctx.background {
+                ctx.services.quickDocAt(Paths.get(path), text, offset)?.let {
+                    UiQuickDoc(it.signature, it.name, it.kind.name.lowercase(), it.container, it.doc, it.docFormat.name.lowercase())
+                }
+            }
+        } catch (e: EngineCanceledException) { null }
 
     override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
         withContext(ctx.engineDispatcher) { ctx.services.prepareRename(Paths.get(path), text, offset)?.let { UiRenameTarget(it.oldName, it.kind) } }

@@ -9,18 +9,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 
 /**
@@ -37,6 +41,12 @@ internal fun EditorSymbolBar(
     onTab: () -> Unit,
     onSymbol: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onComment: () -> Unit = {},
+    onMoveLineUp: () -> Unit = {},
+    onMoveLineDown: () -> Unit = {},
+    onDuplicateLine: () -> Unit = {},
+    showDiagnosticJump: Boolean = false,
+    onNextDiagnostic: () -> Unit = {},
 ) {
     val separator = Ca.colors.separator // captured for the draw lambda (can't read the theme inside drawBehind)
     Row(
@@ -50,6 +60,15 @@ internal fun EditorSymbolBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SymbolKey("Tab", onClick = onTab, modifier = Modifier.width(48.dp), accent = true)
+        Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
+        // Fixed line-action group: comment toggle, move line up/down, duplicate — the editor ops that are
+        // otherwise keyboard-only, surfaced for touch.
+        SymbolKey("//", onClick = onComment)
+        IconKey(CaIcons.chevronUp, "Move line up", onClick = onMoveLineUp)
+        IconKey(CaIcons.chevronDown, "Move line down", onClick = onMoveLineDown)
+        IconKey(CaIcons.copy, "Duplicate line", onClick = onDuplicateLine)
+        // Jump to the next diagnostic — shown only while the file has any (otherwise it's noise).
+        if (showDiagnosticJump) IconKey(CaIcons.warning, "Next problem", onClick = onNextDiagnostic)
         Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
         Row(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()),
@@ -83,5 +102,20 @@ private fun SymbolKey(label: String, onClick: () -> Unit, modifier: Modifier = M
             color = if (accent) Ca.colors.accent else Ca.colors.textPrimary,
             fontWeight = FontWeight.Medium,
         )
+    }
+}
+
+/** An icon variant of [SymbolKey] for the line-action group (raw tap, no `clickable`, to keep editor focus). */
+@Composable
+private fun IconKey(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .widthIn(min = 36.dp)
+            .pointerInput(label) { detectTapGestures { onClick() } }
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, label, Modifier.size(18.dp), tint = Ca.colors.textPrimary)
     }
 }

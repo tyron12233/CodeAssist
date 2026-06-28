@@ -63,6 +63,7 @@ object BuiltInSettingsPages {
                 options = listOf(
                     SettingControl.Choice.Option(IdeSettings.ACCENT_VIOLET, "Violet"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_TEAL, "Teal"),
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_ORANGE, "Orange (Legacy)"),
                 ),
             ),
         )
@@ -87,6 +88,7 @@ object BuiltInSettingsPages {
             SettingControl.Toggle("wrapIndent", "Indent wrapped lines", "Align a wrapped line's continuation rows to its indentation (when word wrap is on)", default = d.wrapIndent),
             SettingControl.Toggle("twoAxisScroll", "Two-axis scrolling", "Drag in any direction to scroll both axes at once (touch)", default = d.twoAxisScroll, group = "Gestures"),
             SettingControl.Toggle("pinchZoom", "Pinch to zoom", "Pinch with two fingers to change the code font size", default = d.pinchZoom, group = "Gestures"),
+            SettingControl.Toggle("softKeyboardSuggestions", "Keyboard suggestions", "Let the soft keyboard autocorrect, suggest, and auto-space. Off (recommended for code) treats input as raw text, so a typed '.' doesn't get an auto-inserted space.", default = d.softKeyboardSuggestions, group = "Keyboard"),
         )
     }
 

@@ -23,6 +23,16 @@ interface SourceDocProvider {
     /** The type's own doc comment, or null when unavailable. */
     fun classDoc(fqn: String): String? = null
 
+    /**
+     * The **raw** (unstripped) doc comment for the method overload, preserving markup (`@param`/`@return`,
+     * HTML, `{@code}`/`{@link}`) for rich rendering. Null when no source is attached. Distinct from [method]'s
+     * `doc`, which is cleaned plain text for the inline completion/signature panels.
+     */
+    fun methodRaw(declaringFqn: String, methodName: String, arity: Int): String? = null
+
+    /** The type's **raw** doc comment (markup preserved), or null when unavailable. */
+    fun classDocRaw(fqn: String): String? = null
+
     companion object {
         /** A provider that knows nothing (no sources attached). */
         val NONE: SourceDocProvider = object : SourceDocProvider {

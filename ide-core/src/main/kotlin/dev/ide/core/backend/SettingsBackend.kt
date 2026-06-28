@@ -174,7 +174,11 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     private fun IdeSettings.toUi(): UiSettings = UiSettings(
         themeMode = themeMode,
-        accent = if (accent == IdeSettings.ACCENT_TEAL) UiAccent.Teal else UiAccent.Violet,
+        accent = when (accent) {
+            IdeSettings.ACCENT_TEAL -> UiAccent.Teal
+            IdeSettings.ACCENT_ORANGE -> UiAccent.Orange
+            else -> UiAccent.Violet
+        },
         editorFontScale = editorFontScale,
         codeFont = codeFont,
         fontLigatures = fontLigatures,
@@ -192,6 +196,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         wrapIndent = wrapIndent,
         twoAxisScroll = twoAxisScroll,
         pinchZoom = pinchZoom,
+        softKeyboardSuggestions = softKeyboardSuggestions,
     )
 
     private fun Severity.toUiSeverity(): UiSeverity = when (this) {

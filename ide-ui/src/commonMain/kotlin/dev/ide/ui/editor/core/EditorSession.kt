@@ -728,6 +728,21 @@ class EditorSession(
         updateSelectionAndComposing(TextRange(doc.lineStart(line), doc.lineEnd(line)), null)
     }
 
+    /**
+     * Move the caret to the next ([forward]) or previous diagnostic relative to the current caret, wrapping
+     * around the buffer ends. Visits every diagnostic in offset order (errors and warnings alike). Returns
+     * false (a no-op) when the file has no diagnostics.
+     */
+    fun goToDiagnostic(forward: Boolean): Boolean {
+        if (diagnostics.isEmpty()) return false
+        val offsets = diagnostics.map { it.startOffset.coerceIn(0, doc.length) }.distinct().sorted()
+        val caret = selection.start
+        val target = if (forward) offsets.firstOrNull { it > caret } ?: offsets.first()
+        else offsets.lastOrNull { it < caret } ?: offsets.last()
+        setCaret(target)
+        return true
+    }
+
     fun selectedText(): String? =
         if (selection.collapsed) null else doc.substring(selection.min, selection.max)
 
@@ -736,6 +751,225 @@ class EditorSession(
         replaceRange(selection.min, selection.max, "", TextRange(selection.min))
         resyncIme()
         return t
+    }
+
+    // ---- line operations (keyboard + symbol-bar) ----
+
+    /** The inclusive line range the current selection touches. A selection ending exactly at a line start
+     *  doesn't include that trailing line (matching [indent]/[dedent]). */
+    private fun selectedLineRange(): IntRange {
+        val sel = selection
+        val first = doc.lineForOffset(sel.min)
+        var last = doc.lineForOffset(sel.max)
+        if (last > first && sel.max == doc.lineStart(last)) last--
+        return first..last
+    }
+
+    /**
+     * Duplicate the selection, or — when the caret is collapsed — the whole current line. The copy lands
+     * directly after the original: a collapsed caret moves to the same column on the new (lower) line; a
+     * range selection re-selects the copy, so a repeated press keeps duplicating.
+     */
+    fun duplicateSelection() {
+        val sel = selection
+        if (sel.collapsed) {
+            val line = doc.lineForOffset(sel.min)
+            val ls = doc.lineStart(line)
+            val le = doc.lineEnd(line)
+            val lineText = doc.substring(ls, le)
+            replaceRange(le, le, "\n" + lineText, TextRange(le + 1 + (sel.min - ls)))
+        } else {
+            val text = doc.substring(sel.min, sel.max)
+            replaceRange(sel.max, sel.max, text, TextRange(sel.max, sel.max + text.length))
+        }
+        resyncIme()
+    }
+
+    /**
+     * Move the line(s) the selection touches up ([dir] < 0) or down ([dir] > 0) by one, swapping with the
+     * adjacent line and keeping the same text selected. A no-op at the corresponding buffer edge.
+     */
+    fun moveLines(dir: Int) {
+        val range = selectedLineRange()
+        val first = range.first
+        val last = range.last
+        if (dir < 0) {
+            if (first == 0) return
+            val prevStart = doc.lineStart(first - 1)
+            val prevEnd = doc.lineEnd(first - 1)
+            val prevText = doc.substring(prevStart, prevEnd)
+            val blockText = doc.substring(doc.lineStart(first), doc.lineEnd(last))
+            val delta = -((prevEnd - prevStart) + 1)
+            replaceRange(
+                prevStart, doc.lineEnd(last), blockText + "\n" + prevText,
+                TextRange(selection.start + delta, selection.end + delta),
+            )
+        } else {
+            if (last >= doc.lineCount - 1) return
+            val blockStart = doc.lineStart(first)
+            val blockText = doc.substring(blockStart, doc.lineEnd(last))
+            val nextStart = doc.lineStart(last + 1)
+            val nextEnd = doc.lineEnd(last + 1)
+            val nextText = doc.substring(nextStart, nextEnd)
+            val delta = (nextEnd - nextStart) + 1
+            replaceRange(
+                blockStart, nextEnd, nextText + "\n" + blockText,
+                TextRange(selection.start + delta, selection.end + delta),
+            )
+        }
+        resyncIme()
+    }
+
+    /** Delete the line(s) the selection touches, including the line break, leaving the caret at the start of
+     *  the following line (or the new end of the buffer). */
+    fun deleteLines() {
+        val range = selectedLineRange()
+        val first = range.first
+        val last = range.last
+        val start: Int
+        val end: Int
+        if (last < doc.lineCount - 1) {
+            start = doc.lineStart(first)
+            end = doc.lineStart(last + 1)
+        } else {
+            // Deleting through the last line: also drop the preceding newline so no blank tail line is left.
+            start = if (first > 0) doc.lineEnd(first - 1) else doc.lineStart(first)
+            end = doc.length
+        }
+        replaceRange(start, end, "", TextRange(start))
+        resyncIme()
+    }
+
+    /** Join the next line up onto the caret's line (or fuse all lines a selection spans), collapsing each
+     *  line break + the next line's leading indent into a single space. */
+    fun joinLines() {
+        val range = selectedLineRange()
+        val first = range.first
+        if (first >= doc.lineCount - 1) return // nothing below to join
+        val joins = if (range.last > first) range.last - first else 1
+        beginBatch()
+        var caret = -1
+        repeat(joins) {
+            if (first >= doc.lineCount - 1) return@repeat
+            val le = doc.lineEnd(first) // the '\n' ending the joined-onto line
+            val nextEnd = doc.lineEnd(first + 1)
+            var nextNonWs = doc.lineStart(first + 1)
+            while (nextNonWs < nextEnd && (doc.charAt(nextNonWs) == ' ' || doc.charAt(nextNonWs) == '\t')) nextNonWs++
+            // No separating space when the upper line is blank / already ends in space, or the lower line is blank.
+            val upperBlank = le == doc.lineStart(first)
+            val upperEndsSpace = le > 0 && (doc.charAt(le - 1) == ' ' || doc.charAt(le - 1) == '\t')
+            val lowerBlank = nextNonWs == nextEnd
+            val sep = if (upperBlank || upperEndsSpace || lowerBlank) "" else " "
+            if (caret < 0) caret = le
+            replaceRange(le, nextNonWs, sep, TextRange(le + sep.length))
+        }
+        updateSelectionAndComposing(TextRange(if (caret < 0) selection.min else caret), null)
+        endBatch()
+        resyncIme()
+    }
+
+    // ---- comment toggling ----
+
+    private class CommentSyntax(val line: String?, val blockOpen: String?, val blockClose: String?)
+
+    private fun commentSyntax(): CommentSyntax = when (language) {
+        CodeLanguage.Java, CodeLanguage.Kotlin -> CommentSyntax("//", "/*", "*/")
+        CodeLanguage.Xml -> CommentSyntax(null, "<!--", "-->")
+        CodeLanguage.Plain -> CommentSyntax(null, null, null)
+    }
+
+    /** Toggle comments on the touched line(s): line comments by default, block comments when [preferBlock]
+     *  (or when the language has no line comment, e.g. XML). Already-commented lines are uncommented. */
+    fun toggleComment(preferBlock: Boolean = false) {
+        val c = commentSyntax()
+        when {
+            !preferBlock && c.line != null -> toggleLineComment(c.line)
+            c.blockOpen != null && c.blockClose != null -> toggleBlockComment(c.blockOpen, c.blockClose)
+            c.line != null -> toggleLineComment(c.line)
+        }
+    }
+
+    private fun firstNonWsOnLine(line: Int): Int {
+        var i = doc.lineStart(line)
+        val end = doc.lineEnd(line)
+        while (i < end && (doc.charAt(i) == ' ' || doc.charAt(i) == '\t')) i++
+        return i
+    }
+
+    private fun lineStartsWith(line: Int, token: String): Boolean {
+        val at = firstNonWsOnLine(line)
+        if (at + token.length > doc.lineEnd(line)) return false
+        for (k in token.indices) if (doc.charAt(at + k) != token[k]) return false
+        return true
+    }
+
+    private fun toggleLineComment(token: String) {
+        val range = selectedLineRange()
+        val first = range.first
+        val last = range.last
+        val wasCollapsed = selection.collapsed
+        // Operate on non-blank lines; if the whole range is blank, comment the first line anyway.
+        val nonBlank = (first..last).filter { firstNonWsOnLine(it) < doc.lineEnd(it) }
+        val lines = if (nonBlank.isEmpty()) listOf(first) else nonBlank
+        val allCommented = lines.all { lineStartsWith(it, token) }
+        beginBatch()
+        if (allCommented) {
+            for (l in lines.sortedDescending()) {
+                val at = firstNonWsOnLine(l)
+                var removeEnd = at + token.length
+                if (removeEnd < doc.lineEnd(l) && doc.charAt(removeEnd) == ' ') removeEnd++
+                replaceRange(at, removeEnd, "", TextRange(at))
+            }
+        } else {
+            // Insert at the common minimum indent column so the markers line up (IntelliJ-style).
+            val col = lines.minOf { firstNonWsOnLine(it) - doc.lineStart(it) }
+            for (l in lines.sortedDescending()) {
+                val at = doc.lineStart(l) + col
+                replaceRange(at, at, "$token ", TextRange(at))
+            }
+        }
+        endBatch()
+        if (wasCollapsed) updateSelectionAndComposing(TextRange(firstNonWsOnLine(first)), null)
+        else updateSelectionAndComposing(TextRange(doc.lineStart(first), doc.lineEnd(last)), null)
+        resyncIme()
+    }
+
+    private fun toggleBlockComment(open: String, close: String) {
+        val sel = selection
+        val start: Int
+        val end: Int
+        if (sel.collapsed) {
+            val line = doc.lineForOffset(sel.min)
+            start = firstNonWsOnLine(line)
+            end = doc.lineEnd(line)
+        } else {
+            start = sel.min
+            end = sel.max
+        }
+        val text = doc.substring(start, end)
+        val inner = text.trim()
+        val wrapped = inner.startsWith(open) && inner.endsWith(close) && inner.length >= open.length + close.length
+        beginBatch()
+        if (wrapped) {
+            val oRel = text.indexOf(open)
+            val cRel = text.lastIndexOf(close)
+            // Remove the closer first (higher offset), each with one padding space if present.
+            var cs = start + cRel
+            val ce = cs + close.length
+            if (cs > start && doc.charAt(cs - 1) == ' ') cs--
+            replaceRange(cs, ce, "", TextRange(cs))
+            val os = start + oRel
+            var oe = os + open.length
+            if (oe < doc.length && doc.charAt(oe) == ' ') oe++
+            replaceRange(os, oe, "", TextRange(os))
+            updateSelectionAndComposing(TextRange(os), null)
+        } else {
+            replaceRange(end, end, " $close", TextRange(end))
+            replaceRange(start, start, "$open ", TextRange(start))
+            updateSelectionAndComposing(TextRange(start, end + open.length + close.length + 2), null)
+        }
+        endBatch()
+        resyncIme()
     }
 
     /**

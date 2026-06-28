@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
  * type, spacing, radius, motion) rather than Material defaults — the look is fully bespoke.
  */
 
-enum class CaAccent { Violet, Teal }
+enum class CaAccent { Violet, Teal, Orange }
 
 @Immutable
 data class SyntaxColors(
@@ -249,7 +249,10 @@ private fun lightColors(accent: Color, accentStrong: Color) = CodeAssistColors(
 fun caColors(dark: Boolean, accent: CaAccent): CodeAssistColors = when {
     dark && accent == CaAccent.Violet -> darkColors(Color(0xFFB487F7), Color(0xFFA06BFF))
     dark && accent == CaAccent.Teal -> darkColors(Color(0xFF5CCFE6), Color(0xFF3FBDD9))
+    // Legacy CodeAssist orange (the Darcula `#CC7832` from the classic `<>` logo).
+    dark && accent == CaAccent.Orange -> darkColors(Color(0xFFD98A3D), Color(0xFFCC7832))
     !dark && accent == CaAccent.Violet -> lightColors(Color(0xFF8B5CF6), Color(0xFF7C3AED))
+    !dark && accent == CaAccent.Orange -> lightColors(Color(0xFFC16A1C), Color(0xFFA85614))
     else -> lightColors(Color(0xFF1C9BBD), Color(0xFF137E9C))
 }
 

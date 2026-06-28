@@ -9,11 +9,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +37,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -44,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupPositionProvider
 import dev.ide.ui.backend.UiCompletionItem
+import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
@@ -113,6 +120,110 @@ internal fun RenamePopup(
     }
 }
 
+/**
+ * A centered prompt to jump to a line — accepts `line` or `line:column` (both 1-based). Enter navigates,
+ * Esc cancels. Auto-focused; only digits and a single `:` are accepted so it can't be mistyped into prose.
+ */
+@Composable
+internal fun GoToLinePopup(
+    lineCount: Int,
+    onGo: (line: Int, column: Int) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focus = remember { FocusRequester() }
+    var field by remember { mutableStateOf(TextFieldValue("")) }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    fun submit() {
+        val parts = field.text.trim().split(':', limit = 2)
+        val line = parts.getOrNull(0)?.trim()?.toIntOrNull()
+        val col = parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 1
+        if (line != null) onGo(line, col) else onCancel()
+    }
+    Column(
+        modifier.padding(top = 48.dp).width(320.dp)
+            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .padding(16.dp),
+    ) {
+        Text("Go to line", color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.size(8.dp))
+        Box(
+            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            BasicTextField(
+                value = field,
+                onValueChange = { v -> field = v.copy(text = v.text.filter { it.isDigit() || it == ':' }) },
+                singleLine = true,
+                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary, fontFamily = Ca.type.codeFamily),
+                cursorBrush = SolidColor(Ca.colors.accent),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (ev.key) {
+                        Key.Enter -> { submit(); true }
+                        Key.Escape -> { onCancel(); true }
+                        else -> false
+                    }
+                },
+            )
+        }
+        Spacer(Modifier.size(6.dp))
+        Text("Line 1–$lineCount  (line or line:column)", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+    }
+}
+
+/**
+ * Quick documentation popup: the symbol's signature (monospace) + container, then its rendered doc comment
+ * (rich KDoc/Javadoc via [parseQuickDoc]). A floating card over the editor; the body scrolls when long.
+ * Dismissed by the caller (Esc / tap-out). [doc] is null-checked by the caller, so it's always present here.
+ */
+@Composable
+internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
+    val codeStyle = SpanStyle(fontFamily = Ca.type.codeFamily, color = Ca.colors.accent)
+    val content = remember(doc, codeStyle) { doc.doc?.takeIf { it.isNotBlank() }?.let { parseQuickDoc(it, codeStyle) } }
+    Column(
+        modifier.padding(top = 56.dp).widthIn(max = 440.dp).heightIn(max = 360.dp)
+            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .padding(14.dp),
+    ) {
+        Text(
+            doc.signature,
+            style = Ca.type.body.copy(fontFamily = Ca.type.codeFamily),
+            color = Ca.colors.textPrimary,
+            fontWeight = FontWeight.Medium,
+        )
+        doc.container?.takeIf { it.isNotEmpty() }?.let {
+            Spacer(Modifier.size(2.dp))
+            Text(it, style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.size(10.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.hairline))
+        Spacer(Modifier.size(10.dp))
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            if (content == null) {
+                Text("No documentation", style = Ca.type.body, color = Ca.colors.textTertiary)
+            } else {
+                if (content.description.isNotEmpty()) {
+                    Text(content.description, style = Ca.type.body, color = Ca.colors.textSecondary)
+                }
+                for (sec in content.sections) {
+                    Spacer(Modifier.size(10.dp))
+                    if (sec.title.isNotEmpty()) {
+                        Text(sec.title, style = Ca.type.caption, color = Ca.colors.textSecondary, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.size(3.dp))
+                    }
+                    for (item in sec.items) {
+                        Text(item, style = Ca.type.caption, color = Ca.colors.textSecondary, modifier = Modifier.padding(bottom = 2.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** The inline diagnostic chip: a pill at the right of a diagnostic line — severity-tinted fill, icon,
  *  message. Colour/icon follow [severity]; an [unused] warning is muted rather than alarming. */
 @Composable
@@ -157,6 +268,7 @@ internal fun SelectionToolbar(
     onCut: () -> Unit,
     onPaste: () -> Unit,
     onSelectAll: () -> Unit,
+    onDocs: (() -> Unit)? = null,
 ) {
     Row(
         Modifier
@@ -171,6 +283,15 @@ internal fun SelectionToolbar(
         }
         ToolbarAction("Paste", onPaste)
         ToolbarAction("Select all", onSelectAll)
+        // Quick documentation for the symbol under the caret (the touch path for Ctrl-Q).
+        if (onDocs != null) {
+            Box(
+                Modifier.clickable(onClick = onDocs).padding(horizontal = 9.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CaIcons.info, "Quick documentation", Modifier.size(16.dp), tint = Ca.colors.textSecondary)
+            }
+        }
         // Quick-fixes / intentions for the caret position, when any exist.
         if (hasActions) {
             Box(

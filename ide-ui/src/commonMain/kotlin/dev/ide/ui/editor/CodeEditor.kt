@@ -84,6 +84,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import dev.ide.ui.editor.core.EditorCaretGeometry
 import dev.ide.ui.editor.core.EditorImeHandle
+import dev.ide.ui.editor.core.EditorImeOptions
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -116,6 +117,7 @@ import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.WrapModel
 import dev.ide.ui.editor.core.smartEnter
+import dev.ide.ui.editor.core.wordRangeAt
 import dev.ide.ui.editor.core.editorTextInput
 import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.icons.CaIcons
@@ -170,6 +172,12 @@ fun CodeEditor(
     twoAxisScroll: Boolean = true,
     /** Whether a two-finger pinch zooms the code font (Settings → Editor); Ctrl-+/-/0 always works. */
     pinchZoom: Boolean = true,
+    /**
+     * Allow the soft keyboard's autocorrect / suggestions / auto-space (Settings → Editor → Keyboard). Off
+     * (default) marks the IME field as raw code input, so a typed `.` doesn't get an auto-inserted space and
+     * identifiers aren't "corrected". Android-only effect; desktop typing never goes through the IME.
+     */
+    softKeyboardSuggestions: Boolean = false,
     /** Soft-wrap long lines at the viewport edge (Settings → Editor). Off = one row per line + h-scroll. */
     wordWrap: Boolean = false,
     /** Indent wrapped continuation rows to the line's own indent (Settings → Editor); only when [wordWrap]. */
@@ -193,7 +201,7 @@ fun CodeEditor(
         CodeEditorContent(
             path, session, backend, modifier, onSave, onNavigate, onRenamed,
             findEpoch, fontScale, onFontScaleChange, onPreview, completionAutoPopup, completionDelayMs,
-            twoAxisScroll, pinchZoom, wordWrap, wrapIndent, fontLigatures, obscured,
+            twoAxisScroll, pinchZoom, softKeyboardSuggestions, wordWrap, wrapIndent, fontLigatures, obscured,
         )
     }
 }
@@ -215,6 +223,7 @@ private fun CodeEditorContent(
     completionDelayMs: Int = 110,
     twoAxisScroll: Boolean = true,
     pinchZoom: Boolean = true,
+    softKeyboardSuggestions: Boolean = false,
     wordWrap: Boolean = false,
     wrapIndent: Boolean = true,
     fontLigatures: Boolean = true,
@@ -566,11 +575,25 @@ private fun CodeEditorContent(
         }
         onDispose { editorIme.caretGeometryProvider = null }
     }
+    // Sticky scroll headers: the file's declarations (fetched debounced below); the renderer pins the ones
+    // enclosing the top visible line, and [stickyHeaderHit] maps a tap in that pinned band back to a decl.
+    var editorStructure by remember(path) { mutableStateOf(emptyList<dev.ide.ui.backend.UiFileSymbol>()) }
+
     /** The document line shown at viewport [y] (the fold-start line when [y] is on a collapsed row). */
     fun lineAtY(y: Float): Int {
         val row = floor((y + vOffset.floatValue - metrics.padTop) / metrics.lineHeight)
             .toInt().coerceIn(0, (vlayout.totalRows - 1).coerceAtLeast(0))
         return vlayout.docLineForRow(row)
+    }
+    /** If [pos] lands on a pinned sticky-header row, the declaration it stands for (to jump to); else null.
+     *  Mirrors the renderer's [stickyHeaderItems] so the hit-test and the drawn rows always agree. */
+    fun stickyHeaderHit(pos: Offset): dev.ide.ui.backend.UiFileSymbol? {
+        if (editorStructure.isEmpty()) return null
+        val firstVisibleLine = lineAtY(0f)
+        if (firstVisibleLine <= 0) return null
+        val sticky = stickyHeaderItems(editorStructure, firstVisibleLine, editorSession.doc, STICKY_MAX)
+        if (sticky.isEmpty()) return null
+        return sticky.getOrNull(floor(pos.y / metrics.lineHeight).toInt())
     }
     /** Handle a tap that targets folding: the gutter fold strip toggles the line's fold; tapping a collapsed
      *  line's placeholder (the dimmed `...` past the visible prefix) expands it. Returns true when handled. */
@@ -705,6 +728,17 @@ private fun CodeEditorContent(
     // State + behaviour live in [FindReplaceController]; the surface only opens it, paints its matches, and
     // renders the [FindReplaceBar] against it.
     val find = rememberFindReplaceController(path, editorSession)
+
+    // ---- go to line (Ctrl-G): a small centered prompt that jumps the caret to a line[:column] ----
+    var gotoLineOpen by remember(path) { mutableStateOf(false) }
+
+    // ---- quick documentation (Ctrl-Q / toolbar): a floating card with the symbol's signature + doc comment ----
+    var quickDoc by remember(path) { mutableStateOf<dev.ide.ui.backend.UiQuickDoc?>(null) }
+    fun showQuickDoc() {
+        val caret = editorSession.selection.start
+        val text = editorSession.doc.text
+        scope.launch { quickDoc = runCatching { backend.editor.quickDocAt(path, text, caret) }.getOrNull() }
+    }
 
     // ---- rename refactoring (F2 / Shift-F6): prompt for a new name, then a project-wide rename ----
     var rename by remember(path) { mutableStateOf<RenameUiState?>(null) }
@@ -976,6 +1010,12 @@ private fun CodeEditorContent(
         }
     }
 
+    // Fetch the file's declarations (debounced) for sticky headers — kept off the keystroke path.
+    LaunchedEffect(path, editorSession.textRevision) {
+        delay(300.milliseconds)
+        editorStructure = runCatching { backend.editor.fileStructure(path, editorSession.doc.text) }.getOrDefault(emptyList())
+    }
+
     LaunchedEffect(path) { runCatching { focus.requestFocus() } }
 
     // ---- per-line diagnostic segments (recomputed per edit — O(diagnostics), they are few) ----
@@ -986,9 +1026,32 @@ private fun CodeEditorContent(
         matchingBracket(doc.chars, editorSession.selection.start)
     }
 
+    // ---- highlight occurrences of the identifier under the caret (textual, whole-word) ----
+    // The word is cheap to recompute per caret move; the (whole-document) match scan is memoized on the word
+    // so it only runs when the identifier changes. Suppressed while the find bar is open (find owns matches).
+    val occurrenceWord = run {
+        val sel = editorSession.selection
+        if (find.open) null else {
+            val r = wordRangeAt(doc.chars, sel.start)
+            if (r.isEmpty()) null else {
+                val w = doc.substring(r.first, r.last + 1)
+                // Identifiers only (a letter/_/$ start — skip number literals and lone symbols); and when there
+                // IS a selection it must be exactly the word, so a broad selection doesn't trigger highlighting.
+                val isIdent = w.isNotEmpty() && (w[0].isLetter() || w[0] == '_' || w[0] == '$')
+                if (isIdent && (sel.collapsed || (sel.min == r.first && sel.max == r.last + 1))) w else null
+            }
+        }
+    }
+    val occurrences = remember(doc, occurrenceWord) {
+        val w = occurrenceWord ?: return@remember emptyList<Match>()
+        findMatches(doc.text, w, FindOptions(caseSensitive = true, wholeWord = true))
+            .takeIf { it.size >= 2 } ?: emptyList() // only meaningful when it appears more than once
+    }
+
     // ---- keyboard handling ----
     fun handleKey(ev: KeyEvent): Boolean {
         if (ev.type != KeyEventType.KeyDown) return false
+        quickDoc = null // any editing/navigation key dismisses the quick-doc popup
         val word = ev.isCtrlPressed || ev.isAltPressed
         val select = ev.isShiftPressed
         val shortcut = ev.isCtrlPressed || ev.isMetaPressed
@@ -1084,7 +1147,7 @@ private fun CodeEditorContent(
                 .fillMaxSize()
                 .onSizeChanged { viewport = it }
                 .onGloballyPositioned { contentInWindow.value = it.positionInWindow() }
-                .editorTextInput(editorSession, editorIme)
+                .editorTextInput(editorSession, editorIme, EditorImeOptions(softKeyboardSuggestions))
                 .focusRequester(focus)
                 .onFocusChanged { isFocused = it.isFocused }
                 .focusable()
@@ -1099,6 +1162,15 @@ private fun CodeEditorContent(
                         find.openBar(replace = ev.key == Key.R, seed = seed)
                         completion.dismiss()
                         return@onPreviewKeyEvent true
+                    }
+                    // Go to line (⌘/Ctrl-G): open the line-jump prompt.
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.G) {
+                        gotoLineOpen = true; completion.dismiss(); return@onPreviewKeyEvent true
+                    }
+                    // Quick documentation (⌘/Ctrl-Q, IntelliJ); Esc dismisses an open doc popup first.
+                    if (quickDoc != null && ev.key == Key.Escape) { quickDoc = null; return@onPreviewKeyEvent true }
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Q) {
+                        showQuickDoc(); completion.dismiss(); return@onPreviewKeyEvent true
                     }
                     // Go to definition (⌘/Ctrl-B): resolve the resource/symbol at the caret and jump to it.
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.B) {
@@ -1121,6 +1193,31 @@ private fun CodeEditorContent(
                     // Rename (F2, or Shift-F6 a la IntelliJ): prompt for a new name → project-wide rename.
                     if (ev.key == Key.F2 || (ev.isShiftPressed && ev.key == Key.F6)) {
                         startRename(); return@onPreviewKeyEvent true
+                    }
+                    // Next / previous diagnostic (F8 / Shift-F8, a la VS Code), wrapping around the buffer.
+                    if (ev.key == Key.F8) {
+                        editorSession.goToDiagnostic(forward = !ev.isShiftPressed); return@onPreviewKeyEvent true
+                    }
+                    // Line ops + comment toggle (IntelliJ-style). Comment: ⌘/Ctrl-/ (line), +Shift (block).
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && (ev.key == Key.Slash)) {
+                        editorSession.toggleComment(preferBlock = ev.isShiftPressed)
+                        completion.dismiss(); return@onPreviewKeyEvent true
+                    }
+                    // Duplicate line/selection: ⌘/Ctrl-D.
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.D && !ev.isShiftPressed && !ev.isAltPressed) {
+                        editorSession.duplicateSelection(); return@onPreviewKeyEvent true
+                    }
+                    // Delete line(s): ⌘/Ctrl-Shift-K. Join lines: ⌘/Ctrl-Shift-J.
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isShiftPressed && ev.key == Key.K) {
+                        editorSession.deleteLines(); completion.dismiss(); return@onPreviewKeyEvent true
+                    }
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isShiftPressed && ev.key == Key.J) {
+                        editorSession.joinLines(); return@onPreviewKeyEvent true
+                    }
+                    // Move line(s) up/down: Alt-Shift-Up/Down (intercepted before the default vertical move).
+                    if (ev.isAltPressed && ev.isShiftPressed && (ev.key == Key.DirectionUp || ev.key == Key.DirectionDown)) {
+                        editorSession.moveLines(if (ev.key == Key.DirectionUp) -1 else 1)
+                        return@onPreviewKeyEvent true
                     }
                     // Code actions: Alt+Enter (or Ctrl/Cmd-.) opens the lightbulb menu; when it's open the
                     // arrows + Enter/Tab drive it and Esc closes it (checked before completion's own keys).
@@ -1231,12 +1328,18 @@ private fun CodeEditorContent(
                             val released = tryAwaitRelease()
                             if (released && !longPressed) {
                                 focus.requestFocus()
+                                quickDoc = null // a tap in the editor dismisses an open quick-doc popup
                                 // Third quick tap near the double-tap → select the whole line.
                                 val triple = tripleArmed && (pos - tripleArmPos).getDistance() < 60f
                                 // A tap on a gutter error/warning glyph opens that line's diagnostic sheet
                                 // (full message + fixes) instead of moving the caret.
                                 val gutterDiag = if (pos.x < gutterWidthPx) acts.diagnosticOnLine(lineAtY(pos.y)) else null
+                                val stickyHit = stickyHeaderHit(pos)
                                 when {
+                                    stickyHit != null -> { // tapped a pinned sticky header → jump to that declaration
+                                        editorSession.setCaret(stickyHit.nameOffset.coerceIn(0, editorSession.doc.length))
+                                        if (lastInputWasTouch) editorIme.show()
+                                    }
                                     foldActionAt(pos) -> {} // toggled/expanded a fold (gutter chevron or placeholder)
                                     triple -> {
                                         tripleArmed = false; tripleArmJob?.cancel()
@@ -1380,6 +1483,8 @@ private fun CodeEditorContent(
                         bracketPair = bracketPair,
                         findMatches = if (find.open) find.matches else emptyList(),
                         currentMatch = find.currentIndex,
+                        occurrences = occurrences,
+                        structure = editorStructure,
                         colors = EditorDrawColors(
                             background = colors.editorBg,
                             currentLine = colors.currentLine,
@@ -1396,6 +1501,7 @@ private fun CodeEditorContent(
                             indentGuide = colors.hairline,
                             findMatch = colors.warning.copy(alpha = 0.28f),
                             findCurrent = colors.accent.copy(alpha = 0.5f),
+                            occurrence = colors.textSecondary.copy(alpha = 0.18f),
                         ),
                         caretVisible = isFocused && (blinkOn || !editorSession.selection.collapsed),
                         caretContent = caretAnim.value, // animated, content-space; read here → redraw per frame
@@ -1486,6 +1592,7 @@ private fun CodeEditorContent(
                         handlesVisible = false
                     },
                     onSelectAll = { editorSession.selectAll() },
+                    onDocs = { handlesVisible = false; showQuickDoc() },
                 )
             }
         }
@@ -1642,6 +1749,26 @@ private fun CodeEditorContent(
                 }
             }
         }
+
+        // go-to-line prompt — a small centered card; jumps the caret (the into-view effect scrolls to it)
+        if (gotoLineOpen) {
+            GoToLinePopup(
+                lineCount = editorSession.doc.lineCount,
+                onGo = { line, col ->
+                    val d = editorSession.doc
+                    val l = (line - 1).coerceIn(0, d.lineCount - 1)
+                    val off = (d.lineStart(l) + (col - 1).coerceAtLeast(0)).coerceAtMost(d.lineEnd(l))
+                    editorSession.setCaret(off)
+                    gotoLineOpen = false
+                    runCatching { focus.requestFocus() }
+                },
+                onCancel = { gotoLineOpen = false; runCatching { focus.requestFocus() } },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
+
+        // quick-documentation popup — a floating card; dismissed by Esc, a tap, or a navigation/edit key.
+        quickDoc?.let { QuickDocPopup(it, Modifier.align(Alignment.TopCenter)) }
 
         // rename prompt — a small centered card over the editor
         rename?.let { r ->

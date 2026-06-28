@@ -17,7 +17,7 @@ data class IdeSettings(
     // ---- appearance ----
     /** [THEME_LIGHT], [THEME_DARK], or [THEME_SYSTEM] (follow the OS). */
     val themeMode: String = THEME_DARK,
-    /** [ACCENT_VIOLET] or [ACCENT_TEAL] (the two accent swaps the theme ships). */
+    /** [ACCENT_VIOLET], [ACCENT_TEAL], or [ACCENT_ORANGE] (the accent swaps the theme ships). */
     val accent: String = ACCENT_VIOLET,
 
     // ---- editor ----
@@ -39,6 +39,10 @@ data class IdeSettings(
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
     val pinchZoom: Boolean = true,
+    /** Allow the soft keyboard's autocorrect / suggestions / auto-space in the editor. Off (default) treats
+     *  the field as raw code input, so a typed `.` doesn't get an auto-inserted space and identifiers aren't
+     *  "corrected". On = a normal prose keyboard (suggestion strip, glide typing). */
+    val softKeyboardSuggestions: Boolean = false,
 
     // ---- completion ----
     /** Pop the completion list up automatically while typing; off = only on explicit trigger (Ctrl-Space). */
@@ -64,6 +68,7 @@ data class IdeSettings(
         const val THEME_SYSTEM = "system"
         const val ACCENT_VIOLET = "violet"
         const val ACCENT_TEAL = "teal"
+        const val ACCENT_ORANGE = "orange"
         const val CODE_FONT_JETBRAINS = "jetbrains"
         const val CODE_FONT_MONOSPACE = "monospace"
 

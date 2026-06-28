@@ -226,7 +226,7 @@ internal object CandidateCollector {
             deprecated = m.isDeprecated,
             caret = caret,
             discouraged = discouraged,
-            documentation = info?.javadoc,
+            documentation = info?.javadocRaw?.let { dev.ide.lang.jdt.JavadocText.clean(it) }?.takeIf { it.isNotEmpty() },
         )
     }
 

@@ -24,7 +24,27 @@ import androidx.compose.ui.input.key.KeyEvent
  * hidden; the caret is placed and hardware keys still work (those flow through the focusable's key handler,
  * not the IME session). Losing focus drops the request, so the next passive refocus won't reopen it.
  */
-expect fun Modifier.editorTextInput(session: EditorSession, ime: EditorImeHandle): Modifier
+expect fun Modifier.editorTextInput(
+    session: EditorSession,
+    ime: EditorImeHandle,
+    options: EditorImeOptions = EditorImeOptions(),
+): Modifier
+
+/**
+ * Tunables for the platform soft-keyboard connection. Only the Android IME bridge consults these (desktop
+ * typing arrives as hardware key events, never through the IME), but they live in common code so the editor
+ * passes one config object regardless of platform.
+ */
+data class EditorImeOptions(
+    /**
+     * Allow the soft keyboard's autocorrect, predictive suggestions, glide typing, and auto-space-after-
+     * punctuation. **Off (the default)** marks the input field as raw code: a typed `.` doesn't get an
+     * auto-inserted space, identifiers aren't "corrected", and the suggestion strip is suppressed. On = a
+     * normal prose keyboard. Regardless of this flag the bridge never lets the keyboard learn the buffer's
+     * text (no personalized learning) and never auto-capitalizes.
+     */
+    val softKeyboardSuggestions: Boolean = false,
+)
 
 /**
  * A small imperative handle the editor uses to ask the platform IME to show/hide. Showing the keyboard is

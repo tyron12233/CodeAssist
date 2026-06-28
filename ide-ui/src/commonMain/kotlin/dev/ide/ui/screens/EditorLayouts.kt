@@ -200,6 +200,12 @@ internal fun CompactLayout(
                 EditorSymbolBar(
                     onTab = { state.active?.session?.indent() },
                     onSymbol = { sym -> state.active?.session?.commitText(sym) },
+                    onComment = { state.active?.session?.toggleComment() },
+                    onMoveLineUp = { state.active?.session?.moveLines(-1) },
+                    onMoveLineDown = { state.active?.session?.moveLines(1) },
+                    onDuplicateLine = { state.active?.session?.duplicateSelection() },
+                    showDiagnosticJump = state.active?.session?.diagnostics?.isNotEmpty() == true,
+                    onNextDiagnostic = { state.active?.session?.goToDiagnostic(forward = true) },
                 )
             }
             if (!keyboardOpen) {

@@ -38,11 +38,21 @@ import org.eclipse.jdt.core.dom.AST
 import org.eclipse.jdt.core.dom.ASTNode
 import org.eclipse.jdt.core.dom.ASTParser
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration
+import org.eclipse.jdt.core.dom.AnnotationTypeDeclaration
+import org.eclipse.jdt.core.dom.BodyDeclaration
 import org.eclipse.jdt.core.dom.CompilationUnit
+import org.eclipse.jdt.core.dom.EnumConstantDeclaration
+import org.eclipse.jdt.core.dom.EnumDeclaration
 import org.eclipse.jdt.core.dom.Expression
+import org.eclipse.jdt.core.dom.FieldDeclaration
+import org.eclipse.jdt.core.dom.IMethodBinding
 import org.eclipse.jdt.core.dom.ITypeBinding
+import org.eclipse.jdt.core.dom.IVariableBinding
 import org.eclipse.jdt.core.dom.MethodDeclaration
 import org.eclipse.jdt.core.dom.Name
+import org.eclipse.jdt.core.dom.SingleVariableDeclaration
+import org.eclipse.jdt.core.dom.TypeDeclaration
+import org.eclipse.jdt.core.dom.VariableDeclarationFragment
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants
 import java.io.File
 import java.nio.file.Files
@@ -377,6 +387,125 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
             node = node.parent
         }
         return out.toList()
+    }
+
+    /** The file's type/method/field declarations in document order, each with nesting depth — for the
+     *  structure view and sticky scroll headers. Syntactic parse only (no bindings needed). */
+    override fun fileStructure(file: VirtualFile, text: CharSequence): List<dev.ide.lang.resolve.StructureItem> {
+        val pf = parseSyntactic(file, text) as? JdtParsedFile ?: return emptyList()
+        val out = ArrayList<dev.ide.lang.resolve.StructureItem>()
+        @Suppress("UNCHECKED_CAST")
+        for (t in pf.cu.types() as List<AbstractTypeDeclaration>) collectStructure(t, 0, out)
+        return out
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun collectStructure(type: AbstractTypeDeclaration, depth: Int, out: MutableList<dev.ide.lang.resolve.StructureItem>) {
+        val name = type.name?.identifier ?: return
+        val kind = when {
+            type is EnumDeclaration -> dev.ide.lang.resolve.SymbolKind.ENUM
+            type is AnnotationTypeDeclaration -> dev.ide.lang.resolve.SymbolKind.ANNOTATION_TYPE
+            type is TypeDeclaration && type.isInterface -> dev.ide.lang.resolve.SymbolKind.INTERFACE
+            else -> dev.ide.lang.resolve.SymbolKind.CLASS
+        }
+        out.add(item(name, null, kind, type.name.startPosition, type, depth))
+        if (type is EnumDeclaration) {
+            for (c in type.enumConstants() as List<EnumConstantDeclaration>) {
+                out.add(item(c.name.identifier, null, dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT, c.name.startPosition, c, depth + 1))
+            }
+        }
+        for (decl in type.bodyDeclarations() as List<BodyDeclaration>) {
+            when (decl) {
+                is AbstractTypeDeclaration -> collectStructure(decl, depth + 1, out)
+                is MethodDeclaration -> {
+                    val nm = decl.name?.identifier
+                    if (nm != null) {
+                        val params = (decl.parameters() as List<SingleVariableDeclaration>).joinToString(", ") { it.type.toString() }
+                        val k = if (decl.isConstructor) dev.ide.lang.resolve.SymbolKind.CONSTRUCTOR else dev.ide.lang.resolve.SymbolKind.METHOD
+                        out.add(item(nm, "($params)", k, decl.name.startPosition, decl, depth + 1))
+                    }
+                }
+                is FieldDeclaration -> {
+                    val typeStr = decl.type.toString()
+                    for (frag in decl.fragments() as List<VariableDeclarationFragment>) {
+                        out.add(item(frag.name.identifier, typeStr, dev.ide.lang.resolve.SymbolKind.FIELD, frag.name.startPosition, decl, depth + 1))
+                    }
+                }
+                else -> {}
+            }
+        }
+    }
+
+    private fun item(name: String, detail: String?, kind: dev.ide.lang.resolve.SymbolKind, nameOffset: Int, node: ASTNode, depth: Int) =
+        dev.ide.lang.resolve.StructureItem(name, detail, kind, nameOffset, node.startPosition + node.length, depth)
+
+    /** Quick documentation for the symbol under [offset]: resolve the name's binding, build a signature, and
+     *  fetch its RAW javadoc (same-file from the AST, else from attached sources) for rich rendering. */
+    override fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): dev.ide.lang.resolve.QuickDocInfo? {
+        val pf = runCatching { parse(file, text) }.getOrNull() ?: return null
+        val cu = pf.cu
+        val node = (pf.nodeAt(offset) as? JdtDomNode)?.node ?: return null
+        var n: ASTNode? = node
+        while (n != null && n !is Name) n = n.parent
+        val binding = (n as? Name)?.resolveBinding() ?: return null
+        val fmt = dev.ide.lang.resolve.DocFormat.JAVADOC
+        return when (binding) {
+            is IMethodBinding -> dev.ide.lang.resolve.QuickDocInfo(
+                methodSignature(binding), binding.name, dev.ide.lang.jdt.resolve.symbolKindOf(binding),
+                binding.declaringClass?.let { it.qualifiedName.ifEmpty { it.name } }, methodDoc(cu, binding), fmt,
+            )
+            is ITypeBinding -> dev.ide.lang.resolve.QuickDocInfo(
+                "${typeKeyword(binding)} ${binding.qualifiedName.ifEmpty { binding.name }}", binding.name,
+                dev.ide.lang.jdt.resolve.symbolKindOf(binding), binding.`package`?.name, typeDoc(cu, binding), fmt,
+            )
+            is IVariableBinding -> {
+                val tn = binding.type?.name.orEmpty()
+                dev.ide.lang.resolve.QuickDocInfo(
+                    (if (tn.isNotEmpty()) "$tn " else "") + binding.name, binding.name,
+                    dev.ide.lang.jdt.resolve.symbolKindOf(binding),
+                    binding.declaringClass?.let { it.qualifiedName.ifEmpty { it.name } }, fieldDoc(cu, binding), fmt,
+                )
+            }
+            else -> null
+        }
+    }
+
+    private fun methodSignature(m: IMethodBinding): String {
+        val sb = StringBuilder()
+        if (m.isConstructor) sb.append(m.declaringClass?.name ?: m.name)
+        else { m.returnType?.let { sb.append(it.name).append(' ') }; sb.append(m.name) }
+        sb.append('(')
+        val params = m.parameterTypes
+        for (i in params.indices) {
+            if (i > 0) sb.append(", ")
+            val vt = m.isVarargs && i == params.size - 1 && params[i].isArray
+            sb.append(if (vt) params[i].componentType.name + "..." else params[i].name)
+        }
+        return sb.append(')').toString()
+    }
+
+    private fun typeKeyword(t: ITypeBinding): String = when {
+        t.isAnnotation -> "@interface"
+        t.isInterface -> "interface"
+        t.isEnum -> "enum"
+        else -> "class"
+    }
+
+    private fun methodDoc(cu: CompilationUnit, m: IMethodBinding): String? {
+        (cu.findDeclaringNode(m) as? MethodDeclaration)?.javadoc?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+        val fqn = m.declaringClass?.let { it.binaryName ?: it.qualifiedName } ?: return null
+        val name = if (m.isConstructor) fqn.substringAfterLast('.').substringAfterLast('$') else m.name
+        return sourceMethodResolver.methodRaw(fqn, name, m.parameterTypes.size)
+    }
+
+    private fun typeDoc(cu: CompilationUnit, t: ITypeBinding): String? {
+        (cu.findDeclaringNode(t) as? AbstractTypeDeclaration)?.javadoc?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+        return sourceMethodResolver.classDocRaw(t.qualifiedName.ifEmpty { return null })
+    }
+
+    private fun fieldDoc(cu: CompilationUnit, v: IVariableBinding): String? {
+        val decl = generateSequence(cu.findDeclaringNode(v)) { it.parent }.firstOrNull { it is FieldDeclaration } as? FieldDeclaration
+        return decl?.javadoc?.toString()?.takeIf { it.isNotBlank() }
     }
 
     override fun resolve(node: DomNode): ResolveResult {
