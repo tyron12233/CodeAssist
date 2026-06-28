@@ -565,9 +565,12 @@ class KotlinSymbolService(
         syntheticMembers(fqn)?.let { return it }
         model().classByFqn[fqn]?.let { rc ->
             val own = rc.members.map { toSymbol(it, fqn) } // source generics deferred (no <T> parse yet)
+            // An enum's `values()`/`valueOf()`/`entries` are compiler-synthesized (not written in source), so
+            // the source model would otherwise miss them and `Color.values()` would flag unresolved.
+            val synthetic = if (rc.isEnum) enumSyntheticMembers(fqn) else emptyList()
             val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
-            return own + inherited
+            return own + synthetic + inherited
         }
         // Kotlin built-ins (List/Int/String/…): the real members, preferred over the java.* approximation.
         builtinShape(fqn)?.let { return membersFromShape(it, typeArgs, visited) }
@@ -580,6 +583,24 @@ class KotlinSymbolService(
         index?.exact<MemberValue>(MEMBERS_BY_OWNER, fqn)?.map { memberFromIndex(it) }?.toList()
             ?.takeIf { it.isNotEmpty() }?.let { return it }
         return emptyList()
+    }
+
+    /** The compiler-synthesized static members of a (source) enum [fqn]: `values(): Array<E>`,
+     *  `valueOf(value: String): E`, and `entries: List<E>` (the `EnumEntries<E>`, modeled as a `List` for member
+     *  access). STATIC, so they surface on type access (`Color.values()`) and resolve like a Java enum's. */
+    private fun enumSyntheticMembers(fqn: String): List<KotlinSymbol> {
+        val simple = fqn.substringAfterLast('.')
+        val enumType = typeByFqn(fqn)
+        val owner = KotlinSymbol(simple, SymbolKind.CLASS, origin = SOURCE)
+        val static = setOf(Modifier.STATIC)
+        return listOf(
+            KotlinSymbol("values", SymbolKind.METHOD, type = typeByFqn("kotlin.Array", listOf(enumType)),
+                owner = owner, modifiers = static, origin = SOURCE, signature = "(): Array<$simple>"),
+            KotlinSymbol("valueOf", SymbolKind.METHOD, type = enumType, owner = owner, modifiers = static, origin = SOURCE,
+                signature = "(value: String): $simple", paramTypes = listOf(typeByFqn("kotlin.String")), paramNames = listOf("value")),
+            KotlinSymbol("entries", SymbolKind.FIELD, type = typeByFqn("kotlin.collections.List", listOf(enumType)),
+                owner = owner, modifiers = static, origin = SOURCE, signature = ": EnumEntries<$simple>"),
+        )
     }
 
     private fun memberFromIndex(mv: MemberValue): KotlinSymbol {
@@ -840,6 +861,7 @@ class KotlinSymbolService(
             isComposable = s.isComposable,
             isInline = s.isInline,
             isSuspend = s.isSuspend,
+            isDeprecated = s.isDeprecated,
             varargParamIndex = s.varargParamIndex,
             paramHasDefault = s.paramHasDefault,
             declarationNode = s.declaration(), doc = s.documentation(),
@@ -1115,6 +1137,7 @@ class KotlinSymbolService(
             isComposable = rc.isComposable,
             isInline = rc.isInline,
             isSuspend = rc.isSuspend,
+            isDeprecated = rc.isDeprecated,
             varargParamIndex = if (rc.isFunction) rc.varargParamIndex else -1,
             paramHasDefault = if (rc.isFunction) rc.paramHasDefault else emptyList(),
             // Top-level callables (no owner) carry their package for import-visibility; members don't.

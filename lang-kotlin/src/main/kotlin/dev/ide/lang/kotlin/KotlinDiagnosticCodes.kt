@@ -21,6 +21,9 @@ object KotlinDiagnosticCodes {
     const val COMPOSABLE_INVOCATION = "kt.composableInvocation"
     const val SUSPEND_CONTEXT = "kt.suspendContext"
     const val DELEGATE_OPERATOR = "kt.delegateOperator"
+    /** A destructuring declaration whose value's type lacks the required `componentN()` operator (too many
+     *  entries for the type's components, or a non-destructurable type). */
+    const val DESTRUCTURING = "kt.destructuring"
 
     // --- declaration / modifier validity ---
     const val CONFLICTING_DECLARATION = "kt.conflictingDeclaration"

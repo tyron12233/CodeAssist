@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtCatchClause
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
@@ -35,6 +36,7 @@ import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtParameterList
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtProperty
@@ -129,6 +131,7 @@ class KotlinResolver(
             is KtSuperExpression -> superType(expr)
             is KtBinaryExpression -> inferBinaryType(expr)
             is KtBinaryExpressionWithTypeRHS -> castType(expr)
+            is KtPrefixExpression -> inferPrefixType(expr)
             is KtArrayAccessExpression -> inferArrayGet(expr)
             // `if`/`when` used as an expression: the value is one of the branches, so its type is the type of
             // a branch — the `then`/`else` of an `if`, the first typeable entry of a `when`. (A common Compose
@@ -149,27 +152,14 @@ class KotlinResolver(
         KtTokens.ANDAND, KtTokens.OROR, KtTokens.LT, KtTokens.GT, KtTokens.LTEQ, KtTokens.GTEQ,
         KtTokens.EQEQ, KtTokens.EXCLEQ, KtTokens.EQEQEQ, KtTokens.EXCLEQEQEQ -> service.typeByFqn("kotlin.Boolean")
         KtTokens.ELVIS -> inferType(e.left)?.withNullable(false) ?: inferType(e.right)
-        // An infix call (`a to b`, `0 until n`): the result is the infix function's return type, so a chain
-        // off it (`(1 to 2).first`, `(0 until n).count()`) can resolve its receiver. Resolved as a single-param
-        // member of the left type, else a single-param extension on it (member-first, like the lowering). The
-        // receiver's type parameter is already bound by the member/extension lookup; the value parameter's is
-        // bound here from the right operand (`"" to 1` → `Pair<String, Int>`, not `Pair<String, B>`).
-        KtTokens.IDENTIFIER -> {
-            val name = e.operationReference.getReferencedName()
-            val leftType = inferType(e.left) ?: return null
-            val member = service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
-                .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
-            val callable = member ?: service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name)
-                .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
-            val raw = callable?.type as? KotlinType
-            if (raw == null || callable.typeParameters.isEmpty()) raw
-            else {
-                val bindings = HashMap<String, TypeRef>()
-                val pt = callable.paramTypes.firstOrNull() as? KotlinType
-                if (pt != null) inferType(e.right)?.let { unify(pt, it, bindings) }
-                service.substitute(raw, bindings) as? KotlinType ?: raw
-            }
-        }
+        // `a in b` / `a !in b` desugar to a `contains` operator returning Boolean.
+        KtTokens.IN_KEYWORD, KtTokens.NOT_IN -> service.typeByFqn("kotlin.Boolean")
+        // An infix call (`a to b`, `0 until n`, a custom `infix fun`): the result is the function's return type,
+        // so a chain off it (`(1 to 2).first`) can resolve its receiver. The `..`/`..<` range operators desugar
+        // the same way (`rangeTo`/`rangeUntil`), so `(1..10).first` resolves too.
+        KtTokens.IDENTIFIER -> binaryConventionReturn(e, e.operationReference.getReferencedName())
+        KtTokens.RANGE -> binaryConventionReturn(e, "rangeTo")
+        KtTokens.RANGE_UNTIL -> binaryConventionReturn(e, "rangeUntil")
         else -> {
             val convention = ARITHMETIC_CONVENTIONS[token] ?: return null
             val leftType = inferType(e.left) ?: return null
@@ -184,6 +174,49 @@ class KotlinResolver(
                     ?.type as? KotlinType
         }
     }
+
+    /** The return type of a single-argument binary CONVENTION call `left <name> right` — a custom `infix fun`,
+     *  `to`/`until`, or a `..`/`..<` desugaring to `rangeTo`/`rangeUntil`. Resolved as the single-param member of
+     *  the left type (member-first), else a single-param extension on it, with the callable's own type parameters
+     *  bound from the right operand (`"" to 1` → `Pair<String, Int>`). Null when unresolved. */
+    private fun binaryConventionReturn(e: KtBinaryExpression, name: String): KotlinType? {
+        val leftType = inferType(e.left) ?: return null
+        val member = service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+        val callable = member ?: service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name)
+            .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+        val raw = callable?.type as? KotlinType
+        if (raw == null || callable.typeParameters.isEmpty()) return raw
+        val bindings = HashMap<String, TypeRef>()
+        (callable.paramTypes.firstOrNull() as? KotlinType)?.let { pt -> inferType(e.right)?.let { unify(pt, it, bindings) } }
+        return service.substitute(raw, bindings) as? KotlinType ?: raw
+    }
+
+    /** A unary prefix expression's type: `!x` → its `not()` (else Boolean); `-x`/`+x`/`++x`/`--x` → the operand's
+     *  own type for a primitive number, else the `unaryMinus`/`unaryPlus`/`inc`/`dec` operator's return type. So
+     *  `(-vec).member` and `(!flag)` resolve for custom and built-in operators alike. */
+    private fun inferPrefixType(e: KtPrefixExpression): KotlinType? {
+        val operand = inferType(e.baseExpression)
+        if (e.operationToken == KtTokens.EXCL) {
+            (operand?.takeIf { !it.isTypeParameter })?.let { op ->
+                (unaryOperator(op, "not"))?.let { return it }
+            }
+            return service.typeByFqn("kotlin.Boolean")
+        }
+        if (operand == null || operand.isTypeParameter) return null
+        if (operand.qualifiedName in NUMERIC_RANK) return operand // primitive +/-/++/-- yields the operand's type
+        val name = when (e.operationToken) {
+            KtTokens.MINUS -> "unaryMinus"; KtTokens.PLUS -> "unaryPlus"
+            KtTokens.PLUSPLUS -> "inc"; KtTokens.MINUSMINUS -> "dec"
+            else -> return null
+        }
+        return unaryOperator(operand, name)
+    }
+
+    /** The return type of a zero-argument unary operator [name] on [type] (member or extension). */
+    private fun unaryOperator(type: KotlinType, name: String): KotlinType? =
+        service.membersNamed(type.qualifiedName, type.typeArguments, name)
+            .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.isEmpty() }?.type as? KotlinType
 
     /** `value as T` / `value as? T` → the target type `T`, nullable for a safe cast (`as?` yields `T?`) or a
      *  written nullable target (`as T?`). Lets `(x as T).member` resolve members against `T`. */
@@ -302,12 +335,24 @@ class KotlinResolver(
         if (receiverType == null && name.firstOrNull()?.isUpperCase() == true) {
             service.resolveTypeName(name, fileContext)?.let { return service.typeByFqn(it) }
         }
-        val sym = resolveCalleeFunction(call) ?: return null
+        // No function callee → maybe the callee is a VALUE with an `invoke` operator (`val g = Greeter(); g()`).
+        val sym = resolveCalleeFunction(call) ?: return if (receiverType == null) invokeReturnType(call) else null
         // Bind the function's OWN type parameters from the arguments (listOf("") -> List<String>; a lambda's
         // result binds R in `(…) -> R`), falling back to each parameter's erased bound when an argument can't
         // pin it (a raw `findViewById(): T` → `View`), then substitute into the return type.
         val bindings = methodTypeParamErasure(sym) + inferTypeArguments(sym, call)
         return (sym.type as? KotlinType)?.let { service.substitute(it, bindings) as? KotlinType }
+    }
+
+    /** `value(args)` where `value` isn't a function — the result of its `invoke` operator (`Greeter()(name)`,
+     *  a functional object / DSL). The argument count picks the matching `invoke` overload. Null when the callee
+     *  has no inferable type or no applicable `invoke`. */
+    private fun invokeReturnType(call: KtCallExpression): KotlinType? {
+        val calleeType = inferType(call.calleeExpression)?.takeIf { !it.isTypeParameter } ?: return null
+        val n = call.valueArguments.size
+        val invokes = service.membersNamed(calleeType.qualifiedName, calleeType.typeArguments, "invoke")
+            .filter { it.kind == SymbolKind.METHOD }
+        return (invokes.firstOrNull { it.paramTypes.size == n } ?: invokes.firstOrNull())?.type as? KotlinType
     }
 
     /** Each of a function's own type parameters mapped to its erased upper bound, so any that argument
@@ -362,8 +407,13 @@ class KotlinResolver(
         val q = call.parent as? KtQualifiedExpression
         val receiverType = if (q != null && q.selectorExpression === call) inferType(q.receiverExpression) else null
         val candidates = if (receiverType != null) {
-            service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+            val members = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
                 .filter { it.kind == SymbolKind.METHOD }
+            // A member-extension declared in an enclosing scope (`fun Map<…>.printMap()` in this class) resolves
+            // on a matching receiver without an import — same seam completion/diagnostics use.
+            val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
+                .filter { it.name == name && it.kind == SymbolKind.METHOD }
+            members + scopeExts
         } else {
             // Top-level functions (`Text`, `Column`, `remember`, …) resolve via the cheap exact lookup. Only when
             // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
@@ -742,6 +792,19 @@ class KotlinResolver(
      *  inspect the callee — e.g. the Compose calling-convention check (is the callee `@Composable`?). */
     fun calleeFunctionOf(call: KtCallExpression): KotlinSymbol? = resolveCalleeFunction(call)
 
+    /** The infix function a binary `left <name> right` resolves to — a custom `infix fun`, `to`, `until`, … : a
+     *  single-param member of the left type (member-first), else a single-param extension. Null for an
+     *  operator-token binary (`+`, `<`) or when unresolved. Exposed for semantic highlighting of an infix call. */
+    fun resolveInfixFunction(e: KtBinaryExpression): KotlinSymbol? {
+        if (e.operationToken != KtTokens.IDENTIFIER) return null
+        val name = e.operationReference.getReferencedName()
+        val leftType = inferType(e.left) ?: return null
+        return service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            ?: service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name)
+                .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+    }
+
     /**
      * Whether the calling context at [offset] is a `@Composable` context, per Compose's calling convention
      * (the rule the Compose compiler's `ComposableCallChecker` enforces):
@@ -889,6 +952,19 @@ class KotlinResolver(
     private fun memberNamed(type: KotlinType, name: String): KotlinSymbol? =
         service.membersNamed(type.qualifiedName, type.typeArguments, name).firstOrNull()
 
+    /** The simple names of [typeFqn]'s enum constants — for highlighting `Color.RED` as an enum constant. */
+    fun enumConstantNames(typeFqn: String): Set<String> = service.enumConstantsOf(typeFqn).mapTo(HashSet()) { it.name }
+
+    /** A static/companion member named [name] on type [typeFqn] (`MaterialTheme.colorScheme`, `Type.CONST`),
+     *  for member-read highlighting. */
+    fun staticMemberNamed(typeFqn: String, name: String): KotlinSymbol? =
+        service.companionMembersFor(typeFqn, name).firstOrNull { it.name == name }
+            ?: service.membersNamed(typeFqn, emptyList(), name).firstOrNull()
+
+    /** An instance member named [name] on [receiverType] (`obj.prop`), for member-read highlighting. */
+    fun instanceMemberNamed(receiverType: KotlinType, name: String): KotlinSymbol? =
+        service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name).firstOrNull()
+
     // --- scopes ---
 
     /** Locals + parameters in scope at [offset] (declared before it). */
@@ -900,7 +976,7 @@ class KotlinResolver(
                 is KtBlockExpression -> node.statements.filter { it.textRange.endOffset <= offset }.forEach { st ->
                     when (st) {
                         is KtProperty -> out += localVar(st)
-                        is KtDestructuringDeclaration -> out += destructuringLocals(st)
+                        is KtDestructuringDeclaration -> out += destructuringLocals(st, inferType(st.initializer))
                         is KtNamedFunction -> out += KotlinSymbol(
                             st.name ?: "_", SymbolKind.METHOD,
                             type = service.typeFromText(st.typeReference?.text, fileContext), origin = SOURCE,
@@ -916,7 +992,19 @@ class KotlinResolver(
                 is KtFunctionLiteral -> {}
                 is KtFunction -> node.valueParameters.forEach { out += param(it) }
                 is KtForExpression -> node.loopParameter?.let { lp ->
-                    lp.destructuringDeclaration?.let { out += destructuringLocals(it) } ?: run { out += param(lp) }
+                    // The loop variable is in scope only in the BODY (not the `in` clause). Gating on that both
+                    // matches Kotlin scoping AND breaks a recursion: inferring the loop range's type queries
+                    // locals at the range's own position (in the `in` clause), which then must NOT re-enter this
+                    // branch — else `for (x in m)` would infer `m` → look up locals → re-infer `m` forever.
+                    val body = node.body
+                    if (body != null && offset >= body.textRange.startOffset) {
+                        // The loop variable's type is the iteration element type (`for (x in list)` → x is the
+                        // element); a destructuring loop var (`for ((k, v) in map)`) splits it by componentN.
+                        val element = iterationElementType(inferType(node.loopRange))
+                        val dd = lp.destructuringDeclaration
+                        if (dd != null) out += destructuringLocals(dd, element)
+                        else out += loopParam(lp, element)
+                    }
                 }
                 is KtCatchClause -> node.catchParameter?.let { out += param(it) }
                 is KtWhenExpression -> node.subjectVariable?.let { out += localVar(it) }
@@ -935,10 +1023,18 @@ class KotlinResolver(
                     } else {
                         params.forEachIndexed { i, p ->
                             val t = service.typeFromText(p.typeReference?.text, fileContext) ?: inputs.getOrNull(i)
-                            out += KotlinSymbol(
-                                p.name ?: "_", SymbolKind.PARAMETER, type = t, origin = SOURCE,
-                                declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
-                            )
+                            // A destructuring lambda parameter (`forEach { (k, v) -> }`) binds its entries by
+                            // componentN of the parameter's type (the Map.Entry / Pair / data class it receives),
+                            // not a single `_`.
+                            val dd = p.destructuringDeclaration
+                            if (dd != null) {
+                                out += destructuringLocals(dd, t as? KotlinType)
+                            } else {
+                                out += KotlinSymbol(
+                                    p.name ?: "_", SymbolKind.PARAMETER, type = t, origin = SOURCE,
+                                    declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+                                )
+                            }
                         }
                     }
                 }
@@ -1155,6 +1251,7 @@ class KotlinResolver(
             paramHasDefault = fn.valueParameters.map { it.hasDefaultValue() },
             varargParamIndex = fn.valueParameters.indexOfFirst { it.isVarArg },
             isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" },
+            isDeprecated = fn.annotationEntries.any { it.shortName?.asString() == "Deprecated" },
             // Top-level callables carry their package for import-visibility; members don't (mirror toSymbol).
             packageName = if (ownerFqn == null) fileContext.packageName.ifEmpty { null } else null,
             declarationNode = runCatching { parsed.adapt(fn) }.getOrNull(),
@@ -1168,6 +1265,7 @@ class KotlinResolver(
             type = retText?.let { service.typeFromText(it, fileContext) } ?: inferType(p.initializer),
             owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
             origin = SOURCE, signature = retText?.let { ": $it" } ?: "",
+            isDeprecated = p.annotationEntries.any { it.shortName?.asString() == "Deprecated" },
             packageName = if (ownerFqn == null) fileContext.packageName.ifEmpty { null } else null,
             declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
         )
@@ -1210,10 +1308,11 @@ class KotlinResolver(
             val members = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
                 .filter { it.kind == SymbolKind.METHOD }
             // Member-extensions of an in-scope implicit receiver: `Modifier.weight(…)` resolves inside `Row { }`
-            // because `RowScope` (the content lambda's receiver) declares `fun Modifier.weight()`. Only an
-            // extension whose receiver matches the call's explicit receiver type — kept scope-gated, so `weight`
-            // never leaks onto a `Modifier.` outside a `RowScope`.
-            val scopeExts = memberExtensionsInScope(call.textRange.startOffset, name, receiverType)
+            // because `RowScope` (the content lambda's receiver) declares `fun Modifier.weight()`, and a
+            // `fun Map<…>.printMap()` declared in the enclosing class resolves on a `Map`. Scope-gated, so the
+            // extension never leaks onto a receiver outside its declaring scope.
+            val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
+                .filter { it.name == name && it.kind == SymbolKind.METHOD }
             return if (scopeExts.isEmpty()) members else members + scopeExts
         }
         val out = ArrayList<KotlinSymbol>()
@@ -1230,20 +1329,97 @@ class KotlinResolver(
         return out
     }
 
-    /** Member-extension functions named [name] declared by any implicit receiver in scope at [offset] whose
-     *  extension receiver matches [receiverType] (or a supertype of it) — e.g. `RowScope`'s `fun Modifier.weight`
-     *  applies to a `Modifier` receiver while inside a `Row { }` block. Kept scope-gated for soundness. */
-    private fun memberExtensionsInScope(offset: Int, name: String, receiverType: KotlinType): List<KotlinSymbol> {
+    /**
+     * Member-extension callables in scope at [offset] applicable to a receiver of [receiverType] — an extension
+     * declared INSIDE a class/object whose instance is an implicit `this` here, so it resolves like a member
+     * WITHOUT an import. Two cases: `RowScope`'s `fun Modifier.weight()` applies to a `Modifier` while inside a
+     * `Row { }` (the lambda's receiver scope), and a `fun Map<…>.printMap()` declared in the class you're editing
+     * applies to a `Map` value inside that class. Sourced from BOTH the LIVE buffer's enclosing classes (a
+     * just-typed extension, before the disk model catches up) and the symbol model's implicit-receiver types (a
+     * saved / cross-file declaring class, or a `with(x){}` block receiver). Kept scope-gated for soundness, so
+     * the extension never leaks onto a receiver outside its declaring scope. [namePrefix] empty = all.
+     */
+    fun scopeMemberExtensions(offset: Int, receiverType: KotlinType, namePrefix: String = ""): List<KotlinSymbol> {
+        if (receiverType.isTypeParameter) return emptyList()
         val recvTargets = (listOf(receiverType.qualifiedName) + service.supertypesOf(receiverType.qualifiedName)
             .filterIsInstance<KotlinType>().map { it.qualifiedName }).toHashSet()
+        fun matches(n: String) = namePrefix.isEmpty() || n.startsWith(namePrefix, ignoreCase = true)
         val out = ArrayList<KotlinSymbol>()
-        for (scope in implicitReceiversAt(offset)) {
-            service.membersNamed(scope.qualifiedName, scope.typeArguments, name)
-                .filterTo(out) {
-                    it.kind == SymbolKind.METHOD && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets
+        val liveOwners = HashSet<String>()
+        // (a) Live-buffer enclosing classes/objects — covers an extension just typed in the file being edited
+        //     (the disk-based symbol model may not carry it yet).
+        var node: PsiElement? = elementAt(offset)
+        while (node != null) {
+            if (node is KtClassOrObject) {
+                node.fqName?.asString()?.let { liveOwners += it }
+                for (d in node.declarations) {
+                    if (d !is KtCallableDeclaration || d.receiverTypeReference == null) continue
+                    val name = d.name ?: continue
+                    if (!matches(name)) continue
+                    val recvFqn = service.resolveTypeName(d.receiverTypeReference!!.text, fileContext) ?: continue
+                    if (recvFqn !in recvTargets) continue
+                    sameFileMemberExtension(d, recvFqn)?.let { out += bindMemberExtensionReceiver(it, receiverType) }
                 }
+            }
+            node = node.parent
+        }
+        // (b) Model implicit-receiver types (an extension-fn receiver, a `with`/`apply` block receiver, or a
+        //     saved / cross-file enclosing class) — query their members for matching extensions.
+        for (scope in implicitReceiversAt(offset)) {
+            if (scope.qualifiedName in liveOwners) continue // already covered from the live buffer above
+            service.membersForCompletion(scope.qualifiedName, scope.typeArguments, namePrefix)
+                .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
+                .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
         }
         return out
+    }
+
+    /** Bind a member-extension's receiver type parameters from the actual [receiverType] (`fun <T> List<T>.x()`
+     *  on `List<String>` → T = String), so its return/param types resolve concretely. */
+    private fun bindMemberExtensionReceiver(ext: KotlinSymbol, receiverType: KotlinType): KotlinSymbol {
+        val bindings = HashMap<String, TypeRef>()
+        ext.receiverTypeParam?.let { bindings[it] = receiverType }
+        ext.receiverTypeArgs.forEachIndexed { i, ra ->
+            val k = ra as? KotlinType ?: return@forEachIndexed
+            if (k.isTypeParameter && i < receiverType.typeArguments.size) bindings[k.qualifiedName] = receiverType.typeArguments[i]
+        }
+        return if (bindings.isEmpty()) ext else service.substituteSymbol(ext, bindings)
+    }
+
+    /** A symbol for a member-extension declared in the LIVE buffer (`fun Map<…>.printMap()` inside a class),
+     *  with its extension [receiverFqn] and receiver type-args set so it resolves/binds like an indexed one. */
+    private fun sameFileMemberExtension(d: KtCallableDeclaration, receiverFqn: String): KotlinSymbol? {
+        val name = d.name ?: return null
+        val recvArgs = (service.typeFromText(d.receiverTypeReference?.text, fileContext) as? KotlinType)?.typeArguments ?: emptyList()
+        val declNode = runCatching { parsed.adapt(d) }.getOrNull()
+        return when (d) {
+            is KtNamedFunction -> {
+                val params = d.valueParameters.map { (it.name ?: "_") to it.typeReference?.text }
+                val retText = d.typeReference?.text
+                KotlinSymbol(
+                    name = name, kind = SymbolKind.METHOD,
+                    type = retText?.let { service.typeFromText(it, fileContext) },
+                    origin = SOURCE, receiverTypeFqn = receiverFqn,
+                    signature = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" } ?: ""),
+                    paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
+                    paramNames = params.map { (n, _) -> n },
+                    paramHasDefault = d.valueParameters.map { it.hasDefaultValue() },
+                    varargParamIndex = d.valueParameters.indexOfFirst { it.isVarArg },
+                    isComposable = d.annotationEntries.any { it.shortName?.asString() == "Composable" },
+                    receiverTypeArgs = recvArgs,
+                    declarationNode = declNode,
+                )
+            }
+            is KtProperty -> KotlinSymbol(
+                name = name, kind = SymbolKind.FIELD,
+                type = d.typeReference?.text?.let { service.typeFromText(it, fileContext) },
+                origin = SOURCE, receiverTypeFqn = receiverFqn,
+                signature = d.typeReference?.text?.let { ": $it" } ?: "",
+                receiverTypeArgs = recvArgs,
+                declarationNode = declNode,
+            )
+            else -> null
+        }
     }
 
     private fun sourceCtorSymbol(rc: dev.ide.lang.kotlin.symbols.RawCallable, fqn: String): KotlinSymbol = KotlinSymbol(
@@ -1412,13 +1588,71 @@ class KotlinResolver(
     private fun delegatedValueType(delegate: KtExpression): KotlinType? =
         inferType(delegate)?.let { memberNamed(it, "value")?.type as? KotlinType }
 
-    /** Names bound by a destructuring declaration (`val (a, b) = …`, `for ((k, v) in …)`); types deferred. */
-    private fun destructuringLocals(d: KtDestructuringDeclaration): List<KotlinSymbol> =
-        d.entries.mapNotNull { e ->
-            e.name?.let {
-                KotlinSymbol(it, SymbolKind.LOCAL_VARIABLE, origin = SOURCE, declarationNode = runCatching { parsed.adapt(e) }.getOrNull())
+    /**
+     * Names bound by a destructuring declaration (`val (a, b) = …`, `for ((k, v) in …)`, `{ (k, v) -> }`),
+     * each typed by the corresponding `componentN()` of [sourceType] (the destructured value's type): a data
+     * class's Nth property, a `Pair`/`Triple`, a `Map.Entry`'s key/value, etc. An entry with an explicit type
+     * (`(a: Int, b) = …`) keeps it; an entry whose component can't be typed stays untyped (never invents one).
+     */
+    private fun destructuringLocals(d: KtDestructuringDeclaration, sourceType: KotlinType?): List<KotlinSymbol> =
+        d.entries.mapIndexedNotNull { i, e ->
+            e.name?.let { name ->
+                val t = service.typeFromText(e.typeReference?.text, fileContext) ?: componentType(sourceType, i)
+                KotlinSymbol(
+                    name, SymbolKind.LOCAL_VARIABLE, type = t, origin = SOURCE,
+                    declarationNode = runCatching { parsed.adapt(e) }.getOrNull(),
+                )
             }
         }
+
+    /**
+     * The type of the value a destructuring declaration destructures: its initializer (`val (a, b) = e`), the
+     * iteration element (`for ((k, v) in xs)`), or the lambda parameter it binds (`{ (k, v) -> }`). Null when
+     * it can't be inferred. Powers the destructuring diagnostics (the resolver itself uses the more specific
+     * source already known at each call site in [localsAt]).
+     */
+    fun destructuringSourceType(d: KtDestructuringDeclaration): KotlinType? {
+        d.initializer?.let { return inferType(it) }
+        val param = d.parent as? KtParameter ?: return null
+        (param.parent as? KtForExpression)?.let { f -> if (f.loopParameter === param) return iterationElementType(inferType(f.loopRange)) }
+        val literal = (param.parent as? KtParameterList)?.parent as? KtFunctionLiteral
+        val lambda = literal?.parent as? KtLambdaExpression ?: return null
+        val idx = literal.valueParameters.indexOf(param)
+        return expectedLambdaShape(lambda)?.parameterTypes?.getOrNull(idx) as? KotlinType
+    }
+
+    /** The destructuring component type for entry [index] (0-based) of [sourceType] — the `componentN()` return
+     *  type, or null when that operator isn't modeled. Public counterpart of [componentType] for diagnostics. */
+    fun componentTypeFor(sourceType: KotlinType, index: Int): KotlinType? = componentType(sourceType, index)
+
+    /** The type of the [index]-th (0-based) destructuring component of [sourceType]: the return type of its
+     *  `componentN()` operator (member or extension, receiver type-args already bound). Null when the component
+     *  operator isn't modeled for the type — so an unknown destructuring degrades to untyped, never wrong. */
+    private fun componentType(sourceType: KotlinType?, index: Int): KotlinType? {
+        val t = sourceType?.takeIf { !it.isTypeParameter } ?: return null
+        return service.membersNamed(t.qualifiedName, t.typeArguments, "component${index + 1}")
+            .firstOrNull { it.kind == SymbolKind.METHOD }?.type as? KotlinType
+    }
+
+    /** The element type produced by iterating [iterableType] (`for (x in xs)` → x's type): the return type of
+     *  `iterator().next()` (member or extension — a `Map`'s `iterator()` is a stdlib extension yielding
+     *  `Iterator<Map.Entry<K, V>>`). Null when the iterator convention isn't modeled. */
+    private fun iterationElementType(iterableType: KotlinType?): KotlinType? {
+        val t = iterableType?.takeIf { !it.isTypeParameter } ?: return null
+        val iterator = service.membersNamed(t.qualifiedName, t.typeArguments, "iterator")
+            .firstOrNull { it.kind == SymbolKind.METHOD }?.type as? KotlinType ?: return null
+        return service.membersNamed(iterator.qualifiedName, iterator.typeArguments, "next")
+            .firstOrNull { it.kind == SymbolKind.METHOD }?.type as? KotlinType
+    }
+
+    /** A `for` loop variable: its declared type if written (`for (x: T in …)`), else the iteration [element] type. */
+    private fun loopParam(p: KtParameter, element: KotlinType?) = KotlinSymbol(
+        name = p.name ?: "_",
+        kind = SymbolKind.PARAMETER,
+        type = service.typeFromText(p.typeReference?.text, fileContext) ?: element,
+        origin = SOURCE,
+        declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+    )
 
     private fun param(p: KtParameter) = KotlinSymbol(
         name = p.name ?: "_",

@@ -980,7 +980,7 @@ class KotlinTreeResolver(
         if (chosen.isExtension) {
             // A MEMBER extension of an in-scope receiver scope (`RowScope.weight`, declared inside `RowScope`)
             // dispatches ON that scope instance, with the explicit/implicit `Modifier` as its extension receiver
-            // — `memberExtensionsInScope` is what surfaced it, so the scope IS in scope here.
+            // — `scopeMemberExtensions` is what surfaced it, so the scope IS in scope here.
             val dispatchScope = chosen.declaringClassFqn?.let { findScopeReceiver(it) }
             if (dispatchScope != null) {
                 val extReceiver = receiverNode ?: chosen.receiverTypeFqn?.let { findScopeReceiver(it) }

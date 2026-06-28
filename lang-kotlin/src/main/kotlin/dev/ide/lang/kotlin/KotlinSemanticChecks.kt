@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
+import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -150,6 +151,9 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             }
             is KtWhenExpression -> whenNotExhaustive(psi, resolver)?.let { out += it }
             is KtBinaryExpressionWithTypeRHS -> uselessCast(psi, resolver)?.let { out += it }
+            // A destructuring (`val (a, b) = …`, `for ((k, v) in …)`, `{ (k, v) -> }`) needs a componentN()
+            // per entry; gated on resolveReady since library/builtin component operators come from the classpath.
+            is KtDestructuringDeclaration -> if (resolveReady) out += destructuringMismatch(psi, resolver)
             is KtCallExpression -> KotlinPerf.span("sem.call") {
                 // The same-file PSI check first (it also catches "too many arguments"); only fall back to the
                 // overload-aware binary check when it didn't fire, so a call is never double-reported.
@@ -1000,6 +1004,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
         val parent = call.parent
         if (parent is KtQualifiedExpression && parent.selectorExpression === call) return null // member call
+        // A capitalized callee that resolves to a known TYPE is a CONSTRUCTOR call, not a value invocation —
+        // never "not callable" (a class with no explicit constructor, esp. cross-file where callTargets may not
+        // yet carry the synthesized no-arg ctor; and so an abstract type isn't mislabeled "not a function").
+        if (resolver.constructorTypeFqn(callee.getReferencedName(), callee.textRange.startOffset) != null) return null
         val callable = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
         if (callable.any { it.kind == SymbolKind.METHOD || it.kind == SymbolKind.CONSTRUCTOR }) return null
         val type = resolver.inferType(callee) ?: return null // unknown → unresolvedBareReference handles it
@@ -1240,6 +1248,44 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         )
     }
 
+    /**
+     * Destructuring diagnostics: each entry needs a `componentN()` on the destructured value's type, and an
+     * explicitly-typed entry (`val (a: Int, b) = …`) must accept its component's type. Conservative:
+     *  - the source type must be inferable, known, and CONFIRMED destructurable (it has a `component1()`, or it
+     *    is a project source class we fully model) — so a library type whose `componentN` extension the
+     *    parse-only model can't see is never false-flagged as non-destructurable;
+     *  - a `_` entry requires no component (the compiler skips it);
+     *  - the type check reuses [isMismatch], which itself backs off on any unknown/type-parameter type.
+     * This catches the classic too-many-entries mistake (`val (a, b, c) = pair`) and a wrong entry type.
+     */
+    private fun destructuringMismatch(d: KtDestructuringDeclaration, resolver: KotlinResolver): List<Diagnostic> {
+        val source = resolver.destructuringSourceType(d) ?: return emptyList()
+        if (source.isTypeParameter || !service.isKnownType(source.qualifiedName)) return emptyList()
+        val destructurable = resolver.componentTypeFor(source, 0) != null || service.isSourceClass(source.qualifiedName)
+        if (!destructurable) return emptyList()
+        val out = ArrayList<Diagnostic>()
+        d.entries.forEachIndexed { i, e ->
+            val name = e.name
+            if (name == null || name == "_") return@forEachIndexed // an ignored entry calls no componentN
+            val comp = resolver.componentTypeFor(source, i)
+            if (comp == null) {
+                val r = e.textRange
+                out += Diagnostic(
+                    TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                    "Destructuring of '${renderType(source)}' requires a 'component${i + 1}()' function",
+                    KotlinDiagnosticCodes.DESTRUCTURING,
+                )
+            } else {
+                val declared = e.typeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+                if (declared != null && isMismatch(declared, comp)) {
+                    val r = (e.typeReference ?: e).textRange
+                    out += mismatchDiagnostic(r.startOffset, r.endOffset, comp, declared)
+                }
+            }
+        }
+        return out
+    }
+
     /** Whether [actual] is a confidently-incompatible value for a declaration of type [declared].
      *  Both must be fully-known concrete types; numeric/numeric and `Nothing` are excused (see [typeMismatch]). */
     private fun isMismatch(declared: KotlinType?, actual: KotlinType?): Boolean {
@@ -1410,6 +1456,11 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // ancestors (`android.app.Activity`) the symbol reader may not have read — its chain enumeration is
         // best-effort, so don't risk a false "unresolved" on a valid override call.
         if (unwrapParen(receiver) is KtSuperExpression && service.sourceClass(recvType.qualifiedName) == null) return null
+        // A member-extension in scope (`fun Map<…>.printMap()` declared in this class, `Modifier.weight` inside a
+        // `Row { }`) resolves on a matching receiver WITHOUT an import — its dispatch receiver is an implicit
+        // `this` here — so it must not be flagged unresolved (the import gate below applies only to top-level
+        // extensions). Checked first since these never need an import.
+        if (resolver.scopeMemberExtensions(expr.textRange.startOffset, recvType, name).any { it.name == name }) return null
         // Does the receiver have a member named `name`? Push the NAME into the lookup so only same-named
         // members/extensions are materialized + receiver-bound — not the type's whole extension set (the
         // `kotlin.Any` bucket alone is thousands on a Compose classpath). A `Type.member` reference (`Color.Red`)

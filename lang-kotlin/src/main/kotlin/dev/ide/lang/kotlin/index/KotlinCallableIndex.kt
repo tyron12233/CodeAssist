@@ -39,7 +39,7 @@ import java.io.DataOutput
  */
 object KotlinCallableIndex : IndexExtension<String, CallableShape> {
     override val id = IndexId("kotlin.callables")
-    override val version = 3 // v3: + CallableShape.paramHasDefault (missing-required-argument detection)
+    override val version = 4 // v4: + CallableShape.isDeprecated (deprecation strikethrough highlighting)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = CallableShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried by prefix on a tagged key; no fuzzy
@@ -105,6 +105,7 @@ class CallableShape(
     val isInline: Boolean,
     val varargParamIndex: Int = -1,
     val paramHasDefault: List<Boolean> = emptyList(),
+    val isDeprecated: Boolean = false,
 ) {
     fun toSymbol(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymbol(
         name = name,
@@ -122,6 +123,7 @@ class CallableShape(
         declaringClassFqn = declaringClassFqn,
         isComposable = isComposable,
         isInline = isInline,
+        isDeprecated = isDeprecated,
         varargParamIndex = varargParamIndex,
         paramHasDefault = paramHasDefault,
     )
@@ -141,6 +143,7 @@ class CallableShape(
             s.isInline,
             s.varargParamIndex,
             s.paramHasDefault,
+            s.isDeprecated,
         )
     }
 }
@@ -164,6 +167,7 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         out.writeBoolean(value.isInline)
         out.writeInt(value.varargParamIndex)
         out.writeInt(value.paramHasDefault.size); value.paramHasDefault.forEach { out.writeBoolean(it) }
+        out.writeBoolean(value.isDeprecated)
     }
 
     override fun read(inp: DataInput): CallableShape {
@@ -183,7 +187,8 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         val isInline = inp.readBoolean()
         val varargIdx = inp.readInt()
         val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
-        return CallableShape(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, varargIdx, paramHasDefault)
+        val isDeprecated = inp.readBoolean()
+        return CallableShape(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, varargIdx, paramHasDefault, isDeprecated)
     }
 
     /** Recursive, context-free encoding of a [KotlinType] (fqn + flags + args). */

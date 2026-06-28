@@ -111,7 +111,7 @@ class KotlinCompletion(
 
         val pos = KotlinPerf.span("candidates") {
             when (val where = classifyPosition(markerLeaf, nameRef)) {
-                is CompletionPosition.MemberAccess -> memberAccessCandidates(where.receiver, resolver, prefix)
+                is CompletionPosition.MemberAccess -> memberAccessCandidates(where.receiver, offset, resolver, prefix)
                 CompletionPosition.TypeReference -> PositionResult(service.typeNamesByPrefix(prefix))
                 CompletionPosition.NameReference -> nameReferenceCandidates(markerLeaf, offset, prefix, resolver, autoImport)
             }
@@ -190,7 +190,7 @@ class KotlinCompletion(
 
     /** `receiver.<caret>` — instance members + extensions, type-receiver statics + companion members, or, when
      *  the receiver is a pure package/FQN path, that package's sub-packages + types (inserted fully-qualified). */
-    private fun memberAccessCandidates(receiver: KtExpression, resolver: KotlinResolver, prefix: String): PositionResult {
+    private fun memberAccessCandidates(receiver: KtExpression, offset: Int, resolver: KotlinResolver, prefix: String): PositionResult {
         val recvType = KotlinPerf.span("infer") { resolver.inferType(receiver) }
         if (recvType != null) {
             // Instance receiver (`listOf("").`) → instance members + extensions; type receiver (`Int.`) →
@@ -209,7 +209,9 @@ class KotlinCompletion(
                 members + service.companionMembersFor(recvType.qualifiedName, prefix)
                     .filter { memberVisibleOn(it, typeReceiver = false) }
             } else {
-                members
+                // Member-extensions in scope on an instance receiver (`map.printMap()` where `printMap` is a
+                // `Map<…>` extension declared in the enclosing class, `Modifier.weight` inside a `Row { }`).
+                members + resolver.scopeMemberExtensions(offset, recvType, prefix)
             }
             return PositionResult(raw)
         }

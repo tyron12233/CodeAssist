@@ -17,7 +17,10 @@ import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunction
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
+import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtConstructorCalleeExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
@@ -29,6 +32,7 @@ import org.jetbrains.kotlin.psi.KtTypeParameterListOwner
 import org.jetbrains.kotlin.psi.KtUserType
 import org.jetbrains.kotlin.psi.KtValueArgumentName
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
+import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 
 /**
  * Type-aware Kotlin coloring. One PSI walk over the live parse (the same model
@@ -72,8 +76,9 @@ class KotlinSemanticHighlighter(
                         declMods(HighlightModifier.DECLARATION) + functionMods(psi) + extensionIf(psi.receiverTypeReference != null))
                 is KtProperty -> {
                     val local = psi.parent is KtBlockExpression
+                    val depr = if (isDeprecatedDecl(psi)) setOf(HighlightModifier.DEPRECATED) else emptySet()
                     emit(psi.nameIdentifier?.textRange, if (local) HighlightKind.LOCAL_VARIABLE else HighlightKind.PROPERTY,
-                        declMods(HighlightModifier.DECLARATION) + mutability(psi.isVar) + extensionIf(psi.receiverTypeReference != null))
+                        declMods(HighlightModifier.DECLARATION) + mutability(psi.isVar) + extensionIf(psi.receiverTypeReference != null) + depr)
                 }
                 is KtParameter ->
                     emit(psi.nameIdentifier?.textRange, HighlightKind.PARAMETER,
@@ -81,8 +86,11 @@ class KotlinSemanticHighlighter(
                 is KtTypeParameter ->
                     emit(psi.nameIdentifier?.textRange, HighlightKind.TYPE_PARAMETER, setOf(HighlightModifier.DECLARATION))
                 is KtCallExpression -> classifyCall(psi, resolver, ::emit)
+                is KtBinaryExpression -> classifyInfix(psi, resolver, ::emit)
+                // A named-argument label (`foo(name = x)`) is a parameter reference — color it like a parameter.
+                is KtValueArgumentName -> emit(psi.referenceExpression?.textRange, HighlightKind.PARAMETER, emptySet())
                 is KtUserType -> classifyTypeRef(psi, ::emit)
-                is KtNameReferenceExpression -> classifyReference(psi, ::emit)
+                is KtNameReferenceExpression -> classifyReference(psi, resolver, ::emit)
                 else -> {}
             }
             var c = psi.firstChild
@@ -100,11 +108,16 @@ class KotlinSemanticHighlighter(
     }
 
     private fun functionMods(fn: KtNamedFunction): Set<HighlightModifier> {
-        val m = HashSet<HighlightModifier>(2)
+        val m = HashSet<HighlightModifier>(3)
         if (fn.annotationEntries.any { it.shortName?.asString() == "Composable" }) m += HighlightModifier.COMPOSABLE
         if (fn.hasModifier(KtTokens.SUSPEND_KEYWORD)) m += HighlightModifier.SUSPEND
+        if (isDeprecatedDecl(fn)) m += HighlightModifier.DEPRECATED
         return m
     }
+
+    /** A declaration carrying `@Deprecated` (by annotation simple name) — its own name renders struck through. */
+    private fun isDeprecatedDecl(d: org.jetbrains.kotlin.psi.KtAnnotated): Boolean =
+        d.annotationEntries.any { it.shortName?.asString() == "Deprecated" }
 
     private fun declMods(vararg m: HighlightModifier): Set<HighlightModifier> = m.toSet()
     private fun extensionIf(b: Boolean): Set<HighlightModifier> = if (b) setOf(HighlightModifier.EXTENSION) else emptySet()
@@ -124,10 +137,11 @@ class KotlinSemanticHighlighter(
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return
         val sym = resolver.calleeFunctionOf(call)
         if (sym != null) {
-            val mods = HashSet<HighlightModifier>(3)
+            val mods = HashSet<HighlightModifier>(4)
             if (sym.isComposable) mods += HighlightModifier.COMPOSABLE
             if (sym.isExtension) mods += HighlightModifier.EXTENSION
             if (sym.isSuspend) mods += HighlightModifier.SUSPEND
+            if (sym.isDeprecated) mods += HighlightModifier.DEPRECATED
             emit(callee.textRange, HighlightKind.METHOD, mods)
             return
         }
@@ -137,25 +151,49 @@ class KotlinSemanticHighlighter(
         }
     }
 
-    /** A type-position name: distinguish an in-scope type parameter (`T`) from a class. Only the LEAF of a
-     *  qualified type (`a.b.C` → `C`) is colored; the qualifier segments (packages/owners) are KtUserType
-     *  children visited separately and skipped here, so a package name isn't miscolored as a class. */
+    /** An infix call (`a combine b`, `0 until n`): color the operator identifier as the resolved function, with
+     *  its extension/suspend/composable facts. Operator-token binaries (`+`, `<`) are left to the lexical layer. */
+    private fun classifyInfix(e: KtBinaryExpression, resolver: KotlinResolver, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+        if (e.operationToken != KtTokens.IDENTIFIER) return
+        val sym = resolver.resolveInfixFunction(e) ?: return
+        val mods = HashSet<HighlightModifier>(3)
+        if (sym.isComposable) mods += HighlightModifier.COMPOSABLE
+        if (sym.isExtension) mods += HighlightModifier.EXTENSION
+        if (sym.isSuspend) mods += HighlightModifier.SUSPEND
+        emit(e.operationReference.textRange, HighlightKind.METHOD, mods)
+    }
+
+    /** A type-position name: an annotation usage (`@Foo`), an in-scope type parameter (`T`), or a class. Only
+     *  the LEAF of a qualified type (`a.b.C` → `C`) is colored; the qualifier segments (packages/owners) are
+     *  KtUserType children visited separately and skipped here, so a package name isn't miscolored as a class. */
     private fun classifyTypeRef(userType: KtUserType, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
         if (userType.parent is KtUserType) return // a qualifier segment of an enclosing type
         val ref = userType.referenceExpression ?: return
         val name = ref.getReferencedName()
-        val kind = if (isTypeParameterInScope(userType, name)) HighlightKind.TYPE_PARAMETER else HighlightKind.CLASS
+        val kind = when {
+            isAnnotationName(userType) -> HighlightKind.ANNOTATION
+            isTypeParameterInScope(userType, name) -> HighlightKind.TYPE_PARAMETER
+            else -> HighlightKind.CLASS
+        }
         emit(ref.textRange, kind, emptySet())
     }
 
-    /** A bare reference in value position: classify only LOCALS and PARAMETERS (with var/val) — exact from the
-     *  PSI scope. Members/top-level reads, type refs, call callees, named-arg labels, this/super are skipped. */
-    private fun classifyReference(ref: KtNameReferenceExpression, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+    /** Whether [userType] is the type of an annotation entry (`@Foo`, `@pkg.Foo`) — i.e. it sits under the
+     *  annotation's constructor callee, not in an annotation argument (`@Foo(Bar::class)` keeps `Bar` a class). */
+    private fun isAnnotationName(userType: KtUserType): Boolean =
+        userType.getStrictParentOfType<KtConstructorCalleeExpression>()?.parent is KtAnnotationEntry
+
+    /** A bare/member reference in value position: locals & parameters (with var/val) from the PSI scope, and now
+     *  resolved member reads (`obj.prop`, `Color.RED`, `point.x`) colored as property / field / enum-constant.
+     *  Call callees, named-arg labels, type refs, this/super are handled elsewhere. */
+    private fun classifyReference(ref: KtNameReferenceExpression, resolver: KotlinResolver, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
         val parent = ref.parent
         if (parent is KtCallExpression && parent.calleeExpression === ref) return // a call callee (classifyCall)
-        if (parent is KtQualifiedExpression && parent.selectorExpression === ref) return // a member selector
         if (parent is KtUserType || parent is KtValueArgumentName) return
         if (parent is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel) return // this/super
+        if (parent is KtQualifiedExpression && parent.selectorExpression === ref) {
+            classifyMemberSelector(ref, parent, resolver, emit); return
+        }
         val name = ref.getReferencedName()
         if (name.isEmpty()) return
         when (val decl = localOrParamDecl(name, ref.textRange.startOffset, ref)) {
@@ -164,6 +202,35 @@ class KotlinSemanticHighlighter(
             else -> {} // a member / top-level / unresolved name → leave to the lexical layer
         }
     }
+
+    /** A member read `receiver.name` (not a call) resolved off the receiver type: an enum constant, else a
+     *  property/field. A type/static receiver (`Color.RED`, `Companion.X`) and an instance receiver
+     *  (`point.x`) are both handled; an unresolvable receiver/member is left to the lexical layer. */
+    private fun classifyMemberSelector(ref: KtNameReferenceExpression, q: KtQualifiedExpression, resolver: KotlinResolver, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+        val name = ref.getReferencedName()
+        if (name.isEmpty()) return
+        val receiver = q.receiverExpression
+        val typeFqn = resolver.typeDenotationFqn(receiver)
+        val member = if (typeFqn != null) {
+            if (resolver.enumConstantNames(typeFqn).contains(name)) {
+                emit(ref.textRange, HighlightKind.ENUM_CONSTANT, emptySet()); return
+            }
+            resolver.staticMemberNamed(typeFqn, name)
+        } else {
+            val recvType = resolver.inferType(receiver) ?: return
+            if (recvType.isTypeParameter) return
+            resolver.instanceMemberNamed(recvType, name)
+        } ?: return
+        // A property/field read (a method ref without a call is rare; leave it to the lexical layer).
+        if (member.kind == dev.ide.lang.resolve.SymbolKind.FIELD || member.kind == dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT) {
+            val kind = if (member.kind == dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT) HighlightKind.ENUM_CONSTANT else HighlightKind.PROPERTY
+            emit(ref.textRange, kind, deprecationMods(member))
+        }
+    }
+
+    /** The DEPRECATED modifier when [sym] is `@Deprecated` (UI renders strikethrough), else nothing. */
+    private fun deprecationMods(sym: dev.ide.lang.kotlin.symbols.KotlinSymbol): Set<HighlightModifier> =
+        if (sym.isDeprecated) setOf(HighlightModifier.DEPRECATED) else emptySet()
 
     /** The nearest local property / parameter named [name] declared before [offset], or null if it resolves
      *  to a class member / top level (the walk stops at the enclosing class). Mirrors the analyzer's lookup. */

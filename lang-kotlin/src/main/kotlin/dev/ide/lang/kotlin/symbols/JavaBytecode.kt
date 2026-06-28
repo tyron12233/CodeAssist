@@ -109,6 +109,7 @@ object JavaBytecode {
                     typeParameterBounds = methodBounds,
                     paramTypes = paramTypes,
                     declaringClassFqn = classFqn,
+                    isDeprecated = access and Opcodes.ACC_DEPRECATED != 0,
                     // ACC_VARARGS ⇒ the LAST parameter is a vararg (`String...`), so it absorbs trailing args.
                     varargParamIndex = if (access and Opcodes.ACC_VARARGS != 0) paramTypes.size - 1 else -1,
                 )
@@ -126,6 +127,7 @@ object JavaBytecode {
                     modifiers = mods(access),
                     origin = BINARY,
                     signature = ": ${t.className.substringAfterLast('.')}",
+                    isDeprecated = access and Opcodes.ACC_DEPRECATED != 0,
                 )
                 return null
             }

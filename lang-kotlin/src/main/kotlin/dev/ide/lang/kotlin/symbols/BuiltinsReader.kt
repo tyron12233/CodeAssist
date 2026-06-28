@@ -8,6 +8,11 @@ import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.builtins.BuiltInsBinaryVersion
 import org.jetbrains.kotlin.metadata.deserialization.Flags
 import org.jetbrains.kotlin.metadata.deserialization.NameResolverImpl
+import org.jetbrains.kotlin.metadata.deserialization.TypeTable
+import org.jetbrains.kotlin.metadata.deserialization.returnType
+import org.jetbrains.kotlin.metadata.deserialization.supertypes
+import org.jetbrains.kotlin.metadata.deserialization.type
+import org.jetbrains.kotlin.metadata.deserialization.varargElementType
 import org.jetbrains.kotlin.serialization.deserialization.builtins.BuiltInSerializerProtocol
 import java.io.ByteArrayInputStream
 import java.nio.file.Path
@@ -74,19 +79,25 @@ class BuiltinsReader(private val jars: List<Path>) {
             for ((fqn, cls) in classes) {
                 val owner = KotlinSymbol(fqn.substringAfterLast('.'), SymbolKind.CLASS, origin = BINARY)
                 val classTp = cls.typeParameterList.associate { it.id to nr.getString(it.name) }
+                // Modern Kotlin metadata stores member/supertype types in a per-class TYPE TABLE, referenced by
+                // id; only the legacy format inlines them. The extension accessors (`returnType(tt)`, `type(tt)`,
+                // `supertypes(tt)`, …) read the table when an id is present and fall back to the inline field
+                // otherwise — so without this a builtin member's type decoded as null (e.g. `Map.Entry.value: V`).
+                val tt = TypeTable(cls.typeTable)
                 val members = ArrayList<KotlinSymbol>()
-                cls.functionList.filterNot { it.hasReceiverType() }.forEach { members += func(it, nr, classTp, owner, static = false) }
-                cls.propertyList.filterNot { it.hasReceiverType() }.forEach { members += prop(it, nr, classTp, owner, static = false) }
+                cls.functionList.filterNot { it.hasReceiverType() }.forEach { members += func(it, nr, classTp, owner, static = false, tt = tt) }
+                cls.propertyList.filterNot { it.hasReceiverType() }.forEach { members += prop(it, nr, classTp, owner, static = false, tt = tt) }
                 // Companion object: its members behave like statics (`Int.MAX_VALUE`).
                 val companionName = if (cls.hasCompanionObjectName()) nr.getString(cls.companionObjectName) else null
                 companionName?.let { name ->
                     classes["$fqn.$name"]?.let { comp ->
                         val compTp = comp.typeParameterList.associate { it.id to nr.getString(it.name) }
-                        comp.functionList.filterNot { it.hasReceiverType() }.forEach { members += func(it, nr, compTp, owner, static = true) }
-                        comp.propertyList.filterNot { it.hasReceiverType() }.forEach { members += prop(it, nr, compTp, owner, static = true) }
+                        val compTt = TypeTable(comp.typeTable)
+                        comp.functionList.filterNot { it.hasReceiverType() }.forEach { members += func(it, nr, compTp, owner, static = true, tt = compTt) }
+                        comp.propertyList.filterNot { it.hasReceiverType() }.forEach { members += prop(it, nr, compTp, owner, static = true, tt = compTt) }
                     }
                 }
-                val supers = cls.supertypeList.mapNotNull { typeRef(it, nr, classTp) }
+                val supers = cls.supertypes(tt).mapNotNull { typeRef(it, nr, classTp, tt) }
                 val isObject = Flags.CLASS_KIND.get(cls.flags) == ProtoBuf.Class.Kind.OBJECT
                 out[fqn] = TypeShape(
                     typeParameters = cls.typeParameterList.map { nr.getString(it.name) },
@@ -101,58 +112,65 @@ class BuiltinsReader(private val jars: List<Path>) {
             out
         }.getOrDefault(emptyMap())
 
-        private fun func(f: ProtoBuf.Function, nr: NameResolverImpl, classTp: Map<Int, String>, owner: KotlinSymbol, static: Boolean): KotlinSymbol {
+        private fun func(f: ProtoBuf.Function, nr: NameResolverImpl, classTp: Map<Int, String>, owner: KotlinSymbol, static: Boolean, tt: TypeTable): KotlinSymbol {
             val tp = classTp + f.typeParameterList.associate { it.id to nr.getString(it.name) }
             val params = f.valueParameterList.joinToString(", ") { vp ->
-                "${nr.getString(vp.name)}: ${typeText(if (vp.hasVarargElementType()) vp.varargElementType else vp.type, nr, tp)}"
+                "${nr.getString(vp.name)}: ${typeText(vp.varargElementType(tt) ?: vp.type(tt), nr, tp, tt)}"
             }
+            val ret = f.returnType(tt)
             return KotlinSymbol(
                 name = nr.getString(f.name),
                 kind = SymbolKind.METHOD,
-                type = typeRef(f.returnType, nr, tp),
+                type = typeRef(ret, nr, tp, tt),
                 owner = owner,
                 modifiers = if (static) setOf(Modifier.STATIC) else emptySet(),
                 origin = BINARY,
-                signature = "($params): ${typeText(f.returnType, nr, tp)}",
+                signature = "($params): ${typeText(ret, nr, tp, tt)}",
                 typeParameters = f.typeParameterList.map { nr.getString(it.name) },
-                paramTypes = f.valueParameterList.map { typeRef(if (it.hasVarargElementType()) it.varargElementType else it.type, nr, tp) },
-                varargParamIndex = f.valueParameterList.indexOfFirst { it.hasVarargElementType() },
+                paramTypes = f.valueParameterList.map { typeRef(it.varargElementType(tt) ?: it.type(tt), nr, tp, tt) },
+                varargParamIndex = f.valueParameterList.indexOfFirst { it.varargElementType(tt) != null },
             )
         }
 
-        private fun prop(p: ProtoBuf.Property, nr: NameResolverImpl, classTp: Map<Int, String>, owner: KotlinSymbol, static: Boolean): KotlinSymbol {
+        private fun prop(p: ProtoBuf.Property, nr: NameResolverImpl, classTp: Map<Int, String>, owner: KotlinSymbol, static: Boolean, tt: TypeTable): KotlinSymbol {
             val tp = classTp + p.typeParameterList.associate { it.id to nr.getString(it.name) }
+            val ret = p.returnType(tt)
             return KotlinSymbol(
                 name = nr.getString(p.name),
                 kind = SymbolKind.FIELD,
-                type = typeRef(p.returnType, nr, tp),
+                type = typeRef(ret, nr, tp, tt),
                 owner = owner,
                 modifiers = if (static) setOf(Modifier.STATIC) else emptySet(),
                 origin = BINARY,
-                signature = ": ${typeText(p.returnType, nr, tp)}",
+                signature = ": ${typeText(ret, nr, tp, tt)}",
             )
         }
 
-        private fun typeRef(t: ProtoBuf.Type, nr: NameResolverImpl, tp: Map<Int, String>): TypeRef? = when {
+        private fun typeRef(t: ProtoBuf.Type, nr: NameResolverImpl, tp: Map<Int, String>, tt: TypeTable): TypeRef? = when {
             t.hasTypeParameter() -> KotlinType(tp[t.typeParameter] ?: "T", nullable = t.nullable, context = null, isTypeParameter = true)
             t.hasTypeParameterName() -> KotlinType(nr.getString(t.typeParameterName), nullable = t.nullable, context = null, isTypeParameter = true)
             t.hasClassName() -> {
                 val fqn = nr.getQualifiedClassName(t.className).replace('/', '.')
+                // A type ARGUMENT's type is itself table-referenced (`a.typeId`) in the modern format, so it must
+                // be read via the table — else `Iterator<T>` decodes as a raw `Iterator` and generic member
+                // inference (`list.iterator().next()`) loses the element type.
                 val args = t.argumentList.mapNotNull { a ->
-                    if (a.projection == ProtoBuf.Type.Argument.Projection.STAR) null else typeRef(a.type, nr, tp)
+                    if (a.projection == ProtoBuf.Type.Argument.Projection.STAR) null
+                    else a.type(tt)?.let { typeRef(it, nr, tp, tt) }
                 }
                 KotlinType(fqn, args, nullable = t.nullable, context = null)
             }
             else -> null
         }
 
-        private fun typeText(t: ProtoBuf.Type, nr: NameResolverImpl, tp: Map<Int, String>): String = when {
+        private fun typeText(t: ProtoBuf.Type, nr: NameResolverImpl, tp: Map<Int, String>, tt: TypeTable): String = when {
             t.hasTypeParameter() -> (tp[t.typeParameter] ?: "T") + if (t.nullable) "?" else ""
             t.hasTypeParameterName() -> nr.getString(t.typeParameterName) + if (t.nullable) "?" else ""
             t.hasClassName() -> {
                 val fqn = nr.getQualifiedClassName(t.className).replace('/', '.')
                 val args = t.argumentList.map { a ->
-                    if (a.projection == ProtoBuf.Type.Argument.Projection.STAR) "*" else typeText(a.type, nr, tp)
+                    if (a.projection == ProtoBuf.Type.Argument.Projection.STAR) "*"
+                    else a.type(tt)?.let { typeText(it, nr, tp, tt) } ?: "*"
                 }
                 TypeRendering.render(fqn, args, t.nullable)
             }

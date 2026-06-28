@@ -48,6 +48,8 @@ class RawCallable(
     val isInline: Boolean = false,
     /** A `suspend` function. */
     val isSuspend: Boolean = false,
+    /** A `@Deprecated` declaration (detected by annotation simple name) — for strikethrough highlighting. */
+    val isDeprecated: Boolean = false,
     /** The index of the `vararg` value parameter, or -1 if none. */
     val varargParamIndex: Int = -1,
     /** The function's own type-parameter names (`fun <T> items(…)` → `["T"]`) — so a param/return type that
@@ -184,6 +186,18 @@ object SourceIndexBuilder {
                 paramHasDefault = sc.valueParameters.map { it.hasDefaultValue() },
                 jvmOverloads = hasAnno(sc, "JvmOverloads"))
         }
+        // A class with NO declared constructor has a compiler-synthesized no-arg primary constructor, so `Foo()`
+        // resolves to a callable (cross-file too, where there's no PSI fallback). Only for instantiable kinds —
+        // an interface/object/enum/annotation/abstract/sealed class can't be created with `Foo()`.
+        if (ctors.isEmpty()) {
+            val k = c as? org.jetbrains.kotlin.psi.KtClass
+            val instantiable = c !is org.jetbrains.kotlin.psi.KtObjectDeclaration && k != null &&
+                !k.isInterface() && !k.isEnum() && !k.isAnnotation() &&
+                !k.hasModifier(KtTokens.ABSTRACT_KEYWORD) && !k.hasModifier(KtTokens.SEALED_KEYWORD)
+            if (instantiable) {
+                ctors += RawCallable(c.name ?: "", true, null, fqn, null, emptyList(), ctx, node(parsed, c), paramHasDefault = emptyList())
+            }
+        }
         val enumEntries = ArrayList<String>()
         for (d in c.declarations) {
             when (d) {
@@ -205,6 +219,16 @@ object SourceIndexBuilder {
                 ctx = ctx, node = node(parsed, c),
                 paramHasDefault = c.primaryConstructorParameters.map { true }, // copy() defaults every param to the current value
             )
+            // `componentN()` operators are compiler-synthesized for a data class (the Nth primary-constructor
+            // property's type), so destructuring `val (a, b) = point` types `a`/`b` from them. Not in source, so
+            // the index would otherwise miss them.
+            c.primaryConstructorParameters.forEachIndexed { i, p ->
+                members += RawCallable(
+                    name = "component${i + 1}", isFunction = true, receiverText = null,
+                    returnText = p.typeReference?.text, initializerText = null, paramTexts = emptyList(),
+                    ctx = ctx, node = node(parsed, p),
+                )
+            }
         }
         val companion = c.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtObjectDeclaration>().firstOrNull { it.isCompanion() }
         val asClass = c as? org.jetbrains.kotlin.psi.KtClass
@@ -254,6 +278,7 @@ object SourceIndexBuilder {
         isComposable = f.annotationEntries.any { it.shortName?.asString() == "Composable" },
         isInline = f.hasModifier(KtTokens.INLINE_KEYWORD),
         isSuspend = f.hasModifier(KtTokens.SUSPEND_KEYWORD),
+        isDeprecated = hasAnno(f, "Deprecated"),
         varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
         paramHasDefault = f.valueParameters.map { it.hasDefaultValue() },
         typeParameterNames = f.typeParameters.mapNotNull { it.name },
@@ -273,6 +298,7 @@ object SourceIndexBuilder {
         node = node(parsed, p),
         visibility = visOf(p),
         isVar = p.isVar,
+        isDeprecated = hasAnno(p, "Deprecated"),
         jvmStatic = hasAnno(p, "JvmStatic"),
         jvmField = hasAnno(p, "JvmField"),
     )

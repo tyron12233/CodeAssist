@@ -45,7 +45,7 @@ class TypeShape(
         /** A Kotlin `@Metadata` class: supertypes carry their type arguments (so inherited generic members
          *  substitute); metadata carries no type-parameter bounds. The class's MEMBER extensions (`RowScope`'s
          *  `fun Modifier.weight()`) are kept as members — they carry their extension `receiverTypeFqn`, so a
-         *  resolver enumerating an implicit receiver's members (`memberExtensionsInScope`) can apply them to a
+         *  resolver enumerating an implicit receiver's members (`scopeMemberExtensions`) can apply them to a
          *  matching receiver while in scope, and they don't pollute plain member lookups (which ignore them). */
         fun of(d: KotlinMetadata.Decoded, ctx: KotlinTypeContext?): TypeShape = TypeShape(
             d.typeParameters, emptyList(),
@@ -79,5 +79,6 @@ fun KotlinSymbol.rebindTypes(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymb
     isComposable = isComposable,
     isInline = isInline,
     isSuspend = isSuspend,
+    isDeprecated = isDeprecated,
     varargParamIndex = varargParamIndex,
 )

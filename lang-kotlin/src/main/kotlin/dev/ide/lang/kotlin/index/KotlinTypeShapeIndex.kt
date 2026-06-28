@@ -37,7 +37,7 @@ import java.io.DataOutput
  */
 object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.typeShape")
-    override val version = 12 // v12: + TypeShape.isObject/companionObjectName/isKotlin (index-only, no live decode)
+    override val version = 13 // v13: + member KotlinSymbol.isDeprecated (deprecation strikethrough highlighting)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN
@@ -110,6 +110,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(s.isInline)
         out.writeInt(s.varargParamIndex)
         out.writeInt(s.paramHasDefault.size); s.paramHasDefault.forEach { out.writeBoolean(it) }
+        out.writeBoolean(s.isDeprecated)
     }
 
     private fun readSymbol(inp: DataInput): KotlinSymbol {
@@ -132,12 +133,13 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val isInline = inp.readBoolean()
         val varargIdx = inp.readInt()
         val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
+        val isDeprecated = inp.readBoolean()
         return KotlinSymbol(
             name = name, kind = kind, type = type, origin = BINARY, modifiers = mods,
             receiverTypeFqn = recvFqn, signature = sig, typeParameters = tps, typeParameterBounds = bounds,
             paramTypes = params, paramNames = paramNames, receiverTypeArgs = recvArgs, receiverTypeParam = recvParam,
             packageName = pkg, declaringClassFqn = declaringFqn, isInternal = internal,
-            isComposable = isComposable, isInline = isInline, varargParamIndex = varargIdx, paramHasDefault = paramHasDefault,
+            isComposable = isComposable, isInline = isInline, isDeprecated = isDeprecated, varargParamIndex = varargIdx, paramHasDefault = paramHasDefault,
         )
     }
 
