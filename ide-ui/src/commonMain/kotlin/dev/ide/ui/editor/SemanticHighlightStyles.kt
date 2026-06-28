@@ -26,7 +26,9 @@ private fun baseColor(kind: String, s: SyntaxColors): Color? = when (kind) {
     "property", "field" -> s.property
     "enumConstant" -> s.constant
     "parameter", "localVariable" -> s.variable
-    "namespace" -> s.default
+    "namespace" -> s.default          // a Java/Kotlin package / import segment (muted)
+    "xmlNamespace" -> s.keyword       // an XML namespace prefix (android:/app:/tools:) reads like markup
+    "xmlReference" -> s.constant      // an @type/name / ?attr/name resource reference in an attribute value
     else -> null
 }
 

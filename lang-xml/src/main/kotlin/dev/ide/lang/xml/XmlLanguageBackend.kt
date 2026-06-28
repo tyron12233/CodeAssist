@@ -18,6 +18,8 @@ class XmlLanguageBackend : LanguageBackend {
     override val capabilities: Set<BackendCapability> = setOf(
         BackendCapability.ERROR_RECOVERY,
         BackendCapability.COMPLETION,
+        BackendCapability.SEMANTIC_HIGHLIGHT, // structural coloring: namespace prefixes + resource references
+        BackendCapability.INLAY_HINTS,        // resolved resource-value previews (host wires the resolver)
     )
 
     override fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer = XmlSourceAnalyzer()

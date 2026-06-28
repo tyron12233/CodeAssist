@@ -18,15 +18,28 @@ import java.io.DataOutput
 import java.io.StringReader
 import javax.xml.parsers.SAXParserFactory
 
-/** A resource declaration found in a `res/` file: its type, name, declaring file, and offset (for go-to). */
-data class ResourceDeclValue(val type: String, val name: String, val filePath: String, val offset: Int)
+/**
+ * A resource declaration found in a `res/` file: its type, name, declaring file, and offset (for go-to), plus
+ * the resolved literal [value] for a value resource (a string's text, a color's `#…`, a dimen's `16dp`),
+ * length-capped and null for file resources / ids. Carrying the value here lets resource-name completion show
+ * the resolved-value hint from ONE index query, instead of re-parsing/fingerprinting the resource repository
+ * per candidate per keystroke.
+ */
+data class ResourceDeclValue(
+    val type: String, val name: String, val filePath: String, val offset: Int, val value: String? = null,
+)
 
 object ResourceDeclExternalizer : Externalizer<ResourceDeclValue> {
     override fun write(out: DataOutput, value: ResourceDeclValue) {
         out.writeUTF(value.type); out.writeUTF(value.name); out.writeUTF(value.filePath); out.writeInt(value.offset)
+        out.writeBoolean(value.value != null)
+        if (value.value != null) out.writeUTF(value.value)
     }
-    override fun read(inp: DataInput): ResourceDeclValue =
-        ResourceDeclValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readInt())
+    override fun read(inp: DataInput): ResourceDeclValue {
+        val type = inp.readUTF(); val name = inp.readUTF(); val path = inp.readUTF(); val offset = inp.readInt()
+        val value = if (inp.readBoolean()) inp.readUTF() else null
+        return ResourceDeclValue(type, name, path, offset, value)
+    }
 }
 
 /**
@@ -58,7 +71,8 @@ private object ResourceKeyDescriptor : KeyDescriptor<String> {
 object AndroidResourceIndex : IndexExtension<String, ResourceDeclValue> {
     override val id = IndexId("android.resources")
     // v2: SAX scanner replaced the regex one (offsets are line-anchored; library resources now segment-cached).
-    override val version = 2
+    // v3: value resources also store their resolved literal value (for the completion hint, index-backed).
+    override val version = 3
     override val keyDescriptor: KeyDescriptor<String> = ResourceKeyDescriptor
     override val valueExternalizer: Externalizer<ResourceDeclValue> = ResourceDeclExternalizer
     override val matching = MatchingMode.PREFIX_AND_FUZZY
@@ -100,6 +114,11 @@ object ResourceFileScanner {
     private val ID_BEARING = setOf(ResourceType.LAYOUT, ResourceType.MENU, ResourceType.NAVIGATION, ResourceType.DRAWABLE, ResourceType.XML, ResourceType.TRANSITION)
     private const val ID_PREFIX = "@+id/"
 
+    /** Value resources whose element text is a useful completion hint (a literal, not a child-bearing element). */
+    private val VALUE_TEXT_TYPES = setOf("string", "color", "dimen", "bool", "integer", "fraction")
+    /** Hint values are length-capped so the index segment doesn't balloon on a large `values.xml`. */
+    private const val MAX_VALUE_LEN = 60
+
     fun scan(folder: String, filePath: String, text: String): List<ResourceDeclValue> {
         val base = folder.substringBefore('-')
         val out = ArrayList<ResourceDeclValue>()
@@ -119,7 +138,9 @@ object ResourceFileScanner {
     }
 
     /** Value-resource SAX handler: top-level `<resources>` children are declarations; `<declare-styleable>`'s
-     *  child `<attr>`s are `R.attr` entries; `<style>`/array `<item>`s are deliberately ignored (not ids). */
+     *  child `<attr>`s are `R.attr` entries; `<style>`/array `<item>`s are deliberately ignored (not ids).
+     *  A depth-1 declaration is emitted on its END tag so its element text (a value resource's literal) can be
+     *  captured for the completion hint. */
     private class ValuesHandler(
         private val filePath: String,
         text: String,
@@ -128,13 +149,16 @@ object ResourceFileScanner {
         private val lines = LineOffsets(text)
         private var loc: Locator? = null
         private val stack = ArrayList<String>()
+        /** The open depth-1 declaration whose text content we're accumulating (null between declarations). */
+        private var pending: ResourceDeclValue? = null
+        private val chars = StringBuilder()
 
         override fun setDocumentLocator(locator: Locator) { loc = locator }
 
         override fun startElement(uri: String?, localName: String?, qName: String, attrs: Attributes) {
             when {
-                // depth 1 = a direct child of <resources>: the resource declaration itself.
-                stack.size == 1 -> emitTopLevel(qName, attrs)
+                // depth 1 = a direct child of <resources>: the resource declaration itself (emitted on its close).
+                stack.size == 1 -> { pending = topLevelDecl(qName, attrs); chars.setLength(0) }
                 // depth 2 under a <declare-styleable>: each child <attr name=…> is an R.attr entry.
                 stack.size == 2 && stack[1] == "declare-styleable" && qName == "attr" ->
                     sanitize(attrs.getValue("name").orEmpty()).ifEmpty { null }
@@ -143,22 +167,33 @@ object ResourceFileScanner {
             stack.add(qName)
         }
 
+        override fun characters(ch: CharArray, start: Int, length: Int) {
+            if (pending != null && chars.length < MAX_VALUE_LEN * 2) chars.append(ch, start, length)
+        }
+
         override fun endElement(uri: String?, localName: String?, qName: String) {
+            // Closing a depth-1 declaration (stack = [resources, <decl>]): emit it, with text for a value type.
+            if (stack.size == 2) pending?.let { p ->
+                val value = if (p.type in VALUE_TEXT_TYPES) chars.toString().trim().take(MAX_VALUE_LEN).ifEmpty { null } else null
+                out += if (value != null) p.copy(value = value) else p
+                pending = null
+            }
             if (stack.isNotEmpty()) stack.removeAt(stack.size - 1)
         }
 
-        private fun emitTopLevel(tag: String, attrs: Attributes) {
-            val rawName = attrs.getValue("name") ?: return
+        /** The declaration for a top-level `<resources>` child (value still null), or null if it isn't one. */
+        private fun topLevelDecl(tag: String, attrs: Attributes): ResourceDeclValue? {
+            val rawName = attrs.getValue("name") ?: return null
             // A namespaced name (`android:colorPrimary`) is a style/theme item referencing an attr, not a
             // resource declaration - resource names never contain ':'.
-            if (':' in rawName) return
-            val name = sanitize(rawName).ifEmpty { return }
+            if (':' in rawName) return null
+            val name = sanitize(rawName).ifEmpty { return null }
             val type = when (tag) {
                 // Only `<item type="…" name="…">` declares a resource; a bare `<item name=…>` is a style entry.
                 "item" -> attrs.getValue("type")?.let { ResourceType.byRClass(it) }
                 else -> ResourceType.fromValueTag(tag)
-            } ?: return
-            out += ResourceDeclValue(type.rClass, name, filePath, offset())
+            } ?: return null
+            return ResourceDeclValue(type.rClass, name, filePath, offset())
         }
 
         private fun offset(): Int = lines.offsetOf(loc?.lineNumber ?: 1)

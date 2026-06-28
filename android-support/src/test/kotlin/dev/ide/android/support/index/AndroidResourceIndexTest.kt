@@ -24,6 +24,32 @@ class AndroidResourceIndexTest {
         assertEquals("color", byName["primary"]?.type)
         assertEquals("dimen", byName["margin"]?.type)
         assertTrue(byName.getValue("primary").offset > 0) // a real offset into the file
+        // Value resources carry their resolved literal (for the index-backed completion hint).
+        assertEquals("My App", byName["app_name"]?.value)
+        assertEquals("#FF0000", byName["primary"]?.value)
+        assertEquals("8dp", byName["margin"]?.value)
+    }
+
+    @Test
+    fun fileResourcesAndIdsCarryNoValue() {
+        val text = """<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:id="@+id/root"/>""".trimIndent()
+        val decls = ResourceFileScanner.scan("layout", "/p/res/layout/a.xml", text)
+        assertTrue(decls.all { it.value == null }, "file resources + @+id declarations have no value hint: $decls")
+    }
+
+    @Test
+    fun valueRoundTripsThroughTheExternalizer() {
+        val v = ResourceDeclValue("string", "app_name", "/p/res/values/strings.xml", 12, "My App")
+        val bytes = java.io.ByteArrayOutputStream()
+        ResourceDeclExternalizer.write(java.io.DataOutputStream(bytes), v)
+        val back = ResourceDeclExternalizer.read(java.io.DataInputStream(bytes.toByteArray().inputStream()))
+        assertEquals(v, back)
+        // …and a null value round-trips too.
+        val noVal = v.copy(value = null)
+        val b2 = java.io.ByteArrayOutputStream()
+        ResourceDeclExternalizer.write(java.io.DataOutputStream(b2), noVal)
+        assertEquals(noVal, ResourceDeclExternalizer.read(java.io.DataInputStream(b2.toByteArray().inputStream())))
     }
 
     @Test

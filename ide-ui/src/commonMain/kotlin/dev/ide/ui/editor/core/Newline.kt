@@ -252,9 +252,13 @@ private object DefaultNewlineHandler : NewlineHandler {
 }
 
 /**
- * The XML/layout Enter handler (Android manifests, layouts, resources). Expands a tag pair onto three
- * lines, indents one level deeper after an opening tag, and — inside a start tag's attribute list — aligns
- * the next line under the first attribute. Falls back to plain indent continuation.
+ * The XML/layout Enter handler (Android manifests, layouts, resources). The new line's indent is
+ * **structural** - derived from the element nesting at the caret ([xmlIndentAt]) rather than from the
+ * previous line's whitespace - so it is correct regardless of how the surrounding lines happen to be
+ * indented: a sibling after a close tag (`</TextView>|` → the TextView's level), a child after an open tag
+ * (`<LinearLayout>|` → one deeper), and a sibling after a self-closing tag (`<CardView/>|` → the same level).
+ * Two special cases ride on top: a tag pair is expanded onto three lines (`<Foo>|</Foo>` → body deeper, close
+ * de-dented), and inside an unclosed start tag the wrapped attribute aligns under the first attribute.
  */
 private object XmlNewlineHandler : NewlineHandler {
     override fun onEnter(text: CharSequence, pos: Int): RangeEdit {
@@ -270,26 +274,87 @@ private object XmlNewlineHandler : NewlineHandler {
             return RangeEdit(pos, pos, "\n" + pad, pos + 1 + pad.length)
         }
 
-        // Tag-pair expansion: `<Foo …>|</Foo>` → body on a deeper line, the close tag de-dented.
+        // The indent a new line at the caret should get, from the open-element nesting (child of the innermost
+        // open element; "" at the root). The body of a tag pair sits here; its close tag one level shallower.
+        val base = xmlIndentAt(text, pos, unit)
+
+        // Tag-pair expansion: `<Foo …>|</Foo>` → body on a deeper line, the close tag de-dented under <Foo>.
         val gt = prevNonBlankOnLine(text, pos)
         val closeLt = nextNonBlankOnLine(text, pos)
         if (gt >= 0 && text[gt] == '>' && text.charOrNull(gt - 1) != '/' &&
             closeLt >= 0 && text[closeLt] == '<' && text.charOrNull(closeLt + 1) == '/'
         ) {
-            val mid = "\n" + indent + unit
+            val mid = "\n" + base
             var start = pos
             while (start > lineStart && (text[start - 1] == ' ' || text[start - 1] == '\t')) start--
-            return RangeEdit(start, closeLt, mid + "\n" + indent, start + mid.length)
+            return RangeEdit(start, closeLt, mid + "\n" + dropIndentLevel(base, unit), start + mid.length)
         }
 
-        // After an opening start tag (close elsewhere / none) → one level deeper.
-        if (gt >= 0 && text[gt] == '>' && isOpenStartTagEnd(text, gt)) {
-            val deeperIndent = indent + unit
-            return RangeEdit(pos, pos, "\n" + deeperIndent, pos + 1 + deeperIndent.length)
-        }
-
-        return RangeEdit(pos, pos, "\n" + indent, pos + 1 + indent.length)
+        return RangeEdit(pos, pos, "\n" + base, pos + 1 + base.length)
     }
+}
+
+private const val XML_INDENT_SCAN_LIMIT = 200_000
+
+/**
+ * The structural indent for a new line at [pos]: one [unit] deeper than the innermost still-open element's
+ * opening line, or "" when no element is open (the root level). A forward scan maintains a stack of the
+ * opening-line indents of currently-open elements (open tags push, close tags pop, self-closing tags don't),
+ * skipping comments / CDATA / processing instructions / doctype, so the result reflects the document's actual
+ * nesting and base indentation rather than the previous line's whitespace. Bounded: past
+ * [XML_INDENT_SCAN_LIMIT] it falls back to the current line's leading indent (huge files only).
+ */
+private fun xmlIndentAt(text: CharSequence, pos: Int, unit: String): String {
+    if (pos > XML_INDENT_SCAN_LIMIT) return leadingIndent(text, lineStartOf(text, pos), pos)
+    val stack = ArrayList<String>()
+    var i = 0
+    while (i < pos) {
+        if (text[i] != '<') { i++; continue }
+        i = when {
+            text.startsWith("<!--", i) -> indexAfter(text, "-->", i + 4, pos)
+            text.startsWith("<![CDATA[", i) -> indexAfter(text, "]]>", i + 9, pos)
+            text.charOrNull(i + 1) == '?' -> indexAfter(text, "?>", i + 2, pos)
+            text.charOrNull(i + 1) == '!' -> indexAfter(text, ">", i + 2, pos)
+            text.charOrNull(i + 1) == '/' -> { // close tag → pop the innermost open element
+                if (stack.isNotEmpty()) stack.removeAt(stack.size - 1)
+                indexAfter(text, ">", i + 2, pos)
+            }
+            text.charOrNull(i + 1)?.let { it.isLetter() || it == '_' } == true -> { // open or self-closing tag
+                val gt = findTagEnd(text, i + 1, pos)
+                if (gt < 0) pos // tag unterminated before the caret (we're inside it) - stop
+                else {
+                    if (text.charOrNull(gt - 1) != '/') stack.add(leadingIndent(text, lineStartOf(text, i), i))
+                    gt + 1
+                }
+            }
+            else -> i + 1
+        }
+    }
+    val parent = stack.lastOrNull() ?: return ""
+    return parent + unit
+}
+
+/** Index of the `>` ending a tag whose name starts at [from], honoring quoted attribute values, or -1. */
+private fun findTagEnd(text: CharSequence, from: Int, limit: Int): Int {
+    var i = from
+    var quote = ' '
+    var inQuote = false
+    while (i < limit) {
+        val c = text[i]
+        when {
+            inQuote -> if (c == quote) inQuote = false
+            c == '"' || c == '\'' -> { inQuote = true; quote = c }
+            c == '>' -> return i
+        }
+        i++
+    }
+    return -1
+}
+
+/** Index just past [needle]'s first occurrence in `[from, limit)`, or [limit] when it isn't found in range. */
+private fun indexAfter(text: CharSequence, needle: String, from: Int, limit: Int): Int {
+    val idx = indexBounded(text, needle, from)
+    return if (idx in 0 until limit) idx + needle.length else limit
 }
 
 // ---- helpers shared by the brace handler ----

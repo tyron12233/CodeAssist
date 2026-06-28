@@ -32,6 +32,9 @@ class XmlSourceAnalyzer : SourceAnalyzer {
     /** Set by the host after construction. Empty ⇒ completion returns nothing (no Android knowledge here). */
     @Volatile var contributors: List<XmlCompletionContributor> = emptyList()
 
+    /** Set by the host: resolves a local `@type/name` to its value for inlay hints. Null ⇒ no inlay hints. */
+    @Volatile var inlayResourceResolver: dev.ide.lang.xml.hints.XmlResourceValueResolver? = null
+
     private val backing = XmlIncrementalParser()
     private val lastByFile = ConcurrentHashMap<String, ParsedFile>()
 
@@ -46,6 +49,13 @@ class XmlSourceAnalyzer : SourceAnalyzer {
     private val completionContributor = XmlCompletion(contributors = { contributors })
     override fun completionContributions(): List<dev.ide.lang.completion.CompletionContribution> =
         listOf(dev.ide.lang.completion.CompletionContribution(completionContributor))
+
+    /** Type-aware coloring is structural over the DOM (namespace prefixes + resource references), always on. */
+    override val semanticHighlighter = dev.ide.lang.xml.highlight.XmlSemanticHighlighter(::parsedFile)
+
+    /** Inlay hints (resolved resource-value previews) are available only once the host wires the resolver. */
+    override val inlayHints: dev.ide.lang.hints.InlayHintService?
+        get() = inlayResourceResolver?.let { dev.ide.lang.xml.hints.XmlInlayHintService(::parsedFile, it) }
 
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))

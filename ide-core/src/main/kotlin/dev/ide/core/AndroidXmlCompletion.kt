@@ -17,26 +17,31 @@ import dev.ide.lang.xml.completion.XmlCompletionContributor
 import dev.ide.lang.xml.completion.XmlCompletionKind
 import dev.ide.lang.xml.completion.XmlCompletionPosition
 
+/** A resource-name candidate for value completion: the [name] plus, for a value resource, its resolved
+ *  literal [value] (a string's text, a color's `#…`, a dimen's `16dp`) used as the popup hint. Both come from
+ *  ONE incremental-index query, so completion never re-parses or re-fingerprints the resource repository. */
+data class ResourceCandidate(val name: String, val value: String? = null)
+
 /**
  * The Android half of XML completion: adapts layout metadata ([LayoutMetadata], the SDK-derived
  * `AndroidSdkMetadata` when its asset is present, else an empty fallback), the project's
  * custom-view attributes ([customAttrs], parsed from `attrs.xml`), the [AndroidManifestCatalog] (manifest
- * schema), and the module's merged [ResourceRepository] into [CompletionItem]s for the language-neutral
+ * schema), and the module's resources into [CompletionItem]s for the language-neutral
  * [XmlCompletionContributor] seam. `lang-xml` decides where the caret is; this decides what Android
  * offers there, switching by file type (`AndroidManifest.xml` for the manifest schema, else layout/res widgets).
- * Providers are lazy so they reflect the latest resources at completion time. [resourceNames] returns the
- * known resource names of a type, backed by the incremental resource index, so this does not
- * rebuild the whole `ResourceRepository` per keystroke.
+ * Providers are lazy so they reflect the latest resources at completion time. [resources] returns the known
+ * resource candidates (name + value hint) of a type from the incremental resource index, so this does not
+ * parse or fingerprint a `ResourceRepository` per keystroke; [frameworkResources] returns framework
+ * (`@android:type/name`) resource names, offered once the user opts in by typing `@android`.
  */
 class AndroidXmlContributor(
-    private val resourceNames: (ResourceType) -> List<String>,
+    private val resources: (ResourceType) -> List<ResourceCandidate>,
     private val layout: () -> LayoutMetadata = { AndroidSdkMetadata.bundled() },
     private val customAttrs: () -> LayoutMetadata? = { null },
     /** Custom View subclasses from the module's library classpath (FQN tags); offered alongside framework widgets. */
     private val customViews: () -> List<Widget> = { emptyList() },
-    /** The resolved inline value of `@type/name` (a string's text, a color's `#…`, a dimen's literal), for the
-     *  completion-popup hint; null for a file resource (drawable/layout) or an unresolved/cold reference. */
-    private val resourceValue: (ResourceType, String) -> String? = { _, _ -> null },
+    /** Framework resource names of a type (from `android.jar`'s `android.R$*`), for `@android:type/name` refs. */
+    private val frameworkResources: (ResourceType) -> List<String> = { emptyList() },
 ) : XmlCompletionContributor {
 
     override fun contribute(position: XmlCompletionPosition): List<CompletionItem> {
@@ -75,14 +80,14 @@ class AndroidXmlContributor(
                     an != null && an.startsWith("xmlns:") -> namespaceUriItems(an)
                     // A `tools:` attribute's value: its curated spec, else the android:/app: attribute it overrides.
                     flavor == Flavor.LAYOUT && an != null && an.startsWith("tools:") ->
-                        toolsValueSpec(position, an)?.let(::valueItemsFor) ?: emptyList()
+                        toolsValueSpec(position, an)?.let { valueItemsFor(it, position.prefix) } ?: emptyList()
                     else -> {
                         val spec = when (flavor) {
                             Flavor.MANIFEST -> AndroidManifestCatalog.attribute(position.tag, an)
                             Flavor.DRAWABLE -> DrawableXmlCatalog.attribute(position.tag, an)
                             Flavor.LAYOUT -> mergedAttributes(position).firstOrNull { it.name == an }
                         }
-                        spec?.let(::valueItemsFor) ?: emptyList()
+                        spec?.let { valueItemsFor(it, position.prefix) } ?: emptyList()
                     }
                 }
             }
@@ -196,7 +201,7 @@ class AndroidXmlContributor(
         return listOf(TextEdit(TextRange(at, at), " xmlns:$prefix=\"$uri\""))
     }
 
-    private fun valueItemsFor(spec: AttributeSpec): List<CompletionItem> {
+    private fun valueItemsFor(spec: AttributeSpec, prefix: String): List<CompletionItem> {
         val out = ArrayList<CompletionItem>()
 
         (spec.enumValues + spec.flags).forEach { v ->
@@ -206,17 +211,23 @@ class AndroidXmlContributor(
             out += CompletionItem(it, it, CompletionItemKind.ENUM_CONSTANT, detail = "boolean")
         }
 
+        // Framework `@android:` resources are large, so they're offered only once the user opts in by typing
+        // `@android` (the engine then narrows by the rest of the prefix); local resources always show.
+        val wantFramework = prefix.startsWith("@android", ignoreCase = true)
         for (type in spec.resourceTypes) {
             if (type == ResourceType.ID) {
                 // An id attribute almost always declares a new id.
                 out += CompletionItem("@+id/", "@+id/", CompletionItemKind.SNIPPET, detail = "new id")
             }
-            for (name in runCatching { resourceNames(type) }.getOrDefault(emptyList())) {
-                val ref = "@${type.rClass}/$name"
+            for (c in runCatching { resources(type) }.getOrDefault(emptyList())) {
+                val ref = "@${type.rClass}/${c.name}"
                 // Show the resolved value as the hint (@string/app_name → "CodeAssist", @color/primary → #6200EE)
                 // so the right resource is pickable at a glance; fall back to the resource type for file resources.
-                val resolved = runCatching { resourceValue(type, name) }.getOrNull()?.let(::valuePreview)
-                out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = resolved ?: type.rClass)
+                out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = c.value?.let(::valuePreview) ?: type.rClass)
+            }
+            if (wantFramework) for (name in runCatching { frameworkResources(type) }.getOrDefault(emptyList())) {
+                val ref = "@android:${type.rClass}/$name"
+                out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = "android")
             }
         }
         return out

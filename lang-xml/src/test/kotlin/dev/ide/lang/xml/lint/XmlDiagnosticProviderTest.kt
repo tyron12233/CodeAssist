@@ -73,6 +73,32 @@ class XmlDiagnosticProviderTest {
         assertTrue(unresolved.fixes.isEmpty(), "no create fix for a non-value, non-file resource type")
     }
 
+    @Test
+    fun flagsWrongAttributeWithRemoveFix() = runTest {
+        val xml = """<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:bogus="x"/>"""
+        val host = FakeHost(refs = emptyList(), valueTypes = emptySet(), present = emptySet())
+        val checker = XmlAttributeChecker { _, _, _, attr ->
+            if (attr == "android:bogus") AttrInfo.NotAllowed else AttrInfo.Indeterminate
+        }
+        val d = XmlDiagnosticProvider(host, checker).diagnose(target(xml))
+            .single { it.code == "android.unknownAttribute" }
+        assertTrue("android:bogus" in d.message)
+        assertEquals("Remove attribute android:bogus", d.fixes.single().title)
+    }
+
+    @Test
+    fun flagsInvalidAttributeValueWithExpectedHint() = runTest {
+        val xml = """<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:visibility="goen"/>"""
+        val host = FakeHost(refs = emptyList(), valueTypes = emptySet(), present = emptySet())
+        val checker = XmlAttributeChecker { _, _, _, attr ->
+            if (attr == "android:visibility") AttrInfo.Recognized(setOf("visible", "invisible", "gone")) else AttrInfo.Indeterminate
+        }
+        val d = XmlDiagnosticProvider(host, checker).diagnose(target(xml))
+            .single { it.code == "android.invalidAttributeValue" }
+        assertTrue("goen" in d.message && "gone" in d.message, "the message names the bad value + the expected set: ${d.message}")
+        assertTrue(d.fixes.isEmpty())
+    }
+
     // ---- fakes ----
 
     private fun target(xml: String): AnalysisTarget = FakeTarget(XmlIncrementalParser().parseFull(Doc(xml)))
