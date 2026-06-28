@@ -76,16 +76,16 @@ fun RunScreen(
     onBack: () -> Unit,
     onOpenDiagnostic: (BuildDiagnosticUi) -> Unit = {},
 ) {
-    val console by backend.runConsole.collectAsState()
-    val build by backend.buildState.collectAsState()
+    val console by backend.build.runConsole.collectAsState()
+    val build by backend.build.buildState.collectAsState()
     val rc = console
     Column(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         RunTopBar(
             console = rc,
             buildFailed = build.status == RunStatus.Failed,
             onBack = onBack,
-            onStop = { backend.stopBuild() },
-            onRerun = { backend.runBuild() },
+            onStop = { backend.build.stopBuild() },
+            onRerun = { backend.build.runBuild() },
         )
         if (rc == null) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -97,8 +97,8 @@ fun RunScreen(
         Transcript(rc, Modifier.weight(1f).padding(horizontal = 14.dp))
         if (rc.acceptsInput) {
             InputBar(
-                onSend = { backend.sendRunInput(it) },
-                onEof = { backend.closeRunInput() },
+                onSend = { backend.build.sendRunInput(it) },
+                onEof = { backend.build.closeRunInput() },
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             )
         } else {
@@ -243,7 +243,7 @@ private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
  */
 @Composable
 fun RunningIndicator(backend: IdeBackend, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val rc by backend.runConsole.collectAsState()
+    val rc by backend.build.runConsole.collectAsState()
     val console = rc
     if (console == null || console.phase == RunPhase.Finished) return
     Row(

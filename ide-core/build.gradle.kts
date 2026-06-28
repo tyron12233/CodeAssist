@@ -23,6 +23,8 @@ dependencies {
     implementation(project(":analysis-impl"))
     implementation(project(":block-api"))
     implementation(project(":block-impl")) // projectional (block) editor — DOM→BlockTree + surgical edits
+    implementation(project(":plugin-api")) // UI action SPI (IdeAction/ActionGroup + places)
+    implementation(project(":plugin-impl")) // ActionManager: resolves the action EPs for the UI surfaces
     implementation(project(":build-api"))
     implementation(project(":build-engine"))
     implementation(project(":jvm-build")) // JavaBuildSystem: composes lang-jdt/lang-kotlin compile tasks over build-engine
@@ -41,4 +43,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     // Opt-in regression suites (`regressionTest`): shared benchmark/baseline harness.
     testImplementation(project(":bench-support"))
+    // Bouncy Castle: the keystore-registry test creates a real keystore (KeystoreCrypto.create needs BC at runtime).
+    testImplementation(libs.bouncycastle.pkix)
 }

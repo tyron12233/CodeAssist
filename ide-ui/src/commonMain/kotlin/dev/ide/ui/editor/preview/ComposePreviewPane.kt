@@ -91,7 +91,7 @@ fun ComposePreviewPane(
     // Detect the @Preview variants from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
     LaunchedEffect(path, renderText) {
-        previews = runCatching { backend.composePreviews(path, renderText) }.getOrDefault(emptyList())
+        previews = runCatching { backend.preview.composePreviews(path, renderText) }.getOrDefault(emptyList())
     }
     // Variant selection: the editor gutter picks one (via [selected]); the in-pane selector can override it
     // (cleared whenever the gutter selection changes so a fresh gutter tap wins).

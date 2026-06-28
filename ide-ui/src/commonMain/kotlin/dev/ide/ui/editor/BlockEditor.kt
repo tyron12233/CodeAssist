@@ -131,7 +131,7 @@ fun BlockEditor(
     LaunchedEffect(path, session.textRevision) {
         delay(250)
         val text = session.doc.text
-        val projected = runCatching { backend.projectBlocks(path, text) }
+        val projected = runCatching { backend.blocks.projectBlocks(path, text) }
         tree = projected.getOrNull()
         failed = projected.isFailure || projected.getOrNull() == null
         projectedText = text
@@ -145,7 +145,7 @@ fun BlockEditor(
     val applyEdit: (UiBlockEdit, List<UiTextEdit>) -> Unit = { edit, extra ->
         editing = null; selected = null; focusStack = emptyList()
         scope.launch {
-            val edits = runCatching { backend.applyBlockEdit(path, projectedText, edit) }.getOrDefault(emptyList())
+            val edits = runCatching { backend.blocks.applyBlockEdit(path, projectedText, edit) }.getOrDefault(emptyList())
             val all = edits + extra
             if (all.isNotEmpty()) {
                 val ranges = all.map { RangeEdit(it.start, it.end, it.newText, it.start + it.newText.length) }
@@ -892,8 +892,8 @@ private fun Palette(ctx: Ctx, onClose: () -> Unit) {
         if (q.isEmpty()) { hits = emptyList(); searching = false; return@LaunchedEffect }
         searching = true
         delay(150)
-        val symbols = runCatching { ctx.backend.searchSymbols(q, 12) }.getOrDefault(emptyList())
-        val members = runCatching { ctx.backend.searchMembers(q, 12) }.getOrDefault(emptyList())
+        val symbols = runCatching { ctx.backend.search.searchSymbols(q, 12) }.getOrDefault(emptyList())
+        val members = runCatching { ctx.backend.search.searchMembers(q, 12) }.getOrDefault(emptyList())
         hits = symbols.map { it to false } + members.map { it to true }
         searching = false
     }
@@ -1472,7 +1472,28 @@ internal fun opSampleFile(): Pair<UiBlockNode, String> {
 }
 
 /** A no-op backend so previews can build a [Ctx] (completion/search return nothing). */
-internal object PreviewBackend : IdeBackend {
+internal object PreviewBackend : IdeBackend,
+    dev.ide.ui.backend.FileService, dev.ide.ui.backend.EditorService, dev.ide.ui.backend.BlockService,
+    dev.ide.ui.backend.PreviewService, dev.ide.ui.backend.SearchService, dev.ide.ui.backend.BuildService,
+    dev.ide.ui.backend.DependencyService, dev.ide.ui.backend.ModuleService, dev.ide.ui.backend.SigningService,
+    dev.ide.ui.backend.ProjectService,
+    dev.ide.ui.backend.SdkService, dev.ide.ui.backend.SettingsService, dev.ide.ui.backend.ActionService,
+    dev.ide.ui.backend.DiagnosticsService {
+    override val files get() = this
+    override val editor get() = this
+    override val blocks get() = this
+    override val preview get() = this
+    override val search get() = this
+    override val build get() = this
+    override val deps get() = this
+    override val modules get() = this
+    override val signing get() = this
+    override val projects get() = this
+    override val sdk get() = this
+    override val settings get() = this
+    override val actions get() = this
+    override val diagnostics get() = this
+
     override val project = ProjectInfo("preview", "/preview", 1)
     override fun fileTree(mode: TreeViewMode) = TreeNode("root", "preview", NodeKind.Workspace, null)
     override fun readFile(path: String) = ""

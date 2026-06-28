@@ -20,15 +20,15 @@ class OpenTabsPersistenceTest {
             val backend = IdeServicesBackend(ide)
 
             // Nothing saved yet → an empty session.
-            assertEquals(UiOpenTabs(), backend.openTabs())
+            assertEquals(UiOpenTabs(), backend.projects.openTabs())
 
             val tabs = UiOpenTabs(listOf("/a/Foo.java", "/a/Bar.java", "/b/Baz.kt"), activeIndex = 2)
-            backend.saveOpenTabs(tabs)
+            backend.projects.saveOpenTabs(tabs)
 
             // Persisted alongside the rest of the workspace state, not in the (disposable) caches dir.
             assertTrue(Files.exists(ide.workspaceRoot.resolve(".platform/open-tabs.txt")), "tabs file written")
 
-            assertEquals(tabs, backend.openTabs(), "paths and active index round-trip")
+            assertEquals(tabs, backend.projects.openTabs(), "paths and active index round-trip")
         }
         dir.toFile().deleteRecursively()
     }
@@ -38,8 +38,8 @@ class OpenTabsPersistenceTest {
         val dir = Files.createTempDirectory("ide-tabs-empty")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
-            backend.saveOpenTabs(UiOpenTabs(emptyList(), activeIndex = -1))
-            val restored = backend.openTabs()
+            backend.projects.saveOpenTabs(UiOpenTabs(emptyList(), activeIndex = -1))
+            val restored = backend.projects.openTabs()
             assertEquals(emptyList(), restored.paths)
             assertEquals(-1, restored.activeIndex)
         }

@@ -57,7 +57,7 @@ internal class SignatureHelpController(private val backend: IdeBackend, private 
         if (dismissed) return
         delay(40.milliseconds)
         val text = session.doc.text
-        help = runCatching { backend.signatureHelp(path, text, caret) }.getOrNull()
+        help = runCatching { backend.editor.signatureHelp(path, text, caret) }.getOrNull()
     }
 }
 

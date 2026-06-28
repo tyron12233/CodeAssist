@@ -162,24 +162,24 @@ class EditorEngineDaemon(
     private suspend fun fetchAndApply(pass: DaemonPass, text: String, myRev: Int) {
         when (pass) {
             DaemonPass.DIAGNOSTICS -> {
-                backend.updateDocument(path, text) // the engine's live overlay must see the buffer first
-                val r = backend.analyze(path, text)
+                backend.editor.updateDocument(path, text) // the engine's live overlay must see the buffer first
+                val r = backend.editor.analyze(path, text)
                 ifCurrent(myRev) { onDiagnostics(r) }
             }
             DaemonPass.SEMANTIC -> {
-                val r = backend.semanticTokens(path, text)
+                val r = backend.editor.semanticTokens(path, text)
                 ifCurrent(myRev) { onSemanticTokens(r) }
             }
             DaemonPass.INLAY -> {
-                val r = backend.hintsAt(path, text, 0, text.length)
+                val r = backend.editor.hintsAt(path, text, 0, text.length)
                 ifCurrent(myRev) { onInlayHints(r) }
             }
             DaemonPass.FOLDS -> {
-                val r = backend.codeFolds(path, text)
+                val r = backend.editor.codeFolds(path, text)
                 ifCurrent(myRev) { onCodeFolds(r) }
             }
             DaemonPass.PREVIEWS -> {
-                val r = backend.composePreviews(path, text)
+                val r = backend.preview.composePreviews(path, text)
                 ifCurrent(myRev) { onComposePreviews(r) }
             }
         }

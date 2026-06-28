@@ -64,7 +64,7 @@ internal class CompletionController(
             if (!immediate) delay(delayMs.milliseconds)
             val text = session.doc.text
             val caret = session.selection.start
-            val res = runCatching { backend.complete(path, text, caret) }.getOrNull() ?: return@launch
+            val res = runCatching { backend.editor.complete(path, text, caret) }.getOrNull() ?: return@launch
             val sameToken = res.replaceStart == current?.tokenStart
             current = CompletionSession.from(res)
             if (!sameToken) selected = 0

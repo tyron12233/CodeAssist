@@ -133,12 +133,12 @@ fun DependenciesPane(
     var pendingRemove by remember { mutableStateOf<String?>(null) }
     var pendingEdit by remember { mutableStateOf<UiDependencyNode?>(null) }
     var toast by remember { mutableStateOf<ToastMsg?>(null) }
-    val resolveState by backend.depsState.collectAsState()
+    val resolveState by backend.deps.depsState.collectAsState()
     val coroutine = rememberCoroutineScope()
 
     LaunchedEffect(moduleName, reloadKey) {
         loading = true
-        deps = runCatching { backend.moduleDependencies(moduleName) }.getOrNull()
+        deps = runCatching { backend.deps.moduleDependencies(moduleName) }.getOrNull()
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
@@ -148,7 +148,7 @@ fun DependenciesPane(
     val onExcludeTransitive: (UiDependencyNode, UiDependencyNode) -> Unit = { root, transitive ->
         coroutine.launch {
             val gn = "${transitive.group}:${transitive.name}"
-            val result = backend.setDependencyExclusions(moduleName, root.coordinate, (root.exclusions + gn).distinct())
+            val result = backend.deps.setDependencyExclusions(moduleName, root.coordinate, (root.exclusions + gn).distinct())
             toast = ToastMsg(if (result.success) "Excluded $gn from ${root.name}" else result.message, error = !result.success)
             if (result.success) reloadKey++
         }
@@ -156,7 +156,7 @@ fun DependenciesPane(
     // Re-include a previously-excluded entry: drop it from the direct dependency's exclusions and re-resolve.
     val onRemoveExclusion: (UiDependencyNode, String) -> Unit = { root, excl ->
         coroutine.launch {
-            val result = backend.setDependencyExclusions(moduleName, root.coordinate, root.exclusions - excl)
+            val result = backend.deps.setDependencyExclusions(moduleName, root.coordinate, root.exclusions - excl)
             toast = ToastMsg(if (result.success) "Re-included $excl" else result.message, error = !result.success)
             if (result.success) reloadKey++
         }
@@ -204,7 +204,7 @@ fun DependenciesPane(
             onDismiss = { pendingRemove = null },
             onConfirm = {
                 val coord = pendingRemove
-                if (coord != null && backend.removeDependency(moduleName, coord)) {
+                if (coord != null && backend.deps.removeDependency(moduleName, coord)) {
                     toast = ToastMsg("Removed ${shortCoord(coord)}", error = false)
                     reloadKey++
                 }
@@ -221,7 +221,7 @@ fun DependenciesPane(
                 onDismiss = { pendingEdit = null },
                 onSave = { newExclusions ->
                     coroutine.launch {
-                        val result = backend.setDependencyExclusions(moduleName, node.coordinate, newExclusions)
+                        val result = backend.deps.setDependencyExclusions(moduleName, node.coordinate, newExclusions)
                         toast = ToastMsg(result.message, error = !result.success)
                         if (result.success) reloadKey++
                     }
@@ -279,13 +279,13 @@ private fun DepPaneToolbar(
 
 @Composable
 private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modifier: Modifier = Modifier) {
-    var repos by remember { mutableStateOf(backend.repositories()) }
+    var repos by remember { mutableStateOf(backend.deps.repositories()) }
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     val add = {
-        if (backend.addRepository(name, url)) { repos = backend.repositories(); name = ""; url = ""; error = null }
+        if (backend.deps.addRepository(name, url)) { repos = backend.deps.repositories(); name = ""; url = ""; error = null }
         else error = "Enter a valid http(s) URL that isn't already added."
     }
 
@@ -295,7 +295,7 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
         Text("Where libraries resolve from. Built-in repos can't be removed.", color = Ca.colors.textTertiary, style = Ca.type.caption)
         Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
-            items(repos, key = { it.url }) { r -> RepoRow(r) { if (backend.removeRepository(r.url)) repos = backend.repositories() } }
+            items(repos, key = { it.url }) { r -> RepoRow(r) { if (backend.deps.removeRepository(r.url)) repos = backend.deps.repositories() } }
         }
         Spacer(Modifier.height(12.dp))
         // add a custom repository
@@ -638,7 +638,7 @@ private fun AddDependencyContent(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf<String?>(null) }
-    val resolveState by backend.depsState.collectAsState()
+    val resolveState by backend.deps.depsState.collectAsState()
     val scopeOptions = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
     val coroutine = rememberCoroutineScope()
 
@@ -648,13 +648,13 @@ private fun AddDependencyContent(
         searching = true
         delay(320)
         // distinctBy coordinate: the same GAV can come back from more than one repo; duplicate keys crash the list.
-        results = runCatching { backend.searchArtifacts(q, moduleName) }.getOrDefault(emptyList()).distinctBy { it.coordinate }
+        results = runCatching { backend.deps.searchArtifacts(q, moduleName) }.getOrDefault(emptyList()).distinctBy { it.coordinate }
         searching = false
     }
     // Load candidate modules / project-local jars when their tab is selected.
     LaunchedEffect(mode) {
-        if (mode == AddMode.Module) moduleTargets = runCatching { backend.moduleDependencyTargets(moduleName) }.getOrDefault(emptyList())
-        if (mode == AddMode.Local) localCandidates = runCatching { backend.localLibraryCandidates(moduleName) }.getOrDefault(emptyList())
+        if (mode == AddMode.Module) moduleTargets = runCatching { backend.deps.moduleDependencyTargets(moduleName) }.getOrDefault(emptyList())
+        if (mode == AddMode.Local) localCandidates = runCatching { backend.deps.localLibraryCandidates(moduleName) }.getOrDefault(emptyList())
     }
 
     // Add a versioned library/AAR, a BOM platform, or (Module mode) a module-on-module dependency.
@@ -662,10 +662,10 @@ private fun AddDependencyContent(
         busy = true; error = null; adding = coordinate
         coroutine.launch {
             val result = when (mode) {
-                AddMode.Platform -> backend.addPlatform(moduleName, coordinate)
-                AddMode.Module -> backend.addModuleDependency(moduleName, coordinate, scope)
-                AddMode.Local -> backend.addLocalLibrary(moduleName, coordinate, scope)
-                AddMode.Library -> backend.addDependency(moduleName, coordinate, scope)
+                AddMode.Platform -> backend.deps.addPlatform(moduleName, coordinate)
+                AddMode.Module -> backend.deps.addModuleDependency(moduleName, coordinate, scope)
+                AddMode.Local -> backend.deps.addLocalLibrary(moduleName, coordinate, scope)
+                AddMode.Library -> backend.deps.addDependency(moduleName, coordinate, scope)
             }
             busy = false; adding = null
             if (result.success) onResult(result) else error = result.message
@@ -674,13 +674,13 @@ private fun AddDependencyContent(
 
     // Pick a jar/aar via the platform file picker; it's copied into the module's libs/ then attached.
     val pickLocalFile = {
-        val dropDir = backend.localLibraryDropDir(moduleName)
+        val dropDir = backend.deps.localLibraryDropDir(moduleName)
         if (dropDir != null) fileActions.importInto(dropDir) { imported ->
             if (imported.isNotEmpty()) {
                 busy = true; error = null; adding = imported.first().substringAfterLast('/').substringAfterLast('\\')
                 coroutine.launch {
                     var last: UiAddResult? = null
-                    for (p in imported) { last = backend.addLocalLibrary(moduleName, p, scope); if (last?.success != true) break }
+                    for (p in imported) { last = backend.deps.addLocalLibrary(moduleName, p, scope); if (last?.success != true) break }
                     busy = false; adding = null
                     last?.let { if (it.success) onResult(it) else error = it.message }
                 }
@@ -740,10 +740,10 @@ private fun AddDependencyContent(
                     }
                 }
             }
-            ModeChip("Firebase", false) { quickAdd("Firebase") { backend.addFirebase(moduleName) } }
-            ModeChip("Play Services Auth", false) { quickAdd("Play Services Auth") { backend.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-auth:21.2.0")) } }
-            ModeChip("Maps", false) { quickAdd("Maps") { backend.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-maps:19.0.0")) } }
-            ModeChip("Location", false) { quickAdd("Location") { backend.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-location:21.3.0")) } }
+            ModeChip("Firebase", false) { quickAdd("Firebase") { backend.deps.addFirebase(moduleName) } }
+            ModeChip("Play Services Auth", false) { quickAdd("Play Services Auth") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-auth:21.2.0")) } }
+            ModeChip("Maps", false) { quickAdd("Maps") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-maps:19.0.0")) } }
+            ModeChip("Location", false) { quickAdd("Location") { backend.deps.addGooglePlayServices(moduleName, listOf("com.google.android.gms:play-services-location:21.3.0")) } }
         }
 
         error?.let { msg ->
@@ -778,7 +778,7 @@ private fun AddDependencyContent(
             } else if (mode == AddMode.Local) {
                 LocalLibraryBody(
                     candidates = localCandidates,
-                    canPick = fileActions.canImport && backend.localLibraryDropDir(moduleName) != null,
+                    canPick = fileActions.canImport && backend.deps.localLibraryDropDir(moduleName) != null,
                     codeFont = codeFont,
                     onPick = pickLocalFile,
                     onAttach = { path -> performAdd(path) },

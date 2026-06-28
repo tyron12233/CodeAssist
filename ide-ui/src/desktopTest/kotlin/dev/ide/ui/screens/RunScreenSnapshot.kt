@@ -11,6 +11,7 @@ import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
+import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.NodeKind
@@ -40,24 +41,11 @@ import kotlin.test.Test
 class RunScreenSnapshot {
 
     private class FakeBackend(
-        private val rc: RunConsoleUi?,
-        private val bs: BuildState,
-    ) : IdeBackend {
-        override val project = ProjectInfo("demo", "/demo", 1)
-        override fun fileTree(mode: TreeViewMode) = TreeNode("root", "demo", NodeKind.Workspace, null)
-        override fun readFile(path: String) = ""
-        override fun moduleNameForFile(path: String): String? = null
-        override fun updateDocument(path: String, text: String) {}
-        override fun saveFile(path: String, text: String) {}
-        override suspend fun complete(path: String, text: String, offset: Int) = UiCompletionResult(emptyList(), offset, offset)
-        override suspend fun analyze(path: String, text: String): List<UiDiagnostic> = emptyList()
-        override val indexStatus: StateFlow<IndexUiStatus> = MutableStateFlow(IndexUiStatus())
-        override suspend fun searchSymbols(query: String, limit: Int): List<SymbolHit> = emptyList()
-        override suspend fun searchMembers(query: String, limit: Int): List<SymbolHit> = emptyList()
+        rc: RunConsoleUi?,
+        bs: BuildState,
+    ) : StubBackend() {
         override val buildState: StateFlow<BuildState> = MutableStateFlow(bs)
         override val runConsole: StateFlow<RunConsoleUi?> = MutableStateFlow(rc)
-        override fun runBuild() {}
-        override fun stopBuild() {}
     }
 
     @Test

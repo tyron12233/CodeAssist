@@ -49,14 +49,14 @@ internal fun BreadcrumbBar(
     LaunchedEffect(active.path, active.session.textRevision, caretOffset) {
         delay(200.milliseconds)
         val structure = runCatching {
-            state.backend.breadcrumbAt(
+            state.backend.editor.breadcrumbAt(
                 active.path,
                 active.text,
                 caretOffset
             )
         }.getOrDefault(emptyList())
         crumbs = if (structure.isEmpty()) breadcrumbFor(state, active)
-        else listOfNotNull(state.backend.moduleNameForFile(active.path)) + structure
+        else listOfNotNull(state.backend.files.moduleNameForFile(active.path)) + structure
     }
     val canPreview = isPreviewable(active.path) || isLayoutPreviewable(active.path) || hasPreview
     Row(

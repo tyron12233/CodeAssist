@@ -83,7 +83,7 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
     var drawable by remember(path) { mutableStateOf<UiDrawable?>(null) }
     var loaded by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path, text) {
-        drawable = runCatching { backend.drawablePreview(path, text) }.getOrNull()
+        drawable = runCatching { backend.preview.drawablePreview(path, text) }.getOrNull()
         loaded = true
     }
     val d = drawable
@@ -118,7 +118,7 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
 @Composable
 private fun ColorPreview(path: String, text: String, backend: IdeBackend) {
     var colors by remember(path) { mutableStateOf<List<UiColorEntry>>(emptyList()) }
-    LaunchedEffect(path, text) { colors = runCatching { backend.colorResources(path, text) }.getOrDefault(emptyList()) }
+    LaunchedEffect(path, text) { colors = runCatching { backend.preview.colorResources(path, text) }.getOrDefault(emptyList()) }
     if (colors.isEmpty()) {
         EmptyPreview("No colors declared in this file")
         return
@@ -152,7 +152,7 @@ private fun BitmapPreview(path: String, backend: IdeBackend) {
     var image by remember(path) { mutableStateOf<ImageBitmap?>(null) }
     var loaded by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path) {
-        image = runCatching { backend.resourceImageBytes(path)?.let { decodeImageBytes(it) } }.getOrNull()
+        image = runCatching { backend.preview.resourceImageBytes(path)?.let { decodeImageBytes(it) } }.getOrNull()
         loaded = true
     }
     val img = image

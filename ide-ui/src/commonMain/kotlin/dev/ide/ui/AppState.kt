@@ -19,7 +19,7 @@ import dev.ide.ui.platform.isMobilePlatform
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, Editor, Run, ModuleConfig, SdkManager, Settings }
+enum class Screen { Projects, CreateProject, Editor, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings }
 
 /**
  * Top-level editor destinations in the side rail / bottom nav. Per Apple's HIG these are peer
@@ -86,7 +86,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     /** Which shape the file tree takes — curated Project view vs the raw All-Files view (IntelliJ-style). */
     var treeMode by mutableStateOf(TreeViewMode.Project)
         private set
-    var tree: TreeNode by mutableStateOf(backend.fileTree(treeMode))
+    var tree: TreeNode by mutableStateOf(backend.files.fileTree(treeMode))
         private set
 
     val openFiles = mutableStateListOf<OpenFile>()
@@ -130,7 +130,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     var pinchZoomEnabled by mutableStateOf(true)
 
     init {
-        applySettings(backend.settings())
+        applySettings(backend.settings.settings())
     }
 
     /** Push persisted IDE settings into the live editor-pref fields (called on creation + on each settings change). */
@@ -180,8 +180,8 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
             activeIndex = existing
             return
         }
-        val text = backend.readFile(path)
-        backend.updateDocument(path, text)
+        val text = backend.files.readFile(path)
+        backend.editor.updateDocument(path, text)
         openFiles.add(OpenFile(path, name, text))
         activeIndex = openFiles.lastIndex
     }
@@ -213,7 +213,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     fun save(file: OpenFile) {
         if (!file.modified) return
         val text = file.text // one lazy materialization, on save (not per keystroke)
-        backend.saveFile(file.path, text)
+        backend.editor.saveFile(file.path, text)
         file.onSaved(text)
     }
 
@@ -226,7 +226,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
      * the caller can fall back to [defaultFile] when there was no remembered session.
      */
     fun restoreTabs(): Boolean {
-        val saved = backend.openTabs()
+        val saved = backend.projects.openTabs()
         if (saved.paths.isEmpty()) return false
         for (path in saved.paths) {
             val name = path.substringAfterLast('/').substringAfterLast('\\')
@@ -252,7 +252,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     }
 
     /** Re-read the workspace tree from the backend (after a file is created/removed). */
-    fun refreshTree() { tree = backend.fileTree(treeMode) }
+    fun refreshTree() { tree = backend.files.fileTree(treeMode) }
 
     /** Switch the tree view mode (Project ↔ All Files) and rebuild the tree. */
     fun selectTreeMode(mode: TreeViewMode) {
@@ -273,53 +273,53 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
             val followsFileRename = newPath != null && f.path == activePath
             if (!followsFileRename && f.modified) continue
             val diskPath = if (followsFileRename) newPath!! else f.path
-            val text = runCatching { backend.readFile(diskPath) }.getOrNull() ?: continue
+            val text = runCatching { backend.files.readFile(diskPath) }.getOrNull() ?: continue
             if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
             val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
             openFiles[i] = OpenFile(diskPath, name, text)
-            backend.updateDocument(diskPath, text)
+            backend.editor.updateDocument(diskPath, text)
         }
         refreshTree()
     }
 
     /** Create a new file through the backend, refresh the tree, and open it in the editor. */
     fun createFile(dirPath: String, fileName: String, content: String) {
-        val path = backend.createFile(dirPath, fileName, content) ?: return
+        val path = backend.files.createFile(dirPath, fileName, content) ?: return
         refreshTree()
         open(path, fileName)
     }
 
     /** Create a new directory through the backend and refresh the tree (nothing to open). */
     fun createDirectory(parentPath: String, name: String) {
-        if (backend.createDirectory(parentPath, name) != null) refreshTree()
+        if (backend.files.createDirectory(parentPath, name) != null) refreshTree()
     }
 
     // ---- file & package operations (delete / rename / move / copy) ----
 
     /** Delete a file or directory/package: close any open tabs under it, then refresh the tree. */
     fun deletePath(path: String) {
-        if (!backend.deletePath(path)) return
+        if (!backend.files.deletePath(path)) return
         closeTabsUnder(path)
         refreshTree()
     }
 
     /** Rename a file/directory to [newName]; rebase open tabs onto the new path + refresh. Returns the result. */
     suspend fun renamePath(path: String, newName: String): UiRenameResult {
-        val r = backend.renamePath(path, newName)
+        val r = backend.files.renamePath(path, newName)
         if (r.success) { rebaseTabs(path, r.newPath ?: path); refreshCleanTabs(); refreshTree() }
         return r
     }
 
     /** Move a file/directory into [destDir]; rebase open tabs + refresh. Returns true on success. */
     fun movePath(path: String, destDir: String): Boolean {
-        val newPath = backend.movePath(path, destDir) ?: return false
+        val newPath = backend.files.movePath(path, destDir) ?: return false
         rebaseTabs(path, newPath); refreshTree()
         return true
     }
 
     /** Copy a file/directory into [destDir]; refresh the tree. Returns true on success. */
     fun copyPath(path: String, destDir: String): Boolean {
-        if (backend.copyPath(path, destDir) == null) return false
+        if (backend.files.copyPath(path, destDir) == null) return false
         refreshTree()
         return true
     }
@@ -342,10 +342,10 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
                 underPath(p, oldPath) -> newPath + p.substring(oldPath.length)
                 else -> continue
             }
-            val text = runCatching { backend.readFile(rebased) }.getOrNull() ?: continue
+            val text = runCatching { backend.files.readFile(rebased) }.getOrNull() ?: continue
             val name = rebased.substringAfterLast('/').substringAfterLast('\\')
             openFiles[i] = OpenFile(rebased, name, text)
-            backend.updateDocument(rebased, text)
+            backend.editor.updateDocument(rebased, text)
         }
     }
 
@@ -354,23 +354,23 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
         for (i in openFiles.indices) {
             val f = openFiles[i]
             if (f.modified) continue
-            val text = runCatching { backend.readFile(f.path) }.getOrNull() ?: continue
+            val text = runCatching { backend.files.readFile(f.path) }.getOrNull() ?: continue
             if (text == f.savedText) continue
             openFiles[i] = OpenFile(f.path, f.name, text)
-            backend.updateDocument(f.path, text)
+            backend.editor.updateDocument(f.path, text)
         }
     }
 
     /** Create a smart-scaffolded, nested-path-aware file under [dirPath], refresh the tree, and open it. */
     fun createFileSmart(dirPath: String, name: String) {
-        val path = backend.createFileSmart(dirPath, name) ?: return
+        val path = backend.files.createFileSmart(dirPath, name) ?: return
         refreshTree()
         open(path, name.substringAfterLast('/').substringAfterLast('\\'))
     }
 
     /** Create a typed source file ([template]) named [name] under [dirPath], refresh the tree, and open it. */
     fun createSourceFile(dirPath: String, name: String, template: UiNewFileTemplate) {
-        val path = backend.createSourceFile(dirPath, name, template) ?: return
+        val path = backend.files.createSourceFile(dirPath, name, template) ?: return
         refreshTree()
         open(path, path.substringAfterLast('/').substringAfterLast('\\'))
     }
@@ -378,25 +378,25 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     // ---- source-set / content-root management ----
 
     /** Source-set names declared on [moduleName] (for the Add-Source-Root selector). */
-    fun moduleSourceSets(moduleName: String): List<String> = backend.moduleSourceSets(moduleName)
+    fun moduleSourceSets(moduleName: String): List<String> = backend.modules.moduleSourceSets(moduleName)
 
     /** Add a typed source root to [moduleName] and refresh the tree. Returns true on success. */
     fun addSourceRoot(moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole): Boolean {
-        val created = backend.addSourceRoot(moduleName, sourceSetName, dirName, role) != null
+        val created = backend.modules.addSourceRoot(moduleName, sourceSetName, dirName, role) != null
         if (created) refreshTree()
         return created
     }
 
     /** Unmark a content root (model-only) and refresh the tree. Returns true on success. */
     fun removeSourceRoot(moduleName: String, sourceSetName: String, rootPath: String): Boolean {
-        val ok = backend.removeSourceRoot(moduleName, sourceSetName, rootPath)
+        val ok = backend.modules.removeSourceRoot(moduleName, sourceSetName, rootPath)
         if (ok) refreshTree()
         return ok
     }
 
     /** Create an empty source set on [moduleName] and refresh the tree. Returns true on success. */
     fun addSourceSet(moduleName: String, name: String): Boolean {
-        val ok = backend.addSourceSet(moduleName, name)
+        val ok = backend.modules.addSourceSet(moduleName, name)
         if (ok) refreshTree()
         return ok
     }

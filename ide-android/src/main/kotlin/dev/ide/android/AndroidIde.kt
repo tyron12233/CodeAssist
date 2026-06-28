@@ -112,8 +112,8 @@ object AndroidIde {
         backend.installCrashReporting()
         // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
         // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
-        if (backend.analyticsConsent() == true) {
-            backend.track(dev.ide.analytics.Events.COLD_START, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
+        if (backend.diagnostics.analyticsConsent() == true) {
+            backend.diagnostics.track(dev.ide.analytics.Events.COLD_START, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
         }
 
         return Session(backend)

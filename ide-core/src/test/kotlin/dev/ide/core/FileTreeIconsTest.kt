@@ -22,7 +22,7 @@ class FileTreeIconsTest {
         val dir = Files.createTempDirectory("ide-tree-java")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
-            val nodes = flatten(backend.fileTree())
+            val nodes = flatten(backend.files.fileTree())
 
             // (a) a .java file gets the Java badge id.
             assertEquals("java", nodes.first { it.name == "Greeter.java" }.iconId)
@@ -38,9 +38,9 @@ class FileTreeIconsTest {
 
             // (d) create a class at the *intermediate* level (com.example) and see it in a fresh tree.
             val mid = pkg.packageSegments.first { it.packageName == "com.example" }
-            val created = backend.createFile(mid.dirPath, "Mid.java", "package com.example;\n\npublic class Mid {\n}\n")
+            val created = backend.files.createFile(mid.dirPath, "Mid.java", "package com.example;\n\npublic class Mid {\n}\n")
             assertNotNull(created, "createFile should return the new path")
-            assertTrue(flatten(backend.fileTree()).any { it.name == "Mid.java" }, "the new file should appear in the tree")
+            assertTrue(flatten(backend.files.fileTree()).any { it.name == "Mid.java" }, "the new file should appear in the tree")
         }
         dir.toFile().deleteRecursively()
     }
@@ -50,7 +50,7 @@ class FileTreeIconsTest {
         val dir = Files.createTempDirectory("ide-tree-android")
         IdeServices.bootstrapDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
-            val nodes = flatten(backend.fileTree())
+            val nodes = flatten(backend.files.fileTree())
 
             val appModule = nodes.firstOrNull { it.kind == NodeKind.Module && it.name == "app" }
             assertNotNull(appModule, "app module must be present")

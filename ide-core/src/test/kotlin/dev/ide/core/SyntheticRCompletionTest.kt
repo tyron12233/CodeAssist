@@ -131,6 +131,7 @@ class SyntheticRCompletionTest {
     @Test
     fun resourceXmlFlagsOnlyUnresolvedLocalReferences() {
         val s = IdeServices.bootstrapDemo(root).also { services = it }
+        awaitIndexed(s) // resource resolution is index-only (no repository fallback) → wait for the index
         val layout = root.resolve("app/src/main/res/layout/probe.xml")
         val text = """
             <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -148,6 +149,7 @@ class SyntheticRCompletionTest {
     @Test
     fun goToDefinitionResolvesResourceFromXmlAndJava() {
         val s = IdeServices.bootstrapDemo(root).also { services = it }
+        awaitIndexed(s) // go-to-def resolves resources via the index only (no repository fallback)
 
         // XML: @string/greeting → its <string name="greeting"> declaration.
         val layout = root.resolve("app/src/main/res/layout/probe.xml")

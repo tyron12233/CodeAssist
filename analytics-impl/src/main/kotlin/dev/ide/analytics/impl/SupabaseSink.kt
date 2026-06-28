@@ -3,6 +3,7 @@ package dev.ide.analytics.impl
 import dev.ide.analytics.AnalyticsSink
 import dev.ide.analytics.EventBatch
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 
 /**

@@ -53,6 +53,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="new_project_content">Android app, Java console app, library…</string>
     <string name="join_the_community">Join the community</string>
     <string name="join_the_community_content">Chat, get help, and share what you build on Discord.</string>
+    <string name="support_title">Support CodeAssist</string>
+    <string name="support_content">Built in my free time and kept free for everyone. If it helps you, a sponsor or a star means a lot.</string>
+    <string name="support_chip_free">100% free</string>
+    <string name="support_chip_no_ads">No ads</string>
+    <string name="support_chip_open_source">Open source</string>
+    <string name="support_sponsor">Sponsor</string>
+    <string name="support_star">Star on GitHub</string>
     <string name="no_project_yet">No projects yet — create one to get started.</string>
     <string name="your_projects">Your projects</string>
     <plurals name="modules">

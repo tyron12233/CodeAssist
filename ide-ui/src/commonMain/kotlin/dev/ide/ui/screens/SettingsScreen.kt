@@ -88,7 +88,7 @@ fun SettingsScreen(
     codeFont: FontFamily = FontFamily.Monospace,
     fileActions: FileActions = FileActions.None,
 ) {
-    val pages = remember { backend.settingsPages() }
+    val pages = remember { backend.settings.settingsPages() }
     // Local mirror of each control's value (keyed "pageId.controlKey"), seeded from the descriptors. Controls
     // read/write this for instant feedback; each write also persists through the backend.
     val values = remember {
@@ -102,14 +102,14 @@ fun SettingsScreen(
 
     val onSet: (String, String, String) -> Unit = { pageId, key, encoded ->
         values["$pageId.$key"] = encoded
-        backend.setSetting(pageId, key, encoded)
+        backend.settings.setSetting(pageId, key, encoded)
         onSettingsChanged()
     }
     val onAction: (String, UiSettingControl.Action) -> Unit = { pageId, action ->
         when (action.key) {
             ACTION_VIEW_LOGS -> onOpenLogs()
-            ACTION_BACKUP -> scope.launch { backend.backupProjects()?.let { fileActions.share(it) }; toast = "Backup ready" }
-            else -> scope.launch { backend.invokeSettingAction(pageId, action.key)?.let { toast = it } }
+            ACTION_BACKUP -> scope.launch { backend.projects.backupProjects()?.let { fileActions.share(it) }; toast = "Backup ready" }
+            else -> scope.launch { backend.settings.invokeSettingAction(pageId, action.key)?.let { toast = it } }
         }
     }
 
@@ -265,7 +265,7 @@ private fun ControlRow(
 
 @Composable
 private fun InspectionsCard(backend: IdeBackend) {
-    var inspections by remember { mutableStateOf(backend.inspections()) }
+    var inspections by remember { mutableStateOf(backend.settings.inspections()) }
     if (inspections.isEmpty()) return
     val byLang = inspections.groupBy { it.language }.toList().sortedBy { it.first }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -273,8 +273,8 @@ private fun InspectionsCard(backend: IdeBackend) {
             SettingsCard("$lang inspections") {
                 list.forEach { insp ->
                     InspectionRow(insp) { enabled, severity ->
-                        backend.setInspection(insp.id, enabled, severity)
-                        inspections = backend.inspections()
+                        backend.settings.setInspection(insp.id, enabled, severity)
+                        inspections = backend.settings.inspections()
                     }
                 }
             }

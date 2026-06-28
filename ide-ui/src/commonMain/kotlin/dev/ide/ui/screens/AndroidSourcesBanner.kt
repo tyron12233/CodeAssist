@@ -32,7 +32,7 @@ internal fun AndroidSourcesBanner(state: IdeUiState) {
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { info = runCatching { state.backend.androidSourcesInfo() }.getOrNull() }
+    LaunchedEffect(Unit) { info = runCatching { state.backend.sdk.androidSourcesInfo() }.getOrNull() }
 
     val show = status != null || (info?.let { !it.installed && it.downloadable } == true)
     if (!show) return
@@ -54,7 +54,7 @@ internal fun AndroidSourcesBanner(state: IdeUiState) {
                 modifier = Modifier.then(
                     if (busy) Modifier else Modifier.clickable {
                         busy = true
-                        scope.launch { status = runCatching { state.backend.downloadAndroidSources() }.getOrElse { "Download failed: ${it.message}" } }
+                        scope.launch { status = runCatching { state.backend.sdk.downloadAndroidSources() }.getOrElse { "Download failed: ${it.message}" } }
                     },
                 ),
             )

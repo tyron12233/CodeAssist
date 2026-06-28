@@ -139,7 +139,7 @@ internal fun LegacyCodeEditor(
         job?.cancel()
         job = scope.launch {
             if (!immediate) delay(110.milliseconds)
-            val res = runCatching { backend.complete(path, v.text, v.selection.start) }.getOrNull() ?: return@launch
+            val res = runCatching { backend.editor.complete(path, v.text, v.selection.start) }.getOrNull() ?: return@launch
             val sameToken = res.replaceStart == session?.tokenStart
             session = CompletionSession.from(res)
             if (!sameToken) selected = 0

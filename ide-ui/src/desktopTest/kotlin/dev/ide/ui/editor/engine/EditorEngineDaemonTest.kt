@@ -2,6 +2,7 @@ package dev.ide.ui.editor.engine
 
 import dev.ide.ui.backend.AnalysisPreempted
 import dev.ide.ui.backend.BuildState
+import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.NodeKind
@@ -40,7 +41,7 @@ class EditorEngineDaemonTest {
     /** A backend that records pass calls in order and simulates per-pass engine latency; can preempt a pass. */
     private class FakeEngine(
         private val latencyMs: Long = 10,
-    ) : IdeBackend {
+    ) : StubBackend() {
         val calls = CopyOnWriteArrayList<String>()
         /** Pass names to throw [AnalysisPreempted] from ONCE (consumed on use), modelling a completion cut-in. */
         val preemptOnce = mutableSetOf<String>()
@@ -56,21 +57,6 @@ class EditorEngineDaemonTest {
         override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> { pass("INLAY"); return emptyList() }
         override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> { pass("FOLDS"); return emptyList() }
         override suspend fun composePreviews(path: String, text: String): List<UiComposePreview> { pass("PREVIEWS"); return emptyList() }
-
-        // --- inert IdeBackend surface ---
-        override val project = ProjectInfo("p", "/p", 1)
-        override fun fileTree(mode: TreeViewMode) = TreeNode("root", "p", NodeKind.Workspace, null)
-        override fun readFile(path: String) = ""
-        override fun moduleNameForFile(path: String): String? = null
-        override fun updateDocument(path: String, text: String) {}
-        override fun saveFile(path: String, text: String) {}
-        override suspend fun complete(path: String, text: String, offset: Int) = UiCompletionResult(emptyList(), offset, offset)
-        override val indexStatus: StateFlow<IndexUiStatus> = MutableStateFlow(IndexUiStatus())
-        override suspend fun searchSymbols(query: String, limit: Int): List<SymbolHit> = emptyList()
-        override suspend fun searchMembers(query: String, limit: Int): List<SymbolHit> = emptyList()
-        override val buildState: StateFlow<BuildState> = MutableStateFlow(BuildState())
-        override fun runBuild() {}
-        override fun stopBuild() {}
     }
 
     private class Recorder : DaemonObserver {

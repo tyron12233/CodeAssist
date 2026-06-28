@@ -22,7 +22,7 @@ class AndroidDemoTest {
             assertEquals("android-lib", ide.modules().first { it.name == "feature" }.type.id)
 
             val backend = IdeServicesBackend(ide)
-            val tree = backend.fileTree()
+            val tree = backend.files.fileTree()
             fun flatten(n: TreeNode): List<TreeNode> = listOf(n) + n.children.flatMap { flatten(it) }
             val nodes = flatten(tree)
             val names = nodes.map { it.name }.toSet()
@@ -34,7 +34,7 @@ class AndroidDemoTest {
             // The manifest is an openable file (has a path) and reads back its content.
             val manifest = nodes.first { it.name == "AndroidManifest.xml" }
             assertTrue(manifest.filePath != null, "manifest node must be openable")
-            assertTrue("com.example.app" in backend.readFile(manifest.filePath!!), "manifest content should be readable/editable")
+            assertTrue("com.example.app" in backend.files.readFile(manifest.filePath!!), "manifest content should be readable/editable")
         }
         dir.toFile().deleteRecursively()
     }
@@ -43,7 +43,7 @@ class AndroidDemoTest {
     fun runPickerOffersAndroidAssembleVariants() {
         val dir = Files.createTempDirectory("ide-android-run")
         IdeServices.bootstrapDemo(dir).use { ide ->
-            val ids = IdeServicesBackend(ide).runTasks().map { it.id }.toSet()
+            val ids = IdeServicesBackend(ide).build.runTasks().map { it.id }.toSet()
             assertTrue("assemble:app:debug" in ids, "Run picker should offer assemble debug: $ids")
             assertTrue("assemble:app:release" in ids, "Run picker should offer assemble release: $ids")
             // reindex is a fire-and-forget background action; it must at least not throw.

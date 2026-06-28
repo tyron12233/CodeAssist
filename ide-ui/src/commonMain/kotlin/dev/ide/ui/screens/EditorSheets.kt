@@ -28,16 +28,39 @@ import dev.ide.ui.IdeUiState
 import dev.ide.ui.RailDestination
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.components.DropdownOverlay
+import dev.ide.ui.ext.BuiltInUiActions
+import dev.ide.ui.ext.UiActionHost
+import dev.ide.ui.ext.UiActionRegistry
+import dev.ide.ui.ext.UiDestinations
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
 
 @Composable
-internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenSettings: () -> Unit, onOpenDependencies: (String?) -> Unit, onOpenSdkManager: () -> Unit) {
+internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenSettings: () -> Unit, onOpenDependencies: (String?) -> Unit, onOpenSdkManager: () -> Unit, onOpenKeystoreManager: () -> Unit) {
+    // The palette's UI-navigation commands come from UiActionRegistry; this host bridges them to the app's
+    // navigation callbacks (the same pattern as the More menu).
+    val paletteHost = object : UiActionHost {
+        override val backend: IdeBackend = state.backend
+        override fun navigate(destination: String) {
+            state.paletteOpen = false
+            when (destination) {
+                UiDestinations.SETTINGS -> onOpenSettings()
+                UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
+                UiDestinations.SDK -> onOpenSdkManager()
+                UiDestinations.KEYSTORES -> onOpenKeystoreManager()
+                UiDestinations.LOGS -> state.logsOpen = true
+            }
+        }
+        override fun toggleTheme() { state.paletteOpen = false; onToggleTheme() }
+        override fun openFile(path: String, offset: Int) { state.paletteOpen = false; state.openAt(path, offset) }
+    }
     DropdownOverlay(
         visible = state.paletteOpen,
         onDismiss = { state.paletteOpen = false },
@@ -45,13 +68,9 @@ internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpen
         CommandPalette(
             files = openableFiles(state.tree),
             backend = state.backend,
+            uiHost = paletteHost,
             onOpenFile = { node -> node.filePath?.let { state.open(it, node.name); state.paletteOpen = false } },
             onOpenAt = { path, offset -> state.openAt(path, offset); state.paletteOpen = false },
-            onToggleTheme = onToggleTheme,
-            onReindex = { state.backend.reindex(); state.paletteOpen = false },
-            onOpenDependencies = { state.paletteOpen = false; onOpenDependencies(null) },
-            onManageSdk = { state.paletteOpen = false; onOpenSdkManager() },
-            onOpenSettings = { state.paletteOpen = false; onOpenSettings() },
             onClose = { state.paletteOpen = false },
         )
     }
@@ -69,10 +88,11 @@ internal fun DestinationSheets(
     onToggleTheme: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSdkManager: () -> Unit,
+    onOpenKeystoreManager: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
 ) {
-    val indexStatus by state.backend.indexStatus.collectAsState()
+    val indexStatus by state.backend.search.indexStatus.collectAsState()
     if (compact) {
         BottomSheet(visible = state.searchOpen, onDismiss = { state.searchOpen = false }, heightFraction = 0.85f) {
             SearchScreen(
@@ -92,15 +112,29 @@ internal fun DestinationSheets(
         )
     }
     BottomSheet(visible = state.sheetDest == RailDestination.More, onDismiss = { state.sheetDest = null }, heightFraction = 0.62f) {
+        // The "More" rows are UI-side actions resolved from the registry; the host bridges them to the app's
+        // navigation/theme callbacks. Adding a row is a registration (see BuiltInUiActions), not an edit here.
+        val moreHost = remember(state) {
+            object : UiActionHost {
+                override val backend: IdeBackend = state.backend
+                override fun navigate(destination: String) {
+                    state.sheetDest = null
+                    when (destination) {
+                        UiDestinations.SETTINGS -> onOpenSettings()
+                        UiDestinations.MODULES -> onOpenModuleConfig(null)
+                        UiDestinations.SDK -> onOpenSdkManager()
+                        UiDestinations.KEYSTORES -> onOpenKeystoreManager()
+                        UiDestinations.LOGS -> state.logsOpen = true
+                        UiDestinations.PROJECTS -> onCloseProject()
+                    }
+                }
+                override fun toggleTheme() { state.sheetDest = null; onToggleTheme() }
+                override fun openFile(path: String, offset: Int) { state.sheetDest = null; state.openAt(path, offset) }
+            }
+        }
         MoreSheetContent(
             backend = state.backend,
-            onSettings = { state.sheetDest = null; onOpenSettings() },
-            onModuleSettings = { state.sheetDest = null; onOpenModuleConfig(null) },
-            onReindex = { state.sheetDest = null; state.backend.reindex() },
-            onToggleTheme = { state.sheetDest = null; onToggleTheme() },
-            onManageSdk = { state.sheetDest = null; onOpenSdkManager() },
-            onViewLogs = { state.sheetDest = null; state.logsOpen = true },
-            onCloseProject = { state.sheetDest = null; onCloseProject() },
+            host = moreHost,
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
     }
@@ -114,39 +148,32 @@ internal fun DestinationSheets(
     }
 }
 
-/** The "More" menu: secondary actions that don't warrant a top-level destination. */
+/** The "More" menu: secondary actions that don't warrant a top-level destination. Rows are UI-side actions
+ *  resolved from [UiActionRegistry] (the built-ins, plus anything an in-UI plugin contributes). */
 @Composable
-private fun MoreSheetContent(
+internal fun MoreSheetContent(
     backend: IdeBackend,
-    onSettings: () -> Unit,
-    onModuleSettings: () -> Unit,
-    onReindex: () -> Unit,
-    onToggleTheme: () -> Unit,
-    onManageSdk: () -> Unit,
-    onViewLogs: () -> Unit,
-    onCloseProject: () -> Unit,
+    host: UiActionHost,
     modifier: Modifier = Modifier,
 ) {
+    BuiltInUiActions.ensureRegistered()
+    val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host)
     // Scrollable so every row (incl. "Close project") is reachable when the sheet is short — e.g. the soft
     // keyboard is up and the sheet has been lifted above it (issue #994).
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
         Text("More", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
-        MoreRow(CaIcons.gear, "Settings", "Appearance · editor · completion · analysis · build", onSettings)
-        MoreRow(CaIcons.layers, "Modules", "Add/remove modules · Java version · dependencies · repositories", onModuleSettings)
-        MoreRow(CaIcons.pkg, "SDK Manager", "Download Android SDK packages & JDK sources", onManageSdk)
-        MoreRow(CaIcons.refresh, "Re-index project", "Rebuild symbol & completion indexes", onReindex)
-        MoreRow(CaIcons.terminal, "View logs", "Editor, analysis & build logs — share when something's off", onViewLogs)
-        MoreRow(CaIcons.eye, "Toggle theme", "Switch between light and dark", onToggleTheme)
-        MoreRow(CaIcons.close, "Close project", "Back to all projects", onCloseProject)
+        actions.forEach { a ->
+            MoreRow(actionIcon(a.iconId), a.text, a.description ?: "") { a.perform(host) }
+        }
 
         // Performance-analytics opt-in lives here (a settings surface) rather than on the home screen, so it's
         // a deliberate one-time choice the user can revisit, not a permanent fixture of the project picker.
-        if (backend.analyticsAvailable()) {
-            var on by remember { mutableStateOf(backend.analyticsConsent() == true) }
+        if (backend.diagnostics.analyticsAvailable()) {
+            var on by remember { mutableStateOf(backend.diagnostics.analyticsConsent() == true) }
             Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(Ca.colors.separator))
             Box(Modifier.padding(horizontal = 6.dp)) {
-                AnalyticsToggleRow(enabled = on, onChange = { on = it; backend.setAnalyticsConsent(it) })
+                AnalyticsToggleRow(enabled = on, onChange = { on = it; backend.diagnostics.setAnalyticsConsent(it) })
             }
         }
     }

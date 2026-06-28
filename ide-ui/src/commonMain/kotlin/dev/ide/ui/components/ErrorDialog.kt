@@ -47,12 +47,12 @@ import dev.ide.ui.theme.Ca
  */
 @Composable
 fun ErrorDialog(backend: IdeBackend) {
-    val error by backend.errorEvents.collectAsState()
+    val error by backend.diagnostics.errorEvents.collectAsState()
     // Retain the last error so the exit animation doesn't flash empty as it clears.
     var shown by remember { mutableStateOf<UiError?>(null) }
     if (error != null) shown = error
 
-    fun dismiss() { shown?.let { backend.dismissError(it.id) } }
+    fun dismiss() { shown?.let { backend.diagnostics.dismissError(it.id) } }
 
     CenteredDialog(visible = error != null, onDismiss = { dismiss() }) {
         shown?.let { err -> ErrorCard(err, onDismiss = ::dismiss) }

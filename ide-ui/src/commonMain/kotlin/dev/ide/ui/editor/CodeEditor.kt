@@ -176,6 +176,13 @@ fun CodeEditor(
     wrapIndent: Boolean = true,
     /** Render programming ligatures (`->`, `!=`, …) when the code font provides them (Settings → Editor; on). */
     fontLigatures: Boolean = true,
+    /**
+     * The editor is covered by an app-level overlay (the file-tree / build-console sheet on a phone, the command
+     * palette, a destination sheet). The floating popups (completion, lightbulb, signature help, code-action
+     * menu) are separate Popup windows that would otherwise sit ON TOP of that overlay, so they're torn down
+     * while obscured — even when the overlay doesn't steal the editor's input focus.
+     */
+    obscured: Boolean = false,
 ) {
     // Source code is intrinsically left-to-right: the gutter sits at the left edge and lines flow right.
     // On an RTL system locale (e.g. Arabic) Compose flips `LocalLayoutDirection`, which would make
@@ -186,7 +193,7 @@ fun CodeEditor(
         CodeEditorContent(
             path, session, backend, modifier, onSave, onNavigate, onRenamed,
             findEpoch, fontScale, onFontScaleChange, onPreview, completionAutoPopup, completionDelayMs,
-            twoAxisScroll, pinchZoom, wordWrap, wrapIndent, fontLigatures,
+            twoAxisScroll, pinchZoom, wordWrap, wrapIndent, fontLigatures, obscured,
         )
     }
 }
@@ -211,6 +218,7 @@ private fun CodeEditorContent(
     wordWrap: Boolean = false,
     wrapIndent: Boolean = true,
     fontLigatures: Boolean = true,
+    obscured: Boolean = false,
 ) {
     val colors = Ca.colors
     val syntax = colors.syntax
@@ -600,6 +608,11 @@ private fun CodeEditorContent(
 
     // ---- focus / caret blink / touch chrome ----
     var isFocused by remember { mutableStateOf(false) }
+    // The editor is "engaged" only when it holds input focus AND isn't covered by an app overlay (a phone's
+    // file-tree / console sheet, the palette, …). The floating popups (completion, lightbulb, signature help,
+    // code-action menu) are separate Popup windows and so float above any such overlay; they're shown only
+    // while engaged and torn down (below) the moment the editor is disengaged.
+    val engaged = isFocused && !obscured
     var blinkOn by remember { mutableStateOf(true) }
     LaunchedEffect(editorSession.editCount, editorSession.selection.start, isFocused) {
         blinkOn = true // caret solid through every edit or cursor move; blink only at rest
@@ -703,7 +716,7 @@ private fun CodeEditorContent(
         val text = editorSession.doc.text
         val caret = editorSession.selection.start
         scope.launch {
-            val target = runCatching { backend.prepareRename(path, text, caret) }.getOrNull()
+            val target = runCatching { backend.editor.prepareRename(path, text, caret) }.getOrNull()
             if (target != null) { renameError = null; rename = RenameUiState(caret, target.oldName, target.kind, target.oldName) }
         }
     }
@@ -714,7 +727,7 @@ private fun CodeEditorContent(
         renameBusy = true; renameError = null
         val text = editorSession.doc.text
         scope.launch {
-            val result = runCatching { backend.rename(path, text, r.offset, r.newName) }
+            val result = runCatching { backend.editor.rename(path, text, r.offset, r.newName) }
                 .getOrElse { dev.ide.ui.backend.UiRenameResult(false, it.message ?: "Rename failed") }
             renameBusy = false
             if (result.success) { rename = null; onRenamed(result.newPath) }
@@ -905,6 +918,19 @@ private fun CodeEditorContent(
         acts.refreshAvailability(isFocused)
     }
 
+    // Tear down the floating popups when the editor loses focus or is covered by an overlay (e.g. the file
+    // tree opens over it on a phone). They're separate Popup windows, so without this they'd hang on top of
+    // whatever now has the user's attention. Dismiss (not just hide) so a stale popup doesn't pop back when
+    // the editor is re-engaged — completion re-opens on the next keystroke / Ctrl-Space, the menu on Alt-Enter.
+    LaunchedEffect(engaged) {
+        if (!engaged) {
+            completion.dismiss()
+            sig.dismiss()
+            acts.closeMenu()
+            acts.closeSheet()
+        }
+    }
+
     // signature help — re-resolve whenever the caret moves or the buffer changes (or Ctrl/Cmd-P bumps sigEpoch).
     // Gated by a cheap local scan so we only call the backend when the caret is actually inside a call's parens;
     // dismisses (and re-arms) when the caret leaves the call, so Esc only hides it for the current call.
@@ -1079,7 +1105,7 @@ private fun CodeEditorContent(
                         val text = editorSession.doc.text
                         val caret = editorSession.selection.start
                         scope.launch {
-                            runCatching { backend.definitionAt(path, text, caret) }.getOrNull()
+                            runCatching { backend.editor.definitionAt(path, text, caret) }.getOrNull()
                                 ?.let { onNavigate(it.path, it.offset) }
                         }
                         return@onPreviewKeyEvent true
@@ -1468,7 +1494,7 @@ private fun CodeEditorContent(
         // (the keep-alive latch) and rendered from `shownCompletion` (the last good state) so a keystroke's
         // transient session swap / filter miss doesn't blink the window shut.
         val shown = completion.shown
-        if (completion.popupVisible && shown != null) {
+        if (completion.popupVisible && shown != null && engaged) {
             val anchor = shown.tokenStart.coerceIn(0, docLength)
             val (anchorLine, anchorX, anchorTop) = caretGeometry(anchor)
             val lineBottomPx = anchorTop + metrics.lineHeight
@@ -1528,7 +1554,7 @@ private fun CodeEditorContent(
         // signature-help (parameter-info) panel — floated ABOVE the caret line, independent of the completion
         // popup below it. Non-focusable so typing keeps reaching the editor; dismissed by the host logic above.
         val sigHelp = sig.help
-        if (sigHelp != null && !sig.dismissed && isFocused && sigHelp.signatures.isNotEmpty()) {
+        if (sigHelp != null && !sig.dismissed && engaged && sigHelp.signatures.isNotEmpty()) {
             val (_, sigX, sigTop) = caretGeometry(caretOffset)
             val gapPx = with(density) { 6.dp.roundToPx() }
             val positionProvider = remember(sigX, sigTop, gapPx) {
@@ -1551,7 +1577,7 @@ private fun CodeEditorContent(
         // covers (so it clearly signals "there's a fix to apply here"), there are actions, the completion popup
         // isn't showing, and the fix menu isn't already open. Tap it → the fix list (opens below the caret).
         // Caret intentions elsewhere stay reachable via Alt-Enter / the selection toolbar, just without a bulb.
-        if (acts.available.isNotEmpty() && acts.caretDiagnostic != null && !showPopup && !acts.menuOpen && isFocused) {
+        if (acts.available.isNotEmpty() && acts.caretDiagnostic != null && !showPopup && !acts.menuOpen && engaged) {
             val (_, bulbX, bulbTop) = caretGeometry(caretOffset)
             val gapPx = with(density) { 6.dp.roundToPx() }
             val positionProvider = remember(bulbX, bulbTop, gapPx) {
@@ -1587,7 +1613,7 @@ private fun CodeEditorContent(
         }
 
         // code-actions menu, anchored below the caret line (same position machinery as completion)
-        if (acts.menuOpen && acts.available.isNotEmpty()) {
+        if (acts.menuOpen && acts.available.isNotEmpty() && engaged) {
             val (_, anchorX, anchorTop) = caretGeometry(caretOffset)
             val lineBottomPx = anchorTop + metrics.lineHeight
             val gapPx = with(density) { 6.dp.roundToPx() }
@@ -1631,7 +1657,7 @@ private fun CodeEditorContent(
         }
 
         // diagnostic sheet — full (scrollable) message + that diagnostic's fixes, docked at the pane bottom
-        acts.sheet?.let { d ->
+        if (engaged) acts.sheet?.let { d ->
             DiagnosticSheet(
                 severity = d.severity,
                 unused = d.unused,

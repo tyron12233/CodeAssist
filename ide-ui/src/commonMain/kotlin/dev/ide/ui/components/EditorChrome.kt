@@ -60,7 +60,9 @@ import dev.ide.ui.OpenFile
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunTaskOption
+import dev.ide.ui.backend.UiActionItem
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
 
 /**
@@ -96,6 +98,10 @@ fun EditorTopBar(
     onPreview: () -> Unit = {},
     previewBusy: Boolean = false,
     onIndexClick: () -> Unit = {},
+    /** Plugin-contributed toolbar actions (the `mainToolbar` place), rendered just before Run. Empty by
+     *  default — built-in chrome stays native; this is the seam a plugin adds a button through. */
+    pluginActions: List<UiActionItem> = emptyList(),
+    onPluginAction: (String) -> Unit = {},
     compact: Boolean = false,
 ) {
     val dim = Ca.colors.textTertiary.copy(alpha = 0.35f)
@@ -117,6 +123,7 @@ fun EditorTopBar(
             if (compact) {
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
                 // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
+                PluginToolbarActions(pluginActions, dim, onPluginAction)
                 RunControl(runTasks, onPickTask, compact = true)
                 EditorOverflowMenu(
                     onOpenPalette = onOpenPalette,
@@ -145,9 +152,24 @@ fun EditorTopBar(
                 IconButtonCa(CaIcons.terminal, "Build console", onToggleConsole, active = consoleOpen)
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
                 if (showPreview) IconButtonCa(CaIcons.image, "Compose preview", onPreview, active = previewBusy)
+                PluginToolbarActions(pluginActions, dim, onPluginAction)
                 RunControl(runTasks, onPickTask, compact = false)
             }
         }
+    }
+}
+
+/** Renders the plugin-contributed toolbar actions (the `mainToolbar` action place). Disabled actions are
+ *  tinted muted; clicking routes the action id back to the host, which runs it through the registry. */
+@Composable
+private fun PluginToolbarActions(actions: List<UiActionItem>, dim: Color, onAction: (String) -> Unit) {
+    actions.forEach { a ->
+        IconButtonCa(
+            actionIcon(a.iconId),
+            a.text,
+            onClick = { if (a.enabled) onAction(a.id) },
+            tint = if (a.enabled) null else dim,
+        )
     }
 }
 

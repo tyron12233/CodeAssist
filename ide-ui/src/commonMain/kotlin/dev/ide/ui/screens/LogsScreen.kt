@@ -62,7 +62,7 @@ fun LogsScreen(
     fileActions: FileActions,
     modifier: Modifier = Modifier,
 ) {
-    var all by remember { mutableStateOf(backend.recentLogs()) }
+    var all by remember { mutableStateOf(backend.diagnostics.recentLogs()) }
     var filter by remember { mutableStateOf(LogFilter.All) }
     var query by remember { mutableStateOf("") }
     var paused by remember { mutableStateOf(false) }
@@ -73,7 +73,7 @@ fun LogsScreen(
     // most a few hundred records), unless the user paused it (so they can read without the list shifting).
     LaunchedEffect(paused) {
         while (!paused) {
-            all = backend.recentLogs()
+            all = backend.diagnostics.recentLogs()
             delay(1500)
         }
     }
@@ -98,13 +98,13 @@ fun LogsScreen(
             Text("${shown.size}", color = Ca.colors.textTertiary, style = Ca.type.footnote, modifier = Modifier.padding(start = 4.dp))
             Box(Modifier.weight(1f))
             HeaderAction(if (paused) CaIcons.play else CaIcons.stop, if (paused) "Resume live tail" else "Pause live tail", paused) { paused = !paused }
-            HeaderAction(CaIcons.refresh, "Refresh") { all = backend.recentLogs() }
+            HeaderAction(CaIcons.refresh, "Refresh") { all = backend.diagnostics.recentLogs() }
             HeaderAction(CaIcons.copy, "Copy all") {
                 clipboard.setText(AnnotatedString(shown.joinToString("\n\n") { renderForCopy(it) }))
             }
             if (fileActions.canShare) {
                 HeaderAction(CaIcons.share, "Share") {
-                    scope.launch { backend.exportLogs()?.let { fileActions.share(it) } }
+                    scope.launch { backend.diagnostics.exportLogs()?.let { fileActions.share(it) } }
                 }
             }
         }

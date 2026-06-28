@@ -85,9 +85,9 @@ fun SearchScreen(
         searching = true
         delay(250)
         when (tab) {
-            SearchTab.Symbols -> symbols = runCatching { backend.searchSymbols(q, 60) }.getOrDefault(emptyList())
-            SearchTab.Members -> members = runCatching { backend.searchMembers(q, 60) }.getOrDefault(emptyList())
-            SearchTab.Text -> matches = runCatching { backend.findInFiles(q, options, 300) }.getOrDefault(emptyList())
+            SearchTab.Symbols -> symbols = runCatching { backend.search.searchSymbols(q, 60) }.getOrDefault(emptyList())
+            SearchTab.Members -> members = runCatching { backend.search.searchMembers(q, 60) }.getOrDefault(emptyList())
+            SearchTab.Text -> matches = runCatching { backend.search.findInFiles(q, options, 300) }.getOrDefault(emptyList())
         }
         searching = false
     }

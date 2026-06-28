@@ -48,7 +48,7 @@ class PreemptionBenchmark {
                 )
                 val completionOffset = completionText.indexOf("formatter.\n") + "formatter.".length
                 val mainPath = mainFile.toString()
-                fun complete() = runBlocking { backend.complete(mainPath, completionText, completionOffset) }.items.size.toLong()
+                fun complete() = runBlocking { backend.editor.complete(mainPath, completionText, completionOffset) }.items.size.toLong()
 
                 // Heavy analysis fixture: a large synthetic class in the same module, so a single analyze takes
                 // long enough to reliably be in flight when a completion fires.
@@ -60,7 +60,7 @@ class PreemptionBenchmark {
                     }
                     append("}\n")
                 }
-                fun analyzeOnce() = runCatching { runBlocking { backend.analyze(hugePath, hugeText) } }
+                fun analyzeOnce() = runCatching { runBlocking { backend.editor.analyze(hugePath, hugeText) } }
 
                 // Warm up both paths (JDT env cache, index, JIT).
                 repeat(3) { complete() }

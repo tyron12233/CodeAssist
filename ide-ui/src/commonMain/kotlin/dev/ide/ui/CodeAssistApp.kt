@@ -31,6 +31,9 @@ import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.EditorScreen
+import dev.ide.ui.screens.KeystoreCreateScreen
+import dev.ide.ui.screens.KeystoreImportScreen
+import dev.ide.ui.screens.KeystoreManagerScreen
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.ProjectPickerScreen
@@ -65,26 +68,27 @@ fun CodeAssistApp(
 ) {
     // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
     // screen writes; appearance changes then take effect immediately.
-    var settings by remember { mutableStateOf(backend.settings()) }
+    var settings by remember { mutableStateOf(backend.settings.settings()) }
     var screen by remember { mutableStateOf(Screen.Projects) }
     var configModule by remember { mutableStateOf<String?>(null) }
     var modulesTab by remember { mutableStateOf(ModulesTab.Settings) }
-    var showMigration by remember { mutableStateOf(backend.preference("migration.acknowledged") != "true") }
-    var showLegacyRecovery by remember { mutableStateOf(backend.preference("legacy.recovery.seen") != "true") }
-    var showOnboarding by remember { mutableStateOf(backend.preference("onboarding.seen") != "true") }
+    var keystoreImportPath by remember { mutableStateOf<String?>(null) }
+    var showMigration by remember { mutableStateOf(backend.settings.preference("migration.acknowledged") != "true") }
+    var showLegacyRecovery by remember { mutableStateOf(backend.settings.preference("legacy.recovery.seen") != "true") }
+    var showOnboarding by remember { mutableStateOf(backend.settings.preference("onboarding.seen") != "true") }
     // Opt-in analytics: prompt only when collection is available and the user hasn't decided yet (null). The
     // re-toggle lives in the editor's More menu (a settings surface), not permanently on the project picker.
-    var showAnalytics by remember { mutableStateOf(backend.analyticsAvailable() && backend.analyticsConsent() == null) }
+    var showAnalytics by remember { mutableStateOf(backend.diagnostics.analyticsAvailable() && backend.diagnostics.analyticsConsent() == null) }
     // Bumped after a project is deleted so the picker re-reads the (now-smaller) on-disk project list.
     var projectsRefresh by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
     // Create a project backup zip and hand it to the host's share/save sheet.
     val backupAndShare: suspend () -> Unit =
-        { backend.backupProjects()?.let { fileActions.share(it) } }
+        { backend.projects.backupProjects()?.let { fileActions.share(it) } }
 
     // The active project changes (create/open) bump the epoch; re-key per-project state on it.
-    val epoch by backend.projectEpoch.collectAsState()
+    val epoch by backend.projects.projectEpoch.collectAsState()
     val state = remember(backend, epoch) { IdeUiState(backend, composePreviewHost) }
 
     // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
@@ -98,7 +102,7 @@ fun CodeAssistApp(
         snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }.drop(1)
             .collectLatest {
                 delay(300)
-                state.backend.saveOpenTabs(state.tabsSnapshot())
+                state.backend.projects.saveOpenTabs(state.tabsSnapshot())
             }
     }
     // A successful create/open advances the epoch — land in the editor on the new project.
@@ -106,13 +110,13 @@ fun CodeAssistApp(
 
     // Starting a console run (a `run` task) opens a fresh interactive session — keyed on its id, jump to the
     // full-screen Run terminal. Build/assemble tasks leave runConsole null and stay in the build console.
-    val runConsole by backend.runConsole.collectAsState()
+    val runConsole by backend.build.runConsole.collectAsState()
     LaunchedEffect(runConsole?.id, epoch) {
         if (runConsole != null && screen == Screen.Editor) screen = Screen.Run
     }
 
     // External file writes (e.g. an "Open with" import the UI didn't drive) re-read the tree.
-    val fsEpoch by backend.fileSystemEpoch.collectAsState()
+    val fsEpoch by backend.files.fileSystemEpoch.collectAsState()
     LaunchedEffect(state, fsEpoch) { if (fsEpoch > 0) state.refreshTree() }
 
     // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
@@ -122,6 +126,9 @@ fun CodeAssistApp(
         "system" -> isSystemInDarkTheme()
         else -> true
     }
+
+
+
     val accent = if (settings.accent == dev.ide.ui.backend.UiAccent.Teal) CaAccent.Teal else CaAccent.Violet
     val resolvedCodeFont = if (settings.codeFont == "monospace") FontFamily.Monospace else codeFont
     // Apply settings to the active project's live editor state whenever they change (or the project swaps).
@@ -135,19 +142,22 @@ fun CodeAssistApp(
         PlatformBackHandler(enabled = screen != Screen.Projects || showOnboarding || showMigration || showAnalytics) {
             when {
                 showOnboarding -> {
-                    showOnboarding = false; backend.setPreference("onboarding.seen", "true")
+                    showOnboarding = false; backend.settings.setPreference("onboarding.seen", "true")
                 }
 
                 showMigration -> {
-                    showMigration = false; backend.setPreference("migration.acknowledged", "true")
+                    showMigration = false; backend.settings.setPreference("migration.acknowledged", "true")
                 }
 
                 showAnalytics -> {
-                    showAnalytics = false; backend.setAnalyticsConsent(false)
+                    showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false)
                 }
 
-                screen == Screen.Run || screen == Screen.ModuleConfig || screen == Screen.SdkManager || screen == Screen.Settings -> screen =
-                    Screen.Editor
+                // The keystore Create/Import sub-screens step back to their manager, not all the way to the editor.
+                screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
+
+                screen == Screen.Run || screen == Screen.ModuleConfig || screen == Screen.SdkManager ||
+                    screen == Screen.KeystoreManager || screen == Screen.Settings -> screen = Screen.Editor
 
                 screen == Screen.CreateProject -> screen = Screen.Projects
                 screen == Screen.Editor -> screen = Screen.Projects
@@ -161,16 +171,16 @@ fun CodeAssistApp(
                 ScreenHost(screen, Modifier.fillMaxSize()) { s ->
                     when (s) {
                         Screen.Projects -> {
-                            val projects = remember(epoch, projectsRefresh) { backend.projects() }
+                            val projects = remember(epoch, projectsRefresh) { backend.projects.projects() }
                             ProjectPickerScreen(
                                 projects = projects,
                                 onOpen = { p ->
                                     scope.launch {
-                                        if (backend.openProject(p.rootPath)) screen = Screen.Editor
+                                        if (backend.projects.openProject(p.rootPath)) screen = Screen.Editor
                                     }
                                 },
                                 onNewProject = { screen = Screen.CreateProject },
-                                onDeleteProject = { p -> scope.launch { backend.deleteProject(p.rootPath); projectsRefresh++ } },
+                                onDeleteProject = { p -> scope.launch { backend.projects.deleteProject(p.rootPath); projectsRefresh++ } },
                                 onBackup = { scope.launch { backupAndShare() } },
                                 onSubmitSuggestions = if (fileActions.canOpenUrl) {
                                     { fileActions.openUrl(BetaInfo.FEEDBACK_URL) }
@@ -178,14 +188,20 @@ fun CodeAssistApp(
                                 onJoinDiscord = if (fileActions.canOpenUrl) {
                                     { fileActions.openUrl(BetaInfo.DISCORD_URL) }
                                 } else null,
-                                storagePath = backend.storageRootPath(),
+                                onSponsor = if (fileActions.canOpenUrl) {
+                                    { fileActions.openUrl(BetaInfo.SPONSOR_URL) }
+                                } else null,
+                                onStarOnGitHub = if (fileActions.canOpenUrl) {
+                                    { fileActions.openUrl(BetaInfo.REPO_URL) }
+                                } else null,
+                                storagePath = backend.projects.storageRootPath(),
                                 onOpenInFiles = if (fileActions.canReveal) {
-                                    { backend.storageRootPath()?.let { fileActions.reveal(it) } }
+                                    { backend.projects.storageRootPath()?.let { fileActions.reveal(it) } }
                                 } else null,
                                 showLegacyRecovery = showLegacyRecovery,
                                 onDismissLegacyRecovery = {
                                     showLegacyRecovery = false
-                                    backend.setPreference("legacy.recovery.seen", "true")
+                                    backend.settings.setPreference("legacy.recovery.seen", "true")
                                 },
                             )
                         }
@@ -201,8 +217,8 @@ fun CodeAssistApp(
                             onToggleTheme = {
                                 // Quick toggle flips to the opposite of what's shown (an explicit light/dark,
                                 // stepping out of "system" if that was active).
-                                backend.setSetting("appearance", "themeMode", if (dark) "light" else "dark")
-                                settings = backend.settings()
+                                backend.settings.setSetting("appearance", "themeMode", if (dark) "light" else "dark")
+                                settings = backend.settings.settings()
                             },
                             onOpenSettings = { screen = Screen.Settings },
                             onOpenDependencies = { module ->
@@ -214,6 +230,7 @@ fun CodeAssistApp(
                                 Screen.ModuleConfig
                             },
                             onOpenSdkManager = { screen = Screen.SdkManager },
+                            onOpenKeystoreManager = { screen = Screen.KeystoreManager },
                             onCloseProject = { screen = Screen.Projects },
                             onOpenRun = { screen = Screen.Run },
                             fileActions = fileActions,
@@ -232,6 +249,7 @@ fun CodeAssistApp(
                             initialModule = configModule,
                             initialTab = modulesTab,
                             onBack = { screen = Screen.Editor },
+                            onOpenKeystoreManager = { screen = Screen.KeystoreManager },
                             codeFont = codeFont,
                             fileActions = fileActions,
                         )
@@ -241,10 +259,44 @@ fun CodeAssistApp(
                             onBack = { screen = Screen.Editor },
                         )
 
+                        Screen.KeystoreManager -> KeystoreManagerScreen(
+                            backend = state.backend,
+                            onBack = { screen = Screen.Editor },
+                            onCreate = { screen = Screen.KeystoreCreate },
+                            onImport = { path -> keystoreImportPath = path; screen = Screen.KeystoreImport },
+                            onManageSigning = {
+                                // Smart jump: one android-app → straight to its Signing tab; otherwise the module list.
+                                configModule = state.backend.signing.signableModules().singleOrNull()
+                                modulesTab = ModulesTab.Signing
+                                screen = Screen.ModuleConfig
+                            },
+                            fileActions = fileActions,
+                        )
+
+                        Screen.KeystoreCreate -> KeystoreCreateScreen(
+                            backend = state.backend,
+                            onBack = { screen = Screen.KeystoreManager },
+                            onDone = { screen = Screen.KeystoreManager },
+                        )
+
+                        Screen.KeystoreImport -> {
+                            val path = keystoreImportPath
+                            if (path == null) {
+                                screen = Screen.KeystoreManager
+                            } else {
+                                KeystoreImportScreen(
+                                    backend = state.backend,
+                                    path = path,
+                                    onBack = { screen = Screen.KeystoreManager },
+                                    onDone = { screen = Screen.KeystoreManager },
+                                )
+                            }
+                        }
+
                         Screen.Settings -> SettingsScreen(
                             backend = state.backend,
                             onBack = { screen = Screen.Editor },
-                            onSettingsChanged = { settings = backend.settings() },
+                            onSettingsChanged = { settings = backend.settings.settings() },
                             onOpenLogs = { state.logsOpen = true; screen = Screen.Editor },
                             codeFont = codeFont,
                             fileActions = fileActions,
@@ -259,7 +311,7 @@ fun CodeAssistApp(
                 onBackup = backupAndShare,
                 onDismiss = {
                     showMigration = false
-                    backend.setPreference("migration.acknowledged", "true")
+                    backend.settings.setPreference("migration.acknowledged", "true")
                 },
             )
             OnboardingSheet(
@@ -269,14 +321,14 @@ fun CodeAssistApp(
                 onGetStarted = { screen = Screen.CreateProject },
                 onFinish = {
                     showOnboarding = false
-                    backend.setPreference("onboarding.seen", "true")
+                    backend.settings.setPreference("onboarding.seen", "true")
                 },
             )
             // Opt-in analytics consent — last of the first-launch sheets, after onboarding/migration.
             AnalyticsConsentSheet(
                 visible = showAnalytics && !showOnboarding && !showMigration && screen == Screen.Projects,
-                onAllow = { showAnalytics = false; backend.setAnalyticsConsent(true) },
-                onDecline = { showAnalytics = false; backend.setAnalyticsConsent(false) },
+                onAllow = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(true) },
+                onDecline = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
                 onLearnMore = if (fileActions.canOpenUrl) {
                     { fileActions.openUrl(BetaInfo.PRIVACY_URL) }
                 } else null,

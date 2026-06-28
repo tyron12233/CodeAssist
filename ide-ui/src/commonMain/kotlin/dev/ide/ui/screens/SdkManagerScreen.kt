@@ -60,17 +60,17 @@ import kotlinx.coroutines.launch
 @Composable
 fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val progress by backend.sdkManagerState.collectAsState()
+    val progress by backend.sdk.sdkManagerState.collectAsState()
     var packages by remember { mutableStateOf<List<UiSdkPackage>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var statusIsError by remember { mutableStateOf(false) }
-    val jdk = remember { runCatching { backend.jdkInfo() }.getOrNull() }
+    val jdk = remember { runCatching { backend.sdk.jdkInfo() }.getOrNull() }
 
     suspend fun reload() {
         loading = true
         status = null
-        val result = runCatching { backend.sdkPackages() }
+        val result = runCatching { backend.sdk.sdkPackages() }
         packages = result.getOrDefault(emptyList())
         statusIsError = result.isFailure
         if (result.isFailure) status = result.exceptionOrNull()?.message ?: "Could not load packages."
@@ -115,13 +115,13 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                     SectionHeader("Downloads", small = true)
                     Spacer(Modifier.weight(1f))
                     if (progress.downloads.any { it.status == "DONE" || it.status == "FAILED" }) {
-                        PillButton("Clear finished", null, accent = false) { backend.clearSdkDownloads() }
+                        PillButton("Clear finished", null, accent = false) { backend.sdk.clearSdkDownloads() }
                     }
                 }
                 Card {
                     progress.downloads.forEachIndexed { i, d ->
                         if (i > 0) Spacer(Modifier.height(12.dp))
-                        DownloadRow(d) { backend.cancelSdkDownload(d.id) }
+                        DownloadRow(d) { backend.sdk.cancelSdkDownload(d.id) }
                     }
                 }
             }
@@ -147,7 +147,7 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                                 if (downloading) "JDK $feature…" else "JDK $feature sources",
                                 if (downloading) null else CaIcons.download,
                                 accent = true, enabled = !downloading,
-                            ) { scope.launch { status = backend.downloadJdkSources(feature) } }
+                            ) { scope.launch { status = backend.sdk.downloadJdkSources(feature) } }
                         }
                     }
                 }
@@ -168,8 +168,8 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                     sorted.forEachIndexed { i, p ->
                         if (i > 0) { Spacer(Modifier.height(4.dp)); RowDivider(); Spacer(Modifier.height(4.dp)) }
                         PackageRow(p, downloading = p.path in activeIds, onInstall = {
-                            scope.launch { status = backend.installSdkPackage(p.path) }
-                        }, onCancel = { backend.cancelSdkDownload(p.path) })
+                            scope.launch { status = backend.sdk.installSdkPackage(p.path) }
+                        }, onCancel = { backend.sdk.cancelSdkDownload(p.path) })
                     }
                 }
             }

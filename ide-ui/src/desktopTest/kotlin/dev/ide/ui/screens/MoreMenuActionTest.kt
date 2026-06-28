@@ -61,7 +61,7 @@ class MoreMenuActionTest {
         val host = RecordingHost(FakeBackend())
         val ids = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).map { it.id }
         assertEquals(
-            listOf("ui.settings", "ui.modules", "ui.sdk", "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject"),
+            listOf("ui.settings", "ui.modules", "ui.sdk", "ui.keystores", "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject"),
             ids,
             "the More-menu built-ins resolve from the registry in their declared order",
         )

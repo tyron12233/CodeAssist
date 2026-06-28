@@ -19,7 +19,10 @@ import androidx.compose.ui.Modifier
 import dev.ide.ui.EditorViewMode
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.OpenFile
+import dev.ide.ui.actions.dispatchAction
 import dev.ide.ui.backend.IndexUiStatus
+import dev.ide.ui.backend.UiActionContext
+import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.components.DepsProgressBar
 import dev.ide.ui.components.EditorTopBar
 import dev.ide.ui.components.TabsStrip
@@ -43,7 +46,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact: Boolean, modifier: Modifier) {
     val project = state.backend.project
-    val depsState by state.backend.depsState.collectAsState()
+    val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
     // @Preview presence (enables the Design view-mode toggle + top-bar shortcut) is set by the editor daemon's
     // PREVIEWS pass below — no separate detection effect.
@@ -51,14 +54,18 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
     val active = state.active
     // Bumped by the Find button (top bar) to open the editor's in-file find bar (Ctrl/⌘-F is the keyboard path).
     var findEpoch by remember(active?.path) { mutableStateOf(0) }
+    // Plugin-contributed toolbar actions (empty until a plugin registers; enablement re-evaluated per file).
+    val toolbarActions = remember(active?.path) {
+        state.backend.actions.actionsFor(UiActionContext(place = UiActionPlaces.MAIN_TOOLBAR, activeFilePath = active?.path))
+    }
     Column(modifier) {
         EditorTopBar(
             projectName = project.name,
             indexStatus = indexStatus,
             onToggleNav = { state.navOpen = !state.navOpen },
             onOpenPalette = { state.paletteOpen = true },
-            runTasks = { state.backend.runTasks() },
-            onPickTask = { state.consoleOpen = true; state.backend.runTask(it.id) },
+            runTasks = { state.backend.build.runTasks() },
+            onPickTask = { state.consoleOpen = true; state.backend.build.runTask(it.id) },
             onSave = { state.saveActive() },
             hasUnsavedChanges = active?.modified == true,
             hasActiveFile = active != null,
@@ -75,9 +82,15 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
             previewBusy = active?.viewMode == EditorViewMode.Preview,
             onPreview = { active?.let { it.viewMode = EditorViewMode.Preview } },
             onIndexClick = { state.indexDetailOpen = true },
+            pluginActions = toolbarActions,
+            onPluginAction = { id ->
+                depsScope.launch {
+                    state.dispatchAction(id, UiActionContext(place = UiActionPlaces.MAIN_TOOLBAR, activeFilePath = active?.path))
+                }
+            },
             compact = compact,
         )
-        DepsProgressBar(depsState) { depsScope.launch { state.backend.retryDependencyResolution() } }
+        DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
         TabsStrip(
             openFiles = state.openFiles,
             activeIndex = state.activeIndex,
@@ -90,12 +103,19 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
             AndroidSourcesBanner(state)
             // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
             // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
+            // The editor is covered when an app-level overlay sits on top of it: the command palette or a
+            // destination sheet (either layout), or — on a phone — the file-tree / build-console bottom sheets
+            // (on desktop those are docked side panes that leave the editor interactive). A covered editor
+            // dismisses its floating popups so they don't hang over the overlay.
+            val editorObscured = state.paletteOpen || state.sheetDest != null ||
+                (compact && (state.navOpen || state.consoleOpen))
             val codeSurface: @Composable (Modifier) -> Unit = { mod ->
                 CodeEditor(
                     path = active.path,
                     session = active.session,
                     backend = state.backend,
                     modifier = mod,
+                    obscured = editorObscured,
                     onSave = { state.save(active) },
                     onNavigate = { p, o -> state.openAt(p, o) },
                     onRenamed = { newPath -> state.reloadAfterRename(active.path, newPath) },

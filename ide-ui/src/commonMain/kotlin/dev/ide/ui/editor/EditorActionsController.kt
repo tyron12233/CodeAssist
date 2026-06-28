@@ -67,7 +67,7 @@ internal class EditorActionsController(
         val len = session.doc.length
         availStart = diag?.startOffset?.coerceIn(0, len) ?: sel.min
         availEnd = diag?.endOffset?.coerceIn(availStart, len) ?: sel.max
-        val result = runCatching { backend.actionsAt(path, session.doc.text, availStart, availEnd) }.getOrNull().orEmpty()
+        val result = runCatching { backend.editor.actionsAt(path, session.doc.text, availStart, availEnd) }.getOrNull().orEmpty()
         available = result
         caretDiagnostic = diag
         when {
@@ -130,7 +130,7 @@ internal class EditorActionsController(
         sheetActions = emptyList()
         val text = session.doc.text
         scope.launch {
-            sheetActions = runCatching { backend.actionsAt(path, text, d.startOffset, d.endOffset) }.getOrNull().orEmpty()
+            sheetActions = runCatching { backend.editor.actionsAt(path, text, d.startOffset, d.endOffset) }.getOrNull().orEmpty()
         }
     }
 
@@ -149,7 +149,7 @@ internal class EditorActionsController(
     private fun runAction(act: UiAction, ctxStart: Int, ctxEnd: Int) {
         val text = session.doc.text
         scope.launch {
-            val raw = runCatching { backend.applyAction(path, text, ctxStart, ctxEnd, act.id) }.getOrNull().orEmpty()
+            val raw = runCatching { backend.editor.applyAction(path, text, ctxStart, ctxEnd, act.id) }.getOrNull().orEmpty()
             if (raw.isEmpty()) return@launch
             val len = session.doc.length
             val edits = raw.map { e ->

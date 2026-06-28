@@ -197,4 +197,26 @@ class ProjectManagerTest {
         }
     }
 
+    /** A Compose template ships with the `compose` build feature already on (the toggle reflects reality, and
+     *  the build/preview don't depend solely on the classpath probe). */
+    @Test
+    fun composeTemplateEnablesComposeBuildFeature() {
+        val root = Files.createTempDirectory("cm-compose-feature")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            fun composeOn(ide: IdeServices): Boolean =
+                ide.getBuildFeatures("app")?.features?.firstOrNull { it.id == "compose" }?.enabled == true
+
+            manager.create("compose-app", mapOf("name" to "ComposeDemo", "packageName" to "com.acme.compose")).use { ide ->
+                assertTrue(composeOn(ide), "the Jetpack Compose template enables the compose build feature")
+            }
+            // And it survives a reopen (persisted to module.toml, not just in memory).
+            manager.open(manager.list().first().rootPath).use { reopened ->
+                assertTrue(composeOn(reopened), "the compose build feature round-trips through module.toml")
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
 }

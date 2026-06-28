@@ -1,7 +1,5 @@
 package dev.ide.ui.backend
 
-import kotlinx.coroutines.flow.StateFlow
-
 /**
  * Thrown by [IdeBackend.analyze] when a higher-priority call (code completion) preempted the analysis pass
  * before it finished — they share one serialized engine thread. The buffer's diagnostics are left unchanged;
@@ -17,709 +15,50 @@ class AnalysisPreempted : RuntimeException("analysis preempted by a higher-prior
  * would implement the same contract.
  */
 interface IdeBackend {
+    /** The active project's identity (name, root, module count) — the one cross-cutting field on the root. */
     val project: ProjectInfo
 
-    /**
-     * The workspace as a tree, shaped by [mode]:
-     *  - [TreeViewMode.Project]: a curated view — modules → source folders → packages → files, plus the
-     *    manifest and each module's root config files (`module.toml`, build scripts, README…).
-     *  - [TreeViewMode.AllFiles]: the raw on-disk tree from the workspace root (everything except bulky
-     *    derived output like `build/`, `.gradle/`, and the platform caches), IntelliJ "Project Files" style.
-     */
-    fun fileTree(mode: TreeViewMode = TreeViewMode.Project): TreeNode
+    /** Files & VFS: the workspace tree and file/directory operations. */
+    val files: FileService
 
-    /**
-     * Create a new file `[dirPath]/[fileName]` with [content] (creating intermediate directories).
-     * Returns the new file's absolute path, or null if it already exists or creation failed. The default
-     * is a no-op for read-only backends; hosts that can write override it. A successful write bumps
-     * [fileSystemEpoch].
-     */
-    fun createFile(dirPath: String, fileName: String, content: String): String? = null
+    /** Editor language services: completion, analysis, hints, navigation, rename, code actions. */
+    val editor: EditorService
 
-    /**
-     * Like [createFile] but writes raw [bytes] verbatim — for importing arbitrary (possibly binary)
-     * files where text decoding would corrupt them. Returns the new path, or null if it exists/failed.
-     */
-    fun createFileBytes(dirPath: String, fileName: String, bytes: ByteArray): String? = null
+    /** The projectional (block) editor. */
+    val blocks: BlockService
 
-    /**
-     * Create a file under [dirPath] where [name] may include nested folders (`a/b/Helper.kt`), all created
-     * along the way. Content is scaffolded from the extension: `.java`/`.kt` → a class stub with the package
-     * resolved from the target location; `.xml` → a root element; anything else → an empty file. Returns the
-     * new file's absolute path, or null if it already exists / creation failed. Bumps [fileSystemEpoch].
-     */
-    fun createFileSmart(dirPath: String, name: String): String? = null
+    /** Resource + Compose preview rendering. */
+    val preview: PreviewService
 
-    /**
-     * Create a typed source file named [name] (a bare type name, no extension) under [dirPath] from
-     * [template] — a Java/Kotlin class/interface/enum/… stub whose `package` is resolved from the target
-     * location. The extension follows the template's language (`.java` / `.kt`). Returns the new file's
-     * absolute path, or null if it already exists / [name] is not a valid identifier / creation failed.
-     * Bumps [fileSystemEpoch]. The default is a no-op for read-only backends.
-     */
-    fun createSourceFile(dirPath: String, name: String, template: UiNewFileTemplate): String? = null
+    /** Indexing status + symbol/member/text search. */
+    val search: SearchService
 
-    /**
-     * Create directory `[parentPath]/[name]` (intermediate dirs included). Returns the new path, or null if
-     * it already exists / failed. Used by the New-Directory flow (e.g. standard Android `res/` folders). A
-     * successful create bumps [fileSystemEpoch] so the tree refreshes.
-     */
-    fun createDirectory(parentPath: String, name: String): String? = null
+    /** Build & run: console state, run tasks, interactive I/O, and the run sandbox prompts. */
+    val build: BuildService
 
-    /**
-     * Delete a file or directory/package (recursively). Returns true on success. Bumps [fileSystemEpoch] so
-     * the tree refreshes. The default is a no-op for read-only backends.
-     */
-    fun deletePath(path: String): Boolean = false
+    /** Dependency management (Maven, local libraries, repositories). */
+    val deps: DependencyService
 
-    /** Source-set names declared on [moduleName] (for the Add-Source-Root selector). */
-    fun moduleSourceSets(moduleName: String): List<String> = emptyList()
+    /** Module configuration + management (source roots, facets, add/remove modules). */
+    val modules: ModuleService
 
-    /**
-     * Add a typed source root named [dirName] (its leaf folder, e.g. `java`/`kotlin`/`resources`) to
-     * [sourceSetName] of [moduleName], placed under the set's base dir (`src/<set>/<dirName>`). Creates the
-     * source set if it doesn't exist. Returns the new directory path, or null on failure. Bumps
-     * [fileSystemEpoch]. The default is a no-op for read-only backends.
-     */
-    fun addSourceRoot(moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole): String? = null
+    /** Signing keystores: create/import/validate/manage, and assign a keystore to a build type. */
+    val signing: SigningService
 
-    /** Unmark the content root at [rootPath] from [sourceSetName] of [moduleName] (model-only; the folder on
-     *  disk is kept). Returns true on success. */
-    fun removeSourceRoot(moduleName: String, sourceSetName: String, rootPath: String): Boolean = false
+    /** Project management (the picker, create/open/delete, templates, open-tab session). */
+    val projects: ProjectService
 
-    /** Create an empty source set [name] on [moduleName]. Returns false if it already exists / failed. */
-    fun addSourceSet(moduleName: String, name: String): Boolean = false
+    /** The SDK manager (Android SDK + JDK sources/docs). */
+    val sdk: SdkService
 
-    /**
-     * Rename a file or directory/package in place (same parent) to [newName] (the full new name, with
-     * extension for files). For a Java source file whose public type matches the file name, the type and all
-     * its references are renamed too (and the backing file moved). On success [UiRenameResult.newPath] is the
-     * new path so the UI can reopen it. Bumps [fileSystemEpoch].
-     */
-    suspend fun renamePath(path: String, newName: String): UiRenameResult =
-        UiRenameResult(false, "Rename is not supported by this backend")
+    /** IDE settings, settings pages, inspections, and app preferences. */
+    val settings: SettingsService
 
-    /**
-     * Move a file or directory/package into [destDir]. Returns the new path, or null on conflict/failure.
-     * Bumps [fileSystemEpoch].
-     */
-    fun movePath(path: String, destDir: String): String? = null
+    /** The IntelliJ-style UI action surface (toolbar / menus / command palette). */
+    val actions: ActionService
 
-    /**
-     * Copy a file or directory/package into [destDir]. Returns the new path, or null on conflict/failure.
-     * Bumps [fileSystemEpoch].
-     */
-    fun copyPath(path: String, destDir: String): String? = null
-
-    /**
-     * Immediate children of [dirPath] — subdirectories and files — for the mobile move/copy directory
-     * browser (a file-manager-style picker that descends folder by folder). Derived/transient dirs
-     * (`build/`, `.gradle/`, platform caches) and dotfiles are excluded; directories sort before files,
-     * each alphabetical. Empty when [dirPath] isn't a readable directory.
-     */
-    fun listDirectory(dirPath: String): List<UiDirEntry> = emptyList()
-
-    /** Read a file's current on-disk text. */
-    fun readFile(path: String): String
-
-    /** Name of the module owning [path], or null if outside the project. */
-    fun moduleNameForFile(path: String): String?
-
-    /** Enclosing declarations (type/method names, outer→inner) at [offset] in [text] — for the breadcrumb. */
-    suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = emptyList()
-
-    /** Register/refresh the live editor buffer so cross-file analysis sees in-progress edits. */
-    fun updateDocument(path: String, text: String)
-
-    /** Android platform-sources status (for `android.*` parameter names + javadoc), or null if no Android SDK. */
-    fun androidSourcesInfo(): UiAndroidSourcesInfo? = null
-
-    /** Download the Android platform sources (desktop `sdkmanager`); returns a status message. */
-    suspend fun downloadAndroidSources(): String = "Not supported."
-
-    // ---- SDK / toolchain manager ----
-    // The SDK manager downloads *sources & documentation* for the editor (javadoc, parameter names,
-    // go-to-source into the SDK/JDK). Downloads run in the backend and keep going after the screen is
-    // closed — observe [sdkManagerState], don't block on the start call.
-
-    /** Live download queue + progress. Shared with the editor — observe, don't poll. */
-    val sdkManagerState: StateFlow<UiSdkManagerState> get() = kotlinx.coroutines.flow.MutableStateFlow(UiSdkManagerState())
-
-    /** The installable Android SDK source packages (for editor docs/go-to-source). Empty offline. */
-    suspend fun sdkPackages(): List<UiSdkPackage> = emptyList()
-
-    /** Start downloading one Android package by its id (`sources;android-34`). Returns immediately; the
-     *  download continues in the background and reports on [sdkManagerState]. */
-    suspend fun installSdkPackage(path: String): String = "Not supported."
-
-    /** Cancel an in-flight SDK/JDK download by its id (the package path, or `jdk-<feature>`). */
-    fun cancelSdkDownload(id: String) {}
-
-    /** Drop the finished (done/failed) entries from the download queue. */
-    fun clearSdkDownloads() {}
-
-    /** Current JDK + whether sources are available for docs, or null if unknown. */
-    fun jdkInfo(): UiJdkInfo? = null
-
-    /** Start downloading a JDK (Temurin) [feature] for its sources; returns immediately. Desktop only. */
-    suspend fun downloadJdkSources(feature: Int): String = "Not supported."
-
-    /** Persist the buffer [text] for [path] to disk (and keep it as the live buffer). */
-    fun saveFile(path: String, text: String)
-
-    /** Code completion for the live buffer [text] at [offset], bound to [path]'s module. */
-    suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult
-
-    /** Diagnostics for the live buffer [text], bound to [path]'s module. May throw [AnalysisPreempted] when a
-     *  completion request took priority on the shared engine thread — the caller retries when it's free. */
-    suspend fun analyze(path: String, text: String): List<UiDiagnostic>
-
-    /**
-     * Inlay hints for `[startOffset, endOffset)` of [path]'s live buffer [text] — inferred `var`/lambda
-     * types, call-site parameter names, fluent-chain types. The editor renders them inline (between
-     * characters); they never change the document. Default empty for backends without hint support.
-     *
-     * May throw [AnalysisPreempted] when a higher-priority engine call (completion) cuts ahead — the host
-     * should retry once the buffer settles, keeping the current hints in the meantime (an empty result would
-     * wrongly clear them until the next edit).
-     */
-    suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
-
-    /**
-     * Parameter-info / signature help for the call surrounding [offset] in [path]'s live buffer [text]. The
-     * editor floats a small panel *above* the call listing the callee's overloads, with the argument the caret
-     * is on highlighted — separate from completion. Returns null when the caret isn't inside a resolvable call
-     * (the editor then dismisses any open panel). Default null for backends without signature-help support.
-     */
-    suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? = null
-
-    /**
-     * Type-aware semantic-highlight tokens for [path]'s live buffer [text] — the editor overlays them on its
-     * fast lexical highlighting, so a field reads differently from a local, a `@Composable`/`suspend`/extension
-     * call is marked, a real type is distinguished from a same-named variable. Ranges are document offsets;
-     * [UiSemanticToken.kind] is an open string id (the UI maps known ids to colors, unknown → its base color).
-     *
-     * Runs on the shared engine thread, debounced like [analyze]/[hintsAt]. May throw [AnalysisPreempted] when
-     * a completion request cut ahead — the host should retry, keeping the current tokens meanwhile (an empty
-     * result would wrongly clear the coloring until the next edit). Default empty for backends without it.
-     */
-    suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> = emptyList()
-
-    /**
-     * Foldable regions for [path]'s live buffer [text] — import groups, type/function bodies, block comments.
-     * Ranges are document offsets spanning exactly the text to hide; [UiFoldRegion.placeholder] is shown in
-     * its place when collapsed (the editor keeps the start line up to the range and the end line after it,
-     * joined by the placeholder → `fun Test() {...}`). [UiFoldRegion.collapsedByDefault] regions (imports)
-     * start folded the first time the file opens.
-     *
-     * Runs on the shared engine thread, debounced like [semanticTokens]. May throw [AnalysisPreempted] when a
-     * completion request cut ahead — the host should retry, keeping the current folds meanwhile. Default empty.
-     */
-    suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> = emptyList()
-
-    /**
-     * Code actions available at the selection `[selStart, selEnd)` (a collapsed range = the bare caret) in
-     * [path]'s live buffer [text]: quick-fixes for the diagnostics there plus caret intentions like
-     * "Introduce local variable". What the editor lightbulb / Alt-Enter menu lists. The order is stable for a
-     * given (path, text, selection) so the UI round-trips a choice back through [applyAction] by [UiAction.id].
-     */
-    suspend fun actionsAt(path: String, text: String, selStart: Int, selEnd: Int): List<UiAction> = emptyList()
-
-    /**
-     * Compute the edits for the action [actionId] (from [actionsAt] over the same buffer + selection). The
-     * UI applies the returned [UiTextEdit]s to its buffer (in descending offset order) — reparse + re-analyze
-     * then follow the normal text path. Empty ⇒ no-op / stale.
-     */
-    suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): List<UiTextEdit> = emptyList()
-
-    /**
-     * Go-to-definition for the symbol/reference at [offset] in the live buffer [text] of [path] — e.g. an
-     * Android resource reference (`@string/x` in XML, `R.layout.y` in Java) → its declaration. Null when
-     * there's nothing to navigate to (or the host doesn't resolve definitions).
-     */
-    suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
-
-    /**
-     * The renameable symbol under the caret at [offset] in [path]'s buffer [text] (its current name + a kind
-     * label), or null when the caret isn't on one. The UI uses this to prompt for the new name. Java only.
-     */
-    suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? = null
-
-    /**
-     * Rename the symbol under [offset] to [newName] across the whole project, applying the multi-file edit
-     * to disk and bumping [fileSystemEpoch] so open editors/the tree refresh. On success [UiRenameResult.newPath]
-     * is set when the backing file was renamed too (the UI should reopen it).
-     */
-    suspend fun rename(path: String, text: String, offset: Int, newName: String): UiRenameResult =
-        UiRenameResult(false, "Rename is not supported by this backend")
-
-    // ---- block-based editing (projectional editor) ----
-
-    /**
-     * Project the live buffer [text] of [path] into a block tree — the same AST the text view edits,
-     * rendered as nested blocks. Null when the host has no projection for the
-     * file (read-only/demo backends). Re-called (debounced) after every edit, like [analyze].
-     */
-    suspend fun projectBlocks(path: String, text: String): UiBlockNode? = null
-
-    /**
-     * A render-ready model of the drawable XML in [path] (live buffer [text]) for the Preview view — with
-     * every `@color`/`@dimen`/`@drawable` reference resolved against the project's resources. Null when the
-     * file isn't an Android drawable/color/mipmap resource (or the backend has no Android support).
-     */
-    suspend fun drawablePreview(path: String, text: String): UiDrawable? = null
-
-    /** The `<color>` swatches of a `res/values` color file ([path], live buffer [text]) — empty if none. */
-    suspend fun colorResources(path: String, text: String): List<UiColorEntry> = emptyList()
-
-    /** Raw bytes of an image resource at [path] (png/webp/jpg/…) for bitmap preview; null if unreadable. */
-    suspend fun resourceImageBytes(path: String): ByteArray? = null
-
-    /**
-     * The `@Preview @Composable` functions in [path]'s live buffer [text] — the editor's Compose preview
-     * targets (drives the toolbar Preview button). Empty when the file has none or there's no Kotlin support.
-     */
-    suspend fun composePreviews(path: String, text: String): List<UiComposePreview> = emptyList()
-
-    /**
-     * Run the `@Preview` composable [functionName] in [path] (live buffer [text]) through the on-device
-     * Compose interpreter, returning a status: whether it is interpretable, and (when a render host is wired)
-     * the render outcome. See `docs/compose-interpreter.md`.
-     */
-    suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
-        UiPreviewResult(ok = false, message = "Compose preview is not available")
-
-    /**
-     * Compile a block edit against [path]'s current buffer [text] into surgical [UiTextEdit]s. The UI
-     * applies them to its text buffer (in descending offset order) — reparse + re-projection then follow
-     * through the normal text path, so the two views never sync to each other. Empty ⇒ not applicable.
-     */
-    suspend fun applyBlockEdit(path: String, text: String, edit: UiBlockEdit): List<UiTextEdit> = emptyList()
-
-    // ---- indexing-backed features ----
-
-    /** Live indexing status, for the status chip + console detail. */
-    val indexStatus: StateFlow<IndexUiStatus>
-
-    /** Go-to-symbol over project declarations (navigable: filePath + offset). */
-    suspend fun searchSymbols(query: String, limit: Int = 50): List<SymbolHit>
-
-    /** Member search (complete-by-member) across the classpath (informational; owner in [SymbolHit.detail]). */
-    suspend fun searchMembers(query: String, limit: Int = 50): List<SymbolHit>
-
-    /**
-     * Full-text find-in-files across the workspace's source/resource files. Matches the live editor buffer
-     * when a file is open (so unsaved edits are searched), else the on-disk text. Each hit carries the file,
-     * the 1-based line/column, the line's text, and the match span within that line plus the absolute
-     * [UiTextMatch.offset] for navigation. Default backends return nothing.
-     */
-    suspend fun findInFiles(query: String, options: UiSearchOptions = UiSearchOptions(), limit: Int = 200): List<UiTextMatch> = emptyList()
-
-    /** Re-invalidate and rebuild the workspace indexes from scratch (the "Re-index" action). */
-    fun reindex() {}
-
-    // ---- build & run ----
-
-    /** Live build/run state for the console pane. */
-    val buildState: StateFlow<BuildState>
-
-    /** The tasks the Run picker can launch — run a CLI, assemble an APK variant, etc. */
-    fun runTasks(): List<RunTaskOption> = emptyList()
-
-    /** Launch the task with [id] (from [runTasks]); streams into [buildState]. */
-    fun runTask(id: String) {}
-
-    /** Run the default task (first of [runTasks]) — the plain Run button. Streams into [buildState]. */
-    fun runBuild()
-
-    /** Cancel an in-progress build/run. */
-    fun stopBuild()
-
-    // ---- interactive console run (the full-screen Run terminal) ----
-
-    /** Live program I/O + lifecycle for an interactive console run, or null when none has started. A `run`
-     *  task (a Java/Kotlin CLI) drives this; build/assemble tasks leave it null (they use [buildState]). */
-    val runConsole: StateFlow<RunConsoleUi?> get() = kotlinx.coroutines.flow.MutableStateFlow(null)
-
-    /** Feed one line of standard input to the running program (a newline is appended) and echo it into the
-     *  transcript. No-op unless a program is running and able to read input. */
-    fun sendRunInput(text: String) {}
-
-    /** Signal end-of-input (EOF / Ctrl-D) to the running program's stdin. */
-    fun closeRunInput() {}
-
-    // ---- runtime permission prompts (the run sandbox/guard) ----
-
-    /** The pending permission a running program is asking for (network/file/reflection/exec), or null.
-     *  The running program is blocked until [answerPermission] is called with this request's id. */
-    val permissionRequest: StateFlow<UiPermissionRequest?> get() = kotlinx.coroutines.flow.MutableStateFlow(null)
-
-    /** Answer the pending [permissionRequest] [id] with [decision] — unblocks (or aborts) the running program. */
-    fun answerPermission(id: Int, decision: UiPermissionDecision) {}
-
-    // ---- dependency management (the Dependencies screen) ----
-
-    /** Live resolution progress (a spinner/message while downloading + walking transitives). Shared across
-     *  the Dependencies screen and the editor's resolve bar — observe, don't poll. */
-    val depsState: StateFlow<DepsResolveState> get() = EMPTY_DEPS_STATE
-
-    /**
-     * Kick off resolving a newly-created project's template dependencies in the background — call once after
-     * the project is opened. Idempotent and a no-op when there's nothing pending (an opened existing project).
-     * Progress streams on [depsState], so the user can leave any screen while it resolves.
-     */
-    fun startPendingDependencyResolution() {}
-
-    /**
-     * Re-attempt resolving every declared dependency (e.g. after the network comes back) — the action behind
-     * the editor's "dependencies unresolved" banner. Re-walks each declared Maven dependency's closure
-     * cache-first, rebuilds `libraries.json`, and refreshes [depsState]'s [DepsResolveState.unresolved].
-     */
-    suspend fun retryDependencyResolution() {}
-
-    /** Modules that can declare dependencies, with their build system + whether they accept `.aar`s. */
-    fun dependencyModules(): List<UiDepModule> = emptyList()
-
-    /**
-     * The full dependency picture for [moduleName]: declared entries, the resolved transitive graph,
-     * version conflicts, cycles, and per-artifact build-system compatibility. Null for an unknown module.
-     * Resolves over the network (cached on disk), so it's [suspend] and may take a moment on first call.
-     */
-    suspend fun moduleDependencies(moduleName: String): UiModuleDeps? = null
-
-    /** Search repositories (Maven Central) for [query]; hits are flagged compatible with [moduleName]. */
-    suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> = emptyList()
-
-    /**
-     * Resolve and add [coordinate] to [moduleName] at [scope] (e.g. `implementation`), bundling its resolved
-     * transitive closure onto the module classpath. [coordinate] is `group:name:version`, or the versionless
-     * `group:name` when a platform (BOM) imported via [addPlatform] supplies the version. Blocked (with a
-     * reason) when the artifact is incompatible — e.g. an `.aar` on a pure-Java module.
-     *
-     * [exclusions] drop transitive dependencies from this declaration's closure (the Gradle `exclude` /
-     * Maven `<exclusions>` semantics). Each is a `group:name` string; either side may be the `*` wildcard.
-     */
-    suspend fun addDependency(
-        moduleName: String, coordinate: String, scope: String, exclusions: List<String> = emptyList()
-    ): UiAddResult =
-        UiAddResult(false, "Dependency management not supported by this backend")
-
-    /**
-     * Import a Maven BOM ([coordinate], `group:name:version`) as a platform of [moduleName] — Gradle
-     * `platform(...)` semantics. It adds no artifact; it supplies the version for versionless dependencies
-     * (added via [addDependency] with a `group:name` coordinate). Verified resolvable before it's added.
-     */
-    suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
-        UiAddResult(false, "Dependency management not supported by this backend")
-
-    /**
-     * One-click Firebase setup for [moduleName]: import the Firebase BoM and add [artifacts] (short names
-     * like `firebase-analytics`, or full coordinates), resolved against the BoM. The result message reminds
-     * the user to add `google-services.json` if it is missing — the native build processes it (no Gradle
-     * plugin) and merges the libraries' manifests.
-     */
-    suspend fun addFirebase(moduleName: String, artifacts: List<String> = listOf("firebase-analytics")): UiAddResult =
-        UiAddResult(false, "Dependency management not supported by this backend")
-
-    /** One-click Google Play Services: add each fully-qualified [coordinates] entry to [moduleName]. */
-    suspend fun addGooglePlayServices(moduleName: String, coordinates: List<String>): UiAddResult =
-        UiAddResult(false, "Dependency management not supported by this backend")
-
-    /** Remove the declared dependency or platform [coordinate] from [moduleName]. False if it wasn't present.
-     *  For a module-on-module dependency, [coordinate] is the target module's name. */
-    fun removeDependency(moduleName: String, coordinate: String): Boolean = false
-
-    /**
-     * Replace the transitive exclusions on an already-declared library [coordinate] of [moduleName], then
-     * re-resolve so the closure reflects the change. Each exclusion is a `group:name` string (`*` allowed).
-     * A no-op (success) when unchanged; fails when [coordinate] isn't a declared library dependency.
-     */
-    suspend fun setDependencyExclusions(
-        moduleName: String, coordinate: String, exclusions: List<String>
-    ): UiAddResult =
-        UiAddResult(false, "Dependency management not supported by this backend")
-
-    /**
-     * Other modules [moduleName] may depend on: every module in the same project except itself, those it
-     * already depends on, and any that would form a cycle (a module that depends on [moduleName]). Drives
-     * the "add module dependency" picker.
-     */
-    fun moduleDependencyTargets(moduleName: String): List<String> = emptyList()
-
-    /**
-     * Add a module-on-module dependency from [moduleName] onto [targetModule] at [scope] (`implementation`,
-     * `api`, …). An `api` scope is exported (visible to this module's dependers), like Gradle. Re-assembles
-     * the module classpath so completion/analysis pick up the target's output. Blocked (with a reason) on a
-     * self/cycle/duplicate.
-     */
-    suspend fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult =
-        UiAddResult(false, "Dependency management not supported by this backend")
-
-    // ---- local libraries (file-based jar/aar, no Maven coordinate) ----
-
-    /**
-     * The directory a picked local library should be copied into (a `libs/` folder under [moduleName]'s
-     * project), for [FileActions.importInto]. Null for an unknown module / backend without local-library
-     * support. The UI imports the file here, then calls [addLocalLibrary] with the returned path.
-     */
-    fun localLibraryDropDir(moduleName: String): String? = null
-
-    /**
-     * Existing `.jar`/`.aar` files already under the project tree that [moduleName] could depend on (e.g.
-     * ones the user imported earlier), minus any already declared. Lets the user attach a local library
-     * without re-picking it.
-     */
-    fun localLibraryCandidates(moduleName: String): List<String> = emptyList()
-
-    /**
-     * Attach the local library at [path] (an absolute `.jar` or `.aar` already on disk — freshly imported
-     * into `libs/` or an existing project file) to [moduleName] at [scope]. An `.aar` is exploded at add
-     * time so the editor sees its classes and the build routes its resources; an `.aar` on a non-Android
-     * module is rejected. No Maven resolution — local libraries have no transitive closure.
-     */
-    suspend fun addLocalLibrary(moduleName: String, path: String, scope: String): UiAddResult =
-        UiAddResult(false, "Dependency management not supported by this backend")
-
-    // ---- repositories (where libraries resolve from) ----
-
-    /** The Maven repositories libraries resolve from — the built-in ones (Maven Central, Google) plus any
-     *  the user added. Built-in repos are flagged [UiRepository.builtin] and can't be removed. */
-    fun repositories(): List<UiRepository> = emptyList()
-
-    /** Add a custom Maven repository [url] (named [name]) to resolve from. False if the URL is invalid or
-     *  already present. */
-    fun addRepository(name: String, url: String): Boolean = false
-
-    /** Remove the user-added repository at [url]. False when it wasn't present or is a built-in repo. */
-    fun removeRepository(url: String): Boolean = false
-
-    // ---- module configuration (the Module Settings editor) ----
-
-    /** Modules whose configuration can be edited (the settings screen's module switcher). */
-    fun configurableModules(): List<UiModuleRef> = emptyList()
-
-    /**
-     * The editable configuration of [moduleName] — its type, language level, source sets, and one
-     * [UiFacetConfig] panel per registered facet (Android, etc.), with fields derived generically from the
-     * facet codec so new facets / new model fields surface without bespoke UI. Null for an unknown module
-     * or a backend that doesn't expose config.
-     */
-    suspend fun getModuleConfig(moduleName: String): UiModuleConfig? = null
-
-    /**
-     * Persist [edit] to [moduleName] (language level + facet field values) through a model transaction,
-     * atomically writing `module.toml`. On success bumps [fileSystemEpoch] so the tree re-reads. The facet
-     * values use the same `Map<String, Any?>` shape the facet codec round-trips.
-     */
-    suspend fun updateModuleConfig(moduleName: String, edit: UiModuleConfigEdit): UiConfigResult =
-        UiConfigResult(false, "Module configuration not supported by this backend")
-
-    /**
-     * For an Android module, the keep-rule files its build types reference (`proguardFiles` /
-     * `consumerProguardFiles`) that are module-relative and MISSING on disk. R8 silently skips a missing
-     * file, so a `minifyEnabled` build would shrink without those rules; surfacing them lets the Module
-     * Settings screen warn and offer to create them. Empty for a non-Android module or when all exist.
-     */
-    suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> = emptyList()
-
-    /**
-     * Create the referenced-but-missing module-relative keep-rule file [entry] for [moduleName] with a
-     * starter template body. Returns its absolute path, or null on failure (unknown/non-Android module, an
-     * absolute or bundled-default entry, or an I/O error). Bumps [fileSystemEpoch] so the tree re-reads.
-     */
-    suspend fun createProguardFile(moduleName: String, entry: String): String? = null
-
-    // ---- module management (add / remove modules) ----
-
-    /**
-     * The module types a new module can be created as (`java-lib`, `android-app`, `android-lib`, …), each
-     * with the language-level choices and a generic, codec-derived set of starter [UiFacetConfig] panels
-     * (e.g. an Android module's namespace/SDK fields) the New-Module dialog prefills and lets the user edit.
-     */
-    fun availableModuleTypes(): List<UiModuleTypeOption> = emptyList()
-
-    /**
-     * Create a new module [name] of [typeId] (from [availableModuleTypes]) with [languageLevel] and the
-     * (possibly edited) [facetValues] — same `Map<String, Any?>` shape the facet codec round-trips. Lays down
-     * the type's default source-set directories and writes `module.toml`. Bumps [fileSystemEpoch].
-     */
-    suspend fun createModule(name: String, typeId: String, languageLevel: String?, facetValues: Map<String, Map<String, Any?>>): UiConfigResult =
-        UiConfigResult(false, "Module management not supported by this backend")
-
-    /**
-     * Remove the module [name] from the project model (its files are left on disk). Also drops any
-     * module-on-module dependency other modules declared on it. Bumps [fileSystemEpoch]. False if absent.
-     */
-    fun removeModule(name: String): Boolean = false
-
-    // ---- project management (Create Project + the picker) ----
-
-    /** Every project the host knows about (for the picker). Defaults to just the open [project]. */
-    fun projects(): List<ProjectInfo> = listOf(project)
-
-    /**
-     * The on-disk directory that holds every project (one workspace dir each) — what the in-app "project
-     * folder" panel shows and what [FileActions.reveal] opens in a file manager. Null when the backend has
-     * no managed projects root (e.g. a single fixed-workspace host).
-     */
-    fun projectsRootPath(): String? = null
-
-    /**
-     * The on-disk directory the in-app "project folder" panel shows and that [FileActions.reveal] opens in a
-     * file manager. This is the whole app storage root (it contains the projects folder plus the SDK,
-     * keystore, caches, and any sibling data such as projects from a previous app version), so users can
-     * reach everything from a file manager. Defaults to [projectsRootPath]; null when the backend has no
-     * managed root.
-     */
-    fun storageRootPath(): String? = projectsRootPath()
-
-    /** The templates the Create-Project gallery offers, with the inputs each one collects. */
-    fun projectTemplates(): List<UiProjectTemplate> = emptyList()
-
-    /**
-     * Create a new project from [templateId] with the collected [args] (`name` + `packageName` plus any
-     * template-specific keys). On success it becomes the active project: [projectEpoch] bumps and the
-     * [project]/[fileTree]/state flows now describe the new project.
-     */
-    suspend fun createProject(templateId: String, args: Map<String, String>): UiProjectResult =
-        UiProjectResult(false, "Project creation not supported by this backend")
-
-    /** Open the existing project rooted at [rootPath]; becomes the active project (bumps [projectEpoch]). */
-    suspend fun openProject(rootPath: String): Boolean = false
-
-    /**
-     * Permanently delete the project rooted at [rootPath] from disk. The UI confirms with the user first.
-     * Returns true on success (or if it was already gone); false if unsupported or the delete failed.
-     */
-    suspend fun deleteProject(rootPath: String): Boolean = false
-
-    /**
-     * Bumps whenever the active project changes (create/open). The UI keys its per-project state on this so
-     * the editor subtree recomposes and re-reads the (now-swapped) [buildState]/[indexStatus]/tree.
-     */
-    val projectEpoch: StateFlow<Int> get() = kotlinx.coroutines.flow.MutableStateFlow(0)
-
-    /**
-     * Bumps whenever a file is created/imported through this backend (incl. external "Open with" imports
-     * the UI didn't drive). The UI observes it to re-read [fileTree] so newly-written files appear without
-     * an explicit refresh.
-     */
-    val fileSystemEpoch: StateFlow<Int> get() = kotlinx.coroutines.flow.MutableStateFlow(0)
-
-    // ---- critical errors (IntelliJ-style non-fatal dialog) ----
-
-    /**
-     * The current unexpected error to surface as a non-fatal dialog, or null. Set when the engine logs an
-     * `ERROR` (a caught failure) or an uncaught exception is intercepted — the app keeps running and the user
-     * sees a dismissible dialog instead of a crash. Observe (don't poll); answer with [dismissError].
-     */
-    val errorEvents: StateFlow<UiError?> get() = kotlinx.coroutines.flow.MutableStateFlow(null)
-
-    /** Dismiss the shown error [id]; surfaces the next queued error, if any. */
-    fun dismissError(id: Int) {}
-
-    // ---- app preferences (onboarding flag, etc.) ----
-
-    /** Read an app-global preference, or null if unset (e.g. `"onboarding.seen"`). */
-    fun preference(key: String): String? = null
-
-    /** Persist an app-global preference. */
-    fun setPreference(key: String, value: String) {}
-
-    // ---- IDE settings (the Settings screen) ----
-
-    /** The app-global settings the editor applies *live* (theme, accent, font scale, inlay) — a typed view
-     *  over the known built-in keys. The full, plugin-extensible catalogue the screen renders is
-     *  [settingsPages]; both read the same store. */
-    fun settings(): UiSettings = UiSettings()
-
-    /**
-     * Every page to render in the Settings screen — the built-in categories plus any contributed by plugins
-     * (each is one sidebar entry of generically-rendered controls). Empty for a backend without a settings
-     * registry. Built-in and plugin pages are uniform here, so a plugin's preferences appear with no UI change.
-     */
-    fun settingsPages(): List<UiSettingsPage> = emptyList()
-
-    /** Write control [key] on page [pageId] (string-encoded value) and apply it. Re-read [settings] /
-     *  [settingsPages] afterwards for the new state. */
-    fun setSetting(pageId: String, key: String, value: String) {}
-
-    /** Press an [UiSettingControl.Action] (e.g. "Clear caches") on page [pageId]; returns a status message. */
-    suspend fun invokeSettingAction(pageId: String, key: String): String? = null
-
-    /**
-     * The per-project inspection catalogue — every registered analyzer with its enabled state + effective
-     * severity. Shown as a list on the page that sets [UiSettingsPage.inspectionsSection] (the Analysis page).
-     */
-    fun inspections(): List<UiInspection> = emptyList()
-
-    /** Enable/disable inspection [id] and set its severity (persisted per project; re-analyzes open files). */
-    fun setInspection(id: String, enabled: Boolean, severity: UiSeverity) {}
-
-    // ---- usage analytics (opt-in) ----
-
-    /**
-     * Whether this backend actually has analytics wired (a transport is configured). False on hosts with no
-     * collector (desktop) or a fork built without an endpoint — the UI then shows neither the consent prompt
-     * nor the settings toggle.
-     */
-    fun analyticsAvailable(): Boolean = false
-
-    /**
-     * The user's analytics-consent decision: `true` = allowed, `false` = declined, `null` = not yet asked
-     * (show the consent prompt). Persisted across launches. Default `null` so a backend without analytics
-     * never prompts.
-     */
-    fun analyticsConsent(): Boolean? = null
-
-    /**
-     * Record the user's analytics decision (from the consent prompt or the settings toggle). Persists it so
-     * the prompt isn't shown again, and enables/disables collection immediately (declining/revoking discards
-     * any buffered events). No-op for backends without analytics.
-     */
-    fun setAnalyticsConsent(granted: Boolean) {}
-
-    /**
-     * Record an analytics [event] (a snake_case name) with string-only [props]. Used for performance metrics
-     * (build/index/completion timings, crashes) — no feature-usage tracking. A no-op unless the user granted
-     * consent; never carries user content (source, file/project names, paths). Returns immediately —
-     * delivery is batched in the background.
-     */
-    fun track(event: String, props: Map<String, String> = emptyMap()) {}
-
-    // ---- editor session (open tabs) ----
-
-    /**
-     * The editor tabs that were open the last time the active project was used — file paths in tab order
-     * plus the active tab's index. Empty when none were saved or the backend doesn't persist them. Scoped
-     * per project (the backend keys it off the active project), so it's re-read after every [projectEpoch] bump.
-     */
-    fun openTabs(): UiOpenTabs = UiOpenTabs()
-
-    /** Persist the open editor tabs for the active project so they reopen on the next launch. */
-    fun saveOpenTabs(tabs: UiOpenTabs) {}
-
-    /**
-     * Back up the user's projects (and any project files from a previous, incompatible app version) into
-     * a single `.zip`, returning its path — the host then shares/saves it via [FileActions.share]. Null if
-     * unsupported or the backup failed. Used by the build-system migration flow.
-     */
-    suspend fun backupProjects(): String? = null
-
-    // ---- diagnostics / logs (the in-app Logs viewer) ----
-
-    /**
-     * A snapshot of the most recent in-memory log records — editor, analysis, indexing, build, and crash
-     * activity — oldest first. Surfaced by the Logs viewer so a user (or a bug report) can see what actually
-     * went wrong when a feature "does nothing". Empty for backends without a logging facade.
-     */
-    fun recentLogs(): List<UiLogEntry> = emptyList()
-
-    /**
-     * Write the current logs to a shareable text file and return its path (handed to [FileActions.share]),
-     * or null when unsupported / the write failed.
-     */
-    suspend fun exportLogs(): String? = null
+    /** The critical-error dialog, the logs viewer, and opt-in analytics. */
+    val diagnostics: DiagnosticsService
 }
 
 // ---- logging DTOs ----
@@ -834,9 +173,6 @@ data class UiPreviewConfig(
 data class UiPreviewResult(val ok: Boolean, val message: String)
 
 // ---- dependency-management DTOs ----
-
-/** A stable empty progress flow for the [IdeBackend.depsState] default (a fresh flow per get would churn). */
-private val EMPTY_DEPS_STATE: StateFlow<DepsResolveState> = kotlinx.coroutines.flow.MutableStateFlow(DepsResolveState())
 
 /** Live resolve progress, mirrored from the engine (mirrors [BuildState]'s role for the console).
  *  [log] is a bounded, ordered history of resolution activity (POMs walked, artifacts downloaded), surfaced
@@ -1156,6 +492,84 @@ data class UiModuleConfigEdit(
 data class UiConfigResult(val success: Boolean, val message: String)
 
 /**
+ * The Android `buildFeatures` of one module — the toggles shown on the Build Features tab. Null when the
+ * module is not an Android module (the tab then explains build features apply only to Android modules).
+ */
+data class UiBuildFeatures(val moduleName: String, val features: List<UiBuildFeature>)
+
+/** One toggleable build feature. [note] is an optional aside (e.g. that enabling it adds dependencies). */
+data class UiBuildFeature(
+    val id: String,
+    val title: String,
+    val description: String,
+    val enabled: Boolean,
+    val note: String? = null,
+)
+
+// ---------------------------------------------------------------------------
+// Signing keystores
+// ---------------------------------------------------------------------------
+
+/** A registered signing keystore, with a best-effort summary of its key certificate (null if unreadable). */
+data class UiKeystore(
+    val id: String,
+    val name: String,
+    val fileName: String,
+    val keyAlias: String,
+    val certSubject: String?,
+    val sha256: String?,
+    val validUntilEpochMs: Long?,
+)
+
+/** One certificate inside a keystore (owner/issuer, validity window, fingerprints). */
+data class UiKeystoreCert(
+    val alias: String,
+    val subject: String,
+    val issuer: String,
+    val validFromEpochMs: Long,
+    val validUntilEpochMs: Long,
+    val sha1: String,
+    val sha256: String,
+)
+
+/** The result of opening a keystore file: its aliases + certs when valid, or the error (e.g. wrong password). */
+data class UiKeystoreValidation(
+    val valid: Boolean,
+    val aliases: List<String>,
+    val certs: List<UiKeystoreCert>,
+    val error: String?,
+)
+
+/**
+ * The fields for creating a new keystore (keypair + self-signed cert). Only [commonName] is required.
+ * PKCS12 uses one password for both the store and the key, so [storePass] is it.
+ */
+data class UiKeystoreSpec(
+    val name: String,
+    val storePass: String,
+    val keyAlias: String,
+    val commonName: String,
+    val organization: String? = null,
+    val organizationalUnit: String? = null,
+    val locality: String? = null,
+    val state: String? = null,
+    val country: String? = null,
+    val validityYears: Int = 25,
+)
+
+data class UiKeystoreResult(val success: Boolean, val message: String, val keystoreId: String? = null)
+
+/** A build type and the keystore assigned to sign it (null keystoreId ⇒ the default debug keystore). */
+data class UiSigningAssignment(val buildType: String, val keystoreId: String?, val keystoreName: String?)
+
+/** A module's per-build-type signing assignments plus the keystores available to assign. Null ⇒ not Android. */
+data class UiSigningAssignments(
+    val moduleName: String,
+    val keystores: List<UiKeystore>,
+    val assignments: List<UiSigningAssignment>,
+)
+
+/**
  * A keep-rule file an Android build type references that is module-relative and missing on disk (so R8
  * skips it). [buildType] is the build type that names it, [entry] the path as written in the model, and
  * [consumer] true when it came from `consumerProguardFiles` (an AAR-export rule) rather than `proguardFiles`.
@@ -1225,6 +639,12 @@ data class TreeNode(
      * file node's parent. Null only when no directory applies.
      */
     val dirPath: String? = null,
+    /**
+     * An optional rendering hint that dims/recolors the row, IntelliJ-style. Currently `"excluded"` — used
+     * for derived build output (the curated *build outputs* node, the raw `build/` dir and everything under
+     * it) so it reads as generated-not-source. Null = the default appearance.
+     */
+    val styleHint: String? = null,
 )
 
 /**
@@ -1327,6 +747,70 @@ enum class UiActionKind { QUICK_FIX, INTENTION, REFACTOR }
 
 /** One entry in the editor's code-action menu. [id] is the stable index used to round-trip via [IdeBackend.applyAction]. */
 data class UiAction(val id: Int, val title: String, val kind: UiActionKind)
+
+// ---- UI action DTOs (toolbar / menu / palette; distinct from the editor's code-action [UiAction]) ----
+
+/** The built-in action places, by their string id. A plugin (or a new surface) may use its own id too. */
+object UiActionPlaces {
+    const val MAIN_TOOLBAR = "mainToolbar"
+    const val MAIN_OVERFLOW = "mainToolbar.overflow"
+    const val MORE_MENU = "moreMenu"
+    const val FILE_CONTEXT = "fileContext"
+    const val EDITOR_TAB = "editorTab"
+    const val COMMAND_PALETTE = "commandPalette"
+}
+
+/**
+ * What an action is being resolved/invoked against — a neutral snapshot the UI builds and the host expands.
+ * [place] is one of [UiActionPlaces]; [contextPath] is the tree/tab node a context menu opened on.
+ */
+data class UiActionContext(
+    val place: String,
+    val activeFilePath: String? = null,
+    val selectionStart: Int? = null,
+    val selectionEnd: Int? = null,
+    val contextPath: String? = null,
+)
+
+/** A resolved action ready to render. [id] round-trips through [IdeBackend.invokeAction]; [iconId] resolves
+ *  via the UI icon registry; [enabled] is pre-evaluated for the context it was resolved in. */
+data class UiActionItem(
+    val id: String,
+    val text: String,
+    val iconId: String? = null,
+    val enabled: Boolean = true,
+)
+
+/** A resolved context menu: a flat, ordered list of [UiMenuNode]s (items, submenus, separators). */
+data class UiMenuGroup(val items: List<UiMenuNode> = emptyList())
+
+/** One node in a resolved menu tree. */
+sealed interface UiMenuNode {
+    /** A leaf action. */
+    data class Item(val action: UiActionItem) : UiMenuNode
+    /** A nested submenu. */
+    data class Submenu(val text: String, val iconId: String?, val items: List<UiMenuNode>) : UiMenuNode
+    /** A divider. */
+    data object Separator : UiMenuNode
+}
+
+/** The outcome of [IdeBackend.invokeAction]: a status [message] to surface, plus [effects] the UI applies. */
+data class UiActionResult(
+    val message: String? = null,
+    val effects: List<UiActionEffect> = emptyList(),
+)
+
+/** A neutral instruction an action returns for the UI to carry out; the UI ignores effects it can't honor. */
+sealed interface UiActionEffect {
+    /** Open [path] in the editor, optionally moving the caret to [offset]. */
+    data class OpenFile(val path: String, val offset: Int? = null) : UiActionEffect
+    /** Navigate to a named UI destination (a screen / tool-window id). */
+    data class Navigate(val target: String) : UiActionEffect
+    /** Re-read the file tree. */
+    data object RefreshTree : UiActionEffect
+    /** Re-read [path] from disk into any open editor showing it. */
+    data class ReloadFile(val path: String) : UiActionEffect
+}
 
 /**
  * One classified identifier from semantic highlighting: its `[startOffset, endOffset)` span, an open

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.PackageSegment
+import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
@@ -59,17 +60,23 @@ fun EditorScreen(
     onOpenDependencies: (String?) -> Unit = {},
     onOpenModuleConfig: (String?) -> Unit = {},
     onOpenSdkManager: () -> Unit = {},
+    onOpenKeystoreManager: () -> Unit = {},
     onCloseProject: () -> Unit = {},
     onOpenRun: () -> Unit = {},
     fileActions: FileActions = FileActions.None,
 ) {
-    val indexStatus by state.backend.indexStatus.collectAsState()
-    val buildState by state.backend.buildState.collectAsState()
+    val indexStatus by state.backend.search.indexStatus.collectAsState()
+    val buildState by state.backend.build.buildState.collectAsState()
     val scope = rememberCoroutineScope()
     // The project is open now — kick off any deferred template-dependency resolution (e.g. the Compose AAR
     // graph of a freshly-created project). Idempotent + a no-op for an opened existing project; progress
     // streams on depsState so the user can work elsewhere while it resolves.
-    LaunchedEffect(state.backend) { state.backend.startPendingDependencyResolution() }
+    LaunchedEffect(state.backend) { state.backend.deps.startPendingDependencyResolution() }
+    // A finished build (re)writes artifacts under `<module>/build/` — refresh the tree so the dimmed
+    // "build outputs" node (and the All-Files `build/` subtree) pick up the new APK/AAB/jar.
+    LaunchedEffect(buildState.status) {
+        if (buildState.status == RunStatus.Succeeded || buildState.status == RunStatus.Failed) state.refreshTree()
+    }
     var newEntry by remember { mutableStateOf<NewEntryRequest?>(null) }
     var newXmlTarget by remember { mutableStateOf<NewXmlTarget?>(null) }
     var newSource by remember { mutableStateOf<NewSourceRequest?>(null) }
@@ -77,20 +84,24 @@ fun EditorScreen(
     // New File / New Folder can target any directory; res/ folders additionally offer the templated XML flow.
     val rootPath = state.backend.project.rootPath
     fun dirLabel(dir: String): String =
-        if (dir.startsWith(rootPath)) dir.removePrefix(rootPath).trim('/', '\\').ifEmpty { "project root" } else dir
-    val onNewFile: (String, List<PackageSegment>) -> Unit = { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.File, dirLabel(dir), segs) }
-    val onNewFolder: (String, List<PackageSegment>) -> Unit = { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.Folder, dirLabel(dir), segs) }
+        if (dir.startsWith(rootPath)) dir.removePrefix(rootPath).trim('/', '\\')
+            .ifEmpty { "project root" } else dir
+
+    val onNewFile: (String, List<PackageSegment>) -> Unit =
+        { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.File, dirLabel(dir), segs) }
+    val onNewFolder: (String, List<PackageSegment>) -> Unit =
+        { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.Folder, dirLabel(dir), segs) }
     val onNewResource: (TreeNode) -> Unit = { node -> xmlTargetOf(node)?.let { newXmlTarget = it } }
-    val onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit = { dir, lang, segs -> newSource = NewSourceRequest(dir, lang, dirLabel(dir), segs) }
-    val onFileOp: (TreeNode, FileOpKind) -> Unit = { node, kind -> fileOp = FileOpRequest(node, kind) }
+    val onNewSource: (String, NewSourceLang, List<PackageSegment>) -> Unit =
+        { dir, lang, segs -> newSource = NewSourceRequest(dir, lang, dirLabel(dir), segs) }
+    val onFileOp: (TreeNode, FileOpKind) -> Unit =
+        { node, kind -> fileOp = FileOpRequest(node, kind) }
 
     // Back closes an open editor overlay (dialog, palette, or — on mobile — a navigator/console/search/more
     // sheet) before the app-level handler pops the screen (#997). Desktop has no system back, so this is inert
     // there; the mobile-only panes are gated on [isMobilePlatform] since on wide layouts they're docked panes.
     PlatformBackHandler(
-        enabled = newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null ||
-            state.indexDetailOpen || state.paletteOpen || state.sheetDest != null || state.searchOpen ||
-            (isMobilePlatform && (state.navOpen || state.consoleOpen)),
+        enabled = newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null || state.indexDetailOpen || state.paletteOpen || state.sheetDest != null || state.searchOpen || (isMobilePlatform && (state.navOpen || state.consoleOpen)),
     ) {
         when {
             fileOp != null -> fileOp = null
@@ -108,8 +119,42 @@ fun EditorScreen(
     }
     Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(state, onToggleTheme, onOpenSettings, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
-            else ExpandedLayout(state, onToggleTheme, onOpenSettings, indexStatus, buildState, onNewFile, onNewFolder, onNewResource, onNewSource, onFileOp, onOpenDependencies, onOpenModuleConfig, onOpenSdkManager, onCloseProject, fileActions)
+            if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(
+                state,
+                onToggleTheme,
+                onOpenSettings,
+                indexStatus,
+                buildState,
+                onNewFile,
+                onNewFolder,
+                onNewResource,
+                onNewSource,
+                onFileOp,
+                onOpenDependencies,
+                onOpenModuleConfig,
+                onOpenSdkManager,
+                onOpenKeystoreManager,
+                onCloseProject,
+                fileActions
+            )
+            else ExpandedLayout(
+                state,
+                onToggleTheme,
+                onOpenSettings,
+                indexStatus,
+                buildState,
+                onNewFile,
+                onNewFolder,
+                onNewResource,
+                onNewSource,
+                onFileOp,
+                onOpenDependencies,
+                onOpenModuleConfig,
+                onOpenSdkManager,
+                onOpenKeystoreManager,
+                onCloseProject,
+                fileActions
+            )
         }
         NewEntryDialog(
             request = newEntry,
@@ -134,15 +179,25 @@ fun EditorScreen(
             onCreate = { dir, name, template -> state.createSourceFile(dir, name, template) },
         )
         AddSourceRootDialog(
-            request = state.addSourceRootModule?.let { AddSourceRootRequest(it, state.moduleSourceSets(it)) },
+            request = state.addSourceRootModule?.let {
+                AddSourceRootRequest(
+                    it, state.moduleSourceSets(it)
+                )
+            },
             onDismiss = { state.addSourceRootModule = null },
-            onAdd = { module, set, dirName, role -> state.addSourceRoot(module, set, dirName, role) },
+            onAdd = { module, set, dirName, role ->
+                state.addSourceRoot(
+                    module, set, dirName, role
+                )
+            },
         )
         FileOperationDialog(
             request = fileOp,
             rootPath = state.backend.project.rootPath,
-            listDir = { state.backend.listDirectory(it) },
-            onRename = { node, newName -> node.fileOpPath()?.let { p -> scope.launch { state.renamePath(p, newName) } } },
+            listDir = { state.backend.files.listDirectory(it) },
+            onRename = { node, newName ->
+                node.fileOpPath()?.let { p -> scope.launch { state.renamePath(p, newName) } }
+            },
             onMove = { node, dest -> node.fileOpPath()?.let { state.movePath(it, dest) } },
             onCopy = { node, dest -> node.fileOpPath()?.let { state.copyPath(it, dest) } },
             onDelete = { node -> node.fileOpPath()?.let { state.deletePath(it) } },
@@ -152,7 +207,7 @@ fun EditorScreen(
         IndexStatusDialog(
             visible = state.indexDetailOpen,
             status = indexStatus,
-            onReindex = { state.backend.reindex() },
+            onReindex = { state.backend.search.reindex() },
             onDismiss = { state.indexDetailOpen = false },
         )
         // While a console run is active but its terminal isn't on screen (the user backed out mid-run), a

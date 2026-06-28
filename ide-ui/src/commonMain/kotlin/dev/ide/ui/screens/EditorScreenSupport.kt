@@ -7,7 +7,7 @@ import dev.ide.ui.backend.TreeNode
 
 /** Breadcrumb fallback: module › the last few path segments, used when the caret isn't inside a declaration. */
 internal fun breadcrumbFor(state: IdeUiState, file: OpenFile): List<String> {
-    val module = state.backend.moduleNameForFile(file.path)
+    val module = state.backend.files.moduleNameForFile(file.path)
     val segs = file.path.replace('\\', '/').split('/').filter { it.isNotEmpty() }
     val tail = segs.takeLast(3)
     return (listOfNotNull(module) + tail).distinct()
@@ -26,6 +26,14 @@ private fun firstSourceRootDir(root: TreeNode): String? {
  */
 internal fun doImport(state: IdeUiState, fileActions: FileActions) {
     val dir = firstSourceRootDir(state.tree) ?: state.tree.dirPath ?: return
+    doImportInto(state, fileActions, dir)
+}
+
+/**
+ * Launch the host's file picker to import external file(s) into [dir] (a specific project directory chosen
+ * from a tree row's context menu), then refresh the tree and open the first imported file.
+ */
+internal fun doImportInto(state: IdeUiState, fileActions: FileActions, dir: String) {
     fileActions.importInto(dir) { paths ->
         state.refreshTree()
         paths.firstOrNull()?.let { p -> state.open(p, p.substringAfterLast('/').substringAfterLast('\\')) }

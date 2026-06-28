@@ -20,22 +20,10 @@ import kotlin.test.assertTrue
 /** The tab dirty-flag + save semantics in [IdeUiState] (the orange-dot logic and the save action). */
 class SaveActionTest {
 
-    private class FakeBackend(private val disk: MutableMap<String, String>) : IdeBackend {
+    private class FakeBackend(private val disk: MutableMap<String, String>) : StubBackend() {
         val saved = ArrayList<Pair<String, String>>()
-        override val project = ProjectInfo("p", "/p", 1)
-        override fun fileTree(mode: TreeViewMode) = TreeNode("root", "p", NodeKind.Workspace, null)
         override fun readFile(path: String) = disk[path] ?: ""
-        override fun moduleNameForFile(path: String): String? = null
-        override fun updateDocument(path: String, text: String) {}
         override fun saveFile(path: String, text: String) { disk[path] = text; saved += path to text }
-        override suspend fun complete(path: String, text: String, offset: Int) = UiCompletionResult(emptyList(), offset, offset)
-        override suspend fun analyze(path: String, text: String): List<UiDiagnostic> = emptyList()
-        override val indexStatus: StateFlow<IndexUiStatus> = MutableStateFlow(IndexUiStatus())
-        override suspend fun searchSymbols(query: String, limit: Int): List<SymbolHit> = emptyList()
-        override suspend fun searchMembers(query: String, limit: Int): List<SymbolHit> = emptyList()
-        override val buildState: StateFlow<BuildState> = MutableStateFlow(BuildState())
-        override fun runBuild() {}
-        override fun stopBuild() {}
     }
 
     private fun openA(): Pair<IdeUiState, FakeBackend> {

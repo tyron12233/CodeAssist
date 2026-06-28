@@ -33,12 +33,12 @@ import dev.ide.ui.theme.Ca
  */
 @Composable
 fun PermissionDialog(backend: IdeBackend) {
-    val request by backend.permissionRequest.collectAsState()
+    val request by backend.build.permissionRequest.collectAsState()
     // Retain the last request so the exit animation doesn't flash empty as it clears.
     var shown by remember { mutableStateOf<UiPermissionRequest?>(null) }
     if (request != null) shown = request
 
-    fun answer(decision: UiPermissionDecision) { shown?.let { backend.answerPermission(it.id, decision) } }
+    fun answer(decision: UiPermissionDecision) { shown?.let { backend.build.answerPermission(it.id, decision) } }
 
     CenteredDialog(visible = request != null, onDismiss = { answer(UiPermissionDecision.DENY) }) {
         shown?.let { req -> PermissionCard(req, ::answer) }

@@ -46,6 +46,12 @@ object BetaInfo {
 
     /** The Discord community invite (opened via FileActions.openUrl from the Projects screen). */
     const val DISCORD_URL: String = "https://discord.gg/y2gycT6pDW"
+
+    /** Where the "Sponsor" action sends the user (the GitHub Sponsors page). */
+    const val SPONSOR_URL: String = "https://github.com/sponsors/tyron12233"
+
+    /** The GitHub repository the "Star on GitHub" action opens. */
+    const val REPO_URL: String = "https://github.com/tyron12233/CodeAssist"
 }
 
 /**

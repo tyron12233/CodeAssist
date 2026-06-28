@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,13 @@ import dev.ide.ui.generated.resources.open_a_project
 import dev.ide.ui.generated.resources.projects
 import dev.ide.ui.generated.resources.recovered_projects
 import dev.ide.ui.generated.resources.recovered_projects_content
+import dev.ide.ui.generated.resources.support_chip_free
+import dev.ide.ui.generated.resources.support_chip_no_ads
+import dev.ide.ui.generated.resources.support_chip_open_source
+import dev.ide.ui.generated.resources.support_content
+import dev.ide.ui.generated.resources.support_sponsor
+import dev.ide.ui.generated.resources.support_star
+import dev.ide.ui.generated.resources.support_title
 import dev.ide.ui.generated.resources.your_files
 import dev.ide.ui.generated.resources.your_projects
 import dev.ide.ui.icons.CaIcons
@@ -73,6 +83,8 @@ fun ProjectPickerScreen(
     onBackup: (() -> Unit)? = null,
     onSubmitSuggestions: (() -> Unit)? = null,
     onJoinDiscord: (() -> Unit)? = null,
+    onSponsor: (() -> Unit)? = null,
+    onStarOnGitHub: (() -> Unit)? = null,
     storagePath: String? = null,
     onOpenInFiles: (() -> Unit)? = null,
     showLegacyRecovery: Boolean = false,
@@ -115,16 +127,22 @@ fun ProjectPickerScreen(
             }
             Spacer(Modifier.size(12.dp))
 
-            // Top of the screen stays action-focused: the important first-run recovery notice, the primary
+            // The support card sits at the very top: CodeAssist is free, ad-free and open source, so the
+            // only "monetisation" is an optional sponsor/star. Shown whenever the host can open links.
+            if (onSponsor != null || onStarOnGitHub != null) {
+                SupportCard(onSponsor = onSponsor, onStar = onStarOnGitHub)
+            }
+
+            // Then the screen stays action-focused: the important first-run recovery notice, the primary
             // "New project" action, the community link, and the project list. The informational/utility cards
             // (Beta notice, storage location) sink to the bottom so the picker no longer feels crowded.
             if (showLegacyRecovery && compatibilityCount > 0) {
                 LegacyRecoveryBanner(count = compatibilityCount, onDismiss = onDismissLegacyRecovery)
             }
 
-            NewProjectCard(onNewProject)
-
             if (onJoinDiscord != null) DiscordCard(onJoinDiscord)
+
+            NewProjectCard(onNewProject)
 
             Column(
                 Modifier.fillMaxWidth(),
@@ -306,6 +324,107 @@ private fun DiscordCard(onClick: () -> Unit) {
             Text(stringResource(Res.string.join_the_community_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = DiscordBlurple)
+    }
+}
+
+/** GitHub Sponsors' pink — the support card's icon/accent, kept distinct from the app accent. */
+private val SponsorPink = Color(0xFFDB61A2)
+
+/**
+ * A persistent card asking for support. CodeAssist is free, ad-free and fully open source, so the only
+ * ask is an optional GitHub sponsorship or a star. [onSponsor]/[onStar] are wired by the host to open the
+ * respective URLs; a null action simply hides that button.
+ */
+@Composable
+private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
+    val shape = RoundedCornerShape(Ca.radius.lg)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(SponsorPink.copy(alpha = 0.10f), shape)
+            .border(1.dp, SponsorPink.copy(alpha = 0.30f), shape)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.size(40.dp).background(SponsorPink, RoundedCornerShape(Ca.radius.md)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CaIcons.heart, null, Modifier.size(22.dp), tint = Color.White)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(Res.string.support_title), color = Ca.colors.textPrimary, style = Ca.type.headline)
+                Text(stringResource(Res.string.support_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            }
+        }
+        SupportChips()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (onSponsor != null) {
+                SupportButton(stringResource(Res.string.support_sponsor), CaIcons.heart, Modifier.weight(1f), filled = true, onClick = onSponsor)
+            }
+            if (onStar != null) {
+                SupportButton(stringResource(Res.string.support_star), CaIcons.star, Modifier.weight(1f), filled = false, onClick = onStar)
+            }
+        }
+    }
+}
+
+/** The "100% free / No ads / Open source" reassurance pills; wraps to a second row on narrow screens. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SupportChips() {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SupportChip(stringResource(Res.string.support_chip_free))
+        SupportChip(stringResource(Res.string.support_chip_no_ads))
+        SupportChip(stringResource(Res.string.support_chip_open_source))
+    }
+}
+
+@Composable
+private fun SupportChip(text: String) {
+    Row(
+        Modifier
+            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(CaIcons.check, null, Modifier.size(13.dp), tint = SponsorPink)
+        Text(text, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** A support action: a filled (sponsor) or outlined (star) button with a leading glyph. */
+@Composable
+private fun SupportButton(text: String, icon: ImageVector, modifier: Modifier = Modifier, filled: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(Ca.radius.control)
+    val surface =
+        if (filled) Modifier.background(SponsorPink, shape)
+        else Modifier.background(Ca.colors.surface2, shape).border(1.dp, Ca.colors.hairline, shape)
+    Row(
+        modifier
+            .pressScale(interaction)
+            .then(surface)
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, null, Modifier.size(16.dp), tint = if (filled) Color.White else Ca.colors.textSecondary)
+        Spacer(Modifier.size(6.dp))
+        Text(
+            text,
+            color = if (filled) Color.White else Ca.colors.textPrimary,
+            style = Ca.type.subhead,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

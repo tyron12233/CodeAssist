@@ -41,15 +41,15 @@ class SourceSetManagementTest {
             val base = moduleRoot.resolve("src").resolve("main") // sibling of the existing src/main/java root
 
             // `resources` under the source-set base → auto-registered as a Java resources root.
-            assertNotNull(backend.createDirectory(base.toString(), "resources"))
+            assertNotNull(backend.files.createDirectory(base.toString(), "resources"))
             assertEquals(setOf(ContentRole.RESOURCE), ide.rolesOf("core", "resources"))
 
             // A non-convention name stays a plain folder (no content root added).
-            assertNotNull(backend.createDirectory(base.toString(), "templates"))
+            assertNotNull(backend.files.createDirectory(base.toString(), "templates"))
             assertNull(ide.rolesOf("core", "templates"))
 
             // `resources` NOT under a source-set base (here, directly in the module root) is left alone.
-            assertNotNull(backend.createDirectory(moduleRoot.toString(), "resources"))
+            assertNotNull(backend.files.createDirectory(moduleRoot.toString(), "resources"))
             val resourceRoots = ide.modules().first { it.name == "core" }
                 .sourceSets.flatMap { it.contentRoots }.filter { ContentRole.RESOURCE in it.roles }
             assertEquals(1, resourceRoots.size, "only the source-set-base resources folder is registered")

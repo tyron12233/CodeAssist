@@ -80,7 +80,7 @@ fun CreateProjectScreen(
             val sel = selected
             if (sel == null) {
                 Gallery(
-                    templates = backend.projectTemplates(),
+                    templates = backend.projects.projectTemplates(),
                     onBack = onCancel,
                     onPick = { selected = it },
                 )
@@ -179,7 +179,7 @@ private fun ColumnScope.Configure(
             paramValues.forEach { (k, v) -> put(k, v) }
         }
         scope.launch {
-            val result = backend.createProject(template.id, args)
+            val result = backend.projects.createProject(template.id, args)
             busy = false
             if (result.success) onCreated() else error = result.message
         }

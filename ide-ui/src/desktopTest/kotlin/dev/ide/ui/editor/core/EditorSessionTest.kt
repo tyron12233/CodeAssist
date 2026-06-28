@@ -790,6 +790,47 @@ class EditorSessionTest {
     }
 
     @Test
+    fun xmlEnterAfterCloseTagDropsToSiblingLevel() {
+        // After `</TextView>` the new line is a sibling of TextView, not stuck at the close tag's column.
+        val src = "<LinearLayout>\n    <TextView>\n    </TextView>"
+        val s = session(src, src.length, CodeLanguage.Xml)
+        val (text, _) = enter(s)
+        assertEquals("$src\n    ", text)
+    }
+
+    @Test
+    fun xmlEnterAfterOpenTagIndentsAsChild() {
+        val s = session("<LinearLayout>", 14, CodeLanguage.Xml)
+        val (text, _) = enter(s)
+        assertEquals("<LinearLayout>\n    ", text)
+    }
+
+    @Test
+    fun xmlEnterAfterSelfClosingTagIsSiblingLevel() {
+        // `<CardView />` doesn't open a scope, so the next line stays a sibling (the reported bug).
+        val src = "<LinearLayout>\n    <CardView />"
+        val s = session(src, src.length, CodeLanguage.Xml)
+        val (text, _) = enter(s)
+        assertEquals("$src\n    ", text)
+    }
+
+    @Test
+    fun xmlEnterAtRootAfterSelfCloseIsColumnZero() {
+        val s = session("<CardView />", 12, CodeLanguage.Xml)
+        val (text, _) = enter(s)
+        assertEquals("<CardView />\n", text)
+    }
+
+    @Test
+    fun xmlEnterExpandsTagPairOntoThreeLines() {
+        // Caret between an open/close pair → body one level deeper, close tag de-dented under the open tag.
+        val s = session("<LinearLayout></LinearLayout>", 14, CodeLanguage.Xml)
+        val (text, caret) = enter(s)
+        assertEquals("<LinearLayout>\n    \n</LinearLayout>", text)
+        assertEquals(19, caret) // on the body line, after the 4-space indent
+    }
+
+    @Test
     fun enterIndentsDeeperAfterOpenBrace() {
         val s = session("class A {", 9, CodeLanguage.Java)
         val (text, _) = enter(s)

@@ -116,7 +116,7 @@ internal fun InlineInput(
             if (!immediate) delay(110.milliseconds)
             val live = ctx.source.replaceRange(docStart, spanEnd, v.text)
             val caret = docStart + v.selection.start.coerceIn(0, v.text.length)
-            val res = runCatching { ctx.backend.complete(ctx.path, live, caret) }.getOrNull() ?: return@launch
+            val res = runCatching { ctx.backend.editor.complete(ctx.path, live, caret) }.getOrNull() ?: return@launch
             val sameToken = res.replaceStart == session?.tokenStart
             session = CompletionSession.from(res)
             if (!sameToken) selected = 0

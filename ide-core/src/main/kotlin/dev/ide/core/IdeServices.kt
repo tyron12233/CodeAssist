@@ -39,7 +39,9 @@ import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
 import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
+import dev.ide.android.support.AndroidFeatureDependencies
 import dev.ide.android.support.AndroidRClassProvider
+import dev.ide.android.support.AndroidViewBindingProvider
 import dev.ide.android.support.AndroidSupport
 import dev.ide.android.support.AndroidVariants
 import dev.ide.android.support.SampleAndroidProject
@@ -48,6 +50,11 @@ import dev.ide.android.support.tools.AarExtractor
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
+import dev.ide.android.support.tools.KeystoreCertInfo
+import dev.ide.android.support.tools.KeystoreCreateSpec
+import dev.ide.android.support.tools.KeystoreCrypto
+import dev.ide.android.support.tools.KeystoreEntry
+import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildGoal
@@ -206,7 +213,16 @@ import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
 import dev.ide.ui.backend.UiDepKind
 import dev.ide.ui.backend.UiConfigField
+import dev.ide.ui.backend.UiBuildFeature
+import dev.ide.ui.backend.UiBuildFeatures
 import dev.ide.ui.backend.UiConfigResult
+import dev.ide.ui.backend.UiKeystore
+import dev.ide.ui.backend.UiKeystoreCert
+import dev.ide.ui.backend.UiKeystoreResult
+import dev.ide.ui.backend.UiKeystoreSpec
+import dev.ide.ui.backend.UiKeystoreValidation
+import dev.ide.ui.backend.UiSigningAssignment
+import dev.ide.ui.backend.UiSigningAssignments
 import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiDependencyNode
 import dev.ide.ui.backend.UiFacetConfig
@@ -465,9 +481,16 @@ class IdeServices private constructor(
     private val _indexStatus = MutableStateFlow(IndexUiStatus())
     val indexStatus: StateFlow<IndexUiStatus> get() = _indexStatus
 
+    /** Resolves the UI action extension points (toolbar / context menus / command palette) for the
+     *  IdeBackend action surface. Built-ins are registered in [init]; plugins contribute to the same EPs. */
+    val actionManager: dev.ide.plugin.impl.ActionManager =
+        dev.ide.plugin.impl.ActionManager(platform.extensions)
+
     init {
         // Register the scoped services this engine contributes before anything resolves them.
         registerScopedServices()
+        // Built-in UI actions (engine commands surfaced in the command palette + the plugin action seams).
+        dev.ide.core.actions.BuiltInActions.register(platform.extensions, this)
         // platform.syntheticClass: the light Android `R`, resolved from the SHARED fingerprint-cached resource
         // repository ([resourceRepo]) so it reuses the SAME parsed resource set as the preview/value/go-to-def
         // paths. Registered here (instance scope), not in [registerStaticPlugins], because that cache is
@@ -862,6 +885,22 @@ class IdeServices private constructor(
      * assets). On the desktop it is the subprocess wiring over a detected SDK, or null when none is
      * installed (the UI then reports "install an SDK" for assemble tasks).
      */
+    /**
+     * The app-global signing-keystore registry (create/import/validate/assign): keystores + their secrets
+     * live under the shared home dir, shared across projects and kept OUT of any project. Falls back to the
+     * project's `.platform` when the host supplies no shared dir (tests).
+     */
+    val keystoreRegistry: KeystoreRegistry by lazy {
+        KeystoreRegistry((sharedCachesRoot ?: store.rootPath.resolve(".platform")).resolve("keystores"))
+    }
+
+    /** Resolves a build type's assigned signing keystore (its `signingConfig` id) to a [SigningConfig], or
+     *  null to fall back to the debug keystore. Captured into the Android build system. */
+    private val signingResolver: (Module, String) -> SigningConfig? = { module, buildType ->
+        module.facets.get(AndroidFacet.KEY)?.buildType?.invoke(buildType)?.signingConfig
+            ?.let { keystoreRegistry.signingConfigFor(it) }
+    }
+
     private val androidBuild: AndroidBuildSystem? by lazy {
         // A content-addressed library-dex cache shared across every project (alongside the resolved-deps
         // cache), so a library jar is dexed once per machine, not once per project — the big win when many
@@ -885,7 +924,8 @@ class IdeServices private constructor(
                 bootClasspath = compileBootClasspath,
                 kotlin = incrementalKotlin,
                 plugins = kotlinCompilerPlugins,
-                dexCacheRoot = dexCache
+                dexCacheRoot = dexCache,
+                signingResolver = signingResolver,
             )
         }
         val sdk =
@@ -899,7 +939,8 @@ class IdeServices private constructor(
             bootClasspath = compileBootClasspath,
             kotlin = incrementalKotlin,
             plugins = kotlinCompilerPlugins,
-            dexCacheRoot = dexCache
+            dexCacheRoot = dexCache,
+            signingResolver = signingResolver,
         )
     }
 
@@ -2742,6 +2783,187 @@ class IdeServices private constructor(
         return UiConfigResult(true, "Saved ${module.name}")
     }
 
+    /** The Android `buildFeatures` of [moduleName] as toggle descriptors, or null for a non-Android module. */
+    fun getBuildFeatures(moduleName: String): UiBuildFeatures? {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return null
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
+        val bf = facet.buildFeatures
+        return UiBuildFeatures(
+            moduleName,
+            listOf(
+                UiBuildFeature(
+                    "viewBinding", "View Binding",
+                    "Generate a type-safe binding class for each layout — a field per view id, plus inflate()/bind(), no findViewById.",
+                    bf.viewBinding,
+                    note = "Adds the ViewBinding runtime and generates a <Layout>Binding for every layout.",
+                ),
+                UiBuildFeature(
+                    "compose", "Jetpack Compose",
+                    "Compile @Composable UI with the Compose compiler and render @Preview composables in the editor.",
+                    bf.compose,
+                    note = "Adds the Compose compiler plugin and the Compose runtime + tooling dependencies.",
+                ),
+            ),
+        )
+    }
+
+    /**
+     * Toggle an Android build feature ([feature] = `viewBinding`/`compose`) on [moduleName]. Persists the
+     * facet, then — when switching ON — adds the dependencies the feature needs (the ViewBinding/Compose
+     * runtime), matching AGP's auto-provisioning. Turning a feature OFF only clears the flag; the
+     * dependencies are left in place (removing them could break code that already uses the feature).
+     */
+    suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult {
+        val module = modules().firstOrNull { it.name == moduleName }
+            ?: return UiConfigResult(false, "No module '$moduleName'.")
+        val facet = module.facets.get(AndroidFacet.KEY)
+            ?: return UiConfigResult(false, "'$moduleName' is not an Android module.")
+        val project = projectOf(module) ?: return UiConfigResult(false, "No project owns '$moduleName'.")
+        val bf = facet.buildFeatures
+        val updated = when (feature) {
+            "viewBinding" -> bf.copy(viewBinding = enabled)
+            "compose" -> bf.copy(compose = enabled)
+            else -> return UiConfigResult(false, "Unknown build feature '$feature'.")
+        }
+        if (updated == bf) return UiConfigResult(true, "No change.")
+        try {
+            project.beginModification().apply {
+                module(module.id).putFacet(facet.copy(buildFeatures = updated))
+                commit()
+            }
+        } catch (e: Exception) {
+            return UiConfigResult(false, "Update failed: ${e.message}")
+        }
+        store.save()
+
+        // Enabling a feature pulls in its runtime dependencies (AGP adds these for you). A resolution failure
+        // (e.g. offline) doesn't fail the toggle — the flag is set; the deps can be retried from Dependencies.
+        var depNote = ""
+        if (enabled) {
+            val coords = when (feature) {
+                "viewBinding" -> AndroidFeatureDependencies.VIEW_BINDING
+                "compose" -> AndroidFeatureDependencies.COMPOSE
+                else -> emptyList()
+            }
+            val failures = ensureFeatureDependencies(moduleName, coords)
+            if (failures.isNotEmpty()) depNote = " (couldn't add: ${failures.joinToString(", ")})"
+        }
+
+        invalidateAnalyzers()
+        invalidateSyntheticClasses() // viewBinding on/off changes the synthetic binding classes
+        resyncIndex()
+        val verb = if (enabled) "Enabled" else "Disabled"
+        return UiConfigResult(true, "$verb $feature on ${module.name}$depNote")
+    }
+
+    /** Add each of [coordinates] to [moduleName] unless a dependency on the same `group:name` already exists.
+     *  Returns the coordinates that failed to resolve (best-effort; the caller surfaces them, not fatal). */
+    private suspend fun ensureFeatureDependencies(moduleName: String, coordinates: List<String>): List<String> {
+        val failures = ArrayList<String>()
+        for (coord in coordinates) {
+            val module = modules().firstOrNull { it.name == moduleName } ?: break
+            val groupName = coord.substringBeforeLast(':')   // group:name:version → group:name
+            val present = module.dependencies.any {
+                it is LibraryDependency && it.library.name.substringBeforeLast(':') == groupName
+            }
+            if (present) continue
+            val r = addDependency(moduleName, coord, "implementation")
+            if (!r.success && !r.message.contains("already a dependency")) failures += coord
+        }
+        return failures
+    }
+
+    // ---- signing keystores (the global registry + per-build-type assignment) ----
+
+    /** Every registered keystore, each with a best-effort summary of its key certificate. */
+    fun keystores(): List<UiKeystore> = keystoreRegistry.all().map(::uiKeystore)
+
+    fun createKeystore(spec: UiKeystoreSpec): UiKeystoreResult {
+        if (spec.commonName.isBlank()) return UiKeystoreResult(false, "A certificate name (CN) is required.")
+        if (spec.storePass.length < 6) return UiKeystoreResult(false, "The keystore password must be at least 6 characters.")
+        val r = keystoreRegistry.create(
+            spec.name,
+            KeystoreCreateSpec(
+                storePass = spec.storePass, keyAlias = spec.keyAlias.ifBlank { "key0" },
+                commonName = spec.commonName, organizationalUnit = spec.organizationalUnit,
+                organization = spec.organization, locality = spec.locality, state = spec.state,
+                country = spec.country, validityYears = spec.validityYears,
+            ),
+        )
+        return r.fold(
+            { UiKeystoreResult(true, "Created ${it.name}", it.id) },
+            { UiKeystoreResult(false, it.message ?: "Keystore creation failed.") },
+        )
+    }
+
+    fun importKeystore(filePath: String, name: String, storePass: String, keyAlias: String, keyPass: String): UiKeystoreResult {
+        val r = keystoreRegistry.import(name, Paths.get(filePath), storePass, keyAlias, keyPass)
+        return r.fold(
+            { UiKeystoreResult(true, "Imported ${it.name}", it.id) },
+            { UiKeystoreResult(false, it.message ?: "Keystore import failed.") },
+        )
+    }
+
+    fun validateKeystore(filePath: String, storePass: String): UiKeystoreValidation {
+        val v = KeystoreCrypto.validate(Paths.get(filePath), storePass)
+        return UiKeystoreValidation(v.valid, v.aliases, v.certs.map(::uiCert), v.error)
+    }
+
+    fun deleteKeystore(id: String): Boolean = keystoreRegistry.delete(id)
+
+    /** Modules that produce a signed APK (android-app) — the ones whose signing assignment matters. */
+    fun signableModules(): List<String> = modules().filter { it.type.id == "android-app" }.map { it.name }
+
+    /** Per-build-type signing assignments for [moduleName] + the assignable keystores; null for a non-Android module. */
+    fun signingAssignments(moduleName: String): UiSigningAssignments? {
+        val module = modules().firstOrNull { it.name == moduleName } ?: return null
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
+        val keystores = keystores()
+        val byId = keystores.associateBy { it.id }
+        val assignments = facet.buildTypes.map { bt ->
+            UiSigningAssignment(bt.name, bt.signingConfig, bt.signingConfig?.let { byId[it]?.name })
+        }
+        return UiSigningAssignments(moduleName, keystores, assignments)
+    }
+
+    /** Set (or clear, when [keystoreId] is null) the keystore that signs [moduleName]'s [buildType]. */
+    fun assignSigning(moduleName: String, buildType: String, keystoreId: String?): UiConfigResult {
+        val module = modules().firstOrNull { it.name == moduleName }
+            ?: return UiConfigResult(false, "No module '$moduleName'.")
+        val facet = module.facets.get(AndroidFacet.KEY)
+            ?: return UiConfigResult(false, "'$moduleName' is not an Android module.")
+        val project = projectOf(module) ?: return UiConfigResult(false, "No project owns '$moduleName'.")
+        if (keystoreId != null && keystoreRegistry.get(keystoreId) == null) {
+            return UiConfigResult(false, "Unknown keystore '$keystoreId'.")
+        }
+        if (facet.buildTypes.none { it.name == buildType }) return UiConfigResult(false, "No build type '$buildType'.")
+        val newTypes = facet.buildTypes.map { if (it.name == buildType) it.copy(signingConfig = keystoreId) else it }
+        if (newTypes == facet.buildTypes) return UiConfigResult(true, "No change.")
+        try {
+            project.beginModification().apply {
+                module(module.id).putFacet(facet.copy(buildTypes = newTypes))
+                commit()
+            }
+        } catch (e: Exception) {
+            return UiConfigResult(false, "Update failed: ${e.message}")
+        }
+        store.save()
+        val target = keystoreId?.let { keystoreRegistry.get(it)?.name } ?: "debug (default)"
+        return UiConfigResult(true, "$buildType → $target")
+    }
+
+    private fun uiKeystore(e: KeystoreEntry): UiKeystore {
+        val cert = runCatching { KeystoreCrypto.inspect(Paths.get(e.file), e.storePass, e.keyAlias) }.getOrNull()
+        return UiKeystore(
+            id = e.id, name = e.name, fileName = Paths.get(e.file).fileName.toString(), keyAlias = e.keyAlias,
+            certSubject = cert?.subject, sha256 = cert?.sha256, validUntilEpochMs = cert?.validUntilEpochMs,
+        )
+    }
+
+    private fun uiCert(c: KeystoreCertInfo): UiKeystoreCert = UiKeystoreCert(
+        c.alias, c.subject, c.issuer, c.validFromEpochMs, c.validUntilEpochMs, c.sha1, c.sha256,
+    )
+
     /** The directory `proguardFiles`/`consumerProguardFiles` entries resolve against (the module root,
      *  `<module>/build/classes` → `<module>`), or null when the layout is unexpected. */
     private fun moduleDirOf(module: Module): Path? =
@@ -3605,7 +3827,8 @@ class IdeServices private constructor(
                 is XmlSourceAnalyzer -> {
                     // Inject the Android knowledge: layout metadata (SDK attrs.xml asset when present, else
                     // the curated catalog) + custom-view attributes (project/AAR attrs.xml, parsed once per
-                    // analyzer) + resource references (the module's merged repository, rebuilt per request).
+                    // analyzer) + resource candidates (name + value hint, straight from the incremental index)
+                    // + framework `@android:` resource names (android.jar's android.R, scanned + cached).
                     // One bytecode scan feeds both: the custom-view tags AND the ancestry that lets a custom/
                     // library view inherit its base classes' app: attributes (+ AppCompat substitutions).
                     val scan =
@@ -3615,13 +3838,18 @@ class IdeServices private constructor(
                     val customViews = scan?.widgets ?: emptyList()
                     it.contributors = listOf(
                         AndroidXmlContributor(
-                            resourceNames = { type -> resourceNamesFor(module, type) },
+                            resources = { type -> resourceCandidatesFor(module, type) },
                             layout = { sdkLayoutMetadata() },
                             customAttrs = { custom },
                             customViews = { customViews },
-                            resourceValue = { type, name -> resourceValueFor(module, type, name) },
+                            frameworkResources = { type -> frameworkResources(type) },
                         )
                     )
+                    // Inlay hints: resolve a local `@type/name` to its value straight from the resource index
+                    // (the value field carried on each declaration); no repository, no per-keystroke parse.
+                    it.inlayResourceResolver = dev.ide.lang.xml.hints.XmlResourceValueResolver { rClass, name ->
+                        ResourceType.byRClass(rClass)?.let { resourceHintValue(it, name) }
+                    }
                 }
             }
             // NB: the module container owns disposal. An evicted/removed module's container disposes
@@ -3742,6 +3970,9 @@ class IdeServices private constructor(
         val analyzer = analyzerFor(module, languageFor(file))
         val service = analyzer.inlayHints ?: return emptyList()
         val vf = store.vfs.fileFor(file)
+        // Refresh the analyzer's parse of the live buffer (the XML hint service reads the last parse; the JDT/
+        // Kotlin services read their overlay, for which this reparse is a cheap no-op when text is unchanged).
+        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
         return runCatching {
             runSync {
                 service.hints(
@@ -3847,7 +4078,9 @@ class IdeServices private constructor(
     private val analysisEngine = run {
         dev.ide.lang.jdt.analysis.JdtAnalysisSupport.register(platform.extensions)
         dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport.register(platform.extensions)
-        dev.ide.lang.xml.lint.XmlAnalysisSupport.register(platform.extensions, IdeXmlResourceHost())
+        dev.ide.lang.xml.lint.XmlAnalysisSupport.register(
+            platform.extensions, IdeXmlResourceHost(), AndroidXmlChecker(layout = { sdkLayoutMetadata() }),
+        )
         platform.extensions.register(ACTION_PROVIDER_EP, AndroidXmlActionProvider(::moduleUsesAppCompat), PluginId("android-xml"))
         AnalysisEngine(
             analyzers = platform.extensions.extensions(ANALYZER_EP),
@@ -4615,20 +4848,16 @@ class IdeServices private constructor(
                 )
             }
 
-        override fun typeHasAny(file: VirtualFile, rClass: String): Boolean {
-            val type = ResourceType.byRClass(rClass) ?: return false
-            if (indexTypeHasAny(type)) return true
-            val module = moduleForEditableFile(Paths.get(file.path)) ?: return false
-            val repo = resourceRepo(module)
-            return repo?.names(type)?.isNotEmpty() == true
-        }
+        // Both go purely through the incremental resource index (project + dependency/AAR res). No repository
+        // fallback: while the index is still building, `typeHasAny` is false so the unresolved-resource check
+        // stays quiet (never a false positive) until the index is ready: the same "dumb until indexed" rule
+        // the other editor features follow.
+        override fun typeHasAny(file: VirtualFile, rClass: String): Boolean =
+            ResourceType.byRClass(rClass)?.let { indexTypeHasAny(it) } == true
 
         override fun hasResource(file: VirtualFile, rClass: String, name: String): Boolean {
             val type = ResourceType.byRClass(rClass) ?: return true // unknown type → don't flag
-            if (indexHasResource(type, name)) return true
-            val module = moduleForEditableFile(Paths.get(file.path)) ?: return false
-            val repo = resourceRepo(module)
-            return repo?.has(type, name) == true
+            return indexHasResource(type, name)
         }
 
         override fun isValueType(rClass: String): Boolean =
@@ -4780,11 +5009,9 @@ class IdeServices private constructor(
         val (type, name) = (if (isXml) xmlResourceRefAt(text, offset) else rClassRefAt(
             text, offset
         )) ?: return null
-        // Prefer the resource index — it carries the precise declaration offset; fall back to the repository.
-        indexDefinition(type, name)?.let { return it }
-        val item = resourceRepo(module)?.definitions(type, name)?.firstOrNull() ?: return null
-        val src = item.source ?: return null
-        return src to declarationOffset(src, name)
+        // Resolved purely through the resource index, which carries the declaring file + offset. No repository
+        // fallback: an as-yet-unindexed resource simply has no go-to target until the index catches up.
+        return indexDefinition(type, name)
     }
 
     /** The local resource reference under [offset] in res XML (`@type/name`), as (type, R-field name). */
@@ -4808,14 +5035,6 @@ class IdeServices private constructor(
         val ri = segs.indexOf("R")
         if (ri < 0 || ri + 2 >= segs.size) return null
         return (ResourceType.byRClass(segs[ri + 1]) ?: return null) to segs[ri + 2]
-    }
-
-    /** Offset of the `name="…"` declaration of [sanitizedName] in [file] (a value resource), else the file top. */
-    private fun declarationOffset(file: Path, sanitizedName: String): Int {
-        val text =
-            runCatching { String(Files.readAllBytes(file), Charsets.UTF_8) }.getOrNull() ?: return 0
-        return NAME_ATTR.findAll(text)
-            .firstOrNull { sanitizeResName(it.groupValues[1]) == sanitizedName }?.range?.first ?: 0
     }
 
     /** Resolve a resource to its declaration (file + offset) via the resource index, or null. */
@@ -5168,28 +5387,20 @@ class IdeServices private constructor(
 
     private val DIMEN_LITERAL = Regex("""(-?\d+(?:\.\d+)?)""")
 
-    /** Names of every indexed resource of [type], falling back to the repository if the index isn't built
-     *  yet. Used by resource-reference completion. */
-    /** The resolved inline value of `@type/name` (a value resource's text), or null for a file resource /
-     *  unresolved reference. Used only for the completion-popup hint; reuses the shared repository cache. */
-    private fun resourceValueFor(module: Module, type: ResourceType, name: String): String? {
-        if (!type.isValueType()) return null // file resources (drawable/layout/…) carry no inline value
-        val repo = resourceRepo(module) ?: return null
-        return repo.definitions(type, sanitizeResName(name)).firstOrNull { it.value != null }?.value
-    }
-
-    private fun resourceNamesFor(module: Module, type: ResourceType): List<String> {
-        val out = LinkedHashSet<String>()
-        out += indexService.prefix<ResourceDeclValue>(
-            AndroidResourceIndex.id, "${type.rClass}/", limit = 2000
-        ).map { it.value.name }
-        if (out.isEmpty()) {
-            out += resourceRepo(module)?.names(type).orEmpty()
+    /**
+     * Resource candidates (name + value hint) of [type] for completion, **straight from the incremental
+     * resource index** - ONE `prefix("type/")` query yields both the name and the resolved value, so the
+     * completion popup never parses or fingerprints a `ResourceRepository`. No repository fallback: until the
+     * index has built, resource completion is simply empty (the "dumb until indexed" rule). Ids declared inline
+     * with `@+id/…` in open buffers (not yet saved/indexed) are surfaced live so `@id/…` completes immediately.
+     */
+    private fun resourceCandidatesFor(module: Module, type: ResourceType): List<ResourceCandidate> {
+        val byName = LinkedHashMap<String, ResourceCandidate>()
+        for (hit in indexService.prefix<ResourceDeclValue>(AndroidResourceIndex.id, "${type.rClass}/", limit = 2000)) {
+            byName.putIfAbsent(hit.value.name, ResourceCandidate(hit.value.name, hit.value.value))
         }
-        // Ids are declared inline with `@+id/…`, often in the buffer being edited (not yet saved/indexed),
-        // so surface those live so `@id/…` completes them immediately.
-        if (type == ResourceType.ID) out += liveDeclaredIds()
-        return out.toList()
+        if (type == ResourceType.ID) for (id in liveDeclaredIds()) byName.putIfAbsent(id, ResourceCandidate(id))
+        return byName.values.toList()
     }
 
     private val ID_DECL = Regex("""@\+id/([A-Za-z_][\w.]*)""")
@@ -5199,11 +5410,35 @@ class IdeServices private constructor(
         ID_DECL.findAll(text).map { sanitizeResName(it.groupValues[1]) }
     }.distinct()
 
+    /** Framework (`@android:`) resource names by android.jar identity - scanned once from `android.R$*`. */
+    private val frameworkResCache = ConcurrentHashMap<String, Map<ResourceType, List<String>>>()
+
+    /**
+     * Framework resource names of [type] for `@android:type/name` completion, scanned from the SDK/device
+     * `android.jar`'s `android.R$*` classes and cached by the jar's identity (it's fixed per platform). Empty
+     * when there's no android.jar (no Android SDK / a non-Android module).
+     */
+    private fun frameworkResources(type: ResourceType): List<String> {
+        val jar = previewAndroidJar() ?: return emptyList()
+        val key = runCatching { "$jar:${Files.size(jar)}:${Files.getLastModifiedTime(jar).toMillis()}" }
+            .getOrDefault(jar.toString())
+        return frameworkResCache.getOrPut(key) {
+            runCatching { dev.ide.android.support.resources.FrameworkResourceScanner.scan(jar) }.getOrDefault(emptyMap())
+        }[type].orEmpty()
+    }
+
     /** Whether the index knows resource `@type/name` (precise). */
     private fun indexHasResource(type: ResourceType, name: String): Boolean =
         indexService.exact<ResourceDeclValue>(
             AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, name)
         ).any()
+
+    /** The resolved literal value of `@type/name` from the index (a value resource's text/`#…`/`16dp`), or
+     *  null for a file resource / unindexed reference. Used for the inlay-hint preview. */
+    private fun resourceHintValue(type: ResourceType, name: String): String? =
+        indexService.exact<ResourceDeclValue>(
+            AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, name)
+        ).firstNotNullOfOrNull { it.value }
 
     /** Whether the index has any resource of [type]; used to stay conservative (don't flag invisible types). */
     private fun indexTypeHasAny(type: ResourceType): Boolean =
@@ -5369,7 +5604,6 @@ class IdeServices private constructor(
 
         private val PACKAGE_DECL = Regex("""(?m)^\s*package\s+([\w.]+)\s*;""")
         private val MAIN_METHOD = Regex("""\bstatic\s+void\s+main\s*\(""")
-        private val NAME_ATTR = Regex("""name\s*=\s*"([^"]+)"""")
 
         // Kotlin run detection. Kotlin packages have no trailing `;`. A top-level `fun main(` is anchored at
         // column 0 (top-level declarations are unindented) so a `fun main` nested in a class doesn't match.
@@ -5573,6 +5807,11 @@ class IdeServices private constructor(
             // tight device. Only the project-independent stand-ins (BuildConfig) register here.
             platform.extensions.register(
                 SYNTHETIC_CLASS_EP, AndroidBuildConfigProvider(), PluginId("android-support")
+            )
+            // ViewBinding: `<namespace>.databinding.<Layout>Binding` per layout, generated from the module's OWN
+            // layouts (small, no dependency res), so it needs no shared repo cache and registers statically too.
+            platform.extensions.register(
+                SYNTHETIC_CLASS_EP, AndroidViewBindingProvider(), PluginId("android-support")
             )
             // Kotlin interop: a module's top-level `fun`/`val` become a `<File>Kt` facade and its classes/
             // objects become types, so Java code (and JDT completion/analysis) resolves them before a build.
