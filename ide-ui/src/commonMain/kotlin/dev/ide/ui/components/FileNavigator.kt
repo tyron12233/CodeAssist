@@ -39,7 +39,10 @@ import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
+import dev.ide.ui.backend.UiMenuGroup
+import dev.ide.ui.backend.UiMenuNode
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.resolveTint
@@ -85,8 +88,14 @@ fun FileNavigator(
     onAddSourceRoot: (TreeNode) -> Unit = {},
     canImport: Boolean = false,
     onImport: () -> Unit = {},
+    /** Import external file(s) from the system file manager into a specific directory ([dirPath]); wired into
+     *  each directory row's context menu. Gated by [canImport]. */
+    onImportInto: (dirPath: String) -> Unit = {},
     canShare: Boolean = false,
     onShare: (TreeNode) -> Unit = {},
+    /** Save a copy of a file out to a user-chosen location ("Save As"); wired to [dev.ide.ui.backend.FileActions.exportFile]. */
+    canExport: Boolean = false,
+    onExport: (TreeNode) -> Unit = {},
     canModify: Boolean = false,
     onRename: (TreeNode) -> Unit = {},
     onMove: (TreeNode) -> Unit = {},
@@ -94,6 +103,10 @@ fun FileNavigator(
     onDelete: (TreeNode) -> Unit = {},
     canReveal: Boolean = false,
     onReveal: (TreeNode) -> Unit = {},
+    /** Plugin-contributed context-menu items for a tree node (the `fileContext` place). Resolved when a row's
+     *  menu opens; empty by default. Rendered under a divider below the built-in file ops. */
+    contextMenuFor: (TreeNode) -> UiMenuGroup = { UiMenuGroup() },
+    onContextAction: (String, TreeNode) -> Unit = { _, _ -> },
     /** Open the whole project folder in the system file manager (the DocumentsProvider root). Null hides the button. */
     onOpenInFiles: (() -> Unit)? = null,
     mode: TreeViewMode = TreeViewMode.Project,
@@ -104,7 +117,7 @@ fun FileNavigator(
         mutableSetExpandedDefaults(root)
     }
     var sort by remember { mutableStateOf(TreeSort.Name) }
-    val ctx = FileRowActions(canModify, onRename, onMove, onCopy, onDelete, canReveal, onReveal)
+    val ctx = FileRowActions(canModify, onRename, onMove, onCopy, onDelete, canReveal, onReveal, canImport, onImportInto, contextMenuFor, onContextAction, canExport, onExport)
     Column(modifier) {
         // header — project identity + the IntelliJ-style scope dropdown, with import + an overflow ⋮ menu.
         Row(
@@ -177,6 +190,12 @@ private class FileRowActions(
     val onDelete: (TreeNode) -> Unit,
     val canReveal: Boolean,
     val onReveal: (TreeNode) -> Unit,
+    val canImport: Boolean = false,
+    val onImportInto: (dirPath: String) -> Unit = {},
+    val contextMenu: (TreeNode) -> UiMenuGroup = { UiMenuGroup() },
+    val onContextAction: (String, TreeNode) -> Unit = { _, _ -> },
+    val canExport: Boolean = false,
+    val onExport: (TreeNode) -> Unit = {},
 )
 
 /** The label shown in the scope dropdown for a view mode. */
@@ -307,7 +326,11 @@ private fun TreeRow(
     // File/Folder for any dir, New resource for res/, module settings/deps, reveal, and the file ops.
     val canModuleMenu = node.kind == NodeKind.Module
     val canRevealHere = ctx.canReveal && node.fileOpPath() != null
-    val hasMenu = canNew || canContext || canModuleMenu || canRevealHere
+    // Export ("Save As") applies to a concrete file — e.g. a built APK/AAB under the dimmed build-outputs node.
+    val canExportHere = ctx.canExport && node.kind == NodeKind.File && node.filePath != null
+    // Import external file(s) from the system file manager into this row's directory (a file's parent dir).
+    val canImportHere = ctx.canImport && targetDir != null
+    val hasMenu = canNew || canContext || canModuleMenu || canRevealHere || canImportHere || canExportHere
     var menuOpen by remember { mutableStateOf(false) }
     // The context menu is two-level: the root actions, and a "New ▸" page of context-aware create options.
     var inNewPage by remember(menuOpen) { mutableStateOf(false) }
@@ -371,7 +394,12 @@ private fun TreeRow(
         } else {
             Text(
                 node.name,
-                color = if (isActive) Ca.colors.accent else Ca.colors.textPrimary,
+                color = when {
+                    isActive -> Ca.colors.accent
+                    // Derived build output, IntelliJ-style: dimmed so it reads as generated, not source.
+                    node.styleHint == "excluded" -> Ca.colors.textTertiary
+                    else -> Ca.colors.textPrimary
+                },
                 style = Ca.type.footnote,
                 fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
@@ -414,6 +442,10 @@ private fun TreeRow(
                     FileActionItem(CaIcons.plus, "Add source root") { menuOpen = false; onAddSourceRoot(node) }
                 }
                 if (canNew) FileActionItem(CaIcons.plus, "New", trailing = CaIcons.caretRight) { inNewPage = true }
+                if (canImportHere) targetDir?.let { dir ->
+                    FileActionItem(CaIcons.download, "Import from file manager") { menuOpen = false; ctx.onImportInto(dir) }
+                }
+                if (canExportHere) FileActionItem(CaIcons.save, "Export…") { menuOpen = false; ctx.onExport(node) }
                 if (canRevealHere) FileActionItem(CaIcons.share, "Reveal in file manager") { menuOpen = false; ctx.onReveal(node) }
                 if (canContext) {
                     FileActionItem(CaIcons.docText, "Rename") { menuOpen = false; ctx.onRename(node) }
@@ -421,11 +453,33 @@ private fun TreeRow(
                     FileActionItem(CaIcons.copy, "Copy") { menuOpen = false; ctx.onCopy(node) }
                     FileActionItem(CaIcons.close, "Delete", danger = true) { menuOpen = false; ctx.onDelete(node) }
                 }
+                // Plugin-contributed file actions (the `fileContext` place). Resolved lazily when the menu
+                // opens; nothing renders until a plugin contributes.
+                val pluginItems = ctx.contextMenu(node).items
+                if (pluginItems.isNotEmpty()) {
+                    MenuDivider()
+                    PluginMenuItems(pluginItems) { id -> menuOpen = false; ctx.onContextAction(id, node) }
+                }
             }
         }
     }
 
     if (isOpen) node.children.sortedForTree(sort).forEach { TreeRow(it, depth + 1, expanded, sort, activePath, onOpen, onNewFile, onNewFolder, onNewResource, onNewSource, onViewDependencies, onConfigureModule, onAddSourceRoot, canShare, onShare, ctx) }
+}
+
+/** Renders plugin-contributed [UiMenuNode]s in the file-tree dropdown. Submenus are flattened one level
+ *  (the lightweight dropdown has no nested-page chrome of its own); separators map to dividers. */
+@Composable
+private fun PluginMenuItems(items: List<UiMenuNode>, onAction: (String) -> Unit) {
+    items.forEach { item ->
+        when (item) {
+            is UiMenuNode.Item -> FileActionItem(actionIcon(item.action.iconId), item.action.text) {
+                if (item.action.enabled) onAction(item.action.id)
+            }
+            is UiMenuNode.Submenu -> PluginMenuItems(item.items, onAction)
+            UiMenuNode.Separator -> MenuDivider()
+        }
+    }
 }
 
 @Composable

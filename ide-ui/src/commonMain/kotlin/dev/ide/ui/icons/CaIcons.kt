@@ -148,10 +148,26 @@ object CaIcons {
     )
     /** A mallet/hammer — build & run. */
     val hammer = build("hammer", roundRect(4.5f, 4.5f, 15f, 5f, 2f), s("M12 9.5V19.5"))
+    /** A solid heart — the "Support" affordance. */
+    val heart = build(
+        "heart",
+        f(
+            "M12 20.3 c-.35 0-.7 -.13 -.97 -.4 C6.8 16.1 4 13.4 4 10.1 4 7.7 5.9 5.8 8.3 5.8" +
+                " c1.45 0 2.8 .68 3.7 1.83 .9 -1.15 2.25 -1.83 3.7 -1.83 C18.1 5.8 20 7.7 20 10.1" +
+                " c0 3.3 -2.8 6 -7.03 9.8 -.27 .27 -.62 .4 -.97 .4 z",
+        ),
+    )
+    /** A five-point star — the "Star on GitHub" affordance. */
+    val star = build(
+        "star",
+        s("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
+    )
 
     // ---- file-tree node icons (resolved by TreeIcons) ----
     /** A package: a square divided into a grid. */
     val pkg = build("pkg", roundRect(4.5f, 4.5f, 15f, 15f, 2.5f), s("M12 4.5v15M4.5 12h15"))
+    // A key: round bow + diagonal shaft with two teeth (signing keystores).
+    val key = build("key", circle(8f, 8f, 3.5f), s("M10.5 10.5L20 20"), s("M16 16l1.6-1.6"), s("M18.5 18.5l1.6-1.6"))
     /** The Android robot head — for android modules and the manifest. */
     val androidLogo = build(
         "android-logo",

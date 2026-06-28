@@ -17,6 +17,16 @@ interface FileActions {
      */
     fun importInto(targetDir: String, onImported: (List<String>) -> Unit)
 
+    /** Whether this host can pick a single existing file and hand back its path (shows the keystore Import affordance). */
+    val canPickFile: Boolean get() = false
+
+    /**
+     * Launch the platform file picker for ONE existing file and return its absolute path via [onPicked]
+     * (null if cancelled). Unlike [importInto], this does NOT copy the file into the project — the caller
+     * reads it directly (e.g. importing a `.jks`/`.keystore` into the keystore registry). Default no-op.
+     */
+    fun pickFile(onPicked: (String?) -> Unit) = onPicked(null)
+
     /** Whether this host can share/export a file out (shows the Share affordance). */
     val canShare: Boolean
 
@@ -33,6 +43,17 @@ interface FileActions {
     /** Whether this host can open external URLs (shows link affordances like "Submit suggestions"). */
     val canOpenUrl: Boolean get() = false
 
+    /** Whether this host can export/save a copy of a file to a user-chosen location (shows the Export affordance). */
+    val canExport: Boolean get() = false
+
+    /**
+     * Save a copy of the file at [path] to a user-chosen destination via the platform "Save As" flow —
+     * Android `ACTION_CREATE_DOCUMENT` (the system Files app / Drive / Downloads), desktop `JFileChooser`.
+     * Unlike [share] (a transient hand-off), this writes a durable copy the user picks the location for —
+     * the way to get a built APK/AAB off the device. Default no-op (hidden when [canExport] is false).
+     */
+    fun exportFile(path: String) = Unit
+
     /** Whether this host can open a folder in the system file manager (shows the "Open in Files" affordance). */
     val canReveal: Boolean get() = false
 
@@ -44,6 +65,16 @@ interface FileActions {
      * [canReveal] is false).
      */
     fun reveal(path: String) = Unit
+
+    /** Whether this host can hand an APK to the system package installer (Android only). */
+    val canInstallApk: Boolean get() = false
+
+    /**
+     * Prompt the platform package installer for the APK at [path] — on Android the system install
+     * confirmation UI (`ACTION_VIEW` of a FileProvider URI). Used when the user taps a built `.apk` in the
+     * tree instead of opening it as text. Default no-op (the affordance is hidden when [canInstallApk] is false).
+     */
+    fun installApk(path: String) = Unit
 
     /** A no-op bridge for hosts without file integration (the default). */
     object None : FileActions {

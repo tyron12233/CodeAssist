@@ -24,12 +24,22 @@ class DesktopFileActions(private val backend: IdeBackend) : FileActions {
             }
             if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
                 val created = chooser.selectedFiles.mapNotNull { f ->
-                    runCatching { backend.createFileBytes(targetDir, f.name, f.readBytes()) }.getOrNull()
+                    runCatching { backend.files.createFileBytes(targetDir, f.name, f.readBytes()) }.getOrNull()
                 }
                 onImported(created)
             } else {
                 onImported(emptyList())
             }
+        }
+    }
+
+    override val canPickFile: Boolean = true
+
+    override fun pickFile(onPicked: (String?) -> Unit) {
+        SwingUtilities.invokeLater {
+            val chooser = JFileChooser().apply { dialogTitle = "Choose a keystore" }
+            val path = if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile?.absolutePath else null
+            onPicked(path)
         }
     }
 
@@ -39,6 +49,22 @@ class DesktopFileActions(private val backend: IdeBackend) : FileActions {
         runCatching {
             val file = File(path)
             if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(file.parentFile ?: file)
+        }
+    }
+
+    override val canExport: Boolean = true
+
+    /** "Save As": pick a destination via [JFileChooser] and copy the file there (e.g. a built APK out of the project). */
+    override fun exportFile(path: String) {
+        SwingUtilities.invokeLater {
+            val src = File(path)
+            val chooser = JFileChooser().apply {
+                dialogTitle = "Export ${src.name}"
+                selectedFile = File(src.name)
+            }
+            if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                chooser.selectedFile?.let { dest -> runCatching { src.copyTo(dest, overwrite = true) } }
+            }
         }
     }
 

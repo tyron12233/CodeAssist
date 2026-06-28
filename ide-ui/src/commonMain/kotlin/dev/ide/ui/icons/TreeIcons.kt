@@ -74,6 +74,9 @@ object TreeIcons {
         register("sourceset.android-res", TreeIcon.Glyph(CaIcons.image, IconTint.Fixed(androidGreen)))
         register("sourceset.assets", TreeIcon.Glyph(CaIcons.box, IconTint.Warning))
         register("sourceset.generated", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Tertiary))
+        // Derived build output (the curated "build outputs" node + the raw `build/` dir) — IntelliJ marks
+        // excluded/output dirs with a warm tint; the row text is additionally muted via `styleHint`.
+        register("build-output", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Warning))
         register("package", TreeIcon.Glyph(CaIcons.pkg, IconTint.Secondary))
         register("folder", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Secondary))
         register("manifest", TreeIcon.Glyph(CaIcons.file, IconTint.Fixed(androidGreen)))
