@@ -51,7 +51,46 @@ private fun isPunct(c: Char) = c in "{}()[];,.<>=+-*\\/%&|!?:^~@"
 fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine = when (language) {
     CodeLanguage.Plain -> StyledLine.EMPTY
     CodeLanguage.Xml -> styleXmlLine(line, entryState)
+    CodeLanguage.Proguard -> styleProguardLine(line)
     CodeLanguage.Java, CodeLanguage.Kotlin -> styleCodeLine(line, entryState)
+}
+
+/** ProGuard/R8 keep-rule line styling: `#` comments, `-directives` (keyword), `@`-annotations, quoted
+ *  strings, and capitalised class names as types. No cross-line state (no block comments). */
+private fun styleProguardLine(line: String): StyledLine {
+    val n = line.length
+    val spans = ArrayList<LineSpan>(8)
+    var i = 0
+    while (i < n) {
+        val c = line[i]
+        when {
+            c == '#' -> { spans.add(LineSpan(i, n, TokenType.COMMENT)); return StyledLine(spans, LexState.CODE) }
+            c == '-' && (i == 0 || line[i - 1] == ' ' || line[i - 1] == '\t') -> {
+                val start = i; i++
+                while (i < n && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+                spans.add(LineSpan(start, i, TokenType.KEYWORD))
+            }
+            c == '@' -> {
+                val start = i; i++
+                while (i < n && (line[i].isLetterOrDigit() || line[i] == '_' || line[i] == '.')) i++
+                spans.add(LineSpan(start, i, TokenType.ANNOTATION))
+            }
+            c == '"' || c == '\'' -> {
+                val start = i; i++
+                while (i < n && line[i] != c) i++
+                if (i < n) i++
+                spans.add(LineSpan(start, i.coerceAtMost(n), TokenType.STRING))
+            }
+            c.isLetter() || c == '_' -> {
+                val start = i; i++
+                while (i < n && (line[i].isLetterOrDigit() || line[i] == '_' || line[i] == '.' || line[i] == '$')) i++
+                if (line[start].isUpperCase()) spans.add(LineSpan(start, i, TokenType.TYPE))
+            }
+            c in "{}()[];,*" -> { spans.add(LineSpan(i, i + 1, TokenType.PUNCT)); i++ }
+            else -> i++
+        }
+    }
+    return StyledLine(spans, LexState.CODE)
 }
 
 private fun styleCodeLine(line: String, entryState: Int): StyledLine {

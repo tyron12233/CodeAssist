@@ -291,6 +291,35 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun alignsKotlinStdlibFamilyToOneVersion() {
+        // The real failure: `kotlin-stdlib:1.8.22` (which post-1.8 carries CollectionsJDK8Kt) plus an older
+        // `kotlin-stdlib-jdk8:1.6.21` (which still carries it) dragged in transitively. These are DISTINCT
+        // artifacts, so per-coordinate newest-wins can't collapse them, and D8/R8 abort on the duplicate
+        // class. Family alignment must snap kotlin-stdlib-jdk8 up to 1.8.22, where it's an empty shim.
+        val k = "org.jetbrains.kotlin"
+        val files = FakeRepo()
+        files.put("kotlin-stdlib", "1.8.22", group = k)
+        files.put("kotlin-stdlib", "1.6.21", group = k)
+        // jdk8 1.6.21 is the standalone (class-carrying) artifact; 1.8.22 is the empty shim the build will fetch.
+        files.put("kotlin-stdlib-jdk8", "1.6.21", group = k, deps = listOf(Dep(k, "kotlin-stdlib", "1.6.21")))
+        files.put("kotlin-stdlib-jdk8", "1.8.22", group = k, deps = listOf(Dep(k, "kotlin-stdlib", "1.8.22")))
+        // An older library that still depends on the standalone jdk8 artifact (e.g. an old coroutines build).
+        files.put("legacy-lib", "1.0", group = k, deps = listOf(Dep(k, "kotlin-stdlib-jdk8", "1.6.21")))
+
+        val result = runBlocking {
+            newResolver(files).first.resolve(
+                listOf(Coordinate(k, "kotlin-stdlib", "1.8.22"), Coordinate(k, "legacy-lib", "1.0")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals("1.8.22", byName.getValue("kotlin-stdlib").coordinate.version)
+        // The whole point: jdk8 is pulled in at 1.6.21 but aligned up to 1.8.22 (the empty shim) → no dup class.
+        assertEquals("1.8.22", byName.getValue("kotlin-stdlib-jdk8").coordinate.version)
+    }
+
+    @Test
     fun unresolvedWhenRepoLacksTheArtifact() {
         val (resolver, _) = newResolver(FakeRepo())
         val result = runBlocking { resolver.resolve(listOf(coord("ghost", "9.9")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
@@ -319,10 +348,10 @@ class MavenDependencyResolverTest {
         private val byUrl = HashMap<String, ByteArray>()
         override fun fetch(url: String): ByteArray? = byUrl[url]
 
-        fun put(name: String, version: String, packaging: String = "jar", deps: List<Dep> = emptyList(), jarBytes: ByteArray = emptyJar()) {
-            byUrl[url("g", name, version, "pom")] = pom("g", name, version, packaging, deps).toByteArray()
+        fun put(name: String, version: String, packaging: String = "jar", deps: List<Dep> = emptyList(), jarBytes: ByteArray = emptyJar(), group: String = "g") {
+            byUrl[url(group, name, version, "pom")] = pom(group, name, version, packaging, deps).toByteArray()
             val ext = if (packaging == "aar") "aar" else "jar"
-            byUrl[url("g", name, version, ext)] = jarBytes
+            byUrl[url(group, name, version, ext)] = jarBytes
         }
 
         /** A `pom`-packaged BOM: only a POM with a `<dependencyManagement>` block, no artifact. */

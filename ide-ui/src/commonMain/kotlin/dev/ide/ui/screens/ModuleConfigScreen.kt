@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -450,12 +451,18 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
     var addRootOpen by remember { mutableStateOf(false) }
     var missingProguard by remember(moduleName) { mutableStateOf<List<UiMissingProguardFile>>(emptyList()) }
     val scope = rememberCoroutineScope()
+    val fsEpoch by backend.files.fileSystemEpoch.collectAsState()
 
     LaunchedEffect(moduleName, reloadKey) {
         loading = true
         config = runCatching { backend.modules.getModuleConfig(moduleName) }.getOrNull()
         missingProguard = runCatching { backend.modules.missingProguardFiles(moduleName) }.getOrDefault(emptyList())
         loading = false
+    }
+    // A proguard keep-rule file created/deleted elsewhere (the file tree's New File, an external edit) flips
+    // the "missing proguard file" warning without touching the module config — refresh just that, no flash.
+    LaunchedEffect(moduleName, fsEpoch) {
+        missingProguard = runCatching { backend.modules.missingProguardFiles(moduleName) }.getOrDefault(emptyList())
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
 

@@ -96,8 +96,12 @@ class AndroidBuildSystem(
      */
     private val bootClasspath: List<Path> = emptyList(),
     private val aapt2: Aapt2 = Aapt2Subprocess(sdk.aapt2),
-    private val dexer: Dexer = D8Dexer(sdk.d8Jar, sdk.javaLauncher),
-    private val shrinker: Shrinker = R8Subprocess(sdk.d8Jar, sdk.javaLauncher),
+    private val dexer: Dexer = D8Dexer(listOf(sdk.d8Jar), sdk.javaLauncher),
+    /** Dexer for the dex MERGE step ([DexMergeTask]) specifically — the debug-path memory peak. Defaults to
+     *  [dexer]; on ART the host injects a forked-VM D8 here so the merge gets a heap above the app cap, while
+     *  the per-class archives keep using the in-process [dexer]. */
+    private val mergeDexer: Dexer = dexer,
+    private val shrinker: Shrinker = R8Subprocess(listOf(sdk.d8Jar), sdk.javaLauncher),
     private val signer: ApkSigner = ApkSignerTool(sdk.apksignerJar, sdk.zipalign, sdk.javaLauncher),
     /** Builds the `.aab` from a base module zip; in-process bundletool by default (it is not an SDK tool). */
     private val bundler: Bundler = BundletoolInProcess(),
@@ -414,14 +418,14 @@ class AndroidBuildSystem(
                 // Native multidex: ART loads many dex, so keep the scopes split for the best incrementality.
                 val mergeProjectDex = step("mergeProjectDex")
                 tasks.task(mergeProjectDex, listOf(dexBuilder)) {
-                    DexMergeTask(mergeProjectDex, listOf(layout.projectArchives), sdk.androidJar, facet.minSdk, release, layout.projectDex, dexer)
+                    DexMergeTask(mergeProjectDex, listOf(layout.projectArchives), sdk.androidJar, facet.minSdk, release, layout.projectDex, mergeDexer)
                 }
                 val dirs = arrayListOf(layout.projectDex)
                 val deps = arrayListOf(aapt2Link, mergeProjectDex)
                 if (subProjectJars.isNotEmpty()) {
                     val mergeLibDex = step("mergeLibDex")
                     tasks.task(mergeLibDex, listOf(dexBuilder)) {
-                        DexMergeTask(mergeLibDex, listOf(layout.subArchives), sdk.androidJar, facet.minSdk, release, layout.libDex, dexer)
+                        DexMergeTask(mergeLibDex, listOf(layout.subArchives), sdk.androidJar, facet.minSdk, release, layout.libDex, mergeDexer)
                     }
                     dirs.add(layout.libDex); deps.add(mergeLibDex)
                 }
@@ -430,7 +434,7 @@ class AndroidBuildSystem(
                     // Below AGP's LIBRARIES_MERGING_THRESHOLD: merge per-library (more dex files, finer isolation).
                     val perLib = externalJars.size <= extMergeThreshold(facet.minSdk)
                     tasks.task(mergeExtDex, listOf(dexBuilder)) {
-                        DexMergeTask(mergeExtDex, listOf(layout.extArchives), sdk.androidJar, facet.minSdk, release, layout.extDex, dexer, groupPerBucket = perLib)
+                        DexMergeTask(mergeExtDex, listOf(layout.extArchives), sdk.androidJar, facet.minSdk, release, layout.extDex, mergeDexer, groupPerBucket = perLib)
                     }
                     dirs.add(layout.extDex); deps.add(mergeExtDex)
                 }
@@ -440,7 +444,7 @@ class AndroidBuildSystem(
                 val mergeDex = step("mergeDex")
                 tasks.task(mergeDex, listOf(dexBuilder)) {
                     DexMergeTask(mergeDex, listOf(layout.projectArchives, layout.subArchives, layout.extArchives),
-                        sdk.androidJar, facet.minSdk, release, layout.dex, dexer)
+                        sdk.androidJar, facet.minSdk, release, layout.dex, mergeDexer)
                 }
                 dexDirs = listOf(layout.dex); pkgDeps = listOf(aapt2Link, mergeDex)
             }
@@ -711,11 +715,15 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, mergeDexer: Dexer? = null): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 dexer = D8InProcessDexer(),
-                shrinker = R8InProcessShrinker(),
+                // R8 is the heaviest in-process step (whole-program). On ART the host can inject a forked-VM
+                // shrinker that runs R8 with a bigger -Xmx than the app heap cap; default keeps it in-process.
+                shrinker = shrinker ?: R8InProcessShrinker(),
+                // The dex MERGE is the debug-path memory peak; the host can inject a forked-VM D8 for it.
+                mergeDexer = mergeDexer ?: D8InProcessDexer(),
                 signer = ApksigSigner(),
                 bundleSigner = ApksigBundleSigner(),   // ART: v1-sign the .aab in-process (no jarsigner)
                 kotlin = kotlin,

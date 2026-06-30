@@ -190,6 +190,29 @@ class MavenDependencyResolver(
 
         log.info("graph walk done: ${chosen.size} node(s) chosen, ${unresolved.size} POM(s) unresolved so far")
 
+        // --- version alignment -------------------------------------------------------------------
+        // Members of an alignment group that ended up in the graph all snap to the newest version any of
+        // them requested. Done AFTER the full walk so it sees every requested version regardless of the
+        // order members were discovered in (a sibling's newer version may surface waves later than the one
+        // that pulled in the member being aligned). Rewriting `chosen` is enough: the download pass below
+        // and the `dependsOn` edges both read the per-`ga` version from `chosen`, so the bumped member is
+        // fetched at the aligned version and its edges point at the aligned closure. See [ALIGNMENT_GROUPS].
+        for (group in ALIGNMENT_GROUPS) {
+            val present = group.filter { it in chosen }
+            if (present.size < 2) continue   // a single member can't collide with a sibling — nothing to align
+            val aligned = MavenVersion.newest(present.flatMap { seenVersions[it].orEmpty() }) ?: continue
+            for (ga in present) {
+                // Under PINNED the user's explicit declaration wins over alignment (a transitively-pulled
+                // sibling still aligns, which is what removes the duplicate class).
+                if (conflict == ConflictPolicy.PINNED && ga in directVersions) continue
+                val cur = chosen[ga]
+                if (cur != aligned) {
+                    log.info("align $ga: $cur -> $aligned (alignment group)")
+                    chosen[ga] = aligned
+                }
+            }
+        }
+
         // --- download + assemble results ---------------------------------------------------------
         // Two passes, so the build-critical jars/aars all land first at full concurrency and editor-only
         // sources never share a download slot with (or queue ahead of) a jar something is waiting to build
@@ -486,6 +509,30 @@ class MavenDependencyResolver(
 
     private companion object {
         const val MAX_NODES = 4000
+
+        /**
+         * Version-alignment groups (Gradle BOM / `kotlin-bom`-style alignment). Every member of a group
+         * present in the graph resolves to ONE shared version: the newest requested across the group. This
+         * is the POM-only equivalent of the Gradle Module Metadata *capability* the published `.module`
+         * files carry (which a pure-POM resolver never sees).
+         *
+         * The load-bearing case is the Kotlin stdlib family. As of Kotlin 1.8.0 the contents of
+         * `kotlin-stdlib-jdk7`/`-jdk8` were folded into the main `kotlin-stdlib` artifact (the jdk7/jdk8
+         * modules became near-empty shims). So a graph that mixes `kotlin-stdlib:1.8.x` (which now carries
+         * `kotlin.collections.jdk8.CollectionsJDK8Kt`) with an older `kotlin-stdlib-jdk8:1.6.x` (which still
+         * carries it) defines that class twice — harmless on the JVM (first-on-classpath wins) but FATAL to
+         * D8/R8, which abort on a type defined more than once. These are DISTINCT artifacts (different
+         * `group:name`), so plain newest-wins per-coordinate dedup can't collapse them. Aligning the family
+         * to a single version does: at any one version exactly one member carries the class.
+         */
+        val ALIGNMENT_GROUPS: List<Set<GA>> = listOf(
+            setOf(
+                GA("org.jetbrains.kotlin", "kotlin-stdlib"),
+                GA("org.jetbrains.kotlin", "kotlin-stdlib-jdk7"),
+                GA("org.jetbrains.kotlin", "kotlin-stdlib-jdk8"),
+                GA("org.jetbrains.kotlin", "kotlin-stdlib-common"),
+            ),
+        )
     }
 }
 

@@ -1,19 +1,25 @@
 package dev.ide.android.support.tools
 
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 
 /**
  * Dexes JVM `.class` files into Dalvik `classes.dex` with D8. D8 is pure Java, so it
- * runs unchanged on a desktop JVM and on ART; here it is launched as `java -cp d8.jar
- * com.android.tools.r8.D8 …` using the supplied [javaLauncher] (the running JVM by default, so the build
- * needs no `java` on `PATH`). `--lib android.jar` supplies the bootclasspath for core-library desugaring.
+ * runs unchanged on a desktop JVM and on ART; here it is launched as `<launcher> [vmArgs] -cp <tool cp>
+ * com.android.tools.r8.D8 …`. `--lib android.jar` supplies the bootclasspath for core-library desugaring.
  * Inputs may be class directories and/or jars; output is written to [outDir] as `classes.dex`.
+ *
+ * Two wirings: **desktop** = `launcher=java`, `toolClasspath=[d8.jar]`, no [vmArgs]; **on-device forked
+ * merge** = `launcher=dalvikvm64`, `toolClasspath=`R8's dexes, `vmArgs=["-Xmx<n>m"]` so the dex merge gets a
+ * heap above the app cap (the merge is the debug-path memory peak). See ForkedD8Dexer in :ide-android.
  */
 class D8Dexer(
-    private val d8Jar: Path,
+    private val toolClasspath: List<Path>,
     private val javaLauncher: Path,
+    private val vmArgs: List<String> = emptyList(),
 ) : Dexer {
+    private val toolCp: String get() = toolClasspath.joinToString(File.pathSeparator) { it.toString() }
 
     override fun dex(
         inputs: List<Path>,
@@ -56,8 +62,9 @@ class D8Dexer(
         if (existing.isEmpty()) return ToolResult.fail("no class inputs to dex")
         val cmd = buildList {
             add(javaLauncher.toString());
+            addAll(vmArgs);
             add("-cp");
-            add(d8Jar.toString());
+            add(toolCp);
             add("com.android.tools.r8.D8")
             add(if (release) "--release" else "--debug")
             // Archive mode = one intermediate .dex per input class file (D8 OutputMode.DexFilePerClassFile),

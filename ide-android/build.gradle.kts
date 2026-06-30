@@ -155,6 +155,40 @@ val bundleKotlincResourcesAsset = tasks.register("bundleKotlincResourcesAsset") 
     }
 }
 
+// --- R8 tool dexed as an asset (forked-VM R8 for the release/minify OOM fix) ---------------------
+// R8's whole-program pass needs more heap than an app process's `largeHeap` cap (576MB on the test device);
+// a command-line VM (dalvikvm) forked from the app is NOT a zygote app process, so its `-Xmx` can exceed
+// that cap (measured ceiling ~1.5GB). To run R8 there it needs its classes as a loadable dex — the app's own
+// copy is buried in secondary dexes a bare `dalvikvm -cp base.apk` won't load. D8-dex the r8 tool jar into a
+// standalone r8.dex.zip asset; `dev.ide.android.ForkedR8Shrinker` extracts it and runs
+// `dalvikvm64 -Xmx<n>m -cp <dexes> com.android.tools.r8.R8 …`. (Mirrors what AGP already does to r8 for the app.)
+val r8DexTool: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { r8DexTool(libs.android.r8) { isTransitive = false } }
+
+val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
+    description = "D8-dex the R8 tool jar into a forked-VM-loadable r8.dex.zip asset."
+    val outZip = layout.buildDirectory.file("r8-dex-asset/r8.dex.zip")
+    classpath = r8DexTool                       // r8.jar contains D8 — self-dex it
+    mainClass.set("com.android.tools.r8.D8")
+    inputs.files(r8DexTool)
+    outputs.file(outZip)
+    // min-api 26 = the app's minSdk; the forked VM runs on the device's ART (>= 26), and a higher min-api
+    // minimises desugaring (r8 is plain Java 8 bytecode), so no `--lib` platform is needed to dex it.
+    doFirst {
+        val out = outZip.get().asFile
+        out.parentFile.mkdirs(); out.delete()
+        args = listOf(
+            "--release",
+            "--min-api", "26",
+            "--output", out.absolutePath,
+            r8DexTool.singleFile.absolutePath,
+        )
+    }
+}
+
 // --- JetBrains Mono fonts as Compose-resource assets ----------------------------------------------
 // Compose Multiplatform's resource→Android-assets packaging isn't wired for :ide-ui's AGP-9
 // `com.android.kotlin.multiplatform.library` target: the generated `Res.font.*` accessors exist, but the
@@ -221,6 +255,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-runtime-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
 
     // Release signing, never committed. Resolution order per field: keystore.properties (gitignored,
     // alongside this build script) → Gradle property (-PRELEASE_*) → env var (RELEASE_*). With no keystore
@@ -355,6 +390,39 @@ val generateStaxApiJar = tasks.register("generateStaxApiJar") {
     }
 }
 
+// --- javax.swing.Icon (java.desktop) for on-device K2 --------------------------------------------
+// IntelliJ-core's PSI carries a Swing-based icon API: dozens of classes (ElementBase, PsiPackageBase,
+// the asJava light classes, …) declare methods returning javax.swing.Icon, and four marker interfaces
+// (ui.icons.ReplaceableIcon/CompositeIcon, openapi.util.ScalableIcon/DummyIcon) `extends javax.swing.Icon`.
+// javax.swing is a JDK (java.desktop) package Android omits entirely. On a strict ART verifier this is
+// fatal at *class load*: KotlinCoreEnvironment.createForProduction → KotlinJavaPsiFacade.<clinit> builds a
+// PsiPackageImpl, whose ElementBase/PsiPackageBase supertypes fail to verify ("can't resolve returned type
+// javax.swing.Icon"), which kills the Kotlin parse host AND the bundled K2 compiler.
+// App classes may live in javax.* (unlike java.*), so we dex the real javax.swing.Icon interface from the
+// build JBR's java.desktop module — exactly like generateStaxApiJar / libs/java-compiler.jar. It is a pure
+// interface (3 abstract methods); the java.awt.Component/Graphics it names live only in those abstract
+// descriptors (never resolved at load, never invoked headless), so Icon alone suffices and pulls in no AWT.
+// With the type present, RowIcon stays a subtype of Icon and every icon method/ctor/<clinit> + the four
+// markers verify normally — no bytecode surgery (this replaces the old ASM SwingIconArtPass interface strip,
+// which only made the markers load and then broke verification of RowIcon-returning methods).
+val generateSwingApiJar = tasks.register("generateSwingApiJar") {
+    description = "Extract javax.swing.Icon from the build JDK's java.desktop module into a dexable jar."
+    val outJar = layout.buildDirectory.file("swing-api/swing-api.jar")
+    outputs.file(outJar)
+    doLast {
+        val out = outJar.get().asFile
+        out.parentFile.mkdirs()
+        val jrt = FileSystems.getFileSystem(URI.create("jrt:/"))
+        val iconClass = jrt.getPath("/modules/java.desktop/javax/swing/Icon.class")
+        ZipOutputStream(out.outputStream().buffered()).use { zos ->
+            zos.putNextEntry(ZipEntry("javax/swing/Icon.class").apply { time = 315532800000L })
+            Files.copy(iconClass, zos)
+            zos.closeEntry()
+        }
+        logger.lifecycle("generateSwingApiJar: wrote javax/swing/Icon.class → ${out.name}")
+    }
+}
+
 // --- on-device native aapt2 ----------------------------------------------------------------------
 // ART can only exec binaries from nativeLibraryDir and Google ships no Android-ABI aapt2, so we bundle a
 // prebuilt aapt2 as libaapt2.so per ABI. AGP packages it; the installer extracts it where it can run.
@@ -415,7 +483,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleR8DexAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -511,6 +579,11 @@ dependencies {
     // javax.xml.stream (StAX API) — absent on Android; needed by the dexed aalto/stax2 the K2 compiler uses
     // to parse its plugin descriptors. Generated from the build JDK above (see generateStaxApiJar).
     implementation(files(generateStaxApiJar.map { it.outputs.files.singleFile }))
+
+    // javax.swing.Icon (java.desktop) — absent on Android; IntelliJ-core's PSI icon API names it in method
+    // signatures and four marker interfaces, so without it the dexed K2 compiler + parse host fail ART
+    // verification at class load. Generated from the build JDK above (see generateSwingApiJar).
+    implementation(files(generateSwingApiJar.map { it.outputs.files.singleFile }))
 
     // gnu.trove.* — IntelliJ-core uses Trove4j (un-relocated) but kotlin-compiler-embeddable doesn't bundle
     // it; dex it so the on-device compiler's FileUtil/VFS classes resolve (matches CodeAssist's approach).

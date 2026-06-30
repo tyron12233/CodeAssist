@@ -63,7 +63,9 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         put("name", bt.name)
         put("debuggable", bt.debuggable)
         put("minifyEnabled", bt.minifyEnabled)
-        if (bt.shrinkResources) put("shrinkResources", true)
+        // Always emit (like minifyEnabled): the Module Settings UI derives its editable fields from the
+        // encoded map, so a key omitted when false has no toggle — leaving no way to turn shrinkResources ON.
+        put("shrinkResources", bt.shrinkResources)
         if (bt.proguardFiles.isNotEmpty()) put("proguardFiles", bt.proguardFiles)
         if (bt.consumerProguardFiles.isNotEmpty()) put("consumerProguardFiles", bt.consumerProguardFiles)
         if (bt.proguardRules.isNotEmpty()) put("proguardRules", bt.proguardRules)

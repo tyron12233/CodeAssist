@@ -56,6 +56,6 @@ object BuildDaemonProof {
             onLog = { msg -> log.info("PROOF <- $msg") },
         )
         log.info("PROOF start: ui pid=${Process.myPid()} — building '${project.name}' in the :build process")
-        client.bind { client.open(project.absolutePath) }
+        client.bind { client.open(project.absolutePath, 0) }
     }
 }

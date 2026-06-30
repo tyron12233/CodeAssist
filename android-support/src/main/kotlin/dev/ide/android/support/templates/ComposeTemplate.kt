@@ -67,6 +67,7 @@ object JetpackComposeAppTemplate : ProjectTemplate {
         }
 
         val path = AndroidTemplateSupport.pkgPath(pkg)
+        scaffold.writeText("app/proguard-rules.pro", AndroidTemplateSupport.PROGUARD_RULES_PRO)
         scaffold.writeText(
             "app/src/main/AndroidManifest.xml",
             """

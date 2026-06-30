@@ -69,6 +69,11 @@ class BuildDaemonService : Service() {
 
     @Volatile
     private var currentDir: String? = null
+
+    // The UI model revision the open project was loaded at. A later open() with a higher revision means the
+    // on-disk module.toml changed (e.g. minifyEnabled toggled) — reload rather than reuse the stale model.
+    @Volatile
+    private var currentGeneration: Int = -1
     private var streamJob: Job? = null
 
     private val binder = object : IBuildDaemon.Stub() {
@@ -78,11 +83,13 @@ class BuildDaemonService : Service() {
             callback = cb
         }
 
-        override fun open(workspaceDir: String?) {
+        override fun open(workspaceDir: String?, modelGeneration: Int) {
             val dir = workspaceDir ?: return
             // Idempotent: re-opening the already-open project is a fast no-op — never pay the engine
-            // re-create (model load + index). Lets the UI safely open-then-build on every Run.
-            if (dir == currentDir && services != null) {
+            // re-create (model load + index). Lets the UI safely open-then-build on every Run. BUT only when
+            // the model is also unchanged: a higher [modelGeneration] means the UI committed a config edit
+            // (and saved module.toml), so the cached model is stale and must be reloaded from disk.
+            if (dir == currentDir && modelGeneration == currentGeneration && services != null) {
                 runCatching { callback?.onOpened(true, null) }
                 return
             }
@@ -95,6 +102,7 @@ class BuildDaemonService : Service() {
                     mgr.open(dir, buildOnly = true).also {
                         services = it
                         currentDir = dir
+                        currentGeneration = modelGeneration
                         startStreaming(it)
                     }
                 }.onSuccess {

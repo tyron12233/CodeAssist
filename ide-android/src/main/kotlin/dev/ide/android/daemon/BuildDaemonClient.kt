@@ -93,7 +93,7 @@ class BuildDaemonClient(
         log.info("ui(pid=${Process.myPid()}): bindService = $ok")
     }
 
-    fun open(workspaceDir: String) = runCatching { daemon?.open(workspaceDir) }
+    fun open(workspaceDir: String, modelGeneration: Int) = runCatching { daemon?.open(workspaceDir, modelGeneration) }
     fun runTasks(): List<String> = runCatching { daemon?.runTasks()?.toList() }.getOrNull().orEmpty()
     fun runTask(id: String) = runCatching { daemon?.runTask(id) }
     fun runBuild() = runCatching { daemon?.runBuild() }

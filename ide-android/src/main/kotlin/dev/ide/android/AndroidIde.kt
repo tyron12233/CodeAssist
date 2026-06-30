@@ -38,6 +38,10 @@ object AndroidIde {
         // only if external isn't mounted (rare). The location is resolved identically by the provider.
         val home = appHomeDir(context).apply { mkdirs() }
         val manager = createProjectManager(context)
+        // Measure the forked-VM R8 heap ceiling once per app version, in the background, and cache it. The
+        // Build Runtime settings use it as the heap slider's MAX (user scales down from the real device
+        // limit) and the shrinker uses it as the default heap. Off the main thread; never blocks startup.
+        detectR8CeilingAsync(context, manager)
 
         // Recover projects left in internal storage by a build from before the move to external app storage
         // (issues #1003 / #1024 / #1041 / #1042: projects vanishing from the picker after an update). Runs at
@@ -118,6 +122,25 @@ object AndroidIde {
         val kotlinPluginLoader = ArtKotlinPluginLoader(
             androidJar.toPath(), File(context.cacheDir, "kotlinc-plugins").toPath(), Build.VERSION.SDK_INT,
         )
+        // Runs the release/minify R8 pass in a forked dalvikvm with a heap above the app cap (the bundled
+        // r8.dex asset is its classpath). Self-falls-back to in-process R8 if forking isn't usable here.
+        // The heap comes from the "R8 maximum heap" setting, read lazily from the manager's prefs at build
+        // time (a holder breaks the cycle: the shrinker is built before the manager it reads from).
+        val managerRef = java.util.concurrent.atomic.AtomicReference<ProjectManager?>()
+        val settingsPrefix = "settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}."
+        val r8HeapKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.R8_MAX_HEAP
+        val r8ModeKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.R8_MODE
+        val r8ModeProvider = { managerRef.get()?.preference(r8ModeKey)?.trim() }
+        // The user's heap setting, else the measured device ceiling (so the default matches the slider), else
+        // null → the built-in default. Shared by the forked R8 shrinker and the forked D8 merge dexer.
+        val r8HeapProvider = {
+            val mgr = managerRef.get()
+            mgr?.preference(r8HeapKey)?.trim()?.toIntOrNull()
+                ?: mgr?.preference(dev.ide.core.settings.BuiltInSettingsPages.R8_CEILING_PREF)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+        }
+        val r8Shrinker = ForkedR8Shrinker(context.applicationContext, r8ModeProvider, r8HeapProvider)
+        // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings.
+        val r8MergeDexer = ForkedD8Dexer(context.applicationContext, r8ModeProvider, r8HeapProvider)
         // Project data left by previous app versions (same `com.tyron.code` package, so the same external
         // files dir survives a Play update). Swept into backups, and recovered into the picker by
         // `importLegacyProjects` when in a loadable format. Two known locations:
@@ -138,7 +161,9 @@ object AndroidIde {
             apkInstaller = apkInstaller,
             customViewRuntime = previewRuntime,
             kotlinPluginLoader = kotlinPluginLoader,
-        )
+            r8Shrinker = r8Shrinker,
+            r8MergeDexer = r8MergeDexer,
+        ).also { managerRef.set(it) }
     }
 
     /**
@@ -189,6 +214,27 @@ object AndroidIde {
     /** The on-disk projects directory (`<external-files>/codeassist/projects`). */
     fun projectsDir(context: Context): File = File(appHomeDir(context), "projects")
 
+    /** Measure (once per app version, in the background) the largest heap a forked VM grants R8 on this device
+     *  and cache it in [BuiltInSettingsPages.R8_CEILING_PREF] (`0` = forking unavailable). The settings UI uses
+     *  it as the heap slider's MAX and the shrinker as its default heap. Forks a few short-lived VMs, so it
+     *  runs off the main thread; re-measures only when the app updates (a new APK may carry a new R8). */
+    private fun detectR8CeilingAsync(context: Context, manager: ProjectManager) {
+        val stamp = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L).toString()
+        if (manager.preference(R8_CEILING_STAMP_PREF) == stamp) return
+        val appContext = context.applicationContext
+        Thread {
+            runCatching {
+                val ceiling = R8ForkSupport.detectCeiling(appContext) ?: 0
+                manager.setPreference(dev.ide.core.settings.BuiltInSettingsPages.R8_CEILING_PREF, ceiling.toString())
+                manager.setPreference(R8_CEILING_STAMP_PREF, stamp)
+            }
+        }.apply { isDaemon = true; name = "r8-ceiling-detect" }.start()
+    }
+
+    private const val R8_CEILING_STAMP_PREF = "r8.detectedCeilingStamp"
+
     /**
      * Copy a bundled asset into app storage, re-extracting when the APK has been updated since the last
      * copy (assets are read-only in the APK). The re-extract-on-update check is essential: app storage lives
@@ -199,14 +245,22 @@ object AndroidIde {
      * subsequent launch with no new update sees it as current.
      */
     private fun copyAsset(context: Context, name: String, dest: File): File {
-        val updatedAt = runCatching {
+        // Re-extract only when the app has been updated (a new APK may carry a new asset), tracked by a marker
+        // holding the package's lastUpdateTime. The previous guard compared dest.lastModified() to lastUpdateTime,
+        // but a freshly-written file on this device's emulated external storage reports an unreliable mtime, so
+        // the guard fired every launch and re-copied with a fresh mtime — which re-keyed (and so re-indexed)
+        // android.jar on every cold start. The marker is mtime-independent. Mirrors [provisionKotlincHome].
+        val stamp = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
-        }.getOrDefault(0L)
-        if (!dest.exists() || dest.length() == 0L || dest.lastModified() < updatedAt) {
+        }.getOrDefault(0L).toString()
+        val marker = File(dest.parentFile, "${dest.name}.provisioned")
+        val upToDate = dest.exists() && dest.length() > 0L && marker.exists() && marker.readText() == stamp
+        if (!upToDate) {
             dest.parentFile?.mkdirs()
             context.assets.open(name).use { input ->
                 dest.outputStream().use { output -> input.copyTo(output) }
             }
+            runCatching { marker.writeText(stamp) }
         }
         return dest
     }

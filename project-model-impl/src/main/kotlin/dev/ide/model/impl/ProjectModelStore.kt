@@ -49,6 +49,16 @@ class ProjectModelStore internal constructor(
     var data: WorkspaceData = normalize(initial)
         private set
 
+    /**
+     * Monotonic model revision, bumped on every [commit]. A separate process that holds its own copy of this
+     * model (the `:build` daemon) can't see an in-memory edit here, so it compares this number against the one
+     * it last loaded at: a mismatch means the on-disk model changed and it must reload. Distinct from a
+     * file-system epoch — this advances only on a MODEL change (facet/dep/source-set/SDK), not source edits.
+     */
+    @Volatile
+    var generation: Int = 0
+        private set
+
     /** The live read handle. Each access returns views over the current snapshot. */
     val workspace: Workspace = WorkspaceImpl(this)
 
@@ -121,6 +131,7 @@ class ProjectModelStore internal constructor(
     fun commit(newData: WorkspaceData, events: List<ProjectModelEvent>) {
         lock.write {
             data = normalize(newData)
+            generation++ // any commit is a model change a separate-process build must reload to see
             if (events.isNotEmpty()) {
                 bus.syncPublisher(ProjectModelTopics.CHANGES).onEvents(events)
             }

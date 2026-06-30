@@ -118,6 +118,17 @@ interface Dexer {
 internal val R8_PASS_THROUGH = listOf("-dontshrink", "-dontoptimize", "-dontobfuscate", "-ignorewarnings")
 
 /**
+ * Make R8 tolerate classes referenced but absent from the program + classpath. By default R8 *fails* the
+ * build on them (`Error: Missing class …`), then AGP writes a `missing_rules.txt` and asks the user to add a
+ * `-dontwarn` for each. Such references are routine in real apps — e.g. Play Services' `DeviceProperties`
+ * carries `@com.google.android.apps.common.proguard.SideEffectFree`, an annotation Google never publishes as a
+ * class. A tolerant on-device IDE keeps building instead (it can't sensibly make a phone user hand-edit
+ * ProGuard files): `-ignorewarnings` downgrades the missing-class *error* to a *warning* that is still printed,
+ * so the references surface as Problems in the build console while the APK is produced. (Already part of
+ * [R8_PASS_THROUGH] for the no-rules path; applied to the minify path too — see the shrinkers.) */
+internal const val R8_IGNORE_WARNINGS = "-ignorewarnings"
+
+/**
  * Integrated resource shrinking: R8 reads the linked, proto-format resources from [inputAp], drops the
  * entries unreachable from the shrunken code, and writes the shrunk proto-format resources to [outputAp]
  * during the same run. The build then converts [outputAp] back to binary for packaging (see [Aapt2.convert]).

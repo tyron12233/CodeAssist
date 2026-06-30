@@ -13,8 +13,10 @@ interface IBuildDaemon {
     void registerCallback(IBuildCallback cb);
 
     // Open the project at [workspaceDir] into a headless engine in this process. Heavy (model load + init),
-    // so it runs off the Binder thread and replies via IBuildCallback.onOpened.
-    void open(String workspaceDir);
+    // so it runs off the Binder thread and replies via IBuildCallback.onOpened. [modelGeneration] is the UI
+    // model's revision: when it differs from the one the daemon last opened at, the on-disk module.toml
+    // changed (e.g. minifyEnabled toggled) and the daemon reloads instead of reusing its stale model.
+    void open(String workspaceDir, int modelGeneration);
 
     // The runnable tasks for the open project, each encoded "id\tlabel\tgroup". Valid after onOpened(true).
     String[] runTasks();

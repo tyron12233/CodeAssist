@@ -18,6 +18,15 @@ internal const val MB_BYTES = 1024L * 1024L
 /** How often the build/open peak trackers sample the heap, in ms (catches a long task's intra-task peak). */
 internal const val MEM_SAMPLE_INTERVAL_MS = 200L
 
+/**
+ * Emit a heap "heartbeat" log line every this-many samples during a build (≈ every
+ * [MEM_SAMPLE_INTERVAL_MS] × this ms). The build's peak summary is logged only on the `finally` exit path,
+ * which never runs when the OS low-memory-killer kills the process mid-task (the classic whole-program R8
+ * OOM). A periodic heartbeat naming the running task leaves a logcat trail whose LAST line before the kill
+ * pins which task was at the ceiling and how high it had climbed — the closest proxy to the OOM peak.
+ */
+internal const val MEM_HEARTBEAT_EVERY_SAMPLES = 8
+
 /** A point-in-time Java-heap reading in MB. [headroomMb] is `max - used`: the room left before an OOM. */
 internal data class MemSample(
     val usedMb: Long,

@@ -1324,6 +1324,18 @@ internal class R8MinifyTask(
         }
         if (inputs.isEmpty()) return TaskResult.Failed("nothing to minify")
         // Cap R8's worker pool: it's the heaviest in-process step, so fewer threads = a smaller peak heap.
+        val threads = DexConcurrency.plan(1).threadsPerInvocation
+        // R8 is a single whole-program pass over EVERY input (app + sub-modules + external libs); its peak heap
+        // scales with this total. Log the input scale + tuning up front so an OOM profile (pair with the
+        // `ide.mem` heap heartbeat) can size the whole-program working set against the device heap ceiling.
+        val inputMb = inputs.sumOf { runCatching { Files.size(it) }.getOrDefault(0L) } / (1024L * 1024L)
+        ctx.logger()(
+            "${name.value}: R8 whole-program shrink+dex via ${shrinker::class.simpleName} — " +
+                "${inputs.size} input jar(s), ~${inputMb}MB classes, threads=$threads, " +
+                "fullMode=$fullMode, minApi=$minApi" +
+                (if (resources != null) ", +resourceShrink" else "") +
+                (if (desugaredLibrary != null) ", +coreLibDesugar" else "")
+        )
         val r = shrinker.shrink(
             ShrinkRequest(
                 programs = inputs,
@@ -1337,7 +1349,7 @@ internal class R8MinifyTask(
                 mappingOutput = mappingOutput,
                 resources = resources,
                 desugaredLibrary = desugaredLibrary,
-                threads = DexConcurrency.plan(1).threadsPerInvocation,
+                threads = threads,
             )
         )
         r.log.forEach(ctx.logger())

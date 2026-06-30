@@ -875,6 +875,7 @@ class EditorSession(
     private fun commentSyntax(): CommentSyntax = when (language) {
         CodeLanguage.Java, CodeLanguage.Kotlin -> CommentSyntax("//", "/*", "*/")
         CodeLanguage.Xml -> CommentSyntax(null, "<!--", "-->")
+        CodeLanguage.Proguard -> CommentSyntax("#", null, null)
         CodeLanguage.Plain -> CommentSyntax(null, null, null)
     }
 

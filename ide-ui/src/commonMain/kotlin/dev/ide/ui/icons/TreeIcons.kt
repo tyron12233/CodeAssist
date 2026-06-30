@@ -84,5 +84,7 @@ object TreeIcons {
         register("java", TreeIcon.Badge("J", Color(0xFFD9A066)))
         register("kotlin", TreeIcon.Badge("K", Color(0xFFCD7EE0)))
         register("xml", TreeIcon.Badge("‹›", Color(0xFF61AFEF)))
+        // ProGuard/R8 keep-rule files (`proguard-rules.pro`, `consumer-rules.pro`) — the shrinker config.
+        register("proguard", TreeIcon.Badge("R8", Color(0xFF56B6C2)))
     }
 }

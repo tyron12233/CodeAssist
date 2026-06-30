@@ -131,7 +131,7 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
      *  reference [client] — which isn't yet assigned inside its own initializer.) */
     private fun onDaemonConnected() {
         connected = true
-        if (pending != null) runCatching { client.open(workspaceRoot) }
+        if (pending != null) runCatching { client.open(workspaceRoot, services.modelGeneration) }
     }
 
     /** Show Running immediately, then ensure the daemon has THIS project open (idempotent) and run [action].
@@ -140,7 +140,10 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     private fun execute(action: () -> Unit) {
         _buildState.value = BuildState(status = RunStatus.Running)
         pending = action
-        if (connected) runCatching { client.open(workspaceRoot) } // → daemon onOpened → runs `pending`
+        // Pass the current model revision: if the UI committed a config change (e.g. minifyEnabled) since the
+        // daemon last opened, this differs and the daemon reloads module.toml before building — otherwise the
+        // build would run against the daemon's stale, frozen-at-first-open model.
+        if (connected) runCatching { client.open(workspaceRoot, services.modelGeneration) } // → daemon onOpened → runs `pending`
     }
 
     private fun line(msg: String) = BuildLogLine(msg)

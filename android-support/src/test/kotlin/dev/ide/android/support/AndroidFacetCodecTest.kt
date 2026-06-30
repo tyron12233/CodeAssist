@@ -72,8 +72,10 @@ class AndroidFacetCodecTest {
         // buildFeatures flatten into on-only flags on the [android] table.
         assertEquals(true, values["viewBinding"])
         assertEquals(true, values["compose"])
-        // Defaults are omitted (debug shrinks nothing, has no rules): absent keys, not false/empty.
-        assertEquals(null, bts[0]["shrinkResources"])
+        // shrinkResources is always emitted (like minifyEnabled) so the Module Settings UI can render a
+        // toggle to turn it ON — a key omitted when false would leave no control for it.
+        assertEquals(false, bts[0]["shrinkResources"])
+        // Other defaults are still omitted (no rules): absent keys, not empty.
         assertEquals(null, bts[0]["proguardFiles"])
     }
 

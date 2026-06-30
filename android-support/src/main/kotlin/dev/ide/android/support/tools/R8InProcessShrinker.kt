@@ -59,6 +59,9 @@ class R8InProcessShrinker : Shrinker {
             if (keepFiles.isEmpty() && inline.isEmpty()) {
                 inline.addAll(R8_PASS_THROUGH)
             }
+            // Don't let a class that's referenced but absent from the classpath fail the build (see
+            // R8_IGNORE_WARNINGS) — R8_PASS_THROUGH already carries it, so only the minify path needs it added.
+            if (R8_IGNORE_WARNINGS !in inline) inline.add(R8_IGNORE_WARNINGS)
             if (inline.isNotEmpty()) {
                 builder.addProguardConfiguration(inline, Origin.unknown())
             }

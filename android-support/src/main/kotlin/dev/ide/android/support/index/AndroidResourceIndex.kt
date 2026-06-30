@@ -156,11 +156,11 @@ object ResourceFileScanner {
         override fun setDocumentLocator(locator: Locator) { loc = locator }
 
         override fun startElement(uri: String?, localName: String?, qName: String, attrs: Attributes) {
-            when {
-                // depth 1 = a direct child of <resources>: the resource declaration itself (emitted on its close).
-                stack.size == 1 -> { pending = topLevelDecl(qName, attrs); chars.setLength(0) }
+            when (stack.size) // depth 1 = a direct child of <resources>: the resource declaration itself (emitted on its close).
+            {
+                1 -> { pending = topLevelDecl(qName, attrs); chars.setLength(0) }
                 // depth 2 under a <declare-styleable>: each child <attr name=…> is an R.attr entry.
-                stack.size == 2 && stack[1] == "declare-styleable" && qName == "attr" ->
+                2 if stack[1] == "declare-styleable" && qName == "attr" ->
                     sanitize(attrs.getValue("name").orEmpty()).ifEmpty { null }
                         ?.let { out += ResourceDeclValue(ResourceType.ATTR.rClass, it, filePath, offset()) }
             }
