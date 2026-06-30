@@ -148,6 +148,59 @@ class SegmentTest {
         }
     }
 
+    /**
+     * The streaming [SegmentWriter] must produce byte-for-byte the same segment whether or not it spills to
+     * disk — otherwise the external-merge path isn't transparent and the content-addressed store's
+     * deterministic-bytes invariant (two concurrent identical writers → identical files) breaks. Forces the
+     * spill + k-way merge + trigram external sort via tiny caps, and compares against an all-in-memory build.
+     */
+    @Test
+    fun spillingWriteEqualsInMemoryWriteByteForByte() {
+        val dir = Files.createTempDirectory("segw")
+        try {
+            val ext = StringIndex(MatchingMode.PREFIX_AND_FUZZY)
+            // 300 distinct terms (cross the 64-term sparse interval several times); some carry a 2nd value with
+            // a distinct origin (multi-value postings + insertion-order-within-a-term sensitivity).
+            val entries = ArrayList<IndexEntry>()
+            for (i in 0 until 300) {
+                entries.add(entry("Item%03d".format(i), "v$i", IndexOrigin.LIBRARY))
+                if (i % 7 == 0) entries.add(entry("Item%03d".format(i), "alt$i", IndexOrigin.SDK))
+            }
+
+            fun build(name: String, maxE: Int, maxT: Int, spill: Int): Path {
+                val f = dir.resolve(name)
+                SegmentWriter(f, ext, maxBufferedEntries = maxE, maxBufferedTrigrams = maxT, regionSpillBytes = spill).use { w ->
+                    for (e in entries) w.add(e.term, e.value, e.origin)
+                    w.finish()
+                }
+                return f
+            }
+
+            // Tiny caps ⇒ many spilled runs + region temp files + a trigram external sort. (Moderate, not 1, so
+            // the k-way merge stays well under the OS open-file limit.)
+            val spilled = build("spilled.seg", maxE = 32, maxT = 128, spill = 512)
+            // Huge caps ⇒ everything stays in memory, never spills.
+            val inMem = build("inmem.seg", maxE = Int.MAX_VALUE, maxT = Int.MAX_VALUE, spill = Int.MAX_VALUE)
+
+            assertTrue(Files.size(spilled) > 0)
+            assertEquals(
+                Files.readAllBytes(inMem).toList(), Files.readAllBytes(spilled).toList(),
+                "a spilling build must be byte-identical to a non-spilling build",
+            )
+
+            // ...and the spilled result is a correct, queryable segment (paged from a tiny block cache). prefix
+            // returns one hit per posting (value), so the count is every value whose term starts with the prefix.
+            val s = Segment.open(spilled, ext, BlockCache(maxBytes = 256, blockSize = 64), 0)
+            try {
+                assertEquals(entries.count { it.term.startsWith("Item1") }, prefix(s, "Item1").size)
+                assertEquals(setOf("v7", "alt7"), exact(s, "Item007").toSet())
+                assertTrue(fuzzy(s, "tem25").any { it.key == "Item250" })
+            } finally { s.close() }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun emptySegmentIsQueryable() {
         val dir = Files.createTempDirectory("seg")

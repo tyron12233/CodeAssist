@@ -5,19 +5,21 @@ import dev.ide.index.Hit
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexOrigin
 import dev.ide.index.MatchingMode
+import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
-import java.util.TreeMap
+import java.util.PriorityQueue
 import java.util.UUID
 
 /** One (term, value, origin) entry handed to the indexer — the unit both the segment and the source side store. */
@@ -250,7 +252,7 @@ internal class Segment private constructor(
     }
 
     companion object {
-        private const val MAGIC = 0x49445831 // "IDX1"
+        internal const val MAGIC = 0x49445831 // "IDX1"
         const val SPARSE_INTERVAL = 64
 
         /** Open an existing segment file: read the footer (resident sparse index), keep the channel for reads. */
@@ -287,112 +289,13 @@ internal class Segment private constructor(
                 )
             }
 
-        /** Build a segment file from [entries] (sorted + front-loaded into the immutable layout above). */
-        @Suppress("UNCHECKED_CAST")
+        /** Build a segment file from a full [entries] list. A convenience over [SegmentWriter] for callers that
+         *  already hold every entry in memory (tests, small/whole-list builds); the engine streams via
+         *  [SegmentWriter.add] instead so a large artifact never buffers all its entries at once. */
         fun write(file: Path, ext: IndexExtension<*, *>, entries: List<IndexEntry>) {
-            val fuzzy = ext.matching == MatchingMode.PREFIX_AND_FUZZY
-            val ser = ext.valueExternalizer as Externalizer<Any>
-
-            // Group by term (sorted), serializing each value to bytes once.
-            val byTerm = TreeMap<String, MutableList<Pair<ByteArray, IndexOrigin>>>()
-            for (e in entries) {
-                val vb = ByteArrayOutputStream().also { bos -> DataOutputStream(bos).use { ser.write(it, e.value) } }.toByteArray()
-                byTerm.getOrPut(e.term) { ArrayList(1) }.add(vb to e.origin)
-            }
-            val numTerms = byTerm.size
-
-            val postings = ByteArrayOutputStream(); val pOut = DataOutputStream(postings)
-            val names = ByteArrayOutputStream(); val nOut = DataOutputStream(names)
-            val termOrder = ArrayList<String>(numTerms)
-            val nameRels = LongArray(numTerms)
-            val sparseTerms = ArrayList<String>(); val sparseTermOff = ArrayList<Long>()
-            var ti = 0
-            for ((term, vals) in byTerm) {
-                val postingsRel = postings.size().toLong()
-                pOut.writeVarLong(vals.size.toLong())
-                for ((vb, origin) in vals) { pOut.writeByte(origin.ordinal); pOut.writeVarLong(vb.size.toLong()); pOut.write(vb) }
-
-                val nameRel = names.size().toLong()
-                val tb = term.toByteArray(Charsets.UTF_8)
-                nOut.writeVarLong(tb.size.toLong()); nOut.write(tb); nOut.writeVarLong(postingsRel)
-
-                termOrder.add(term); nameRels[ti] = nameRel
-                if (ti % SPARSE_INTERVAL == 0) { sparseTerms.add(term); sparseTermOff.add(nameRel) }
-                ti++
-            }
-            pOut.flush(); nOut.flush()
-
-            var tgNamesBytes = ByteArray(0); var tgPostingsBytes = ByteArray(0)
-            val sparseGrams = ArrayList<String>(); val sparseGramOff = ArrayList<Long>()
-            if (fuzzy) {
-                // gram → ascending term indices (added in term order, so naturally sorted).
-                val gramToTerms = TreeMap<String, MutableList<Int>>()
-                for (t in 0 until numTerms) {
-                    for (g in HashSet(Scoring.trigramsOf(termOrder[t].lowercase()))) {
-                        gramToTerms.getOrPut(g) { ArrayList(1) }.add(t)
-                    }
-                }
-                val tgPost = ByteArrayOutputStream(); val tpOut = DataOutputStream(tgPost)
-                val tgNam = ByteArrayOutputStream(); val tnOut = DataOutputStream(tgNam)
-                var gi = 0
-                for ((gram, termIdxs) in gramToTerms) {
-                    val tgPostingsRel = tgPost.size().toLong()
-                    tpOut.writeVarLong(termIdxs.size.toLong())
-                    var prev = 0L
-                    for (t in termIdxs) { val nr = nameRels[t]; tpOut.writeVarLong(nr - prev); prev = nr }
-
-                    val gb = gram.toByteArray(Charsets.UTF_8)
-                    val tgNameRel = tgNam.size().toLong()
-                    tnOut.writeVarLong(gb.size.toLong()); tnOut.write(gb); tnOut.writeVarLong(tgPostingsRel)
-                    if (gi % SPARSE_INTERVAL == 0) { sparseGrams.add(gram); sparseGramOff.add(tgNameRel) }
-                    gi++
-                }
-                tpOut.flush(); tnOut.flush()
-                tgNamesBytes = tgNam.toByteArray(); tgPostingsBytes = tgPost.toByteArray()
-            }
-
-            val postingsBytes = postings.toByteArray(); val namesBytes = names.toByteArray()
-
-            Files.createDirectories(file.parent)
-            // Unique temp per writer: the static segment store can be SHARED across projects, so two index
-            // services may build the same content-hashed segment at once. A fixed "<name>.tmp" would let them
-            // clobber each other's half-written temp; a unique suffix keeps the writes independent. The bytes
-            // are deterministic, so the final ATOMIC_MOVE is idempotent: last writer wins with equal content.
-            val tmp = file.resolveSibling("${file.fileName}.${UUID.randomUUID()}.tmp")
-            try {
-                DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmp))).use { out ->
-                    var pos = 0L
-                    val postingsBase = pos; out.write(postingsBytes); pos += postingsBytes.size
-                    val namesBase = pos; out.write(namesBytes); pos += namesBytes.size
-                    val tgNamesBase = pos; out.write(tgNamesBytes); pos += tgNamesBytes.size
-                    val tgPostingsBase = pos; out.write(tgPostingsBytes); pos += tgPostingsBytes.size
-                    val footerStart = pos
-
-                    out.writeVarLong(sparseTerms.size.toLong())
-                    for (i in sparseTerms.indices) {
-                        val sb = sparseTerms[i].toByteArray(Charsets.UTF_8)
-                        out.writeVarLong(sb.size.toLong()); out.write(sb); out.writeVarLong(sparseTermOff[i])
-                    }
-                    out.writeByte(if (fuzzy) 1 else 0)
-                    if (fuzzy) {
-                        out.writeVarLong(sparseGrams.size.toLong())
-                        for (i in sparseGrams.indices) {
-                            val gb = sparseGrams[i].toByteArray(Charsets.UTF_8)
-                            out.writeVarLong(gb.size.toLong()); out.write(gb); out.writeVarLong(sparseGramOff[i])
-                        }
-                    }
-                    out.writeInt(ext.version)
-                    out.writeVarLong(numTerms.toLong())
-                    out.writeVarLong(postingsBase); out.writeVarLong(postingsBytes.size.toLong())
-                    out.writeVarLong(namesBase); out.writeVarLong(namesBytes.size.toLong())
-                    out.writeVarLong(tgNamesBase); out.writeVarLong(tgNamesBytes.size.toLong())
-                    out.writeVarLong(tgPostingsBase); out.writeVarLong(tgPostingsBytes.size.toLong())
-                    out.writeInt(MAGIC)
-                    out.writeLong(footerStart)
-                }
-                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-            } finally {
-                Files.deleteIfExists(tmp) // no-op after a successful move; removes a half-written temp on failure
+            SegmentWriter(file, ext).use { w ->
+                for (e in entries) w.add(e.term, e.value, e.origin)
+                w.finish()
             }
         }
 
@@ -472,5 +375,281 @@ private class ByteReader(private val a: ByteArray) {
     fun readString(): String {
         val n = readVarLong().toInt()
         return String(a, p, n, Charsets.UTF_8).also { p += n }
+    }
+}
+
+/** Unsigned LEB128 read, the mirror of [writeVarLong] — used to read back the spill temp files. */
+internal fun DataInputStream.readVarLong(): Long {
+    var shift = 0; var r = 0L
+    while (true) {
+        val b = readUnsignedByte()
+        r = r or ((b.toLong() and 0x7F) shl shift)
+        if (b < 0x80) return r
+        shift += 7
+    }
+}
+
+/**
+ * An append-only byte sink that stays in memory until it exceeds [cap], then spills the remainder to a temp
+ * file under [tmpDir] — so a small segment region never touches disk (fast path) while a large one (e.g.
+ * android.jar's postings/names) stays bounded in RAM. [length] is exact after every write (there is no
+ * buffering between the caller's `DataOutputStream` and this), so it doubles as the running region offset.
+ * Single pass: write, then [copyTo] the final segment, then [close] (which deletes the temp file).
+ */
+private class SpillBuffer(private val cap: Int, private val tmpDir: Path) : OutputStream() {
+    private var mem: ByteArrayOutputStream? = ByteArrayOutputStream()
+    private var file: Path? = null
+    private var fileOut: OutputStream? = null
+    private var len = 0L
+
+    override fun write(b: Int) { ensureRoom(1); target().write(b); len++ }
+    override fun write(b: ByteArray, off: Int, l: Int) { ensureRoom(l); target().write(b, off, l); len += l }
+
+    private fun ensureRoom(n: Int) {
+        val m = mem ?: return
+        if (m.size() + n <= cap) return
+        val f = tmpDir.resolve("seg-region-${UUID.randomUUID()}.tmp")
+        val out = BufferedOutputStream(Files.newOutputStream(f))
+        m.writeTo(out)
+        mem = null; file = f; fileOut = out
+    }
+
+    private fun target(): OutputStream = fileOut ?: mem!!
+    fun length(): Long = len
+
+    /** Append every written byte to [out], in order. Call once, before [close]. */
+    fun copyTo(out: OutputStream) {
+        val m = mem
+        if (m != null) { m.writeTo(out); return }
+        fileOut?.let { it.flush(); it.close(); fileOut = null }
+        Files.newInputStream(file!!).use { it.copyTo(out) }
+    }
+
+    override fun close() {
+        runCatching { fileOut?.close() }; fileOut = null
+        file?.let { runCatching { Files.deleteIfExists(it) } }; file = null
+        mem = null
+    }
+}
+
+/**
+ * An external merge sort: [add] items into an in-memory buffer; when it reaches [cap] items, sort and spill it
+ * to a temp run file, then clear. [sortedIterator] returns every added item in [cmp] order — iterating the
+ * in-memory buffer directly when nothing spilled (the small-artifact fast path), else k-way merging the runs.
+ * Live memory is bounded to one [cap]-sized buffer regardless of total count. Single use; [close] deletes the
+ * run files.
+ */
+private class Sorter<T>(
+    private val cap: Int,
+    private val tmpDir: Path,
+    private val cmp: Comparator<T>,
+    private val writeT: (DataOutputStream, T) -> Unit,
+    private val readT: (DataInputStream) -> T,
+) : Closeable {
+    private var buf = ArrayList<T>()
+    private val runs = ArrayList<Path>()
+    private val open = ArrayList<DataInputStream>()
+
+    fun add(t: T) { buf.add(t); if (buf.size >= cap) spill() }
+
+    private fun spill() {
+        if (buf.isEmpty()) return
+        buf.sortWith(cmp)
+        val run = tmpDir.resolve("seg-run-${UUID.randomUUID()}.tmp")
+        DataOutputStream(BufferedOutputStream(Files.newOutputStream(run))).use { out ->
+            out.writeVarLong(buf.size.toLong())
+            for (t in buf) writeT(out, t)
+        }
+        runs.add(run)
+        buf = ArrayList()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    fun sortedIterator(): Iterator<T> {
+        if (runs.isEmpty()) { buf.sortWith(cmp); return buf.iterator() }
+        spill() // flush the tail buffer as a final run so all data is on disk and read uniformly
+        val readers = runs.map { DataInputStream(BufferedInputStream(Files.newInputStream(it))).also { r -> open.add(r) } }
+        val remaining = LongArray(readers.size) { readers[it].readVarLong() }
+        val heads = arrayOfNulls<Any?>(readers.size)
+        val pq = PriorityQueue<Int>(maxOf(1, readers.size)) { a, b -> cmp.compare(heads[a] as T, heads[b] as T) }
+        for (i in readers.indices) if (remaining[i] > 0) { heads[i] = readT(readers[i]); remaining[i]--; pq.add(i) }
+        return object : Iterator<T> {
+            override fun hasNext() = pq.isNotEmpty()
+            override fun next(): T {
+                val i = pq.poll()
+                val v = heads[i] as T
+                if (remaining[i] > 0) { heads[i] = readT(readers[i]); remaining[i]--; pq.add(i) } else heads[i] = null
+                return v
+            }
+        }
+    }
+
+    override fun close() {
+        open.forEach { runCatching { it.close() } }; open.clear()
+        runs.forEach { runCatching { Files.deleteIfExists(it) } }; runs.clear()
+        buf = ArrayList()
+    }
+}
+
+/**
+ * Streams a [Segment] to disk without ever holding the whole artifact's entries (or its built regions) in
+ * RAM — the memory-bounded counterpart to [Segment.write], and the path the index engine uses so a large
+ * artifact (android.jar buffered ~95k entries × every extension before a byte was written) no longer drives
+ * the build-time heap peak. [add] serializes each value immediately and feeds it to an external [Sorter];
+ * [finish] merges the sorted entries, writing the postings/names (and, for a fuzzy index, the trigram)
+ * regions through spill-aware [SpillBuffer]s, then concatenates them with the footer.
+ *
+ * The on-disk byte layout is identical to the old in-memory builder (terms in `String` order; values in
+ * insertion order within a term, preserved by the monotonic [Rec.seq]; grams in order with ascending
+ * name-offset deltas), so readers are unchanged and the deterministic-bytes / last-writer-wins atomic move is
+ * preserved. Locked in by `SegmentWriterTest` (a spilling build equals a non-spilling build byte-for-byte).
+ */
+internal class SegmentWriter(
+    private val file: Path,
+    private val ext: IndexExtension<*, *>,
+    private val maxBufferedEntries: Int = 50_000,
+    private val maxBufferedTrigrams: Int = 200_000,
+    private val regionSpillBytes: Int = 8 * 1024 * 1024,
+) : Closeable {
+    private val fuzzy = ext.matching == MatchingMode.PREFIX_AND_FUZZY
+    @Suppress("UNCHECKED_CAST")
+    private val ser = ext.valueExternalizer as Externalizer<Any>
+    private val tmpDir: Path = file.parent
+    private var seq = 0L
+    private var added = 0
+
+    /** One indexed entry, pre-serialized; [seq] preserves insertion order within equal terms (a stable sort). */
+    private class Rec(val term: String, val seq: Long, val origin: Int, val value: ByteArray)
+    /** A (trigram, name-offset) pairing; sorting by (gram, nameRel) reproduces the gram-sorted, ascending-offset
+     *  trigram postings the in-memory builder produced. */
+    private class Tri(val gram: String, val nameRel: Long)
+
+    private val entries: Sorter<Rec> = run {
+        Files.createDirectories(tmpDir)
+        Sorter(
+            maxBufferedEntries, tmpDir,
+            compareBy({ it.term }, { it.seq }),
+            { out, r -> writeBytes(out, r.term.toByteArray(Charsets.UTF_8)); out.writeVarLong(r.seq); out.writeByte(r.origin); writeBytes(out, r.value) },
+            { din -> Rec(String(readBytes(din), Charsets.UTF_8), din.readVarLong(), din.readUnsignedByte(), readBytes(din)) },
+        )
+    }
+
+    /** The number of entries added — the per-artifact entry count for the index.perf probe. */
+    val count: Int get() = added
+
+    fun add(term: String, value: Any, origin: IndexOrigin) {
+        val vb = ByteArrayOutputStream().also { bos -> DataOutputStream(bos).use { ser.write(it, value) } }.toByteArray()
+        entries.add(Rec(term, seq++, origin.ordinal, vb))
+        added++
+    }
+
+    fun finish() {
+        val postings = SpillBuffer(regionSpillBytes, tmpDir); val pOut = DataOutputStream(postings)
+        val names = SpillBuffer(regionSpillBytes, tmpDir); val nOut = DataOutputStream(names)
+        val tgNames = SpillBuffer(regionSpillBytes, tmpDir); val tnOut = DataOutputStream(tgNames)
+        val tgPostings = SpillBuffer(regionSpillBytes, tmpDir); val tpOut = DataOutputStream(tgPostings)
+        val tri = if (fuzzy) Sorter<Tri>(
+            maxBufferedTrigrams, tmpDir,
+            compareBy({ it.gram }, { it.nameRel }),
+            { out, t -> writeBytes(out, t.gram.toByteArray(Charsets.UTF_8)); out.writeVarLong(t.nameRel) },
+            { din -> Tri(String(readBytes(din), Charsets.UTF_8), din.readVarLong()) },
+        ) else null
+        val sparseTerms = ArrayList<String>(); val sparseTermOff = ArrayList<Long>()
+        val sparseGrams = ArrayList<String>(); val sparseGramOff = ArrayList<Long>()
+        var numTerms = 0
+        try {
+            // Pass 1: merge entries in (term, seq) order → postings + names regions, emitting trigram tuples.
+            val it = entries.sortedIterator()
+            var head: Rec? = if (it.hasNext()) it.next() else null
+            while (head != null) {
+                val term = head.term
+                val postingsRel = postings.length()
+                val group = ArrayList<Rec>()
+                while (head != null && head.term == term) { group.add(head); head = if (it.hasNext()) it.next() else null }
+                pOut.writeVarLong(group.size.toLong())
+                for (r in group) { pOut.writeByte(r.origin); pOut.writeVarLong(r.value.size.toLong()); pOut.write(r.value) }
+
+                val nameRel = names.length()
+                val tb = term.toByteArray(Charsets.UTF_8)
+                nOut.writeVarLong(tb.size.toLong()); nOut.write(tb); nOut.writeVarLong(postingsRel)
+
+                if (numTerms % Segment.SPARSE_INTERVAL == 0) { sparseTerms.add(term); sparseTermOff.add(nameRel) }
+                if (tri != null) for (g in HashSet(Scoring.trigramsOf(term.lowercase()))) tri.add(Tri(g, nameRel))
+                numTerms++
+            }
+            pOut.flush(); nOut.flush()
+
+            // Pass 2: merge trigram tuples in (gram, nameRel) order → trigram names + postings (delta-encoded).
+            if (tri != null) {
+                val tit = tri.sortedIterator()
+                var th: Tri? = if (tit.hasNext()) tit.next() else null
+                var gi = 0
+                while (th != null) {
+                    val gram = th.gram
+                    val tgPostingsRel = tgPostings.length()
+                    val rels = ArrayList<Long>()
+                    while (th != null && th.gram == gram) { rels.add(th.nameRel); th = if (tit.hasNext()) tit.next() else null }
+                    tpOut.writeVarLong(rels.size.toLong())
+                    var prev = 0L; for (nr in rels) { tpOut.writeVarLong(nr - prev); prev = nr }
+
+                    val gb = gram.toByteArray(Charsets.UTF_8)
+                    val tgNameRel = tgNames.length()
+                    tnOut.writeVarLong(gb.size.toLong()); tnOut.write(gb); tnOut.writeVarLong(tgPostingsRel)
+                    if (gi % Segment.SPARSE_INTERVAL == 0) { sparseGrams.add(gram); sparseGramOff.add(tgNameRel) }
+                    gi++
+                }
+                tpOut.flush(); tnOut.flush()
+            }
+
+            // Assemble: concatenate the four regions then the footer into a unique temp, atomic-move into place.
+            // Deterministic bytes ⇒ two concurrent writers of the same content-addressed segment can't corrupt
+            // each other (last-writer-wins is a no-op overwrite).
+            val tmp = file.resolveSibling("${file.fileName}.${UUID.randomUUID()}.tmp")
+            try {
+                DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmp))).use { out ->
+                    var pos = 0L
+                    val postingsBase = pos; postings.copyTo(out); pos += postings.length()
+                    val namesBase = pos; names.copyTo(out); pos += names.length()
+                    val tgNamesBase = pos; tgNames.copyTo(out); pos += tgNames.length()
+                    val tgPostingsBase = pos; tgPostings.copyTo(out); pos += tgPostings.length()
+                    val footerStart = pos
+
+                    out.writeVarLong(sparseTerms.size.toLong())
+                    for (i in sparseTerms.indices) {
+                        val sb = sparseTerms[i].toByteArray(Charsets.UTF_8)
+                        out.writeVarLong(sb.size.toLong()); out.write(sb); out.writeVarLong(sparseTermOff[i])
+                    }
+                    out.writeByte(if (fuzzy) 1 else 0)
+                    if (fuzzy) {
+                        out.writeVarLong(sparseGrams.size.toLong())
+                        for (i in sparseGrams.indices) {
+                            val gb = sparseGrams[i].toByteArray(Charsets.UTF_8)
+                            out.writeVarLong(gb.size.toLong()); out.write(gb); out.writeVarLong(sparseGramOff[i])
+                        }
+                    }
+                    out.writeInt(ext.version)
+                    out.writeVarLong(numTerms.toLong())
+                    out.writeVarLong(postingsBase); out.writeVarLong(postings.length())
+                    out.writeVarLong(namesBase); out.writeVarLong(names.length())
+                    out.writeVarLong(tgNamesBase); out.writeVarLong(tgNames.length())
+                    out.writeVarLong(tgPostingsBase); out.writeVarLong(tgPostings.length())
+                    out.writeInt(Segment.MAGIC)
+                    out.writeLong(footerStart)
+                }
+                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } finally {
+                Files.deleteIfExists(tmp)
+            }
+        } finally {
+            postings.close(); names.close(); tgNames.close(); tgPostings.close()
+            tri?.close(); entries.close()
+        }
+    }
+
+    override fun close() { runCatching { entries.close() } }
+
+    private companion object {
+        fun writeBytes(out: DataOutputStream, b: ByteArray) { out.writeVarLong(b.size.toLong()); out.write(b) }
+        fun readBytes(din: DataInputStream): ByteArray { val n = din.readVarLong().toInt(); val b = ByteArray(n); din.readFully(b); return b }
     }
 }

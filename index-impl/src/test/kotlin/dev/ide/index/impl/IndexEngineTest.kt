@@ -224,6 +224,60 @@ class IndexEngineTest {
         }
     }
 
+    /** A class-name index that counts how many `.class` entries it actually indexes, so a test can assert a jar
+     *  is (or isn't) re-indexed across "launches" (fresh service instances over a shared cache). */
+    private class CountingClassIndex(val indexed: AtomicInteger) : IndexExtension<String, ClassNameValue> {
+        override val id = CLASS
+        override val version = 1
+        override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+        override val valueExternalizer: Externalizer<ClassNameValue> = ClassNameExternalizer
+        override val matching = MatchingMode.PREFIX_AND_FUZZY
+        override val inputFilter = InputFilter { it.unitName?.endsWith(".class") == true }
+        override fun index(input: IndexInput): Map<String, Collection<ClassNameValue>> {
+            val (fqn, simple) = classEntryToFqn(input.unitName!!) ?: return emptyMap()
+            indexed.incrementAndGet()
+            return mapOf(simple to listOf(ClassNameValue(fqn, input.origin, "class")))
+        }
+    }
+
+    private fun bumpMtime(p: Path) =
+        Files.setLastModifiedTime(p, FileTime.fromMillis(Files.getLastModifiedTime(p).toMillis() + 10_000))
+
+    /**
+     * A bundled/SDK jar (android.jar, core-lambda-stubs) is re-extracted from app assets, so its on-disk mtime
+     * is not stable across launches; the default `path+size+mtime` content key re-keyed it every launch and it
+     * was re-indexed from scratch (android.jar ≈ 90% of all entries). A stable, path-free [IndexScope.stableJarIds]
+     * id keys the segment by content identity, so it is reused across an mtime change — whereas the default key,
+     * given the same mtime change, forces a full re-index.
+     */
+    @Test
+    fun stableKeyedJarSurvivesMtimeChangeUnlikeDefaultKey() {
+        val dir = Files.createTempDirectory("lib")
+        val stableCache = Files.createTempDirectory("idxStable")
+        val defaultCache = Files.createTempDirectory("idxDefault")
+        try {
+            val jar = dir.resolve("android.jar").also { storedJar(it, "com/x/Foo.class", byteArrayOf(1, 2)) }
+
+            // Stable-keyed: a fresh-mtime "re-extract" between launches must NOT re-index.
+            val stableHits = AtomicInteger(0)
+            val stable = mapOf(jar to "android.jar-${Files.size(jar)}")
+            runBlocking { IndexServiceImpl(listOf(CountingClassIndex(stableHits)), stableCache).ensureUpToDate(IndexScope(libraryJars = listOf(jar), stableJarIds = stable)) }
+            assertEquals(1, stableHits.get(), "first build indexes the class")
+            bumpMtime(jar)
+            runBlocking { IndexServiceImpl(listOf(CountingClassIndex(stableHits)), stableCache).ensureUpToDate(IndexScope(libraryJars = listOf(jar), stableJarIds = stable)) }
+            assertEquals(1, stableHits.get(), "stable-keyed jar must reuse its segment after an mtime change (not re-index)")
+
+            // Default-keyed contrast: the same mtime change re-keys → re-index (the bug the stable id fixes).
+            val defaultHits = AtomicInteger(0)
+            runBlocking { IndexServiceImpl(listOf(CountingClassIndex(defaultHits)), defaultCache).ensureUpToDate(IndexScope(libraryJars = listOf(jar))) }
+            bumpMtime(jar)
+            runBlocking { IndexServiceImpl(listOf(CountingClassIndex(defaultHits)), defaultCache).ensureUpToDate(IndexScope(libraryJars = listOf(jar))) }
+            assertEquals(2, defaultHits.get(), "default path+size+mtime key re-indexes on an mtime change")
+        } finally {
+            dir.toFile().deleteRecursively(); stableCache.toFile().deleteRecursively(); defaultCache.toFile().deleteRecursively()
+        }
+    }
+
     /** A source-symbol index over `.java` files that counts how many files it actually (re)parses, so a test
      *  can assert the engine re-indexes ONLY changed files across "launches" (fresh service instances). */
     private class CountingSourceIndex(val indexed: AtomicInteger) : IndexExtension<String, ClassNameValue> {

@@ -40,9 +40,9 @@ class IndexE2ETest {
                 val segs = segFiles(dir)
                 val segBytes = segs.sumOf { Files.size(it) }
                 // a query served from a disk segment (JDK members) through the real service…
-                val members = ide.searchMembers("toString", 50)
+                val members = ide.search.searchMembers("toString", 50)
                 // …and one from the in-memory source side (the demo's own declarations)
-                val symbols = ide.searchSymbols("Main", 50)
+                val symbols = ide.search.searchSymbols("Main", 50)
                 println("E2E launch#1: ${segs.size} .seg segments ($segBytes B on disk) — ${segs.joinToString { it.fileName.toString() }}")
                 println("E2E launch#1: searchMembers('toString')=${members.size}, searchSymbols('Main')=${symbols.size}, status=${ide.indexStatus.value.message}")
 
@@ -58,7 +58,7 @@ class IndexE2ETest {
             //    .seg are opened, not rebuilt, and still answer queries.
             IdeServices.open(dir).use { ide ->
                 awaitIndexed(ide)
-                val reused = ide.searchMembers("toString", 50)
+                val reused = ide.search.searchMembers("toString", 50)
                 println("E2E launch#2 (reuse): searchMembers('toString')=${reused.size}, ${segFiles(dir).size} .seg still on disk")
                 assertTrue(reused.isNotEmpty(), "reused index returned nothing after a second launch")
             }

@@ -8,26 +8,6 @@ import java.io.DataInput
 import java.io.DataOutput
 import java.nio.file.Path
 
-/**
- * index-api — the SPI for the on-device indexing subsystem.
- *
- * Every index is an [IndexExtension] registered on the [INDEX_EP] extension point; the framework owns
- * the engine (dictionary, postings, trigrams, persistence, queries) and an extension only declares
- * *what* to index and *how to (de)serialize* its keys/values. Resolution and completion query
- * [IndexService] — they never maintain their own indexes.
- */
-
-@JvmInline
-value class IndexId(val value: String)
-
-/** Whether the engine builds a trigram index for an extension (controls fuzzy/substring matching). */
-enum class MatchingMode { PREFIX_ONLY, PREFIX_AND_FUZZY }
-
-/** Provenance of an indexed entry — drives ranking proximity and the completion origin label. [LIBRARY_SOURCE]
- *  is an attached library/SDK SOURCE archive (`-sources.jar`, JDK `src.zip`, Android `sources/`): immutable like
- *  a library (so it's segment-cached, not the edit-sensitive in-memory [SOURCE] path) but carries source text. */
-enum class IndexOrigin { SDK, LIBRARY, SOURCE, LIBRARY_SOURCE }
-
 /** Serialize + ORDER keys (ordering is what enables prefix scans). v1 keys are strings. */
 interface KeyDescriptor<K : Any> : Comparator<K> {
     /** The searchable term form of a key. */
@@ -45,53 +25,7 @@ fun interface InputFilter {
     fun accepts(input: IndexInput): Boolean
 }
 
-/** One unit to index: a class-file entry, a source file, … Cheap fields are eager; bytes/dom are lazy. */
-interface IndexInput {
-    val origin: IndexOrigin
-    val contentHash: ContentHash
-    /** Logical name of the unit: a class entry path ("java/util/List.class") or a source path. */
-    val unitName: String?
-    /** Source file path for project-source inputs (null for library/SDK units). */
-    val sourcePath: Path?
-    /** The interned, per-project-stable file id of a project-SOURCE unit (see the index's file-id table), or
-     *  -1 for library/SDK units that have no project file. Lets a source value store the id instead of
-     *  repeating the full path string; resolve it back with [IndexService.filePath]. */
-    val fileId: Int get() = -1
-    fun bytes(): ByteArray
-    fun text(): String?
-    fun dom(): ParsedFile?
-}
-
-interface IndexExtension<K : Any, V : Any> {
-    val id: IndexId
-    val version: Int
-    val keyDescriptor: KeyDescriptor<K>
-    val valueExternalizer: Externalizer<V>
-    val inputFilter: InputFilter
-    val matching: MatchingMode
-
-    /** Map one unit to its entries. Pure + deterministic. */
-    fun index(input: IndexInput): Map<K, Collection<V>>
-}
-
 data class Hit<V>(val key: String, val value: V, val score: Int)
-
-/** What to (re)index: project source roots + the classpath/SDK backing the workspace. */
-data class IndexScope(
-    val sourceRoots: List<Path> = emptyList(),
-    val libraryJars: List<Path> = emptyList(),
-    val jdkHome: Path? = null,
-    /** The project's OWN (+ dependency-module) `res/` roots — walked for `.xml` resource files into the resident,
-     *  edit-sensitive source side. Immutable dependency/AAR res goes in [libraryResourceRoots] instead. */
-    val resourceRoots: List<Path> = emptyList(),
-    /** Immutable dependency/AAR `res/` dirs — content-addressed onto disk segments (parsed once, shared across
-     *  projects, read on demand) rather than held resident like [resourceRoots]. A Material/AndroidX resource
-     *  set is hundreds of files / a multi-hundred-KB merged `values.xml`, so keeping it off the heap matters. */
-    val libraryResourceRoots: List<Path> = emptyList(),
-    /** Attached SOURCE archives/dirs (`-sources.jar`, JDK `src.zip`, Android `sources/`) — walked for `.java`/
-     *  `.kt`, fed as [IndexOrigin.LIBRARY_SOURCE] units (the source-doc index: real param names + javadoc/KDoc). */
-    val sourceArchives: List<Path> = emptyList(),
-)
 
 /** State of one unit of indexing work, for the detail view. */
 enum class IndexItemState { PENDING, ACTIVE, DONE }
