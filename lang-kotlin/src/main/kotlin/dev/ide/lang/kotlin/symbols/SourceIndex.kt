@@ -79,6 +79,9 @@ class RawClass(
     val constructors: List<RawCallable>,
     val ctx: FileContext,
     val node: DomNode?,
+    /** The class's own type-parameter names (`class Box<T>` → `["T"]`) — so a member type that references one
+     *  (`val value: T`) is marked a type parameter and binds from the receiver's type arguments. */
+    val typeParameterNames: List<String> = emptyList(),
     /** Entry names when this is an `enum class` (`RED`, `GREEN`); empty otherwise. */
     val enumEntries: List<String> = emptyList(),
     /** The companion object's simple name (`"Companion"` by default), or null if none. A bare `Type.`
@@ -233,7 +236,9 @@ object SourceIndexBuilder {
         val companion = c.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtObjectDeclaration>().firstOrNull { it.isCompanion() }
         val asClass = c as? org.jetbrains.kotlin.psi.KtClass
         return RawClass(fqn, c.name ?: fqn.substringAfterLast('.'), c is org.jetbrains.kotlin.psi.KtObjectDeclaration,
-            supers, members, ctors, ctx, node(parsed, c), enumEntries,
+            supers, members, ctors, ctx, node(parsed, c),
+            typeParameterNames = asClass?.typeParameters?.mapNotNull { it.name } ?: emptyList(),
+            enumEntries = enumEntries,
             companionObjectName = companion?.let { it.name ?: "Companion" },
             isCompanion = (c as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.isCompanion() == true,
             isInterface = asClass?.isInterface() == true,

@@ -36,6 +36,15 @@ class KotlinSymbol(
     /** Each own type parameter's erased upper bound (positional with [typeParameters]); used to erase a
      *  parameter that argument inference couldn't bind (a raw `findViewById` → its `View` bound). */
     val typeParameterBounds: List<TypeRef> = emptyList(),
+    /** When a type parameter's upper bound is a SIBLING type parameter (`fun <R, T : R> …` → T's bound is R),
+     *  the bound parameter's NAME (positional with [typeParameters]); null when the bound is concrete/absent.
+     *  Drives `T : R` constraint propagation: a receiver-bound `T` makes its bound `R` a lower bound (see
+     *  [KotlinSymbolService.bindExtensionReceiver] / [typeParamLowerBounds]). `Result<T>.getOrElse` → String?. */
+    val typeParamBoundNames: List<String?> = emptyList(),
+    /** TRANSIENT (not persisted): lower bounds inferred for this callable's OWN type parameters from a `X : P`
+     *  constraint whose `X` was bound at the receiver (`Result<String>.getOrElse`: T = String, T : R ⇒ R ≥
+     *  String). The call-site inference widens these with the actual argument/lambda result. */
+    val typeParamLowerBounds: Map<String, TypeRef> = emptyMap(),
     /** Value-parameter types (vararg → element type), for inferring type arguments from call arguments. */
     val paramTypes: List<TypeRef?> = emptyList(),
     /** Value-parameter NAMES (positional with [paramTypes]), for named-argument completion. Empty when the
@@ -83,9 +92,27 @@ class KotlinSymbol(
      *  to enrich a binary symbol from attached sources without re-reading its shape. Other fields are preserved. */
     fun withSourceDoc(names: List<String> = paramNames, sig: String? = signature, docText: String? = doc): KotlinSymbol =
         KotlinSymbol(
-            name, kind, type, owner, modifiers, origin, receiverTypeFqn, sig, typeParameters, typeParameterBounds,
-            paramTypes, names, receiverTypeArgs, receiverTypeParam, packageName, declaringClassFqn, isInternal,
-            isComposable, isInline, isSuspend, isDeprecated, varargParamIndex, paramHasDefault, declarationNode, docText,
+            name = name, kind = kind, type = type, owner = owner, modifiers = modifiers, origin = origin,
+            receiverTypeFqn = receiverTypeFqn, signature = sig, typeParameters = typeParameters,
+            typeParameterBounds = typeParameterBounds, typeParamBoundNames = typeParamBoundNames,
+            typeParamLowerBounds = typeParamLowerBounds, paramTypes = paramTypes, paramNames = names,
+            receiverTypeArgs = receiverTypeArgs, receiverTypeParam = receiverTypeParam, packageName = packageName,
+            declaringClassFqn = declaringClassFqn, isInternal = isInternal, isComposable = isComposable,
+            isInline = isInline, isSuspend = isSuspend, isDeprecated = isDeprecated, varargParamIndex = varargParamIndex,
+            paramHasDefault = paramHasDefault, declarationNode = declarationNode, doc = docText,
+        )
+
+    /** A copy carrying [typeParamLowerBounds] (the `T : R` lower bounds derived at receiver binding). */
+    fun withTypeParamLowerBounds(lower: Map<String, TypeRef>): KotlinSymbol =
+        KotlinSymbol(
+            name = name, kind = kind, type = type, owner = owner, modifiers = modifiers, origin = origin,
+            receiverTypeFqn = receiverTypeFqn, signature = signature, typeParameters = typeParameters,
+            typeParameterBounds = typeParameterBounds, typeParamBoundNames = typeParamBoundNames,
+            typeParamLowerBounds = lower, paramTypes = paramTypes, paramNames = paramNames,
+            receiverTypeArgs = receiverTypeArgs, receiverTypeParam = receiverTypeParam, packageName = packageName,
+            declaringClassFqn = declaringClassFqn, isInternal = isInternal, isComposable = isComposable,
+            isInline = isInline, isSuspend = isSuspend, isDeprecated = isDeprecated, varargParamIndex = varargParamIndex,
+            paramHasDefault = paramHasDefault, declarationNode = declarationNode, doc = doc,
         )
 }
 
@@ -131,6 +158,13 @@ class KotlinType(
 
     fun withNullable(n: Boolean): KotlinType =
         if (n == nullable) this else KotlinType(qualifiedName, typeArguments, n, context, isTypeParameter, isExtensionFunctionType, isComposable)
+
+    /** A copy with the classifier [fqn] (same arguments, nullability, context) — for canonicalizing a JVM
+     *  type to its Kotlin classifier (`java.lang.String` → `kotlin.String`) before a comparison, keeping the
+     *  resolution context so the supertype walk still works. */
+    fun withClassifier(fqn: String): KotlinType =
+        if (fqn == qualifiedName) this
+        else KotlinType(fqn, typeArguments, nullable, context, isTypeParameter, isExtensionFunctionType, isComposable)
 
     /** Rebind the resolution [context] through the whole tree (used when reloading a context-free cache). */
     fun withContext(ctx: KotlinTypeContext?): KotlinType =

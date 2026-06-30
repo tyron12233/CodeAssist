@@ -86,6 +86,17 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         runCatching { service.setOverlay(liveOverlayProvider()) }
     }
 
+    /** Register the file being queried as the model's focal source from its live PSI, so a class/member declared
+     *  in the buffer being edited resolves immediately — even before it's saved and reindexed (same-file
+     *  freshness). Keyed by text hash in the service, so a repeated query on unchanged text is a no-op. */
+    private fun syncFocal(parsed: KotlinParsedFile) {
+        runCatching {
+            service.syncFocal(parsed.file.path, parsed.ktFile.text.hashCode()) {
+                dev.ide.lang.kotlin.symbols.SourceIndexBuilder.extractFrom(parsed.ktFile, parsed, parsed.file.path)
+            }
+        }
+    }
+
     private val sourceRoots: List<VirtualFile> = ctx.sourceRoots
     private val classpathJars: List<Path> =
         (ctx.classpath.entries + ctx.bootClasspath.entries)
@@ -120,7 +131,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
         KotlinInlayHintService(
             parsedFor = { lastByFile[it.path] },
-            resolverFor = { KotlinResolver(it.ktFile, it, service) },
+            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
         )
     }
 
@@ -131,7 +142,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService by lazy {
         KotlinSemanticHighlighter(
             parsedFor = { lastByFile[it.path] },
-            resolverFor = { KotlinResolver(it.ktFile, it, service) },
+            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
             refresh = { refreshOverlay() },
         )
     }
@@ -139,6 +150,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override val folding: dev.ide.lang.folding.FoldingService by lazy {
         KotlinCodeFolder(parsedFor = { lastByFile[it.path] })
     }
+
+    /** Re-indentation + whitespace cleanup over the parse-only PSI (no IntelliJ formatting model on ART). */
+    override val formatting: dev.ide.lang.formatting.FormattingService = KotlinFormatter()
 
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))
@@ -210,7 +224,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     override suspend fun analyze(file: VirtualFile): AnalysisResult = KotlinPerf.trace("kt.analyze") {
         val parsed = lastByFile[file.path] ?: return@trace AnalysisResult(file, emptyList())
-        KotlinPerf.span("overlay") { refreshOverlay() } // cross-file: a symbol just typed elsewhere must not flag here
+        KotlinPerf.span("overlay") { refreshOverlay(); syncFocal(parsed) } // cross-file freshness + same-file (the live buffer's own classes)
         AnalysisResult(file, parsed.diagnostics + KotlinPerf.span("semantic") { incrementalAnalysis.diagnostics(parsed) })
     }
 
@@ -228,7 +242,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      */
     fun importFixesAt(file: VirtualFile, offset: Int): List<KotlinImportFix> {
         val parsed = lastByFile[file.path] ?: return emptyList()
-        refreshOverlay()
+        refreshOverlay(); syncFocal(parsed)
         val text = parsed.ktFile.text
         val diags = incrementalAnalysis.diagnostics(parsed)
         fun coversCaret(d: Diagnostic) = offset >= d.range.start && offset <= d.range.end
@@ -362,6 +376,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val kdn = node as? KotlinDomNode ?: return ResolveResult.Unresolved
         refreshOverlay() // go-to-definition must reach a symbol just declared in another open file
         val parsed = kdn.owner
+        syncFocal(parsed) // ...and one declared in the same buffer being edited
         val resolver = KotlinResolver(parsed.ktFile, parsed, service)
         val psi = kdn.psi as? KtNameReferenceExpression ?: return ResolveResult.Unresolved
         val name = psi.getReferencedName()

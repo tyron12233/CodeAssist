@@ -126,6 +126,31 @@ class KotlinSemanticHighlightTest {
     }
 
     @Test
+    fun implicitItInScopeLambdaIsColoredParameter() {
+        // `it` is synthetic (no KtParameter) but must color like a parameter inside let/also.
+        val let = tokens("It.kt", "package demo\nfun f() { \"hello\".let { it.length } }")
+        assertTrue(let.any { it.text == "it" && it.kind == "parameter" }, "implicit `it` should be a parameter in let; got $let")
+        val also = tokens("It.kt", "package demo\nfun f(p: Point) { p.also { it.x } }")
+        assertTrue(also.any { it.text == "it" && it.kind == "parameter" }, "implicit `it` should be a parameter in also; got $also")
+    }
+
+    @Test
+    fun bareMemberViaImplicitReceiverIsColored() {
+        // The `this` of apply/with/run is an implicit receiver — a bare member read off it colors like `p.x`.
+        val apply = tokens("Recv.kt", "package demo\nfun f(p: Point) { p.apply { x } }")
+        assertTrue(apply.any { it.text == "x" && it.kind == "property" }, "bare `x` via apply receiver should be a property; got $apply")
+        val with = tokens("Recv.kt", "package demo\nfun f(p: Point) { with(p) { y } }")
+        assertTrue(with.any { it.text == "y" && it.kind == "property" }, "bare `y` via with receiver should be a property; got $with")
+    }
+
+    @Test
+    fun unresolvedBareNameInScopeLambdaIsNotColored() {
+        // Conservative: a name that resolves to nothing on the receiver is left to the lexical layer.
+        val toks = tokens("Recv.kt", "package demo\nfun f(p: Point) { p.apply { bogusXyz } }")
+        assertTrue(toks.none { it.text == "bogusXyz" }, "an unresolved bare name must not be colored; got $toks")
+    }
+
+    @Test
     fun deprecatedDeclarationAndCallAreMarked() {
         val code = "package demo\n@Deprecated(\"x\") fun old() {}\nfun f() { old(); oldApi() }\n"
         val toks = tokens("Dep.kt", code)

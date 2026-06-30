@@ -47,6 +47,9 @@ object KotlinDiagnosticCodes {
     const val UNUSED_PRIVATE = "kt.unusedPrivate"
     const val UNUSED_LOCAL = "kt.unusedLocal"
     const val VAR_COULD_BE_VAL = "kt.varCouldBeVal"
+    /** A Java bean accessor called explicitly (`view.setText("x")` / `view.getText()`) where Kotlin's
+     *  synthetic-property syntax (`view.text = "x"` / `view.text`) is idiomatic. */
+    const val USE_PROPERTY_ACCESS = "kt.usePropertyAccess"
 
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"

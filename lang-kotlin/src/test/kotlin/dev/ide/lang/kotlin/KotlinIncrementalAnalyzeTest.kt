@@ -59,6 +59,28 @@ class KotlinIncrementalAnalyzeTest {
     }
 
     @Test
+    fun crossFileDependencyEditInvalidatesDependentCache() {
+        // Editing a class's property type in ANOTHER (open) file must refresh a dependent file's diagnostics,
+        // even though the dependent file's OWN text is unchanged (its analyze cache would otherwise be reused).
+        // `Main.kt` does `with(Test()) { s = null }`; flipping Test.s String? → String must make it flag.
+        val dir = tempProject(mapOf(
+            "Test.kt" to "package demo\nclass Test { var s: String? = null }",
+            "Main.kt" to "package demo\nfun use() { with(Test()) { s = null } }",
+        ))
+        val analyzer = KotlinSourceAnalyzer(fakeContext(dir))
+        val testPath = dir.resolve("Test.kt").toString()
+        fun analyzeMainCodes(): List<String?> {
+            val doc = SnippetDoc("package demo\nfun use() { with(Test()) { s = null } }", DiskFile(dir.resolve("Main.kt")))
+            return runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }.map { it.code }
+        }
+        analyzer.liveOverlayProvider = { mapOf(testPath to "package demo\nclass Test { var s: String? = null }") }
+        assertEquals(false, "kt.typeMismatch" in analyzeMainCodes(), "s: String? accepts null")
+        // Edit Test.kt (the dependency) in the overlay: s becomes non-null. Main.kt's text is unchanged.
+        analyzer.liveOverlayProvider = { mapOf(testPath to "package demo\nclass Test { var s: String = \"\" }") }
+        assertEquals(true, "kt.typeMismatch" in analyzeMainCodes(), "after the dependency's type changed, the dependent's cached diagnostics must refresh")
+    }
+
+    @Test
     fun bodyEditChangingCrossDeclarationUsageMatchesFull() {
         // screenB's body starts referencing the private helper → helper's "unused" warning must clear, even
         // though helper's own text is unchanged (a whole-file check that the scoped path must not stale-reuse).

@@ -7,6 +7,7 @@ import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.highlight.SemanticToken
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.resolve.SymbolKind
 import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
@@ -196,9 +197,24 @@ class KotlinSemanticHighlighter(
         }
         val name = ref.getReferencedName()
         if (name.isEmpty()) return
-        when (val decl = localOrParamDecl(name, ref.textRange.startOffset, ref)) {
-            is KtParameter -> emit(ref.textRange, HighlightKind.PARAMETER, paramMutability(decl))
-            is KtProperty -> emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar))
+        val offset = ref.textRange.startOffset
+        when (val decl = localOrParamDecl(name, offset, ref)) {
+            is KtParameter -> { emit(ref.textRange, HighlightKind.PARAMETER, paramMutability(decl)); return }
+            is KtProperty -> { emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return }
+        }
+        // The implicit lambda parameter `it` (`x.let { it }`, `x.also { it }`) is synthetic — no `KtParameter`,
+        // so the PSI scan above misses it. The resolver synthesizes it ONLY when an enclosing no-arg lambda fills
+        // a single-value-parameter functional type, so gating on that is sound (it's never a stray `it`). Immutable.
+        if (name == "it" && resolver.localsAt(offset).any { it.name == "it" && it.kind == SymbolKind.PARAMETER }) {
+            emit(ref.textRange, HighlightKind.PARAMETER, setOf(HighlightModifier.READONLY)); return
+        }
+        // A bare member read resolved through an implicit receiver — the `this` of an `apply`/`with`/`run` block,
+        // an enclosing extension receiver, or the enclosing class (`p.apply { x }`). Colored like the qualified
+        // form (`p.x`) would be in [classifyMemberSelector]; a method ref without a call is left to the lexer.
+        val member = resolver.implicitReceiverMember(name, offset) ?: return
+        when (member.kind) {
+            SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(member))
+            SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(member))
             else -> {} // a member / top-level / unresolved name → leave to the lexical layer
         }
     }

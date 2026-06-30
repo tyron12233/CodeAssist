@@ -49,6 +49,30 @@ class KotlinInlayHintTest {
         assertTrue(hs.any { it.first == ": String" }, "explicit lambda param should hint ': String'; got $hs")
     }
 
+    @Test
+    fun receiverLambdaScopeHint() {
+        // A receiver-typed lambda parameter (`Foo.() -> Unit`) → `this: Foo` at the brace.
+        val hs = hints(
+            "Use.kt",
+            "class Foo { fun bar() {} }\nfun build(block: Foo.() -> Unit) {}\nfun f() { build { bar() } }",
+        )
+        assertTrue(hs.any { it.first == "this: Foo" && it.second == InlayHintKind.TYPE }, "receiver lambda should hint 'this: Foo'; got $hs")
+    }
+
+    @Test
+    fun withBlockScopeHint() {
+        // `with(x) { … }` binds the receiver from its argument → `this: StringBuilder`.
+        val hs = hints("Use.kt", "fun f() { with(StringBuilder()) { append(\"x\") } }")
+        assertTrue(hs.any { it.first == "this: StringBuilder" }, "with-block should hint 'this: StringBuilder'; got $hs")
+    }
+
+    @Test
+    fun plainLambdaHasNoScopeHint() {
+        // `forEach`'s lambda is a plain `(T) -> Unit`, not a receiver type — no `this:` hint.
+        val hs = hints("Use.kt", "fun f() { listOf(\"\").forEach { s -> s.length } }")
+        assertTrue(hs.none { it.first.startsWith("this:") }, "plain lambda should have no 'this:' hint; got $hs")
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

@@ -19,7 +19,9 @@ import org.jetbrains.kotlin.psi.KtProperty
  * Inlay hints for Kotlin, computed over the live PSI + the backend's own inference (no FIR). Mirrors the
  * Java/JDT hints but for the cases that matter in Kotlin:
  *  - **local `val`/`var` inferred types** — `val x = foo()` → `x: Bar` (only when there's no explicit type),
- *  - **lambda parameter types** — `list.map { x -> … }` → `x: String`, and the implicit `it` → `it: String`.
+ *  - **lambda parameter types** — `list.map { x -> … }` → `x: String`, and the implicit `it` → `it: String`,
+ *  - **lambda scope receivers** — `Column { … }` → `this: ColumnScope`, for any receiver-typed lambda
+ *    (`RowScope.() -> Unit`, a DSL builder block, `with(x) { … }`).
  *
  * Every hint comes from a type the resolver could infer; an unknown type simply yields no hint (so a
  * half-typed buffer never shows a wrong or `Unknown` annotation).
@@ -63,8 +65,12 @@ class KotlinInlayHintService(
         return typeHint(nameEnd, type)
     }
 
-    /** Untyped lambda parameters (`{ x -> }`) and the implicit `it`, typed from the function-type they fill. */
+    /** Untyped lambda parameters (`{ x -> }`), the implicit `it`, and the implicit `this` receiver of a
+     *  receiver-typed lambda, all typed from the function-type the lambda fills. */
     private fun lambdaHints(lambda: KtLambdaExpression, resolver: KotlinResolver, out: MutableList<InlayHint>) {
+        // Added first so it sorts ahead of any same-offset `it:` hint (`R.(A) -> Unit` shows `this: R it: A`).
+        receiverScopeHint(lambda, resolver)?.let { out += it }
+
         val inputs = resolver.lambdaParameterTypes(lambda)
         if (inputs.isEmpty()) return
         val params = lambda.valueParameters
@@ -86,6 +92,21 @@ class KotlinInlayHintService(
                 out += typeHint(nameEnd, t)
             }
         }
+    }
+
+    /** A receiver-typed lambda (`RowScope.() -> Unit` — a Compose content lambda, a DSL builder block,
+     *  `with`/`buildString`) → `this: RowScope` right after the `{`. Suppressed when the receiver is an
+     *  unbound type parameter (e.g. `apply`/`run`, whose `T` is only known from the call's receiver, which the
+     *  resolver doesn't bind) so we never render a bare `this: T`. */
+    private fun receiverScopeHint(lambda: KtLambdaExpression, resolver: KotlinResolver): InlayHint? {
+        val receiver = resolver.lambdaReceiverType(lambda) ?: return null
+        if (receiver.isTypeParameter) return null
+        val lBrace = lambda.functionLiteral.lBrace // always present on a parsed lambda
+        return InlayHint(
+            lBrace.textRange.endOffset,
+            listOf(InlayHintPart("this: " + receiver)),
+            InlayHintKind.TYPE, tooltip = receiver.qualifiedName, paddingLeft = true, paddingRight = true,
+        )
     }
 
     private fun referencesIt(lambda: KtLambdaExpression): Boolean {

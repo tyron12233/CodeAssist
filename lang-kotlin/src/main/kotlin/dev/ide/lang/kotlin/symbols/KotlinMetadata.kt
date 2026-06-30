@@ -190,6 +190,7 @@ object KotlinMetadata {
             receiverTypeFqn = recvFqn,
             signature = "($params): ${typeText(f.returnType, tp)}",
             typeParameters = f.typeParameters.map { it.name },
+            typeParamBoundNames = f.typeParameters.map { siblingBoundName(it, tp) },
             paramTypes = f.valueParameters.map { typeRef(it.varargElementType ?: it.type, ctx, tp) },
             paramNames = f.valueParameters.map { it.name },
             receiverTypeArgs = receiver?.arguments?.map { arg -> arg.type?.let { typeRef(it, ctx, tp) } ?: KotlinType("kotlin.Any", context = ctx) } ?: emptyList(),
@@ -222,6 +223,12 @@ object KotlinMetadata {
             declaringClassFqn = declaringFqn,
         )
     }
+
+    /** When [param]'s upper bound is a SIBLING type parameter (`fun <R, T : R>` → T's bound is R), that
+     *  parameter's name (looked up in the id→name map [tp]); null when the bound is a class/absent. Drives
+     *  `T : R` constraint propagation (see [KotlinSymbol.typeParamBoundNames]). */
+    private fun siblingBoundName(param: KmTypeParameter, tp: Map<Int, String>): String? =
+        param.upperBounds.firstNotNullOfOrNull { ub -> (ub.classifier as? KmClassifier.TypeParameter)?.let { tp[it.id] } }
 
     /** For an extension receiver: (keying FQN, type-param name if the receiver is a bare type parameter).
      *  `T.also` keys by T's upper bound (`kotlin.Any` if unbounded) and remembers `T` to bind to the receiver. */

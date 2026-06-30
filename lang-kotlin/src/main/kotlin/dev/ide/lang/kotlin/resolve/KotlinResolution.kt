@@ -1,6 +1,7 @@
 package dev.ide.lang.kotlin.resolve
 
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
+import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.FileContext
 import dev.ide.lang.kotlin.symbols.ImportInfo
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
@@ -21,6 +22,7 @@ import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtCatchClause
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
@@ -127,6 +129,7 @@ class KotlinResolver(
             is KtNameReferenceExpression -> typeOfName(expr.getReferencedName(), expr.textRange.startOffset)
             is KtCallExpression -> typeOfCall(expr, null)
             is KtQualifiedExpression -> typeOfQualified(expr)
+            is KtClassLiteralExpression -> classLiteralType(expr)
             is KtThisExpression -> thisType(expr)
             is KtSuperExpression -> superType(expr)
             is KtBinaryExpression -> inferBinaryType(expr)
@@ -331,17 +334,80 @@ class KotlinResolver(
 
     private fun typeOfCall(call: KtCallExpression, receiverType: KotlinType?): KotlinType? {
         val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
-        // No receiver + Capitalized → a constructor call (the type itself).
+        // No receiver + Capitalized → a constructor call (the type itself, with its type parameters inferred
+        // from the constructor arguments — `Box("s")` → Box<String>).
         if (receiverType == null && name.firstOrNull()?.isUpperCase() == true) {
-            service.resolveTypeName(name, fileContext)?.let { return service.typeByFqn(it) }
+            service.resolveTypeName(name, fileContext)?.let { return constructorResultType(it, call) }
         }
         // No function callee → maybe the callee is a VALUE with an `invoke` operator (`val g = Greeter(); g()`).
         val sym = resolveCalleeFunction(call) ?: return if (receiverType == null) invokeReturnType(call) else null
         // Bind the function's OWN type parameters from the arguments (listOf("") -> List<String>; a lambda's
         // result binds R in `(…) -> R`), falling back to each parameter's erased bound when an argument can't
         // pin it (a raw `findViewById(): T` → `View`), then substitute into the return type.
-        val bindings = methodTypeParamErasure(sym) + inferTypeArguments(sym, call)
+        val bindings = (methodTypeParamErasure(sym) + inferTypeArguments(sym, call)).toMutableMap()
+        applyLowerBounds(sym, call, bindings)
         return (sym.type as? KotlinType)?.let { service.substitute(it, bindings) as? KotlinType }
+    }
+
+    /**
+     * Apply `T : R` lower bounds (recorded at receiver binding, see [KotlinSymbolService.bindExtensionReceiver])
+     * to a callee's still-free return type parameters. `Result<String>.getOrElse { … }`: T : R, T = String ⇒
+     * R ≥ String. When the `onFailure` lambda returns a concrete type, argument inference already bound R (e.g.
+     * `{ "x" }` → String); but `{ null }` gives R no type, so without this R stays a raw `R`. Here R is widened to
+     * its lower bound (String), made nullable when the lambda body is `null` → `String?` (Kotlin's LUB of
+     * `String` and `Nothing?`). A `let { null }` has NO such bound, so it is untouched (stays the lambda result).
+     */
+    private fun applyLowerBounds(sym: KotlinSymbol, call: KtCallExpression, bindings: MutableMap<String, TypeRef>) {
+        if (sym.typeParamLowerBounds.isEmpty()) return
+        for ((param, lowerRef) in sym.typeParamLowerBounds) {
+            val lower = lowerRef as? KotlinType ?: continue
+            val cur = bindings[param] as? KotlinType
+            when {
+                // Argument inference left R free (its lambda returned `null` → no type) → R = the lower bound,
+                // nullable when that lambda body is the `null` literal.
+                cur == null || cur.isTypeParameter -> bindings[param] = if (returnParamGotNullLambda(sym, call, param)) lower.withNullable(true) else lower
+                // R was bound to `Nothing`/`Nothing?` (a `null`/`throw` lambda) → widen to the lower bound.
+                cur.qualifiedName == "kotlin.Nothing" -> bindings[param] = lower.withNullable(cur.nullable || lower.nullable)
+                else -> {} // a concrete lambda result already pinned R (`getOrElse { "x" }` → String) — keep it
+            }
+        }
+    }
+
+    /** Whether [call] passes a lambda — to the parameter whose functional return type is [param] — whose body is
+     *  the `null` literal (so [param] should be nullable). */
+    private fun returnParamGotNullLambda(sym: KotlinSymbol, call: KtCallExpression, param: String): Boolean {
+        call.valueArguments.forEachIndexed { i, arg ->
+            val lambda = arg.getArgumentExpression() as? KtLambdaExpression ?: return@forEachIndexed
+            val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
+            val ret = service.functionalShape(pt)?.returnType as? KotlinType
+            if (ret?.isTypeParameter == true && ret.qualifiedName == param) {
+                val last = lambda.bodyExpression?.statements?.lastOrNull() as? KtExpression
+                if (last is KtConstantExpression && last.text.trim() == "null") return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * The type a constructor call `Foo(args)` produces, with `Foo`'s type parameters inferred from the
+     * constructor arguments (`Box("s")` → `Box<String>`), so a chain off it (`Box("s").value`) and the scope
+     * function receiver (`Box("s").apply { value }`) resolve the element type. Falls back to the raw type when
+     * `Foo` is non-generic, has no matching constructor, or no argument pins a parameter; an unbound parameter
+     * (a partial inference) erases to `Any`.
+     */
+    private fun constructorResultType(fqn: String, call: KtCallExpression): KotlinType {
+        val tps = service.classTypeParameters(fqn)
+        if (tps.isEmpty()) return service.typeByFqn(fqn)
+        val paramTypes = service.constructorParamTypes(fqn, call.valueArguments.size) ?: return service.typeByFqn(fqn)
+        val bindings = HashMap<String, TypeRef>()
+        call.valueArguments.forEachIndexed { i, arg ->
+            val pt = paramTypes.getOrNull(i) as? KotlinType ?: return@forEachIndexed
+            val expr = arg.getArgumentExpression() ?: return@forEachIndexed
+            if (expr is KtLambdaExpression) return@forEachIndexed // a lambda arg can't pin a scalar type param here
+            inferType(expr)?.let { unify(pt, it, bindings) }
+        }
+        if (bindings.isEmpty()) return service.typeByFqn(fqn)
+        return service.typeByFqn(fqn, tps.map { bindings[it] ?: service.typeByFqn("kotlin.Any") })
     }
 
     /** `value(args)` where `value` isn't a function — the result of its `invoke` operator (`Greeter()(name)`,
@@ -429,29 +495,51 @@ class KotlinResolver(
         // over `items(Int…)` when the arg is a `List<Project>`, and the String `TextField(value=…)` overload
         // over the `TextFieldValue` one when `value` is a String.
         val exact = candidates.filter { it.paramTypes.size == argCount }
-        if (exact.isNotEmpty()) return bestOverload(exact, call)
+        if (exact.isNotEmpty()) return bestOverload(exact, call, receiverType)
         val moreParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
-        if (moreParams.isNotEmpty()) return bestOverload(moreParams, call)
+        if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
         val fewerParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
-        if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call)
+        if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call, receiverType)
         return candidates.firstOrNull()
     }
 
-    /** Pick the best-fitting overload from same-arity-tier [candidates] by [overloadFitScore], breaking ties in
-     *  favour of the first (the declaration/lookup order) so a confident resolution is unchanged. Generalises the
-     *  old first-positional-argument heuristic to ALL arguments, positional and NAMED. This matters for the
-     *  idiomatic Compose call style `TextField(value = s, onValueChange = { … })`, whose only disambiguating
-     *  argument (`value`) is named: a first-positional-only scorer gave up and picked an arbitrary overload,
-     *  then mistyped the lambda's `it` from the wrong one. */
-    private fun bestOverload(candidates: List<KotlinSymbol>, call: KtCallExpression): KotlinSymbol {
+    /** Pick the best-fitting overload from same-arity-tier [candidates] by [overloadFitScore], breaking a tie by
+     *  the most-specific RECEIVER (see [receiverSpecificity]), then in favour of the first (the declaration/lookup
+     *  order) so a confident resolution is unchanged. Generalises the old first-positional-argument heuristic to
+     *  ALL arguments, positional and NAMED. This matters for the idiomatic Compose call style
+     *  `TextField(value = s, onValueChange = { … })`, whose only disambiguating argument (`value`) is named: a
+     *  first-positional-only scorer gave up and picked an arbitrary overload, then mistyped the lambda's `it` from
+     *  the wrong one. The receiver tiebreak matters for stdlib pairs like `String.removePrefix(): String` vs
+     *  `CharSequence.removePrefix(): CharSequence`: both fit a `String` receiver and a `CharSequence` arg equally,
+     *  but only the `String` overload's return type lets a further `String`-extension chain (`.removePrefix("").x`)
+     *  resolve — without the tiebreak the candidate set's (HashSet) order decided it, intermittently flagging the
+     *  chained call unresolved. */
+    private fun bestOverload(candidates: List<KotlinSymbol>, call: KtCallExpression, receiverType: KotlinType?): KotlinSymbol {
         if (candidates.size == 1) return candidates.first()
         var best = candidates.first()
-        var bestScore = overloadFitScore(best, call)
+        var bestFit = overloadFitScore(best, call)
+        var bestSpec = receiverType?.let { receiverSpecificity(best, it) } ?: 0
         for (c in candidates.drop(1)) {
-            val s = overloadFitScore(c, call)
-            if (s > bestScore) { best = c; bestScore = s }
+            val fit = overloadFitScore(c, call)
+            val spec = receiverType?.let { receiverSpecificity(c, it) } ?: 0
+            if (fit > bestFit || (fit == bestFit && spec > bestSpec)) { best = c; bestFit = fit; bestSpec = spec }
         }
         return best
+    }
+
+    /** How specifically a candidate applies to a receiver of [receiverType] (higher = more specific) — the
+     *  most-specific-receiver tiebreaker among overloads that fit the arguments equally well. A plain member
+     *  outranks any extension; among extensions, one declared on the actual type beats one on a supertype
+     *  (`String.removePrefix` over `CharSequence.removePrefix`), with a nearer supertype beating a farther one,
+     *  mirroring Kotlin's overload resolution. An extension with no/unknown receiver, or one on an unrelated
+     *  type, ranks lowest (0). */
+    private fun receiverSpecificity(sym: KotlinSymbol, receiverType: KotlinType): Int {
+        if (!sym.isExtension) return Int.MAX_VALUE
+        val recv = sym.receiverTypeFqn?.let { Builtins.kotlinTypeFor(it) ?: it } ?: return 0
+        val actual = Builtins.kotlinTypeFor(receiverType.qualifiedName) ?: receiverType.qualifiedName
+        if (recv == actual) return RECEIVER_EXACT
+        val idx = service.supertypesOf(actual).indexOfFirst { (Builtins.kotlinTypeFor(it.qualifiedName) ?: it.qualifiedName) == recv }
+        return if (idx >= 0) RECEIVER_EXACT - 1 - idx else 0
     }
 
     /** Score how well [sym] fits [call]'s arguments: +1 for each concrete-typed argument whose inferred type fits
@@ -949,8 +1037,28 @@ class KotlinResolver(
         return service.resolveTypeName(name, fileContext)?.let { service.typeByFqn(it) }
     }
 
+    /** `X::class` → `kotlin.reflect.KClass<X>`. The left-hand side is either a classifier name (`Main::class`,
+     *  `Foo.Bar::class`, `String::class`) or a value expression (`instance::class`); either way its type is the
+     *  literal's single type argument. So `Main::class.java` resolves the `KClass<T>.java` extension to
+     *  `Class<Main>`, and `Main::class.simpleName` reaches a `KClass` member. The argument is made non-null
+     *  (`KClass`'s parameter is `T : Any`); a bare/reified type-parameter LHS leaves it open (raw `KClass`). */
+    private fun classLiteralType(e: KtClassLiteralExpression): KotlinType {
+        val lhs = e.receiverExpression
+        val arg = lhs?.let { inferType(it) ?: typeOfTypeName(it) }?.withNullable(false)
+        return service.typeByFqn("kotlin.reflect.KClass", listOfNotNull(arg))
+    }
+
     private fun memberNamed(type: KotlinType, name: String): KotlinSymbol? =
         service.membersNamed(type.qualifiedName, type.typeArguments, name).firstOrNull()
+
+    /** The member named [name] on the nearest implicit receiver in scope at [offset] — the `this` of an
+     *  `apply`/`with`/`run` block, an enclosing extension function's receiver, or the enclosing class — for
+     *  highlighting a bare member read (`p.apply { x }`). Innermost receiver first; null when none has it. */
+    fun implicitReceiverMember(name: String, offset: Int): KotlinSymbol? {
+        if (name.isEmpty()) return null
+        for (recv in implicitReceiversAt(offset)) memberNamed(recv, name)?.let { return it }
+        return null
+    }
 
     /** The simple names of [typeFqn]'s enum constants — for highlighting `Color.RED` as an enum constant. */
     fun enumConstantNames(typeFqn: String): Set<String> = service.enumConstantsOf(typeFqn).mapTo(HashSet()) { it.name }
@@ -1670,6 +1778,10 @@ class KotlinResolver(
 
     companion object {
         private val SOURCE = SymbolOrigin(fromSource = true, file = null)
+
+        /** Specificity score for an extension whose receiver IS the actual type (see [receiverSpecificity]); a
+         *  supertype receiver subtracts its distance from this, so the value just needs headroom above any chain. */
+        private const val RECEIVER_EXACT = 1 shl 20
         private val ARITHMETIC_CONVENTIONS = mapOf(
             KtTokens.PLUS to "plus", KtTokens.MINUS to "minus", KtTokens.MUL to "times",
             KtTokens.DIV to "div", KtTokens.PERC to "rem",

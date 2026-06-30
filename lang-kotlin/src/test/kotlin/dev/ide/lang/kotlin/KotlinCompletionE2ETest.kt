@@ -173,6 +173,21 @@ class KotlinCompletionE2ETest {
     }
 
     @Test
+    fun siblingBoundInfersReturnType() {
+        // `Result<String>.getOrElse { null }`: T : R, T = String, the lambda returns null → R = String? (Kotlin's
+        // LUB of String and Nothing?). Without the `T : R` bound R was a raw, unbindable type parameter.
+        fun detailOf(code: String, local: String) = runBlocking { analyzer.completeAtCaret(srcDir, "Use.kt", code) }
+            .items.firstOrNull { it.symbol?.name == local }?.detail
+        assertTrue(
+            detailOf("fun f() { val a = runCatching { \"\" }.getOrElse { null }\n  a| }", "a")?.contains("String?") == true,
+            "getOrElse { null } should infer String?; detail=${detailOf("fun f() { val a = runCatching { \"\" }.getOrElse { null }\n  a| }", "a")}",
+        )
+        // A concrete lambda result still binds R directly (unchanged), and `let { null }` (no T : R bound) is
+        // NOT widened to the receiver — it stays the lambda result (here a member completes on String).
+        assertTrue("uppercase" in labels(srcDir, "Use.kt", "fun f() { runCatching { \"\" }.getOrElse { \"x\" }.upper| }"), "getOrElse { \"x\" } : String")
+    }
+
+    @Test
     fun functionTypeParametersRenderAsArrows() {
         // `map`'s `transform` parameter is a function type — its label renders `(…) -> …`, not Function1<…>.
         val map = runBlocking { analyzer.completeAtCaret(srcDir, "Use.kt", "fun f() { listOf(\"\").ma| }") }
@@ -280,6 +295,37 @@ class KotlinCompletionE2ETest {
         // expression-body function and a flat-out wrong primitive too.
         assertTrue(diagnostics("fun f(): Int = \"\"").any { it.code == "kt.typeMismatch" }, "fun f(): Int = \"\" should mismatch")
         assertTrue(diagnostics("val a: String = 5").any { it.code == "kt.typeMismatch" }, "val a: String = 5 should mismatch")
+    }
+
+    @Test
+    fun nullAssignedToNonNullableIsFlagged() {
+        // Kotlin's NULL_FOR_NONNULL_TYPE — `null` has no inferred type, so this is checked directly.
+        assertTrue("kt.typeMismatch" in codes("var street: String = null"), "var street: String = null")
+        assertTrue("kt.typeMismatch" in codes("val x: Int = null"), "val x: Int = null")
+        assertTrue("kt.typeMismatch" in codes("fun f(): String = null"), "expression body returning null")
+        assertTrue("kt.typeMismatch" in codes("fun f(): String { return null }"), "return null in a non-null fun")
+        // Assignment via a `with`/`apply` implicit receiver — the reported case (Mutable.label is `var String`).
+        assertTrue(
+            "kt.typeMismatch" in codes("package demo\nfun f() { with(Mutable()) { label = null } }"),
+            "label = null via a with receiver",
+        )
+        assertTrue("kt.typeMismatch" in codes("fun f() { var s = \"\"\n  s = null\n  println(s) }"), "s = null on a non-null local")
+    }
+
+    @Test
+    fun nullAssignedToNullableIsClean() {
+        for (ok in listOf(
+            "var s: String? = null",
+            "val x: Int? = null",
+            "fun f(): String? = null",
+            "fun f(): String? { return null }",
+            "fun f() { var s: String? = \"\"\n  s = null\n  println(s) }",
+            "class B { var street: String? = null }\nfun f() { with(B()) { street = null } }",
+        )) {
+            assertTrue("kt.typeMismatch" !in codes(ok), "nullable target accepts null: `$ok`; got ${diagnostics(ok)}")
+        }
+        // No declared type → `val x = null` infers Nothing?; not our error to raise here.
+        assertTrue("kt.typeMismatch" !in codes("fun f() { val x = null\n  println(x) }"), "inferred null is not flagged")
     }
 
     @Test
@@ -548,6 +594,8 @@ class KotlinCompletionE2ETest {
                 "Palette.kt" to "package demo\nclass Palette {\n  companion object {\n    val Red: Palette = Palette()\n    fun mix(): Palette = Palette()\n  }\n}",
                 // A source supertype with an overridable member (source `super.member` is fully enumerable).
                 "Bases.kt" to "package demo\nopen class Base {\n  open fun onCreate() {}\n  open val tag: String = \"\"\n}",
+                // A class with a non-null mutable property — for the null-for-non-null assignment-via-receiver check.
+                "Mutable.kt" to "package demo\nclass Mutable {\n  var label: String = \"\"\n  var count: Int = 0\n}",
             ),
         )
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.symbols
 
+import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.SymbolOrigin
 import dev.ide.lang.resolve.TypeRef
@@ -26,6 +27,11 @@ import java.util.zip.ZipFile
  *     given) persisted keyed by name+size+mtime, so an unchanged jar is read from disk once and reused
  *     across launches, never re-scanned.
  */
+/** A library callable user code can never reach: `private` (file-scoped to its library source) or `internal`
+ *  (a library is always a DIFFERENT module than the user's source). See [KotlinCallableIndex]'s twin. */
+private fun KotlinSymbol.inaccessibleFromAnotherModule(): Boolean =
+    Modifier.PRIVATE in modifiers || isInternal
+
 class ClasspathReader(
     private val containers: List<Path>,
     private val cacheDir: Path? = null,
@@ -159,8 +165,10 @@ class ClasspathReader(
             // The .class being scanned IS the JVM facade these top-level/extension functions compile into
             // (`kotlin/io/ConsoleKt` for println) — exactly what the interpreter reflects into.
             val facade = e.name.removeSuffix(".class").replace('/', '.')
-            decoded.extensions.forEach { s -> ext += RawCallableData.from(s, pkg, facade) }
-            decoded.topLevel.forEach { s -> top += RawCallableData.from(s, pkg, facade) }
+            // Skip library `private`/`internal` callables — never accessible from the user's (other) module, so
+            // they must not leak into completion/resolution (mirrors KotlinCallableIndex, the on-device path).
+            decoded.extensions.forEach { s -> if (!s.inaccessibleFromAnotherModule()) ext += RawCallableData.from(s, pkg, facade) }
+            decoded.topLevel.forEach { s -> if (!s.inaccessibleFromAnotherModule()) top += RawCallableData.from(s, pkg, facade) }
         }
         return if (ext.isEmpty() && top.isEmpty()) JarScanData.EMPTY else JarScanData(ext, top)
     }
@@ -200,6 +208,7 @@ class ClasspathReader(
         val packageName: String?,
         val receiverTypeParam: String?,
         val typeParameters: List<String>,
+        val typeParamBoundNames: List<String?>,
         val returnType: KotlinType?,
         val paramTypes: List<KotlinType?>,
         val receiverTypeArgs: List<KotlinType>,
@@ -220,6 +229,7 @@ class ClasspathReader(
             receiverTypeFqn = receiverFqn,
             signature = signature,
             typeParameters = typeParameters,
+            typeParamBoundNames = typeParamBoundNames,
             paramTypes = paramTypes.map { it?.withContext(ctx) },
             paramNames = paramNames,
             receiverTypeArgs = receiverTypeArgs.map { it.withContext(ctx) },
@@ -236,6 +246,7 @@ class ClasspathReader(
         companion object {
             fun from(s: KotlinSymbol, pkg: String?, facade: String?): RawCallableData = RawCallableData(
                 s.name, s.kind, s.receiverTypeFqn, s.signature, pkg, s.receiverTypeParam, s.typeParameters,
+                s.typeParamBoundNames,
                 s.type as? KotlinType,
                 s.paramTypes.map { it as? KotlinType },
                 s.receiverTypeArgs.mapNotNull { it as? KotlinType },
@@ -275,6 +286,7 @@ class ClasspathReader(
             out.writeUTF(r.packageName ?: "")
             out.writeUTF(r.receiverTypeParam ?: "")
             out.writeInt(r.typeParameters.size); r.typeParameters.forEach { out.writeUTF(it) }
+            out.writeInt(r.typeParamBoundNames.size); r.typeParamBoundNames.forEach { out.writeUTF(it ?: "") }
             writeType(out, r.returnType)
             out.writeInt(r.paramTypes.size); r.paramTypes.forEach { writeType(out, it) }
             out.writeInt(r.receiverTypeArgs.size); r.receiverTypeArgs.forEach { writeType(out, it) }
@@ -299,6 +311,7 @@ class ClasspathReader(
             val pkg = inp.readUTF().ifEmpty { null }
             val recvParam = inp.readUTF().ifEmpty { null }
             val tps = List(inp.readInt()) { inp.readUTF() }
+            val boundNames = List(inp.readInt()) { inp.readUTF().ifEmpty { null } }
             val ret = readType(inp)
             val params = List(inp.readInt()) { readType(inp) }
             val recvArgs = List(inp.readInt()) { readType(inp) }.filterNotNull()
@@ -309,7 +322,7 @@ class ClasspathReader(
             val isSuspend = inp.readBoolean()
             val varargIdx = inp.readInt()
             val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
-            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, isSuspend, varargIdx, paramHasDefault)
+            out += RawCallableData(name, kind, receiver, sig, pkg, recvParam, tps, boundNames, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, isSuspend, varargIdx, paramHasDefault)
         }
         return out
     }
@@ -341,7 +354,7 @@ class ClasspathReader(
     }
 
     private companion object {
-        const val FORMAT_VERSION = 11 // v11: + RawCallableData.paramHasDefault (missing-required-argument detection)
+        const val FORMAT_VERSION = 13 // v13: + RawCallableData.typeParamBoundNames (sibling `T : R` bounds)
         // Cap on simultaneously-open jar handles (file descriptors). Small: the hot working set during
         // completion is a handful of jars, and reopening an evicted one is cheap behind the decode caches.
         const val MAX_OPEN_ZIPS = 24

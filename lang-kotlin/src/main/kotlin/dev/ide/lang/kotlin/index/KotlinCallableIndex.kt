@@ -13,6 +13,7 @@ import dev.ide.lang.kotlin.symbols.KotlinMetadata
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.KotlinTypeContext
+import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.SymbolOrigin
 import dev.ide.lang.resolve.TypeRef
@@ -37,14 +38,27 @@ import java.io.DataOutput
  * on disk. Values are context-free ([CallableShape]); the consumer ([dev.ide.lang.kotlin.symbols.KotlinSymbolService])
  * rebinds the resolution context at query time, exactly as `kotlin.typeShape` does.
  */
+/**
+ * A library/SDK callable that user code can never reach: `private` (file-scoped to its own library source) or
+ * `internal` (the index only covers SDK/LIBRARY origins, always a DIFFERENT module than the user's source, so
+ * their `internal` is out of scope). Such callables — e.g. the stdlib's `private fun String.getRootLength()` —
+ * must not be indexed, or they leak into completion and resolve without the "cannot access, it is private"
+ * the compiler reports. Public API is unaffected.
+ */
+private fun KotlinSymbol.inaccessibleFromAnotherModule(): Boolean =
+    Modifier.PRIVATE in modifiers || isInternal
+
 object KotlinCallableIndex : IndexExtension<String, CallableShape> {
     override val id = IndexId("kotlin.callables")
-    override val version = 4 // v4: + CallableShape.isDeprecated (deprecation strikethrough highlighting)
+    override val version =
+        7 // v7: + CallableShape.isSuspend (an indexed suspend callable keeps its calling-convention flag)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = CallableShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried by prefix on a tagged key; no fuzzy
     override val inputFilter = InputFilter {
-        (it.origin == IndexOrigin.SDK || it.origin == IndexOrigin.LIBRARY) && it.unitName?.endsWith(".class") == true
+        (it.origin == IndexOrigin.SDK || it.origin == IndexOrigin.LIBRARY) && it.unitName?.endsWith(
+            ".class"
+        ) == true
     }
 
     const val TOP_PREFIX = "top:"
@@ -63,7 +77,8 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
         val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
         // Only a Kotlin @Metadata facade carries top-level/extension callables; plain Java/Android .class
         // (no metadata) yields nothing here (its member shape is the `kotlin.typeShape` index's job).
-        val decoded = runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull() ?: return emptyMap()
+        val decoded =
+            runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull() ?: return emptyMap()
         if (decoded.topLevel.isEmpty() && decoded.extensions.isEmpty()) return emptyMap()
         val unit = input.unitName?.removeSuffix(".class")
         val pkg = unit?.substringBeforeLast('/', "")?.replace('/', '.')?.ifEmpty { null }
@@ -72,11 +87,14 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
         val facade = unit?.replace('/', '.')
         val out = HashMap<String, MutableList<CallableShape>>()
         decoded.topLevel.forEach { s ->
+            if (s.inaccessibleFromAnotherModule()) return@forEach
             out.getOrPut(topKey(s.name)) { ArrayList() }.add(CallableShape.from(s, pkg, facade))
         }
         decoded.extensions.forEach { s ->
+            if (s.inaccessibleFromAnotherModule()) return@forEach
             val recv = s.receiverTypeFqn ?: return@forEach
-            out.getOrPut(extKey(recv, s.name)) { ArrayList() }.add(CallableShape.from(s, pkg, facade))
+            out.getOrPut(extKey(recv, s.name)) { ArrayList() }
+                .add(CallableShape.from(s, pkg, facade))
         }
         return out
     }
@@ -103,9 +121,12 @@ class CallableShape(
     val paramNames: List<String>,
     val isComposable: Boolean,
     val isInline: Boolean,
+    val isSuspend: Boolean,
     val varargParamIndex: Int = -1,
     val paramHasDefault: List<Boolean> = emptyList(),
     val isDeprecated: Boolean = false,
+    /** Sibling type-param upper bounds (`fun <R, T : R>` → `[null, "R"]`), for `T : R` constraint inference. */
+    val typeParamBoundNames: List<String?> = emptyList(),
 ) {
     fun toSymbol(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymbol(
         name = name,
@@ -115,6 +136,7 @@ class CallableShape(
         receiverTypeFqn = receiverFqn,
         signature = signature,
         typeParameters = typeParameters,
+        typeParamBoundNames = typeParamBoundNames,
         paramTypes = paramTypes.map { it?.withContext(ctx) },
         paramNames = paramNames,
         receiverTypeArgs = receiverTypeArgs.map { it.withContext(ctx) },
@@ -123,6 +145,7 @@ class CallableShape(
         declaringClassFqn = declaringClassFqn,
         isComposable = isComposable,
         isInline = isInline,
+        isSuspend = isSuspend,
         isDeprecated = isDeprecated,
         varargParamIndex = varargParamIndex,
         paramHasDefault = paramHasDefault,
@@ -132,7 +155,13 @@ class CallableShape(
         private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
         fun from(s: KotlinSymbol, pkg: String?, facade: String?): CallableShape = CallableShape(
-            s.name, s.kind, s.receiverTypeFqn, s.signature, pkg, s.receiverTypeParam, s.typeParameters,
+            s.name,
+            s.kind,
+            s.receiverTypeFqn,
+            s.signature,
+            pkg,
+            s.receiverTypeParam,
+            s.typeParameters,
             s.type as? KotlinType,
             s.paramTypes.map { it as? KotlinType },
             s.receiverTypeArgs.mapNotNull { it as? KotlinType },
@@ -141,9 +170,11 @@ class CallableShape(
             s.paramNames,
             s.isComposable,
             s.isInline,
+            s.isSuspend,
             s.varargParamIndex,
             s.paramHasDefault,
             s.isDeprecated,
+            s.typeParamBoundNames,
         )
     }
 }
@@ -160,14 +191,24 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         out.writeInt(value.typeParameters.size); value.typeParameters.forEach { out.writeUTF(it) }
         writeType(out, value.returnType)
         out.writeInt(value.paramTypes.size); value.paramTypes.forEach { writeType(out, it) }
-        out.writeInt(value.receiverTypeArgs.size); value.receiverTypeArgs.forEach { writeType(out, it) }
+        out.writeInt(value.receiverTypeArgs.size); value.receiverTypeArgs.forEach {
+            writeType(
+                out, it
+            )
+        }
         out.writeUTF(value.declaringClassFqn ?: "")
         out.writeInt(value.paramNames.size); value.paramNames.forEach { out.writeUTF(it) }
         out.writeBoolean(value.isComposable)
         out.writeBoolean(value.isInline)
+        out.writeBoolean(value.isSuspend)
         out.writeInt(value.varargParamIndex)
-        out.writeInt(value.paramHasDefault.size); value.paramHasDefault.forEach { out.writeBoolean(it) }
+        out.writeInt(value.paramHasDefault.size); value.paramHasDefault.forEach {
+            out.writeBoolean(
+                it
+            )
+        }
         out.writeBoolean(value.isDeprecated)
+        out.writeInt(value.typeParamBoundNames.size); value.typeParamBoundNames.forEach { out.writeUTF(it ?: "") }
     }
 
     override fun read(inp: DataInput): CallableShape {
@@ -185,10 +226,32 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         val paramNames = List(inp.readInt()) { inp.readUTF() }
         val isComposable = inp.readBoolean()
         val isInline = inp.readBoolean()
+        val isSuspend = inp.readBoolean()
         val varargIdx = inp.readInt()
         val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
         val isDeprecated = inp.readBoolean()
-        return CallableShape(name, kind, receiver, sig, pkg, recvParam, tps, ret, params, recvArgs, declaringFqn, paramNames, isComposable, isInline, varargIdx, paramHasDefault, isDeprecated)
+        val boundNames = List(inp.readInt()) { inp.readUTF().ifEmpty { null } }
+        return CallableShape(
+            name,
+            kind,
+            receiver,
+            sig,
+            pkg,
+            recvParam,
+            tps,
+            ret,
+            params,
+            recvArgs,
+            declaringFqn,
+            paramNames,
+            isComposable,
+            isInline,
+            isSuspend,
+            varargIdx,
+            paramHasDefault,
+            isDeprecated,
+            boundNames,
+        )
     }
 
     /** Recursive, context-free encoding of a [KotlinType] (fqn + flags + args). */
@@ -214,6 +277,14 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         val n = inp.readInt()
         val args = ArrayList<TypeRef>(n)
         repeat(n) { readType(inp)?.let { args.add(it) } }
-        return KotlinType(fqn, args, nullable, context = null, isTypeParameter = isTp, isExtensionFunctionType = isExtFn, isComposable = isComposable)
+        return KotlinType(
+            fqn,
+            args,
+            nullable,
+            context = null,
+            isTypeParameter = isTp,
+            isExtensionFunctionType = isExtFn,
+            isComposable = isComposable
+        )
     }
 }

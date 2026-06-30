@@ -30,7 +30,10 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
     // [bodyStmts] is present for a block-bodied function — it enables INTRA-function reuse (a keystroke in a
     // 150-line @Composable re-checks only the touched statement, not all ~50 calls). Null for other declarations.
     private class DeclDiags(val header: String, val fullText: String, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>? = null)
-    private class AnalyzeCache(val importsKey: String, val decls: List<DeclDiags>)
+    // [externalStamp] = the content versions of OTHER source files at cache time ([KotlinSymbolService.
+    // externalContentStamp]); when it changes, a cross-file dependency was edited, so this file's cached
+    // diagnostics may be stale (e.g. a class whose property type changed in another file) → full re-analyze.
+    private class AnalyzeCache(val importsKey: String, val externalStamp: Long, val decls: List<DeclDiags>)
     private val analyzeCache = ConcurrentHashMap<String, AnalyzeCache>()
 
     /**
@@ -68,20 +71,25 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
      * (signature change, added/removed/reordered declaration, multiple changes, an import edit) → full re-analyze.
      */
     fun diagnostics(parsed: KotlinParsedFile): List<Diagnostic> {
+        checks.resetPassCaches() // PSI-keyed per-pass caches must not survive the reparse
         val ktFile = parsed.ktFile
         val resolver = KotlinResolver(ktFile, parsed, service)
         val localAliases = typeAliasNamesIn(ktFile) // same-file typealiases (the disk model may lag the buffer)
 
-        val fileLevel = checks.fileLevelDiagnostics(ktFile)
+        val fileLevel = KotlinPerf.span("fileLevel") { checks.fileLevelDiagnostics(ktFile) }
 
         val topDecls = ktFile.declarations
         val importsKey = (ktFile.packageDirective?.text ?: "") + "\u0000" + (ktFile.importList?.text ?: "")
-        val prev = analyzeCache[parsed.file.path]
+        val externalStamp = service.externalContentStamp(parsed.file.path)
+        // A cross-file dependency changed (a class edited in ANOTHER file) → this file's cached diagnostics may
+        // be stale even though its own text is unchanged → re-analyze fully. (Self-edits are excluded from the
+        // stamp and handled by the per-declaration text diff in recomputeIndices.)
+        val prev = analyzeCache[parsed.file.path]?.takeIf { it.externalStamp == externalStamp }
         val recompute = KotlinPerf.span("scopeCheck") { recomputeIndices(prev, importsKey, topDecls) } // null → full
 
         val perDecl = ArrayList<List<Diagnostic>>(topDecls.size)
         val newEntries = ArrayList<DeclDiags>(topDecls.size)
-        for ((i, d) in topDecls.withIndex()) {
+        KotlinPerf.span("walk") { for ((i, d) in topDecls.withIndex()) {
             val base = d.textRange.startOffset
             if (recompute != null && i !in recompute) {
                 val cached = prev!!.decls[i] // text identical → reuse, re-anchored to the (possibly shifted) offset
@@ -105,8 +113,8 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
                     newEntries += DeclDiags(headerOf(d), d.text, diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
                 }
             }
-        }
-        analyzeCache[parsed.file.path] = AnalyzeCache(importsKey, newEntries)
+        } }
+        analyzeCache[parsed.file.path] = AnalyzeCache(importsKey, externalStamp, newEntries)
 
         val result = ArrayList<Diagnostic>(fileLevel)
         perDecl.forEach { result += it }
@@ -160,8 +168,8 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
         val out = ArrayList<Diagnostic>()
         // Frame: walk the function but stop at each top-level statement (handled per-statement below); skip the
         // cross-statement local checks (done next). This still runs the block-node checks (duplicate/unreachable).
-        checks.walkDecl(fn, resolver, localAliases, out, stopAt = statements.toHashSet(), skipLocalDeclChecks = true)
-        checks.localDeclarationChecks(fn, out)
+        KotlinPerf.span("frame") { checks.walkDecl(fn, resolver, localAliases, out, stopAt = statements.toHashSet(), skipLocalDeclChecks = true) }
+        KotlinPerf.span("localDecl") { checks.localDeclarationChecks(fn, out) }
 
         val prevStmts = prev?.bodyStmts
         // A structural change (statement added/removed/reordered) → no index alignment, recompute every statement.

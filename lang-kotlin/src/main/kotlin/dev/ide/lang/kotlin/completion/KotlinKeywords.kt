@@ -108,6 +108,8 @@ internal object KotlinKeywords {
                 kind = CompletionItemKind.SNIPPET,
                 detail = t.preview,
                 documentation = t.description,
+                // Sign convention (see ItemTierWeigher): positive keeps a not-yet-typed template below real
+                // symbols; a fully-typed key (-30) opts into the symbol tier and tops.
                 sortPriority = if (t.key == prefix) -30 else 70,
                 caret = CaretAction.ExpandSnippet(t.expansion),
             )
@@ -119,7 +121,8 @@ internal object KotlinKeywords {
         label = text,
         insertText = if (trailingSpace) "$text " else text,
         kind = CompletionItemKind.KEYWORD,
-        // Below real symbols by default; an exact whole-word match still floats up via the editor's match tier.
+        // Positive → the engine's tier weigher keeps keywords below real symbols; an exact whole-word match
+        // still floats up via the editor's match tier.
         sortPriority = 50,
     )
 

@@ -100,6 +100,20 @@ class KotlinExpressionDiagnosticsTest {
         )
     }
 
+    @Test
+    fun chainedStringExtensionAfterMostSpecificOverloadIsNotFlagged() {
+        // `String.removePrefix(CharSequence): String` and `CharSequence.removePrefix(CharSequence): CharSequence`
+        // both fit a String receiver + String arg; only the String overload's return type lets the trailing
+        // `String`-only extension `uppercase()` (absent on CharSequence) resolve. The most-specific-receiver
+        // tiebreak must pick the String overload deterministically (not by HashSet candidate order).
+        val code = "package demo\nfun main() { val s = \"\"\n  s.removePrefix(\"\").uppercase() }"
+        val diags = diagnose("Chain.kt", code)
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" && "uppercase" in it.message },
+            "`s.removePrefix(\"\").uppercase()` must resolve via the String overload, not be flagged unresolved; got $diags",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

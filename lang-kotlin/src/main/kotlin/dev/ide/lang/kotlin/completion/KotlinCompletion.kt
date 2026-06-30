@@ -97,6 +97,14 @@ class KotlinCompletion(
         val spliced = original.substring(0, offset) + MARKER + original.substring(offset)
         val kt = KotlinPerf.span("parse") { KotlinParserHost.parse(document.file.name, spliced) }
         val parsed = KotlinParsedFile(kt, document.file, document.version)
+        // Same-file freshness: a class/member declared in THIS buffer (`with(LocalClass()) { … }`) resolves from
+        // the live PSI. Keyed by the marker-free text hash so it shares the focal entry analyze/highlight set
+        // (a no-op when already synced); the marker sits at the caret, leaving referenced declarations intact.
+        runCatching {
+            service.syncFocal(document.file.path, original.hashCode()) {
+                dev.ide.lang.kotlin.symbols.SourceIndexBuilder.extractFrom(kt, parsed, document.file.path)
+            }
+        }
         val resolver = KotlinResolver(kt, parsed, service)
 
         val markerLeaf = kt.findElementAt(offset)

@@ -71,6 +71,16 @@ class KotlinSymbolService(
 
     @Volatile private var overlay: Map<String, String> = emptyMap()
     @Volatile private var cachedModel: ModuleSourceModel? = null
+    // The file currently being edited, as an already-parsed [SourceFile] (built from the live PSI, no re-parse),
+    // OVERRIDING disk/overlay for its path in the model — so a class declared in the buffer being edited resolves
+    // its members immediately (same-file freshness), before the file is saved and reindexed. Keyed path+textHash.
+    @Volatile private var focalSource: SourceFile? = null
+    @Volatile private var focalKey: Pair<String, Int>? = null
+    // A monotonic content version per source file, bumped whenever its effective (overlay/focal) text changes.
+    // Lets a file's analyze cache detect that a DIFFERENT file it depends on changed — cross-file invalidation
+    // (editing a class in one file must refresh a dependent file's diagnostics). Only edited files are tracked.
+    private val fileVersions = HashMap<String, Long>()
+    private var versionClock = 0L
     // Path -> VirtualFile for every source `.kt` walked into the model, so a cross-file consumer (the Compose
     // preview's reachable-declaration lowering) can re-open the file declaring a reached type/function. Rebuilt
     // alongside the model, so it tracks files added/removed since the last build.
@@ -82,6 +92,15 @@ class KotlinSymbolService(
     // value is the content hash it was parsed from + the resulting SourceFile (null = parse failed/unreadable).
     private class CachedFile(val hash: Int, val file: SourceFile?)
     private val fileCache = ConcurrentHashMap<String, CachedFile>()
+
+    // Inferred return type of an expression-body declaration with no explicit type (`fun f() = expr`,
+    // `val p = expr`) whose initializer the cheap text heuristic [inferInitializerType] couldn't type —
+    // computed lazily by resolving the body with a real [KotlinResolver]. Memoized by declaration identity and
+    // cleared on a source-model rebuild ([buildModel]); a changed file produces fresh RawCallables, so a stale
+    // entry can't survive an edit. [inferringBody] (per-thread) breaks the recursion when a body's type depends
+    // (transitively) on its own — self/mutual recursion — which Kotlin itself rejects, so null is safe there.
+    private val inferredBodyTypeMemo = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<RawCallable, Holder<KotlinType>>())
+    private val inferringBody = ThreadLocal.withInitial { java.util.Collections.newSetFromMap(java.util.IdentityHashMap<RawCallable, Boolean>()) }
 
     // Per-receiver-FQN memo of the (recursively-walked) Kotlin supertype chain — the expensive part of
     // `extensionsFor`/`supertypesOf`, recomputed on every member-access keystroke otherwise. Split by origin:
@@ -153,10 +172,37 @@ class KotlinSymbolService(
             for (p in old.keys) if (p !in map) changed += p
             overlay = map
             if (changed.isEmpty()) return
-            changed.forEach { fileCache.remove(it) }
+            changed.forEach { fileCache.remove(it); fileVersions[it] = ++versionClock }
             cachedModel = null
             sourceSupertypeMemo = ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
         }
+    }
+
+    /**
+     * Register the file currently being analyzed as the model's FOCAL source — built from its live PSI (via
+     * [build], called only when the path+hash key changed, so it reuses the parse the editor already has). It
+     * OVERRIDES the disk/overlay version of its path in the model, so a class/member declared in the buffer
+     * being edited resolves immediately (same-file freshness), even before the file is saved/indexed. Keyed by
+     * (path, textHash): a repeated query on unchanged text is a no-op.
+     */
+    fun syncFocal(path: String, textHash: Int, build: () -> SourceFile?) {
+        synchronized(this) {
+            if (focalKey == path to textHash) return
+            focalSource = runCatching { build() }.getOrNull()
+            focalKey = path to textHash
+            fileVersions[path] = ++versionClock // the focal file's content changed (matters to files depending on it)
+            cachedModel = null
+            sourceSupertypeMemo = ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+        }
+    }
+
+    /** A stamp over the content versions of every edited source file EXCEPT [exceptPath] — so a file's analyze
+     *  cache can tell that a DIFFERENT file (a cross-file dependency) changed and invalidate itself, while its
+     *  OWN edits (excluded here, handled by the per-declaration text diff) don't force a full re-analyze. */
+    fun externalContentStamp(exceptPath: String): Long = synchronized(this) {
+        var h = 0L
+        for ((p, v) in fileVersions) if (p != exceptPath) h = h * 1_000_003L + (p.hashCode().toLong() * 31L + v)
+        h
     }
 
     private fun model(): ModuleSourceModel =
@@ -167,16 +213,23 @@ class KotlinSymbolService(
     /** Aggregate the per-file [SourceFile]s into the module model, reusing unchanged files' cached parses and
      *  reparsing only those whose effective (overlay-or-disk) text changed since the last build. */
     private fun buildModel(): ModuleSourceModel {
+        inferredBodyTypeMemo.clear() // a rebuilt model may carry edited bodies; re-infer on demand
         val ov = overlay
+        val focal = focalSource
+        val focalPath = focalKey?.first
         val files = ArrayList<SourceFile>()
         val vfByPath = HashMap<String, VirtualFile>()
         val seen = HashSet<String>()
+        // The focal file's LIVE version is appended below — skip its disk/overlay copy so it isn't read twice
+        // (and so a not-yet-saved focal file, absent from disk, still contributes its declarations).
+        if (focal != null && focalPath != null) seen.add(focalPath)
         for (root in sourceRoots) walkKt(root) { vf ->
             if (seen.add(vf.path)) {
                 vfByPath[vf.path] = vf
                 sourceFileFor(vf, ov)?.let(files::add)
             }
         }
+        if (focal != null) files.add(focal)
         sourceVfByPath = vfByPath
         return ModuleSourceModel(files)
     }
@@ -564,7 +617,14 @@ class KotlinSymbolService(
         if (!visited.add(fqn)) return emptyList()
         syntheticMembers(fqn)?.let { return it }
         model().classByFqn[fqn]?.let { rc ->
-            val own = rc.members.map { toSymbol(it, fqn) } // source generics deferred (no <T> parse yet)
+            // Bind the source class's type parameters from the receiver's type arguments (`Box<String>` →
+            // `value: T` becomes `value: String`). toSymbol marks the class's `T` as a type parameter, then
+            // substituteSymbol replaces it. No type arguments (a raw use) → members keep their `T` (unbound).
+            val classBindings = rc.typeParameterNames.zip(typeArgs).toMap()
+            val own = rc.members.map {
+                val sym = toSymbol(it, fqn, rc.typeParameterNames)
+                if (classBindings.isEmpty()) sym else substituteSymbol(sym, classBindings)
+            }
             // An enum's `values()`/`valueOf()`/`entries` are compiler-synthesized (not written in source), so
             // the source model would otherwise miss them and `Color.values()` would flag unresolved.
             val synthetic = if (rc.isEnum) enumSyntheticMembers(fqn) else emptyList()
@@ -573,11 +633,15 @@ class KotlinSymbolService(
             return own + synthetic + inherited
         }
         // Kotlin built-ins (List/Int/String/…): the real members, preferred over the java.* approximation.
-        builtinShape(fqn)?.let { return membersFromShape(it, typeArgs, visited) }
+        // These ARE Kotlin types (even though their bytecode is java.lang.String etc.), so NO synthetic Java
+        // bean properties — `"".bytes` is not a Kotlin property of String.
+        builtinShape(fqn)?.let { return membersFromShape(it, typeArgs, visited, synthesizeBeanProps = false) }
         // Classpath BINARY (@Metadata Kotlin or plain Java/Android): the type's shape comes from the
         // persistent `kotlin.typeShape` index when built, else a live decode/bytecode read (graceful degrade
-        // while indexing). Either way the generic shape is enumerated + bound the same way.
-        typeShape(fqn)?.let { return membersFromShape(it, typeArgs, visited) }
+        // while indexing). Either way the generic shape is enumerated + bound the same way. Synthesize Java bean
+        // properties (getX/isX/setX → x) ONLY for a genuine Java type — not a Kotlin `@Metadata` binary
+        // (`shape.isKotlin`) and not a mapped type (its `fqn` was rewritten to `kotlin.*` above).
+        typeShape(fqn)?.let { return membersFromShape(it, typeArgs, visited, synthesizeBeanProps = !it.isKotlin && !fqn.startsWith("kotlin.")) }
         // Cross-language: a same-project Java SOURCE class (no .class, no metadata) — its members come from
         // the `java.membersByOwner` index (public, keyed by owner FQN).
         index?.exact<MemberValue>(MEMBERS_BY_OWNER, fqn)?.map { memberFromIndex(it) }?.toList()
@@ -784,19 +848,77 @@ class KotlinSymbolService(
         return signature.substring(0, open + 1) + rebuilt + signature.substring(close)
     }
 
-    private fun membersFromShape(shape: TypeShape, typeArgs: List<TypeRef>, visited: MutableSet<String>): List<KotlinSymbol> {
+    private fun membersFromShape(shape: TypeShape, typeArgs: List<TypeRef>, visited: MutableSet<String>, synthesizeBeanProps: Boolean): List<KotlinSymbol> {
         val bindings = classBindings(shape, typeArgs)
         // A member that re-declares a class type-parameter name (a static `<E> of(E)` on `List<E>`) shadows it,
         // so its own parameters are excluded from the class binding (bound later from the call site).
         val own = shape.members.map { m ->
             enrich(substituteSymbol(m, if (m.typeParameters.isEmpty()) bindings else bindings - m.typeParameters.toSet()))
         }
+        // Kotlin exposes a Java class's bean accessors (`getText`/`isVisible`/`setText`) as synthetic properties
+        // (`view.text`). The accessor methods stay too (both forms work; [KotlinSemanticChecks.usePropertyAccess]
+        // nudges call sites toward the property). Gated by the caller to a GENUINE Java type — never a Kotlin
+        // built-in or mapped type (else `"".bytes` etc. would appear, and every builtin enumeration would pay it).
+        val synthetic = if (synthesizeBeanProps) syntheticAccessorProperties(own) else emptyList()
         val inherited = shape.supertypes.flatMap { st ->
             val sub = substitute(st, bindings) as? KotlinType ?: return@flatMap emptyList()
             ownAndInherited(sub.qualifiedName, sub.typeArguments, visited)
         }
-        return own + inherited
+        return own + synthetic + inherited
     }
+
+    /**
+     * The synthetic Kotlin properties a Java type exposes from its bean accessors (Kotlin's
+     * `SyntheticJavaPropertyDescriptor`): a `getX()`/`isX()` getter (no parameters) becomes a readable property,
+     * a `setX(v)` setter (one parameter) a writable one. The property name follows Kotlin's rule — `getText` →
+     * `text`, `isVisible` → `isVisible` (the `is` is kept), `getURL` → `URL` (no decap when the 2nd char is
+     * upper). A getter defines the type (the read side); a lone setter (no matching getter) defines a
+     * write-only property. Skips names that already exist as a real field and static accessors.
+     */
+    private fun syntheticAccessorProperties(methods: List<KotlinSymbol>): List<KotlinSymbol> {
+        val existingFields = methods.filterTo(HashSet()) { it.kind == SymbolKind.FIELD }.mapTo(HashSet()) { it.name }
+        val getters = LinkedHashMap<String, KotlinSymbol>() // propName -> the getter method
+        val setterNames = HashSet<String>()                  // candidate property names from setX (decap form)
+        for (m in methods) {
+            if (m.kind != SymbolKind.METHOD || Modifier.STATIC in m.modifiers) continue
+            val n = m.name
+            when {
+                n.length > 3 && n.startsWith("get") && n[3].isUpperCase() && m.paramTypes.isEmpty() &&
+                    (m.type as? KotlinType)?.qualifiedName != "kotlin.Unit" ->
+                    getters.putIfAbsent(decapitalizeAccessor(n.substring(3)), m)
+                n.length > 2 && n.startsWith("is") && n[2].isUpperCase() && m.paramTypes.isEmpty() &&
+                    (m.type as? KotlinType)?.qualifiedName == "kotlin.Boolean" ->
+                    getters.putIfAbsent(n, m) // isVisible -> property `isVisible`
+                n.length > 3 && n.startsWith("set") && n[3].isUpperCase() && m.paramTypes.size == 1 ->
+                    setterNames += decapitalizeAccessor(n.substring(3))
+            }
+        }
+        val out = ArrayList<KotlinSymbol>()
+        for ((prop, getter) in getters) {
+            if (prop in existingFields) continue
+            out += KotlinSymbol(prop, SymbolKind.FIELD, type = getter.type, origin = BINARY,
+                signature = (getter.type as? KotlinType)?.let { ": ${it.qualifiedName.substringAfterLast('.')}" },
+                declaringClassFqn = getter.declaringClassFqn)
+        }
+        // A write-only property (a `setX` with no `getX`/`isX` getter) — typed from the setter parameter.
+        for (m in methods) {
+            if (m.kind != SymbolKind.METHOD || Modifier.STATIC in m.modifiers) continue
+            if (!(m.name.length > 3 && m.name.startsWith("set") && m.name[3].isUpperCase() && m.paramTypes.size == 1)) continue
+            val prop = decapitalizeAccessor(m.name.substring(3))
+            // Skip if a getter already produced it (decap form OR the `is<Suffix>` form), or a real field exists.
+            if (prop in getters || ("is" + m.name.substring(3)) in getters || prop in existingFields) continue
+            out += KotlinSymbol(prop, SymbolKind.FIELD, type = m.paramTypes.firstOrNull(), origin = BINARY,
+                signature = (m.paramTypes.firstOrNull() as? KotlinType)?.let { ": ${it.qualifiedName.substringAfterLast('.')}" },
+                declaringClassFqn = m.declaringClassFqn)
+        }
+        return out
+    }
+
+    /** Kotlin's accessor-name decapitalization: drop the `get`/`set` prefix already removed, then lowercase the
+     *  first char UNLESS the second is also uppercase (`URL` stays `URL`, `Text` → `text`). */
+    private fun decapitalizeAccessor(suffix: String): String =
+        if (suffix.length > 1 && suffix[1].isUpperCase()) suffix
+        else suffix.replaceFirstChar { it.lowercaseChar() }
 
     /** Bind a type's parameters from the receiver's [typeArgs]; a parameter the receiver doesn't supply (a raw
      *  use) falls back to its erased bound when known (Java bytecode), so a member's generic return type still
@@ -840,7 +962,17 @@ class KotlinSymbolService(
             val k = ra as? KotlinType ?: return@forEachIndexed
             if (k.isTypeParameter && i < receiverArgs.size) bindings[k.qualifiedName] = receiverArgs[i]
         }
-        return if (bindings.isEmpty()) ext else substituteSymbol(ext, bindings)
+        if (bindings.isEmpty()) return ext
+        // `T : R` propagation: a receiver-bound param `T` whose declared upper bound is a sibling param `R`
+        // makes R a lower bound = T's binding (`Result<String>.getOrElse`, T : R, T = String ⇒ R ≥ String). The
+        // call site (typeOfCall) widens R with the lambda result, so `getOrElse { null }` resolves to String?.
+        val lowerBounds = HashMap<String, TypeRef>()
+        for ((p, bound) in bindings) {
+            val sibling = ext.typeParameters.indexOf(p).takeIf { it >= 0 }?.let { ext.typeParamBoundNames.getOrNull(it) }
+            if (sibling != null) lowerBounds[sibling] = bound
+        }
+        val sub = substituteSymbol(ext, bindings)
+        return if (lowerBounds.isEmpty()) sub else sub.withTypeParamLowerBounds(lowerBounds)
     }
 
     /** Apply type-parameter [bindings] to a symbol's return/param/receiver-arg types. */
@@ -851,6 +983,8 @@ class KotlinSymbolService(
             owner = s.owner, modifiers = s.modifiers, origin = s.origin,
             receiverTypeFqn = s.receiverTypeFqn, signature = s.signature, typeParameters = s.typeParameters,
             typeParameterBounds = s.typeParameterBounds,
+            typeParamBoundNames = s.typeParamBoundNames,
+            typeParamLowerBounds = s.typeParamLowerBounds.mapValues { substitute(it.value, bindings) },
             paramTypes = s.paramTypes.map { it?.let { p -> substitute(p, bindings) } },
             paramNames = s.paramNames,
             receiverTypeArgs = s.receiverTypeArgs.map { substitute(it, bindings) },
@@ -1052,6 +1186,39 @@ class KotlinSymbolService(
     fun constructorsOf(fqn: String): List<KotlinSymbol> =
         typeShape(fqn)?.members?.filter { it.kind == SymbolKind.CONSTRUCTOR } ?: emptyList()
 
+    /** A class's own type-parameter names (`Box<T>` → `["T"]`), from the project source model or a classpath
+     *  binary's shape. Empty for a non-generic or unknown type. Drives constructor type-argument inference. */
+    fun classTypeParameters(fqn: String): List<String> {
+        model().classByFqn[fqn]?.let { return it.typeParameterNames }
+        return typeShape(fqn)?.typeParameters ?: emptyList()
+    }
+
+    /**
+     * The parameter types of the constructor of [fqn] whose arity accepts [argCount] (the unique one when a
+     * source class has several), with the CLASS's type parameters marked so a call site can bind them from the
+     * argument types (`Box(value: T)` → its `T` is bindable). Null when [fqn] has no such constructor or its
+     * shape is unknown. Source classes come from the primary/secondary constructors in the model; binary
+     * classes from the type-shape index (whose constructor param types already carry the marked parameters).
+     */
+    fun constructorParamTypes(fqn: String, argCount: Int): List<TypeRef?>? {
+        model().classByFqn[fqn]?.let { rc ->
+            if (rc.typeParameterNames.isEmpty()) return null // non-generic: nothing to infer
+            val tps = rc.typeParameterNames.toHashSet()
+            // Prefer the constructor whose required..max arity accepts the call (defaults make the upper end), then
+            // an exact match, then the first — positional unification only reads the supplied arguments anyway.
+            fun accepts(c: RawCallable) = argCount in c.paramTexts.indices.count { c.paramHasDefault.getOrElse(it) { false } }
+                .let { defaults -> (c.paramTexts.size - defaults)..c.paramTexts.size }
+            val ctor = rc.constructors.firstOrNull(::accepts)
+                ?: rc.constructors.firstOrNull { it.paramTexts.size == argCount }
+                ?: rc.constructors.firstOrNull()
+                ?: return if (argCount == 0) emptyList() else null
+            return ctor.paramTexts.map { (_, t) -> markTypeParameters(typeFromText(t, ctor.ctx), tps) }
+        }
+        val ctors = constructorsOf(fqn)
+        val ctor = ctors.firstOrNull { it.paramTypes.size == argCount } ?: ctors.firstOrNull() ?: return null
+        return ctor.paramTypes
+    }
+
     /** The enum constants of [fqn] — source `enum class` entries and binary enums (`@Metadata` Kotlin enums
      *  surface entries as ENUM_CONSTANT members; Java enums as static fields typed to the enum). Empty when
      *  [fqn] is not an enum. Powers expected-type completion offering `Enum.CONSTANT`. */
@@ -1077,6 +1244,15 @@ class KotlinSymbolService(
 
     fun isSourceClass(fqn: String): Boolean = fqn in model().classByFqn
     fun sourceClass(fqn: String): RawClass? = model().classByFqn[fqn]
+
+    /** Whether [fqn] is a plain JAVA type (classpath binary, not a Kotlin `@Metadata` class, not a project
+     *  Kotlin source class, not a mapped built-in). Java types expose synthetic bean properties + drive the
+     *  use-property-access inspection; a Kotlin `fun getX()` is a real function, so its type is excluded. */
+    fun isJavaType(fqn: String): Boolean {
+        if (fqn.startsWith("kotlin.") || Builtins.kotlinTypeFor(fqn) != null) return false
+        if (isSourceClass(fqn) || hasKotlinMetadata(fqn)) return false
+        return isKnownType(fqn)
+    }
 
     /** Whether [fqn] names a real class/object (source, a default stdlib type, or on the classpath). Used to
      *  tell a TYPE receiver (`String.`, `Locale.`) from a value receiver (`listOf("").`). */
@@ -1107,9 +1283,17 @@ class KotlinSymbolService(
 
     // --- raw -> neutral symbol ---
 
-    private fun toSymbol(rc: RawCallable, ownerFqn: String?): KotlinSymbol {
-        val tps = rc.typeParameterNames.toHashSet()
-        val type = markTypeParameters(typeFromText(rc.returnText, rc.ctx) ?: inferInitializerType(rc.initializerText, rc.ctx), tps)
+    private fun toSymbol(rc: RawCallable, ownerFqn: String?, ownerTypeParams: List<String> = emptyList()): KotlinSymbol {
+        // Mark BOTH the callable's own type parameters AND the enclosing class's (`class Box<T> { val value: T }`):
+        // a member type that references the class's `T` must be a type parameter so a `Box<String>` receiver can
+        // bind it (see [ownAndInherited]'s source-class substitution). The callable's own params win on a clash.
+        val tps = (rc.typeParameterNames + ownerTypeParams).toHashSet()
+        val type = markTypeParameters(
+            typeFromText(rc.returnText, rc.ctx)
+                ?: inferInitializerType(rc.initializerText, rc.ctx)
+                ?: inferReturnFromBody(rc),
+            tps,
+        )
         val receiverFqn = rc.receiverText?.let { resolveTypeName(it, rc.ctx) }
         val sig = if (rc.isFunction) {
             "(" + rc.paramTexts.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" +
@@ -1146,13 +1330,55 @@ class KotlinSymbolService(
         )
     }
 
-    /** Approximate typing of an initializer (constructor call / literal), for inferred member types. */
+    /**
+     * The return type of an expression-body declaration with no explicit type (`fun String.trimmed() =
+     * this.trim().toString()`, `val x = something()`) that [inferInitializerType]'s text heuristic couldn't
+     * type — resolved by running the real [KotlinResolver] over the body PSI. This is what lets a chain off
+     * such a function (`s.trimmed().uppercase()`) resolve and the function show a return type in the editor,
+     * instead of degrading to no-type. Only EXPRESSION bodies are inferred (a block body's return type needs
+     * return-statement analysis Kotlin requires to be declared anyway); non-source nodes are skipped. The
+     * result is memoized; a re-entrant request (a body whose own type is needed to type it — self/mutual
+     * recursion, which Kotlin rejects) returns null to break the cycle without caching a misleading value.
+     */
+    private fun inferReturnFromBody(rc: RawCallable): KotlinType? {
+        val dom = rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode ?: return null
+        val body: org.jetbrains.kotlin.psi.KtExpression = when (val psi = dom.psi) {
+            is org.jetbrains.kotlin.psi.KtNamedFunction -> if (psi.hasBlockBody()) return null else psi.bodyExpression ?: return null
+            is org.jetbrains.kotlin.psi.KtProperty -> psi.initializer ?: return null
+            else -> return null
+        }
+        inferredBodyTypeMemo[rc]?.let { return it.value }
+        val guard = inferringBody.get()
+        if (!guard.add(rc)) return null // re-entrant (self/mutual recursion) → break the cycle, don't cache
+        val result = try {
+            dev.ide.lang.kotlin.resolve.KotlinResolver(dom.owner.ktFile, dom.owner, this).inferType(body)
+        } catch (t: Throwable) {
+            null
+        } finally {
+            guard.remove(rc)
+        }
+        inferredBodyTypeMemo[rc] = Holder(result)
+        return result
+    }
+
+    /**
+     * Cheap, SOUND typing of an initializer — the fast path before the resolver-based [inferReturnFromBody].
+     * Only returns a type it is confident about: a constructor call `Foo(...)` whose name is a KNOWN type, or a
+     * pure literal that IS the whole initializer. Anything else (`this.trim()`, `make()`, `"x".length`, `a.b()`)
+     * returns null so real resolution runs — earlier this branch returned a bogus type for any `name(...)` text
+     * (e.g. `this.trim` parsed as a type), which masked the real return type.
+     */
     private fun inferInitializerType(text: String?, ctx: FileContext?): KotlinType? {
         val e = text?.trim() ?: return null
         return when {
-            e.endsWith(")") && e.substringBefore('(').isNotEmpty() && e.first().isLetter() ->
-                typeFromText(e.substringBefore('('), ctx)
-            e.startsWith("\"") -> typeByFqn("kotlin.String")
+            // `Foo(...)` / `pkg.Foo(...)`: only when the callee before `(` resolves to a real type — not a plain
+            // function call (`make()`) or a member call on a value (`this.trim()`), which aren't constructors.
+            e.endsWith(")") && e.first().isLetter() ->
+                e.substringBefore('(').takeIf { it.isNotEmpty() }
+                    ?.let { typeFromText(it, ctx) }?.takeIf { isKnownType(it.qualifiedName) }
+            // A pure string literal/template that is the ENTIRE initializer (`= "x"`, `= "v=$v"`) — not `"x".y`
+            // (doesn't end in `"`) nor `"a" + "b"` (an inner quote), which would mistype as String.
+            e.startsWith("\"") && e.indexOf('"', 1) == e.length - 1 -> typeByFqn("kotlin.String")
             e.toIntOrNull() != null -> typeByFqn("kotlin.Int")
             e.toLongOrNull() != null -> typeByFqn("kotlin.Long")
             e.toDoubleOrNull() != null -> typeByFqn("kotlin.Double")
