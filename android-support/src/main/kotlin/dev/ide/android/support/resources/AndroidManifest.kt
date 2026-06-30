@@ -13,6 +13,10 @@ data class AndroidManifestInfo(
     val targetSdk: Int?,
     val permissions: List<String>,
     val components: List<ManifestComponent>,
+    /** `<application android:icon>` resource reference (e.g. `@mipmap/ic_launcher`), or null. */
+    val appIcon: String? = null,
+    /** `<application android:roundIcon>` resource reference, or null (a fallback when [appIcon] won't resolve). */
+    val appRoundIcon: String? = null,
 )
 
 /** A declared component — its [kind] (`activity`/`service`/`receiver`/`provider`) and fully-qualified [name]. */
@@ -31,6 +35,8 @@ object AndroidManifestParser {
 
         var minSdk: Int? = null
         var targetSdk: Int? = null
+        var appIcon: String? = null
+        var appRoundIcon: String? = null
         val permissions = ArrayList<String>()
         val components = ArrayList<ManifestComponent>()
 
@@ -40,11 +46,15 @@ object AndroidManifestParser {
                     minSdk = el.androidAttr("minSdkVersion")?.toIntOrNull() ?: minSdk
                     targetSdk = el.androidAttr("targetSdkVersion")?.toIntOrNull() ?: targetSdk
                 }
+                "application" -> {
+                    appIcon = el.androidAttr("icon") ?: appIcon
+                    appRoundIcon = el.androidAttr("roundIcon") ?: appRoundIcon
+                }
                 "uses-permission" -> el.androidAttr("name")?.let { permissions += it }
                 in COMPONENT_TAGS -> el.androidAttr("name")?.let { components += ManifestComponent(el.tagName, resolveName(it, pkg)) }
             }
         }
-        return AndroidManifestInfo(pkg, minSdk, targetSdk, permissions.distinct(), components)
+        return AndroidManifestInfo(pkg, minSdk, targetSdk, permissions.distinct(), components, appIcon, appRoundIcon)
     }
 
     /** A component `android:name` may be relative (`.MainActivity`) or bare — resolve it against [pkg]. */

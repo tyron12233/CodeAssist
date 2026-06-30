@@ -35,6 +35,38 @@ class AndroidManifestTest {
     }
 
     @Test
+    fun parsesApplicationIconReferences() {
+        val dir = createTempDirectory("manifest")
+        val file = dir.resolve("AndroidManifest.xml")
+        Files.writeString(file, """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+              <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
+                <activity android:name=".MainActivity"/>
+              </application>
+            </manifest>
+        """.trimIndent())
+
+        val info = AndroidManifestParser.parse(file)!!
+        assertEquals("@mipmap/ic_launcher", info.appIcon)
+        assertEquals("@mipmap/ic_launcher_round", info.appRoundIcon)
+    }
+
+    @Test
+    fun absentIconReferencesAreNull() {
+        val dir = createTempDirectory("manifest")
+        val file = dir.resolve("AndroidManifest.xml")
+        Files.writeString(file, """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+              <application/>
+            </manifest>
+        """.trimIndent())
+
+        val info = AndroidManifestParser.parse(file)!!
+        assertNull(info.appIcon)
+        assertNull(info.appRoundIcon)
+    }
+
+    @Test
     fun returnsNullForMissingFile() {
         assertNull(AndroidManifestParser.parse(createTempDirectory("m").resolve("nope.xml")))
     }

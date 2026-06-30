@@ -34,6 +34,7 @@ object DrawablePreviewParser {
             "vector" -> parseVector(el, r)
             "selector" -> parseSelector(el, r, depth)
             "layer-list" -> DrawablePreview.Layers(parseLayers(el, r, depth))
+            "adaptive-icon" -> parseAdaptiveIcon(el, r, depth)
             "color" -> (colorToken(androidAttr(el, "color"), r))?.let { DrawablePreview.SolidColor(it) }
                 ?: DrawablePreview.Unsupported("color", "Unresolved color")
             "ripple" -> parseRipple(el, r, depth)
@@ -200,6 +201,22 @@ object DrawablePreviewParser {
             )
         }
         return out
+    }
+
+    /**
+     * An `<adaptive-icon>` (API 26+ launcher icon): its `<background>` + `<foreground>` painted back-to-front,
+     * like a two-layer [DrawablePreview.Layers] (the `<monochrome>` layer is themed-icon only, so ignored).
+     * Each layer is an inline child or an `android:drawable` ref.
+     */
+    private fun parseAdaptiveIcon(el: Element, r: DrawableResolver, depth: Int): DrawablePreview {
+        val layers = ArrayList<Layer>()
+        for (child in elements(el)) {
+            when (child.tagName.substringAfterLast(':')) {
+                "background", "foreground" -> itemDrawable(child, r, depth)?.let { layers += Layer(it) }
+            }
+        }
+        return if (layers.isEmpty()) DrawablePreview.Unsupported("adaptive-icon", "Empty adaptive icon")
+        else DrawablePreview.Layers(layers)
     }
 
     private fun parseRipple(el: Element, r: DrawableResolver, depth: Int): DrawablePreview {

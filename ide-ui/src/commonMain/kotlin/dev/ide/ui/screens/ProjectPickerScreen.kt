@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,21 +25,32 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.ProjectInfo
+import dev.ide.ui.backend.UiDrawable
+import dev.ide.ui.backend.UiProjectIcon
+import dev.ide.ui.editor.preview.decodeImageBytes
+import dev.ide.ui.editor.preview.drawUiDrawable
 import dev.ide.ui.components.BetaBadge
 import dev.ide.ui.components.BetaBanner
 import dev.ide.ui.components.CenteredDialog
+import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.StorageAccessCard
 import dev.ide.ui.components.entranceSlideUp
@@ -70,6 +83,8 @@ import dev.ide.ui.generated.resources.your_files
 import dev.ide.ui.generated.resources.your_projects
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -81,6 +96,9 @@ fun ProjectPickerScreen(
     onNewProject: () -> Unit,
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
+    /** Open the global Settings & Tools hub (settings · code style · SDK & keystore managers) — reachable
+     *  here without an open project. Null hides the entry point. */
+    onOpenHub: (() -> Unit)? = null,
     onSubmitSuggestions: (() -> Unit)? = null,
     onJoinDiscord: (() -> Unit)? = null,
     onSponsor: (() -> Unit)? = null,
@@ -89,6 +107,8 @@ fun ProjectPickerScreen(
     onOpenInFiles: (() -> Unit)? = null,
     showLegacyRecovery: Boolean = false,
     onDismissLegacyRecovery: () -> Unit = {},
+    /** Loads an Android project's launcher icon (off the main thread); null ⇒ no icon support. */
+    loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)? = null,
 ) {
     var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
     val compatibilityCount = projects.count { it.compatibility }
@@ -124,6 +144,9 @@ fun ProjectPickerScreen(
                     )
                 }
                 if (onBackup != null) BackupButton(onBackup, compact = narrow)
+                if (onOpenHub != null) {
+                    IconButtonCa(CaIcons.gear, "Settings & tools", onOpenHub)
+                }
             }
             Spacer(Modifier.size(12.dp))
 
@@ -159,6 +182,7 @@ fun ProjectPickerScreen(
                         delayMillis = i * 50,
                         onOpen = { onOpen(project) },
                         onDelete = if (onDeleteProject != null) ({ pendingDelete = project }) else null,
+                        loadIcon = loadIcon,
                     )
                 }
             }
@@ -429,7 +453,13 @@ private fun SupportButton(text: String, icon: ImageVector, modifier: Modifier = 
 }
 
 @Composable
-private fun ProjectCard(project: ProjectInfo, delayMillis: Int, onOpen: () -> Unit, onDelete: (() -> Unit)?) {
+private fun ProjectCard(
+    project: ProjectInfo,
+    delayMillis: Int,
+    onOpen: () -> Unit,
+    onDelete: (() -> Unit)?,
+    loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)? = null,
+) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
@@ -443,7 +473,7 @@ private fun ProjectCard(project: ProjectInfo, delayMillis: Int, onOpen: () -> Un
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        ProjectTile(project.name, size = 52.dp, radius = Ca.radius.md)
+        ProjectAvatar(project, size = 52.dp, radius = Ca.radius.md, loadIcon = loadIcon)
         Column(Modifier.weight(1f)) {
             Text(project.name, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(project.rootPath, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -470,6 +500,51 @@ private fun ProjectCard(project: ProjectInfo, delayMillis: Int, onOpen: () -> Un
             }
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+    }
+}
+
+/** The resolved avatar art: a decoded bitmap, or a render-ready drawable to draw on a canvas. */
+private sealed interface AvatarContent {
+    data class Raster(val bitmap: ImageBitmap) : AvatarContent
+    data class Vector(val drawable: UiDrawable) : AvatarContent
+}
+
+/**
+ * The leading tile for a project card: an Android project's launcher icon when one resolves, else the
+ * initial-letter [ProjectTile]. The icon is fetched (off the main thread, via [loadIcon]) and a raster is
+ * decoded asynchronously, so a card paints immediately with the fallback and swaps in the icon when it
+ * arrives. A vector/adaptive icon is drawn directly on a Compose canvas.
+ */
+@Composable
+private fun ProjectAvatar(
+    project: ProjectInfo,
+    size: Dp,
+    radius: Dp,
+    loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)?,
+) {
+    var content by remember(project.rootPath) { mutableStateOf<AvatarContent?>(null) }
+    if (project.isAndroid && loadIcon != null) {
+        LaunchedEffect(project.rootPath) {
+            content = when (val icon = runCatching { loadIcon(project) }.getOrNull()) {
+                is UiProjectIcon.Raster ->
+                    withContext(Dispatchers.Default) { decodeImageBytes(icon.bytes) }?.let(AvatarContent::Raster)
+                is UiProjectIcon.Drawable -> AvatarContent.Vector(icon.drawable)
+                null -> null
+            }
+        }
+    }
+    val shape = RoundedCornerShape(radius)
+    when (val c = content) {
+        is AvatarContent.Raster -> Image(
+            bitmap = c.bitmap,
+            contentDescription = null,
+            modifier = Modifier.size(size).clip(shape),
+            contentScale = ContentScale.Crop,
+        )
+        is AvatarContent.Vector -> Canvas(Modifier.size(size).clip(shape)) {
+            drawUiDrawable(c.drawable, Offset.Zero, this.size)
+        }
+        null -> ProjectTile(project.name, size = size, radius = radius)
     }
 }
 

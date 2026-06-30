@@ -19,7 +19,13 @@ import dev.ide.ui.platform.isMobilePlatform
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, Editor, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings }
+enum class Screen { Projects, CreateProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle }
+
+/**
+ * The home screen's bottom-navigation destinations (the landing surface shown on [Screen.Projects]): the
+ * project picker, the Projects Store (browse/install templates + samples), and Learn (docs + tutorials).
+ */
+enum class HomeTab { Projects, Store, Learn }
 
 /**
  * Top-level editor destinations in the side rail / bottom nav. Per Apple's HIG these are peer
@@ -131,7 +137,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
     var pinchZoomEnabled by mutableStateOf(true)
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
-    var softKeyboardSuggestions by mutableStateOf(false)
+    var softKeyboardSuggestions by mutableStateOf(true)
 
     init {
         applySettings(backend.settings.settings())

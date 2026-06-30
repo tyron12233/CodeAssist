@@ -71,8 +71,13 @@ fun CreateProjectScreen(
     backend: IdeBackend,
     onCancel: () -> Unit,
     onCreated: () -> Unit,
+    /** Pre-select a template (e.g. opened from a Projects Store item) and jump straight to its configure step. */
+    initialTemplateId: String? = null,
 ) {
-    var selected by remember { mutableStateOf<UiProjectTemplate?>(null) }
+    val templates = remember { backend.projects.projectTemplates() }
+    var selected by remember(initialTemplateId) {
+        mutableStateOf(initialTemplateId?.let { id -> templates.firstOrNull { it.id == id } })
+    }
     Box(Modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 640.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
@@ -80,7 +85,7 @@ fun CreateProjectScreen(
             val sel = selected
             if (sel == null) {
                 Gallery(
-                    templates = backend.projects.projectTemplates(),
+                    templates = templates,
                     onBack = onCancel,
                     onPick = { selected = it },
                 )

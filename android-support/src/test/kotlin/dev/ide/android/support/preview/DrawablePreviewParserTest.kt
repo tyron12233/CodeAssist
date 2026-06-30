@@ -31,6 +31,22 @@ class DrawablePreviewParserTest {
     }
 
     @Test
+    fun parsesAdaptiveIconAsBackgroundForegroundLayers() {
+        val xml = """
+            <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/bg_round"/>
+              <foreground android:drawable="@drawable/bg_round"/>
+              <monochrome android:drawable="@drawable/bg_round"/>
+            </adaptive-icon>
+        """.trimIndent()
+        val d = DrawablePreviewParser.parse(xml, resolver)
+        assertTrue(d is DrawablePreview.Layers)
+        // background + foreground (monochrome is themed-icon only and ignored).
+        assertEquals(2, (d as DrawablePreview.Layers).layers.size)
+        assertTrue(d.layers.all { it.drawable is DrawablePreview.Shape })
+    }
+
+    @Test
     fun parsesShapeWithSolidStrokeCorners() {
         val xml = """
             <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">

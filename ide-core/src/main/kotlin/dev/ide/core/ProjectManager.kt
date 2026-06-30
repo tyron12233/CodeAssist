@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import dev.ide.android.support.AndroidFacetCodec
+import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.engine.DexRunner
 import dev.ide.model.LanguageLevel
 import dev.ide.model.impl.ModelPersistence
@@ -20,9 +22,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import java.nio.file.Paths
 
-/** APPLICATION-scoped Create-Project template registry, built over [ProjectManager]'s application platform
- *  so the picker can enumerate templates with no project open. */
-private val PROJECT_TEMPLATES = ServiceKey<ProjectTemplateRegistry>("ide.projectTemplates")
 
 /** A project listed in the picker, read cheaply from disk without opening the full engine. */
 data class ProjectSummary(
@@ -31,6 +30,8 @@ data class ProjectSummary(
     val moduleCount: Int,
     /** True when this project was imported from a Gradle project and runs in compatibility mode. */
     val compatibility: Boolean = false,
+    /** True when the project has an Android module (the picker then tries to show its launcher icon). */
+    val isAndroid: Boolean = false,
 )
 
 /**
@@ -67,30 +68,47 @@ class ProjectManager private constructor(
     }
 
     /**
-     * Application-scoped platform substrate. Holds the **project-independent** plugin contributions
-     * (module types, facet codecs, file icons, and the Create-Project templates) so they're reachable
-     * WITHOUT an open project — the picker enumerates templates from here ([projectTemplates]) before any
-     * engine exists. Each opened project still gets its own per-project [PlatformCore] for the model lock /
-     * message bus / activities; this one only carries the static registries. Disposed by [dispose].
+     * The application environment — created once, shared by every opened project: the app-global extension
+     * registry + message bus + model lock, the process-global application service container (parent of every
+     * project's workspace container), and the host plugin registrations. All application *bootstrap* lives in
+     * [ApplicationEnvironment], so this manager is purely about *managing* projects. Disposed by [dispose].
      */
-    private val appPlatform: PlatformCore = PlatformCore().also { IdeServices.registerStaticPlugins(it) }
+    val env: ApplicationEnvironment = ApplicationEnvironment()
 
-    /**
-     * The process-global application service container. One per running app; it parents every opened
-     * project's workspace container, so APPLICATION-scoped services are shared across projects and
-     * survive project switches. Disposed by [dispose] on app exit. The Create-Project template registry
-     * is registered here (an APPLICATION-scoped service over [appPlatform]) so the picker resolves it
-     * through the scope container, with no open project.
-     */
-    val applicationContainer: ServiceContainer = ApplicationContainer().also { container ->
-        container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(appPlatform.extensions) }
-    }
+    /** The process-global application service container (see [env]); parents every project container. */
+    val applicationContainer: ServiceContainer get() = env.container
 
     /**
      * The Create-Project gallery templates, enumerable without an open project (the picker shows them
      * before any engine exists). Resolved from the APPLICATION-scoped [PROJECT_TEMPLATES] service.
      */
     fun projectTemplates(): List<ProjectTemplate> = applicationContainer.getService(PROJECT_TEMPLATES).all()
+
+    /**
+     * The shared SDK / toolchain download manager — APPLICATION-scoped, so one download queue + resumable
+     * cache serves every project AND the project picker's Settings & Tools hub (reachable with no project
+     * open). Self-registers on the application container; an opened engine resolves the very same instance,
+     * so a download started from the picker is still visible after a project opens. Its on-disk artifacts
+     * live under [homeDir] (the same shared dir an engine uses), so the registrant's exact path doesn't matter.
+     */
+    fun sdkManager(): SdkManagerService {
+        applicationContainer.registerServiceIfAbsent(APP_SDK_MANAGER) {
+            SdkManagerService(homeDir, sharedRoot = homeDir)
+        }
+        return applicationContainer.getService(APP_SDK_MANAGER)
+    }
+
+    /**
+     * The shared signing-keystore registry — APPLICATION-scoped (keystores + their secrets live under
+     * [homeDir], shared across projects and kept OUT of any project). Reachable from the picker's hub with
+     * no project open. The path matches an engine's (`<homeDir>/keystores`), so both resolve one registry.
+     */
+    fun keystoreRegistry(): KeystoreRegistry {
+        applicationContainer.registerServiceIfAbsent(APP_KEYSTORE_REGISTRY) {
+            KeystoreRegistry(homeDir.resolve("keystores"))
+        }
+        return applicationContainer.getService(APP_KEYSTORE_REGISTRY)
+    }
 
     private val prefsFile: Path get() = homeDir.resolve("prefs.properties")
 
@@ -110,6 +128,7 @@ class ProjectManager private constructor(
                     dir.toString(),
                     proj?.modules?.size ?: 0,
                     compatibility = GradleImport.isCompatibilityMode(dir),
+                    isAndroid = proj?.modules?.any { m -> m.facets.any { it.tomlTable == AndroidFacetCodec.tomlTable } } ?: false,
                 )
             }
             .sortedBy { it.name.lowercase() }
@@ -122,13 +141,13 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, appContainer = applicationContainer)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env)
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
      *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
     fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, appContainer = applicationContainer, buildOnly = buildOnly)
+        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
@@ -269,11 +288,10 @@ class ProjectManager private constructor(
         }
     }
 
-    /** Dispose application-scoped services + the application platform. Call on app exit, after the open
+    /** Dispose application-scoped services + the app extension registry. Call on app exit, after the open
      *  project is closed. */
     fun dispose() {
-        runCatching { applicationContainer.dispose() }
-        runCatching { appPlatform.dispose() }
+        runCatching { env.close() }
     }
 
     private fun uniqueProjectDir(name: String): Path {
@@ -333,11 +351,18 @@ class ProjectManager private constructor(
             /** The host's ART Kotlin compiler-plugin loader (D8-dex + DexClassLoader), so runtime Kotlin
              *  compiler plugins can be applied on device. */
             kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
+            /** The host's forked-VM R8 shrinker (`dalvikvm64 -Xmx…`), so the release/minify R8 pass gets a heap
+             *  above the app cap. Null → in-process R8 (the shrinker also self-falls-back if forking fails). */
+            r8Shrinker: dev.ide.android.support.tools.Shrinker? = null,
+            /** The host's forked-VM D8 dexer for the dex merge step (debug-path memory peak). Null → in-process. */
+            r8MergeDexer: dev.ide.android.support.tools.Dexer? = null,
         ): ProjectManager {
+
+
             val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
-                desugarStubs = bootClasspath.drop(1).map { Paths.get(it) })
+                desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer)
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,

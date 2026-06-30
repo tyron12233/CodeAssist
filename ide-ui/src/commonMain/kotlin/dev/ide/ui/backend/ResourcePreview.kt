@@ -41,6 +41,15 @@ sealed interface UiDrawable {
     data class Unsupported(val rootTag: String, val message: String) : UiDrawable
 }
 
+/**
+ * A project's launcher icon for the picker: either encoded raster bytes (PNG/WebP/…, decoded by the host) or
+ * a render-ready [UiDrawable] (a vector / layer-list / adaptive icon drawn on a Compose canvas).
+ */
+sealed interface UiProjectIcon {
+    data class Raster(val bytes: ByteArray) : UiProjectIcon
+    data class Drawable(val drawable: UiDrawable) : UiProjectIcon
+}
+
 data class UiGradient(
     val kind: String, // "linear" | "radial" | "sweep"
     val startColor: Long,

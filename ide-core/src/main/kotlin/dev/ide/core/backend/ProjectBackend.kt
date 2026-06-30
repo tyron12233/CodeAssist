@@ -1,12 +1,15 @@
 package dev.ide.core.backend
 
+import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.core.BackendContext
+import dev.ide.core.ProjectIconLocator
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateParameter
 import dev.ide.model.template.TextValidation
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.ProjectService
+import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
@@ -30,9 +33,29 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     override val projectEpoch: StateFlow<Int> get() = ctx.projectEpoch
 
     override fun projects(): List<ProjectInfo> =
-        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility) }
+        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid) }
             ?: ctx.servicesOrNull?.let { listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size)) }
             ?: emptyList()
+
+    // Resolved launcher icon, cached so revisiting the picker doesn't re-read the model + image each time
+    // (an empty Optional marks "no icon", so a fruitless project isn't re-resolved on every visit).
+    private val iconCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<UiProjectIcon>>()
+
+    override suspend fun projectIcon(rootPath: String): UiProjectIcon? {
+        iconCache[rootPath]?.let { return it.orElse(null) }
+        return withContext(Dispatchers.IO) {
+            val icon = runCatching { toUiProjectIcon(ProjectIconLocator.locate(Paths.get(rootPath))) }.getOrNull()
+            iconCache[rootPath] = java.util.Optional.ofNullable(icon)
+            icon
+        }
+    }
+
+    private fun toUiProjectIcon(icon: LauncherIcon?): UiProjectIcon? = when (icon) {
+        is LauncherIcon.Raster ->
+            runCatching { Files.readAllBytes(icon.path) }.getOrNull()?.let { UiProjectIcon.Raster(it) }
+        is LauncherIcon.Drawable -> UiProjectIcon.Drawable(DrawableMapping.toUi(icon.preview))
+        null -> null
+    }
 
     override fun projectsRootPath(): String? = ctx.manager?.projectsRoot?.toString()
 
@@ -73,6 +96,7 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
 
     override suspend fun deleteProject(rootPath: String): Boolean {
         val mgr = ctx.manager ?: return false
+        iconCache.remove(rootPath)
         return withContext(Dispatchers.IO) {
             runCatching { mgr.delete(rootPath); true }.getOrDefault(false)
         }

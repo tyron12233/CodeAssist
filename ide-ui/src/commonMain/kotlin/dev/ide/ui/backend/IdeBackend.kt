@@ -48,6 +48,10 @@ interface IdeBackend {
     /** Project management (the picker, create/open/delete, templates, open-tab session). */
     val projects: ProjectService
 
+    /** The Projects Store: the featured/searchable catalog of templates + sample projects. Optional — a
+     *  backend that wires no catalog inherits [StoreService.Unsupported]. */
+    val store: StoreService get() = StoreService.Unsupported
+
     /** The SDK manager (Android SDK + JDK sources/docs). */
     val sdk: SdkService
 
@@ -134,6 +138,58 @@ sealed interface UiTemplateParam {
 
 /** Outcome of a create: [success] + a human message (the reason on failure) + the new project's root path. */
 data class UiProjectResult(val success: Boolean, val message: String, val rootPath: String? = null)
+
+// ---- Projects Store DTOs ----
+
+/**
+ * What a [UiStoreItem] is, which decides how opening it behaves. [Template] launches the Create-Project flow
+ * pre-selected to its [UiStoreItem.templateId]; [Sample] and [Community] are downloadable ready-made projects
+ * installed through [StoreService.install].
+ */
+enum class UiStoreItemKind { Template, Sample, Community }
+
+/**
+ * One entry in the Projects Store, neutral to where the catalog came from (bundled templates today, a remote
+ * backend later). [category] buckets it for filtering ("Android", "Java", "Kotlin", "Games", ...); [iconId]
+ * resolves through the UI's `TreeIcons` registry; [accentColor] is an optional ARGB brand color for the
+ * featured hero. [available] false marks a preview/coming-soon item that can be browsed but not yet installed.
+ */
+data class UiStoreItem(
+    val id: String,
+    val kind: UiStoreItemKind,
+    val title: String,
+    val summary: String,
+    val description: String = summary,
+    val category: String,
+    val iconId: String = "file",
+    val tags: List<String> = emptyList(),
+    val author: String? = null,
+    val featured: Boolean = false,
+    val accentColor: Long? = null,
+    /** Downloads / stars, shown as a soft stat on the card. Negative hides it. */
+    val installs: Int = -1,
+    /** For a [UiStoreItemKind.Template] item: the template id the Create-Project flow opens with. */
+    val templateId: String? = null,
+    val available: Boolean = true,
+)
+
+/** A titled shelf of store items (e.g. "Starter templates", "Sample projects"). */
+data class UiStoreSection(
+    val id: String,
+    val title: String,
+    val subtitle: String? = null,
+    val items: List<UiStoreItem> = emptyList(),
+)
+
+/** The store landing payload: a featured carousel, the filter categories, and the section shelves. */
+data class UiStoreCatalog(
+    val featured: List<UiStoreItem> = emptyList(),
+    val categories: List<String> = emptyList(),
+    val sections: List<UiStoreSection> = emptyList(),
+)
+
+/** Outcome of installing a store item: [success] + a human message + the new project's root path when created. */
+data class UiStoreInstallResult(val success: Boolean, val message: String, val rootPath: String? = null)
 
 /**
  * A `@Preview @Composable` target (one variant) in the open editor file. A function with several `@Preview`
@@ -582,6 +638,8 @@ data class ProjectInfo(
     val moduleCount: Int,
     /** True when the project was imported from Gradle and runs in compatibility mode (may not be fully supported). */
     val compatibility: Boolean = false,
+    /** True for an Android project; the picker asks the backend for its launcher icon (see [ProjectService.projectIcon]). */
+    val isAndroid: Boolean = false,
 )
 
 /** How the project tree is shaped — a curated module view, or the raw filesystem (see [IdeBackend.fileTree]). */
@@ -991,7 +1049,9 @@ data class UiSettings(
     /** Two-finger pinch zooms the code font. */
     val pinchZoom: Boolean = true,
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
-    val softKeyboardSuggestions: Boolean = false,
+    val softKeyboardSuggestions: Boolean = true,
+    /** Reformat the active file when it is saved (the editor's save handler reads this). */
+    val formatOnSave: Boolean = false,
 ) {
     companion object {
         const val MIN_FONT_SCALE = 0.7f
@@ -1007,6 +1067,41 @@ data class UiSettings(
 
 /** The theme accent swaps the design system ships. */
 enum class UiAccent { Violet, Teal, Orange }
+
+/**
+ * A per-language code style profile the Code Style screen edits. Values are plain strings/ints/bools (preset,
+ * brace style, and wrap modes are string ids) so the DTO stays transport-neutral; the host maps it to the
+ * formatter's style. The Kotlin profile honors only indentation / tabs / blank-lines; the rest are Java-only.
+ */
+data class UiCodeStyle(
+    val preset: String = "google",
+    val indentSize: Int = 2,
+    val continuationIndent: Int = 4,
+    val maxLineLength: Int = 100,
+    val useTabs: Boolean = false,
+    val braceStyle: String = "endOfLine",
+    val spaceBeforeParens: Boolean = true,
+    val spaceWithinParens: Boolean = false,
+    val spaceAfterComma: Boolean = true,
+    val spaceAroundOperators: Boolean = true,
+    val spaceBeforeBrace: Boolean = true,
+    val blankLinesToKeep: Int = 1,
+    val wrapMethodParameters: String = "ifLong",
+    val wrapMethodArguments: String = "ifLong",
+    val wrapChainedCalls: String = "ifLong",
+    val wrapBinaryExpressions: String = "ifLong",
+    val blankLinesAfterImports: Int = 1,
+    val blankLinesBeforeMethod: Int = 1,
+    val blankLinesBeforeField: Int = 0,
+    val blankLinesBeforeFirstMember: Int = 0,
+    val blankLinesBetweenTypes: Int = 1,
+    val spaceBeforeSemicolon: Boolean = false,
+    val spaceAroundLambdaArrow: Boolean = true,
+    val spaceAroundTernary: Boolean = true,
+    val spaceAfterTypeCast: Boolean = true,
+    val formatComments: Boolean = true,
+    val wrapComments: Boolean = false,
+)
 
 /**
  * One inspection (analyzer) in the Analysis settings list. [enabled] off = the check never runs; [severity]

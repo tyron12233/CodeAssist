@@ -30,7 +30,11 @@ import dev.ide.ui.components.PermissionDialog
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.screens.CreateProjectScreen
+import dev.ide.ui.screens.CodeStyleScreen
 import dev.ide.ui.screens.EditorScreen
+import dev.ide.ui.screens.HomeScreen
+import dev.ide.ui.screens.LearnScreen
+import dev.ide.ui.screens.ProjectsStoreScreen
 import dev.ide.ui.screens.KeystoreCreateScreen
 import dev.ide.ui.screens.KeystoreImportScreen
 import dev.ide.ui.screens.KeystoreManagerScreen
@@ -39,7 +43,9 @@ import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.ProjectPickerScreen
 import dev.ide.ui.screens.RunScreen
 import dev.ide.ui.screens.SdkManagerScreen
+import dev.ide.ui.screens.SettingsHubScreen
 import dev.ide.ui.screens.SettingsScreen
+import dev.ide.ui.screens.SettingsView
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaAccent
 import dev.ide.ui.theme.CodeAssistTheme
@@ -70,9 +76,30 @@ fun CodeAssistApp(
     // screen writes; appearance changes then take effect immediately.
     var settings by remember { mutableStateOf(backend.settings.settings()) }
     var screen by remember { mutableStateOf(Screen.Projects) }
+    // The home screen's selected bottom-nav tab (project picker / store / learn). Lives here, not in the
+    // per-project [IdeUiState], so it survives across the landing session and resets only on a full relaunch.
+    var homeTab by remember { mutableStateOf(HomeTab.Projects) }
+    // A template id to pre-select in the Create-Project flow when it's opened from a Store item (null = the
+    // plain New-Project gallery).
+    var createTemplateId by remember { mutableStateOf<String?>(null) }
+    // The home-screen Projects Store + bottom nav is WIP and ships dark: it appears only when its feature flag
+    // is on (or the `feature.projectsStore` preference overrides it). Off ⇒ the picker shows on its own.
+    val storeEnabled = remember {
+        backend.settings.preference("feature.projectsStore")?.toBooleanStrictOrNull() ?: FeatureFlags.PROJECTS_STORE
+    }
     var configModule by remember { mutableStateOf<String?>(null) }
     var modulesTab by remember { mutableStateOf(ModulesTab.Settings) }
     var keystoreImportPath by remember { mutableStateOf<String?>(null) }
+    // Where the Settings & Tools hub returns on Back — the picker (opened with no project) or the editor.
+    var hubReturn by remember { mutableStateOf(Screen.Editor) }
+    // Where the Keystore Manager returns on Back — the hub (its normal entry) or the module Signing tab (the
+    // "manage keystores" cross-link from project signing).
+    var keystoreReturn by remember { mutableStateOf(Screen.Hub) }
+    // Whether the Keystore Manager was reached from a project context (the editor's hub or a module's Signing
+    // tab) rather than the picker's hub. Gates the "Assign to a build" row — assignment is per-project, so it's
+    // hidden when no project is open (and must never navigate into one). NOT `epoch > 0`: that stays true after
+    // a project is closed back to the picker, which is exactly when the row must not show.
+    var keystoreInProject by remember { mutableStateOf(false) }
     var showMigration by remember { mutableStateOf(backend.settings.preference("migration.acknowledged") != "true") }
     var showLegacyRecovery by remember { mutableStateOf(backend.settings.preference("legacy.recovery.seen") != "true") }
     var showOnboarding by remember { mutableStateOf(backend.settings.preference("onboarding.seen") != "true") }
@@ -143,7 +170,7 @@ fun CodeAssistApp(
         // deeper handler wins); this one only fires for screen-level back: pop a sub-screen to the editor, the
         // editor to the project picker, or dismiss the first-launch sheets. On the picker it stays disabled so
         // back exits the app as usual.
-        PlatformBackHandler(enabled = screen != Screen.Projects || showOnboarding || showMigration || showAnalytics) {
+        PlatformBackHandler(enabled = screen != Screen.Projects || homeTab != HomeTab.Projects || showOnboarding || showMigration || showAnalytics) {
             when {
                 showOnboarding -> {
                     showOnboarding = false; backend.settings.setPreference("onboarding.seen", "true")
@@ -157,14 +184,20 @@ fun CodeAssistApp(
                     showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false)
                 }
 
-                // The keystore Create/Import sub-screens step back to their manager, not all the way to the editor.
+                // The keystore Create/Import sub-screens step back to their manager, not all the way out.
                 screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
+                // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
+                screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle -> screen = Screen.Hub
+                screen == Screen.KeystoreManager -> screen = keystoreReturn
+                // The hub returns to wherever it was opened from (picker or editor).
+                screen == Screen.Hub -> screen = hubReturn
 
-                screen == Screen.Run || screen == Screen.ModuleConfig || screen == Screen.SdkManager ||
-                    screen == Screen.KeystoreManager || screen == Screen.Settings -> screen = Screen.Editor
+                screen == Screen.Run || screen == Screen.ModuleConfig -> screen = Screen.Editor
 
                 screen == Screen.CreateProject -> screen = Screen.Projects
                 screen == Screen.Editor -> screen = Screen.Projects
+                // On the home screen, a Store/Learn tab steps back to the project picker before exiting.
+                screen == Screen.Projects && homeTab != HomeTab.Projects -> homeTab = HomeTab.Projects
                 else -> {}
             }
         }
@@ -176,44 +209,77 @@ fun CodeAssistApp(
                     when (s) {
                         Screen.Projects -> {
                             val projects = remember(epoch, projectsRefresh) { backend.projects.projects() }
-                            ProjectPickerScreen(
-                                projects = projects,
-                                onOpen = { p ->
-                                    scope.launch {
-                                        if (backend.projects.openProject(p.rootPath)) screen = Screen.Editor
-                                    }
-                                },
-                                onNewProject = { screen = Screen.CreateProject },
-                                onDeleteProject = { p -> scope.launch { backend.projects.deleteProject(p.rootPath); projectsRefresh++ } },
-                                onBackup = { scope.launch { backupAndShare() } },
-                                onSubmitSuggestions = if (fileActions.canOpenUrl) {
-                                    { fileActions.openUrl(BetaInfo.FEEDBACK_URL) }
-                                } else null,
-                                onJoinDiscord = if (fileActions.canOpenUrl) {
-                                    { fileActions.openUrl(BetaInfo.DISCORD_URL) }
-                                } else null,
-                                onSponsor = if (fileActions.canOpenUrl) {
-                                    { fileActions.openUrl(BetaInfo.SPONSOR_URL) }
-                                } else null,
-                                onStarOnGitHub = if (fileActions.canOpenUrl) {
-                                    { fileActions.openUrl(BetaInfo.REPO_URL) }
-                                } else null,
-                                storagePath = backend.projects.storageRootPath(),
-                                onOpenInFiles = if (fileActions.canReveal) {
-                                    { backend.projects.storageRootPath()?.let { fileActions.reveal(it) } }
-                                } else null,
-                                showLegacyRecovery = showLegacyRecovery,
-                                onDismissLegacyRecovery = {
-                                    showLegacyRecovery = false
-                                    backend.settings.setPreference("legacy.recovery.seen", "true")
-                                },
-                            )
+                            val picker: @Composable () -> Unit = {
+                                    ProjectPickerScreen(
+                                        projects = projects,
+                                        onOpen = { p ->
+                                            scope.launch {
+                                                if (backend.projects.openProject(p.rootPath)) screen = Screen.Editor
+                                            }
+                                        },
+                                        onNewProject = { createTemplateId = null; screen = Screen.CreateProject },
+                                        onDeleteProject = { p -> scope.launch { backend.projects.deleteProject(p.rootPath); projectsRefresh++ } },
+                                        onBackup = { scope.launch { backupAndShare() } },
+                                        onOpenHub = { hubReturn = Screen.Projects; screen = Screen.Hub },
+                                        onSubmitSuggestions = if (fileActions.canOpenUrl) {
+                                            { fileActions.openUrl(BetaInfo.FEEDBACK_URL) }
+                                        } else null,
+                                        onJoinDiscord = if (fileActions.canOpenUrl) {
+                                            { fileActions.openUrl(BetaInfo.DISCORD_URL) }
+                                        } else null,
+                                        onSponsor = if (fileActions.canOpenUrl) {
+                                            { fileActions.openUrl(BetaInfo.SPONSOR_URL) }
+                                        } else null,
+                                        onStarOnGitHub = if (fileActions.canOpenUrl) {
+                                            { fileActions.openUrl(BetaInfo.REPO_URL) }
+                                        } else null,
+                                        storagePath = backend.projects.storageRootPath(),
+                                        onOpenInFiles = if (fileActions.canReveal) {
+                                            { backend.projects.storageRootPath()?.let { fileActions.reveal(it) } }
+                                        } else null,
+                                        showLegacyRecovery = showLegacyRecovery,
+                                        onDismissLegacyRecovery = {
+                                            showLegacyRecovery = false
+                                            backend.settings.setPreference("legacy.recovery.seen", "true")
+                                        },
+                                        loadIcon = { backend.projects.projectIcon(it.rootPath) },
+                                    )
+                            }
+                            // Store + Learn tabs only when the WIP flag is on; otherwise the picker stands alone.
+                            if (storeEnabled) {
+                                HomeScreen(
+                                    tab = homeTab,
+                                    onSelectTab = { homeTab = it },
+                                    projectsContent = picker,
+                                    storeContent = {
+                                        ProjectsStoreScreen(
+                                            backend = backend,
+                                            onCreateFromTemplate = { id -> createTemplateId = id; screen = Screen.CreateProject },
+                                            onOpenHub = { hubReturn = Screen.Projects; screen = Screen.Hub },
+                                        )
+                                    },
+                                    learnContent = {
+                                        LearnScreen(
+                                            onOpenDocs = if (fileActions.canOpenUrl) {
+                                                { fileActions.openUrl(BetaInfo.REPO_URL) }
+                                            } else null,
+                                            onJoinDiscord = if (fileActions.canOpenUrl) {
+                                                { fileActions.openUrl(BetaInfo.DISCORD_URL) }
+                                            } else null,
+                                            onBrowseSamples = { homeTab = HomeTab.Store },
+                                        )
+                                    },
+                                )
+                            } else {
+                                picker()
+                            }
                         }
 
                         Screen.CreateProject -> CreateProjectScreen(
                             backend = backend,
                             onCancel = { screen = Screen.Projects },
                             onCreated = { screen = Screen.Editor },
+                            initialTemplateId = createTemplateId,
                         )
 
                         Screen.Editor -> EditorScreen(
@@ -224,7 +290,7 @@ fun CodeAssistApp(
                                 backend.settings.setSetting("appearance", "themeMode", if (dark) "light" else "dark")
                                 settings = backend.settings.settings()
                             },
-                            onOpenSettings = { screen = Screen.Settings },
+                            onOpenHub = { hubReturn = Screen.Editor; screen = Screen.Hub },
                             onOpenDependencies = { module ->
                                 configModule = module; modulesTab =
                                 ModulesTab.Dependencies; screen = Screen.ModuleConfig
@@ -233,8 +299,6 @@ fun CodeAssistApp(
                                 configModule = module; modulesTab = ModulesTab.Settings; screen =
                                 Screen.ModuleConfig
                             },
-                            onOpenSdkManager = { screen = Screen.SdkManager },
-                            onOpenKeystoreManager = { screen = Screen.KeystoreManager },
                             onCloseProject = { screen = Screen.Projects },
                             onOpenRun = { screen = Screen.Run },
                             fileActions = fileActions,
@@ -253,27 +317,38 @@ fun CodeAssistApp(
                             initialModule = configModule,
                             initialTab = modulesTab,
                             onBack = { screen = Screen.Editor },
-                            onOpenKeystoreManager = { screen = Screen.KeystoreManager },
+                            onOpenKeystoreManager = { keystoreReturn = Screen.ModuleConfig; keystoreInProject = true; screen = Screen.KeystoreManager },
                             codeFont = codeFont,
                             fileActions = fileActions,
                         )
 
                         Screen.SdkManager -> SdkManagerScreen(
                             backend = state.backend,
-                            onBack = { screen = Screen.Editor },
+                            onBack = { screen = Screen.Hub },
+                        )
+
+                        Screen.CodeStyle -> CodeStyleScreen(
+                            backend = state.backend,
+                            // The live formatter preview is engine-backed: available when the hub (hence Code
+                            // Style) was opened from the editor, not from the project picker.
+                            hasProject = hubReturn == Screen.Editor,
+                            onBack = { screen = Screen.Hub },
                         )
 
                         Screen.KeystoreManager -> KeystoreManagerScreen(
                             backend = state.backend,
-                            onBack = { screen = Screen.Editor },
+                            onBack = { screen = keystoreReturn },
                             onCreate = { screen = Screen.KeystoreCreate },
                             onImport = { path -> keystoreImportPath = path; screen = Screen.KeystoreImport },
-                            onManageSigning = {
+                            // Signing assignment is per-project — only offered when the manager was opened from a
+                            // project context (the editor's hub or a module's Signing tab), never from the picker's
+                            // hub. So it stays hidden with no project open and can't navigate into one.
+                            onManageSigning = if (keystoreInProject) ({
                                 // Smart jump: one android-app → straight to its Signing tab; otherwise the module list.
                                 configModule = state.backend.signing.signableModules().singleOrNull()
                                 modulesTab = ModulesTab.Signing
                                 screen = Screen.ModuleConfig
-                            },
+                            }) else null,
                             fileActions = fileActions,
                         )
 
@@ -297,11 +372,26 @@ fun CodeAssistApp(
                             }
                         }
 
+                        Screen.Hub -> SettingsHubScreen(
+                            onBack = { screen = hubReturn },
+                            onOpenGlobalSettings = { screen = Screen.Settings },
+                            onOpenCodeStyle = { screen = Screen.CodeStyle },
+                            onOpenSdkManager = { screen = Screen.SdkManager },
+                            // The hub reached from the editor is a project context; from the picker it isn't.
+                            onOpenKeystoreManager = { keystoreReturn = Screen.Hub; keystoreInProject = hubReturn == Screen.Editor; screen = Screen.KeystoreManager },
+                        )
+
+                        // Settings — reached from the hub. With a project open (hub entered from the editor) the
+                        // project-scoped pages (dependency conflicts, inspections) merge in; from the picker only
+                        // the global app pages show.
                         Screen.Settings -> SettingsScreen(
                             backend = state.backend,
-                            onBack = { screen = Screen.Editor },
+                            onBack = { screen = Screen.Hub },
                             onSettingsChanged = { settings = backend.settings.settings() },
-                            onOpenLogs = { state.logsOpen = true; screen = Screen.Editor },
+                            // The logs viewer is an editor overlay; only meaningful with a project open.
+                            onOpenLogs = { if (epoch > 0) { state.logsOpen = true; screen = Screen.Editor } },
+                            view = if (hubReturn == Screen.Editor) SettingsView.All else SettingsView.Global,
+                            title = "Settings",
                             codeFont = codeFont,
                             fileActions = fileActions,
                         )
@@ -311,7 +401,7 @@ fun CodeAssistApp(
             // Upgrade notice first (the build-system migration warning), then the feature tour — both over
             // the picker only, one at a time.
             MigrationNotice(
-                visible = showMigration && screen == Screen.Projects,
+                visible = showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
                 onBackup = backupAndShare,
                 onDismiss = {
                     showMigration = false
@@ -319,7 +409,7 @@ fun CodeAssistApp(
                 },
             )
             OnboardingSheet(
-                visible = showOnboarding && !showMigration && screen == Screen.Projects,
+                visible = showOnboarding && !showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
                 // Final CTA: send the user straight into the Create-Project flow (the same screen the picker's
                 // "New Project" card opens) so the tour ends on a concrete action.
                 onGetStarted = { screen = Screen.CreateProject },
@@ -330,7 +420,7 @@ fun CodeAssistApp(
             )
             // Opt-in analytics consent — last of the first-launch sheets, after onboarding/migration.
             AnalyticsConsentSheet(
-                visible = showAnalytics && !showOnboarding && !showMigration && screen == Screen.Projects,
+                visible = showAnalytics && !showOnboarding && !showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
                 onAllow = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(true) },
                 onDecline = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
                 onLearnMore = if (fileActions.canOpenUrl) {
