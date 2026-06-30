@@ -156,6 +156,8 @@ fun CodeEditor(
     onRenamed: (newPath: String?) -> Unit = {},
     /** Bump from the host (a toolbar Find button) to open the in-file find bar; 0 = no request. */
     findEpoch: Int = 0,
+    /** Bump from the host (a toolbar/menu Reformat action) to reformat the whole file; 0 = no request. */
+    formatEpoch: Int = 0,
     /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
@@ -173,11 +175,12 @@ fun CodeEditor(
     /** Whether a two-finger pinch zooms the code font (Settings → Editor); Ctrl-+/-/0 always works. */
     pinchZoom: Boolean = true,
     /**
-     * Allow the soft keyboard's autocorrect / suggestions / auto-space (Settings → Editor → Keyboard). Off
-     * (default) marks the IME field as raw code input, so a typed `.` doesn't get an auto-inserted space and
-     * identifiers aren't "corrected". Android-only effect; desktop typing never goes through the IME.
+     * Allow the soft keyboard's autocorrect / suggestions / auto-space (Settings → Editor → Keyboard). On by
+     * default (a normal keyboard). Turning it OFF marks the IME field as raw code input, so a typed `.` doesn't
+     * get an auto-inserted space and identifiers aren't "corrected". Android-only effect; desktop typing never
+     * goes through the IME.
      */
-    softKeyboardSuggestions: Boolean = false,
+    softKeyboardSuggestions: Boolean = true,
     /** Soft-wrap long lines at the viewport edge (Settings → Editor). Off = one row per line + h-scroll. */
     wordWrap: Boolean = false,
     /** Indent wrapped continuation rows to the line's own indent (Settings → Editor); only when [wordWrap]. */
@@ -200,7 +203,7 @@ fun CodeEditor(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         CodeEditorContent(
             path, session, backend, modifier, onSave, onNavigate, onRenamed,
-            findEpoch, fontScale, onFontScaleChange, onPreview, completionAutoPopup, completionDelayMs,
+            findEpoch, formatEpoch, fontScale, onFontScaleChange, onPreview, completionAutoPopup, completionDelayMs,
             twoAxisScroll, pinchZoom, softKeyboardSuggestions, wordWrap, wrapIndent, fontLigatures, obscured,
         )
     }
@@ -216,6 +219,7 @@ private fun CodeEditorContent(
     onNavigate: (path: String, offset: Int) -> Unit = { _, _ -> },
     onRenamed: (newPath: String?) -> Unit = {},
     findEpoch: Int = 0,
+    formatEpoch: Int = 0,
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
     onPreview: (variantId: String) -> Unit = {},
@@ -223,7 +227,7 @@ private fun CodeEditorContent(
     completionDelayMs: Int = 110,
     twoAxisScroll: Boolean = true,
     pinchZoom: Boolean = true,
-    softKeyboardSuggestions: Boolean = false,
+    softKeyboardSuggestions: Boolean = true,
     wordWrap: Boolean = false,
     wrapIndent: Boolean = true,
     fontLigatures: Boolean = true,
@@ -896,6 +900,30 @@ private fun CodeEditorContent(
         editorSession.applyEdits(listOf(edit), TextRange(edit.caret))
     }
 
+    // Reformat Code: ask the backend for the minimal edits to reformat the whole buffer, or just the
+    // selection when `[rangeStart, rangeEnd)` is non-empty, then splice them in. The caret is kept on its
+    // logical spot (shifted by the net delta of edits at/before it) and the viewport stays anchored on the
+    // caret's line. A no-op (already formatted / unsupported language) returns nothing and does nothing.
+    suspend fun runFormat(rangeStart: Int, rangeEnd: Int) {
+        completion.dismiss()
+        val text = editorSession.doc.text
+        val caretBefore = editorSession.selection.start.coerceIn(0, editorSession.doc.length)
+        val anchorLine = editorSession.doc.lineForOffset(caretBefore)
+        val raw = runCatching {
+            if (rangeEnd > rangeStart) backend.editor.formatRange(path, text, rangeStart, rangeEnd)
+            else backend.editor.formatDocument(path, text)
+        }.getOrNull().orEmpty()
+        if (raw.isEmpty()) return
+        val len = editorSession.doc.length
+        val edits = raw.map { e ->
+            val st = e.start.coerceIn(0, len)
+            RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
+        }
+        var caret = caretBefore
+        for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
+        applyEditsKeepingViewport(edits, TextRange(caret.coerceAtLeast(0)), anchorLine)
+    }
+
 
     // keep the per-line render cache aligned with line splices (a render concern, owned by this surface)
     SideEffect {
@@ -975,6 +1003,11 @@ private fun CodeEditorContent(
     // host (toolbar Find button) requested the find bar
     LaunchedEffect(findEpoch) {
         if (findEpoch > 0) find.openBar(replace = false)
+    }
+
+    // host (toolbar/menu Reformat action) requested a whole-file reformat
+    LaunchedEffect(formatEpoch) {
+        if (formatEpoch > 0) runFormat(0, 0)
     }
 
     // recompute find matches when the query/options change or the buffer edits (debounced); select the match
@@ -1153,8 +1186,18 @@ private fun CodeEditorContent(
                 .focusable()
                 .onPreviewKeyEvent { ev ->
                     if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    // Reformat code (⌘/Ctrl-Alt-L, IntelliJ): the selection if any, else the whole file.
+                    if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.L) {
+                        val sel = editorSession.selection
+                        scope.launch { if (!sel.collapsed) runFormat(sel.min, sel.max) else runFormat(0, 0) }
+                        return@onPreviewKeyEvent true
+                    }
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.S) {
-                        onSave(); return@onPreviewKeyEvent true
+                        // Reformat-on-save (Settings → Code Style) reformats first, then saves the result.
+                        if (runCatching { backend.settings.settings().formatOnSave }.getOrDefault(false)) {
+                            scope.launch { runFormat(0, 0); onSave() }
+                        } else onSave()
+                        return@onPreviewKeyEvent true
                     }
                     // Find (⌘/Ctrl-F) / find+replace (⌘/Ctrl-R); seed the query from the current selection.
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && (ev.key == Key.F || ev.key == Key.R)) {

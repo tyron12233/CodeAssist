@@ -90,6 +90,7 @@ fun EditorTopBar(
     onUndo: () -> Unit = {},
     onRedo: () -> Unit = {},
     onFind: () -> Unit = {},
+    onReformat: () -> Unit = {},
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
     inlayHintsOn: Boolean = true,
@@ -133,6 +134,7 @@ fun EditorTopBar(
                     onUndo = onUndo,
                     onRedo = onRedo,
                     onFind = onFind,
+                    onReformat = onReformat,
                     inlayHintsOn = inlayHintsOn,
                     onToggleInlayHints = onToggleInlayHints,
                     consoleOpen = consoleOpen,
@@ -146,6 +148,7 @@ fun EditorTopBar(
                     IconButtonCa(CaIcons.undo, "Undo", onUndo, tint = if (canUndo) null else dim)
                     IconButtonCa(CaIcons.redo, "Redo", onRedo, tint = if (canRedo) null else dim)
                     IconButtonCa(CaIcons.search, "Find / replace", onFind)
+                    IconButtonCa(CaIcons.braces, "Reformat code", onReformat)
                 }
                 IconButtonCa(CaIcons.command, "Command palette", onOpenPalette)
                 IconButtonCa(CaIcons.eye, "Toggle inlay hints", onToggleInlayHints, active = inlayHintsOn)
@@ -187,6 +190,7 @@ private fun EditorOverflowMenu(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onFind: () -> Unit,
+    onReformat: () -> Unit,
     inlayHintsOn: Boolean,
     onToggleInlayHints: () -> Unit,
     consoleOpen: Boolean,
@@ -202,6 +206,7 @@ private fun EditorOverflowMenu(
                 OverflowItem(CaIcons.undo, "Undo", enabled = canUndo) { open = false; onUndo() }
                 OverflowItem(CaIcons.redo, "Redo", enabled = canRedo) { open = false; onRedo() }
                 OverflowItem(CaIcons.search, "Find / replace") { open = false; onFind() }
+                OverflowItem(CaIcons.braces, "Reformat code") { open = false; onReformat() }
             }
             OverflowItem(CaIcons.command, "Command palette") { open = false; onOpenPalette() }
             OverflowItem(

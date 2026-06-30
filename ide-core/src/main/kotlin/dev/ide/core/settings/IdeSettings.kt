@@ -39,10 +39,11 @@ data class IdeSettings(
     val twoAxisScroll: Boolean = true,
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
     val pinchZoom: Boolean = true,
-    /** Allow the soft keyboard's autocorrect / suggestions / auto-space in the editor. Off (default) treats
-     *  the field as raw code input, so a typed `.` doesn't get an auto-inserted space and identifiers aren't
-     *  "corrected". On = a normal prose keyboard (suggestion strip, glide typing). */
-    val softKeyboardSuggestions: Boolean = false,
+    /** Allow the soft keyboard's autocorrect / suggestions / auto-space. **On by default** — a normal
+     *  keyboard. Turning it OFF marks the field as raw code (a `visible-password` input type) so a typed `.`
+     *  doesn't get an auto-inserted space and identifiers aren't "corrected", at the cost of the suggestion
+     *  strip (and a password-style keyboard on some IMEs). */
+    val softKeyboardSuggestions: Boolean = true,
 
     // ---- completion ----
     /** Pop the completion list up automatically while typing; off = only on explicit trigger (Ctrl-Space). */
@@ -61,6 +62,13 @@ data class IdeSettings(
     val analyzeOnTheFly: Boolean = true,
     /** Quiet period after the last edit before the highlighting daemon runs its passes. */
     val reparseDelayMs: Int = 300,
+
+    // ---- code style (Reformat Code) ----
+    // The per-language code style profiles live in their own per-language store (see CodeStyleSettings +
+    // SettingsStore.loadCodeStyle), edited on the dedicated Code Style screen. Only the editor-behaviour
+    // toggle is app-global here.
+    /** Reformat the file automatically when it is saved. */
+    val formatOnSave: Boolean = false,
 ) {
     companion object {
         const val THEME_LIGHT = "light"

@@ -31,6 +31,7 @@ import dev.ide.ui.editor.BlockEditor
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.engine.DaemonPass
 import dev.ide.ui.editor.engine.EditorEngineDaemon
+import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.preview.ComposePreviewPane
 import dev.ide.ui.editor.preview.LayoutPreviewPane
 import dev.ide.ui.editor.preview.ResourcePreviewPane
@@ -45,7 +46,12 @@ import kotlinx.coroutines.launch
  * effects and renders the active [EditorViewMode] (code / blocks / preview / split).
  */
 @Composable
-internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact: Boolean, modifier: Modifier) {
+internal fun EditorCenter(
+    state: IdeUiState,
+    indexStatus: IndexUiStatus,
+    compact: Boolean,
+    modifier: Modifier
+) {
     val project = state.backend.project
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
@@ -55,131 +61,167 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
     val active = state.active
     // Bumped by the Find button (top bar) to open the editor's in-file find bar (Ctrl/⌘-F is the keyboard path).
     var findEpoch by remember(active?.path) { mutableStateOf(0) }
+    // Bumped by the Reformat button (top bar) to reformat the active file (Ctrl/⌘-Alt-L is the keyboard path).
+    var formatEpoch by remember(active?.path) { mutableStateOf(0) }
     // Plugin-contributed toolbar actions (empty until a plugin registers; enablement re-evaluated per file).
     val toolbarActions = remember(active?.path) {
-        state.backend.actions.actionsFor(UiActionContext(place = UiActionPlaces.MAIN_TOOLBAR, activeFilePath = active?.path))
+        state.backend.actions.actionsFor(
+            UiActionContext(
+                place = UiActionPlaces.MAIN_TOOLBAR,
+                activeFilePath = active?.path
+            )
+        )
     }
     Box(modifier) {
-      Column(Modifier.fillMaxSize()) {
-        EditorTopBar(
-            projectName = project.name,
-            indexStatus = indexStatus,
-            onToggleNav = { state.navOpen = !state.navOpen },
-            onOpenPalette = { state.paletteOpen = true },
-            runTasks = { state.backend.build.runTasks() },
-            onPickTask = { state.consoleOpen = true; state.backend.build.runTask(it.id) },
-            onSave = { state.saveActive() },
-            hasUnsavedChanges = active?.modified == true,
-            hasActiveFile = active != null,
-            canUndo = active?.session?.canUndo == true,
-            canRedo = active?.session?.canRedo == true,
-            onUndo = { active?.session?.undo() },
-            onRedo = { active?.session?.redo() },
-            onFind = { if (active != null) findEpoch++ },
-            onToggleConsole = { state.consoleOpen = !state.consoleOpen },
-            consoleOpen = state.consoleOpen,
-            inlayHintsOn = state.inlayHintsEnabled,
-            onToggleInlayHints = { state.inlayHintsEnabled = !state.inlayHintsEnabled },
-            showPreview = hasPreview,
-            previewBusy = active?.viewMode == EditorViewMode.Preview,
-            onPreview = { active?.let { it.viewMode = EditorViewMode.Preview } },
-            onIndexClick = { state.indexDetailOpen = true },
-            pluginActions = toolbarActions,
-            onPluginAction = { id ->
-                depsScope.launch {
-                    state.dispatchAction(id, UiActionContext(place = UiActionPlaces.MAIN_TOOLBAR, activeFilePath = active?.path))
-                }
-            },
-            compact = compact,
-        )
-        DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
-        TabsStrip(
-            openFiles = state.openFiles,
-            activeIndex = state.activeIndex,
-            onSelect = { state.activeIndex = it },
-            onClose = { state.close(it) },
-        )
-        if (active != null) {
-            EditorDaemonEffect(state, active) { hasPreview = it }
-            BreadcrumbBar(state, active, hasPreview)
-            AndroidSourcesBanner(state)
-            // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
-            // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
-            // The editor is covered when an app-level overlay sits on top of it: the command palette or a
-            // destination sheet (either layout), or — on a phone — the file-tree / build-console bottom sheets
-            // (on desktop those are docked side panes that leave the editor interactive). A covered editor
-            // dismisses its floating popups so they don't hang over the overlay.
-            val editorObscured = state.paletteOpen || state.sheetDest != null ||
-                (compact && (state.navOpen || state.consoleOpen))
-            val codeSurface: @Composable (Modifier) -> Unit = { mod ->
-                CodeEditor(
-                    path = active.path,
-                    session = active.session,
-                    backend = state.backend,
-                    modifier = mod,
-                    obscured = editorObscured,
-                    onSave = { state.save(active) },
-                    onNavigate = { p, o -> state.openAt(p, o) },
-                    onRenamed = { newPath -> state.reloadAfterRename(active.path, newPath) },
-                    findEpoch = findEpoch,
-                    fontScale = state.editorFontScale,
-                    onFontScaleChange = { state.editorFontScale = it },
-                    completionAutoPopup = state.completionAutoPopup,
-                    completionDelayMs = state.completionDelayMs,
-                    twoAxisScroll = state.twoAxisScrollEnabled,
-                    pinchZoom = state.pinchZoomEnabled,
-                    softKeyboardSuggestions = state.softKeyboardSuggestions,
-                    wordWrap = state.wordWrapEnabled,
-                    wrapIndent = state.wrapIndentEnabled,
-                    fontLigatures = state.fontLigaturesEnabled,
-                    // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that
-                    // specific composable. The editor tools (incl. the Code/Blocks/Preview switch) are pinned
-                    // to the breadcrumb row, so they're already visible — making the view change easy to undo.
-                    onPreview = { fn ->
-                        active.previewTarget = fn
-                        active.viewMode = EditorViewMode.Preview
-                    },
-                )
-            }
-            val previewSurface: @Composable (Modifier) -> Unit = { mod ->
-                when {
-                    isLayoutPreviewable(active.path) -> LayoutPreviewPane(
-                        path = active.path, text = active.text, backend = state.backend, modifier = mod,
-                    )
-                    isPreviewable(active.path) -> ResourcePreviewPane(
-                        path = active.path, text = active.text, backend = state.backend, modifier = mod,
-                    )
-                    else -> ComposePreviewPane(
-                        path = active.path, text = active.text, backend = state.backend,
-                        host = state.composePreviewHost, modifier = mod, selected = active.previewTarget,
+        Column(Modifier.fillMaxSize()) {
+            EditorTopBar(
+                projectName = project.name,
+                indexStatus = indexStatus,
+                onToggleNav = { state.navOpen = !state.navOpen },
+                onOpenPalette = { state.paletteOpen = true },
+                runTasks = { state.backend.build.runTasks() },
+                onPickTask = { state.consoleOpen = true; state.backend.build.runTask(it.id) },
+                onSave = { state.saveActive() },
+                hasUnsavedChanges = active?.modified == true,
+                hasActiveFile = active != null,
+                canUndo = active?.session?.canUndo == true,
+                canRedo = active?.session?.canRedo == true,
+                onUndo = { active?.session?.undo() },
+                onRedo = { active?.session?.redo() },
+                onFind = { if (active != null) findEpoch++ },
+                onReformat = { if (active != null) formatEpoch++ },
+                onToggleConsole = { state.consoleOpen = !state.consoleOpen },
+                consoleOpen = state.consoleOpen,
+                inlayHintsOn = state.inlayHintsEnabled,
+                onToggleInlayHints = { state.inlayHintsEnabled = !state.inlayHintsEnabled },
+                showPreview = hasPreview,
+                previewBusy = active?.viewMode == EditorViewMode.Preview,
+                onPreview = { active?.let { it.viewMode = EditorViewMode.Preview } },
+                onIndexClick = { state.indexDetailOpen = true },
+                pluginActions = toolbarActions,
+                onPluginAction = { id ->
+                    depsScope.launch {
+                        state.dispatchAction(
+                            id,
+                            UiActionContext(
+                                place = UiActionPlaces.MAIN_TOOLBAR,
+                                activeFilePath = active?.path
+                            )
+                        )
+                    }
+                },
+                compact = compact,
+            )
+            DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
+            TabsStrip(
+                openFiles = state.openFiles,
+                activeIndex = state.activeIndex,
+                onSelect = { state.activeIndex = it },
+                onClose = { state.close(it) },
+            )
+            if (active != null) {
+                EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
+                BreadcrumbBar(state, active, hasPreview)
+                AndroidSourcesBanner(state)
+                // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
+                // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
+                // The editor is covered when an app-level overlay sits on top of it: the command palette or a
+                // destination sheet (either layout), or — on a phone — the file-tree / build-console bottom sheets
+                // (on desktop those are docked side panes that leave the editor interactive). A covered editor
+                // dismisses its floating popups so they don't hang over the overlay.
+                val editorObscured = state.paletteOpen || state.sheetDest != null ||
+                        (compact && (state.navOpen || state.consoleOpen))
+                val codeSurface: @Composable (Modifier) -> Unit = { mod ->
+                    CodeEditor(
+                        path = active.path,
+                        session = active.session,
+                        backend = state.backend,
+                        modifier = mod,
+                        obscured = editorObscured,
+                        onSave = { state.save(active) },
+                        onNavigate = { p, o -> state.openAt(p, o) },
+                        onRenamed = { newPath -> state.reloadAfterRename(active.path, newPath) },
+                        findEpoch = findEpoch,
+                        formatEpoch = formatEpoch,
+                        fontScale = state.editorFontScale,
+                        onFontScaleChange = { state.editorFontScale = it },
+                        completionAutoPopup = state.completionAutoPopup,
+                        completionDelayMs = state.completionDelayMs,
+                        twoAxisScroll = state.twoAxisScrollEnabled,
+                        pinchZoom = state.pinchZoomEnabled,
+                        softKeyboardSuggestions = state.softKeyboardSuggestions,
+                        wordWrap = state.wordWrapEnabled,
+                        wrapIndent = state.wrapIndentEnabled,
+                        fontLigatures = state.fontLigaturesEnabled,
+                        // Tapping a @Preview gutter icon switches this tab to the Preview surface, rendering that
+                        // specific composable. The editor tools (incl. the Code/Blocks/Preview switch) are pinned
+                        // to the breadcrumb row, so they're already visible — making the view change easy to undo.
+                        onPreview = { fn ->
+                            active.previewTarget = fn
+                            active.viewMode = EditorViewMode.Preview
+                        },
                     )
                 }
-            }
-            when (active.viewMode) {
-                EditorViewMode.Blocks -> BlockEditor(
-                    path = active.path,
-                    session = active.session,
-                    backend = state.backend,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-                EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth())
-                // Edit + watch at once: stacked on a phone (the only way both fit), side-by-side when wide.
-                EditorViewMode.Split -> SplitEditorPreview(
-                    stacked = compact,
-                    editor = codeSurface,
-                    preview = previewSurface,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-                else -> codeSurface(Modifier.weight(1f).fillMaxWidth())
-            }
-        } else {
-            Box(Modifier.weight(1f).fillMaxWidth().background(Ca.colors.editorBg), contentAlignment = Alignment.Center) {
-                Text("Open a file from the navigator", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                val previewSurface: @Composable (Modifier) -> Unit = { mod ->
+                    when {
+                        isLayoutPreviewable(active.path) -> LayoutPreviewPane(
+                            path = active.path,
+                            text = active.text,
+                            backend = state.backend,
+                            modifier = mod,
+                        )
+
+                        isPreviewable(active.path) -> ResourcePreviewPane(
+                            path = active.path,
+                            text = active.text,
+                            backend = state.backend,
+                            modifier = mod,
+                        )
+
+                        else -> ComposePreviewPane(
+                            path = active.path,
+                            text = active.text,
+                            backend = state.backend,
+                            host = state.composePreviewHost,
+                            modifier = mod,
+                            selected = active.previewTarget,
+                        )
+                    }
+                }
+                when (active.viewMode) {
+                    EditorViewMode.Blocks -> BlockEditor(
+                        path = active.path,
+                        session = active.session,
+                        backend = state.backend,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+
+                    EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth())
+                    // Edit + watch at once: stacked on a phone (the only way both fit), side-by-side when wide.
+                    EditorViewMode.Split -> SplitEditorPreview(
+                        stacked = compact,
+                        editor = codeSurface,
+                        preview = previewSurface,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+
+                    else -> codeSurface(Modifier.weight(1f).fillMaxWidth())
+                }
+            } else {
+                Box(
+                    Modifier.weight(1f).fillMaxWidth().background(Ca.colors.editorBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Open a file from the navigator",
+                        color = Ca.colors.textTertiary,
+                        style = Ca.type.subhead
+                    )
+                }
             }
         }
-      }
-      // In-file structure / outline overlay (opened from the breadcrumb tap or Ctrl-F12).
-      active?.let { StructureSheet(state, it) }
+        // In-file structure / outline overlay (opened from the breadcrumb tap or Ctrl-F12).
+        active?.let { StructureSheet(state, it) }
     }
 }
 
@@ -195,7 +237,12 @@ internal fun EditorCenter(state: IdeUiState, indexStatus: IndexUiStatus, compact
  * @Preview presence via [onHasPreview] to gate the Design toggle.
  */
 @Composable
-private fun EditorDaemonEffect(state: IdeUiState, active: OpenFile, onHasPreview: (Boolean) -> Unit) {
+private fun EditorDaemonEffect(
+    state: IdeUiState,
+    active: OpenFile,
+    indexStatus: IndexUiStatus,
+    onHasPreview: (Boolean) -> Unit
+) {
     val scope = rememberCoroutineScope()
     val daemon = remember(active.path) { EditorEngineDaemon(scope, state.backend, active.path) }
     daemon.onDiagnostics = { active.session.applyAnalysis(it); active.recomputeDirty() }
@@ -203,16 +250,26 @@ private fun EditorDaemonEffect(state: IdeUiState, active: OpenFile, onHasPreview
     daemon.onInlayHints = { active.session.applyInlayHints(it) }
     daemon.onCodeFolds = { folds ->
         active.session.applyCodeFolds(folds.map {
-            dev.ide.ui.editor.folding.FoldRegion(it.startOffset, it.endOffset, it.placeholder, it.kind, it.collapsedByDefault)
+            FoldRegion(
+                it.startOffset,
+                it.endOffset,
+                it.placeholder,
+                it.kind,
+                it.collapsedByDefault
+            )
         })
     }
-    daemon.onComposePreviews = { active.session.applyComposePreviews(it); onHasPreview(it.isNotEmpty()) }
+    daemon.onComposePreviews =
+        { active.session.applyComposePreviews(it); onHasPreview(it.isNotEmpty()) }
     daemon.appliesTo = { pass ->
         when (pass) {
             // Semantic coloring + folding are Java/Kotlin; @Preview markers are Kotlin-only; diagnostics + inlay
             // apply to every backend (they no-op for languages that don't provide them).
             DaemonPass.SEMANTIC, DaemonPass.FOLDS ->
-                active.path.endsWith(".java") || active.path.endsWith(".kt") || active.path.endsWith(".kts")
+                active.path.endsWith(".java") || active.path.endsWith(".kt") || active.path.endsWith(
+                    ".kts"
+                )
+
             DaemonPass.PREVIEWS -> active.path.endsWith(".kt") || active.path.endsWith(".kts")
             else -> true
         }
@@ -230,5 +287,17 @@ private fun EditorDaemonEffect(state: IdeUiState, active: OpenFile, onHasPreview
         daemon.analyzeEnabled = state.analyzeOnTheFly
         daemon.autoReparseDelayMs = state.reparseDelayMs
         daemon.restart(active.session.doc.text) // one lazy rope materialization per settled edit
+    }
+    // Re-run the daemon when the workspace index finishes building. A file opened (e.g. a restored tab) while
+    // the index is still building is analyzed against an incomplete classpath/symbol index and can show stale
+    // "unresolved symbol" diagnostics that resolve once indexing completes. The daemon is pull-based — it only
+    // re-runs on a settled edit — so nothing re-triggers it on its own when the index catches up. Fire on the
+    // building true→false transition only; a file opened in the already-built steady state is already analyzed
+    // against the ready index by the edit/open effect above (the initial null state never fires).
+    var wasIndexing by remember(active.path) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(active.path, indexStatus.building) {
+        val prev = wasIndexing
+        wasIndexing = indexStatus.building
+        if (prev == true && !indexStatus.building) daemon.restart(active.session.doc.text)
     }
 }

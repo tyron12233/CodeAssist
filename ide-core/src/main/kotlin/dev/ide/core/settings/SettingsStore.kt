@@ -45,8 +45,80 @@ class SettingsStore(
             wordCompletion = bool("completion.wordCompletion", d.wordCompletion),
             analyzeOnTheFly = bool("analysis.onTheFly", d.analyzeOnTheFly),
             reparseDelayMs = int("analysis.reparseDelayMs", d.reparseDelayMs).coerceIn(MIN_REPARSE_DELAY_MS, MAX_REPARSE_DELAY_MS),
+            formatOnSave = bool("codeStyle.formatOnSave", d.formatOnSave),
         )
     }
+
+    /** The per-language code style profile (keyed `codeStyle.<lang>.<field>`); unset fields fall back to the
+     *  language default and numeric fields are clamped. */
+    fun loadCodeStyle(languageId: String): CodeStyleSettings {
+        val d = CodeStyleSettings.default(languageId)
+        fun k(name: String) = "codeStyle.$languageId.$name"
+        return CodeStyleSettings(
+            preset = oneOf(k("preset"), d.preset, CodeStyleSettings.PRESET_GOOGLE, CodeStyleSettings.PRESET_ANDROID, CodeStyleSettings.PRESET_KOTLIN_OFFICIAL, CodeStyleSettings.PRESET_CUSTOM),
+            indentSize = int(k("indentSize"), d.indentSize).coerceIn(CodeStyleSettings.MIN_INDENT, CodeStyleSettings.MAX_INDENT),
+            continuationIndent = int(k("continuationIndent"), d.continuationIndent).coerceIn(CodeStyleSettings.MIN_CONTINUATION, CodeStyleSettings.MAX_CONTINUATION),
+            maxLineLength = int(k("maxLineLength"), d.maxLineLength).coerceIn(CodeStyleSettings.MIN_LINE_LENGTH, CodeStyleSettings.MAX_LINE_LENGTH),
+            useTabs = bool(k("useTabs"), d.useTabs),
+            braceStyle = oneOf(k("braceStyle"), d.braceStyle, CodeStyleSettings.BRACE_END_OF_LINE, CodeStyleSettings.BRACE_NEXT_LINE),
+            spaceBeforeParens = bool(k("spaceBeforeParens"), d.spaceBeforeParens),
+            spaceWithinParens = bool(k("spaceWithinParens"), d.spaceWithinParens),
+            spaceAfterComma = bool(k("spaceAfterComma"), d.spaceAfterComma),
+            spaceAroundOperators = bool(k("spaceAroundOperators"), d.spaceAroundOperators),
+            spaceBeforeBrace = bool(k("spaceBeforeBrace"), d.spaceBeforeBrace),
+            blankLinesToKeep = int(k("blankLinesToKeep"), d.blankLinesToKeep).coerceIn(CodeStyleSettings.MIN_BLANK, CodeStyleSettings.MAX_BLANK),
+            wrapMethodParameters = wrapOf(k("wrapMethodParameters"), d.wrapMethodParameters),
+            wrapMethodArguments = wrapOf(k("wrapMethodArguments"), d.wrapMethodArguments),
+            wrapChainedCalls = wrapOf(k("wrapChainedCalls"), d.wrapChainedCalls),
+            wrapBinaryExpressions = wrapOf(k("wrapBinaryExpressions"), d.wrapBinaryExpressions),
+            blankLinesAfterImports = int(k("blankLinesAfterImports"), d.blankLinesAfterImports).coerceIn(CodeStyleSettings.MIN_BLANK, CodeStyleSettings.MAX_BLANK),
+            blankLinesBeforeMethod = int(k("blankLinesBeforeMethod"), d.blankLinesBeforeMethod).coerceIn(CodeStyleSettings.MIN_BLANK, CodeStyleSettings.MAX_BLANK),
+            blankLinesBeforeField = int(k("blankLinesBeforeField"), d.blankLinesBeforeField).coerceIn(CodeStyleSettings.MIN_BLANK, CodeStyleSettings.MAX_BLANK),
+            blankLinesBeforeFirstMember = int(k("blankLinesBeforeFirstMember"), d.blankLinesBeforeFirstMember).coerceIn(CodeStyleSettings.MIN_BLANK, CodeStyleSettings.MAX_BLANK),
+            blankLinesBetweenTypes = int(k("blankLinesBetweenTypes"), d.blankLinesBetweenTypes).coerceIn(CodeStyleSettings.MIN_BLANK, CodeStyleSettings.MAX_BLANK),
+            spaceBeforeSemicolon = bool(k("spaceBeforeSemicolon"), d.spaceBeforeSemicolon),
+            spaceAroundLambdaArrow = bool(k("spaceAroundLambdaArrow"), d.spaceAroundLambdaArrow),
+            spaceAroundTernary = bool(k("spaceAroundTernary"), d.spaceAroundTernary),
+            spaceAfterTypeCast = bool(k("spaceAfterTypeCast"), d.spaceAfterTypeCast),
+            formatComments = bool(k("formatComments"), d.formatComments),
+            wrapComments = bool(k("wrapComments"), d.wrapComments),
+        )
+    }
+
+    /** Persist a per-language code style profile under `codeStyle.<lang>.<field>`. */
+    fun saveCodeStyle(languageId: String, s: CodeStyleSettings) {
+        fun p(name: String, v: String) = put("codeStyle.$languageId.$name", v)
+        p("preset", s.preset)
+        p("indentSize", s.indentSize.toString())
+        p("continuationIndent", s.continuationIndent.toString())
+        p("maxLineLength", s.maxLineLength.toString())
+        p("useTabs", s.useTabs.toString())
+        p("braceStyle", s.braceStyle)
+        p("spaceBeforeParens", s.spaceBeforeParens.toString())
+        p("spaceWithinParens", s.spaceWithinParens.toString())
+        p("spaceAfterComma", s.spaceAfterComma.toString())
+        p("spaceAroundOperators", s.spaceAroundOperators.toString())
+        p("spaceBeforeBrace", s.spaceBeforeBrace.toString())
+        p("blankLinesToKeep", s.blankLinesToKeep.toString())
+        p("wrapMethodParameters", s.wrapMethodParameters)
+        p("wrapMethodArguments", s.wrapMethodArguments)
+        p("wrapChainedCalls", s.wrapChainedCalls)
+        p("wrapBinaryExpressions", s.wrapBinaryExpressions)
+        p("blankLinesAfterImports", s.blankLinesAfterImports.toString())
+        p("blankLinesBeforeMethod", s.blankLinesBeforeMethod.toString())
+        p("blankLinesBeforeField", s.blankLinesBeforeField.toString())
+        p("blankLinesBeforeFirstMember", s.blankLinesBeforeFirstMember.toString())
+        p("blankLinesBetweenTypes", s.blankLinesBetweenTypes.toString())
+        p("spaceBeforeSemicolon", s.spaceBeforeSemicolon.toString())
+        p("spaceAroundLambdaArrow", s.spaceAroundLambdaArrow.toString())
+        p("spaceAroundTernary", s.spaceAroundTernary.toString())
+        p("spaceAfterTypeCast", s.spaceAfterTypeCast.toString())
+        p("formatComments", s.formatComments.toString())
+        p("wrapComments", s.wrapComments.toString())
+    }
+
+    private fun wrapOf(k: String, def: String): String =
+        get(key(k))?.takeIf { it in setOf(CodeStyleSettings.WRAP_NEVER, CodeStyleSettings.WRAP_IF_LONG, CodeStyleSettings.WRAP_ONE_PER_LINE) } ?: def
 
     /** Persist every field (idempotent; only the prefs file is touched). */
     fun save(s: IdeSettings) {
@@ -70,6 +142,7 @@ class SettingsStore(
         put("completion.wordCompletion", s.wordCompletion.toString())
         put("analysis.onTheFly", s.analyzeOnTheFly.toString())
         put("analysis.reparseDelayMs", s.reparseDelayMs.toString())
+        put("codeStyle.formatOnSave", s.formatOnSave.toString())
     }
 
     private fun key(k: String) = "$KEY_PREFIX$k"

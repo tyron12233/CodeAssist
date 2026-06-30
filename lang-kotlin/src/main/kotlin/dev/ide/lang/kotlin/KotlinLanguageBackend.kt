@@ -30,6 +30,7 @@ class KotlinLanguageBackend : LanguageBackend {
         BackendCapability.SIGNATURE_HELP,
         BackendCapability.SEMANTIC_HIGHLIGHT,
         BackendCapability.CODE_FOLDING,
+        BackendCapability.FORMAT,
     )
 
     override fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer = KotlinSourceAnalyzer(ctx)

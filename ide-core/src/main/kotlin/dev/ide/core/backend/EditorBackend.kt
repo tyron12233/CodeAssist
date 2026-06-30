@@ -2,8 +2,12 @@ package dev.ide.core.backend
 
 import dev.ide.analysis.CodeActionKind
 import dev.ide.analysis.DiagnosticTag
+import dev.ide.analytics.Events
 import dev.ide.core.BackendContext
+import dev.ide.core.settings.CodeStyleSettings
+import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.completion.CaretAction
+import dev.ide.lang.formatting.FormatStyle
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.dom.Severity
 import dev.ide.lang.highlight.HighlightModifier
@@ -48,59 +52,92 @@ import kotlinx.coroutines.withContext
  */
 internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
-    override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> =
-        try { ctx.background { ctx.services.breadcrumbAt(Paths.get(path), text, offset) } }
-        catch (e: EngineCanceledException) { emptyList() } // re-runs on the next caret move
+    override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
+        ctx.background { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
+    } catch (e: EngineCanceledException) {
+        emptyList()
+    } // re-runs on the next caret move
 
-    override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> =
-        try {
-            ctx.background {
-                ctx.services.fileStructure(Paths.get(path), text).map {
-                    UiFileSymbol(it.name, it.detail, it.kind.name.lowercase(), it.nameOffset, it.endOffset, it.depth)
-                }
+    override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = try {
+        ctx.background {
+            ctx.services.fileStructure(Paths.get(path), text).map {
+                UiFileSymbol(
+                    it.name,
+                    it.detail,
+                    it.kind.name.lowercase(),
+                    it.nameOffset,
+                    it.endOffset,
+                    it.depth
+                )
             }
-        } catch (e: EngineCanceledException) { emptyList() }
+        }
+    } catch (e: EngineCanceledException) {
+        emptyList()
+    }
 
     override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
-        withContext(ctx.engineDispatcher) { ctx.services.definitionAt(Paths.get(path), text, offset) }
-            ?.let { (p, o) -> UiDefinition(p.toString(), o) }
+        withContext(ctx.engineDispatcher) {
+            ctx.services.definitionAt(
+                Paths.get(path), text, offset
+            )
+        }?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
-    override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? =
-        try {
-            ctx.background {
-                ctx.services.quickDocAt(Paths.get(path), text, offset)?.let {
-                    UiQuickDoc(it.signature, it.name, it.kind.name.lowercase(), it.container, it.doc, it.docFormat.name.lowercase())
-                }
+    override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = try {
+        ctx.background {
+            ctx.services.quickDocAt(Paths.get(path), text, offset)?.let {
+                UiQuickDoc(
+                    it.signature,
+                    it.name,
+                    it.kind.name.lowercase(),
+                    it.container,
+                    it.doc,
+                    it.docFormat.name.lowercase()
+                )
             }
-        } catch (e: EngineCanceledException) { null }
+        }
+    } catch (e: EngineCanceledException) {
+        null
+    }
 
     override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
-        withContext(ctx.engineDispatcher) { ctx.services.prepareRename(Paths.get(path), text, offset)?.let { UiRenameTarget(it.oldName, it.kind) } }
-
-    override suspend fun rename(path: String, text: String, offset: Int, newName: String): UiRenameResult =
         withContext(ctx.engineDispatcher) {
-            val r = ctx.services.rename(Paths.get(path), text, offset, newName)
-            if (r.success) ctx.bumpFileSystemEpoch() // the multi-file edit / file rename changed the tree + other buffers
-            UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
+            ctx.services.prepareRename(
+                Paths.get(path), text, offset
+            )?.let { UiRenameTarget(it.oldName, it.kind) }
         }
+
+    override suspend fun rename(
+        path: String, text: String, offset: Int, newName: String
+    ): UiRenameResult = withContext(ctx.engineDispatcher) {
+        val r = ctx.services.rename(Paths.get(path), text, offset, newName)
+        if (r.success) ctx.bumpFileSystemEpoch() // the multi-file edit / file rename changed the tree + other buffers
+        UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
+    }
 
     override fun updateDocument(path: String, text: String) =
         ctx.services.updateDocument(Paths.get(path), text)
 
-    override fun saveFile(path: String, text: String) =
-        ctx.services.save(Paths.get(path), text)
+    override fun saveFile(path: String, text: String) = ctx.services.save(Paths.get(path), text)
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val t0 = System.nanoTime()
         val result = ctx.interactive { ctx.services.complete(Paths.get(path), text, offset) }
-        ctx.recordPerf(dev.ide.analytics.Events.COMPLETION_PERF, (System.nanoTime() - t0) / 1_000_000)
+        ctx.recordPerf(Events.COMPLETION_PERF, (System.nanoTime() - t0) / 1_000_000)
         return UiCompletionResult(
             items = result.items.map { item ->
                 UiCompletionItem(
-                    label = item.label, insertText = item.insertText, detail = item.detail,
+                    label = item.label,
+                    insertText = item.insertText,
+                    detail = item.detail,
                     container = item.container,
-                    documentation = item.documentation, kind = mapKind(item.kind), sortPriority = item.sortPriority,
-                    additionalEdits = item.additionalEdits.map { UiTextEdit(it.range.start, it.range.end, it.newText) },
+                    documentation = item.documentation,
+                    kind = mapKind(item.kind),
+                    sortPriority = item.sortPriority,
+                    additionalEdits = item.additionalEdits.map {
+                        UiTextEdit(
+                            it.range.start, it.range.end, it.newText
+                        )
+                    },
                     caret = mapCaret(item.caret),
                     snippet = mapSnippet(item.caret),
                 )
@@ -120,7 +157,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         } catch (e: EngineCanceledException) {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
         }
-        ctx.recordPerf(dev.ide.analytics.Events.ANALYSIS_PERF, (System.nanoTime() - t0) / 1_000_000)
+        ctx.recordPerf(Events.ANALYSIS_PERF, (System.nanoTime() - t0) / 1_000_000)
         return diagnostics.map { d ->
             val (line, col) = lineColOf(text, d.range.start)
             UiDiagnostic(
@@ -140,9 +177,15 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         }
     }
 
-    override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> {
+    override suspend fun hintsAt(
+        path: String, text: String, startOffset: Int, endOffset: Int
+    ): List<UiInlayHint> {
         val hints = try {
-            ctx.background { ctx.services.inlayHints(Paths.get(path), text, startOffset, endOffset) }
+            ctx.background {
+                ctx.services.inlayHints(
+                    Paths.get(path), text, startOffset, endOffset
+                )
+            }
         } catch (e: EngineCanceledException) {
             // Preempted by a higher-priority call (e.g. completion) on the shared engine thread. Surface it so
             // the host retries once the buffer settles — returning empty here would CLEAR the hints and they'd
@@ -178,7 +221,11 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             signatures = help.signatures.map { s ->
                 UiSignature(
                     label = s.label,
-                    parameters = s.parameters.map { p -> UiSignatureParam(p.label, p.labelStart, p.labelEnd) },
+                    parameters = s.parameters.map { p ->
+                        UiSignatureParam(
+                            p.label, p.labelStart, p.labelEnd
+                        )
+                    },
                     documentation = s.documentation,
                     activeParameter = s.activeParameter,
                 )
@@ -225,13 +272,44 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     // ---- code actions (quick-fixes + intentions) ----
 
-    override suspend fun actionsAt(path: String, text: String, selStart: Int, selEnd: Int): List<UiAction> =
-        withContext(ctx.engineDispatcher) { ctx.services.editorActions(Paths.get(path), text, selStart, selEnd) }
-            .mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
+    override suspend fun actionsAt(
+        path: String, text: String, selStart: Int, selEnd: Int
+    ): List<UiAction> = withContext(ctx.engineDispatcher) {
+        ctx.services.editorActions(
+            Paths.get(path), text, selStart, selEnd
+        )
+    }.mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
 
-    override suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): List<UiTextEdit> =
-        withContext(ctx.engineDispatcher) { ctx.services.applyEditorAction(Paths.get(path), text, selStart, selEnd, actionId) }
-            .map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+    override suspend fun applyAction(
+        path: String, text: String, selStart: Int, selEnd: Int, actionId: Int
+    ): List<UiTextEdit> = withContext(ctx.engineDispatcher) {
+        ctx.services.applyEditorAction(
+            Paths.get(path), text, selStart, selEnd, actionId
+        )
+    }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+
+    override suspend fun formatDocument(path: String, text: String): List<UiTextEdit> {
+        val style = currentFormatStyle(path)
+        return withContext(ctx.engineDispatcher) {
+            ctx.services.formatDocument(Paths.get(path), text, style)
+        }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+    }
+
+    override suspend fun formatRange(path: String, text: String, selStart: Int, selEnd: Int): List<UiTextEdit> {
+        val style = currentFormatStyle(path)
+        return withContext(ctx.engineDispatcher) {
+            ctx.services.formatRange(Paths.get(path), text, selStart, selEnd, style)
+        }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+    }
+
+    // The active code style, resolved fresh per reformat from the file's language profile (so a settings
+    // change applies without restart).
+    private val settingsStore = SettingsStore(get = { ctx.manager?.preference(it) }, set = { _, _ -> })
+    private fun currentFormatStyle(path: String): FormatStyle =
+        settingsStore.loadCodeStyle(languageIdForPath(path)).toFormatStyle()
+
+    private fun languageIdForPath(path: String): String =
+        if (path.endsWith(".kt") || path.endsWith(".kts")) CodeStyleSettings.LANG_KOTLIN else CodeStyleSettings.LANG_JAVA
 
     // ---- mappers (editor-local) ----
 
@@ -258,7 +336,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         var lineStart = 0
         val end = offset.coerceIn(0, text.length)
         for (i in 0 until end) {
-            if (text[i] == '\n') { line++; lineStart = i + 1 }
+            if (text[i] == '\n') {
+                line++; lineStart = i + 1
+            }
         }
         return line to (end - lineStart + 1)
     }
@@ -271,10 +351,8 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         // Full snippet stepping (linked cursors, choice popups) is a follow-up in the editor; until then
         // degrade to selecting the first tab stop (or the final caret) so a snippet item is still usable.
         is CaretAction.ExpandSnippet -> {
-            val first = action.expansion.stops
-                .filter { it.index != 0 }
-                .minByOrNull { it.index }
-                ?.ranges?.firstOrNull()
+            val first = action.expansion.stops.filter { it.index != 0 }
+                .minByOrNull { it.index }?.ranges?.firstOrNull()
             if (first != null) UiCaret(first.start, first.end - first.start)
             else UiCaret(action.expansion.finalCaretOffset)
         }
@@ -284,7 +362,11 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     private fun mapSnippet(action: CaretAction): UiSnippet? {
         val exp = (action as? CaretAction.ExpandSnippet)?.expansion ?: return null
         return UiSnippet(
-            stops = exp.stops.map { s -> UiSnippetStop(s.index, s.ranges.map { UiTextRange(it.start, it.end) }, s.choices) },
+            stops = exp.stops.map { s ->
+                UiSnippetStop(
+                    s.index, s.ranges.map { UiTextRange(it.start, it.end) }, s.choices
+                )
+            },
             finalCaretOffset = exp.finalCaretOffset,
         )
     }

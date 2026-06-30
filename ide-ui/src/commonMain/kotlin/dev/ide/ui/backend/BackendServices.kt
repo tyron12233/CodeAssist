@@ -103,6 +103,12 @@ interface EditorService {
     /** Compute the edits for the code action [actionId] from [actionsAt] over the same buffer + selection. */
     suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): List<UiTextEdit> = emptyList()
 
+    /** Reformat the whole buffer to the active code style. Empty if unsupported / already formatted. */
+    suspend fun formatDocument(path: String, text: String): List<UiTextEdit> = emptyList()
+
+    /** Reformat only the text overlapping the selection `[selStart, selEnd)`. */
+    suspend fun formatRange(path: String, text: String, selStart: Int, selEnd: Int): List<UiTextEdit> = emptyList()
+
     /** Go-to-definition for the symbol/reference at [offset], or null. */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
 
@@ -388,6 +394,13 @@ interface ProjectService {
     /** Every project the host knows about (for the picker). */
     fun projects(): List<ProjectInfo> = emptyList()
 
+    /**
+     * The launcher icon for the Android project rooted at [rootPath] — raster bytes or a render-ready
+     * drawable (see [UiProjectIcon]) — or null when the project is not Android or has no resolvable icon.
+     * Resolved off the main thread so the picker stays responsive; the UI renders/decodes it per card.
+     */
+    suspend fun projectIcon(rootPath: String): UiProjectIcon? = null
+
     /** The on-disk directory that holds every project, or null. */
     fun projectsRootPath(): String? = null
 
@@ -418,6 +431,40 @@ interface ProjectService {
 
     /** Persist the open editor tabs for the active project. */
     fun saveOpenTabs(tabs: UiOpenTabs) {}
+}
+
+// ---------------------------------------------------------------------------
+// Projects Store (the featured/searchable catalog of templates + sample projects)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Projects Store: a featured, searchable catalog of starter templates and sample projects, browsed from
+ * the home screen's Store tab. Today a host serves the bundled project templates through this seam; the same
+ * contract is what a remote (submission-backed) catalog later implements, so the UI never changes. A backend
+ * that wires no store inherits [StoreService.Unsupported] (the store tab then shows an unavailable state).
+ */
+interface StoreService {
+    /** Whether a catalog source is configured. False ⇒ the Store tab renders an unavailable placeholder. */
+    fun storeAvailable(): Boolean = false
+
+    /** The store landing payload: featured carousel + filter categories + section shelves. */
+    suspend fun catalog(): UiStoreCatalog = UiStoreCatalog()
+
+    /** Items matching [query] (blank = all), optionally narrowed to [category] (null = every category). */
+    suspend fun search(query: String, category: String? = null): List<UiStoreItem> = emptyList()
+
+    /**
+     * Install the store item [id] into the workspace. A [UiStoreItemKind.Template] item is created through the
+     * normal template flow (the UI passes the configure-form [args]); a sample/community item downloads its
+     * ready-made project. A successful create/install bumps [ProjectService.projectEpoch].
+     */
+    suspend fun install(id: String, args: Map<String, String> = emptyMap()): UiStoreInstallResult =
+        UiStoreInstallResult(false, "The Projects Store is not available in this build")
+
+    companion object {
+        /** A store that advertises nothing — the default for backends that wire no catalog. */
+        val Unsupported: StoreService = object : StoreService {}
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -471,6 +518,15 @@ interface SettingsService {
 
     /** Press a settings action (e.g. "Clear caches") on page [pageId]; returns a status message. */
     suspend fun invokeSettingAction(pageId: String, key: String): String? = null
+
+    /** The per-language code style profile for the Code Style screen ([languageId] = "java" | "kotlin"). */
+    fun codeStyle(languageId: String): UiCodeStyle = UiCodeStyle()
+
+    /** Persist the per-language code style profile (takes effect on the next reformat). */
+    fun setCodeStyle(languageId: String, style: UiCodeStyle) {}
+
+    /** Format the built-in preview sample for [languageId] with [style] (the in-progress, unsaved profile). */
+    suspend fun formatStylePreview(languageId: String, style: UiCodeStyle): String = ""
 
     /** The per-project inspection catalogue (analyzer + enabled state + severity). */
     fun inspections(): List<UiInspection> = emptyList()

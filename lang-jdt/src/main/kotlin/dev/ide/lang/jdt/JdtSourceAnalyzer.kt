@@ -12,6 +12,8 @@ import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.incremental.ReparseResult
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.folding.FoldingService
+import dev.ide.lang.formatting.FormattingService
+import dev.ide.lang.jdt.formatting.JdtFormattingService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.jdt.completion.JdtCompletion
@@ -210,6 +212,9 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     /** Structural code folding (imports, type/method bodies, comments) over the syntactic AST. */
     override val folding: FoldingService = JdtCodeFolder(this)
+
+    /** Reformatting via Eclipse JDT's own code formatter, parsed at the module's compliance level. */
+    override val formatting: FormattingService = JdtFormattingService(complianceOf(ctx.languageLevel))
 
     /**
      * Release the per-module environment cache (open library-jar handles). The host registers each analyzer

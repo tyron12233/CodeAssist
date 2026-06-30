@@ -19,6 +19,7 @@ fun actionIcon(iconId: String?): ImageVector = when (iconId) {
     "terminal", "console" -> CaIcons.terminal
     "copy" -> CaIcons.copy
     "code" -> CaIcons.code
+    "braces", "codeStyle", "format" -> CaIcons.braces
     "file", "doc" -> CaIcons.docText
     "folder" -> CaIcons.folder
     "share" -> CaIcons.share
@@ -28,6 +29,7 @@ fun actionIcon(iconId: String?): ImageVector = when (iconId) {
     "layers", "modules" -> CaIcons.layers
     "pkg", "sdk" -> CaIcons.pkg
     "key", "keystore", "signing" -> CaIcons.key
+    "lightbulb", "inspections", "analysis" -> CaIcons.lightbulb
     "close" -> CaIcons.close
     "plus" -> CaIcons.plus
     else -> CaIcons.lightbulb

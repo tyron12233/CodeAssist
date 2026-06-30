@@ -116,6 +116,10 @@ interface SourceAnalyzer {
     val folding: dev.ide.lang.folding.FoldingService?
         get() = null
 
+    /** Code reformatting; null if !capabilities.contains(FORMAT). See the formatting SPI. */
+    val formatting: dev.ide.lang.formatting.FormattingService?
+        get() = null
+
     /** Current tolerant tree for [file] (parsed/incrementally maintained). */
     suspend fun parsedFile(file: VirtualFile): ParsedFile
 
