@@ -13,6 +13,7 @@ import dev.ide.ui.backend.SigningService
 import dev.ide.ui.backend.PreviewService
 import dev.ide.ui.backend.ProjectService
 import dev.ide.ui.backend.SdkService
+import dev.ide.ui.backend.StoreService
 import dev.ide.ui.backend.SearchService
 import dev.ide.ui.backend.SettingsService
 import dev.ide.ui.backend.ProjectInfo
@@ -29,6 +30,7 @@ import dev.ide.core.backend.FileBackend
 import dev.ide.core.backend.ModuleBackend
 import dev.ide.core.backend.PreviewBackend
 import dev.ide.core.backend.ProjectBackend
+import dev.ide.core.backend.StoreBackend
 import dev.ide.core.backend.SdkBackend
 import dev.ide.core.backend.SearchBackend
 import dev.ide.core.backend.SettingsBackend
@@ -119,6 +121,14 @@ class IdeServicesBackend(
         get() = activeServices ?: error("No project is open")
 
     override val servicesOrNull: IdeServices? get() = activeServices
+
+    // The SDK manager + keystore registry are APPLICATION-scoped (one shared instance per app), so they're
+    // reached through the project manager — available even with no project open, which is what lets the
+    // picker's Settings & Tools hub drive them. The manager-less single-project path (tests) has no manager,
+    // so it falls back to the active engine's (same instance, resolved from the engine's app container).
+    override val sdkManager: SdkManagerService? get() = manager?.sdkManager() ?: activeServices?.sdkManager
+    override val keystoreRegistry: dev.ide.android.support.tools.KeystoreRegistry?
+        get() = manager?.keystoreRegistry() ?: activeServices?.keystoreRegistry
 
     /**
      * The thread the editor's language work (parse/complete/analyze/hints/actions/rename) runs on.
@@ -230,6 +240,7 @@ class IdeServicesBackend(
     override val modules: ModuleService = ModuleBackend(this)
     override val signing: SigningService = SigningBackend(this)
     override val projects: ProjectService = ProjectBackend(this)
+    override val store: StoreService = StoreBackend(this)
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
     override val actions: ActionService = ActionBackend(this)
@@ -267,12 +278,12 @@ class IdeServicesBackend(
             projectEpoch.collectLatest {
                 val svc = activeServices ?: return@collectLatest
                 var prev = dev.ide.ui.backend.RunStatus.Idle
-                svc.buildState.collectLatest { bs ->
+                svc.build.buildState.collectLatest { bs ->
                     val terminal = bs.status == dev.ide.ui.backend.RunStatus.Succeeded || bs.status == dev.ide.ui.backend.RunStatus.Failed
                     if (terminal && prev == dev.ide.ui.backend.RunStatus.Running) {
                         // Attach this build's heap peak (Phase-0 build-isolation instrumentation): the signal
                         // for whether a build/run is the dominant OOM driver vs. the project-open warm-up storm.
-                        val peak = svc.lastBuildPeak
+                        val peak = svc.build.lastBuildPeak
                         track(
                             dev.ide.analytics.Events.BUILD_RESULT,
                             mapOf(
@@ -410,6 +421,9 @@ class IdeServicesBackend(
     override fun swapEngine(next: IdeServices) {
         val prev = activeServices
         activeServices = next
+        // Point the shared application environment at the now-active engine, for app-level extension callbacks
+        // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.
+        manager?.env?.activeEngine = next
         _projectEpoch.value += 1
         if (prev !== next) runCatching { prev?.close() }
     }

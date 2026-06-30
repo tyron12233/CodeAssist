@@ -19,10 +19,10 @@ class ModuleManagementTest {
     fun availableTypesIncludeJavaAndAndroid() {
         val dir = Files.createTempDirectory("ide-modtypes")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val ids = ide.availableModuleTypes().map { it.id }
+            val ids = ide.moduleService.availableModuleTypes().map { it.id }
             assertTrue("java-lib" in ids, "java-lib is creatable")
             assertTrue("android-app" in ids && "android-lib" in ids, "android types are creatable")
-            val javaLib = ide.availableModuleTypes().first { it.id == "java-lib" }
+            val javaLib = ide.moduleService.availableModuleTypes().first { it.id == "java-lib" }
             assertTrue(javaLib.languageLevels.isNotEmpty() && javaLib.defaultFacets.isEmpty(), "java-lib has levels and no facets")
         }
         dir.toFile().deleteRecursively()
@@ -32,18 +32,18 @@ class ModuleManagementTest {
     fun createModuleAddsItWithSourceDirs() {
         val dir = Files.createTempDirectory("ide-createmod")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val r = ide.createModule("newlib", "java-lib", "JAVA_17", emptyMap())
+            val r = ide.moduleService.createModule("newlib", "java-lib", "JAVA_17", emptyMap())
             assertTrue(r.success, r.message)
             assertTrue(ide.modules().any { it.name == "newlib" }, "module is in the model")
-            assertTrue(ide.configurableModules().any { it.name == "newlib" }, "module is in the settings list")
+            assertTrue(ide.moduleService.configurableModules().any { it.name == "newlib" }, "module is in the settings list")
             val mod = ide.modules().first { it.name == "newlib" }
             val srcDir = mod.sourceSets.flatMap { it.contentRoots }.firstOrNull()
             assertNotNull(srcDir, "the default source set has a content root")
             assertTrue(Files.isDirectory(java.nio.file.Paths.get(srcDir.dir.path)), "its directory exists on disk")
 
             // duplicate + invalid names are rejected
-            assertFalse(ide.createModule("newlib", "java-lib", null, emptyMap()).success, "duplicate rejected")
-            assertFalse(ide.createModule("1bad name", "java-lib", null, emptyMap()).success, "invalid name rejected")
+            assertFalse(ide.moduleService.createModule("newlib", "java-lib", null, emptyMap()).success, "duplicate rejected")
+            assertFalse(ide.moduleService.createModule("1bad name", "java-lib", null, emptyMap()).success, "invalid name rejected")
         }
         dir.toFile().deleteRecursively()
     }
@@ -53,26 +53,26 @@ class ModuleManagementTest {
         val dir = Files.createTempDirectory("ide-moddep")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // app already depends on util (→ core). app may additionally depend on core, but not the reverse.
-            val targets = ide.moduleDependencyTargets("app")
+            val targets = ide.dependencies.moduleDependencyTargets("app")
             assertTrue("core" in targets, "core is an eligible target for app")
             assertFalse("util" in targets, "util is already a dependency, so excluded")
             assertFalse("app" in targets, "a module is never its own target")
 
             // core → app would cycle (app transitively depends on core) and is blocked.
-            assertFalse(ide.addModuleDependency("core", "app", "implementation").success, "cycle is rejected")
+            assertFalse(ide.dependencies.addModuleDependency("core", "app", "implementation").success, "cycle is rejected")
 
             // app → core is fine.
-            assertTrue(ide.addModuleDependency("app", "core", "implementation").success)
+            assertTrue(ide.dependencies.addModuleDependency("app", "core", "implementation").success)
             assertTrue(ide.modules().first { it.name == "app" }.dependencies
                 .filterIsInstance<ModuleDependency>().any { it.target.value == "core" }, "the module dep was recorded")
 
             // removable via removeDependency (target name as the coordinate).
-            assertTrue(ide.removeDependency("app", "core"))
+            assertTrue(ide.dependencies.removeDependency("app", "core"))
             assertFalse(ide.modules().first { it.name == "app" }.dependencies
                 .filterIsInstance<ModuleDependency>().any { it.target.value == "core" }, "the module dep was removed")
 
             // an `api` scope is exported; `implementation` is not (Gradle semantics, derived from scope).
-            assertTrue(ide.addModuleDependency("app", "core", "api").success)
+            assertTrue(ide.dependencies.addModuleDependency("app", "core", "api").success)
             val edge = ide.modules().first { it.name == "app" }.dependencies
                 .filterIsInstance<ModuleDependency>().first { it.target.value == "core" }
             assertTrue(edge.exported, "an api module dependency is exported")
@@ -85,7 +85,7 @@ class ModuleManagementTest {
         val dir = Files.createTempDirectory("ide-rmmod")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // util depends on core; removing core must also drop util's edge onto it.
-            assertTrue(ide.removeModule("core"))
+            assertTrue(ide.moduleService.removeModule("core"))
             assertFalse(ide.modules().any { it.name == "core" }, "core is gone from the model")
             assertFalse(ide.modules().first { it.name == "util" }.dependencies
                 .filterIsInstance<ModuleDependency>().any { it.target.value == "core" }, "util's edge onto core was dropped")
@@ -97,18 +97,18 @@ class ModuleManagementTest {
     fun customRepositoriesPersistAndDedup() {
         val dir = Files.createTempDirectory("ide-repos")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val builtins = ide.repositories()
+            val builtins = ide.dependencies.repositories()
             assertTrue(builtins.all { it.builtin } && builtins.size >= 2, "the built-in repos are present and locked")
 
-            assertTrue(ide.addRepository("Internal", "https://repo.example.com/maven"))
-            assertTrue(ide.repositories().any { !it.builtin && it.url == "https://repo.example.com/maven" })
+            assertTrue(ide.dependencies.addRepository("Internal", "https://repo.example.com/maven"))
+            assertTrue(ide.dependencies.repositories().any { !it.builtin && it.url == "https://repo.example.com/maven" })
 
-            assertFalse(ide.addRepository("dup", "https://repo.example.com/maven/"), "a trailing-slash duplicate is rejected")
-            assertFalse(ide.addRepository("bad", "ftp://nope"), "a non-http URL is rejected")
-            assertFalse(ide.removeRepository(builtins.first().url), "a built-in repo can't be removed")
+            assertFalse(ide.dependencies.addRepository("dup", "https://repo.example.com/maven/"), "a trailing-slash duplicate is rejected")
+            assertFalse(ide.dependencies.addRepository("bad", "ftp://nope"), "a non-http URL is rejected")
+            assertFalse(ide.dependencies.removeRepository(builtins.first().url), "a built-in repo can't be removed")
 
-            assertTrue(ide.removeRepository("https://repo.example.com/maven"))
-            assertTrue(ide.repositories().none { it.url == "https://repo.example.com/maven" })
+            assertTrue(ide.dependencies.removeRepository("https://repo.example.com/maven"))
+            assertTrue(ide.dependencies.repositories().none { it.url == "https://repo.example.com/maven" })
         }
         dir.toFile().deleteRecursively()
     }

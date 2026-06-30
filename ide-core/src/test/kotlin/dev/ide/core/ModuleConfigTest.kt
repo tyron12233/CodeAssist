@@ -21,7 +21,7 @@ class ModuleConfigTest {
     fun readsCoreFieldsAndAGenericAndroidFacetPanel() {
         val dir = Files.createTempDirectory("ide-cfg")
         IdeServices.bootstrapDemo(dir).use { ide ->
-            val config = assertNotNull(ide.getModuleConfig("app"), "app config should load")
+            val config = assertNotNull(ide.moduleService.getModuleConfig("app"), "app config should load")
             assertEquals("app", config.name)
             assertTrue(config.languageLevels.contains(config.languageLevel), "current level is one of the options")
             assertTrue(config.sourceSets.isNotEmpty(), "android-app has source sets")
@@ -35,7 +35,7 @@ class ModuleConfigTest {
             assertTrue(android.fields.any { it is UiConfigField.TableList && it.key == "buildTypes" }, "buildTypes → TableList")
 
             // A pure-Java module has no Android panel — extensibility, not hardcoding.
-            val core = assertNotNull(ide.getModuleConfig("core"))
+            val core = assertNotNull(ide.moduleService.getModuleConfig("core"))
             assertTrue(core.facets.none { it.table == "android" }, "java-lib has no android facet")
         }
         dir.toFile().deleteRecursively()
@@ -45,7 +45,7 @@ class ModuleConfigTest {
     fun editingLanguageLevelAndAFacetFieldPersistsAndReloads() {
         val dir = Files.createTempDirectory("ide-cfg-edit")
         IdeServices.bootstrapDemo(dir).use { ide ->
-            val before = assertNotNull(ide.getModuleConfig("app"))
+            val before = assertNotNull(ide.moduleService.getModuleConfig("app"))
             val android = assertNotNull(before.facets.firstOrNull { it.table == "android" })
             val originalNamespace = (android.fields.first { it.key == "namespace" } as UiConfigField.Text).value
 
@@ -54,11 +54,11 @@ class ModuleConfigTest {
                 languageLevel = "JAVA_21",
                 facetValues = mapOf("android" to android.toValues(overrides = mapOf("minSdk" to 24L))),
             )
-            val result = ide.updateModuleConfig("app", edit)
+            val result = ide.moduleService.updateModuleConfig("app", edit)
             assertTrue(result.success, "update should succeed: ${result.message}")
 
             // Visible in the live model immediately.
-            val after = assertNotNull(ide.getModuleConfig("app"))
+            val after = assertNotNull(ide.moduleService.getModuleConfig("app"))
             assertEquals("JAVA_21", after.languageLevel)
             val minSdk = (after.facets.first { it.table == "android" }.fields.first { it.key == "minSdk" } as UiConfigField.Number).value
             assertEquals(24L, minSdk)
@@ -72,7 +72,7 @@ class ModuleConfigTest {
 
         // Re-open the workspace from disk → the edit persisted through module.toml.
         IdeServices.open(dir).use { reopened ->
-            val reloaded = assertNotNull(reopened.getModuleConfig("app"))
+            val reloaded = assertNotNull(reopened.moduleService.getModuleConfig("app"))
             assertEquals("JAVA_21", reloaded.languageLevel, "language level persisted")
             val minSdk = (reloaded.facets.first { it.table == "android" }.fields.first { it.key == "minSdk" } as UiConfigField.Number).value
             assertEquals(24L, minSdk, "minSdk persisted to module.toml")
@@ -98,14 +98,14 @@ class ModuleConfigTest {
         val dir = Files.createTempDirectory("ide-find")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // "package" appears in every Java source — a stable probe.
-            val hits = ide.findInFiles("package", UiSearchOptions(), limit = 200)
+            val hits = ide.search.findInFiles("package", UiSearchOptions(), limit = 200)
             assertTrue(hits.isNotEmpty(), "find-in-files should match project sources")
             val first = hits.first()
             assertTrue(first.line >= 1 && first.offset >= 0, "match carries a navigable line/offset")
             assertTrue("package" in first.lineText.lowercase(), "the matched line contains the query")
 
             // Case sensitivity is honored: an all-caps query won't match lowercase 'package'.
-            val none = ide.findInFiles("PACKAGE", UiSearchOptions(caseSensitive = true), limit = 50)
+            val none = ide.search.findInFiles("PACKAGE", UiSearchOptions(caseSensitive = true), limit = 50)
             assertTrue(none.none { "package " in it.lineText }, "case-sensitive search shouldn't match lowercase")
         }
         dir.toFile().deleteRecursively()

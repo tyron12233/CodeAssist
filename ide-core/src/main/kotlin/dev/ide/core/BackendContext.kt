@@ -19,6 +19,16 @@ internal interface BackendContext {
     /** The active engine, or null when no project is open (picker-safe services use this). */
     val servicesOrNull: IdeServices?
 
+    /** The shared, APPLICATION-scoped SDK / toolchain download manager — resolved from the [manager] so it's
+     *  reachable with no project open (the picker's Settings & Tools hub), falling back to the active engine
+     *  on the manager-less (test) path. Null only when neither a manager nor an open project exists. */
+    val sdkManager: dev.ide.core.SdkManagerService?
+
+    /** The shared, APPLICATION-scoped signing-keystore registry — same resolution as [sdkManager], so keystore
+     *  create/import/validate/delete work from the picker's hub before any project is open. */
+    val keystoreRegistry: dev.ide.android.support.tools.KeystoreRegistry?
+
+
     /** The build/run engine for [services]: the in-process [IdeServices.buildRunner] by default, or a
      *  host-injected out-of-process runner (the `:build` daemon). The single seam the build service routes
      *  every build/run call through. See docs/build-process-isolation.md. */

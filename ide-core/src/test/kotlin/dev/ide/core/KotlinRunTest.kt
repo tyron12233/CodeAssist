@@ -78,21 +78,21 @@ class KotlinRunTest {
         IdeServices.open(dir).use { ide ->
             // Detection: a top-level Kotlin `fun main()` must surface a `run` task (the feature's core fix).
             assertTrue(
-                ide.runTasks().any { it.id == "run:app" },
-                "a Kotlin main() should be runnable: ${ide.runTasks().map { it.id }}",
+                ide.build.runTasks().any { it.id == "run:app" },
+                "a Kotlin main() should be runnable: ${ide.build.runTasks().map { it.id }}",
             )
 
-            ide.runTask("run:app")
+            ide.build.runTask("run:app")
 
             // Wait until the program is executing (build finished, stdin accepted) or it already finished.
-            await(20_000) { ide.runConsole.value?.phase == RunPhase.Running || ide.runConsole.value?.phase == RunPhase.Finished }
-            val started = ide.runConsole.value
+            await(20_000) { ide.build.runConsole.value?.phase == RunPhase.Running || ide.build.runConsole.value?.phase == RunPhase.Finished }
+            val started = ide.build.runConsole.value
             assertTrue(started != null && started.phase != RunPhase.Building, "the program never started; transcript=${started?.transcript}")
 
-            ide.sendRunInput("World")
+            ide.build.sendRunInput("World")
 
-            await(20_000) { ide.runConsole.value?.phase == RunPhase.Finished }
-            val rc = ide.runConsole.value!!
+            await(20_000) { ide.build.runConsole.value?.phase == RunPhase.Finished }
+            val rc = ide.build.runConsole.value!!
             val text = rc.transcript.joinToString("") { it.text }
             assertEquals(0, rc.exitCode, "the program should exit 0; transcript:\n$text")
             assertTrue("Enter name:" in text, "the prompt (no trailing newline) should appear:\n$text")

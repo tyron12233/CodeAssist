@@ -22,7 +22,7 @@ class ProjectManagerTest {
                 assertEquals(listOf("app"), ide.moduleNames())
                 assertEquals("Demo CLI", ide.projectDisplayName())
                 // a Main with `static void main` produces a `run:` task offered.
-                assertTrue(ide.runTasks().any { it.id.startsWith("run:") }, "expected a runnable main")
+                assertTrue(ide.build.runTasks().any { it.id.startsWith("run:") }, "expected a runnable main")
             }
 
             val listed = manager.list()
@@ -205,7 +205,7 @@ class ProjectManagerTest {
         try {
             val manager = ProjectManager.desktop(root.resolve("projects"))
             fun composeOn(ide: IdeServices): Boolean =
-                ide.getBuildFeatures("app")?.features?.firstOrNull { it.id == "compose" }?.enabled == true
+                ide.moduleService.getBuildFeatures("app")?.features?.firstOrNull { it.id == "compose" }?.enabled == true
 
             manager.create("compose-app", mapOf("name" to "ComposeDemo", "packageName" to "com.acme.compose")).use { ide ->
                 assertTrue(composeOn(ide), "the Jetpack Compose template enables the compose build feature")

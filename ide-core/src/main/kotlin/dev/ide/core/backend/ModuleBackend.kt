@@ -21,7 +21,7 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
 
     override fun moduleSourceSets(moduleName: String): List<String> =
         ctx.services.modules().firstOrNull { it.name == moduleName }
-            ?.let { ctx.services.sourceSetNamesOf(it) } ?: emptyList()
+            ?.let { ctx.services.moduleService.sourceSetNamesOf(it) } ?: emptyList()
 
     override fun addSourceRoot(
         moduleName: String, sourceSetName: String, dirName: String, role: UiSourceRootRole
@@ -34,7 +34,7 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
             UiSourceRootRole.Aidl -> setOf(ContentRole.AIDL)
         }
         val created =
-            ctx.services.addSourceRoot(moduleName, sourceSetName, dirName.trim().trim('/'), roles)
+            ctx.services.moduleService.addSourceRoot(moduleName, sourceSetName, dirName.trim().trim('/'), roles)
                 ?: return null
         ctx.bumpFileSystemEpoch()
         return created.toString()
@@ -50,13 +50,13 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
             moduleDir.toAbsolutePath().normalize()
                 .relativize(Paths.get(rootPath).toAbsolutePath().normalize()).toString()
         }.getOrNull() ?: rootPath
-        val ok = ctx.services.removeSourceRoot(moduleName, sourceSetName, rel)
+        val ok = ctx.services.moduleService.removeSourceRoot(moduleName, sourceSetName, rel)
         if (ok) ctx.bumpFileSystemEpoch()
         return ok
     }
 
     override fun addSourceSet(moduleName: String, name: String): Boolean {
-        val ok = ctx.services.addSourceSet(moduleName, name.trim())
+        val ok = ctx.services.moduleService.addSourceSet(moduleName, name.trim())
         if (ok) ctx.bumpFileSystemEpoch()
         return ok
     }
@@ -64,7 +64,7 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
     // ---- module management ----
 
     override fun availableModuleTypes(): List<UiModuleTypeOption> =
-        ctx.services.availableModuleTypes()
+        ctx.services.moduleService.availableModuleTypes()
 
     override suspend fun createModule(
         name: String,
@@ -72,42 +72,42 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
         languageLevel: String?,
         facetValues: Map<String, Map<String, Any?>>
     ): UiConfigResult = withContext(Dispatchers.IO) {
-        ctx.services.createModule(name, typeId, languageLevel, facetValues)
+        ctx.services.moduleService.createModule(name, typeId, languageLevel, facetValues)
             .also { if (it.success) ctx.bumpFileSystemEpoch() }
     }
 
     override fun removeModule(name: String): Boolean =
-        ctx.services.removeModule(name).also { if (it) ctx.bumpFileSystemEpoch() }
+        ctx.services.moduleService.removeModule(name).also { if (it) ctx.bumpFileSystemEpoch() }
 
     // ---- module configuration ----
 
-    override fun configurableModules(): List<UiModuleRef> = ctx.services.configurableModules()
+    override fun configurableModules(): List<UiModuleRef> = ctx.services.moduleService.configurableModules()
 
     override suspend fun getModuleConfig(moduleName: String): UiModuleConfig? =
-        withContext(Dispatchers.IO) { ctx.services.getModuleConfig(moduleName) }
+        withContext(Dispatchers.IO) { ctx.services.moduleService.getModuleConfig(moduleName) }
 
     override suspend fun updateModuleConfig(
         moduleName: String, edit: UiModuleConfigEdit
     ): UiConfigResult = withContext(Dispatchers.IO) {
-        ctx.services.updateModuleConfig(moduleName, edit)
+        ctx.services.moduleService.updateModuleConfig(moduleName, edit)
             .also { if (it.success) ctx.bumpFileSystemEpoch() }
     }
 
     override suspend fun getBuildFeatures(moduleName: String): UiBuildFeatures? =
-        withContext(Dispatchers.IO) { ctx.services.getBuildFeatures(moduleName) }
+        withContext(Dispatchers.IO) { ctx.services.moduleService.getBuildFeatures(moduleName) }
 
     override suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult =
         withContext(Dispatchers.IO) {
-            ctx.services.setBuildFeature(moduleName, feature, enabled)
+            ctx.services.moduleService.setBuildFeature(moduleName, feature, enabled)
                 .also { if (it.success) ctx.bumpFileSystemEpoch() }
         }
 
     override suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> =
-        withContext(Dispatchers.IO) { ctx.services.missingProguardFiles(moduleName) }
+        withContext(Dispatchers.IO) { ctx.services.moduleService.missingProguardFiles(moduleName) }
 
     override suspend fun createProguardFile(moduleName: String, entry: String): String? =
         withContext(Dispatchers.IO) {
-            ctx.services.createProguardFile(moduleName, entry)?.toString()
+            ctx.services.moduleService.createProguardFile(moduleName, entry)?.toString()
                 ?.also { ctx.bumpFileSystemEpoch() }
         }
 }

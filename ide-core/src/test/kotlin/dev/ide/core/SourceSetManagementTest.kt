@@ -25,7 +25,7 @@ class SourceSetManagementTest {
     fun addSourceRootCreatesDirAndRegistersRole() {
         val dir = Files.createTempDirectory("ide-srcset")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val created = assertNotNull(ide.addSourceRoot("core", "main", "kotlin", setOf(ContentRole.SOURCE)))
+            val created = assertNotNull(ide.moduleService.addSourceRoot("core", "main", "kotlin", setOf(ContentRole.SOURCE)))
             assertTrue(Files.isDirectory(created), "the new source root dir is created on disk")
             assertEquals(setOf(ContentRole.SOURCE), ide.rolesOf("core", "kotlin"))
         }

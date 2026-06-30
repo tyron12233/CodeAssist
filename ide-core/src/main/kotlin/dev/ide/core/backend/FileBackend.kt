@@ -377,7 +377,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             Files.createDirectories(target)
             // A conventionally-named folder under a source-set base (e.g. `src/main/resources`) becomes a
             // typed content root automatically, so the build engine + tree icon pick it up immediately.
-            ctx.services.maybeRegisterSourceRoot(target)
+            ctx.services.moduleService.maybeRegisterSourceRoot(target)
             ctx.bumpFileSystemEpoch()
             target.toString()
         }

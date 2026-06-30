@@ -18,18 +18,18 @@ internal class SearchBackend(private val ctx: BackendContext) : SearchService {
     override fun reindex() = ctx.services.reindex()
 
     override suspend fun searchSymbols(query: String, limit: Int): List<SymbolHit> =
-        ctx.services.searchSymbols(query, limit).map {
+        ctx.services.search.searchSymbols(query, limit).map {
             SymbolHit(
                 it.name,
                 it.container ?: it.kind,
                 it.kind,
-                ctx.services.symbolFilePath(it.fileId),
+                ctx.services.search.symbolFilePath(it.fileId),
                 it.offset
             )
         }
 
     override suspend fun searchMembers(query: String, limit: Int): List<SymbolHit> =
-        ctx.services.searchMembers(query, limit).map {
+        ctx.services.search.searchMembers(query, limit).map {
             SymbolHit(it.name, it.owner.substringAfterLast('.'), it.kind, null, null)
         }
 
@@ -39,5 +39,5 @@ internal class SearchBackend(private val ctx: BackendContext) : SearchService {
         options: UiSearchOptions,
         limit: Int
     ): List<UiTextMatch> =
-        withContext(Dispatchers.IO) { ctx.services.findInFiles(query, options, limit) }
+        withContext(Dispatchers.IO) { ctx.services.search.findInFiles(query, options, limit) }
 }

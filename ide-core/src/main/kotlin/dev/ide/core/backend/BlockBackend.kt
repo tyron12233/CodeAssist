@@ -29,7 +29,7 @@ internal class BlockBackend(private val ctx: BackendContext) : BlockService {
 
     override suspend fun projectBlocks(path: String, text: String): UiBlockNode? =
         withContext(ctx.engineDispatcher) {
-            ctx.services.projectBlocks(
+            ctx.services.blocks.projectBlocks(
                 Paths.get(path), text
             )
         }?.let { toUiBlock(it.root) }
@@ -71,7 +71,7 @@ internal class BlockBackend(private val ctx: BackendContext) : BlockService {
             )
         }
         return withContext(ctx.engineDispatcher) {
-            ctx.services.computeBlockEdit(
+            ctx.services.blocks.computeBlockEdit(
                 Paths.get(path), text, blockEdit
             )
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }

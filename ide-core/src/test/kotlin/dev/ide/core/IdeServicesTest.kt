@@ -13,14 +13,14 @@ class IdeServicesTest {
     fun runBuildCompilesAndRunsTheConsoleApp() {
         val dir = Files.createTempDirectory("ide-run")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            ide.runBuild()
+            ide.build.runBuild()
             awaitBuild(ide)
-            val state = ide.buildState.value
+            val state = ide.build.buildState.value
             assertEquals(RunStatus.Succeeded, state.status, "build/run failed; log:\n${state.log.joinToString("\n")}")
             assertTrue(state.steps.any { it.name.endsWith(":run") }, "expected a run step: ${state.steps.map { it.name }}")
             // A console run's program stdout streams to the interactive run console (the full-screen Run
             // terminal), not the build log — which now carries only the compile/run task lines.
-            val transcript = ide.runConsole.value?.transcript?.joinToString("") { it.text } ?: ""
+            val transcript = ide.build.runConsole.value?.transcript?.joinToString("") { it.text } ?: ""
             assertTrue("HELLO, WORLD!" in transcript, "expected program output in the run console:\n$transcript")
         }
         dir.toFile().deleteRecursively()
@@ -37,11 +37,11 @@ class IdeServicesTest {
                 main,
                 "package com.example.app;\npublic class Main { public static void main(String[] a) { System.out.println(\"BUFFER EDIT 12345\"); } }",
             )
-            ide.runBuild()
+            ide.build.runBuild()
             awaitBuild(ide)
-            val state = ide.buildState.value
+            val state = ide.build.buildState.value
             assertEquals(RunStatus.Succeeded, state.status, "log:\n${state.log.joinToString("\n")}")
-            val transcript = ide.runConsole.value?.transcript?.joinToString("") { it.text } ?: ""
+            val transcript = ide.build.runConsole.value?.transcript?.joinToString("") { it.text } ?: ""
             assertTrue("BUFFER EDIT 12345" in transcript, "unsaved edit not compiled/run:\n$transcript")
         }
         dir.toFile().deleteRecursively()
@@ -57,16 +57,16 @@ class IdeServicesTest {
                 main,
                 "package com.example.app;\npublic class Main { public static void main(String[] a) { int x = ; } }",
             )
-            ide.runBuild()
+            ide.build.runBuild()
             awaitBuild(ide)
-            assertEquals(RunStatus.Failed, ide.buildState.value.status, "a compile error must fail the build")
+            assertEquals(RunStatus.Failed, ide.build.buildState.value.status, "a compile error must fail the build")
         }
         dir.toFile().deleteRecursively()
     }
 
     private fun awaitBuild(ide: IdeServices, timeoutMs: Long = 60_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
-        while (ide.buildState.value.status == RunStatus.Running && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        while (ide.build.buildState.value.status == RunStatus.Running && System.currentTimeMillis() < deadline) Thread.sleep(50)
     }
 
     @Test

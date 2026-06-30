@@ -4,10 +4,7 @@ import dev.ide.lang.AnalysisResult
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
 import dev.ide.lang.completion.CompletionContribution
-import dev.ide.lang.completion.CompletionItem
-import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
-import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.core.completion.BufferWordsContributor
@@ -18,9 +15,7 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
 import dev.ide.analysis.AnalysisTarget
-import dev.ide.analysis.AnalyzerId
 import dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP
-import dev.ide.analysis.DiagnosticSource
 import dev.ide.analysis.ProjectAnalysisScope
 import dev.ide.analysis.QUICK_FIX_PROVIDER_EP
 import dev.ide.analysis.WorkspaceEdit
@@ -28,59 +23,25 @@ import dev.ide.analysis.impl.AnalysisEngine
 import dev.ide.analysis.impl.AnalysisEnvironment
 import dev.ide.android.support.AndroidBuildConfigProvider
 import dev.ide.block.BLOCK_MAPPING_EP
-import dev.ide.block.BlockEdit
-import dev.ide.block.BlockTree
-import dev.ide.block.impl.BlockProjectionEngine
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.index.INDEX_EP
-import dev.ide.index.IndexId
+import dev.ide.core.services.BlockService
+import dev.ide.core.services.BuildService
+import dev.ide.core.services.DependencyService
+import dev.ide.core.services.ModuleService
+import dev.ide.core.services.SearchService
+import dev.ide.core.services.SigningService
 import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
-import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
-import dev.ide.android.support.AndroidFeatureDependencies
 import dev.ide.android.support.AndroidRClassProvider
 import dev.ide.android.support.AndroidViewBindingProvider
 import dev.ide.android.support.AndroidSupport
-import dev.ide.android.support.AndroidVariants
 import dev.ide.android.support.SampleAndroidProject
-import dev.ide.android.support.gms.GoogleServices
-import dev.ide.android.support.tools.AarExtractor
 import dev.ide.android.support.tools.AndroidSdk
-import dev.ide.android.support.tools.D8InProcessDexer
-import dev.ide.android.support.tools.DebugKeystore
-import dev.ide.android.support.tools.KeystoreCertInfo
-import dev.ide.android.support.tools.KeystoreCreateSpec
-import dev.ide.android.support.tools.KeystoreCrypto
-import dev.ide.android.support.tools.KeystoreEntry
 import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.android.support.tools.SigningConfig
-import dev.ide.build.BuildDiagnostic
-import dev.ide.build.BuildGoal
-import dev.ide.build.BuildLogEntry
-import dev.ide.build.BuildLogLevel
-import dev.ide.build.BuildRequest
-import dev.ide.build.BuildSeverity
-import dev.ide.build.CyclicTaskDependencyException
-import dev.ide.build.SOURCE_GENERATOR_EP
-import dev.ide.build.SourceGenerator
-import dev.ide.build.TaskGraph
-import dev.ide.build.VariantSelector
-import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.DexBackend
-import dev.ide.build.engine.DexResult
 import dev.ide.build.engine.DexRunner
-import dev.ide.build.engine.GuardCategory
-import dev.ide.build.engine.Guards
-import dev.ide.build.engine.PermissionBroker
-import dev.ide.build.engine.ProgramIo
-import dev.ide.build.engine.SimpleTaskContext
-import dev.ide.build.engine.TaskExecutorImpl
-import dev.ide.build.engine.TaskStatus
-import dev.ide.build.jvm.JavaBuildSystem
-import dev.ide.index.MemberValue
-import dev.ide.index.SymbolValue
 import dev.ide.index.impl.IndexServiceImpl
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.lang.jdt.JdtLanguageBackend
@@ -90,11 +51,7 @@ import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
-import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
 import dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
-import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
-import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
-import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.lang.xml.XmlLanguageBackend
@@ -121,10 +78,7 @@ import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.impl.SdkData
 import dev.ide.model.impl.jdk.JdkSdkProvider
 import dev.ide.model.LanguageLevel
-import dev.ide.model.ModuleType
 import dev.ide.model.Project
-import dev.ide.model.Workspace
-import dev.ide.model.template.ProjectScaffold
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
 import dev.ide.model.template.TemplateId
@@ -137,29 +91,18 @@ import dev.ide.platform.PluginId
 import dev.ide.platform.SERVICE_EP
 import dev.ide.platform.ServiceDescriptor
 import dev.ide.platform.ServiceFactory
+import dev.ide.platform.ExtensionRegistry
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceScopeLevel
-import dev.ide.model.module
-import dev.ide.platform.impl.PlatformCore
-import dev.ide.deps.ArtifactKind
-import dev.ide.deps.ConflictPolicy
-import dev.ide.deps.Repository
-import dev.ide.deps.ResolutionResult
-import dev.ide.deps.impl.DEFAULT_REPOSITORIES
-import dev.ide.deps.impl.MavenDependencyResolver
-import dev.ide.deps.impl.ResolverCache
-import dev.ide.model.Coordinate
-import dev.ide.model.Exclusion
-import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
-import dev.ide.model.SourceSetTemplate
+import dev.ide.model.module
+import dev.ide.platform.impl.PlatformCore
+import dev.ide.deps.ConflictPolicy
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
-import dev.ide.model.PlatformDependency
-import dev.ide.model.SdkDependency
 import dev.ide.android.support.resources.AndroidResources
 import dev.ide.android.support.resources.DrawableXmlCatalog
 import dev.ide.android.support.resources.ResourceReferences
@@ -179,68 +122,33 @@ import dev.ide.android.support.metadata.SdkMetadataCodec
 import dev.ide.android.support.metadata.StyleableEntry
 import dev.ide.android.support.index.AndroidResourceIndex
 import dev.ide.android.support.index.ResourceDeclValue
-import dev.ide.lang.dom.Severity
+import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.completion.CompletionEngine
+import dev.ide.core.completion.PostfixContributor
+import dev.ide.index.IndexItemState
+import dev.ide.lang.jdt.index.JavaClassLocatorIndex
+import dev.ide.lang.jdt.index.JavaSourceDocIndex
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
+import dev.ide.lang.kotlin.index.KotlinBuiltinsIndex
+import dev.ide.lang.kotlin.index.KotlinCallableIndex
+import dev.ide.lang.kotlin.index.KotlinSourceDocIndex
+import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
+import dev.ide.lang.kotlin.interp.ResolvedClass
+import dev.ide.lang.kotlin.interp.ResolvedFunction
+import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticClassContext
 import dev.ide.model.impl.ModelPersistence
-import dev.ide.platform.ProgressReporter
-import dev.ide.platform.ServiceContainer
 import dev.ide.platform.log.Log
-import dev.ide.ui.backend.BuildDiagnosticUi
-import dev.ide.ui.backend.BuildLogLine
-import dev.ide.ui.backend.BuildState
-import dev.ide.ui.backend.BuildStepUi
-import dev.ide.ui.backend.UiLogLevel
-import dev.ide.ui.backend.ConsoleChunk
-import dev.ide.ui.backend.ConsoleChunkKind
-import dev.ide.ui.backend.DepsResolveState
+import dev.ide.plugin.impl.ActionManager
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.IndexWorkItem
 import dev.ide.ui.backend.IndexWorkState
-import dev.ide.ui.backend.RunConsoleUi
-import dev.ide.ui.backend.RunPhase
-import dev.ide.ui.backend.RunStatus
-import dev.ide.ui.backend.RunTaskOption
-import dev.ide.ui.backend.UiPermissionDecision
-import dev.ide.ui.backend.UiPermissionRequest
-import dev.ide.ui.backend.UiSeverity
-import dev.ide.ui.backend.UiUnresolvedDependency
-import dev.ide.ui.backend.StepStatus
-import dev.ide.ui.backend.UiAddResult
-import dev.ide.ui.backend.UiArtifactHit
-import dev.ide.ui.backend.UiDepKind
-import dev.ide.ui.backend.UiConfigField
-import dev.ide.ui.backend.UiBuildFeature
-import dev.ide.ui.backend.UiBuildFeatures
-import dev.ide.ui.backend.UiConfigResult
-import dev.ide.ui.backend.UiKeystore
-import dev.ide.ui.backend.UiKeystoreCert
-import dev.ide.ui.backend.UiKeystoreResult
-import dev.ide.ui.backend.UiKeystoreSpec
-import dev.ide.ui.backend.UiKeystoreValidation
-import dev.ide.ui.backend.UiSigningAssignment
-import dev.ide.ui.backend.UiSigningAssignments
-import dev.ide.ui.backend.UiDepModule
-import dev.ide.ui.backend.UiDependencyNode
-import dev.ide.ui.backend.UiFacetConfig
-import dev.ide.ui.backend.UiMissingProguardFile
-import dev.ide.ui.backend.UiModuleConfig
-import dev.ide.ui.backend.UiModuleConfigEdit
-import dev.ide.ui.backend.UiModuleDeps
-import dev.ide.ui.backend.UiModuleRef
-import dev.ide.ui.backend.UiModuleTypeOption
-import dev.ide.ui.backend.UiRepository
-import dev.ide.ui.backend.UiSearchOptions
-import dev.ide.ui.backend.UiSourceSetInfo
-import dev.ide.ui.backend.UiTextMatch
-import dev.ide.ui.backend.UiVersionConflict
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -249,8 +157,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -259,9 +165,10 @@ import java.util.stream.Collectors
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
-import java.nio.file.Paths
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
+import kotlin.time.Duration.Companion.milliseconds
+import java.nio.file.Paths
 
 /**
  * The UI-agnostic façade that wires the whole framework together: platform-core (extension registry,
@@ -289,6 +196,15 @@ class AndroidDeviceTools(
      *  compile platform so a Java 9+ build's string concatenation/lambdas resolve at compile time (D8 desugars
      *  the resulting invokedynamic). `android.jar` omits them; on ART they ship as a bundled asset. */
     val desugarStubs: List<Path> = emptyList(),
+    /** On-device R8 shrinker that runs R8 in a forked command-line VM (`dalvikvm64 -Xmx…`) so its whole-program
+     *  pass gets a heap larger than the app's `largeHeap` cap — the fix for the release/minify OOM. Null falls
+     *  back to the in-process R8 ([dev.ide.android.support.tools.R8InProcessShrinker]). Supplied by :ide-android,
+     *  which bundles R8's dexes + discovers the launcher; the forked shrinker self-falls-back if forking is
+     *  unavailable on the device. */
+    val r8Shrinker: dev.ide.android.support.tools.Shrinker? = null,
+    /** On-device D8 dexer for the dex MERGE step (the debug-path memory peak), run in a forked VM so it gets a
+     *  heap above the app cap. Null → the in-process merge. Supplied by :ide-android; self-falls-back. */
+    val r8MergeDexer: dev.ide.android.support.tools.Dexer? = null,
 )
 
 /**
@@ -308,9 +224,9 @@ data class PreviewRunResult(val ok: Boolean, val message: String)
  *  the file's source classes/objects/enums (which the interpreter materializes — they aren't compiled). When
  *  the preview takes a `@PreviewParameter`, [parameter] describes the provider the renderer feeds it from. */
 data class LoweredComposePreview(
-    val entry: dev.ide.lang.kotlin.interp.ResolvedFunction,
-    val program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction>,
-    val classes: List<dev.ide.lang.kotlin.interp.ResolvedClass> = emptyList(),
+    val entry: ResolvedFunction,
+    val program: Map<String, ResolvedFunction>,
+    val classes: List<ResolvedClass> = emptyList(),
     val parameter: LoweredPreviewParameter? = null,
 )
 
@@ -320,7 +236,7 @@ data class LoweredComposePreview(
 data class LoweredPreviewParameter(
     val providerSimpleName: String,
     val providerFqn: String?,
-    val providerClass: dev.ide.lang.kotlin.interp.ResolvedClass?,
+    val providerClass: ResolvedClass?,
     val limit: Int,
 )
 
@@ -346,10 +262,15 @@ data class ComposePreviewLibs(
  */
 interface ComposePreviewRunner {
     suspend fun render(
-        entry: dev.ide.lang.kotlin.interp.ResolvedFunction,
-        program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction>,
+        entry: ResolvedFunction,
+        program: Map<String, ResolvedFunction>,
     ): PreviewRunResult
 }
+
+/** WORKSPACE-scoped: this engine's [EngineContext] (the shared-infrastructure surface). Registered on the
+ *  engine's own workspace container so app-global service factories can resolve the per-project engine through
+ *  the scope (MODULE → WORKSPACE) rather than closure-capturing it. */
+private val ENGINE_CONTEXT = ServiceKey<EngineContext>("ide.engineContext")
 
 /** APPLICATION-scoped: the warm K2 compiler shared across every opened project. */
 private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinJvmCompiler>("ide.kotlin.jvmCompiler")
@@ -358,6 +279,26 @@ private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinJvmCompiler>("ide.kotlin.jvmC
 private val ANALYZER_JAVA = ServiceKey<SourceAnalyzer>("ide.analyzer.java")
 private val ANALYZER_KOTLIN = ServiceKey<SourceAnalyzer>("ide.analyzer.kotlin")
 private val ANALYZER_XML = ServiceKey<SourceAnalyzer>("ide.analyzer.xml")
+
+/** WORKSPACE-scoped: this engine's decomposed concern services, resolved from the workspace container. */
+private val SIGNING_SERVICE = ServiceKey<SigningService>("ide.service.signing")
+private val SEARCH_SERVICE = ServiceKey<SearchService>("ide.service.search")
+private val BLOCK_SERVICE = ServiceKey<BlockService>("ide.service.blocks")
+private val ACTION_MANAGER = ServiceKey<ActionManager>("ide.service.actions")
+private val DEPENDENCY_SERVICE = ServiceKey<DependencyService>("ide.service.dependencies")
+private val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
+private val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
+
+/**
+ * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
+ * Tools hub). Registered on the shared application container, so there is ONE SDK download queue and ONE
+ * keystore registry across every project (their on-disk artifacts already live under the shared home dir).
+ * [ProjectManager] registers them eagerly so the picker can resolve them before any engine exists; an
+ * engine [registerScopedServices] registers them idempotently too, for the manager-less (test) path.
+ * `internal` (not file-private) so [ProjectManager] in the same package can register/resolve them.
+ */
+internal val APP_SDK_MANAGER = ServiceKey<SdkManagerService>("ide.app.sdkManager")
+internal val APP_KEYSTORE_REGISTRY = ServiceKey<KeystoreRegistry>("ide.app.keystoreRegistry")
 
 class IdeServices private constructor(
     val platform: PlatformCore,
@@ -384,14 +325,17 @@ class IdeServices private constructor(
      *  Kotlin warm-ups) on open. A build needs only the model/classpath/compilers, so dropping that baseline
      *  frees heap for the dexer/R8 (the build's real memory ceiling). See docs/build-process-isolation.md. */
     private val buildOnly: Boolean = false,
+    /** The application environment whose substrate this engine's per-project platform parents. App-level
+     *  extension callbacks that fire outside any service scope (command actions, the synthetic-R provider, the
+     *  XML resource host) resolve the open engine through [ApplicationEnvironment.activeEngine], which the
+     *  backend points at this engine on project swap. */
+    private val env: ApplicationEnvironment,
 ) : AutoCloseable {
 
     // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): the most recent
     // build/run and project-open heap peaks. [lastBuildPeak] is read by the analytics bridge to attach to
     // build_result; both are logged on the `ide.mem` tag for on-device inspection via the Logs viewer.
     // Declared FIRST so the cold-start coroutine (which logs via memLog) can never read it before init.
-    @Volatile
-    internal var lastBuildPeak: MemSample? = null
     @Volatile
     internal var lastOpenPeak: MemSample? = null
     private val memLog = Log.logger("ide.mem")
@@ -401,55 +345,39 @@ class IdeServices private constructor(
      *  routes all build/run calls through this rather than calling the build methods directly. `by lazy`
      *  defers creation past construction so it never participates in field init-order. Public so the
      *  on-device build daemon (:ide-android BuildDaemonService) can drive a headless build through it. */
-    val buildRunner: BuildRunner by lazy { InProcessBuildRunner(this) }
+    val buildRunner: BuildRunner by lazy { InProcessBuildRunner(build) }
 
-    // Language backends are contributed through the `platform.languageBackend` EP and selected per file by
-    // matching the file's LanguageId against each backend's `languages`, so adding a language is one more
-    // registration rather than a host edit. Java (JDT) is registered first as the default.
-    private val languageBackends: List<LanguageBackend> = run {
-        val plugin = PluginId("language-backends")
-        platform.extensions.register(LANGUAGE_BACKEND_EP, JdtLanguageBackend(), plugin)
-        platform.extensions.register(LANGUAGE_BACKEND_EP, XmlLanguageBackend(), plugin)
-        platform.extensions.register(LANGUAGE_BACKEND_EP, KotlinLanguageBackend(), plugin)
+    // Language backends are contributed through the `platform.languageBackend` EP (registered ONCE, app-global,
+    // in [registerStaticPlugins]) and selected per file by matching the file's LanguageId against each
+    // backend's `languages`. Java (JDT) is registered first as the default; this is a QUERY of the (hierarchical)
+    // registry, so it sees the app-global contributions.
+    private val languageBackends: List<LanguageBackend> =
         platform.extensions.extensions(LANGUAGE_BACKEND_EP)
-    }
 
     /** The unified completion pipeline (language backend + cross-cutting + plugin contributors, ranked by
-     *  weighers). Built-in contributors are registered on the contributor EP here; plugins add their own. */
-    private val completionEngine: dev.ide.core.completion.CompletionEngine = run {
-        val plugin = PluginId("completion-builtins")
-        platform.extensions.register(
-            COMPLETION_CONTRIBUTOR_EP,
-            CompletionContribution(BufferWordsContributor, order = BufferWordsContributor.ORDER),
-            plugin,
-        )
-        // The generic postfix-template driver: activates `platform.postfixTemplate` for plugins/backends.
-        platform.extensions.register(
-            COMPLETION_CONTRIBUTOR_EP,
-            CompletionContribution(
-                dev.ide.core.completion.PostfixContributor(platform.extensions),
-                order = dev.ide.core.completion.PostfixContributor.ORDER,
-            ),
-            plugin,
-        )
-        // Kotlin's built-in postfix templates (`expr.if`/`expr.val`/`list.for`, language-scoped), now driven
-        // by the generic PostfixContributor instead of being baked into the Kotlin completion service.
-        dev.ide.lang.kotlin.completion.KotlinPostfixTemplates.all().forEach {
-            platform.extensions.register(dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP, it, plugin)
-        }
-        dev.ide.core.completion.CompletionEngine(platform.extensions)
-    }
+     *  weighers). Built-in contributors are registered app-global (see [registerStaticPlugins]); plugins add
+     *  their own. This engine just queries the registry per request. */
+    private val completionEngine: CompletionEngine = CompletionEngine(platform.extensions)
 
     /** The backend whose `languages` contains [language], or the first (Java/JDT) as a fallback. */
     private fun backendFor(language: LanguageId): LanguageBackend =
         languageBackends.firstOrNull { language in it.languages } ?: languageBackends.first()
 
-    /** The language of [file] by extension: `.xml` → xml, `.kt` → kotlin, everything else → java (default). */
+    /** Language id for ProGuard/R8 keep-rule files. No backend is registered for it: editing falls back to
+     *  plain text and the diagnostics engine (which dispatches by language) runs nothing, so a `.pro` file is
+     *  never analysed as Java. */
+    private val PROGUARD_LANGUAGE_ID = LanguageId("proguard")
+
+    /** The language of [file] by extension: `.xml` → xml, `.kt` → kotlin, `.pro` → proguard (no analysis
+     *  backend, so it's edited as plain text without being mis-parsed as Java), everything else → java. */
     private fun languageFor(file: Path): LanguageId {
         val name = file.fileName?.toString() ?: return LanguageId("java")
         return when {
             name.endsWith(".xml") -> XmlLanguageBackend.LANGUAGE_ID
             name.endsWith(".kt") || name.endsWith(".kts") -> KotlinLanguageBackend.LANGUAGE_ID
+            // ProGuard/R8 keep-rule files have no language backend; routing them off "java" keeps the JDT
+            // analyzer from flagging the file as broken Java (the diagnostics engine dispatches by language).
+            name.endsWith(".pro") -> PROGUARD_LANGUAGE_ID
             else -> LanguageId("java")
         }
     }
@@ -461,24 +389,9 @@ class IdeServices private constructor(
 
     private val indexScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** The workspace index (class names, packages, members, source symbols). Built in the background. */
+    /** The workspace index (class names, packages, members, source symbols). Built in the background. The index
+     *  extensions are contributed app-global (see [registerStaticPlugins]); this just queries them. */
     val indexService: IndexService = run {
-        val plugin = PluginId("indexing")
-        listOf(
-            JavaClassNamesIndex,
-            JavaPackagesIndex,
-            JavaPackageTypesIndex,
-            dev.ide.lang.jdt.index.JavaClassLocatorIndex, // fqcn -> owning jar, for the index-backed JDT name environment
-            JavaSourceSymbolsIndex,
-            JavaMembersIndex,
-            JavaMembersByOwnerIndex, // cross-language: a Kotlin file enumerating a Java SOURCE class's members
-            dev.ide.lang.kotlin.index.KotlinTypeShapeIndex, // Kotlin backend: persistent owner-keyed member shapes
-            dev.ide.lang.kotlin.index.KotlinBuiltinsIndex, // Kotlin backend: intrinsic List/Int/String shapes (.kotlin_builtins)
-            dev.ide.lang.kotlin.index.KotlinCallableIndex, // Kotlin backend: persistent extensions + top-level callables
-            dev.ide.lang.jdt.index.JavaSourceDocIndex, // param names + javadoc from attached Java sources
-            dev.ide.lang.kotlin.index.KotlinSourceDocIndex, // param names + KDoc from attached Kotlin sources
-            AndroidResourceIndex, // Android resource declarations
-        ).forEach { platform.extensions.register(INDEX_EP, it, plugin) }
         IndexServiceImpl(
             platform.extensions.extensions(INDEX_EP),
             // Static (SDK + library) segments are content-addressed (identical jars index to identical
@@ -504,23 +417,75 @@ class IdeServices private constructor(
     private val _indexStatus = MutableStateFlow(IndexUiStatus())
     val indexStatus: StateFlow<IndexUiStatus> get() = _indexStatus
 
-    /** Resolves the UI action extension points (toolbar / context menus / command palette) for the
-     *  IdeBackend action surface. Built-ins are registered in [init]; plugins contribute to the same EPs. */
-    val actionManager: dev.ide.plugin.impl.ActionManager =
-        dev.ide.plugin.impl.ActionManager(platform.extensions)
+    // The narrow shared-infrastructure view ([EngineContext]) handed to this engine's decomposed concern
+    // services, so each one depends on the surface it needs rather than the whole engine. An inner object so
+    // it can reach private helpers (projectOf/invalidateAnalyzers/resyncIndex) without widening their
+    // visibility; the getters are lazy, so referencing later-declared fields (keystoreRegistry/sdkManager) is
+    // fine — they resolve only when a service is first used, long after construction.
+    private val engineContext: EngineContext = object : EngineContext {
+        override val store get() = this@IdeServices.store
+        override val platform get() = this@IdeServices.platform
+        override val workspaceRoot get() = this@IdeServices.workspaceRoot
+        override val sharedCachesRoot get() = this@IdeServices.sharedCachesRoot
+        override val indexService get() = this@IdeServices.indexService
+        override val keystoreRegistry get() = this@IdeServices.keystoreRegistry
+        override val sdkManager get() = this@IdeServices.sdkManager
+        override val dependencies get() = this@IdeServices.dependencies
+        override val kotlinJvmCompiler get() = this@IdeServices.kotlinJvmCompiler
+        override val compileBootClasspath get() = this@IdeServices.compileBootClasspath
+        override val androidTools get() = this@IdeServices.androidTools
+        override val dexRunner get() = this@IdeServices.dexRunner
+        override val apkInstaller get() = this@IdeServices.apkInstaller
+        override fun modules() = this@IdeServices.modules()
+        override fun projectOf(module: Module) = this@IdeServices.projectOf(module)
+        override fun moduleRoot(module: Module) = this@IdeServices.moduleRoot(module)
+        override fun moduleBuildClosure(module: Module) = this@IdeServices.moduleBuildClosure(module)
+        override fun sourceRoots(module: Module) = this@IdeServices.sourceRoots(module)
+        override fun treeRoots(module: Module) = this@IdeServices.treeRoots(module)
+        override fun overlayText(path: Path) = this@IdeServices.openDocuments[path]
+        override fun flushOpenDocuments() = this@IdeServices.flushOpenDocuments()
+        override fun ensureKotlinStdlib() = this@IdeServices.ensureKotlinStdlib()
+        override fun parse(file: Path, text: String) = this@IdeServices.parse(file, text)
+        override fun buildAnalyzer(module: Module, language: LanguageId) = this@IdeServices.buildAnalyzer(module, language)
+        override fun resourceRepo(module: Module) = this@IdeServices.resourceRepo(module)
+        override fun invalidateSyntheticClasses() = this@IdeServices.invalidateSyntheticClasses()
+        override fun projectPref(key: String) = this@IdeServices.projectPref(key)
+        override fun setProjectPref(key: String, value: String) = this@IdeServices.setProjectPref(key, value)
+        override fun invalidateAnalyzers() = this@IdeServices.invalidateAnalyzers()
+        override fun resyncIndex() = this@IdeServices.resyncIndex()
+    }
+
+    /** WORKSPACE-scoped signing service (keystore registry + per-build-type assignment). */
+    internal val signing: SigningService get() = store.workspaceContainer.getService(SIGNING_SERVICE)
+
+    /** WORKSPACE-scoped symbol/member/full-text search service. */
+    internal val search: SearchService get() = store.workspaceContainer.getService(SEARCH_SERVICE)
+
+    /** WORKSPACE-scoped projectional (block) editor service. */
+    internal val blocks: BlockService get() = store.workspaceContainer.getService(BLOCK_SERVICE)
+
+    /** WORKSPACE-scoped action surface (resolves/invokes the contributed toolbar/menu/palette actions). */
+    internal val actions: ActionManager get() = store.workspaceContainer.getService(ACTION_MANAGER)
+
+    /** WORKSPACE-scoped dependency management (Maven add/resolve, platforms, local libs, repositories). */
+    internal val dependencies: DependencyService get() = store.workspaceContainer.getService(DEPENDENCY_SERVICE)
+
+    /** WORKSPACE-scoped module configuration + management (config, source sets/roots, build features, modules). */
+    internal val moduleService: ModuleService get() = store.workspaceContainer.getService(MODULE_SERVICE)
+
+    /** WORKSPACE-scoped build + run orchestration (the BuildRunner's in-process arm delegates here). */
+    internal val build: BuildService get() = store.workspaceContainer.getService(BUILD_SERVICE)
+
+    /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
+     *  surface can reach it through the engine without depending on the service type. */
+    fun setConflictPolicy(policy: ConflictPolicy) = dependencies.setConflictPolicy(policy)
 
     init {
-        // Register the scoped services this engine contributes before anything resolves them.
+        // Publish this engine's per-engine container services (the K2 compiler + this engine's EngineContext)
+        // before anything resolves them. The reusable concern-service descriptors, the built-in actions, the
+        // synthetic-R provider and the XML resource host are all registered ONCE, app-global (in
+        // [registerStaticPlugins]), and resolve THIS engine via the scope / [ApplicationEnvironment.activeEngine].
         registerScopedServices()
-        // Built-in UI actions (engine commands surfaced in the command palette + the plugin action seams).
-        dev.ide.core.actions.BuiltInActions.register(platform.extensions, this)
-        // platform.syntheticClass: the light Android `R`, resolved from the SHARED fingerprint-cached resource
-        // repository ([resourceRepo]) so it reuses the SAME parsed resource set as the preview/value/go-to-def
-        // paths. Registered here (instance scope), not in [registerStaticPlugins], because that cache is
-        // per-project state; the static factory has no instance to share it from.
-        platform.extensions.register(
-            SYNTHETIC_CLASS_EP, AndroidRClassProvider { m, _ -> resourceRepo(m) }, PluginId("android-support"),
-        )
         // Provision kotlin-stdlib as a real project dependency (bundled jar, never the host runtime) before
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
@@ -534,9 +499,9 @@ class IdeServices private constructor(
                     IndexWorkItem(
                         label = item.label,
                         state = when (item.state) {
-                            dev.ide.index.IndexItemState.PENDING -> IndexWorkState.PENDING
-                            dev.ide.index.IndexItemState.ACTIVE -> IndexWorkState.ACTIVE
-                            dev.ide.index.IndexItemState.DONE -> IndexWorkState.DONE
+                            IndexItemState.PENDING -> IndexWorkState.PENDING
+                            IndexItemState.ACTIVE -> IndexWorkState.ACTIVE
+                            IndexItemState.DONE -> IndexWorkState.DONE
                         },
                     )
                 },
@@ -566,14 +531,18 @@ class IdeServices private constructor(
                 // compared against a build's peak — that comparison decides whether a separate build process
                 // targets the dominant OOM. A periodic sampler catches the storm's true intra-phase peak.
                 val openPeak = PeakHeap().also { it.record() }
-                val sampler = launch { while (isActive) { openPeak.record(); delay(MEM_SAMPLE_INTERVAL_MS) } }
+                val sampler = launch {
+                    while (isActive) {
+                        openPeak.record(); delay(MEM_SAMPLE_INTERVAL_MS.milliseconds)
+                    }
+                }
                 try {
                     memLog.info("project open (before index): ${MemSample.now().fmt()}")
                     runCatching { indexService.ensureUpToDate(buildIndexScope()) }
                     memLog.info("after index build: ${MemSample.now().fmt()}")
                     if (projectHasKotlin()) {
                         if (freeHeapBytes() >= PARSER_WARMUP_MIN_FREE_BYTES) {
-                            runCatching { dev.ide.lang.kotlin.parse.KotlinParserHost.warmUp() }
+                            runCatching { KotlinParserHost.warmUp() }
                             memLog.info("after Kotlin parser warm-up: ${MemSample.now().fmt()}")
                         } else memLog.warn("skipped Kotlin parser warm-up (headroom ${MemSample.now().headroomMb}MB < ${PARSER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
                         if (freeHeapBytes() >= COMPILER_WARMUP_MIN_FREE_BYTES) {
@@ -588,16 +557,31 @@ class IdeServices private constructor(
                 }
             }
         } else {
-            indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) }; memLog.info("after index build: ${MemSample.now().fmt()}") }
+            indexScope.launch {
+                runCatching { indexService.ensureUpToDate(buildIndexScope()) }; memLog.info(
+                "after index build: ${MemSample.now().fmt()}"
+            )
+            }
             // Pre-warm the Kotlin parser environment (the ~200ms KotlinCoreEnvironment standup) off-thread, so
             // the first Kotlin completion/diagnostics/preview doesn't pay it on the interaction path. Gated on
             // the project actually containing Kotlin so a pure-Java project never stands up the Kotlin frontend.
-            indexScope.launch { runCatching { if (projectHasKotlin()) dev.ide.lang.kotlin.parse.KotlinParserHost.warmUp() } }
+            indexScope.launch { runCatching { if (projectHasKotlin()) KotlinParserHost.warmUp() } }
             // Also pre-warm the COMPILE path (the ~1s first-build cold start: class-loading the embeddable
             // compiler + standing up its environment). The parser-host warm-up above only loads the parse
             // classes; a throwaway compile loads the frontend + JVM backend, so the first real Run is warm.
-            indexScope.launch { runCatching { if (projectHasKotlin()) kotlinJvmCompiler.warmUp(compileBootClasspath) } }
+            indexScope.launch {
+                runCatching {
+                    if (projectHasKotlin()) kotlinJvmCompiler.warmUp(
+                        compileBootClasspath
+                    )
+                }
+            }
         }
+        // This is now the active project for app-level extension callbacks that fire outside any service scope
+        // (the command actions, the synthetic-R provider, the XML resource host — all registered once on the
+        // app registry). Set LAST in init, so the engine is fully constructed before it can be resolved as the
+        // active one. The backend re-asserts this on project swap; an engine clears it (if still itself) on close.
+        env.activeEngine = this
     }
 
     /** Heap a new allocation could still claim before hitting the cap (`max - used`) — the headroom before an
@@ -621,10 +605,10 @@ class IdeServices private constructor(
     }.getOrDefault(false)
 
     /**
-     * Contribute this engine's scoped services. The application-scoped K2 compiler registers idempotently
-     * on the shared application container (the next project reuses the warm one). The module-scoped
-     * analyzers register through the `platform.service` EP, so every module container resolves them and
-     * disposes them with the module (prompt library-jar handle release).
+     * Register this engine's PER-ENGINE container services. The application-scoped K2 compiler registers
+     * idempotently on the shared application container (the next project reuses the warm one); this engine's
+     * [EngineContext] is published on its own workspace container so the app-global service factories
+     * (registered once in [registerStaticPlugins]) resolve the per-project engine through the scope.
      */
     private fun registerScopedServices() {
         // The app-scoped K2 compiler gets the host's plugin loader: on device the injected D8/dex one (so a
@@ -632,31 +616,11 @@ class IdeServices private constructor(
         store.appContainer.registerServiceIfAbsent(KOTLIN_JVM_COMPILER) {
             KotlinJvmCompiler(pluginLoader = kotlinPluginLoader ?: DefaultKotlinPluginLoader)
         }
-        val plugin = PluginId("ide-core-services")
-        platform.extensions.register(
-            SERVICE_EP, ServiceDescriptor(
-                ANALYZER_JAVA,
-                ServiceScopeLevel.MODULE,
-                ServiceFactory { buildAnalyzer(module(), LanguageId("java")) },
-                plugin
-            ), plugin
-        )
-        platform.extensions.register(
-            SERVICE_EP, ServiceDescriptor(
-                ANALYZER_KOTLIN,
-                ServiceScopeLevel.MODULE,
-                ServiceFactory { buildAnalyzer(module(), KotlinLanguageBackend.LANGUAGE_ID) },
-                plugin
-            ), plugin
-        )
-        platform.extensions.register(
-            SERVICE_EP, ServiceDescriptor(
-                ANALYZER_XML,
-                ServiceScopeLevel.MODULE,
-                ServiceFactory { buildAnalyzer(module(), XmlLanguageBackend.LANGUAGE_ID) },
-                plugin
-            ), plugin
-        )
+        // Publish this engine's [EngineContext] on its OWN workspace container, so the app-global service
+        // factories (registered once on the app registry) resolve the per-project engine through the scope
+        // (MODULE → WORKSPACE) instead of closure-capturing it. Just returns the already-built field — never
+        // forces any other service's construction.
+        store.workspaceContainer.registerService(ENGINE_CONTEXT) { this@IdeServices.engineContext }
     }
 
     /** The MODULE-scoped analyzer service key for [language]. */
@@ -668,12 +632,33 @@ class IdeServices private constructor(
 
     private fun buildIndexScope(): IndexScope {
         val jdt = modules().map { analyzerFor(it) }.filterIsInstance<JdtSourceAnalyzer>()
+        val libraryJars =
+            (jdt.flatMap { it.classpathJarPaths } + listOfNotNull(BundledKotlinStdlib.jar())).distinct()
         return IndexScope(
             sourceRoots = jdt.flatMap { it.sourceRootPaths }.distinct(),
             // The bundled kotlin-stdlib is always in scope (even for an editor-only Kotlin project that never
             // declared the dependency) so the Kotlin backend's callable/type-shape indexes carry `println`/
             // `listOf`/`String.trim`/… — the backend is a pure index consumer with no live stdlib jar scan.
-            libraryJars = (jdt.flatMap { it.classpathJarPaths } + listOfNotNull(BundledKotlinStdlib.jar())).distinct(),
+            libraryJars = libraryJars,
+            // Bundled/SDK jars (android.jar + desugar stubs, the bundled kotlin-stdlib) are re-extracted from
+            // app assets, so their on-disk mtime is not stable across launches and the default path+size+mtime
+            // key re-indexes them every cold start (android.jar alone is ~90% of all index entries). Give them a
+            // PATH-free `<name>-<size>` key so the segment is reused across launches (and later matches a prebuilt
+            // segment shipped under the same id). Keyed by the same Path objects that appear in [libraryJars].
+            stableJarIds = run {
+                val bundled =
+                    (compileBootClasspath + listOfNotNull(BundledKotlinStdlib.jar())).map {
+                        it.toAbsolutePath().normalize().toString()
+                    }.toSet()
+                libraryJars.filter { it.toAbsolutePath().normalize().toString() in bundled }
+                    .associateWith { p ->
+                        "${p.fileName}-${
+                            runCatching { java.nio.file.Files.size(p) }.getOrDefault(
+                                0L
+                            )
+                        }"
+                    }
+            },
             jdkHome = jdt.firstNotNullOfOrNull { it.jdkHome },
             // Attached library/SDK SOURCE archives (incl. the downloaded JDK src.zip, folded in by the JDT
             // branch of analyzerFor) → the source-doc index: real param names + javadoc/KDoc.
@@ -683,98 +668,22 @@ class IdeServices private constructor(
             // Material/AndroidX resource set (a ~600 KB merged values.xml + hundreds of files) is parsed once
             // and read on demand rather than re-scanned into the heap every launch.
             resourceRoots = modules().flatMap { m ->
-                if (m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null)
-                    runCatching { AndroidResources.projectResourceDirs(m, store.workspace) }.getOrDefault(emptyList())
+                if (m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null) runCatching {
+                    AndroidResources.projectResourceDirs(
+                        m, store.workspace
+                    )
+                }.getOrDefault(emptyList())
                 else resourceRoots(m)
             }.distinct(),
             libraryResourceRoots = modules().flatMap { m ->
-                if (m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null)
-                    runCatching { AndroidResources.libraryResourceDirs(m, store.workspace) }.getOrDefault(emptyList())
+                if (m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null) runCatching {
+                    AndroidResources.libraryResourceDirs(
+                        m, store.workspace
+                    )
+                }.getOrDefault(emptyList())
                 else emptyList()
             }.distinct(),
         )
-    }
-
-    /** Go-to-symbol over project declarations (navigable). */
-    fun searchSymbols(query: String, limit: Int = 50): List<SymbolValue> =
-        indexService.fuzzy<SymbolValue>(IndexId("java.sourceSymbols"), query, limit)
-            .map { it.value }.toList()
-
-    /** Resolve a [SymbolValue.fileId] (interned, path stored once) back to its file path for navigation. */
-    fun symbolFilePath(fileId: Int): String? = indexService.filePath(fileId)
-
-    /** Member search across the classpath (informational). */
-    fun searchMembers(query: String, limit: Int = 50): List<MemberValue> =
-        indexService.fuzzy<MemberValue>(IndexId("java.members"), query, limit).map { it.value }
-            .toList()
-
-    /**
-     * Full-text find-in-files over every surfaced workspace file (code, resources, assets). Reads the live
-     * editor overlay when a file is open (so unsaved edits are searched), else disk. Skips binary/oversized
-     * files. Returns up to [limit] matches.
-     */
-    fun findInFiles(query: String, options: UiSearchOptions, limit: Int): List<UiTextMatch> {
-        if (query.isBlank()) return emptyList()
-        val regex = buildSearchRegex(query, options) ?: return emptyList()
-        val out = ArrayList<UiTextMatch>()
-        val seen = HashSet<String>()
-        for (module in modules()) {
-            for (root in treeRoots(module)) {
-                if (!Files.isDirectory(root)) continue
-                val files = runCatching {
-                    Files.walk(root).use { s ->
-                        s.filter { Files.isRegularFile(it) }.collect(Collectors.toList())
-                    }
-                }.getOrDefault(emptyList())
-                for (file in files) {
-                    val abs = file.toAbsolutePath().normalize()
-                    if (!seen.add(abs.toString())) continue
-                    if (isLikelyBinary(abs)) continue
-                    val text = openDocuments[abs] ?: runCatching { file.readText() }.getOrNull()
-                    ?: continue
-                    if (text.length > MAX_SEARCH_FILE_CHARS || text.any { it.code == 0 }) continue
-                    val name = file.fileName.toString()
-                    var lineStart = 0
-                    var lineNo = 1
-                    var i = 0
-                    val n = text.length
-                    while (i <= n) {
-                        if (i == n || text[i] == '\n') {
-                            val line = text.substring(lineStart, i)
-                            for (m in regex.findAll(line)) {
-                                if (m.range.isEmpty()) continue
-                                out += UiTextMatch(
-                                    filePath = abs.toString(), fileName = name,
-                                    line = lineNo, col = m.range.first + 1, lineText = line,
-                                    matchStart = m.range.first, matchEnd = m.range.last + 1,
-                                    offset = lineStart + m.range.first,
-                                )
-                                if (out.size >= limit) return out
-                            }
-                            lineStart = i + 1
-                            lineNo++
-                        }
-                        i++
-                    }
-                }
-            }
-        }
-        return out
-    }
-
-    private fun buildSearchRegex(query: String, options: UiSearchOptions): Regex? {
-        val core = when {
-            options.regex -> query
-            options.wholeWord -> "\\b" + Regex.escape(query) + "\\b"
-            else -> Regex.escape(query)
-        }
-        val opts = if (options.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
-        return runCatching { Regex(core, opts) }.getOrNull()
-    }
-
-    private fun isLikelyBinary(path: Path): Boolean {
-        val ext = path.fileName.toString().substringAfterLast('.', "").lowercase()
-        return ext in BINARY_EXTENSIONS
     }
 
     /** Re-invalidate and rebuild the workspace indexes from scratch (the UI's "Re-index" action). */
@@ -801,572 +710,39 @@ class IdeServices private constructor(
 
     // ---- SDK / toolchain manager (download Android SDK packages + JDK sources) ----
 
-    /** Downloads Android SDK packages + JDK sources behind a progress flow. Invalidates analyzers on change. */
-    val sdkManager = SdkManagerService(
-        store.rootPath,
-        onChanged = { invalidateAnalyzers(); resyncIndex() },
-        sharedRoot = sharedCachesRoot
-    )
-
-    // ---- Android platform sources (for parameter names + javadoc on android.* APIs) ----
-
-    /** Status of the Android platform sources for inlay/completion docs, or null when there's no Android SDK. */
-    fun androidSourcesInfo(): AndroidSourcesInfo? {
-        val sdkRoot =
-            dev.ide.android.support.tools.AndroidSdk.findSdkRoot(workspaceRoot) ?: return null
-        val sdk = dev.ide.android.support.tools.AndroidSdk.detect(sdkRoot) ?: return null
-        val platform = sdk.androidJar.parent?.fileName?.toString() ?: return null // android-NN
-        // Same-major sources count as installed: the editor resolves them by major API level, so an exact
-        // `sources/android-36` isn't required when `sources/android-36.1` is present (and vice-versa).
-        val installed =
-            dev.ide.android.support.tools.AndroidSdk.platformSourcesDir(sdkRoot, platform) != null
-        return AndroidSourcesInfo(
-            platform, installed, downloadable = findSdkmanager(sdkRoot) != null
-        )
-    }
-
-    /**
-     * Download the Android platform sources via `sdkmanager` (desktop only). Pipes license acceptance and
-     * bounds the run with a timeout so it cannot hang the IDE. On success the analyzers are invalidated so
-     * the new sources take effect. Returns a human-readable status.
-     */
-    fun downloadAndroidSources(): String {
-        val sdkRoot = dev.ide.android.support.tools.AndroidSdk.findSdkRoot(workspaceRoot)
-            ?: return "No Android SDK found."
-        val sdk = dev.ide.android.support.tools.AndroidSdk.detect(sdkRoot)
-            ?: return "No installed Android platform."
-        val platform =
-            sdk.androidJar.parent?.fileName?.toString() ?: return "Couldn't determine the platform."
-        if (dev.ide.android.support.tools.AndroidSdk.platformSourcesDir(
-                sdkRoot, platform
-            ) != null
-        ) return "Sources for $platform are already installed."
-        val sdkmanager = findSdkmanager(sdkRoot)
-            ?: return "sdkmanager not found — install the sources via Android Studio's SDK Manager (SDK Platforms → Sources for Android $platform)."
-        return runCatching {
-            val proc = ProcessBuilder(
-                sdkmanager.toString(), "sources;$platform"
-            ).directory(sdkRoot.toFile()).redirectErrorStream(true).start()
-            proc.outputStream.bufferedWriter()
-                .use { w -> repeat(50) { runCatching { w.write("y\n"); w.flush() } } }
-            val done = proc.waitFor(4, java.util.concurrent.TimeUnit.MINUTES)
-            if (!done) {
-                proc.destroyForcibly(); return "Timed out downloading sources for $platform."
-            }
-            if (proc.exitValue() == 0) {
-                invalidateAnalyzers() // pick up the freshly-installed sources
-                resyncIndex()         // index them for param names + javadoc (source-doc index)
-                "Installed sources for $platform."
-            } else "sdkmanager failed (exit ${proc.exitValue()}) installing sources for $platform."
-        }.getOrElse { "Couldn't run sdkmanager: ${it.message}" }
-    }
-
-    /** Locate `sdkmanager` under the SDK (cmdline-tools preferred, then legacy tools). */
-    private fun findSdkmanager(sdkRoot: java.nio.file.Path): java.nio.file.Path? {
-        val isWin = System.getProperty("os.name").orEmpty().lowercase().contains("win")
-        val exe = if (isWin) "sdkmanager.bat" else "sdkmanager"
-        val candidates = buildList {
-            add(sdkRoot.resolve("cmdline-tools").resolve("latest").resolve("bin").resolve(exe))
-            val cmdlineToolsDir = sdkRoot.resolve("cmdline-tools")
-            if (java.nio.file.Files.isDirectory(cmdlineToolsDir)) {
-                java.nio.file.Files.list(cmdlineToolsDir)
-                    .use { s -> s.forEach { add(it.resolve("bin").resolve(exe)) } }
-            }
-            add(sdkRoot.resolve("tools").resolve("bin").resolve(exe))
+    /** Downloads Android SDK packages + JDK sources behind a progress flow. APPLICATION-scoped: one shared
+     *  queue across every project (and the picker's hub), resolved from the shared application container —
+     *  [ProjectManager] registers it; this engine registers it idempotently for the manager-less (test) path.
+     *  This engine subscribes [sdkChangeSubscription] so a finished install re-attaches the new sources here. */
+    val sdkManager: SdkManagerService
+        get() = store.appContainer.let { c ->
+            c.registerServiceIfAbsent(APP_SDK_MANAGER) { SdkManagerService(store.rootPath, sharedRoot = sharedCachesRoot) }
+            c.getService(APP_SDK_MANAGER)
         }
-        return candidates.firstOrNull { java.nio.file.Files.isRegularFile(it) }
-    }
 
-    // ---- build & run ----
+    /** This engine's subscription to [sdkManager]'s change notifications (invalidate analyzers + reindex on a
+     *  finished install). Held so [close] can unsubscribe it from the shared, longer-lived service. A build-only
+     *  engine has no editor analyzers to refresh, so it doesn't subscribe (and doesn't build the SDK manager).
+     *  Initialized as a property (not in [registerScopedServices]) so it runs after the engine's other fields. */
+    private val sdkChangeSubscription: Disposable? =
+        if (buildOnly) null else sdkManager.addChangeListener { invalidateAnalyzers(); resyncIndex() }
 
     /**
-     * The compile bootclasspath. On-device ([androidTools] non-null) ecj has no readable JRE (ART's platform
-     * lives in `.oat`/dex it cannot load), so every compile, even a plain `java-lib` whose own classpath
-     * carries no `android.jar`, must be handed the bundled `android.jar` as the platform library, or ecj
-     * fails with `"java.lang.Object cannot be resolved … indirectly referenced from required .class files."`
-     * On the desktop this is empty and ecj keeps using the host JDK's platform classes (so the desktop Java
-     * build still targets the real JRE, not android.jar).
+     * The compile bootclasspath. On-device ([androidTools] non-null) ecj has no readable JRE, so every compile
+     * (and the analyzer + Kotlin warm-up) must be handed the bundled `android.jar` as the platform library; on
+     * the desktop it is empty (the host JRE). Shared infrastructure: the build, the per-module analyzer, and
+     * the Kotlin compiler warm-up all read it, so it stays engine-owned and is reached via [EngineContext].
      */
-    private val compileBootClasspath: List<Path> =
+    val compileBootClasspath: List<Path> =
         listOfNotNull(androidTools?.androidJar) + (androidTools?.desugarStubs ?: emptyList())
 
     /**
-     * The Kotlin compiler: K2 in-process (`:lang-kotlin`'s [KotlinJvmCompiler]). APPLICATION-scoped — one
-     * warm compiler shared across every opened project (its environment/jar filesystem is reused
-     * build-to-build; the boot classpath is passed per compile, so one instance serves all projects).
-     * Registered idempotently on the shared application container in init.
+     * Provision the bundled kotlin-stdlib as a real project dependency for every module with `.kt` sources
+     * (never the host runtime). Project setup, not build execution: run at open so completion/index see the
+     * stdlib, and again by a build before it compiles a newly-added Kotlin module. Reached by the build via
+     * [EngineContext.ensureKotlinStdlib].
      */
-    private val kotlinJvmCompiler: KotlinJvmCompiler
-        get() = store.appContainer.getService(
-            KOTLIN_JVM_COMPILER
-        )
-
-    // Incremental state is per-output-dir, so the incremental wrapper stays workspace-scoped. The build's
-    // `compileKotlin` task (lang-kotlin's KotlinCompileTask) drives this directly — Compose-plugin detection
-    // and the boot classpath now live in that task, not in a port lambda here.
-    private val incrementalKotlin = IncrementalKotlinCompiler(kotlinJvmCompiler)
-
-    // Kotlin compiler plugins are contributed through the `platform.kotlinCompilerPlugin` EP and applied
-    // per module by the build's compileKotlin tasks. Compose is the built-in (registered here); a plugin
-    // adds more by contributing to the EP. Captured once for the build systems (Compose is registered eagerly).
-    private val kotlinCompilerPlugins: List<KotlinCompilerPlugin> = run {
-        platform.extensions.register(KOTLIN_COMPILER_PLUGIN_EP, ComposeCompilerPlugin, PluginId("kotlin-support"))
-        platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP)
-    }
-
-    // Build-time source generators contributed through `platform.sourceGenerator` (a KSP runner, ViewBinding
-    // emitter, …); the build runs them into a module's GENERATED root ahead of compilation. Empty until a
-    // plugin contributes one, so the seam is wired but dormant today.
-    private val sourceGenerators: List<SourceGenerator> = platform.extensions.extensions(SOURCE_GENERATOR_EP)
-
-    // The native Java/Kotlin build system (`:jvm-build`): JavaPlugin wires each module's own compile task
-    // (lang-jdt's JdtCompileTask, lang-kotlin's KotlinCompileTask), which drive ecj / K2 directly. The only
-    // host inputs are the boot classpath ([compileBootClasspath]: empty on desktop → host JRE; android.jar +
-    // desugar stubs on ART), the incremental Kotlin compiler, the Kotlin compiler plugins, and source generators.
-    private val buildSystem = JavaBuildSystem(compileBootClasspath, incrementalKotlin, kotlinCompilerPlugins, sourceGenerators)
-
-    /**
-     * The native Android build. On-device ([androidTools] non-null) it is the in-process wiring (D8/R8/
-     * apksigner in-process, bundled native `aapt2`/`zipalign` from `nativeLibraryDir`, debug keystore from
-     * assets). On the desktop it is the subprocess wiring over a detected SDK, or null when none is
-     * installed (the UI then reports "install an SDK" for assemble tasks).
-     */
-    /**
-     * The app-global signing-keystore registry (create/import/validate/assign): keystores + their secrets
-     * live under the shared home dir, shared across projects and kept OUT of any project. Falls back to the
-     * project's `.platform` when the host supplies no shared dir (tests).
-     */
-    val keystoreRegistry: KeystoreRegistry by lazy {
-        KeystoreRegistry((sharedCachesRoot ?: store.rootPath.resolve(".platform")).resolve("keystores"))
-    }
-
-    /** Resolves a build type's assigned signing keystore (its `signingConfig` id) to a [SigningConfig], or
-     *  null to fall back to the debug keystore. Captured into the Android build system. */
-    private val signingResolver: (Module, String) -> SigningConfig? = { module, buildType ->
-        module.facets.get(AndroidFacet.KEY)?.buildType?.invoke(buildType)?.signingConfig
-            ?.let { keystoreRegistry.signingConfigFor(it) }
-    }
-
-    private val androidBuild: AndroidBuildSystem? by lazy {
-        // A content-addressed library-dex cache shared across every project (alongside the resolved-deps
-        // cache), so a library jar is dexed once per machine, not once per project — the big win when many
-        // projects share the same AndroidX/Compose jars. Falls back to the per-project workspace if the host
-        // gave no shared dir (then it just survives cleans within the one project).
-        val dexCache = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("dex")
-        androidTools?.let { t ->
-            if (!Files.exists(t.androidJar) || !Files.exists(t.nativeLibDir)) return@lazy null
-            val sdk =
-                AndroidSdk.forDevice(t.androidJar, t.nativeLibDir).takeIf { it.hasNativeTools() }
-                    ?: return@lazy null
-            val signing = SigningConfig(
-                t.debugKeystore,
-                DebugKeystore.STORE_PASS,
-                DebugKeystore.KEY_ALIAS,
-                DebugKeystore.KEY_PASS
-            )
-            return@lazy AndroidBuildSystem.inProcess(
-                sdk,
-                signing,
-                bootClasspath = compileBootClasspath,
-                kotlin = incrementalKotlin,
-                plugins = kotlinCompilerPlugins,
-                dexCacheRoot = dexCache,
-                signingResolver = signingResolver,
-            )
-        }
-        val sdk =
-            AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }?.takeIf { it.isComplete() }
-                ?: return@lazy null
-        val signing =
-            DebugKeystore.getOrCreate(store.rootPath.resolve(".platform/debug.ks"), sdk.keytool)
-        AndroidBuildSystem.subprocess(
-            sdk,
-            signing,
-            bootClasspath = compileBootClasspath,
-            kotlin = incrementalKotlin,
-            plugins = kotlinCompilerPlugins,
-            dexCacheRoot = dexCache,
-            signingResolver = signingResolver,
-        )
-    }
-
-    /**
-     * On-device only: the dex backend for the Java `run` path — D8 in-process, desugaring against the
-     * bundled `android.jar`. Paired with [dexRunner], it lets a console app run on ART. Null on the desktop
-     * (which forks `java` via [JavaBuildSystem.createRunGraph] instead).
-     */
-    private val javaDexBackend: DexBackend? = androidTools?.let { t ->
-        DexBackend { inputs, minApi, outDir ->
-            val r = D8InProcessDexer().dex(inputs, t.androidJar, minApi, false, outDir)
-            DexResult(r.success, r.log)
-        }
-    }
-
-    private val buildCache = BuildCache(store.rootPath.resolve(".platform/caches/build"))
-    private val _buildState = MutableStateFlow(BuildState())
-    val buildState: StateFlow<BuildState> get() = _buildState
-
-    @Volatile
-    private var buildCtx: SimpleTaskContext? = null
-
-    @Volatile
-    private var buildJob: Job? = null
-
-    // ---- interactive console run (the full-screen Run terminal: program stdio + lifecycle) ----
-
-    private val _runConsole = MutableStateFlow<RunConsoleUi?>(null)
-    val runConsole: StateFlow<RunConsoleUi?> get() = _runConsole
-    private val runConsoleSeq = java.util.concurrent.atomic.AtomicInteger(0)
-
-    @Volatile
-    private var currentRunIo: RunProgramIo? = null
-
-    /** Feed a line of input to the running program (newline appended) and echo it into the transcript. */
-    fun sendRunInput(text: String) {
-        val io = currentRunIo ?: return
-        if (_runConsole.value?.acceptsInput != true) return
-        io.input.feed(text + "\n")
-        appendConsoleChunk(ConsoleChunkKind.INPUT, text + "\n")
-    }
-
-    /** Signal end-of-input (EOF) to the running program's stdin. */
-    fun closeRunInput() {
-        currentRunIo?.input?.close()
-        _runConsole.update { it?.copy(acceptsInput = false) }
-    }
-
-    /** Append to the run transcript, coalescing into the trailing same-[kind] chunk (bounded per chunk) and
-     *  capping total size so a chatty program can't grow it without limit. */
-    private fun appendConsoleChunk(kind: ConsoleChunkKind, text: String) {
-        if (text.isEmpty()) return
-        _runConsole.update { rc ->
-            rc ?: return@update null
-            val chunks = rc.transcript
-            val last = chunks.lastOrNull()
-            val merged = if (last != null && last.kind == kind && last.text.length < CONSOLE_CHUNK_MAX) {
-                chunks.dropLast(1) + ConsoleChunk(last.text + text, kind)
-            } else {
-                chunks + ConsoleChunk(text, kind)
-            }
-            rc.copy(transcript = capTranscript(merged))
-        }
-    }
-
-    private fun capTranscript(chunks: List<ConsoleChunk>): List<ConsoleChunk> {
-        var total = chunks.sumOf { it.text.length }
-        if (total <= CONSOLE_TRANSCRIPT_MAX) return chunks
-        val out = ArrayDeque(chunks)
-        while (total > CONSOLE_TRANSCRIPT_MAX && out.size > 1) total -= out.removeFirst().text.length
-        if (total > CONSOLE_TRANSCRIPT_MAX && out.isNotEmpty()) {
-            val head = out.removeFirst()
-            out.addFirst(head.copy(text = head.text.takeLast(CONSOLE_TRANSCRIPT_MAX)))
-        }
-        out.addFirst(ConsoleChunk("…(earlier output truncated)…\n", ConsoleChunkKind.SYSTEM))
-        return out.toList()
-    }
-
-    /** Drive the run console to Finished if the program lifecycle didn't already (e.g. a compile failure
-     *  where the program never started, or a cancelled run). Also EOFs stdin and drops the per-run IO. */
-    private fun finalizeRunConsole(succeeded: Boolean) {
-        _runConsole.update { rc ->
-            if (rc == null || rc.phase == RunPhase.Finished) rc
-            else rc.copy(phase = RunPhase.Finished, acceptsInput = false, exitCode = if (succeeded) 0 else null)
-        }
-        currentRunIo?.input?.close()
-        currentRunIo = null
-    }
-
-    /** The host's [ProgramIo] for a console run: routes the program's output into [runConsole], provides a
-     *  blocking stdin the UI feeds, and flips the lifecycle phase on start/exit. */
-    private inner class RunProgramIo(private val sessionId: Int) : ProgramIo {
-        val input = RunInputStream()
-        override val stdin: InputStream get() = input
-        override fun stdout(text: String) {
-            if (_runConsole.value?.id == sessionId) appendConsoleChunk(ConsoleChunkKind.OUTPUT, text)
-        }
-
-        override fun started() {
-            _runConsole.update { if (it?.id == sessionId) it.copy(phase = RunPhase.Running, acceptsInput = true) else it }
-        }
-
-        override fun exited(code: Int) {
-            _runConsole.update {
-                if (it?.id == sessionId) it.copy(phase = RunPhase.Finished, acceptsInput = false, exitCode = code) else it
-            }
-            if (_runConsole.value?.id == sessionId) appendConsoleChunk(ConsoleChunkKind.SYSTEM, "\nProcess finished with exit code $code\n")
-        }
-    }
-
-    /**
-     * Blocking standard input for a running program. The UI feeds lines via [feed]; reads block until input
-     * arrives or the stream is [close]d. Closing latches end-of-input — every later read returns -1 — so the
-     * program makes forward progress even if it swallows the cancellation interrupt.
-     */
-    private class RunInputStream : InputStream() {
-        private val queue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
-        @Volatile private var closed = false
-        private var head: ByteArray? = null
-        private var pos = 0
-
-        fun feed(text: String) {
-            if (closed) return
-            val bytes = text.toByteArray(Charsets.UTF_8)
-            if (bytes.isNotEmpty()) queue.put(bytes)
-        }
-
-        override fun close() {
-            closed = true
-            queue.offer(ByteArray(0)) // wake a blocked take() so the read returns EOF
-        }
-
-        override fun read(): Int {
-            val b = ensure() ?: return -1
-            return b[pos++].toInt() and 0xFF
-        }
-
-        override fun read(b: ByteArray, off: Int, len: Int): Int {
-            if (len == 0) return 0
-            val cur = ensure() ?: return -1
-            val n = minOf(len, cur.size - pos)
-            System.arraycopy(cur, pos, b, off, n)
-            pos += n
-            return n
-        }
-
-        override fun available(): Int = head?.let { it.size - pos } ?: 0
-
-        /** Return the chunk currently being read (blocking for one if needed), or null at end-of-input. */
-        private fun ensure(): ByteArray? {
-            while (head == null || pos >= head!!.size) {
-                if (closed && queue.isEmpty()) return null
-                val next = try {
-                    queue.take()
-                } catch (ie: InterruptedException) {
-                    Thread.currentThread().interrupt(); return null
-                }
-                if (next.isEmpty()) { if (closed) return null else continue }
-                head = next; pos = 0
-            }
-            return head
-        }
-    }
-
-    // ---- runtime permission guard (mediates instrumented code's network/file/reflection/exec; see SandboxGuard) ----
-
-    private val _permissionRequest = MutableStateFlow<UiPermissionRequest?>(null)
-    val permissionRequest: StateFlow<UiPermissionRequest?> get() = _permissionRequest
-
-    /** Remembers run/always decisions (persisted per project); the pure, testable part of the guard. */
-    private val permissionPolicy =
-        PermissionPolicy(store.rootPath.resolve(".platform/permissions.properties"))
-    private val promptLock = Any()
-
-    @Volatile
-    private var pendingAnswer: java.util.concurrent.ArrayBlockingQueue<UiPermissionDecision>? = null
-    private val permissionIdSeq = java.util.concurrent.atomic.AtomicInteger(0)
-
-    /**
-     * The broker [Guards] consults from a running program's (instrumented) code. Fast-paths already-decided
-     * categories via [permissionPolicy]; otherwise blocks that program's thread on a UI prompt and applies
-     * the returned decision. One prompt at a time ([promptLock] serializes concurrent program threads).
-     */
-    private val permissionBroker = object : PermissionBroker {
-        override fun check(category: GuardCategory, detail: String): Boolean {
-            permissionPolicy.decided(category)?.let { return it }
-            synchronized(promptLock) {
-                permissionPolicy.decided(category)?.let { return it }
-                val answer = java.util.concurrent.ArrayBlockingQueue<UiPermissionDecision>(1)
-                pendingAnswer = answer
-                _permissionRequest.value = UiPermissionRequest(
-                    permissionIdSeq.incrementAndGet(), category.name.lowercase(), detail
-                )
-                val decision = try {
-                    answer.take()
-                } catch (ie: InterruptedException) {
-                    Thread.currentThread().interrupt(); UiPermissionDecision.DENY
-                }
-                _permissionRequest.value = null
-                pendingAnswer = null
-                return permissionPolicy.apply(category, decision)
-            }
-        }
-    }
-
-    /** Answer the running program's pending permission prompt (from the UI). */
-    fun answerPermission(id: Int, decision: UiPermissionDecision) {
-        if (_permissionRequest.value?.id == id) pendingAnswer?.offer(decision)
-    }
-
-    /** Tasks the UI's Run picker offers: a Java `run` for a runnable CLI module + Android `assemble<Variant>`. */
-    fun runTasks(): List<RunTaskOption> = buildList {
-        findRunnable()?.let { (m, _) ->
-            add(
-                RunTaskOption(
-                    "run:${m.name}", "Run ${m.name}", "run"
-                )
-            )
-        }
-        for (m in modules().filter { it.type.id == "android-app" }) {
-            for (v in AndroidVariants.compute(m)) {
-                val cap = v.name.replaceFirstChar { it.uppercase() }
-                // On device, the android Run builds + installs + launches; on desktop it stops at assemble.
-                if (apkInstaller != null) add(
-                    RunTaskOption(
-                        "androidRun:${m.name}:${v.name}", "Run $cap · ${m.name}", "android"
-                    )
-                )
-                else add(
-                    RunTaskOption(
-                        "assemble:${m.name}:${v.name}", "assemble$cap · ${m.name}", "android"
-                    )
-                )
-                // The signed Android App Bundle (.aab) for Play upload — available on desktop and device.
-                add(
-                    RunTaskOption(
-                        "bundle:${m.name}:${v.name}", "bundle$cap (.aab) · ${m.name}", "android"
-                    )
-                )
-            }
-        }
-    }
-
-    /** Run/assemble the task with [id] (from [runTasks]); streams progress into [buildState]. */
-    fun runTask(id: String) {
-        if (_buildState.value.status == RunStatus.Running) return
-        flushOpenDocuments() // save unsaved editor buffers so the compiler sees the latest source
-        runCatching { ensureKotlinStdlib() } // a newly-added .kt module needs the stdlib dep before it builds/runs
-        // Graph construction + topological ordering run synchronously here; a misconfiguration (cyclic deps,
-        // a duplicate task) must surface as a Failed build in the console, never crash the IDE.
-        try {
-            when {
-                id.startsWith("run:") -> {
-                    val (module, mainClass) = findRunnable()
-                        ?: return fail("No runnable main() found.")
-                    unresolvedBlocker(module)?.let { return fail(it) }
-                    val project = projectOf(module) ?: return
-                    // Start an interactive console session: program stdio + stdin flow through this ProgramIo
-                    // into the full-screen Run terminal.
-                    val sessionId = runConsoleSeq.incrementAndGet()
-                    val io = RunProgramIo(sessionId)
-                    currentRunIo = io
-                    _runConsole.value = RunConsoleUi(sessionId, module.name, mainClass)
-                    val runner = dexRunner
-                    val backend = javaDexBackend
-                    if (runner != null && backend != null) {
-                        // On-device (ART): there is no `java` to fork, so dex the runtime classpath and run the dex,
-                        // targeting this device's API level (default 21 if unknown).
-                        val minApi = androidTools?.apiLevel ?: 21
-                        launch(
-                            module.name, buildSystem.createDexRunGraph(
-                                project, module, mainClass, minApi, backend, runner, programIo = io
-                            ), "> Run (dex) $mainClass", onComplete = ::finalizeRunConsole
-                        )
-                    } else {
-                        launch(
-                            module.name,
-                            buildSystem.createRunGraph(project, module, mainClass, programIo = io),
-                            "> Run $mainClass", onComplete = ::finalizeRunConsole
-                        )
-                    }
-                }
-
-                id.startsWith("assemble:") -> {
-                    val (modName, variant) = id.removePrefix("assemble:").split(":")
-                        .let { it[0] to it.getOrElse(1) { "debug" } }
-                    val module = modules().firstOrNull { it.name == modName }
-                        ?: return fail("No module '$modName'.")
-                    unresolvedBlocker(module)?.let { return fail(it) }
-                    val android = androidBuild
-                        ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
-                    val project = projectOf(module) ?: return
-                    val graph = android.createBuildGraph(
-                        project, BuildRequest(
-                            listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
-                        )
-                    )
-                    launch(
-                        module.name,
-                        graph,
-                        "> assemble $variant · ${module.name}",
-                        firstBuildDexBanner(module)
-                    )
-                }
-
-                id.startsWith("bundle:") -> {
-                    val (modName, variant) = id.removePrefix("bundle:").split(":")
-                        .let { it[0] to it.getOrElse(1) { "debug" } }
-                    val module = modules().firstOrNull { it.name == modName }
-                        ?: return fail("No module '$modName'.")
-                    unresolvedBlocker(module)?.let { return fail(it) }
-                    val android = androidBuild
-                        ?: return fail("Android SDK (platform + build-tools) not found — install one to bundle Android modules.")
-                    val project = projectOf(module) ?: return
-                    val graph = android.createBuildGraph(
-                        project, BuildRequest(
-                            listOf(module.id), VariantSelector(variant), BuildGoal.BUNDLE
-                        )
-                    )
-                    val aab = AndroidBuildSystem.signedAabPath(module, variant)
-                    launch(
-                        module.name,
-                        graph,
-                        "> bundle $variant (.aab) · ${module.name}",
-                        firstBuildDexBanner(module)
-                    ) { log -> log("Signed bundle: $aab") }
-                }
-
-                id.startsWith("androidRun:") -> {
-                    val (modName, variant) = id.removePrefix("androidRun:").split(":")
-                        .let { it[0] to it.getOrElse(1) { "debug" } }
-                    val module = modules().firstOrNull { it.name == modName }
-                        ?: return fail("No module '$modName'.")
-                    unresolvedBlocker(module)?.let { return fail(it) }
-                    val installer =
-                        apkInstaller ?: return fail("APK install is only available on device.")
-                    val android = androidBuild ?: return fail("Android SDK not found.")
-                    val pkg = module.facets.get(AndroidFacet.KEY)?.namespace
-                        ?: return fail("No Android package for '$modName'.")
-                    val project = projectOf(module) ?: return
-                    val graph = android.createBuildGraph(
-                        project, BuildRequest(
-                            listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
-                        )
-                    )
-                    val apk = AndroidBuildSystem.signedApkPath(module, variant)
-                    // On a successful build, install + launch (the OS shows its own install-confirmation).
-                    launch(
-                        module.name,
-                        graph,
-                        "> Run $variant · ${module.name}",
-                        firstBuildDexBanner(module)
-                    ) { log -> installer.installAndLaunch(apk, pkg, log) }
-                }
-
-                else -> fail("Unknown task: $id")
-            }
-        } catch (e: CyclicTaskDependencyException) {
-            fail("Build configuration error — cyclic task dependency: ${e.cycle.joinToString(" → ") { it.value }}")
-        } catch (e: Throwable) {
-            fail("Couldn't start the build: ${e.message ?: e.javaClass.simpleName}")
-        }
-    }
-
-    /** Run the default task (first of [runTasks]) — the plain Run button + existing callers. */
-    fun runBuild() {
-        val first =
-            runTasks().firstOrNull() ?: return fail("Nothing to run or assemble in this project.")
-        runTask(first.id)
-    }
-
-    /**
-     * Make kotlin-stdlib a resolvable dependency of every Kotlin module, sourced from the bundled jar (never
-     * the host runtime; see [BundledKotlinStdlib]). Extracts the bundled stdlib to a stable workspace path,
-     * registers it once as the `kotlin-stdlib` workspace library, and adds an `implementation` dependency to
-     * each module that has `.kt` sources but doesn't already declare it, so the stdlib flows onto both the
-     * compile and the run/dex classpaths through the normal classpath machinery (link and run). Idempotent;
-     * a no-op for Java-only projects.
-     */
-    private fun ensureKotlinStdlib() {
+    fun ensureKotlinStdlib() {
         val libName = "kotlin-stdlib"
         val kotlinModules = store.workspace.projects.flatMap { p -> p.modules.map { p to it } }
             .filter { (_, m) -> moduleHasKotlin(m) }
@@ -1391,9 +767,7 @@ class IdeServices private constructor(
             project.beginModification().apply {
                 missing.forEach {
                     module(it.id).addDependency(
-                        LibraryDependency(
-                            LibraryRef(libName), DependencyScope.IMPLEMENTATION
-                        )
+                        LibraryDependency(LibraryRef(libName), DependencyScope.IMPLEMENTATION)
                     )
                 }
                 commit()
@@ -1407,365 +781,42 @@ class IdeServices private constructor(
     private fun moduleHasKotlin(module: Module): Boolean =
         module.sourceSets.flatMap { it.contentRoots }
             .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
-            .map { Paths.get(it.dir.path) }.filter { Files.isDirectory(it) }.any { root ->
-                Files.walk(root).use { s -> s.anyMatch { p -> p.toString().endsWith(".kt") } }
+            .map { Paths.get(it.dir.path) }
+            .any { root ->
+                Files.isDirectory(root) && runCatching {
+                    Files.walk(root).use { s -> s.anyMatch { it.toString().endsWith(".kt") } }
+                }.getOrDefault(false)
             }
-
-    private fun fail(message: String) {
-        _buildState.value =
-            BuildState(RunStatus.Failed, "", emptyList(), listOf(logLine(message, UiLogLevel.Error)), elapsedMs = 0)
-        finalizeRunConsole(succeeded = false) // unstick a run console if a run failed before its program started
-    }
 
     /**
-     * The first-build dex notice, or null. The shared library-dex cache (the dir [androidBuild] dexes into)
-     * is empty on a machine's first Android build, so every library is dexed from scratch — the slow part of
-     * a cold build. We reassure the user the next build reuses the cache, but only when there are enough
-     * libraries that dexing is actually felt; a tiny app dexes fast and the notice would just be noise.
+     * The Kotlin compiler: K2 in-process (`:lang-kotlin`'s [KotlinJvmCompiler]). APPLICATION-scoped — one
+     * warm compiler shared across every opened project (its environment/jar filesystem is reused
+     * build-to-build; the boot classpath is passed per compile, so one instance serves all projects).
+     * Registered idempotently on the shared application container in init.
      */
-    private fun firstBuildDexBanner(module: Module): String? {
-        val depCount = runCatching {
-            module.classpath(DependencyScope.RUNTIME_ONLY).entries.count { it.kind == ClasspathEntryKind.LIBRARY }
-        }.getOrDefault(0)
-        if (depCount < FIRST_BUILD_DEX_BANNER_THRESHOLD) return null
-        val dexCache = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("dex")
-        if (dexCacheHasEntries(dexCache)) return null
-        return "First build — dexing $depCount libraries from scratch (there's no dex cache yet), so this " + "build is slower than usual. The next build reuses the cached dex and will be much faster."
-    }
-
-    /** Whether the shared dex cache already holds any dexed output (so a build isn't the cold first one). */
-    private fun dexCacheHasEntries(dir: Path): Boolean = Files.isDirectory(dir) && runCatching {
-        Files.walk(dir).use { s -> s.anyMatch { it.toString().endsWith(".dex") } }
-    }.getOrDefault(false)
-
-    /** Stream [graph] execution into [buildState] (shared by run + assemble). [onSuccess] (e.g. install +
-     *  launch an APK) runs after a successful build, receiving the console log appender. [onComplete] runs
-     *  when the build finishes normally (success or failure, not cancellation), with the outcome. */
-    private fun launch(
-        moduleName: String,
-        graph: TaskGraph,
-        header: String,
-        banner: String? = null,
-        onComplete: ((succeeded: Boolean) -> Unit)? = null,
-        onSuccess: (suspend (log: (String) -> Unit) -> Unit)? = null,
-    ) {
-        val order = graph.topologicalLevels().flatten()
-            .map { BuildStepUi(it.name.value, StepStatus.Pending) }
-        _buildState.value = BuildState(
-            RunStatus.Running, moduleName, order, listOf(logLine(header)), elapsedMs = 0, banner = banner
+    private val kotlinJvmCompiler: KotlinJvmCompiler
+        get() = store.appContainer.getService(
+            KOTLIN_JVM_COMPILER
         )
-        val start = System.currentTimeMillis()
-        // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): track this
-        // build/run's heap peak so we can see how close a build comes to the OOM ceiling and compare it
-        // against the project-open peak — the comparison that justifies (or not) a separate build process.
-        val peak = PeakHeap().also { it.record() }
-        memLog.info("build '$header' start: ${MemSample.now().fmt()}")
-        val ctx = SimpleTaskContext(
-            onLog = { e -> _buildState.update { it.copy(log = it.log + e.toUi()) } },
-            onDiagnostic = { d -> _buildState.update { it.copy(diagnostics = it.diagnostics + d.toUi()) } },
-        )
-        buildCtx = ctx
-        // Arm the run-time guard for this run: fresh per-run decisions + this engine's broker. Only the
-        // in-process dex-run executes instrumented code that consults it; other graphs never touch it.
-        permissionPolicy.resetRun(); _permissionRequest.value = null
-        Guards.broker = permissionBroker
-        val exec = TaskExecutorImpl(buildCache, onEvent = { name, status ->
-            peak.record() // sample at each task-status change, in addition to the periodic sampler below
-            // Log heap as each task STARTS so a clean build's timeline names the task that pegs the ceiling
-            // (cold kotlinc vs D8 vs R8) — tells us whether process isolation alone suffices or the task's
-            // own peak must also be cut. Phase-0 instrumentation; see docs/build-process-isolation.md.
-            if (status == TaskStatus.Running) memLog.info("task ${name.value}: ${MemSample.now().fmt()} (peak-so-far ${peak.peak().usedMb}MB)")
-            _buildState.update { st ->
-                st.copy(steps = st.steps.map {
-                    if (it.name == name.value) it.copy(
-                        status = mapStatus(
-                            status
-                        )
-                    ) else it
-                })
-            }
-        })
-        buildJob = indexScope.launch {
-            val memSampler = launch { while (isActive) { peak.record(); delay(MEM_SAMPLE_INTERVAL_MS) } }
-            val outcome = try {
-                exec.execute(graph, ctx, maxParallel = 2)
-            } catch (c: kotlinx.coroutines.CancellationException) {
-                throw c
-            } catch (e: Throwable) {
-                // The executor reports per-task failures itself; this only catches anything that still escaped,
-                // so the build never ends as a silent failure with an empty log.
-                ctx.buildLog.log(BuildLogEntry("Build failed: ${e.message ?: e.toString()}", BuildLogLevel.ERROR))
-                null
-            } finally {
-                // Record the peak on every exit path (success / failure / cancel) so the build_result analytics
-                // and the log reflect the build that just ran, never a stale prior peak.
-                memSampler.cancel()
-                lastBuildPeak = peak.peak()
-                memLog.info("build '$header' peak: ${peak.peak().fmt()}")
-            }
-            Guards.broker = null
-            _permissionRequest.value = null
-            if (outcome?.succeeded == true && onSuccess != null) {
-                runCatching { onSuccess { line -> _buildState.update { st -> st.copy(log = st.log + logLine(line)) } } }.onFailure {
-                    ctx.buildLog.log(BuildLogEntry("post-build step failed: ${it.message}", BuildLogLevel.ERROR))
-                }
-            }
-            _buildState.update {
-                it.copy(
-                    status = if (outcome?.succeeded == true) RunStatus.Succeeded else RunStatus.Failed,
-                    elapsedMs = System.currentTimeMillis() - start,
-                )
-            }
-            onComplete?.invoke(outcome?.succeeded == true)
-        }
-    }
-
-    /** Cancel an in-progress build/run. */
-    fun stopBuild() {
-        buildCtx?.canceled = true
-        currentRunIo?.input?.close() // EOF a program blocked reading stdin, before we interrupt its thread
-        buildJob?.cancel()
-        pendingAnswer?.offer(UiPermissionDecision.DENY) // unblock a program waiting on a permission prompt
-        Guards.broker = null
-        _permissionRequest.value = null
-        finalizeRunConsole(succeeded = false) // the cancelled coroutine skips launch's onComplete
-        _buildState.update {
-            if (it.status == RunStatus.Running) it.copy(
-                status = RunStatus.Failed, log = it.log + logLine("Stopped.", UiLogLevel.Warn)
-            ) else it
-        }
-    }
-
-    /** A build-engine [BuildDiagnostic] → the UI DTO (paths/ids as plain strings for the surface-agnostic UI). */
-    private fun BuildDiagnostic.toUi(): BuildDiagnosticUi = BuildDiagnosticUi(
-        severity = when (severity) {
-            BuildSeverity.ERROR -> UiSeverity.Error
-            BuildSeverity.WARNING -> UiSeverity.Warning
-            BuildSeverity.INFO -> UiSeverity.Info
-        },
-        message = message,
-        kind = kind.id,
-        source = source,
-        file = location?.path,
-        line = location?.line ?: -1,
-        column = location?.column ?: -1,
-        detail = detail,
-        task = task?.value,
-    )
-
-    /** A host-side build-log line: stamps the current wall-clock time + a formatted label for the console. */
-    private fun logLine(message: String, level: UiLogLevel = UiLogLevel.Info, task: String? = null): BuildLogLine {
-        val ms = System.currentTimeMillis()
-        return BuildLogLine(message, level, task, buildLogTimeLabel(ms), ms)
-    }
-
-    /** A build-engine [BuildLogEntry] → the UI log row (level mapped, task as a string, time formatted). */
-    private fun BuildLogEntry.toUi(): BuildLogLine {
-        val ms = if (timestampMs != 0L) timestampMs else System.currentTimeMillis()
-        val mapped = when (level) {
-            BuildLogLevel.DEBUG -> UiLogLevel.Debug
-            BuildLogLevel.INFO -> UiLogLevel.Info
-            BuildLogLevel.WARN -> UiLogLevel.Warn
-            BuildLogLevel.ERROR -> UiLogLevel.Error
-        }
-        return BuildLogLine(message, inferLevel(message, mapped), task?.value, buildLogTimeLabel(ms), ms)
-    }
 
     /**
-     * Best-effort level for an untyped tool line (most arrive as INFO) so the Log tab's level filter is
-     * useful — recognizes the common compiler/tool prefixes (kotlinc `e:`/`w:`, GNU/aapt2 `error:`/
-     * `warning:`). Only ever *upgrades* an INFO line; an explicit level from the engine is left untouched.
+     * The app-global signing-keystore registry (create/import/validate/assign): keystores + their secrets
+     * live under the shared home dir, shared across projects and kept OUT of any project. APPLICATION-scoped
+     * and reached from the shared application container, so it's a single registry across every project and
+     * the picker's hub can drive it with no project open ([ProjectManager] registers it; this engine
+     * registers it idempotently for the manager-less test path). Falls back to the project's `.platform`
+     * when the host supplies no shared dir (tests).
      */
-    private fun inferLevel(message: String, declared: UiLogLevel): UiLogLevel {
-        if (declared != UiLogLevel.Info) return declared
-        val l = message.lowercase()
-        return when {
-            l.startsWith("e:") || l.startsWith("error:") || "error:" in l ||
-                "exception" in l || l.startsWith("failed") -> UiLogLevel.Error
-            l.startsWith("w:") || l.startsWith("warning") || "warning:" in l -> UiLogLevel.Warn
-            else -> UiLogLevel.Info
+    val keystoreRegistry: KeystoreRegistry
+        get() = store.appContainer.let { c ->
+            c.registerServiceIfAbsent(APP_KEYSTORE_REGISTRY) {
+                KeystoreRegistry((sharedCachesRoot ?: store.rootPath.resolve(".platform")).resolve("keystores"))
+            }
+            c.getService(APP_KEYSTORE_REGISTRY)
         }
-    }
-
-    /** Local time-of-day label (HH:mm:ss.SSS) for a build-log line's epoch-millis timestamp. */
-    private fun buildLogTimeLabel(ms: Long): String = runCatching {
-        java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
-            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS"))
-    }.getOrDefault("")
-
-    private fun mapStatus(status: TaskStatus): StepStatus = when (status) {
-        TaskStatus.Running -> StepStatus.Running
-        TaskStatus.Succeeded -> StepStatus.Done
-        TaskStatus.UpToDate -> StepStatus.UpToDate
-        TaskStatus.NoSource -> StepStatus.NoSource
-        TaskStatus.Failed -> StepStatus.Failed
-        TaskStatus.Blocked -> StepStatus.Skipped
-    }
 
     private fun projectOf(module: Module): Project? =
         store.workspace.projects.firstOrNull { p -> p.modules.any { it.id == module.id } }
-
-    // ---- dependency management ----
-
-    /**
-     * The Maven resolver, caching resolved-deps under [sharedCachesRoot] when the host supplies one (so
-     * every project shares one download store) or the workspace itself otherwise. Downloaded jars/
-     * classes-from-aars are wrapped as the store's [VirtualFile]s (which handle any absolute path, in or
-     * out of the workspace) so they flow straight into the model's [LibraryTable] →
-     * [dev.ide.model.ClasspathSnapshot] → build + analysis, like any other library.
-     */
-    private val depsResolver = MavenDependencyResolver(
-        cache = ResolverCache(sharedCachesRoot ?: store.rootPath),
-        fileFor = { p -> store.vfs.fileFor(p) },
-    )
-
-    private val _depsState = MutableStateFlow(DepsResolveState())
-    val depsState: StateFlow<DepsResolveState> get() = _depsState
-
-    /** Upper bound on the resolve log kept in [depsState] (the expandable detail in the editor's resolve bar). */
-    private val MAX_DEPS_LOG = 300
-
-    /** Append [line] to a resolve log, dropping a consecutive duplicate and capping length so a large
-     *  transitive closure can't grow it without bound. */
-    private fun appendDepsLog(log: List<String>, line: String?): List<String> {
-        if (line.isNullOrBlank() || line == log.lastOrNull()) return log
-        val next = log + line
-        return if (next.size > MAX_DEPS_LOG) next.subList(
-            next.size - MAX_DEPS_LOG, next.size
-        ) else next
-    }
-
-    private fun depsProgress(): ProgressReporter = object : ProgressReporter {
-        override fun report(fraction: Double, message: String?) {
-            _depsState.update {
-                it.copy(
-                    fraction = fraction,
-                    message = message ?: it.message,
-                    log = appendDepsLog(it.log, message)
-                )
-            }
-        }
-
-        override fun checkCanceled() {}
-        override val isCanceled: Boolean get() = false
-    }
-
-    /** Like [depsProgress] but leaves the fraction to the caller — the template batch owns the overall
-     *  i/size progress while the resolver's per-artifact messages still stream into the message line + log. */
-    private fun depsLogProgress(): ProgressReporter = object : ProgressReporter {
-        override fun report(fraction: Double, message: String?) {
-            if (message != null) _depsState.update {
-                it.copy(
-                    message = message, log = appendDepsLog(it.log, message)
-                )
-            }
-        }
-
-        override fun checkCanceled() {}
-        override val isCanceled: Boolean get() = false
-    }
-
-    private val NoProgress = object : ProgressReporter {
-        override fun report(fraction: Double, message: String?) {}
-        override fun checkCanceled() {}
-        override val isCanceled: Boolean get() = false
-    }
-
-    // --- deferred template-dependency resolution (project-scoped, started after the project is opened) ---
-
-    /** A project-scoped scope for background resolution, cancelled in [close] (so leaving a project stops it). */
-    private val depsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    /** Template-declared deps to resolve after open (e.g. the Compose AAR graph), set by [createProjectAt]. */
-    @Volatile
-    private var pendingDeps: List<dev.ide.model.template.TemplateDependency> = emptyList()
-    private val pendingStarted = java.util.concurrent.atomic.AtomicBoolean(false)
-    private val reconcileStarted = java.util.concurrent.atomic.AtomicBoolean(false)
-
-    /** Fingerprint marker recording the declared-dependency set last fully reconciled — so reconciliation
-     *  runs once per dep-set change, not on every open. */
-    private val reconcileMarker: java.nio.file.Path get() = store.rootPath.resolve(".platform/.deps-reconciled")
-
-    private val depsLog = Log.logger("deps")
-
-    /** Why each currently-unresolved declared coordinate failed, from the most recent resolve. The KEY SET is
-     *  the authoritative "unresolved declared deps" — populated only from the resolver's
-     *  [ResolutionResult.unresolved] (a coordinate it genuinely couldn't fetch), so a variant dep that
-     *  resolves without its own artifact is never wrongly listed. Read by [computeUnresolved]/[declaredUnresolved]. */
-    private val unresolvedReasons = java.util.concurrent.ConcurrentHashMap<String, String>()
-
-    /** Fallback reason when no resolve has run yet this session (e.g. just opened a project with a missing
-     *  closure). Still actionable: the user can Retry once the network is back. */
-    private val DEFAULT_UNRESOLVED_REASON = "Not resolved. Check your internet connection, then tap Retry."
-
-    /** Modules carrying at least one Maven-coordinate library dependency — the reconcilable set. */
-    private fun mavenDepModules(): List<Module> = modules().filter { m ->
-        m.dependencies.any { it is LibraryDependency && parseCoordinate(it.library.name) != null }
-    }
-
-    /** Fingerprint of the declared library-dependency set (the reconcile marker's contents). */
-    private fun reconcileFingerprint(mods: List<Module>): String = mods.flatMap { m ->
-        m.dependencies.filterIsInstance<LibraryDependency>().map { "${m.id.value}|${it.library.name}" }
-    }.sorted().joinToString("\n")
-
-    /** Record that the current declared set has been fully resolved, so the next open skips the re-walk. */
-    private fun markReconciled(fingerprint: String) = runCatching {
-        java.nio.file.Files.createDirectories(reconcileMarker.parent)
-        reconcileMarker.writeText(fingerprint)
-    }
-
-    // --- dependency-health (resolved vs unresolved) error state ----------------------------------
-
-    /** True if any resolved library's jar is missing on disk (a cleared cache / partial write) — the signal
-     *  that a "reconciled" marker is stale and the closure must be re-resolved. Variant-safe: it inspects the
-     *  libraries that actually exist, never a declared coordinate that legitimately has no library of its own. */
-    private fun hasMissingLibraryFiles(): Boolean {
-        val tables = listOf(store.workspace.libraryTable) + store.workspace.projects.map { it.libraryTable }
-        return tables.flatMap { it.libraries }.any { lib ->
-            lib.classesRoots.any { runCatching { !Files.exists(Paths.get(it.path)) }.getOrDefault(true) }
-        }
-    }
-
-    /** The declared Maven coordinates of [module] the LAST resolve could not resolve (the build-blocking set).
-     *  Driven by the resolver's own verdict ([unresolvedReasons] ← [ResolutionResult.unresolved]), NOT by
-     *  per-coordinate library presence: a Gradle-variant dependency (e.g. `androidx.compose.ui:ui`, whose code
-     *  ships in `ui-android`) resolves with no library of its own and must NOT be treated as unresolved. */
-    private fun declaredUnresolved(module: Module): List<String> =
-        module.dependencies.filterIsInstance<LibraryDependency>()
-            .map { it.library.name }.filter { unresolvedReasons.containsKey(it) }
-
-    /** Every unresolved declared dependency across the workspace, with its module + best-effort reason. */
-    private fun computeUnresolved(): List<UiUnresolvedDependency> = modules().flatMap { m ->
-        declaredUnresolved(m).map { coord ->
-            UiUnresolvedDependency(m.name, coord, unresolvedReasons[coord] ?: DEFAULT_UNRESOLVED_REASON)
-        }
-    }
-
-    /** Publish the current dependency-health into [depsState] (the persistent project error state). */
-    private fun publishDependencyHealth() {
-        val unresolved = computeUnresolved()
-        _depsState.update { it.copy(unresolved = unresolved) }
-    }
-
-    /** Heuristic reason for an unresolved coordinate, from one resolve's outcome: nothing resolved at all
-     *  reads as a connectivity failure; a partial resolve points at the coordinate/repository. */
-    private fun unresolvedReasonFor(anyResolved: Boolean): String =
-        if (!anyResolved) "Couldn't reach the repositories. Check your internet connection, then tap Retry."
-        else "Couldn't download from the configured repositories. Check the version/coordinate or your connection, then tap Retry."
-
-    /** Fold one module-graph resolve into [unresolvedReasons], keyed by declared library NAME. A declared
-     *  coordinate is unresolved IFF the resolver itself reported it in [ResolutionResult.unresolved] (a POM
-     *  or download that genuinely failed). A coordinate that resolved without an artifact of its own (a
-     *  Gradle variant like `compose.ui:ui` → `ui-android`) is NOT in `unresolved`, so it is correctly cleared
-     *  — the previous "is its own artifact in `resolved`" test wrongly flagged such variants. */
-    private fun recordResolveReasons(declared: List<Pair<String, Coordinate>>, result: ResolutionResult) {
-        val failedGAs = result.unresolved.map { "${it.group}:${it.name}" }.toSet()
-        val anyResolved = result.resolved.isNotEmpty()
-        for ((name, c) in declared) {
-            if ("${c.group}:${c.name}" in failedGAs) unresolvedReasons[name] = unresolvedReasonFor(anyResolved)
-            else unresolvedReasons.remove(name)
-        }
-    }
 
     /** [module] plus its transitive module-dependency closure (within its project) — the modules a build of
      *  [module] actually compiles/links against, so a dep module's unresolved library blocks it too. */
@@ -1777,1735 +828,14 @@ class IdeServices private constructor(
         while (stack.isNotEmpty()) {
             val m = stack.removeLast()
             if (!seen.add(m.id)) continue
-            for (dep in m.dependencies.filterIsInstance<ModuleDependency>()) byId[dep.target]?.let { stack.add(it) }
+            for (dep in m.dependencies.filterIsInstance<ModuleDependency>()) byId[dep.target]?.let {
+                stack.add(
+                    it
+                )
+            }
         }
         return seen.mapNotNull { byId[it] }
     }
-
-    /** A build-blocking message when [module] (or a module it depends on) has unresolved declared dependencies,
-     *  else null. A build can't succeed against a missing classpath, so we refuse with a clear, actionable why. */
-    private fun unresolvedBlocker(module: Module): String? {
-        val bad = moduleBuildClosure(module).flatMap { m -> declaredUnresolved(m).map { m.name to it } }
-        if (bad.isEmpty()) return null
-        val lines = bad.joinToString("\n") { (mod, coord) -> "  • $coord  ($mod)" }
-        val n = bad.size
-        return "Can't build: $n declared ${if (n == 1) "dependency is" else "dependencies are"} unresolved.\n" +
-            "$lines\nResolve them first: tap Retry on the dependency banner (check your internet connection), or open the Dependencies screen."
-    }
-
-    /**
-     * Heal stale/incomplete persisted dependency closures in the background, once per open. A project's
-     * `libraries.json` can hold an INCOMPLETE closure: an artifact that failed to download during the
-     * original resolve was historically dropped silently, so e.g. base `androidx.activity:activity`
-     * (`ComponentActivity`'s home) could be absent from `activity-compose`'s closure, and nothing
-     * re-resolved on open — completion then can't resolve the type. This re-resolves each declared Maven
-     * dependency (cache-first, so cheap when already healthy) and rebuilds any closure that differs from a
-     * fully-successful fresh resolve. Bounded by a fingerprint marker so the graph isn't re-walked on every
-     * open; only marks done when *every* dependency resolved completely, so an offline open retries next
-     * time instead of locking in a partial state. Never clobbers a good closure with an incomplete one.
-     */
-    fun startDependencyReconciliation() {
-        if (!reconcileStarted.compareAndSet(false, true)) { depsLog.info("reconcile: already started this session → skip"); return }
-        val mods = mavenDepModules()
-        if (mods.isEmpty()) { depsLog.info("reconcile: no modules with Maven deps → skip"); return }
-        val fingerprint = reconcileFingerprint(mods)
-        // Trust the marker only when the declared deps are ACTUALLY satisfied on disk. A marker can go stale
-        // (the dep cache was cleared, a partial write) — then the closure is missing yet the marker says
-        // "done", so reconciliation must re-resolve despite it or the project never heals.
-        if (runCatching { reconcileMarker.readText() }.getOrNull() == fingerprint && !hasMissingLibraryFiles()) {
-            depsLog.info("reconcile: ${mods.size} module(s) already reconciled, all present → skip")
-            return
-        }
-        depsLog.info("reconcile: ${mods.size} module(s) with Maven deps → resolving")
-
-        depsScope.launch {
-            var changedAny = false
-            var allComplete = true
-            for (m in mods) {
-                // finalize=false: defer the one save/invalidate/reindex to after the whole batch.
-                val asm = runCatching {
-                    assembleModuleClasspath(
-                        m, NoProgress, finalize = false
-                    )
-                }.onFailure { depsLog.warn("reconcile ${m.name} aborted: ${it.javaClass.simpleName}: ${it.message}") }
-                    .getOrNull()
-                if (asm == null || asm.unresolved.isNotEmpty()) allComplete =
-                    false // partial → retry next open
-                if (asm?.changed == true) changedAny = true
-            }
-            if (changedAny) {
-                store.save(); invalidateAnalyzers(); resyncIndex()
-            }
-            if (allComplete) markReconciled(fingerprint)
-            // Refresh the project error state from what's now on disk (reasons stamped during the resolves).
-            publishDependencyHealth()
-        }
-    }
-
-    private data class ModuleAssembly(
-        val changed: Boolean, val unresolved: List<Coordinate>, val resolvedCount: Int
-    )
-
-    /**
-     * Resolve a module's ENTIRE declared Maven-dependency set as ONE graph (not each dependency in isolation),
-     * so conflict resolution spans the whole graph: one version per `group:name`, and a transitive that only a
-     * superseded version pulled in is pruned — exactly what `gradle`/`maven` produce. The single unified closure
-     * is partitioned back across the declared dependencies (each artifact assigned to the first declarer, in
-     * order, whose `dependsOn` chain reaches it), so the per-library model is preserved while the UNION of the
-     * libraries is precisely the whole-graph closure — no duplication, no independent-resolution drift. A
-     * library is rewritten only when its partition actually changes; a dependency whose primary didn't resolve
-     * (offline) is left intact rather than emptied. Returns the unresolved coordinates so a partial resolve is
-     * surfaced and never treated as complete.
-     */
-    private suspend fun assembleModuleClasspath(
-        module: Module, progress: ProgressReporter, finalize: Boolean
-    ): ModuleAssembly {
-        val libDeps = module.dependencies.filterIsInstance<LibraryDependency>()
-            .mapNotNull { dep -> parseInputCoordinate(dep.library.name)?.let { Triple(dep.library.name, it, dep.exclusions) } }
-            .distinctBy { it.first }
-        val directs = libDeps.map { it.first to it.second }
-        if (directs.isEmpty()) return ModuleAssembly(false, emptyList(), 0)
-
-        // Per-declaration exclusions, keyed by the (parsed) coordinate the resolver is seeded with, so each
-        // declaration's excludes prune only its own subtree (Gradle/Maven per-declaration semantics).
-        val exclusions = libDeps.filter { it.third.isNotEmpty() }.associate { it.second to it.third }
-        val result = depsResolver.resolve(
-            directs.map { it.second },
-            currentRepositories(),
-            conflictPolicy,
-            progress,
-            platforms = declaredPlatforms(module),
-            exclusions = exclusions,
-        )
-        val byGa = result.resolved.associateBy { it.coordinate.group to it.coordinate.name }
-        val partition = DependencyPartition.partition(directs, result.resolved)
-        // Stamp a why-it-failed on each declared coordinate that didn't resolve (cleared if it did), so the
-        // project error state can explain itself; keyed by the declared library name.
-        recordResolveReasons(directs, result)
-        // "unresolved" = what the resolver itself couldn't resolve, NOT a declared coord with an empty
-        // partition (a Gradle-variant dep is shared with an earlier declarer and resolves fine).
-        val failedGAs = result.unresolved.map { "${it.group}:${it.name}" }.toSet()
-        val unresolvedDeclared = directs.filter { (_, c) -> "${c.group}:${c.name}" in failedGAs }.map { it.first }
-        depsLog.info(
-            "assemble ${module.name}: ${directs.size} declared, ${result.resolved.size} resolved" +
-                if (unresolvedDeclared.isNotEmpty()) ", UNRESOLVED ${unresolvedDeclared.joinToString()}" else "",
-        )
-
-        var changed = false
-        for ((libName, coord) in directs) {
-            val artifacts = partition[libName].orEmpty()
-            if (artifacts.isEmpty()) continue   // primary didn't resolve (offline) → keep any existing closure
-            val freshClasses = artifacts.map { it.classesRoot.path }.toSet()
-            // The whole closure's `-sources.jar`s — direct AND transitive — so go-to-source, real parameter
-            // names, and javadoc/KDoc resolve for every type the library can reach, not just the declared
-            // coordinate. (`sourceAttachments` → JdtSourceAnalyzer's resolver + the source-doc index.) Included
-            // in the up-to-date check so an existing library whose classes already match but is missing the
-            // transitive sources (the prior behavior, or an offline first resolve) heals on reconcile.
-            val freshSources = artifacts.mapNotNull { it.sourcesRoot?.path }.toSet()
-            val existing = findLibrary(libName)
-            if (existing?.classesRoots?.map { it.path }
-                    ?.toSet() == freshClasses && existing.sourcesRoots.map { it.path }
-                    .toSet() == freshSources) continue // already correct
-            val primary = byGa[coord.group to coord.name]
-            store.workspace.libraryTable.create(libName).apply {
-                kind = if (primary?.kind == ArtifactKind.AAR) LibraryKind.AAR else LibraryKind.JAR
-                artifacts.forEach { a ->
-                    addClassesRoot(a.classesRoot)
-                    a.sourcesRoot?.let { addSourcesRoot(it) }
-                }
-                commit()
-            }
-            changed = true
-        }
-        if (changed && finalize) {
-            store.save(); invalidateAnalyzers(); resyncIndex()
-        }
-        return ModuleAssembly(changed, result.unresolved, result.resolved.size)
-    }
-
-    /**
-     * Resolve the template's declared dependencies in the background — started by the host **once the project
-     * is open** (not during creation), so a large/slow closure never blocks creation and the user can use the
-     * rest of the app while it streams in.
-     *
-     * The declarations themselves are NOT written here — [createProjectAt] already persisted them to
-     * `module.toml` (the source of truth for what the project requires), independent of resolution. This step
-     * only assembles the declared set into `libraries.json`, as ONE whole-graph resolve per affected module
-     * (transitives conflict-resolved across the whole graph, like gradle/maven). A module that fails to
-     * resolve fully keeps its declarations intact, so the next open's [startDependencyReconciliation] retries
-     * it — a transient (offline) failure never silently drops a declared dependency. Idempotent; progress is
-     * published on [depsState] (the same flow the Dependencies screen and the editor's resolve bar observe).
-     */
-    fun startPendingDependencyResolution() {
-        val deps = pendingDeps
-        depsLog.info("startPendingDependencyResolution: ${deps.size} pending template dep(s)${if (deps.isEmpty()) " → reconcile" else ""}")
-        // No template deps to resolve (the normal case for an already-created project that's just been
-        // opened) → instead reconcile the persisted closures, which heals an incomplete one baked by an
-        // earlier partial resolve (see [startDependencyReconciliation]).
-        if (deps.isEmpty()) {
-            // Reflect the persisted library state immediately (so a project opened with a missing closure
-            // shows the error banner at once), then heal/refine in the background.
-            publishDependencyHealth()
-            startDependencyReconciliation(); return
-        }
-        if (!pendingStarted.compareAndSet(false, true)) return
-        pendingDeps = emptyList()
-        val moduleNames = deps.map { it.module }.distinct()
-        depsScope.launch {
-            _depsState.value = DepsResolveState(
-                resolving = true,
-                message = "Resolving project dependencies…",
-                fraction = 0.0,
-                log = listOf("Resolving project dependencies…")
-            )
-            var changedAny = false
-            var allComplete = true
-            try {
-                moduleNames.forEachIndexed { i, name ->
-                    val module = modules().firstOrNull { it.name == name } ?: return@forEachIndexed
-                    _depsState.update {
-                        val m = "Resolving dependencies for $name  (${i + 1}/${moduleNames.size})"
-                        it.copy(
-                            message = m,
-                            fraction = i.toDouble() / moduleNames.size,
-                            log = appendDepsLog(it.log, m)
-                        )
-                    }
-                    // finalize=false: defer the save/invalidate/reindex; do it once after the whole batch.
-                    // depsLogProgress streams the resolver's per-artifact detail into the log.
-                    val asm = runCatching {
-                        assembleModuleClasspath(module, depsLogProgress(), finalize = false)
-                    }.onFailure { depsLog.warn("pending resolve $name aborted: ${it.javaClass.simpleName}: ${it.message}") }
-                        .getOrNull()
-                    if (asm == null || asm.unresolved.isNotEmpty()) allComplete = false
-                    if (asm?.changed == true) changedAny = true
-                }
-                if (changedAny) {
-                    store.save()
-                    invalidateAnalyzers()
-                    resyncIndex()
-                }
-                // Only mark the declared set reconciled when it resolved completely; a partial resolve
-                // (offline) leaves the marker absent so the next open retries via reconciliation.
-                if (allComplete) markReconciled(reconcileFingerprint(mavenDepModules()))
-            } finally {
-                // Publish the final dependency-health alongside resolving=false: any dep that didn't resolve
-                // stays as the persistent error state (with the reason recorded during the resolve).
-                _depsState.update {
-                    it.copy(
-                        resolving = false,
-                        fraction = 1.0,
-                        message = "Dependencies resolved",
-                        log = appendDepsLog(it.log, "Dependencies resolved"),
-                        unresolved = computeUnresolved(),
-                    )
-                }
-            }
-        }
-    }
-
-    /**
-     * Re-attempt resolving every declared dependency — the action behind the editor's unresolved-deps banner.
-     * Re-walks each declared Maven dependency cache-first, rebuilds `libraries.json`, and refreshes the
-     * [depsState] error state, so a project that failed to resolve (offline) recovers once the network is
-     * back, without reopening. Always runs (unlike the once-per-open background paths).
-     */
-    suspend fun retryDependencyResolution() {
-        runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
-        val mods = mavenDepModules()
-        depsLog.info("retryDependencyResolution: ${mods.size} module(s) with Maven deps")
-        if (mods.isEmpty()) { publishDependencyHealth(); return }
-        _depsState.value = DepsResolveState(
-            resolving = true,
-            message = "Resolving project dependencies…",
-            fraction = 0.0,
-            log = listOf("Retrying dependency resolution…"),
-        )
-        var changedAny = false
-        var allComplete = true
-        try {
-            mods.forEachIndexed { i, m ->
-                _depsState.update {
-                    val msg = "Resolving dependencies for ${m.name}  (${i + 1}/${mods.size})"
-                    it.copy(message = msg, fraction = i.toDouble() / mods.size, log = appendDepsLog(it.log, msg))
-                }
-                val asm = runCatching {
-                    assembleModuleClasspath(m, depsLogProgress(), finalize = false)
-                }.onFailure { depsLog.warn("retry resolve ${m.name} aborted: ${it.javaClass.simpleName}: ${it.message}") }
-                    .getOrNull()
-                if (asm == null || asm.unresolved.isNotEmpty()) allComplete = false
-                if (asm?.changed == true) changedAny = true
-            }
-            if (changedAny) { store.save(); invalidateAnalyzers(); resyncIndex() }
-            if (allComplete) markReconciled(reconcileFingerprint(mavenDepModules()))
-        } finally {
-            _depsState.update {
-                it.copy(
-                    resolving = false,
-                    fraction = 1.0,
-                    message = "Dependencies resolved",
-                    log = appendDepsLog(it.log, "Dependencies resolved"),
-                    unresolved = computeUnresolved(),
-                )
-            }
-        }
-    }
-
-    /**
-     * Persist the template's declared Maven dependencies into the model (→ `module.toml`) at creation, so the
-     * declared set is the durable source of truth INDEPENDENT of resolution. Resolution (→ `libraries.json`)
-     * runs later in the background ([startPendingDependencyResolution]); a resolution failure no longer drops
-     * the declaration — it stays declared and the next open's reconciliation retries it. Dedup-guarded so a
-     * dep the template's [generate] (or [ensureKotlinStdlib]) already declared isn't doubled.
-     */
-    private fun declareTemplateDependencies(deps: List<dev.ide.model.template.TemplateDependency>) {
-        if (deps.isEmpty()) return
-        var changed = false
-        for ((moduleName, forModule) in deps.groupBy { it.module }) {
-            val module = modules().firstOrNull { it.name == moduleName } ?: continue
-            val project = projectOf(module) ?: continue
-            val toAdd = forModule.filter { d ->
-                module.dependencies.none { it is LibraryDependency && it.library.name == d.coordinate }
-            }
-            if (toAdd.isEmpty()) continue
-            project.beginModification().apply {
-                toAdd.forEach { d ->
-                    module(module.id).addDependency(
-                        LibraryDependency(LibraryRef(d.coordinate), parseScope(d.scope))
-                    )
-                }
-                commit()
-            }
-            changed = true
-        }
-        if (changed) store.save()
-    }
-
-    /** A module can consume an Android archive (`.aar`) iff it's an Android module — facet or type. */
-    private fun acceptsAar(module: Module): Boolean =
-        module.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null || module.type.id.startsWith(
-            "android"
-        )
-
-    private fun aarReason(module: Module): String =
-        "Android archives (.aar) need an Android module; '${module.name}' is a ${module.type.displayName.lowercase()}"
-
-    private fun parseCoordinate(name: String): Coordinate? =
-        name.split(":").takeIf { it.size >= 3 }?.let { Coordinate(it[0], it[1], it[2]) }
-
-    /**
-     * Parse a user-entered dependency coordinate. Accepts `group:name:version` and the versionless
-     * `group:name` form (version filled from an imported platform BOM at resolve time → blank here).
-     */
-    private fun parseInputCoordinate(name: String): Coordinate? =
-        name.split(":").map { it.trim() }.let {
-            when (it.size) {
-                2 -> Coordinate(it[0], it[1], "")
-                3 -> Coordinate(it[0], it[1], it[2])
-                else -> null
-            }
-        }
-
-    /** The BOM coordinates [module] imports as platforms — the version source for its versionless deps. */
-    private fun declaredPlatforms(module: Module): List<Coordinate> =
-        module.dependencies.filterIsInstance<PlatformDependency>().map { it.bom }
-
-    private fun findLibrary(name: String) = store.workspace.libraryTable.byName(name)
-        ?: store.workspace.projects.firstNotNullOfOrNull { it.libraryTable.byName(name) }
-
-    private fun scopeLabel(scope: DependencyScope): String = when (scope) {
-        DependencyScope.API -> "api"
-        DependencyScope.IMPLEMENTATION -> "implementation"
-        DependencyScope.COMPILE_ONLY -> "compileOnly"
-        DependencyScope.RUNTIME_ONLY -> "runtimeOnly"
-        DependencyScope.TEST_IMPLEMENTATION -> "testImplementation"
-    }
-
-    private fun parseScope(label: String): DependencyScope =
-        when (label.lowercase().replace("_", "").replace("-", "")) {
-            "api" -> DependencyScope.API
-            "compileonly" -> DependencyScope.COMPILE_ONLY
-            "runtimeonly" -> DependencyScope.RUNTIME_ONLY
-            "testimplementation", "test" -> DependencyScope.TEST_IMPLEMENTATION
-            else -> DependencyScope.IMPLEMENTATION
-        }
-
-    /** Dependency-declaring modules + their build system + AAR compatibility (the screen's module switcher). */
-    fun dependencyModules(): List<UiDepModule> = modules().map { m ->
-        UiDepModule(
-            name = m.name,
-            buildSystem = projectOf(m)?.buildSystemId?.value ?: "native",
-            acceptsAar = acceptsAar(m),
-            dependencyCount = m.dependencies.count { it is LibraryDependency },
-        )
-    }
-
-    /**
-     * Resolve [moduleName]'s full dependency picture: declared entries, the transitive graph (from the
-     * resolver's `dependsOn` edges), version conflicts, cycles, and per-artifact compatibility. Network
-     * resolution is cached on disk; on failure it degrades to declared-only with everything unresolved.
-     */
-    suspend fun moduleDependencies(moduleName: String): UiModuleDeps? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        val accepts = acceptsAar(module)
-        val buildSystem = projectOf(module)?.buildSystemId?.value ?: "native"
-
-        // Declared library coordinates → resolve them together so cross-dep version conflicts surface.
-        val declaredGAs = LinkedHashSet<String>()
-        val scopeByGa = HashMap<String, DependencyScope>()
-        val externalCoords = ArrayList<Coordinate>()
-        // Per-declaration exclusions, keyed by the seeded coordinate — passed to resolve so the displayed
-        // tree reflects exclusions (an excluded transitive is pruned from the closure, not shown as a node).
-        val exclusionsByCoord = HashMap<Coordinate, List<Exclusion>>()
-        for (entry in module.dependencies) if (entry is LibraryDependency) {
-            parseCoordinate(entry.library.name)?.let { c ->
-                val ga = "${c.group}:${c.name}"
-                declaredGAs += ga
-                scopeByGa[ga] = entry.scope
-                externalCoords += c
-                if (entry.exclusions.isNotEmpty()) exclusionsByCoord[c] = entry.exclusions
-            }
-        }
-
-        val result = if (externalCoords.isEmpty()) null else {
-            _depsState.value =
-                DepsResolveState(resolving = true, message = "Resolving ${module.name}…")
-            runCatching {
-                depsResolver.resolve(
-                    externalCoords,
-                    currentRepositories(),
-                    conflictPolicy,
-                    depsProgress(),
-                    platforms = declaredPlatforms(module),
-                    exclusions = exclusionsByCoord,
-                )
-            }.onFailure {
-                // The Dependencies-screen resolve is cancelled when the screen leaves composition; this also
-                // catches an unexpected error. Logged so a "screen shows unresolved but no resolver failure"
-                // case is explained (cancellation) rather than looking like a silent hang.
-                depsLog.warn("moduleDependencies(${module.name}) resolve aborted: ${it.javaClass.simpleName}: ${it.message}")
-            }.getOrNull().also { _depsState.update { s -> s.copy(resolving = false) } }
-        }
-
-        val conflictGAs = result?.conflicts?.map { it.coordinate }?.toSet().orEmpty()
-        val edges = LinkedHashMap<String, List<String>>()
-        val nodes = LinkedHashMap<String, UiDependencyNode>()
-        result?.resolved?.forEach { art ->
-            val coordStr = art.coordinate.toString()
-            val ga = "${art.coordinate.group}:${art.coordinate.name}"
-            val kind = if (art.kind == ArtifactKind.AAR) UiDepKind.Aar else UiDepKind.Jar
-            val compatible = kind != UiDepKind.Aar || accepts
-            val declared = ga in declaredGAs
-            edges[coordStr] = art.dependsOn.map { it.toString() }
-            nodes[coordStr] = UiDependencyNode(
-                coordinate = coordStr,
-                group = art.coordinate.group,
-                name = art.coordinate.name,
-                version = art.coordinate.version,
-                kind = kind,
-                declared = declared,
-                scope = if (declared) scopeByGa[ga]?.let(::scopeLabel) else null,
-                compatible = compatible,
-                incompatibleReason = if (!compatible) aarReason(module) else null,
-                inConflict = ga in conflictGAs,
-                children = art.dependsOn.map { it.toString() },
-            )
-        }
-
-        // Declared roots, in declaration order — library coords (matched by group:name), module + sdk deps.
-        val unresolved = result?.unresolved?.map { it.toString() }?.toMutableSet() ?: mutableSetOf()
-        val declaredRoots = ArrayList<UiDependencyNode>()
-        for (entry in module.dependencies) when (entry) {
-            is LibraryDependency -> {
-                val excl = entry.exclusions.map { it.toString() }
-                val coord = parseCoordinate(entry.library.name)
-                if (coord != null) {
-                    val ga = "${coord.group}:${coord.name}"
-                    val resolvedNode = nodes.values.firstOrNull { "${it.group}:${it.name}" == ga }
-                    if (resolvedNode != null) declaredRoots += resolvedNode.copy(exclusions = excl)
-                    else {
-                        unresolved += entry.library.name
-                        val lib = findLibrary(entry.library.name)
-                        val kind =
-                            if (lib?.kind == LibraryKind.AAR) UiDepKind.Aar else UiDepKind.Jar
-                        val compatible = kind != UiDepKind.Aar || accepts
-                        val node = UiDependencyNode(
-                            coordinate = entry.library.name,
-                            group = coord.group,
-                            name = coord.name,
-                            version = coord.version,
-                            kind = kind,
-                            declared = true,
-                            scope = scopeLabel(entry.scope),
-                            compatible = compatible,
-                            incompatibleReason = if (!compatible) aarReason(module) else null,
-                            exclusions = excl,
-                        )
-                        declaredRoots += node
-                        nodes.putIfAbsent(node.coordinate, node)
-                    }
-                } else {
-                    // A local/file-based library (non-coordinate name) — show it, no transitive resolution.
-                    val lib = findLibrary(entry.library.name)
-                    val kind = if (lib?.kind == LibraryKind.AAR) UiDepKind.Aar else UiDepKind.Jar
-                    val compatible = kind != UiDepKind.Aar || accepts
-                    val node = UiDependencyNode(
-                        coordinate = entry.library.name,
-                        group = "",
-                        name = entry.library.name,
-                        version = "",
-                        kind = kind,
-                        declared = true,
-                        scope = scopeLabel(entry.scope),
-                        compatible = compatible,
-                        incompatibleReason = if (!compatible) aarReason(module) else null,
-                        local = true,
-                    )
-                    declaredRoots += node
-                    nodes.putIfAbsent(node.coordinate, node)
-                }
-            }
-
-            is ModuleDependency -> {
-                val node = UiDependencyNode(
-                    coordinate = entry.target.value,
-                    group = "",
-                    name = entry.target.value,
-                    version = "",
-                    kind = UiDepKind.Module,
-                    declared = true,
-                    scope = scopeLabel(entry.scope),
-                )
-                declaredRoots += node
-                nodes.putIfAbsent(node.coordinate, node)
-            }
-
-            is PlatformDependency -> {
-                // A BOM contributes no artifact — show it as a declared root so the user sees the
-                // version source for their versionless dependencies.
-                val node = UiDependencyNode(
-                    coordinate = entry.bom.toString(),
-                    group = entry.bom.group, name = entry.bom.name, version = entry.bom.version,
-                    kind = UiDepKind.Platform, declared = true, scope = "platform",
-                )
-                declaredRoots += node
-                nodes.putIfAbsent(node.coordinate, node)
-            }
-
-            is SdkDependency -> { /* the SDK is shown by the project tree, not as a managed dependency */
-            }
-        }
-
-        return UiModuleDeps(
-            moduleName = moduleName,
-            buildSystem = buildSystem,
-            acceptsAar = accepts,
-            // Dedup by coordinate: two declared coordinates that share a group:name (e.g. two versions of the
-            // same artifact) collapse to the SAME resolved node after conflict resolution, so the same node
-            // would otherwise appear twice — which crashes the LazyColumn (duplicate item key). Keep the first.
-            declared = declaredRoots.distinctBy { it.coordinate },
-            nodes = nodes.values.toList(),
-            conflicts = result?.conflicts?.map {
-                UiVersionConflict(
-                    it.coordinate, it.requested, it.chosen
-                )
-            }.orEmpty(),
-            cycles = detectCycles(edges),
-            unresolved = unresolved.toList(),
-        )
-    }
-
-    /** Repository search (Maven Central), each hit pre-judged against [moduleName]'s AAR compatibility. */
-    suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> {
-        val module = modules().firstOrNull { it.name == moduleName }
-        val accepts = module?.let { acceptsAar(it) } ?: true
-        return depsResolver.search(query).map { hit ->
-            val isAar = hit.packaging.equals("aar", ignoreCase = true)
-            UiArtifactHit(
-                coordinate = hit.coordinate.toString(),
-                packaging = hit.packaging,
-                compatible = !isAar || accepts,
-                incompatibleReason = if (isAar && !accepts && module != null) aarReason(module) else null,
-            )
-        }
-    }
-
-    /**
-     * Resolve [coordinate] and attach its full closure to [moduleName] as one [LibraryDependency] whose
-     * library bundles every resolved jar/aar-classes root. Blocked when incompatible (e.g. an `.aar` on a
-     * Java module). Re-indexes so completion/analysis pick up the new classpath.
-     */
-    suspend fun addDependency(
-        moduleName: String, coordinate: String, scope: String, exclusions: List<String> = emptyList()
-    ): UiAddResult {
-        // The standalone "add" (Dependencies screen): owns the resolve-state flag; the resolution core is
-        // shared with the deferred template-dependency loop ([startPendingDependencyResolution]).
-        _depsState.value = DepsResolveState(
-            resolving = true,
-            message = "Resolving $coordinate…",
-            log = listOf("Resolving $coordinate…")
-        )
-        return try {
-            resolveAndAttach(moduleName, coordinate, scope, depsProgress(), exclusions = exclusions.mapNotNull(Exclusion::parse))
-        } finally {
-            // resolveAndAttach → assembleModuleClasspath already stamped reasons; refresh the error state.
-            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
-        }
-    }
-
-    /** Resolve [coordinate] (with its transitive closure) and attach it to [moduleName]. Does NOT touch
-     *  [depsState] — the caller owns the progress reporting (so a batch can show one continuous bar). When
-     *  [finalize] is false, the save/analyzer-invalidate/reindex is skipped so a batch can do it once at the
-     *  end (see [startPendingDependencyResolution]). */
-    private suspend fun resolveAndAttach(
-        moduleName: String,
-        coordinate: String,
-        scope: String,
-        progress: ProgressReporter,
-        finalize: Boolean = true,
-        exclusions: List<Exclusion> = emptyList(),
-    ): UiAddResult {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
-            false, "No module '$moduleName'."
-        )
-        val coord = parseInputCoordinate(coordinate) ?: return UiAddResult(
-            false, "Invalid coordinate — expected group:name[:version]."
-        )
-        val versionless = coord.version.isBlank()
-        val platforms = declaredPlatforms(module)
-        if (versionless && platforms.isEmpty()) return UiAddResult(
-            false,
-            "$coordinate has no version — import a platform (BOM) first, or give an explicit version."
-        )
-        if (module.dependencies.any { it is LibraryDependency && it.library.name == coordinate }) return UiAddResult(
-            false, "$coordinate is already a dependency of '$moduleName'."
-        )
-
-        val result = try {
-            depsResolver.resolve(
-                listOf(coord),
-                currentRepositories(),
-                conflictPolicy,
-                progress,
-                platforms = platforms,
-                exclusions = if (exclusions.isEmpty()) emptyMap() else mapOf(coord to exclusions),
-            )
-        } catch (e: Exception) {
-            return UiAddResult(false, "Resolution failed: ${e.message}")
-        }
-
-        val primary =
-            result.resolved.firstOrNull { it.coordinate.group == coord.group && it.coordinate.name == coord.name }
-                ?: return UiAddResult(
-                    false,
-                    if (versionless) "No imported platform provides a version for ${coord.group}:${coord.name}."
-                    else "Couldn't find $coordinate in the configured repositories."
-                )
-        if (primary.kind == ArtifactKind.AAR && !acceptsAar(module)) return UiAddResult(
-            false, "$coordinate is an Android library (.aar) — ${aarReason(module)}."
-        )
-
-        // Persist with the resolved, concrete coordinate — a versionless declaration is pinned to the
-        // version the platform supplied at add time (a later BOM bump won't move it; re-add to update).
-        val libraryName = primary.coordinate.toString()
-        if (libraryName != coordinate && module.dependencies.any { it is LibraryDependency && it.library.name == libraryName }) return UiAddResult(
-            false, "$libraryName is already a dependency of '$moduleName'."
-        )
-
-        // Record the declaration; its closure is assembled below as part of the WHOLE module graph (so the new
-        // dependency's transitives are conflict-resolved against the existing ones, not unioned independently).
-        val project =
-            projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
-        project.beginModification().apply {
-            module(module.id).addDependency(
-                LibraryDependency(
-                    LibraryRef(libraryName), parseScope(scope), exclusions = exclusions
-                )
-            )
-            commit()
-        }
-        val updated = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
-            false, "Module '$moduleName' disappeared during resolution."
-        )
-        val asm = assembleModuleClasspath(updated, progress, finalize)
-        // A fresh marker is now stale (the declared set changed) — let the next open re-verify cheaply.
-        runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
-
-        val transitiveCount = result.resolved.size - 1
-        val suffix = if (transitiveCount > 0) " (+$transitiveCount transitive)" else ""
-        // A non-empty `unresolved` means part of the graph failed to download (surfaced, not silently dropped):
-        // the classpath is incomplete — warn so the user re-resolves instead of hitting "unresolved type" later.
-        if (asm.unresolved.isNotEmpty()) {
-            val missing =
-                asm.unresolved.joinToString(", ") { "${it.group}:${it.name}:${it.version}" }
-            return UiAddResult(
-                true,
-                "Added $libraryName$suffix, but ${asm.unresolved.size} artifact(s) failed to download and are missing from the classpath — re-resolve to complete it: $missing",
-                result.resolved.size
-            )
-        }
-        return UiAddResult(true, "Added $libraryName$suffix", result.resolved.size)
-    }
-
-    /**
-     * Import a Maven BOM ([coordinate], `group:name:version`) as a platform of [moduleName] — the Gradle
-     * `platform(...)` semantics. It contributes no artifact; it supplies versions to versionless
-     * dependencies added afterwards. Verified resolvable before it's persisted.
-     */
-    suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
-            false, "No module '$moduleName'."
-        )
-        val bom = parseCoordinate(coordinate) ?: return UiAddResult(
-            false, "A platform BOM needs a version — expected group:name:version."
-        )
-        if (module.dependencies.any { it is PlatformDependency && it.bom == bom }) return UiAddResult(
-            false, "$coordinate is already a platform of '$moduleName'."
-        )
-
-        _depsState.value = DepsResolveState(
-            resolving = true,
-            message = "Importing BOM $coordinate…",
-            log = listOf("Importing BOM $coordinate…")
-        )
-        val result = try {
-            depsResolver.resolve(
-                emptyList(),
-                currentRepositories(),
-                conflictPolicy,
-                depsProgress(),
-                platforms = listOf(bom)
-            )
-        } catch (e: Exception) {
-            return UiAddResult(false, "Couldn't import BOM: ${e.message}")
-        } finally {
-            _depsState.update { it.copy(resolving = false) }
-        }
-        if (bom in result.unresolved) return UiAddResult(
-            false, "Couldn't find the BOM $coordinate in the configured repositories."
-        )
-
-        val project =
-            projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
-        project.beginModification().apply {
-            module(module.id).addDependency(PlatformDependency(bom))
-            commit()
-        }
-        store.save()
-        return UiAddResult(true, "Imported platform $coordinate", 0)
-    }
-
-    /**
-     * One-click Firebase setup: import the Firebase BoM as a platform, then add [artifacts] versionless
-     * (the BoM supplies the version), and report whether a `google-services.json` is present (the user
-     * downloads it from the Firebase console). No Gradle plugin is needed — the native build merges the
-     * libraries' manifests (so `FirebaseInitProvider` lands) and processes `google-services.json` itself.
-     * Idempotent: an already-imported BoM or already-added artifact is tolerated.
-     */
-    suspend fun addFirebase(
-        moduleName: String,
-        artifacts: List<String> = listOf("firebase-analytics"),
-        bomVersion: String = "33.7.0",
-    ): UiAddResult {
-        val module = modules().firstOrNull { it.name == moduleName }
-            ?: return UiAddResult(false, "No module '$moduleName'.")
-        if (!acceptsAar(module)) return UiAddResult(false, "Firebase libraries are Android (.aar) — ${aarReason(module)}.")
-
-        // The Firebase BoM aligns every firebase-* artifact's version; versionless artifacts resolve against it.
-        val bom = addPlatform(moduleName, "com.google.firebase:firebase-bom:$bomVersion")
-        if (!bom.success && "already a platform" !in bom.message)
-            return UiAddResult(false, "Couldn't import the Firebase BoM: ${bom.message}")
-
-        val (added, notes, failed) = addEach(moduleName, artifacts.map { if (':' in it) it else "com.google.firebase:$it" })
-        val reminder = if (hasGoogleServicesJson(module)) emptyList()
-        else listOf("add google-services.json to '$moduleName' (Firebase console → Project settings) to finish setup")
-        return UiAddResult(!failed, "Firebase — " + (notes + reminder).joinToString("; "), added)
-    }
-
-    /** One-click Google Play Services: add each fully-qualified [coordinates] entry (e.g.
-     *  `com.google.android.gms:play-services-maps:18.2.0`). GMS has no BoM, so versions are explicit. */
-    suspend fun addGooglePlayServices(moduleName: String, coordinates: List<String>): UiAddResult {
-        val module = modules().firstOrNull { it.name == moduleName }
-            ?: return UiAddResult(false, "No module '$moduleName'.")
-        if (!acceptsAar(module)) return UiAddResult(false, "Play Services libraries are Android (.aar) — ${aarReason(module)}.")
-        val (added, notes, failed) = addEach(moduleName, coordinates)
-        return UiAddResult(!failed, "Play Services — " + notes.joinToString("; "), added)
-    }
-
-    /** Add a batch of coordinates, collecting per-item notes; tolerates already-present ones. */
-    private suspend fun addEach(moduleName: String, coordinates: List<String>): Triple<Int, List<String>, Boolean> {
-        val notes = ArrayList<String>(); var added = 0; var failed = false
-        for (c in coordinates) {
-            val r = addDependency(moduleName, c, "implementation")
-            when {
-                r.success -> { added++; notes += "added $c" }
-                "already a dependency" in r.message -> notes += "$c already present"
-                else -> { failed = true; notes += "failed $c: ${r.message}" }
-            }
-        }
-        return Triple(added, notes, failed)
-    }
-
-    /** True if the module already ships a `google-services.json` (any variant-specific dir or the module root). */
-    private fun hasGoogleServicesJson(module: Module): Boolean {
-        val variant = AndroidVariants.defaultVariant(module) ?: return false
-        val moduleDir = java.nio.file.Paths.get(module.outputDir.path).parent?.parent ?: return false
-        return GoogleServices.findJson(moduleDir, variant) != null
-    }
-
-    /** Remove the declared library dependency or platform BOM [coordinate] from [moduleName] (false if absent). */
-    fun removeDependency(moduleName: String, coordinate: String): Boolean {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return false
-        val entry = module.dependencies.firstOrNull {
-            (it is LibraryDependency && it.library.name == coordinate) || (it is PlatformDependency && it.bom.toString() == coordinate) || (it is ModuleDependency && it.target.value == coordinate)
-        } ?: return false
-        val project = projectOf(module) ?: return false
-        project.beginModification().apply {
-            module(module.id).removeDependency(entry)
-            commit()
-        }
-        store.save()
-        invalidateAnalyzers()
-        resyncIndex()
-        // The removed dep is no longer declared → drop any stale reason and refresh the error state.
-        unresolvedReasons.remove(coordinate)
-        publishDependencyHealth()
-        // Removing a library changes the declared set, so the whole-graph partition must be recomputed: a
-        // transitive the removed dep had claimed may still be needed by a remaining dep, and one only it pulled
-        // in must now be pruned. Re-assemble in the background (cache-first → cheap).
-        if (entry is LibraryDependency) {
-            reconcileStarted.set(false)
-            runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
-            depsScope.launch {
-                runCatching {
-                    modules().firstOrNull { it.name == moduleName }
-                        ?.let { assembleModuleClasspath(it, NoProgress, finalize = true) }
-                }
-                publishDependencyHealth()
-            }
-        }
-        return true
-    }
-
-    /**
-     * Replace the transitive exclusions on an already-declared library dependency [coordinate] of [moduleName],
-     * then re-resolve the module so the closure reflects the change (a newly-excluded transitive is pruned; a
-     * previously-excluded one comes back). A no-op (success) when the parsed set is unchanged.
-     */
-    suspend fun setExclusions(moduleName: String, coordinate: String, exclusions: List<String>): UiAddResult {
-        val module = modules().firstOrNull { it.name == moduleName }
-            ?: return UiAddResult(false, "No module '$moduleName'.")
-        val entry = module.dependencies.filterIsInstance<LibraryDependency>()
-            .firstOrNull { it.library.name == coordinate }
-            ?: return UiAddResult(false, "$coordinate is not a library dependency of '$moduleName'.")
-        val parsed = exclusions.mapNotNull(Exclusion::parse)
-        if (parsed == entry.exclusions) return UiAddResult(true, "No change to exclusions.")
-        val project = projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
-
-        // Replace the declaration (remove + re-add carrying the new exclusions). Order among library deps
-        // doesn't affect the resolved set — the whole graph is conflict-resolved newest-wins regardless.
-        project.beginModification().apply {
-            module(module.id).removeDependency(entry)
-            module(module.id).addDependency(entry.copy(exclusions = parsed))
-            commit()
-        }
-        _depsState.value = DepsResolveState(
-            resolving = true,
-            message = "Updating exclusions for $coordinate…",
-            log = listOf("Updating exclusions for $coordinate…"),
-        )
-        return try {
-            val updated = modules().firstOrNull { it.name == moduleName }
-                ?: return UiAddResult(false, "Module '$moduleName' disappeared.")
-            val asm = assembleModuleClasspath(updated, depsProgress(), finalize = true)
-            // The declared set changed → let the next open re-verify the persisted closure.
-            runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
-            if (asm.unresolved.isNotEmpty()) UiAddResult(
-                true,
-                "Exclusions updated, but ${asm.unresolved.size} artifact(s) failed to download — re-resolve to complete the classpath.",
-                asm.resolvedCount,
-            ) else UiAddResult(true, "Exclusions updated for $coordinate", asm.resolvedCount)
-        } catch (e: Exception) {
-            UiAddResult(false, "Re-resolution failed: ${e.message}")
-        } finally {
-            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
-        }
-    }
-
-    // ---- local libraries (file-based jar/aar, no Maven coordinate) ----
-
-    /** Where a picked local library is copied: a `libs/` folder under the module's directory. */
-    fun localLibraryDropDir(moduleName: String): String? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        return moduleRoot(module)?.resolve("libs")?.toString()
-    }
-
-    /**
-     * Existing `.jar`/`.aar` files under the project the module could attach — excluding build/platform dirs,
-     * `.aar`s on a non-Android module, and ones already declared. Scans the project dir (so files imported
-     * into any module/source root are offered).
-     */
-    fun localLibraryCandidates(moduleName: String): List<String> {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return emptyList()
-        val accepts = acceptsAar(module)
-        val declaredRoots = module.dependencies.filterIsInstance<LibraryDependency>()
-            .mapNotNull { findLibrary(it.library.name) }
-            .flatMap { it.classesRoots.map { r -> r.path } }.toSet()
-        val base = moduleRoot(module)?.parent ?: store.rootPath
-        if (!Files.isDirectory(base)) return emptyList()
-        return runCatching {
-            Files.walk(base).use { s ->
-                s.filter { Files.isRegularFile(it) }
-                    .map { it.toAbsolutePath().normalize().toString() }.filter { p ->
-                        val low = p.lowercase()
-                        (low.endsWith(".jar") || (accepts && low.endsWith(".aar"))) && !p.contains("/.platform/") && !p.contains(
-                            "/build/"
-                        ) && !p.contains(
-                            "/.git/"
-                        ) && p !in declaredRoots
-                    }.sorted().distinct().collect(java.util.stream.Collectors.toList())
-            }
-        }.getOrDefault(emptyList())
-    }
-
-    /**
-     * Attach the local library at [path] (an absolute `.jar`/`.aar` already on disk) to [moduleName]. A jar is
-     * registered as-is; an aar is exploded at add time into the Maven "exploded" form (classes.jar + res/ +
-     * manifest siblings) so the editor reads its classes and the Android build routes its resources. No Maven
-     * resolution — a local library has no transitive closure.
-     */
-    suspend fun addLocalLibrary(moduleName: String, path: String, scope: String): UiAddResult {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
-            false, "No module '$moduleName'."
-        )
-        val src = runCatching { Paths.get(path).toAbsolutePath().normalize() }.getOrNull()
-            ?: return UiAddResult(false, "Invalid file path.")
-        if (!Files.isRegularFile(src)) return UiAddResult(false, "File not found: ${src.fileName}.")
-        val low = src.toString().lowercase()
-        val isAar = low.endsWith(".aar")
-        if (!isAar && !low.endsWith(".jar")) return UiAddResult(
-            false, "Only .jar and .aar files can be added as a local library."
-        )
-        if (isAar && !acceptsAar(module)) return UiAddResult(
-            false, "${src.fileName} is an Android library (.aar) — ${aarReason(module)}."
-        )
-
-        val libName = src.fileName.toString()
-        if (module.dependencies.any { it is LibraryDependency && it.library.name == libName }) return UiAddResult(
-            false, "$libName is already a dependency of '$moduleName'."
-        )
-        val project =
-            projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
-
-        val registered = runCatching {
-            store.workspace.libraryTable.create(libName).apply {
-                if (isAar) {
-                    kind = LibraryKind.AAR
-                    val into = store.rootPath.resolve(".platform/libs")
-                        .resolve(libName.substringBeforeLast('.'))
-                    AarExtractor.explode(
-                        src, into
-                    ).classesJars.forEach { addClassesRoot(store.vfs.fileFor(it)) }
-                } else {
-                    kind = LibraryKind.JAR
-                    addClassesRoot(store.vfs.fileFor(src))
-                }
-                commit()
-            }
-        }
-        registered.exceptionOrNull()
-            ?.let { return UiAddResult(false, "Couldn't read ${src.fileName}: ${it.message}") }
-
-        project.beginModification().apply {
-            module(module.id).addDependency(
-                LibraryDependency(
-                    LibraryRef(libName), parseScope(scope)
-                )
-            )
-            commit()
-        }
-        store.save()
-        invalidateAnalyzers()
-        resyncIndex()
-        return UiAddResult(true, "Added $libName", 1)
-    }
-
-    // ---- repositories (where libraries resolve from) ----
-
-    /** User-added repositories, persisted one `name<TAB>url` per line; the built-ins are always prepended. */
-    private val repositoriesFile: Path get() = store.rootPath.resolve(".platform/repositories.txt")
-
-    private fun userRepositories(): List<Repository> =
-        runCatching { repositoriesFile.readText() }.getOrNull()?.lineSequence()
-            ?.mapNotNull { line ->
-                val parts = line.split('\t')
-                if (parts.size == 2 && parts[1].isNotBlank()) Repository(
-                    parts[0].trim(), parts[1].trim()
-                ) else null
-            }?.toList().orEmpty()
-
-    /** The repository list every resolve uses: the built-ins (Maven Central, Google) plus the user's. */
-    private fun currentRepositories(): List<Repository> = DEFAULT_REPOSITORIES + userRepositories()
-
-    /** Built-in repos (locked) + user-added repos (removable), for the Repositories manager. */
-    fun repositories(): List<UiRepository> = DEFAULT_REPOSITORIES.map {
-        UiRepository(
-            it.name, it.url, builtin = true
-        )
-    } + userRepositories().map { UiRepository(it.name, it.url, builtin = false) }
-
-    /** Add a custom repository. Rejects a blank/non-http URL or one already provided (built-in or user). */
-    fun addRepository(name: String, url: String): Boolean {
-        val u = url.trim()
-        if (!(u.startsWith("http://") || u.startsWith("https://"))) return false
-        if (currentRepositories().any { it.url.trimEnd('/') == u.trimEnd('/') }) return false
-        val next = userRepositories() + Repository(name.trim().ifEmpty { u }, u)
-        return writeRepositories(next)
-    }
-
-    /** Remove a user-added repository by URL (built-ins can't be removed). */
-    fun removeRepository(url: String): Boolean {
-        val u = url.trim().trimEnd('/')
-        val current = userRepositories()
-        val remaining = current.filterNot { it.url.trimEnd('/') == u }
-        if (remaining.size == current.size) return false
-        return writeRepositories(remaining)
-    }
-
-    private fun writeRepositories(repos: List<Repository>): Boolean = runCatching {
-        Files.createDirectories(repositoriesFile.parent)
-        repositoriesFile.writeText(repos.joinToString("") { "${it.name}\t${it.url}\n" })
-    }.isSuccess
-
-    // ---- module configuration (the Module Settings editor) ----
-
-    /** Modules whose configuration can be edited (the settings screen's switcher). */
-    fun configurableModules(): List<UiModuleRef> =
-        modules().map { UiModuleRef(it.name, it.type.displayName) }
-
-    /**
-     * Read [moduleName]'s editable configuration: type, language level, source sets, and one facet panel
-     * per registered facet. Facet fields are derived generically from the codec's value map, so any
-     * codec-backed facet (Android, future ones) renders without bespoke UI.
-     */
-    fun getModuleConfig(moduleName: String): UiModuleConfig? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        val facets = module.facets.all.mapNotNull { facet ->
-            val data = store.facetCodecs.encode(facet) ?: return@mapNotNull null
-            UiFacetConfig(
-                data.tomlTable,
-                titleCase(data.tomlTable),
-                data.values.map { (k, v) -> configFieldFor(k, v) })
-        }
-        return UiModuleConfig(
-            name = module.name,
-            typeId = module.type.id,
-            typeDisplay = module.type.displayName,
-            languageLevel = module.languageLevel.name,
-            languageLevels = LanguageLevel.values().map { it.name },
-            outputDir = module.outputDir.path,
-            sourceSets = module.sourceSets.map { ss ->
-                UiSourceSetInfo(ss.name, ss.scope.name, ss.contentRoots.map { it.dir.path })
-            },
-            facets = facets,
-        )
-    }
-
-    /** Persist [edit] (language level + facet values) to [moduleName] through a model transaction + save. */
-    fun updateModuleConfig(moduleName: String, edit: UiModuleConfigEdit): UiConfigResult {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return UiConfigResult(
-            false, "No module '$moduleName'."
-        )
-        val project =
-            projectOf(module) ?: return UiConfigResult(false, "No project owns '$moduleName'.")
-        val newLevel =
-            edit.languageLevel?.let { runCatching { LanguageLevel.valueOf(it) }.getOrNull() }
-        if (edit.languageLevel != null && newLevel == null) return UiConfigResult(
-            false, "Unknown language level '${edit.languageLevel}'."
-        )
-        val facets = ArrayList<dev.ide.model.Facet>()
-        for ((table, values) in edit.facetValues) {
-            val facet = store.facetCodecs.decode(dev.ide.model.impl.FacetData(table, values))
-                ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
-            facets += facet
-        }
-        try {
-            project.beginModification().apply {
-                val mod = module(module.id)
-                if (newLevel != null) mod.languageLevel = newLevel
-                facets.forEach { mod.putFacet(it) }
-                commit()
-            }
-        } catch (e: Exception) {
-            return UiConfigResult(false, "Update failed: ${e.message}")
-        }
-        store.save()
-        invalidateAnalyzers()       // language level + facets affect the compile classpath/source sets
-        invalidateSyntheticClasses() // an Android facet change can move the R package
-        resyncIndex()
-        return UiConfigResult(true, "Saved ${module.name}")
-    }
-
-    /** The Android `buildFeatures` of [moduleName] as toggle descriptors, or null for a non-Android module. */
-    fun getBuildFeatures(moduleName: String): UiBuildFeatures? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
-        val bf = facet.buildFeatures
-        return UiBuildFeatures(
-            moduleName,
-            listOf(
-                UiBuildFeature(
-                    "viewBinding", "View Binding",
-                    "Generate a type-safe binding class for each layout — a field per view id, plus inflate()/bind(), no findViewById.",
-                    bf.viewBinding,
-                    note = "Adds the ViewBinding runtime and generates a <Layout>Binding for every layout.",
-                ),
-                UiBuildFeature(
-                    "compose", "Jetpack Compose",
-                    "Compile @Composable UI with the Compose compiler and render @Preview composables in the editor.",
-                    bf.compose,
-                    note = "Adds the Compose compiler plugin and the Compose runtime + tooling dependencies.",
-                ),
-            ),
-        )
-    }
-
-    /**
-     * Toggle an Android build feature ([feature] = `viewBinding`/`compose`) on [moduleName]. Persists the
-     * facet, then — when switching ON — adds the dependencies the feature needs (the ViewBinding/Compose
-     * runtime), matching AGP's auto-provisioning. Turning a feature OFF only clears the flag; the
-     * dependencies are left in place (removing them could break code that already uses the feature).
-     */
-    suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult {
-        val module = modules().firstOrNull { it.name == moduleName }
-            ?: return UiConfigResult(false, "No module '$moduleName'.")
-        val facet = module.facets.get(AndroidFacet.KEY)
-            ?: return UiConfigResult(false, "'$moduleName' is not an Android module.")
-        val project = projectOf(module) ?: return UiConfigResult(false, "No project owns '$moduleName'.")
-        val bf = facet.buildFeatures
-        val updated = when (feature) {
-            "viewBinding" -> bf.copy(viewBinding = enabled)
-            "compose" -> bf.copy(compose = enabled)
-            else -> return UiConfigResult(false, "Unknown build feature '$feature'.")
-        }
-        if (updated == bf) return UiConfigResult(true, "No change.")
-        try {
-            project.beginModification().apply {
-                module(module.id).putFacet(facet.copy(buildFeatures = updated))
-                commit()
-            }
-        } catch (e: Exception) {
-            return UiConfigResult(false, "Update failed: ${e.message}")
-        }
-        store.save()
-
-        // Enabling a feature pulls in its runtime dependencies (AGP adds these for you). A resolution failure
-        // (e.g. offline) doesn't fail the toggle — the flag is set; the deps can be retried from Dependencies.
-        var depNote = ""
-        if (enabled) {
-            val coords = when (feature) {
-                "viewBinding" -> AndroidFeatureDependencies.VIEW_BINDING
-                "compose" -> AndroidFeatureDependencies.COMPOSE
-                else -> emptyList()
-            }
-            val failures = ensureFeatureDependencies(moduleName, coords)
-            if (failures.isNotEmpty()) depNote = " (couldn't add: ${failures.joinToString(", ")})"
-        }
-
-        invalidateAnalyzers()
-        invalidateSyntheticClasses() // viewBinding on/off changes the synthetic binding classes
-        resyncIndex()
-        val verb = if (enabled) "Enabled" else "Disabled"
-        return UiConfigResult(true, "$verb $feature on ${module.name}$depNote")
-    }
-
-    /** Add each of [coordinates] to [moduleName] unless a dependency on the same `group:name` already exists.
-     *  Returns the coordinates that failed to resolve (best-effort; the caller surfaces them, not fatal). */
-    private suspend fun ensureFeatureDependencies(moduleName: String, coordinates: List<String>): List<String> {
-        val failures = ArrayList<String>()
-        for (coord in coordinates) {
-            val module = modules().firstOrNull { it.name == moduleName } ?: break
-            val groupName = coord.substringBeforeLast(':')   // group:name:version → group:name
-            val present = module.dependencies.any {
-                it is LibraryDependency && it.library.name.substringBeforeLast(':') == groupName
-            }
-            if (present) continue
-            val r = addDependency(moduleName, coord, "implementation")
-            if (!r.success && !r.message.contains("already a dependency")) failures += coord
-        }
-        return failures
-    }
-
-    // ---- signing keystores (the global registry + per-build-type assignment) ----
-
-    /** Every registered keystore, each with a best-effort summary of its key certificate. */
-    fun keystores(): List<UiKeystore> = keystoreRegistry.all().map(::uiKeystore)
-
-    fun createKeystore(spec: UiKeystoreSpec): UiKeystoreResult {
-        if (spec.commonName.isBlank()) return UiKeystoreResult(false, "A certificate name (CN) is required.")
-        if (spec.storePass.length < 6) return UiKeystoreResult(false, "The keystore password must be at least 6 characters.")
-        val r = keystoreRegistry.create(
-            spec.name,
-            KeystoreCreateSpec(
-                storePass = spec.storePass, keyAlias = spec.keyAlias.ifBlank { "key0" },
-                commonName = spec.commonName, organizationalUnit = spec.organizationalUnit,
-                organization = spec.organization, locality = spec.locality, state = spec.state,
-                country = spec.country, validityYears = spec.validityYears,
-            ),
-        )
-        return r.fold(
-            { UiKeystoreResult(true, "Created ${it.name}", it.id) },
-            { UiKeystoreResult(false, it.message ?: "Keystore creation failed.") },
-        )
-    }
-
-    fun importKeystore(filePath: String, name: String, storePass: String, keyAlias: String, keyPass: String): UiKeystoreResult {
-        val r = keystoreRegistry.import(name, Paths.get(filePath), storePass, keyAlias, keyPass)
-        return r.fold(
-            { UiKeystoreResult(true, "Imported ${it.name}", it.id) },
-            { UiKeystoreResult(false, it.message ?: "Keystore import failed.") },
-        )
-    }
-
-    fun validateKeystore(filePath: String, storePass: String): UiKeystoreValidation {
-        val v = KeystoreCrypto.validate(Paths.get(filePath), storePass)
-        return UiKeystoreValidation(v.valid, v.aliases, v.certs.map(::uiCert), v.error)
-    }
-
-    fun deleteKeystore(id: String): Boolean = keystoreRegistry.delete(id)
-
-    /** Modules that produce a signed APK (android-app) — the ones whose signing assignment matters. */
-    fun signableModules(): List<String> = modules().filter { it.type.id == "android-app" }.map { it.name }
-
-    /** Per-build-type signing assignments for [moduleName] + the assignable keystores; null for a non-Android module. */
-    fun signingAssignments(moduleName: String): UiSigningAssignments? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
-        val keystores = keystores()
-        val byId = keystores.associateBy { it.id }
-        val assignments = facet.buildTypes.map { bt ->
-            UiSigningAssignment(bt.name, bt.signingConfig, bt.signingConfig?.let { byId[it]?.name })
-        }
-        return UiSigningAssignments(moduleName, keystores, assignments)
-    }
-
-    /** Set (or clear, when [keystoreId] is null) the keystore that signs [moduleName]'s [buildType]. */
-    fun assignSigning(moduleName: String, buildType: String, keystoreId: String?): UiConfigResult {
-        val module = modules().firstOrNull { it.name == moduleName }
-            ?: return UiConfigResult(false, "No module '$moduleName'.")
-        val facet = module.facets.get(AndroidFacet.KEY)
-            ?: return UiConfigResult(false, "'$moduleName' is not an Android module.")
-        val project = projectOf(module) ?: return UiConfigResult(false, "No project owns '$moduleName'.")
-        if (keystoreId != null && keystoreRegistry.get(keystoreId) == null) {
-            return UiConfigResult(false, "Unknown keystore '$keystoreId'.")
-        }
-        if (facet.buildTypes.none { it.name == buildType }) return UiConfigResult(false, "No build type '$buildType'.")
-        val newTypes = facet.buildTypes.map { if (it.name == buildType) it.copy(signingConfig = keystoreId) else it }
-        if (newTypes == facet.buildTypes) return UiConfigResult(true, "No change.")
-        try {
-            project.beginModification().apply {
-                module(module.id).putFacet(facet.copy(buildTypes = newTypes))
-                commit()
-            }
-        } catch (e: Exception) {
-            return UiConfigResult(false, "Update failed: ${e.message}")
-        }
-        store.save()
-        val target = keystoreId?.let { keystoreRegistry.get(it)?.name } ?: "debug (default)"
-        return UiConfigResult(true, "$buildType → $target")
-    }
-
-    private fun uiKeystore(e: KeystoreEntry): UiKeystore {
-        val cert = runCatching { KeystoreCrypto.inspect(Paths.get(e.file), e.storePass, e.keyAlias) }.getOrNull()
-        return UiKeystore(
-            id = e.id, name = e.name, fileName = Paths.get(e.file).fileName.toString(), keyAlias = e.keyAlias,
-            certSubject = cert?.subject, sha256 = cert?.sha256, validUntilEpochMs = cert?.validUntilEpochMs,
-        )
-    }
-
-    private fun uiCert(c: KeystoreCertInfo): UiKeystoreCert = UiKeystoreCert(
-        c.alias, c.subject, c.issuer, c.validFromEpochMs, c.validUntilEpochMs, c.sha1, c.sha256,
-    )
-
-    /** The directory `proguardFiles`/`consumerProguardFiles` entries resolve against (the module root,
-     *  `<module>/build/classes` → `<module>`), or null when the layout is unexpected. */
-    private fun moduleDirOf(module: Module): Path? =
-        Paths.get(module.outputDir.path).parent?.parent
-
-    /**
-     * The build types' keep-rule files that are module-relative and missing on disk — the ones R8 would
-     * silently skip on a `minifyEnabled` build. Bundled defaults (`proguard-android*.txt`) and absolute
-     * entries are excluded; results are deduped by [entry], keeping the first build type that names it.
-     */
-    fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return emptyList()
-        val facet = module.facets.get(AndroidFacet.KEY) ?: return emptyList()
-        val moduleDir = moduleDirOf(module) ?: return emptyList()
-        val out = LinkedHashMap<String, UiMissingProguardFile>()
-        fun consider(bt: dev.ide.android.support.BuildType, entries: List<String>, consumer: Boolean) {
-            for (e in entries) {
-                if (dev.ide.android.support.DefaultProguardFiles.isDefault(e)) continue
-                val p = Paths.get(e)
-                if (p.isAbsolute) continue
-                if (!Files.isRegularFile(moduleDir.resolve(e))) {
-                    out.putIfAbsent(e, UiMissingProguardFile(bt.name, e, consumer))
-                }
-            }
-        }
-        for (bt in facet.buildTypes) {
-            consider(bt, bt.proguardFiles, consumer = false)
-            consider(bt, bt.consumerProguardFiles, consumer = true)
-        }
-        return out.values.toList()
-    }
-
-    /**
-     * Create a referenced-but-missing module-relative keep-rule file [entry] (e.g. `proguard-rules.pro`)
-     * with a starter template body, returning its path. Null for an unknown/non-Android module, a bundled
-     * default or absolute entry, or an I/O failure. Already-present files are returned untouched.
-     */
-    fun createProguardFile(moduleName: String, entry: String): Path? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        module.facets.get(AndroidFacet.KEY) ?: return null
-        if (dev.ide.android.support.DefaultProguardFiles.isDefault(entry)) return null
-        val rel = Paths.get(entry)
-        if (rel.isAbsolute) return null
-        val moduleDir = moduleDirOf(module) ?: return null
-        val target = moduleDir.resolve(entry)
-        if (Files.exists(target)) return target
-        return runCatching {
-            target.parent?.let { Files.createDirectories(it) }
-            Files.write(target, DEFAULT_PROGUARD_RULES.toByteArray())
-            target
-        }.getOrNull()
-    }
-
-    // ---- module management (add / remove modules) ----
-
-    private fun moduleTypeRegistry() = ModuleTypeRegistry(platform.extensions)
-
-    private fun isValidModuleName(n: String): Boolean = n.isNotEmpty() && n.first()
-        .isLetter() && n.all { it.isLetterOrDigit() || it == '-' || it == '_' }
-
-    /**
-     * The module types a new module can be created as, each with the language-level choices and starter
-     * facet panels derived from the type's default facets (so an Android module surfaces namespace/SDK
-     * fields). Fields are codec-derived, so a new facet type appears here without bespoke UI.
-     */
-    fun availableModuleTypes(): List<UiModuleTypeOption> {
-        val levels = LanguageLevel.values().map { it.name }
-        return moduleTypeRegistry().all().map { type ->
-            val facets = type.defaultFacets().mapNotNull { tmpl ->
-                val codec = store.facetCodecs.codecFor(tmpl.key) ?: return@mapNotNull null
-                UiFacetConfig(
-                    codec.tomlTable,
-                    titleCase(codec.tomlTable),
-                    tmpl.defaults.map { (k, v) -> configFieldFor(k, v) })
-            }
-            UiModuleTypeOption(
-                id = type.id,
-                displayName = type.displayName,
-                languageLevels = levels,
-                defaultLanguageLevel = LanguageLevel.JAVA_17.name,
-                defaultFacets = facets,
-            )
-        }
-    }
-
-    /**
-     * Create a new module [name] of [typeId] with [languageLevel] and [facetValues], laying down the type's
-     * default source-set directories on disk, persisting `module.toml`, and refreshing analyzers/index.
-     */
-    fun createModule(
-        name: String,
-        typeId: String,
-        languageLevel: String?,
-        facetValues: Map<String, Map<String, Any?>>
-    ): UiConfigResult {
-        val moduleName = name.trim()
-        if (!isValidModuleName(moduleName)) return UiConfigResult(
-            false, "Invalid module name — start with a letter; use letters, digits, '-' or '_'."
-        )
-        if (modules().any { it.name == moduleName }) return UiConfigResult(
-            false, "A module named '$moduleName' already exists."
-        )
-        val type = moduleTypeRegistry().byId(typeId) ?: return UiConfigResult(
-            false, "Unknown module type '$typeId'."
-        )
-        val project = store.workspace.projects.firstOrNull() ?: return UiConfigResult(
-            false, "No project to add a module to."
-        )
-        val level = languageLevel?.let { runCatching { LanguageLevel.valueOf(it) }.getOrNull() }
-        if (languageLevel != null && level == null) return UiConfigResult(
-            false, "Unknown language level '$languageLevel'."
-        )
-        val facets = ArrayList<dev.ide.model.Facet>()
-        for ((table, values) in facetValues) {
-            val facet = store.facetCodecs.decode(dev.ide.model.impl.FacetData(table, values))
-                ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
-            facets += facet
-        }
-        try {
-            project.beginModification().apply {
-                val mod = addModule(moduleName, type)
-                if (level != null) mod.languageLevel = level
-                facets.forEach { mod.putFacet(it) }
-                // Types that contribute no default source sets (e.g. java-lib) still need somewhere to put
-                // code — give them a conventional `src/main/java` so the module is usable immediately.
-                if (type.defaultSourceSets().isEmpty()) {
-                    mod.addSourceSet(
-                        SourceSetTemplate(
-                            "main",
-                            DependencyScope.IMPLEMENTATION,
-                            mapOf("src/main/java" to setOf(ContentRole.SOURCE))
-                        )
-                    )
-                }
-                commit()
-            }
-        } catch (e: Exception) {
-            return UiConfigResult(false, "Couldn't create module: ${e.message}")
-        }
-        store.save()
-        // Lay down the default source-set directories so the tree shows them immediately.
-        modules().firstOrNull { it.name == moduleName }?.sourceSets?.forEach { ss ->
-            ss.contentRoots.forEach { cr -> runCatching { Files.createDirectories(Paths.get(cr.dir.path)) } }
-        }
-        invalidateAnalyzers()
-        invalidateSyntheticClasses()
-        resyncIndex()
-        return UiConfigResult(true, "Created module '$moduleName'")
-    }
-
-    /**
-     * Remove [name] from the project model (files left on disk), also dropping any module-on-module
-     * dependency other modules declared on it. Refreshes analyzers/index.
-     */
-    fun removeModule(name: String): Boolean {
-        val module = modules().firstOrNull { it.name == name } ?: return false
-        val project = projectOf(module) ?: return false
-        val id = module.id
-        try {
-            project.beginModification().apply {
-                project.modules.forEach { other ->
-                    if (other.id != id) other.dependencies.filterIsInstance<ModuleDependency>()
-                        .filter { it.target == id }
-                        .forEach { module(other.id).removeDependency(it) }
-                }
-                removeModule(id)
-                commit()
-            }
-        } catch (e: Exception) {
-            return false
-        }
-        store.save()
-        invalidateAnalyzers()
-        invalidateSyntheticClasses()
-        resyncIndex()
-        return true
-    }
-
-    // ---- module-on-module dependencies ----
-
-    /** Modules [moduleName] may depend on: same project, not itself, not already a dep, and no cycle. */
-    fun moduleDependencyTargets(moduleName: String): List<String> {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return emptyList()
-        val project = projectOf(module) ?: return emptyList()
-        val existing =
-            module.dependencies.filterIsInstance<ModuleDependency>().map { it.target.value }.toSet()
-        return project.modules.asSequence()
-            .filter { it.id != module.id && it.id.value !in existing }.filterNot {
-                dependsOnTransitively(
-                    it, module.id, project
-                )
-            } // it depends on us → would cycle
-            .map { it.name }.toList()
-    }
-
-    /** True if [from] depends on [targetId] directly or transitively (module-graph walk, cycle-guarded). */
-    private fun dependsOnTransitively(from: Module, targetId: ModuleId, project: Project): Boolean {
-        val byId = project.modules.associateBy { it.id }
-        val seen = HashSet<ModuleId>()
-        val stack = ArrayDeque<Module>().apply { add(from) }
-        while (stack.isNotEmpty()) {
-            val m = stack.removeLast()
-            if (!seen.add(m.id)) continue
-            for (dep in m.dependencies.filterIsInstance<ModuleDependency>()) {
-                if (dep.target == targetId) return true
-                byId[dep.target]?.let { stack.add(it) }
-            }
-        }
-        return false
-    }
-
-    /** Add a module-on-module dependency from [moduleName] onto [targetModule]. An `api` scope is exported
-     *  (Gradle semantics). Blocked on self/cycle/dup. */
-    fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
-            false, "No module '$moduleName'."
-        )
-        if (targetModule == moduleName) return UiAddResult(
-            false, "A module can't depend on itself."
-        )
-        val project =
-            projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
-        val target = project.modules.firstOrNull { it.name == targetModule } ?: return UiAddResult(
-            false, "No module '$targetModule' in this project."
-        )
-        if (module.dependencies.any { it is ModuleDependency && it.target == target.id }) return UiAddResult(
-            false, "'$moduleName' already depends on '$targetModule'."
-        )
-        if (dependsOnTransitively(target, module.id, project)) return UiAddResult(
-            false, "That would create a cycle ('$targetModule' already depends on '$moduleName')."
-        )
-        val resolvedScope = parseScope(scope)
-        try {
-            project.beginModification().apply {
-                module(module.id).addDependency(
-                    ModuleDependency(
-                        target.id, resolvedScope, exported = resolvedScope == DependencyScope.API
-                    )
-                )
-                commit()
-            }
-        } catch (e: Exception) {
-            return UiAddResult(false, "Couldn't add: ${e.message}")
-        }
-        store.save()
-        invalidateAnalyzers()
-        resyncIndex()
-        return UiAddResult(true, "Added module dependency on '$targetModule'", 0)
-    }
-
-    /** Conventional source-set leaf-folder name → the [ContentRole] it implies. Drives both explicit
-     *  "Add source root" presets and the folder-name auto-detect in [maybeRegisterSourceRoot]. */
-    private val conventionRoles: Map<String, ContentRole> = mapOf(
-        "java" to ContentRole.SOURCE,
-        "kotlin" to ContentRole.SOURCE,
-        "resources" to ContentRole.RESOURCE,
-        "res" to ContentRole.ANDROID_RES,
-        "assets" to ContentRole.ASSETS,
-        "aidl" to ContentRole.AIDL,
-    )
-
-    /** The source-set names declared on [module], in declaration order. */
-    fun sourceSetNamesOf(module: Module): List<String> = module.sourceSets.map { it.name }
-
-    /**
-     * The base directory a [sourceSetName]'s roots live under (e.g. `src/main`): the parent of its first
-     * content root, or `<moduleRoot>/src/<name>` when the set is empty or absent. New roots go here.
-     */
-    fun sourceSetBaseFor(module: Module, sourceSetName: String): Path? {
-        val moduleDir = moduleRoot(module) ?: return null
-        val fallback = moduleDir.resolve("src").resolve(sourceSetName)
-        val firstRoot =
-            module.sourceSets.firstOrNull { it.name == sourceSetName }?.contentRoots?.firstOrNull()
-                ?: return fallback
-        return Paths.get(firstRoot.dir.path).parent ?: fallback
-    }
-
-    /**
-     * Register a typed content root at `<set-base>/[dirName]` under [sourceSetName] of [moduleName]. See
-     * [addSourceRootAt]. Returns the created directory, or null if the module/project can't be resolved.
-     */
-    fun addSourceRoot(
-        moduleName: String, sourceSetName: String, dirName: String, roles: Set<ContentRole>
-    ): Path? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        val base = sourceSetBaseFor(module, sourceSetName) ?: return null
-        return addSourceRootAt(moduleName, sourceSetName, base.resolve(dirName), roles)
-    }
-
-    /**
-     * Add [dir] as a content root with [roles] to [sourceSetName] of [moduleName] (creating the set if
-     * needed): persist `module.toml`, create the directory on disk, then refresh analyzers/index. Returns
-     * [dir] on success, or null if the module/project can't be resolved or [dir] isn't under the module.
-     */
-    private fun addSourceRootAt(
-        moduleName: String, sourceSetName: String, dir: Path, roles: Set<ContentRole>
-    ): Path? {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return null
-        val project = projectOf(module) ?: return null
-        val moduleDir = moduleRoot(module) ?: return null
-        val target = dir.toAbsolutePath().normalize()
-        val relPath = runCatching {
-            moduleDir.toAbsolutePath().normalize().relativize(target).toString()
-        }.getOrNull()?.replace('\\', '/')?.takeIf { it.isNotEmpty() && !it.startsWith("..") }
-            ?: return null
-        try {
-            project.beginModification().apply {
-                module(module.id).addContentRoot(sourceSetName, relPath, roles)
-                commit()
-            }
-        } catch (e: Exception) {
-            return null
-        }
-        store.save()
-        runCatching { Files.createDirectories(target) }
-        invalidateAnalyzers()
-        if (ContentRole.ANDROID_RES in roles) invalidateSyntheticClasses()
-        resyncIndex()
-        return target
-    }
-
-    /** Remove the content root at [dirRelPath] (relative to the module dir) from [sourceSetName] of
-     *  [moduleName]. Model-only — the directory on disk is left untouched. Returns true on a model change. */
-    fun removeSourceRoot(moduleName: String, sourceSetName: String, dirRelPath: String): Boolean {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return false
-        val project = projectOf(module) ?: return false
-        try {
-            project.beginModification().apply {
-                module(module.id).removeContentRoot(sourceSetName, dirRelPath.replace('\\', '/'))
-                commit()
-            }
-        } catch (e: Exception) {
-            return false
-        }
-        store.save()
-        invalidateAnalyzers()
-        resyncIndex()
-        return true
-    }
-
-    /** Create an empty source set [name] on [moduleName] (returns false if it already exists). */
-    fun addSourceSet(moduleName: String, name: String): Boolean {
-        val module = modules().firstOrNull { it.name == moduleName } ?: return false
-        if (module.sourceSets.any { it.name == name }) return false
-        val project = projectOf(module) ?: return false
-        try {
-            project.beginModification().apply {
-                module(module.id).addSourceSet(
-                    SourceSetTemplate(
-                        name, DependencyScope.IMPLEMENTATION, emptyMap()
-                    )
-                )
-                commit()
-            }
-        } catch (e: Exception) {
-            return false
-        }
-        store.save()
-        return true
-    }
-
-    /**
-     * If [newDir] is a conventionally-named folder (`resources`/`java`/`kotlin`/`res`/`assets`/`aidl`)
-     * created directly under a source-set base (the parent of an existing content root), register it as the
-     * matching typed content root and return true. Conservative: a folder named `java` anywhere else stays
-     * a plain folder. Called on every directory creation.
-     */
-    fun maybeRegisterSourceRoot(newDir: Path): Boolean {
-        val role = conventionRoles[newDir.fileName?.toString()] ?: return false
-        val dir = newDir.toAbsolutePath().normalize()
-        val parent = dir.parent ?: return false
-        for (module in modules()) {
-            for (ss in module.sourceSets) {
-                val roots =
-                    ss.contentRoots.map { Paths.get(it.dir.path).toAbsolutePath().normalize() }
-                if (roots.none { it.parent == parent }) continue
-                if (dir in roots) return false // already a registered root
-                return addSourceRootAt(module.name, ss.name, dir, setOf(role)) != null
-            }
-        }
-        return false
-    }
-
-    /** Map a codec value to a typed UI field: Long→Number, Boolean→Bool, String→Text, lists→StringList/TableList. */
-    private fun configFieldFor(key: String, value: Any?): UiConfigField = when (value) {
-        is Boolean -> UiConfigField.Bool(key, humanizeKey(key), value)
-        is Long -> UiConfigField.Number(key, humanizeKey(key), value)
-        is Int -> UiConfigField.Number(key, humanizeKey(key), value.toLong())
-        is Number -> UiConfigField.Number(key, humanizeKey(key), value.toLong())
-        is String -> UiConfigField.Text(key, humanizeKey(key), value)
-        is List<*> -> if (value.isNotEmpty() && value.all { it is Map<*, *> }) {
-            @Suppress("UNCHECKED_CAST") val rows = value.map { row ->
-                (row as Map<String, Any?>).map { (k, v) ->
-                    configFieldFor(
-                        k, v
-                    )
-                }
-            }
-            UiConfigField.TableList(key, humanizeKey(key), rows)
-        } else {
-            UiConfigField.StringList(key, humanizeKey(key), value.mapNotNull { it as? String })
-        }
-
-        else -> UiConfigField.Text(key, humanizeKey(key), value?.toString() ?: "")
-    }
-
-    private fun titleCase(s: String): String = s.replaceFirstChar { it.uppercase() }
-
-    /** "compileSdk" → "Compile Sdk", "applicationIdSuffix" → "Application Id Suffix". */
-    private fun humanizeKey(key: String): String =
-        key.replace(Regex("([a-z])([A-Z])"), "$1 $2").replaceFirstChar { it.uppercase() }
-
-    /** Tarjan-lite cycle detection over the resolved `dependsOn` [edges] — surfaces metadata cycles to the UI. */
-    private fun detectCycles(edges: Map<String, List<String>>): List<List<String>> {
-        val cycles = ArrayList<List<String>>()
-        val done = HashSet<String>()
-        val onStack = HashSet<String>()
-        val stack = ArrayList<String>()
-        fun dfs(node: String) {
-            if (node in onStack) {
-                val idx = stack.indexOf(node)
-                if (idx >= 0) cycles += stack.subList(idx, stack.size).toList() + node
-                return
-            }
-            if (node in done) return
-            onStack += node; stack += node
-            edges[node].orEmpty().forEach(::dfs)
-            stack.removeAt(stack.lastIndex); onStack -= node; done += node
-        }
-        edges.keys.toList().forEach(::dfs)
-        return cycles.distinctBy { it.toSet() }
-    }
-
-    /** First module (by source scan) whose source declares a runnable `main`, + its FQN. Java mains take
-     *  precedence over Kotlin so behavior is deterministic when a project mixes both. */
-    private fun findRunnable(): Pair<Module, String>? =
-        scanForMain(".java", ::mainClassIn) ?: scanForMain(".kt", ::mainClassInKotlin)
-
-    private fun scanForMain(ext: String, detect: (Path) -> String?): Pair<Module, String>? {
-        for (module in modules()) {
-            for (root in sourceRoots(module)) {
-                if (!Files.isDirectory(root)) continue
-                val files = runCatching {
-                    Files.walk(root).use { s ->
-                        s.filter { it.toString().endsWith(ext) }.collect(Collectors.toList())
-                    }
-                }.getOrDefault(emptyList())
-                files.firstNotNullOfOrNull(detect)?.let { return module to it }
-            }
-        }
-        return null
-    }
-
-    private fun mainClassIn(file: Path): String? {
-        val text = runCatching { file.readText() }.getOrNull() ?: return null
-        if (!MAIN_METHOD.containsMatchIn(text)) return null
-        val pkg = PACKAGE_DECL.find(text)?.groupValues?.get(1)
-        val cls = file.fileName.toString().removeSuffix(".java")
-        return if (pkg.isNullOrEmpty()) cls else "$pkg.$cls"
-    }
-
-    /** FQN of the JVM entry point for a Kotlin file declaring a top-level `fun main` — the file facade
-     *  (`Main.kt` → `MainKt`, honoring `@file:JvmName`). An `object`/companion `main` isn't detected. */
-    private fun mainClassInKotlin(file: Path): String? {
-        val text = runCatching { file.readText() }.getOrNull() ?: return null
-        if (!KOTLIN_MAIN.containsMatchIn(text)) return null
-        val pkg = KOTLIN_PACKAGE.find(text)?.groupValues?.get(1)
-        val simple = FILE_JVMNAME.find(text)?.groupValues?.get(1)
-            ?: kotlinFacadeName(file.fileName.toString().removeSuffix(".kt"))
-        return if (pkg.isNullOrEmpty()) simple else "$pkg.$simple"
-    }
-
-    /** The Kotlin compiler's default facade class name for a file: sanitize non-identifier chars, capitalize
-     *  the first letter, append `Kt` (`Main.kt` → `MainKt`, `my-app.kt` → `My_appKt`). */
-    private fun kotlinFacadeName(base: String): String {
-        val sanitized = base.map { if (it.isLetterOrDigit() || it == '_') it else '_' }.joinToString("")
-        return sanitized.replaceFirstChar { it.uppercaseChar() } + "Kt"
-    }
-
     // Live editor buffers (absolute path -> text). Surfaced to the JDT analyzer as an in-memory overlay
     // (FQCN -> source) so completion resolves in-progress edits to dependency files without ever
     // touching disk — true working copies, not flushed buffers.
@@ -3656,32 +986,25 @@ class IdeServices private constructor(
 
     val workspaceRoot: Path get() = store.rootPath
 
+    /** The model's current revision (bumped on every model commit). A separate-process build runner passes
+     *  this to the daemon so it reloads `module.toml` from disk when the model changed since it last opened
+     *  — without it, a build in `:build` keeps using the config frozen at the daemon's first open. */
+    val modelGeneration: Int get() = store.generation
+
     // ---- settings (the Settings screen) -----------------------------------------------------------
 
     /** User-tunable completion knobs (max items + optional contributors); applied to the next [complete]. */
     @Volatile
-    var completionOptions: dev.ide.core.completion.CompletionOptions = dev.ide.core.completion.CompletionOptions()
-
-    /** The dependency version-conflict policy every resolve in this project uses (loaded per project). */
-    @Volatile
-    var conflictPolicy: ConflictPolicy = loadConflictPolicy()
-        private set
-
-    fun setConflictPolicy(policy: ConflictPolicy) {
-        if (policy == conflictPolicy) return
-        conflictPolicy = policy
-        setProjectPref(CONFLICT_POLICY_PREF, policy.name)
-    }
-
-    private fun loadConflictPolicy(): ConflictPolicy =
-        projectPref(CONFLICT_POLICY_PREF)?.let { runCatching { ConflictPolicy.valueOf(it) }.getOrNull() } ?: ConflictPolicy.NEWEST
+    var completionOptions: dev.ide.core.completion.CompletionOptions =
+        dev.ide.core.completion.CompletionOptions()
 
     /** Settings pages contributed by plugins (the built-in pages are assembled by the backend). */
     fun settingsPages(): List<dev.ide.platform.settings.SettingsPage> =
         platform.extensions.extensions(dev.ide.platform.settings.SETTINGS_PAGE_EP)
 
     /** Every registered analyzer — the inspection catalogue for the Analysis settings list. */
-    fun registeredAnalyzers(): List<dev.ide.analysis.Analyzer> = platform.extensions.extensions(ANALYZER_EP)
+    fun registeredAnalyzers(): List<dev.ide.analysis.Analyzer> =
+        platform.extensions.extensions(ANALYZER_EP)
 
     @Volatile
     private var inspectionProfileState: dev.ide.analysis.AnalysisProfile = loadInspectionProfile()
@@ -3694,10 +1017,13 @@ class IdeServices private constructor(
      * analyzer default). Persists to `.platform/inspections.properties` and re-configures the live engine
      * (which re-publishes diagnostics for open files).
      */
-    fun setInspection(id: dev.ide.analysis.AnalyzerId, enabled: Boolean, severity: dev.ide.lang.dom.Severity?) {
+    fun setInspection(
+        id: dev.ide.analysis.AnalyzerId, enabled: Boolean, severity: dev.ide.lang.dom.Severity?
+    ) {
         val cur = inspectionProfileState
         val disabled = cur.disabled.toMutableSet().apply { if (enabled) remove(id) else add(id) }
-        val overrides = cur.severityOverrides.toMutableMap().apply { if (severity != null) put(id, severity) else remove(id) }
+        val overrides = cur.severityOverrides.toMutableMap()
+            .apply { if (severity != null) put(id, severity) else remove(id) }
         val next = dev.ide.analysis.AnalysisProfile(disabled, overrides)
         inspectionProfileState = next
         persistInspectionProfile(next)
@@ -3720,7 +1046,9 @@ class IdeServices private constructor(
         // "<id>=off" disables; "<id>=<SEVERITY>" overrides; an enabled-default analyzer is simply omitted.
         val props = java.util.Properties()
         for (id in profile.disabled) props.setProperty(id.value, "off")
-        for ((id, sev) in profile.severityOverrides) if (id !in profile.disabled) props.setProperty(id.value, sev.name)
+        for ((id, sev) in profile.severityOverrides) if (id !in profile.disabled) props.setProperty(
+            id.value, sev.name
+        )
         storeProps(inspectionsFile, props, "CodeAssist inspection profile")
     }
 
@@ -3732,7 +1060,8 @@ class IdeServices private constructor(
         for (name in props.stringPropertyNames()) {
             val v = props.getProperty(name)
             if (v.equals("off", ignoreCase = true)) disabled.add(dev.ide.analysis.AnalyzerId(name))
-            else runCatching { dev.ide.lang.dom.Severity.valueOf(v) }.getOrNull()?.let { overrides[dev.ide.analysis.AnalyzerId(name)] = it }
+            else runCatching { dev.ide.lang.dom.Severity.valueOf(v) }.getOrNull()
+                ?.let { overrides[dev.ide.analysis.AnalyzerId(name)] = it }
         }
         return dev.ide.analysis.AnalysisProfile(disabled, overrides)
     }
@@ -3759,8 +1088,13 @@ class IdeServices private constructor(
             val dir = cachesRoot.resolve(name)
             if (!Files.isDirectory(dir)) continue
             runCatching {
-                Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) }.forEach { freed += runCatching { Files.size(it) }.getOrDefault(0L) } }
-                Files.walk(dir).use { s -> s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
+                Files.walk(dir).use { s ->
+                    s.filter { Files.isRegularFile(it) }
+                        .forEach { freed += runCatching { Files.size(it) }.getOrDefault(0L) }
+                }
+                Files.walk(dir).use { s ->
+                    s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+                }
                 removed++
             }
         }
@@ -3894,10 +1228,12 @@ class IdeServices private constructor(
                     // + framework `@android:` resource names (android.jar's android.R, scanned + cached).
                     // One bytecode scan feeds both: the custom-view tags AND the ancestry that lets a custom/
                     // library view inherit its base classes' app: attributes (+ AppCompat substitutions).
-                    val scan =
-                        runCatching { customViewScan(module) }.getOrNull()
-                    val custom =
-                        runCatching { customAttrsMetadata(module, scan?.superNames ?: emptyMap()) }.getOrNull()
+                    val scan = runCatching { customViewScan(module) }.getOrNull()
+                    val custom = runCatching {
+                        customAttrsMetadata(
+                            module, scan?.superNames ?: emptyMap()
+                        )
+                    }.getOrNull()
                     val customViews = scan?.widgets ?: emptyList()
                     it.contributors = listOf(
                         AndroidXmlContributor(
@@ -3910,9 +1246,10 @@ class IdeServices private constructor(
                     )
                     // Inlay hints: resolve a local `@type/name` to its value straight from the resource index
                     // (the value field carried on each declaration); no repository, no per-keystroke parse.
-                    it.inlayResourceResolver = dev.ide.lang.xml.hints.XmlResourceValueResolver { rClass, name ->
-                        ResourceType.byRClass(rClass)?.let { resourceHintValue(it, name) }
-                    }
+                    it.inlayResourceResolver =
+                        dev.ide.lang.xml.hints.XmlResourceValueResolver { rClass, name ->
+                            ResourceType.byRClass(rClass)?.let { resourceHintValue(it, name) }
+                        }
                 }
             }
             // NB: the module container owns disposal. An evicted/removed module's container disposes
@@ -3963,7 +1300,9 @@ class IdeServices private constructor(
         val replaceRange = TextRange(safeOffset - prefix.length, safeOffset)
         val module = moduleForEditableFile(file)
         val analyzer = module?.let { analyzerFor(it, lang) }
-        if (module != null) updateDocument(file, text) // the live buffer joins the overlay the analyzer reads
+        if (module != null) updateDocument(
+            file, text
+        ) // the live buffer joins the overlay the analyzer reads
         val snapshot = EditorDocument(store.vfs.fileFor(file), docVersion.incrementAndGet(), text)
         // A backend that throws mid-completion (e.g. the Kotlin parse host on ART) would otherwise propagate
         // out to the UI and surface as a silent empty popup with no trace. Log the cause (logcat/stderr) and
@@ -3974,7 +1313,8 @@ class IdeServices private constructor(
                 // Parse the LIVE snapshot (not the cached lastByFile tree, which can lag the just-typed buffer)
                 // so `position`/`parsedFile` reflect the completion buffer — the receiver-type-driven postfix
                 // contributor depends on it. parseFull reuses the cached parse when the text is unchanged.
-                val parsed = analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() }
+                val parsed =
+                    analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() }
                 val params = CompletionParams(
                     document = snapshot,
                     offset = safeOffset,
@@ -4070,6 +1410,52 @@ class IdeServices private constructor(
         return runCatching { runSync { service.folds(vf) } }.getOrDefault(emptyList())
     }
 
+    /** Reformat the whole live buffer of [file] to [style]; minimal edits, or empty if the language has no
+     *  formatter / the buffer is already formatted / can't be safely formatted. */
+    fun formatDocument(file: Path, text: String, style: dev.ide.lang.formatting.FormatStyle): List<DocumentEdit> {
+        val service = formattingServiceFor(file) ?: return emptyList()
+        val vf = store.vfs.fileFor(file)
+        return runCatching { runSync { service.format(vf, text, style) } }.getOrDefault(emptyList())
+    }
+
+    /** Reformat only the text overlapping `[start, end)` of [file]'s live buffer. */
+    fun formatRange(file: Path, text: String, start: Int, end: Int, style: dev.ide.lang.formatting.FormatStyle): List<DocumentEdit> {
+        val service = formattingServiceFor(file) ?: return emptyList()
+        val vf = store.vfs.fileFor(file)
+        val range = dev.ide.lang.dom.TextRange(start, end)
+        return runCatching { runSync { service.formatRange(vf, text, range, style) } }.getOrDefault(emptyList())
+    }
+
+    private fun formattingServiceFor(file: Path): dev.ide.lang.formatting.FormattingService? {
+        val module = moduleForEditableFile(file) ?: return null
+        return analyzerFor(module, languageFor(file)).formatting
+    }
+
+    /** Format the built-in code sample for [languageId] with [style] and return the result — for the Code
+     *  Style screen's live preview. Module-independent: it builds a standalone formatter, so it works with no
+     *  file open. Returns the sample unchanged if formatting fails. */
+    fun formatStylePreview(languageId: String, style: dev.ide.lang.formatting.FormatStyle): String {
+        val sample = dev.ide.core.settings.CodeStyleSamples.forLanguage(languageId)
+        val edits = runCatching {
+            when (languageId) {
+                dev.ide.core.settings.CodeStyleSettings.LANG_KOTLIN ->
+                    dev.ide.lang.kotlin.KotlinFormatter.reformat("Preview.kt", sample, style, 0, sample.length)
+                else ->
+                    // A high default compliance so newer Java syntax in the sample parses; the preview is not
+                    // tied to any module.
+                    dev.ide.lang.jdt.formatting.JdtFormattingService("17").formatText(sample, style)
+            }
+        }.getOrDefault(emptyList())
+        if (edits.isEmpty()) return sample
+        val sb = StringBuilder(sample)
+        for (e in edits.sortedByDescending { it.offset }) {
+            val s = e.offset.coerceIn(0, sb.length)
+            val en = (e.offset + e.oldLength).coerceIn(s, sb.length)
+            sb.replace(s, en, e.newText.toString())
+        }
+        return sb.toString()
+    }
+
     /** Enclosing declarations (type/method names, outer→inner) at [offset] in [file]'s buffer — for the
      *  cursor-tracking breadcrumb. Empty if the file is outside the project or not JDT-backed. */
     fun breadcrumbAt(file: Path, text: String, offset: Int): List<String> {
@@ -4112,37 +1498,19 @@ class IdeServices private constructor(
         return runSync { analyzer.analyze(vf) }
     }
 
-    // ---- block-based editing (projectional editor) ----
-
-    /** Java statements + key expressions decompose; the rest collapse to editable text slots. */
-    // Block mappings come through the `platform.blockMapping` EP, so a plugin (e.g. a Kotlin backend) can
-    // contribute its own decomposition. The built-in Java mapping is registered here as the platform's own.
-    private val blockService = run {
-        platform.extensions.register(BLOCK_MAPPING_EP, JavaBlockMapping, PluginId("java-support"))
-        BlockProjectionEngine(platform.extensions.extensions(BLOCK_MAPPING_EP))
-    }
-
     /**
-     * Project [file]'s live buffer [text] into a [BlockTree] — the same tolerant DOM the analyzer/completion
-     * use, parsed via the module's incremental parser. Null if [file] is outside the project. Projection is
-     * deterministic for identical text, so the ids it assigns are stable enough to round-trip a block edit
-     * (which re-projects the same text to resolve them) without holding any session state.
+     * Parse [file]'s live buffer [text] into the neutral tolerant DOM — the same one the analyzer/completion
+     * use — via the module's incremental parser. Null if [file] is outside the project. The shared parse
+     * primitive ([EngineContext.parse]); the block projection service rides on it.
      */
-    fun projectBlocks(file: Path, text: String): BlockTree? {
+    private fun parse(file: Path, text: String): ParsedFile? {
         val module = moduleForFile(file) ?: return null
         val analyzer = analyzerFor(module, languageFor(file))
-        val parsed = analyzer.incrementalParser.parseFull(
+        return analyzer.incrementalParser.parseFull(
             EditorDocument(
                 store.vfs.fileFor(file), docVersion.incrementAndGet(), text
             )
         )
-        return blockService.project(parsed)
-    }
-
-    /** Compile a [BlockEdit] against [file]'s buffer [text] into surgical document edits (empty if N/A). */
-    fun computeBlockEdit(file: Path, text: String, edit: BlockEdit): List<DocumentEdit> {
-        val tree = projectBlocks(file, text) ?: return emptyList()
-        return blockService.computeEdit(tree, text, edit)
     }
 
     // ---- analysis (diagnostics) ----
@@ -4157,13 +1525,14 @@ class IdeServices private constructor(
      * `languages` filters in [dev.ide.analysis.impl.AnalysisEngine]). So adding a language's editor features
      * is a registration, not a host edit — and the host no longer contains any per-language analysis logic.
      */
+    /** This engine's XML resource host (the per-project resource/index lookups the XML diagnostics need). The
+     *  app-global XML analysis support delegates to the active engine's instance (see [registerActiveEnginePlugins]). */
+    internal val xmlResourceHost: dev.ide.lang.xml.lint.XmlResourceHost by lazy { IdeXmlResourceHost() }
+
     private val analysisEngine = run {
-        dev.ide.lang.jdt.analysis.JdtAnalysisSupport.register(platform.extensions)
-        dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport.register(platform.extensions)
-        dev.ide.lang.xml.lint.XmlAnalysisSupport.register(
-            platform.extensions, IdeXmlResourceHost(), AndroidXmlChecker(layout = { sdkLayoutMetadata() }),
-        )
-        platform.extensions.register(ACTION_PROVIDER_EP, AndroidXmlActionProvider(::moduleUsesAppCompat), PluginId("android-xml"))
+        // Every analyzer / diagnostic / quick-fix / action provider is now contributed app-global (the stateless
+        // JDT + Kotlin support, and the XML support via the active engine — see [registerStaticPlugins]); this
+        // just QUERIES the (hierarchical) registry, so it sees both app-global and any project-local providers.
         AnalysisEngine(
             analyzers = platform.extensions.extensions(ANALYZER_EP),
             quickFixProviders = platform.extensions.extensions(QUICK_FIX_PROVIDER_EP),
@@ -4173,7 +1542,9 @@ class IdeServices private constructor(
             actionProviders = platform.extensions.extensions(ACTION_PROVIDER_EP),
         ).also { engine ->
             // Apply the persisted per-project inspection profile (disabled checks + severity overrides).
-            if (inspectionProfileState != dev.ide.analysis.AnalysisProfile.DEFAULT) engine.configure(inspectionProfileState)
+            if (inspectionProfileState != dev.ide.analysis.AnalysisProfile.DEFAULT) engine.configure(
+                inspectionProfileState
+            )
         }
     }
 
@@ -4244,20 +1615,34 @@ class IdeServices private constructor(
         // (try the entry's view first) and for OWNERSHIP routing (a file under a module's own source roots is
         // lowered by that module's analyzer).
         val kotlinModules = moduleBuildClosure(module).mapNotNull { m ->
-            (analyzerFor(m, KotlinLanguageBackend.LANGUAGE_ID) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer)
-                ?.let { Triple(m, it, sourceRoots(m).map { r -> r.normalize() }) }
+            (analyzerFor(
+                m, KotlinLanguageBackend.LANGUAGE_ID
+            ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer)?.let {
+                Triple(
+                    m,
+                    it,
+                    sourceRoots(m).map { r -> r.normalize() })
+            }
         }
-        fun lowerByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile):
-            dev.ide.lang.kotlin.interp.PreviewFileModel? {
+
+        fun lowerByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewFileModel? {
             val path = runCatching { Paths.get(pf.file.path).normalize() }.getOrNull()
             // The module whose OWN source root contains the file lowers it; fall back to the entry analyzer
             // when no module claims it (a path-shape mismatch must never silently drop a declaration).
-            val owner = path?.let { p -> kotlinModules.firstOrNull { (_, _, roots) -> roots.any { p.startsWith(it) } }?.second }
+            val owner = path?.let { p ->
+                kotlinModules.firstOrNull { (_, _, roots) ->
+                    roots.any {
+                        p.startsWith(it)
+                    }
+                }?.second
+            }
             return (owner ?: entry).loweredFile(pf)
         }
+
         val provider = object : dev.ide.lang.kotlin.interp.PreviewDeclProvider {
             override fun fileDeclaringType(fqn: String): dev.ide.lang.kotlin.interp.PreviewFileModel? =
-                kotlinModules.firstNotNullOfOrNull { (_, a, _) -> a.findDeclaringTypeFile(fqn) }?.let(::lowerByOwner)
+                kotlinModules.firstNotNullOfOrNull { (_, a, _) -> a.findDeclaringTypeFile(fqn) }
+                    ?.let(::lowerByOwner)
 
             override fun filesDeclaringFunction(name: String): List<dev.ide.lang.kotlin.interp.PreviewFileModel> =
                 kotlinModules.flatMap { (_, a, _) -> a.findDeclaringFunctionFiles(name) }
@@ -4305,33 +1690,34 @@ class IdeServices private constructor(
     /** Why [functionName] in [file] (buffer [text]) isn't interpretable yet: each lowering diagnostic as
      *  `"reason: \"offending source\""`. Empty when it's fully interpretable (or not found). The preview panel
      *  shows these so an un-renderable preview explains the unsupported construct instead of a bare message. */
-    fun composePreviewDiagnostics(file: Path, text: String, functionName: String, arity: Int = 0): List<String> =
-        try {
-            val module = moduleForEditableFile(file) ?: return listOf("no module owns this file")
-            val analyzer = analyzerFor(
-                module, KotlinLanguageBackend.LANGUAGE_ID
-            ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return listOf("not a Kotlin file")
-            val vf = store.vfs.fileFor(file)
-            analyzer.incrementalParser.parseFull(
-                EditorDocument(
-                    vf, docVersion.incrementAndGet(), text
-                )
+    fun composePreviewDiagnostics(
+        file: Path, text: String, functionName: String, arity: Int = 0
+    ): List<String> = try {
+        val module = moduleForEditableFile(file) ?: return listOf("no module owns this file")
+        val analyzer = analyzerFor(
+            module, KotlinLanguageBackend.LANGUAGE_ID
+        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return listOf("not a Kotlin file")
+        val vf = store.vfs.fileFor(file)
+        analyzer.incrementalParser.parseFull(
+            EditorDocument(
+                vf, docVersion.incrementAndGet(), text
             )
-            if (analyzer.hasSyntaxErrors(vf)) return listOf("the file has syntax errors — fix them to preview")
-            val program = previewModelFor(module, vf, analyzer)?.program ?: emptyMap()
-            val entry = previewEntry(program, functionName, arity)
-                ?: return listOf("`$functionName` not found as a @Composable (lowered: ${program.keys.joinToString()})")
-            entry.diagnostics.map { d ->
-                val snippet = text.substring(
-                    d.source.start.coerceIn(0, text.length), d.source.end.coerceIn(0, text.length)
-                ).replace('\n', ' ').trim()
-                if (snippet.isBlank()) d.reason else "${d.reason}: \"$snippet\""
-            }
-                .ifEmpty { listOf("`$functionName` lowered with no diagnostics — it may render; if not, the failure is in the render path") }
-        } catch (t: Throwable) {
-            // NEVER return empty on a failure path — a bare "can't be interpreted" with no reason is useless.
-            listOf("analysis failed: ${t::class.java.simpleName}: ${t.message ?: "no message"}")
+        )
+        if (analyzer.hasSyntaxErrors(vf)) return listOf("the file has syntax errors — fix them to preview")
+        val program = previewModelFor(module, vf, analyzer)?.program ?: emptyMap()
+        val entry = previewEntry(program, functionName, arity)
+            ?: return listOf("`$functionName` not found as a @Composable (lowered: ${program.keys.joinToString()})")
+        entry.diagnostics.map { d ->
+            val snippet = text.substring(
+                d.source.start.coerceIn(0, text.length), d.source.end.coerceIn(0, text.length)
+            ).replace('\n', ' ').trim()
+            if (snippet.isBlank()) d.reason else "${d.reason}: \"$snippet\""
         }
+            .ifEmpty { listOf("`$functionName` lowered with no diagnostics — it may render; if not, the failure is in the render path") }
+    } catch (t: Throwable) {
+        // NEVER return empty on a failure path — a bare "can't be interpreted" with no reason is useless.
+        listOf("analysis failed: ${t::class.java.simpleName}: ${t.message ?: "no message"}")
+    }
 
     /** Lower the `@Preview` composable [functionName] in [file] (buffer [text]) to a renderable tree + the
      *  file's program (for its source calls), or null when not found / not fully interpretable. The
@@ -4355,7 +1741,8 @@ class IdeServices private constructor(
         // a missing class.
         val model = previewModelFor(module, vf, analyzer) ?: return null
         val program = model.program
-        val entry = previewEntry(program, functionName, arity)?.takeIf { it.isComplete } ?: return null
+        val entry =
+            previewEntry(program, functionName, arity)?.takeIf { it.isComplete } ?: return null
         // Every source type the preview can actually REACH must lower cleanly too (a malformed `data class` it
         // constructs would otherwise build wrong-typed instances). Scope the check to reachable types only — an
         // unrelated class in the same file (e.g. a `MainActivity` whose `onCreate` uses a construct the
@@ -4370,21 +1757,22 @@ class IdeServices private constructor(
     /** The lowered preview function for [functionName] at [arity] (a `@PreviewParameter` preview has arity > 0);
      *  falls back to any arity of that name so a stale arity still resolves. */
     private fun previewEntry(
-        program: Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction>, functionName: String, arity: Int,
-    ): dev.ide.lang.kotlin.interp.ResolvedFunction? =
-        program["$functionName/$arity"] ?: program["$functionName/0"]
-            ?: program.entries.firstOrNull { it.key.substringBeforeLast('/') == functionName }?.value
+        program: Map<String, ResolvedFunction>, functionName: String, arity: Int,
+    ): ResolvedFunction? = program["$functionName/$arity"] ?: program["$functionName/0"]
+    ?: program.entries.firstOrNull { it.key.substringBeforeLast('/') == functionName }?.value
 
     /** Resolve the `@PreviewParameter` provider for [functionName]/[arity] (if any) to something the renderer
      *  can instantiate: the lowered source [ResolvedClass] when it's project source, else a best-effort FQN. */
     private fun resolvePreviewParameter(
         analyzer: dev.ide.lang.kotlin.KotlinSourceAnalyzer,
         vf: VirtualFile, functionName: String, arity: Int,
-        classes: List<dev.ide.lang.kotlin.interp.ResolvedClass>,
+        classes: List<ResolvedClass>,
     ): LoweredPreviewParameter? {
         val info = analyzer.composePreviews(vf)
-            .firstOrNull { it.functionName == functionName && it.arity == arity }?.parameter ?: return null
-        val source = classes.firstOrNull { it.simpleName == info.providerName || it.fqn == info.providerName }
+            .firstOrNull { it.functionName == functionName && it.arity == arity }?.parameter
+            ?: return null
+        val source =
+            classes.firstOrNull { it.simpleName == info.providerName || it.fqn == info.providerName }
         return LoweredPreviewParameter(
             providerSimpleName = info.providerName,
             providerFqn = source?.fqn ?: analyzer.previewProviderFqn(vf, info.providerName),
@@ -4847,7 +2235,9 @@ class IdeServices private constructor(
      * [AndroidSdkMetadata] (no class hierarchy — a custom view's own attrs; framework View attrs are added by
      * the layout metadata). Null when the module declares no custom attributes.
      */
-    private fun customAttrsMetadata(module: Module, hierarchy: Map<String, String> = emptyMap()): AndroidSdkMetadata? {
+    private fun customAttrsMetadata(
+        module: Module, hierarchy: Map<String, String> = emptyMap()
+    ): AndroidSdkMetadata? {
         val dirs =
             runCatching { AndroidResources.resourceDirs(module, store.workspace) }.getOrDefault(
                 emptyList()
@@ -4964,11 +2354,12 @@ class IdeServices private constructor(
     }
 
     /** True when [target]'s module library classpath includes AppCompat, so its `app:` compat attrs resolve. */
-    private fun moduleUsesAppCompat(target: dev.ide.analysis.AnalysisTarget): Boolean = runCatching {
-        ModuleCompilationContext.create(store.workspace, target.module).classpath.entries.any {
-            it.root.path.contains("appcompat", ignoreCase = true)
-        }
-    }.getOrDefault(false)
+    private fun moduleUsesAppCompat(target: dev.ide.analysis.AnalysisTarget): Boolean =
+        runCatching {
+            ModuleCompilationContext.create(store.workspace, target.module).classpath.entries.any {
+                it.root.path.contains("appcompat", ignoreCase = true)
+            }
+        }.getOrDefault(false)
 
     // ---- Android resource helpers shared by the XML lint host + go-to-definition ----
 
@@ -5056,7 +2447,13 @@ class IdeServices private constructor(
             Files.createDirectories(folder)
             target.writeText(resourceFileStub(type))
             invalidateSyntheticClasses()
-            indexScope.launch { runCatching { indexService.reindexSource(target, target.readText()) } }
+            indexScope.launch {
+                runCatching {
+                    indexService.reindexSource(
+                        target, target.readText()
+                    )
+                }
+            }
             target.toString()
         }.getOrNull()
     }
@@ -5066,14 +2463,14 @@ class IdeServices private constructor(
         val ns = "http://schemas.android.com/apk/res/android"
         val head = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
         return head + when (type) {
-            ResourceType.LAYOUT ->
-                "<FrameLayout xmlns:android=\"$ns\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\">\n\n</FrameLayout>\n"
-            ResourceType.DRAWABLE ->
-                "<shape xmlns:android=\"$ns\" android:shape=\"rectangle\">\n    <solid android:color=\"#FF000000\" />\n</shape>\n"
-            ResourceType.MENU ->
-                "<menu xmlns:android=\"$ns\" xmlns:app=\"http://schemas.android.com/apk/res-auto\">\n\n</menu>\n"
-            ResourceType.ANIM, ResourceType.ANIMATOR ->
-                "<set xmlns:android=\"$ns\">\n\n</set>\n"
+            ResourceType.LAYOUT -> "<FrameLayout xmlns:android=\"$ns\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\">\n\n</FrameLayout>\n"
+
+            ResourceType.DRAWABLE -> "<shape xmlns:android=\"$ns\" android:shape=\"rectangle\">\n    <solid android:color=\"#FF000000\" />\n</shape>\n"
+
+            ResourceType.MENU -> "<menu xmlns:android=\"$ns\" xmlns:app=\"http://schemas.android.com/apk/res-auto\">\n\n</menu>\n"
+
+            ResourceType.ANIM, ResourceType.ANIMATOR -> "<set xmlns:android=\"$ns\">\n\n</set>\n"
+
             else -> "<resources>\n\n</resources>\n"
         }
     }
@@ -5200,6 +2597,7 @@ class IdeServices private constructor(
     )
 
     private val repoCache = ConcurrentHashMap<String, CachedRepo>()
+
     /** Serializes resource-repository builds so concurrent first-callers (analysis + preview on project open)
      *  don't each launch a full parse of the same dependency `res/` set. */
     private val repoBuildLock = Any()
@@ -5219,7 +2617,11 @@ class IdeServices private constructor(
      */
     private fun resourceRepository(module: Module): CachedRepo? {
         val key = module.id.value
-        val fp = filesFingerprint(runCatching { AndroidResources.resourceDirs(module, store.workspace) }.getOrDefault(emptyList()), ".xml")
+        val fp = filesFingerprint(runCatching {
+            AndroidResources.resourceDirs(
+                module, store.workspace
+            )
+        }.getOrDefault(emptyList()), ".xml")
         repoCache[key]?.let { if (it.fingerprint == fp) return it }
         return synchronized(repoBuildLock) {
             val cur = repoCache[key]
@@ -5335,8 +2737,8 @@ class IdeServices private constructor(
                     .ifEmpty { result.messages }
                 return@runCatching failingCustomViewFactory(
                     "preview compile failed: ${
-                    errs.take(3).joinToString(" / ").ifBlank { "(no diagnostics)" }
-                }")
+                        errs.take(3).joinToString(" / ").ifBlank { "(no diagnostics)" }
+                    }")
             }
 
             // Instrument every compiled .class in place (reparent View bases, redirect obtainStyledAttributes).
@@ -5478,10 +2880,14 @@ class IdeServices private constructor(
      */
     private fun resourceCandidatesFor(module: Module, type: ResourceType): List<ResourceCandidate> {
         val byName = LinkedHashMap<String, ResourceCandidate>()
-        for (hit in indexService.prefix<ResourceDeclValue>(AndroidResourceIndex.id, "${type.rClass}/", limit = 2000)) {
+        for (hit in indexService.prefix<ResourceDeclValue>(
+            AndroidResourceIndex.id, "${type.rClass}/", limit = 2000
+        )) {
             byName.putIfAbsent(hit.value.name, ResourceCandidate(hit.value.name, hit.value.value))
         }
-        if (type == ResourceType.ID) for (id in liveDeclaredIds()) byName.putIfAbsent(id, ResourceCandidate(id))
+        if (type == ResourceType.ID) for (id in liveDeclaredIds()) byName.putIfAbsent(
+            id, ResourceCandidate(id)
+        )
         return byName.values.toList()
     }
 
@@ -5502,10 +2908,15 @@ class IdeServices private constructor(
      */
     private fun frameworkResources(type: ResourceType): List<String> {
         val jar = previewAndroidJar() ?: return emptyList()
-        val key = runCatching { "$jar:${Files.size(jar)}:${Files.getLastModifiedTime(jar).toMillis()}" }
-            .getOrDefault(jar.toString())
+        val key = runCatching {
+            "$jar:${Files.size(jar)}:${
+                Files.getLastModifiedTime(jar).toMillis()
+            }"
+        }.getOrDefault(jar.toString())
         return frameworkResCache.getOrPut(key) {
-            runCatching { dev.ide.android.support.resources.FrameworkResourceScanner.scan(jar) }.getOrDefault(emptyMap())
+            runCatching { dev.ide.android.support.resources.FrameworkResourceScanner.scan(jar) }.getOrDefault(
+                emptyMap()
+            )
         }[type].orEmpty()
     }
 
@@ -5619,15 +3030,16 @@ class IdeServices private constructor(
     }
 
     override fun close() {
+        // Stop being the app's active engine (only if a newer project hasn't already taken over).
+        if (env.activeEngine === this) env.activeEngine = null
         analysisEngine.dispose()
-        // Unblock any in-flight run (a program reading stdin / waiting on a permission prompt) before
-        // cancelling its coroutine, and don't leave this disposed engine's broker installed process-wide.
-        currentRunIo?.input?.close()
-        pendingAnswer?.offer(UiPermissionDecision.DENY)
-        if (Guards.broker === permissionBroker) Guards.broker = null
+        // The build/run cleanup (unblocking an in-flight run + clearing the process-global sandbox broker)
+        // now happens in BuildService.dispose(), run when the workspace container is disposed by store.close().
         indexScope.cancel()
-        depsScope.cancel()
-        sdkManager.dispose()
+        // The SDK manager is APPLICATION-scoped (shared across projects), so this engine only drops its own
+        // change subscription — the shared instance itself is disposed by the application container at app
+        // shutdown, not on a per-project close.
+        runCatching { sdkChangeSubscription?.dispose() }
         // Dispose the workspace + module service containers (the application container, the parent, is owned
         // by ProjectManager). This disposes the per-module analyzers, closing their library-jar handles,
         // before the index's segment channels are released.
@@ -5645,15 +3057,11 @@ class IdeServices private constructor(
     }
 
     companion object {
-        /** Per-project settings key (in `.platform/settings.properties`) for the dependency conflict policy. */
-        private const val CONFLICT_POLICY_PREF = "build.conflictPolicy"
-
         /** Cache subdirs under `.platform/caches` the "Clear caches" action removes — all regenerable, none
          *  shared across projects (the static SDK/library index segments live under the shared caches root). */
-        private val CLEARABLE_CACHE_DIRS = listOf("kotlin-ext", "custom-views", "preview", "preview-libs", "build", "source-index")
+        private val CLEARABLE_CACHE_DIRS =
+            listOf("kotlin-ext", "custom-views", "preview", "preview-libs", "build", "source-index")
 
-        /** Below this many library deps, dexing is quick enough that the first-build notice is just noise. */
-        private const val FIRST_BUILD_DEX_BANNER_THRESHOLD = 8
 
         /** Free-heap floor (on device) below which the Kotlin parser-env warm-up is skipped at project open; it
          *  then stands up lazily on the first Kotlin file instead. Keeps cold start from tipping a tight device
@@ -5665,33 +3073,6 @@ class IdeServices private constructor(
          *  start instead. Higher than [PARSER_WARMUP_MIN_FREE_BYTES] because the compile path costs far more. */
         private const val COMPILER_WARMUP_MIN_FREE_BYTES = 224L * 1024 * 1024
 
-        /** Soft cap on a single coalesced console chunk (start a new chunk past this) and on the whole
-         *  transcript (older output is trimmed) — an interactive program's output is otherwise unbounded. */
-        private const val CONSOLE_CHUNK_MAX = 8192
-        private const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
-
-        /** Starter body for a created `proguard-rules.pro` — comments only (the bundled defaults carry the
-         *  framework keep rules); applied on top of them when the build type has `minifyEnabled = true`. */
-        private val DEFAULT_PROGUARD_RULES: String = """
-            # Add project-specific ProGuard/R8 keep rules here.
-            # Applied on top of the bundled defaults (proguard-android-optimize.txt) when minifyEnabled = true.
-            #
-            # Keep a class referenced only by reflection / from XML, e.g.:
-            # -keep class com.example.SomeClass { *; }
-            #
-            # Preserve line numbers for readable crash stack traces, then hide the original file name:
-            # -keepattributes SourceFile,LineNumberTable
-            # -renamesourcefileattribute SourceFile
-        """.trimIndent() + "\n"
-
-        private val PACKAGE_DECL = Regex("""(?m)^\s*package\s+([\w.]+)\s*;""")
-        private val MAIN_METHOD = Regex("""\bstatic\s+void\s+main\s*\(""")
-
-        // Kotlin run detection. Kotlin packages have no trailing `;`. A top-level `fun main(` is anchored at
-        // column 0 (top-level declarations are unindented) so a `fun main` nested in a class doesn't match.
-        private val KOTLIN_PACKAGE = Regex("""(?m)^\s*package\s+([\w.]+)""")
-        private val KOTLIN_MAIN = Regex("""(?m)^(?:public\s+|internal\s+)?(?:suspend\s+)?fun\s+main\s*\(""")
-        private val FILE_JVMNAME = Regex("""@file:(?:kotlin\.jvm\.)?JvmName\s*\(\s*"([^"]+)"\s*\)""")
 
         /** Java reserved words + literals, rejected as rename targets (a valid identifier can't be one). */
         private val JAVA_RESERVED = setOf(
@@ -5762,16 +3143,6 @@ class IdeServices private constructor(
             JavaSourceIndexer.DeclKind.ANNOTATION,
         )
 
-        /** Cap on a single file's size for find-in-files (skip generated/huge blobs). */
-        private const val MAX_SEARCH_FILE_CHARS = 2_000_000
-
-        /** File extensions never scanned by find-in-files. */
-        private val BINARY_EXTENSIONS = setOf(
-            "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svg",
-            "jar", "aar", "class", "dex", "zip", "apk", "so", "o", "a",
-            "keystore", "ks", "jks", "ttf", "otf", "woff", "woff2", "bin", "pdf",
-        )
-
         /**
          * Test fixture: create the Android multi-module sample (`app → feature → core`) at [root] (replacing
          * any existing one) and open it. On a desktop the framework `android.jar` is resolved from an installed
@@ -5781,7 +3152,8 @@ class IdeServices private constructor(
         fun bootstrapDemo(root: Path, sharedCachesRoot: Path? = null): IdeServices {
             if (Files.exists(root)) root.toFile().deleteRecursively()
             Files.createDirectories(root)
-            val (platform, store) = openStore(root)
+            val env = ApplicationEnvironment()
+            val (platform, store) = openStore(root, env)
             store.replaceSdks(listOf(detectAndroidSdk() ?: JdkSdkProvider.detect()))
             val types = ModuleTypeRegistry(platform.extensions)
             SampleAndroidProject.generate(
@@ -5791,7 +3163,7 @@ class IdeServices private constructor(
                 types.resolve("java-lib"),
             )
             store.save()
-            return IdeServices(platform, store, sharedCachesRoot = sharedCachesRoot)
+            return IdeServices(platform, store, sharedCachesRoot = sharedCachesRoot, env = env)
         }
 
         /**
@@ -5803,7 +3175,8 @@ class IdeServices private constructor(
         fun seedDemo(root: Path) {
             if (ModelPersistence.exists(root)) return
             Files.createDirectories(root)
-            val (platform, store) = openStore(root)
+            val env = ApplicationEnvironment()
+            val (platform, store) = openStore(root, env)
             try {
                 store.replaceSdks(listOf(detectAndroidSdk() ?: JdkSdkProvider.detect()))
                 val types = ModuleTypeRegistry(platform.extensions)
@@ -5816,6 +3189,7 @@ class IdeServices private constructor(
                 store.save()
             } finally {
                 platform.dispose()
+                env.close()
             }
         }
 
@@ -5823,13 +3197,14 @@ class IdeServices private constructor(
         fun bootstrapJavaDemo(root: Path): IdeServices {
             if (Files.exists(root)) root.toFile().deleteRecursively()
             Files.createDirectories(root)
-            val (platform, store) = openStore(root)
+            val env = ApplicationEnvironment()
+            val (platform, store) = openStore(root, env)
             store.replaceSdks(listOf(JdkSdkProvider.detect()))
             SampleProject.generate(
                 store, ModuleTypeRegistry(platform.extensions).resolve("java-lib")
             )
             store.save()
-            return IdeServices(platform, store)
+            return IdeServices(platform, store, env = env)
         }
 
         /** An installed Android SDK's `android.jar` as the workspace SDK, or null if none is found. */
@@ -5847,24 +3222,26 @@ class IdeServices private constructor(
 
         /** Open an existing workspace at [root] (used by the "Open Project…" picker). */
         fun open(root: Path): IdeServices {
-            val (platform, store) = openStore(root)
+            val env = ApplicationEnvironment()
+            val (platform, store) = openStore(root, env)
             if (store.workspace.sdkTable.sdks.isEmpty()) store.replaceSdks(listOf(JdkSdkProvider.detect()))
-            return IdeServices(platform, store)
+            return IdeServices(platform, store, env = env)
         }
 
         private fun openStore(
             root: Path,
-            // The process-global application container (the workspace container's parent). When a host
-            // (ProjectManager) does not supply one, a transient per-open container is created so the
-            // standalone bootstrap/test paths still work; app-scoped services then live only as long as
-            // the project does.
-            appContainer: ServiceContainer? = null,
+            // The application environment (substrate + container) every opened project shares. A standalone
+            // caller (a test / one-off bootstrap with no ProjectManager) gets a fresh transient one.
+            env: ApplicationEnvironment = ApplicationEnvironment(),
         ): Pair<PlatformCore, ProjectModelStore> {
-            val platform = PlatformCore()
-            val (_, codecs) = registerStaticPlugins(platform)
-            val store = ProjectModel.open(
-                root, platform, codecs, appContainer ?: dev.ide.platform.impl.ApplicationContainer()
-            )
+            // The per-project platform is a thin CHILD of the app substrate: its extension registry parents the
+            // app registry (so app-global host extensions are visible), and its bus + lock ARE the app's. EVERY
+            // host + engine contribution now registers ONCE on the app registry (in [registerStaticPlugins]) and
+            // resolves the per-project engine through the service scope / [ApplicationEnvironment.activeEngine], so
+            // this child registry holds NOTHING project-local — it exists only as the hierarchy shim. (Kept rather
+            // than eliminated: its bus/lock are the app's, so its `dispose()` is a no-op over the shared substrate.)
+            val platform = PlatformCore(env.platform.extensions, env.platform.messageBus, env.platform.modelLock)
+            val store = ProjectModel.open(root, platform, env.codecs, env.container)
             return platform to store
         }
 
@@ -5876,8 +3253,11 @@ class IdeServices private constructor(
          * [ProjectManager], over its own app-level [PlatformCore]) — letting the picker enumerate templates
          * without an open project. Returns the [ModuleTypeRegistry]/[FacetCodecRegistry] the model needs.
          */
-        internal fun registerStaticPlugins(platform: PlatformCore): Pair<ModuleTypeRegistry, FacetCodecRegistry> {
-            val moduleTypes = ModuleTypeRegistry(platform.extensions)
+        internal fun registerStaticPlugins(
+            extensions: ExtensionRegistry,
+            env: ApplicationEnvironment,
+        ): Pair<ModuleTypeRegistry, FacetCodecRegistry> {
+            val moduleTypes = ModuleTypeRegistry(extensions)
             moduleTypes.register(JavaLibModuleType, PluginId("java-support"))
             val codecs = FacetCodecRegistry()
             // android-support: register android-app/-lib module types + the AndroidFacet codec so
@@ -5887,31 +3267,212 @@ class IdeServices private constructor(
             // INSTANCE ([registerInstanceSyntheticClasses]) so it can share that instance's fingerprint-cached
             // resource repository — re-parsing every dependency `res/` per completion/analysis pass OOM'd a
             // tight device. Only the project-independent stand-ins (BuildConfig) register here.
-            platform.extensions.register(
+            extensions.register(
                 SYNTHETIC_CLASS_EP, AndroidBuildConfigProvider(), PluginId("android-support")
             )
             // ViewBinding: `<namespace>.databinding.<Layout>Binding` per layout, generated from the module's OWN
             // layouts (small, no dependency res), so it needs no shared repo cache and registers statically too.
-            platform.extensions.register(
+            extensions.register(
                 SYNTHETIC_CLASS_EP, AndroidViewBindingProvider(), PluginId("android-support")
             )
             // Kotlin interop: a module's top-level `fun`/`val` become a `<File>Kt` facade and its classes/
             // objects become types, so Java code (and JDT completion/analysis) resolves them before a build.
-            platform.extensions.register(
+            extensions.register(
                 SYNTHETIC_CLASS_EP, KotlinSyntheticClassProvider(), PluginId("kotlin-support")
             )
             // platform.fileIcon: the built-in classifier + the Android plugin's res/assets/manifest icons.
-            val fileIcons = FileIconRegistry(platform.extensions)
+            val fileIcons = FileIconRegistry(extensions)
             fileIcons.register(DefaultFileIconProvider, PluginId("platform"))
             AndroidSupport.registerIcons(fileIcons)
             // platform.projectTemplate: the Create-Project gallery — built-in Java + Kotlin templates + Android plugin's.
-            val templates = ProjectTemplateRegistry(platform.extensions)
+            val templates = ProjectTemplateRegistry(extensions)
             templates.register(JavaConsoleAppTemplate, PluginId("java-support"))
             templates.register(JavaLibraryTemplate, PluginId("java-support"))
             templates.register(KotlinConsoleAppTemplate, PluginId("kotlin-support"))
             templates.register(KotlinLibraryTemplate, PluginId("kotlin-support"))
             AndroidSupport.registerTemplates(templates)
+
+            // ---- Stateless, project-independent editor contributions (registered ONCE, app-global) ----
+            // These capture no per-project state (their parse hosts are global singletons), so one shared
+            // instance per app is correct, and the per-project child registry inherits them via the hierarchy.
+
+            // platform.languageBackend: Java (JDT) first as the default fallback, then XML + Kotlin. The
+            // hierarchical registry returns app (parent) contributions before any project-local ones, so this
+            // app-global order IS the resolution order (JDT-as-fallback must precede the others).
+            val langPlugin = PluginId("language-backends")
+            extensions.register(LANGUAGE_BACKEND_EP, JdtLanguageBackend(), langPlugin)
+            extensions.register(LANGUAGE_BACKEND_EP, XmlLanguageBackend(), langPlugin)
+            extensions.register(LANGUAGE_BACKEND_EP, KotlinLanguageBackend(), langPlugin)
+
+            // platform.completionContributor / platform.postfixTemplate: the cross-cutting completion
+            // contributors + the generic postfix-template driver + Kotlin's built-in postfix templates.
+            val completionPlugin = PluginId("completion-builtins")
+            extensions.register(
+                COMPLETION_CONTRIBUTOR_EP,
+                CompletionContribution(BufferWordsContributor, order = BufferWordsContributor.ORDER),
+                completionPlugin,
+            )
+            extensions.register(
+                COMPLETION_CONTRIBUTOR_EP,
+                CompletionContribution(
+                    PostfixContributor(extensions),
+                    order = PostfixContributor.ORDER,
+                ),
+                completionPlugin,
+            )
+            dev.ide.lang.kotlin.completion.KotlinPostfixTemplates.all().forEach {
+                extensions.register(dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP, it, completionPlugin)
+            }
+
+            // platform.index: the built-in symbol/member/resource index extensions.
+            val indexPlugin = PluginId("indexing")
+            listOf(
+                JavaClassNamesIndex,
+                JavaPackagesIndex,
+                JavaPackageTypesIndex,
+                JavaClassLocatorIndex, // fqcn -> owning jar, for the index-backed JDT name environment
+                JavaSourceSymbolsIndex,
+                JavaMembersIndex,
+                JavaMembersByOwnerIndex, // cross-language: a Kotlin file enumerating a Java SOURCE class's members
+                KotlinTypeShapeIndex, // Kotlin backend: persistent owner-keyed member shapes
+                KotlinBuiltinsIndex, // Kotlin backend: intrinsic List/Int/String shapes (.kotlin_builtins)
+                KotlinCallableIndex, // Kotlin backend: persistent extensions + top-level callables
+                JavaSourceDocIndex, // param names + javadoc from attached Java sources
+                KotlinSourceDocIndex, // param names + KDoc from attached Kotlin sources
+                AndroidResourceIndex, // Android resource declarations
+            ).forEach { extensions.register(INDEX_EP, it, indexPlugin) }
+
+            // platform.blockMapping: the built-in Java block decomposition.
+            extensions.register(BLOCK_MAPPING_EP, JavaBlockMapping, PluginId("java-support"))
+
+            // The STATELESS analysis support (analyzers/diagnostic providers/quick-fix providers that capture no
+            // per-project state). The XML analysis support is NOT here — it captures a per-project resource host
+            // and is registered app-global via the active engine (see [registerActiveEnginePlugins]).
+            dev.ide.lang.jdt.analysis.JdtAnalysisSupport.register(extensions)
+            dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport.register(extensions)
+
+            // platform.service: this engine family's scoped services. Registered ONCE on the app registry; each
+            // factory resolves the per-project engine through the scope ([ENGINE_CONTEXT], published on every
+            // engine's own workspace container) rather than closure-capturing it — so one app-global descriptor
+            // set serves every opened project. A MODULE/WORKSPACE container resolves the right engine by walking
+            // up to where its workspace published ENGINE_CONTEXT.
+            registerEngineServices(extensions)
+
+            // The capturing app-level extensions (synthetic-R, command actions, the XML resource host) that have
+            // no service scope to resolve through: registered ONCE here, deriving the open engine from [env].
+            registerActiveEnginePlugins(extensions, env)
+
             return moduleTypes to codecs
+        }
+
+        /** The `platform.service` descriptors for this engine family's MODULE analyzers + WORKSPACE concern
+         *  services. Each factory resolves the per-project engine via [ENGINE_CONTEXT] (the scope walks
+         *  MODULE → WORKSPACE to the engine that published it), so a single app-global registration serves every
+         *  opened project — no per-project closure capture. */
+        private fun registerEngineServices(extensions: ExtensionRegistry) {
+            val plugin = PluginId("ide-core-services")
+            // MODULE-scoped per-language analyzers: built (and cached/disposed) by each module's container.
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    ANALYZER_JAVA, ServiceScopeLevel.MODULE,
+                    { getService(ENGINE_CONTEXT).buildAnalyzer(module(), LanguageId("java")) },
+                    plugin
+                ), plugin
+            )
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    ANALYZER_KOTLIN, ServiceScopeLevel.MODULE,
+                    { getService(ENGINE_CONTEXT).buildAnalyzer(module(), KotlinLanguageBackend.LANGUAGE_ID) },
+                    plugin
+                ), plugin
+            )
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    ANALYZER_XML, ServiceScopeLevel.MODULE,
+                    { getService(ENGINE_CONTEXT).buildAnalyzer(module(), XmlLanguageBackend.LANGUAGE_ID) },
+                    plugin
+                ), plugin
+            )
+            // WORKSPACE-scoped concern services carved out of the engine. Each pulls its engine's [EngineContext]
+            // from the workspace scope it resolves in (the engine published it there in registerScopedServices).
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    SIGNING_SERVICE, ServiceScopeLevel.WORKSPACE,
+                    { SigningService(getService(ENGINE_CONTEXT)) }, plugin
+                ), plugin
+            )
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    SEARCH_SERVICE, ServiceScopeLevel.WORKSPACE,
+                    { SearchService(getService(ENGINE_CONTEXT)) }, plugin
+                ), plugin
+            )
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    BLOCK_SERVICE, ServiceScopeLevel.WORKSPACE,
+                    { BlockService(getService(ENGINE_CONTEXT)) }, plugin
+                ), plugin
+            )
+            // The action surface is the workspace's ActionManager itself, resolving the toolbar/menu/palette EPs
+            // against the resolving engine's own (hierarchical) registry — so it sees app + project contributions.
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    ACTION_MANAGER, ServiceScopeLevel.WORKSPACE,
+                    { ActionManager(getService(ENGINE_CONTEXT).platform.extensions) }, plugin
+                ), plugin
+            )
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    DEPENDENCY_SERVICE, ServiceScopeLevel.WORKSPACE,
+                    { DependencyService(getService(ENGINE_CONTEXT)) }, plugin
+                ), plugin
+            )
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    MODULE_SERVICE, ServiceScopeLevel.WORKSPACE,
+                    { ModuleService(getService(ENGINE_CONTEXT)) }, plugin
+                ), plugin
+            )
+            extensions.register(
+                SERVICE_EP, ServiceDescriptor(
+                    BUILD_SERVICE, ServiceScopeLevel.WORKSPACE,
+                    { BuildService(getService(ENGINE_CONTEXT)) }, plugin
+                ), plugin
+            )
+        }
+
+        /**
+         * Register the app-level extension callbacks that have no service scope to resolve through — they fire
+         * outside any project's container (the command palette, the synthetic-class resolver, the XML diagnostic
+         * pipeline). Registered ONCE on the app registry; each resolves the open project lazily through
+         * [ApplicationEnvironment.activeEngine] at callback time, so the single registration serves every project.
+         */
+        private fun registerActiveEnginePlugins(extensions: ExtensionRegistry, env: ApplicationEnvironment) {
+            // Built-in command-palette actions (Run/Stop build, Re-index): act on the active engine.
+            BuiltInActions.register(extensions, env)
+
+            // platform.syntheticClass: the light Android `R`, resolved from the active engine's SHARED
+            // fingerprint-cached resource repository (so it reuses the SAME parsed resource set as the
+            // preview/value/go-to-def paths). The per-project repository cache is the engine's; this provider
+            // is app-global and reaches it through the active engine.
+            extensions.register(
+                SYNTHETIC_CLASS_EP,
+                AndroidRClassProvider { m, _ -> env.activeEngine?.resourceRepo(m) },
+                PluginId("android-support"),
+            )
+
+            // The XML editor diagnostics: the resource host + Android attribute schema + the app-compat
+            // intention, all delegating to the active engine's per-project state.
+            dev.ide.lang.xml.lint.XmlAnalysisSupport.register(
+                extensions,
+                ActiveEngineXmlResourceHost(env),
+                AndroidXmlChecker(layout = { env.activeEngine?.sdkLayoutMetadata() ?: AndroidSdkMetadata.bundled() }),
+            )
+            extensions.register(
+                ACTION_PROVIDER_EP,
+                AndroidXmlActionProvider { target -> env.activeEngine?.moduleUsesAppCompat(target) ?: false },
+                PluginId("android-xml"),
+            )
         }
 
         /** Desktop default SDK: an installed Android SDK's `android.jar` if present, else a detected JDK. */
@@ -5938,11 +3499,11 @@ class IdeServices private constructor(
             kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
-            /** The host's application container, so app-scoped services are shared across projects. */
-            appContainer: ServiceContainer? = null,
+            /** The host's application environment, so app-scoped substrate + services are shared across projects. */
+            env: ApplicationEnvironment = ApplicationEnvironment(),
         ): IdeServices {
             Files.createDirectories(root)
-            val (platform, store) = openStore(root, appContainer)
+            val (platform, store) = openStore(root, env)
             store.replaceSdks(listOf(sdk))
             val template = ProjectTemplateRegistry(platform.extensions).byId(TemplateId(templateId))
                 ?: error("Unknown project template '$templateId'")
@@ -5957,7 +3518,8 @@ class IdeServices private constructor(
                 apkInstaller,
                 customViewRuntime,
                 kotlinPluginLoader,
-                sharedCachesRoot
+                sharedCachesRoot,
+                env = env,
             )
             // The template's declared Maven dependencies (e.g. Material You's material, or the Compose AAR
             // graph) are DECLARED into `module.toml` now (the durable source of truth for what the project
@@ -5967,8 +3529,7 @@ class IdeServices private constructor(
             // while deps stream in (progress on `depsState`). Decoupling the two means a slow/offline resolve
             // can't drop a declaration: it stays in `module.toml` and the next open retries it.
             val pending = template.dependencies(templateArgs)
-            services.declareTemplateDependencies(pending)
-            services.pendingDeps = pending
+            services.dependencies.setPendingDependencies(pending)
             return services
         }
 
@@ -5985,12 +3546,12 @@ class IdeServices private constructor(
             kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
-            /** The host's application container, so app-scoped services are shared across projects. */
-            appContainer: ServiceContainer? = null,
+            /** The host's application environment, so app-scoped substrate + services are shared across projects. */
+            env: ApplicationEnvironment = ApplicationEnvironment(),
             /** Headless build-only engine (the :build daemon): skip the editor cold-start. See [buildOnly]. */
             buildOnly: Boolean = false,
         ): IdeServices {
-            val (platform, store) = openStore(root, appContainer)
+            val (platform, store) = openStore(root, env)
             if (store.workspace.sdkTable.sdks.isEmpty()) {
                 store.replaceSdks(listOf(sdk))
             }
@@ -6004,6 +3565,7 @@ class IdeServices private constructor(
                 kotlinPluginLoader,
                 sharedCachesRoot,
                 buildOnly = buildOnly,
+                env = env,
             )
         }
 
@@ -6027,6 +3589,32 @@ class IdeServices private constructor(
 
 /** A surfaced content root with the metadata the tree needs: where it is, its source-set, its roles. */
 data class TreeRootInfo(val path: Path, val sourceSetName: String, val roles: Set<ContentRole>)
+
+/**
+ * The app-global [dev.ide.lang.xml.lint.XmlResourceHost] for the XML diagnostics pipeline: registered once,
+ * it forwards every call to the currently-open engine's per-project host
+ * ([IdeServices.xmlResourceHost], resolved through [ApplicationEnvironment.activeEngine]). With no project
+ * open it returns the quiet defaults (nothing is view-like, no references, nothing flagged), so the XML
+ * pipeline never false-positives before/between projects.
+ */
+private class ActiveEngineXmlResourceHost(private val env: ApplicationEnvironment) :
+    dev.ide.lang.xml.lint.XmlResourceHost {
+    private val host get() = env.activeEngine?.xmlResourceHost
+
+    override fun isViewLike(tag: String): Boolean = host?.isViewLike(tag) ?: false
+    override fun scanResourceReferences(text: String): List<dev.ide.lang.xml.lint.XmlResourceRef> =
+        host?.scanResourceReferences(text) ?: emptyList()
+    override fun typeHasAny(file: VirtualFile, rClass: String): Boolean =
+        host?.typeHasAny(file, rClass) ?: false
+    override fun hasResource(file: VirtualFile, rClass: String, name: String): Boolean =
+        host?.hasResource(file, rClass, name) ?: true
+    override fun isValueType(rClass: String): Boolean = host?.isValueType(rClass) ?: false
+    override fun appendValueResource(file: VirtualFile, rClass: String, name: String, value: String): String =
+        host?.appendValueResource(file, rClass, name, value) ?: name
+    override fun isFileType(rClass: String): Boolean = host?.isFileType(rClass) ?: false
+    override fun createResourceFile(file: VirtualFile, rClass: String, name: String): String? =
+        host?.createResourceFile(file, rClass, name)
+}
 
 /** Content roles surfaced in the project tree (code + resources + assets); see [IdeServices.treeRoots]. */
 private val TREE_ROOT_ROLES = setOf(

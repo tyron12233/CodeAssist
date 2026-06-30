@@ -30,18 +30,19 @@ interface BuildRunner {
 }
 
 /**
- * Runs the build/run in the IDE's own process by delegating straight to [services] — the behavior that
- * existed before the seam. No logic moved here; this is purely the in-process arm of [BuildRunner].
+ * Runs the build/run in the IDE's own process by delegating straight to the workspace [BuildService] — the
+ * behavior that existed before the seam. No logic moved here; this is purely the in-process arm of
+ * [BuildRunner].
  */
-internal class InProcessBuildRunner(private val services: IdeServices) : BuildRunner {
-    override val buildState: StateFlow<BuildState> get() = services.buildState
-    override val runConsole: StateFlow<RunConsoleUi?> get() = services.runConsole
-    override val permissionRequest: StateFlow<UiPermissionRequest?> get() = services.permissionRequest
-    override fun runTasks(): List<RunTaskOption> = services.runTasks()
-    override fun runTask(id: String) = services.runTask(id)
-    override fun runBuild() = services.runBuild()
-    override fun stopBuild() = services.stopBuild()
-    override fun sendRunInput(text: String) = services.sendRunInput(text)
-    override fun closeRunInput() = services.closeRunInput()
-    override fun answerPermission(id: Int, decision: UiPermissionDecision) = services.answerPermission(id, decision)
+internal class InProcessBuildRunner(private val build: dev.ide.core.services.BuildService) : BuildRunner {
+    override val buildState: StateFlow<BuildState> get() = build.buildState
+    override val runConsole: StateFlow<RunConsoleUi?> get() = build.runConsole
+    override val permissionRequest: StateFlow<UiPermissionRequest?> get() = build.permissionRequest
+    override fun runTasks(): List<RunTaskOption> = build.runTasks()
+    override fun runTask(id: String) = build.runTask(id)
+    override fun runBuild() = build.runBuild()
+    override fun stopBuild() = build.stopBuild()
+    override fun sendRunInput(text: String) = build.sendRunInput(text)
+    override fun closeRunInput() = build.closeRunInput()
+    override fun answerPermission(id: Int, decision: UiPermissionDecision) = build.answerPermission(id, decision)
 }

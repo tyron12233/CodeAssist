@@ -16,8 +16,13 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Extension points are keyed by their [ExtensionPoint.id] string rather than instance identity, so a
  * producer and a consumer that each construct their own `ExtensionPoint("…")` with the same id see
  * the same channel.
+ *
+ * Optionally hierarchical: a child registry created with a [parent] (e.g. a per-project registry over the
+ * application registry) sees the parent's contributions FIRST, then its own — so a query resolves both
+ * app-global and project-local extensions, and a contribution can be migrated up to the parent without the
+ * consumers changing. [register] always adds to THIS level.
  */
-class ExtensionRegistryImpl : ExtensionRegistry {
+class ExtensionRegistryImpl(private val parent: ExtensionRegistry? = null) : ExtensionRegistry {
     private class Registration(val impl: Any, val plugin: PluginId)
 
     private val byPoint = ConcurrentHashMap<String, CopyOnWriteArrayList<Registration>>()
@@ -31,9 +36,11 @@ class ExtensionRegistryImpl : ExtensionRegistry {
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : Any> extensions(ep: ExtensionPoint<T>): List<T> {
-        val list = byPoint[ep.id] ?: return emptyList()
-        // Map to a fresh list so callers get a stable snapshot, independent of later (un)registration.
-        return list.map { it.impl as T }
+        val own = byPoint[ep.id]?.map { it.impl as T } ?: emptyList()
+        // Parent (app) contributions first, then this level's — a stable snapshot independent of later
+        // (un)registration. Most EPs are order-insensitive; the few that aren't (e.g. the JDT language
+        // backend as fallback) are registered app-global, so they correctly precede any project-local ones.
+        return if (parent == null) own else parent.extensions(ep) + own
     }
 
     /** Remove every contribution made by [plugin] (bulk unregister on plugin unload). */

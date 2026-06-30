@@ -20,17 +20,17 @@ internal class ActionBackend(private val ctx: BackendContext) : ActionService {
 
     override fun actionsFor(uiCtx: UiActionContext): List<UiActionItem> {
         val c = uiCtx.toActionContext()
-        return ctx.services.actionManager.actionsFor(c).map {
+        return ctx.services.actions.actionsFor(c).map {
             UiActionItem(it.id, it.text, it.iconId, enabled = it.isEnabled(c))
         }
     }
 
     override fun menuFor(uiCtx: UiActionContext): UiMenuGroup =
-        UiMenuGroup(ctx.services.actionManager.menuFor(uiCtx.toActionContext()).map { it.toUiMenuNode() })
+        UiMenuGroup(ctx.services.actions.menuFor(uiCtx.toActionContext()).map { it.toUiMenuNode() })
 
     override suspend fun invokeAction(id: String, uiCtx: UiActionContext): UiActionResult {
         val c = uiCtx.toActionContext()
-        val result = withContext(ctx.engineDispatcher) { ctx.services.actionManager.invoke(id, c) }
+        val result = withContext(ctx.engineDispatcher) { ctx.services.actions.invoke(id, c) }
         return UiActionResult(result.message, result.effects.map { it.toUiEffect() })
     }
 
